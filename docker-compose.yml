@@ -1,0 +1,33 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: projectcsi400-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${DB_NAME:-projectcsi400}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD:-rootpassword}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: projectcsi400-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    ports:
+      - "8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
