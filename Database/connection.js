@@ -14,6 +14,23 @@ const {
   DB_NAME = "projectcsi400",
 } = process.env;
 
+let pool;
+
+export function getPool() {
+  if (!pool) {
+    pool = mysql.createPool({
+      host: DB_HOST,
+      port: Number(DB_PORT),
+      user: DB_USER,
+      password: DB_PASSWORD,
+      database: DB_NAME,
+      waitForConnections: true,
+      connectionLimit: 10,
+    });
+  }
+  return pool;
+}
+
 async function main() {
   const connection = await mysql.createConnection({
     host: DB_HOST,
@@ -40,7 +57,12 @@ async function main() {
   await connection.end();
 }
 
-main().catch((err) => {
-  console.error("Failed to set up database:", err.message);
-  process.exit(1);
-});
+const isMain =
+  process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+
+if (isMain) {
+  main().catch((err) => {
+    console.error("Failed to set up database:", err.message);
+    process.exit(1);
+  });
+}
