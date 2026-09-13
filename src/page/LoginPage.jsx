@@ -34,7 +34,8 @@ function LoginPage() {
       sessionStorage.setItem('token', data.token)
       sessionStorage.setItem('user', JSON.stringify(data.user))
       setSuccess(data.message || 'เข้าสู่ระบบสำเร็จ')
-      setTimeout(() => navigate('/dashboard'), 600)
+      const destination = data.user?.role === 'Customer' ? '/dashboard' : '/staff'
+      setTimeout(() => navigate(destination), 600)
     } catch (err) {
       setError(err.response?.data?.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {

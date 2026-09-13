@@ -210,7 +210,7 @@ function RegisterMain() {
         rental_start_date: getNow(),
         rental_end_date: addDefaultRentalPeriod(getNow()),
       })
-      setTimeout(() => navigate('/login'), 1200)
+      setTimeout(() => navigate('/staff'), 1200)
     } catch (err) {
       setError(err.response?.data?.message || 'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
@@ -243,8 +243,8 @@ function RegisterMain() {
                     <path d="M22 11h-6" />
                   </svg>
                 </div>
-                <h1>สร้างบัญชีใหม่</h1>
-                <p>สมัครสมาชิกเพื่อใช้งานระบบจัดการหอพัก</p>
+                <h1>ลงทะเบียนลูกค้าใหม่</h1>
+                <p>กรอกข้อมูลลูกค้าที่เข้าพักเพื่อสร้างบัญชีและห้องพัก</p>
               </div>
 
               {error && <div className="alert alert-danger py-2 px-3">{error}</div>}
@@ -466,7 +466,15 @@ function RegisterMain() {
                 </div>
 
                 <button type="submit" className="auth-submit-btn" disabled={loading}>
-                  {loading ? 'กำลังสมัครสมาชิก...' : 'สมัครสมาชิก'}
+                  {loading ? 'กำลังลงทะเบียน...' : 'ลงทะเบียนลูกค้า'}
+                </button>
+                <button
+                  type="button"
+                  className="auth-secondary-btn"
+                  disabled={loading}
+                  onClick={() => navigate('/staff')}
+                >
+                  ยกเลิก กลับหน้าแดชบอร์ด
                 </button>
               </form>
             </div>

@@ -43,17 +43,26 @@ router.post("/login", async (req, res) => {
     const isIdcard = /^\d{13}$/.test(normalizedUsername);
 
     const pool = getPool();
-    const [rows] = isIdcard
-      ? await pool.query(`SELECT * FROM Customer WHERE idcard = ?`, [normalizedUsername])
-      : await pool.query(
-          `SELECT c.* FROM Customer c
-           JOIN Booking b ON b.customer_id = c.id
-           JOIN Room r ON r.id = b.room_id
-           WHERE r.room_number = ?
-           LIMIT 1`,
-          [normalizedUsername],
-        );
-    const user = rows[0];
+    let user;
+    if (isIdcard) {
+      for (const table of ["Customer", "Staff", "Admin", "Owner"]) {
+        const [rows] = await pool.query(`SELECT * FROM ${table} WHERE idcard = ?`, [normalizedUsername]);
+        if (rows[0]) {
+          user = rows[0];
+          break;
+        }
+      }
+    } else {
+      const [rows] = await pool.query(
+        `SELECT c.* FROM Customer c
+         JOIN Booking b ON b.customer_id = c.id
+         JOIN Room r ON r.id = b.room_id
+         WHERE r.room_number = ?
+         LIMIT 1`,
+        [normalizedUsername],
+      );
+      user = rows[0];
+    }
 
     if (!user) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });

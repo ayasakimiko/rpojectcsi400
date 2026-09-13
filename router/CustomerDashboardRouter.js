@@ -11,7 +11,7 @@ const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
 const MAINTENANCE_CATEGORIES = new Set(["electrical", "plumbing", "aircon", "furniture", "other"]);
 const MAINTENANCE_TIME_SLOTS = new Set(["anytime", "morning", "afternoon", "evening"]);
 
-function computeCurrentDue(room, paymentsForBooking, depositAmount) {
+export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
 
   const start = new Date(room.rental_start_date);
