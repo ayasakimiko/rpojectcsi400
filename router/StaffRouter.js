@@ -46,7 +46,7 @@ router.get("/rooms", async (req, res) => {
          r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months,
          c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM Room r
-       LEFT JOIN Customer c ON c.room_number = r.room_number
+       LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
        ORDER BY r.room_number ASC`,
     );
 
@@ -70,7 +70,7 @@ router.get("/rooms", async (req, res) => {
       const bookingIds = [...latestBookingByRoomId.values()].map((booking) => booking.id);
       if (bookingIds.length > 0) {
         const [payments] = await pool.query(
-          `SELECT booking_id, status, payment_date FROM Payment WHERE booking_id IN (?)`,
+          `SELECT booking_id, status, type, payment_date FROM Payment WHERE booking_id IN (?)`,
           [bookingIds],
         );
         for (const payment of payments) {
@@ -130,7 +130,7 @@ router.get("/rooms/:room_number/history", async (req, res) => {
     let payments = [];
     if (bookingIds.length > 0) {
       [payments] = await pool.query(
-        `SELECT id, booking_id, amount, payment_date, status, note, created_at
+        `SELECT id, booking_id, amount, payment_date, status, type, note, created_at
          FROM Payment WHERE booking_id IN (?)
          ORDER BY payment_date DESC, created_at DESC`,
         [bookingIds],
@@ -159,7 +159,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
     const pool = getPool();
 
     const [customerRows] = await pool.query(
-      `SELECT id, deposit_amount FROM Customer WHERE room_number = ?`,
+      `SELECT id, deposit_amount FROM Customer WHERE room_number = ? AND is_suspended = FALSE`,
       [roomNumberValue],
     );
     const customer = customerRows[0];
@@ -183,7 +183,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
     }
 
     const [paymentsForBooking] = await pool.query(
-      `SELECT status, payment_date FROM Payment WHERE booking_id = ?`,
+      `SELECT status, type, payment_date FROM Payment WHERE booking_id = ?`,
       [booking.id],
     );
 
@@ -261,7 +261,7 @@ router.post("/requests/:id/approve", async (req, res) => {
     await connection.beginTransaction();
 
     const [requestRows] = await connection.query(
-      `SELECT id, room_number, type, renew_duration_months, renew_payment_type, status
+      `SELECT id, customer_id, room_number, type, renew_duration_months, renew_payment_type, status
        FROM TenantRequest WHERE id = ? FOR UPDATE`,
       [requestId],
     );
@@ -287,6 +287,23 @@ router.post("/requests/:id/approve", async (req, res) => {
            pending_lump_sum_months = IF(? = 'lump_sum', ?, pending_lump_sum_months)
          WHERE room_number = ?`,
         [durationMonths, paymentType, durationMonths, tenantRequest.room_number],
+      );
+    }
+
+    if (tenantRequest.type === "moveout") {
+      await connection.query(`UPDATE Customer SET is_suspended = TRUE WHERE id = ?`, [tenantRequest.customer_id]);
+
+      await connection.query(
+        `UPDATE Room
+         SET
+           is_booked = FALSE,
+           rental_start_date = NULL,
+           rental_end_date = NULL,
+           rental_duration_months = NULL,
+           prepaid_until = NULL,
+           pending_lump_sum_months = NULL
+         WHERE room_number = ?`,
+        [tenantRequest.room_number],
       );
     }
 

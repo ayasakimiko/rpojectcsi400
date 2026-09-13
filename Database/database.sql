@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS Payment (
     amount DECIMAL(10,2) NOT NULL,
     payment_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    type VARCHAR(20) NOT NULL DEFAULT 'rent',
     note VARCHAR(255),
     slip_path VARCHAR(255),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

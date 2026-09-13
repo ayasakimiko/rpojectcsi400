@@ -167,10 +167,17 @@ router.post("/register", async (req, res) => {
       ],
     );
 
-    await connection.query(`INSERT INTO Booking (customer_id, room_id) VALUES (?, ?)`, [
+    const [bookingResult] = await connection.query(`INSERT INTO Booking (customer_id, room_id) VALUES (?, ?)`, [
       customerResult.insertId,
       room.id,
     ]);
+
+    if (normalizedDepositAmount && normalizedDepositAmount > 0) {
+      await connection.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'deposit', 'เงินมัดจำ')`,
+        [bookingResult.insertId, normalizedDepositAmount],
+      );
+    }
 
     const mysqlStartDateTime = toMysqlDateTime(rental_start_date);
     const mysqlEndDateTime = toMysqlDateTime(rental_end_date);

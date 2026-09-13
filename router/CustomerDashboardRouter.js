@@ -48,8 +48,9 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
     return day >= periodStartDay && day < periodEndDay;
   };
 
-  const paidThisPeriod = paymentsForBooking.some((p) => p.status === "paid" && isWithinPeriod(p.payment_date));
-  const notifiedThisPeriod = paymentsForBooking.some((p) => p.status === "pending" && isWithinPeriod(p.payment_date));
+  const rentPayments = paymentsForBooking.filter((p) => p.type !== "deposit");
+  const paidThisPeriod = rentPayments.some((p) => p.status === "paid" && isWithinPeriod(p.payment_date));
+  const notifiedThisPeriod = rentPayments.some((p) => p.status === "pending" && isWithinPeriod(p.payment_date));
 
   const dueDate = new Date(periodStart);
   dueDate.setDate(dueDate.getDate() + GRACE_DAYS);
@@ -111,7 +112,7 @@ router.get("/me", authenticate, async (req, res) => {
     let payments = [];
     if (bookingIds.length > 0) {
       [payments] = await pool.query(
-        `SELECT id, booking_id, amount, payment_date, status, note, slip_path, created_at
+        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
          FROM Payment
          WHERE booking_id IN (?)
          ORDER BY payment_date DESC, created_at DESC`,
@@ -183,7 +184,7 @@ router.post("/payments/confirm", authenticate, async (req, res) => {
     }
 
     const [paymentsForBooking] = await pool.query(
-      `SELECT status, payment_date FROM Payment WHERE booking_id = ?`,
+      `SELECT status, type, payment_date FROM Payment WHERE booking_id = ?`,
       [booking.id],
     );
 

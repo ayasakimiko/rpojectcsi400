@@ -5,7 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
 
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, variant }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -26,7 +26,10 @@ function Modal({ title, onClose, children }) {
         if (isClosing) onClose()
       }}
     >
-      <div className={`staff-modal${isClosing ? ' is-closing' : ''}`} onClick={(event) => event.stopPropagation()}>
+      <div
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${isClosing ? ' is-closing' : ''}`}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="staff-modal-header">
           <h3>{title}</h3>
           <button type="button" className="staff-modal-close" onClick={requestClose} aria-label="ปิด">
@@ -176,6 +179,8 @@ function StaffMain() {
   const [maintenanceFilterStatus, setMaintenanceFilterStatus] = useState('all')
   const [maintenanceFilterDate, setMaintenanceFilterDate] = useState('')
   const [maintenanceFilterSearch, setMaintenanceFilterSearch] = useState('')
+  const [acknowledgedMoveoutIds, setAcknowledgedMoveoutIds] = useState(() => new Set())
+  const [moveoutConfirmRequest, setMoveoutConfirmRequest] = useState(null)
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -252,11 +257,23 @@ function StaffMain() {
       const { data } = await axios.post(`/api/staff/requests/${request.id}/approve`, {}, { headers: authHeaders() })
       setActionSuccess(data.message || 'อนุมัติคำขอสำเร็จ')
       await Promise.all([loadRequests(), loadRooms()])
+      return true
     } catch (err) {
       setRequestsError(err.response?.data?.message || 'อนุมัติคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      return false
     } finally {
       setProcessingRequestKey('')
     }
+  }
+
+  const acknowledgeMoveoutRequest = (requestId) => {
+    setAcknowledgedMoveoutIds((prev) => new Set(prev).add(requestId))
+  }
+
+  const handleConfirmMoveoutApproval = async () => {
+    if (!moveoutConfirmRequest) return
+    const success = await handleApproveTenantRequest(moveoutConfirmRequest)
+    if (success) setMoveoutConfirmRequest(null)
   }
 
   const handleRejectTenantRequest = async (request) => {
@@ -311,14 +328,36 @@ function StaffMain() {
           <p className="staff-request-date">{formatDateTime(request.created_at)}</p>
         </div>
         <div className="staff-row-actions">
-          <button
-            type="button"
-            className="staff-action-btn is-primary"
-            disabled={isProcessing}
-            onClick={() => handleApproveTenantRequest(request)}
-          >
-            {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
-          </button>
+          {request.type === 'moveout' ? (
+            acknowledgedMoveoutIds.has(request.id) ? (
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                disabled={isProcessing}
+                onClick={() => setMoveoutConfirmRequest(request)}
+              >
+                {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติการย้ายออก'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                disabled={isProcessing}
+                onClick={() => acknowledgeMoveoutRequest(request.id)}
+              >
+                รับเรื่อง
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              disabled={isProcessing}
+              onClick={() => handleApproveTenantRequest(request)}
+            >
+              {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
+            </button>
+          )}
           <button
             type="button"
             className="staff-action-btn is-ghost"
@@ -408,7 +447,7 @@ function StaffMain() {
       const { data } = await axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: authHeaders() })
       setHistoryData(data.rentalHistory)
     } catch (err) {
-      setHistoryError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติการเช่าได้')
+      setHistoryError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติการจ่ายเงินได้')
     } finally {
       setHistoryLoading(false)
     }
@@ -695,7 +734,7 @@ function StaffMain() {
                                 className="staff-action-btn is-ghost"
                                 onClick={() => openHistory(room)}
                               >
-                                ประวัติการเช่า
+                                ประวัติการจ่ายเงิน
                               </button>
                               {hasDue && (
                                 <button
@@ -757,7 +796,7 @@ function StaffMain() {
                                       className="staff-action-btn is-ghost"
                                       onClick={() => openHistory(room)}
                                     >
-                                      ประวัติการเช่า
+                                      ประวัติการจ่ายเงิน
                                     </button>
                                     {hasDue && (
                                       <button
@@ -1063,13 +1102,13 @@ function StaffMain() {
       )}
 
       {historyRoom && (
-        <Modal title={`ประวัติการเช่า - ห้อง ${historyRoom.room_number}`} onClose={() => setHistoryRoom(null)}>
+        <Modal title={`ประวัติการจ่ายเงิน - ห้อง ${historyRoom.room_number}`} onClose={() => setHistoryRoom(null)}>
           {historyLoading ? (
             <p className="staff-empty">กำลังโหลดข้อมูล...</p>
           ) : historyError ? (
             <p className="staff-form-error">{historyError}</p>
           ) : !historyData || historyData.length === 0 ? (
-            <p className="staff-empty">ยังไม่มีประวัติการเช่าห้องนี้</p>
+            <p className="staff-empty">ยังไม่มีประวัติการจ่ายเงินห้องนี้</p>
           ) : (
             historyData.map((entry) => (
               <div key={entry.booking_id} className="staff-rental-entry">
@@ -1114,7 +1153,11 @@ function StaffMain() {
       )}
 
       {collectRoom && (
-        <Modal title={`เก็บเงิน - ห้อง ${collectRoom.room_number}`} onClose={() => setCollectRoom(null)}>
+        <Modal
+          title={`เก็บเงิน - ห้อง ${collectRoom.room_number}`}
+          onClose={() => setCollectRoom(null)}
+          variant="confirm"
+        >
           {(requestClose) => (
             <div className="staff-confirm-body">
               <p className="staff-confirm-message">
@@ -1134,6 +1177,37 @@ function StaffMain() {
                   onClick={handleCollectPayment}
                 >
                   {collectSubmitting ? 'กำลังบันทึก...' : 'ยืนยันเก็บเงิน'}
+                </button>
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {moveoutConfirmRequest && (
+        <Modal title="ยืนยันการย้ายออก" onClose={() => setMoveoutConfirmRequest(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <p className="staff-confirm-message">
+                ยืนยันอนุมัติการย้ายออกห้อง {moveoutConfirmRequest.room_number}
+                <br />
+                ของคุณ {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}?
+              </p>
+              <p className="staff-form-error staff-form-error-block">
+                การดำเนินการนี้จะระงับบัญชีผู้เช่ารายนี้ และเปลี่ยนสถานะห้องเป็นว่างทันที
+              </p>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `tenant-${moveoutConfirmRequest.id}`}
+                  onClick={handleConfirmMoveoutApproval}
+                >
+                  {processingRequestKey === `tenant-${moveoutConfirmRequest.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
                 </button>
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก

@@ -58,6 +58,7 @@ router.post("/login", async (req, res) => {
          JOIN Booking b ON b.customer_id = c.id
          JOIN Room r ON r.id = b.room_id
          WHERE r.room_number = ?
+         ORDER BY b.created_at DESC
          LIMIT 1`,
         [normalizedUsername],
       );

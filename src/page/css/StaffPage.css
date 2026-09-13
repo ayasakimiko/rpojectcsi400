@@ -338,6 +338,7 @@
 .staff-badge.status-paid {
   background: #ecfdf5;
   color: #027a48;
+  border: 1.5px solid #6ee7b7;
 }
 
 .staff-badge.status-pending {
@@ -716,7 +717,7 @@
   align-items: center;
   text-align: center;
   gap: 6px;
-  padding: 8px 4px 4px;
+  padding: 0;
   margin: auto 0;
   width: 100%;
 }
@@ -739,15 +740,15 @@
 .staff-form-actions {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: 10px;
+  padding-top: 8px;
   border-top: 1.9px solid #d1ddf0;
   width: 100%;
 }
 
 .staff-form-actions .staff-action-btn {
   flex: 1;
-  padding: 13px 20px;
+  padding: 11px 18px;
   font-size: 14px;
   border-radius: 12px;
 }
@@ -826,6 +827,18 @@
 
 .staff-modal.is-closing {
   animation: staff-modal-pop-out 0.1s ease-in forwards;
+}
+
+.staff-modal.staff-modal-confirm {
+  width: 420px;
+  height: auto;
+  max-height: calc(100vh - 32px);
+  padding: 20px;
+}
+
+.staff-modal-confirm .staff-modal-header {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
 }
 
 .staff-modal-body {
