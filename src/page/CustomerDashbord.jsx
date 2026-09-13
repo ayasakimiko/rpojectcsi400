@@ -538,6 +538,8 @@ function CustomerDashbord() {
   }
 
   const { customer, room, rentalHistory, currentDue, maintenanceRequests = [], tenantRequests = [] } = data
+  const prepaidUntilDate = room?.prepaid_until ? new Date(room.prepaid_until) : null
+  const isPrepaid = prepaidUntilDate && !currentDue && prepaidUntilDate > new Date()
   const msUntilStart = room?.is_booked ? msUntil(room.rental_start_date) : null
   const hasStarted = msUntilStart !== null && msUntilStart <= 0
   const msLeft = hasStarted ? msUntil(room.rental_end_date) : null
@@ -688,6 +690,11 @@ function CustomerDashbord() {
                           หักเงินมัดจำ ฿{formatCurrency(currentDue.depositApplied)} จากค่าเช่าเดือนแรกแล้ว
                         </p>
                       )}
+                      {currentDue.lumpSumMonths && (
+                        <p className="dashboard-due-deposit-note">
+                          ยอดนี้รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน ตามคำขอต่อสัญญาแบบจ่ายทบ
+                        </p>
+                      )}
 
                       <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
                         ชำระเงิน
@@ -701,7 +708,11 @@ function CustomerDashbord() {
                                 <span className="dashboard-qr-badge">PromptPay</span>
                                 <FakeQrCode />
                                 <p className="dashboard-qr-amount">฿{formatCurrency(currentDue.amount)}</p>
-                                <p className="dashboard-qr-hint">สแกนผ่านแอปธนาคารเพื่อชำระเงิน</p>
+                                <p className="dashboard-qr-hint">
+                                  {currentDue.lumpSumMonths
+                                    ? `ยอดรวมค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน — สแกนผ่านแอปธนาคารเพื่อชำระเงิน`
+                                    : 'สแกนผ่านแอปธนาคารเพื่อชำระเงิน'}
+                                </p>
                               </div>
                               {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
                               <div className="dashboard-form-actions">
@@ -719,6 +730,15 @@ function CustomerDashbord() {
                     </>
                   )}
 
+                  {isPrepaid && (
+                    <>
+                      <h3 className="dashboard-section-title">ยอดชำระเดือนนี้</h3>
+                      <p className="dashboard-prepaid-note">
+                        ชำระค่าเช่าล่วงหน้าแบบทบยอดไว้แล้วถึงวันที่ {formatDate(room.prepaid_until)} —
+                        ระบบจะเริ่มแสดงยอดชำระรายเดือนอีกครั้งหลังจากวันนั้น
+                      </p>
+                    </>
+                  )}
                 </>
               ) : (
                 <p className="dashboard-empty">ไม่พบข้อมูลห้องพัก</p>

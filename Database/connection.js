@@ -72,6 +72,18 @@ async function main() {
     if (error.code !== "ER_DUP_FIELDNAME") throw error;
   }
 
+  try {
+    await connection.query("ALTER TABLE Room ADD COLUMN prepaid_until DATETIME");
+  } catch (error) {
+    if (error.code !== "ER_DUP_FIELDNAME") throw error;
+  }
+
+  try {
+    await connection.query("ALTER TABLE Room ADD COLUMN pending_lump_sum_months INT UNSIGNED");
+  } catch (error) {
+    if (error.code !== "ER_DUP_FIELDNAME") throw error;
+  }
+
   const [tables] = await connection.query("SHOW TABLES;");
   console.log(`Database "${DB_NAME}" is ready. Tables:`);
   for (const row of tables) {

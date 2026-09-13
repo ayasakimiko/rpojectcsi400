@@ -550,6 +550,17 @@
   margin: 0 0 12px;
 }
 
+.dashboard-prepaid-note {
+  font-size: 13px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: #f3e8ff;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 0;
+}
+
 .dashboard-action-btn {
   display: inline-flex;
   align-items: center;

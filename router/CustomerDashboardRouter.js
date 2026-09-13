@@ -16,6 +16,7 @@ function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   const end = new Date(room.rental_end_date);
   const now = new Date();
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  
   if (now < start || now > end) return null;
 
   const billingDay = start.getDate();
@@ -25,6 +26,13 @@ function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   }
   const isFirstPeriod = periodStart <= start;
   if (periodStart < start) periodStart = start;
+
+  if (room.prepaid_until) {
+    const prepaidUntil = new Date(room.prepaid_until);
+    if (!Number.isNaN(prepaidUntil.getTime()) && periodStart < prepaidUntil) {
+      return null;
+    }
+  }
 
   const periodEnd = new Date(periodStart);
   periodEnd.setMonth(periodEnd.getMonth() + 1);
@@ -52,9 +60,14 @@ function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   const basePrice = Number(room.price);
   const depositApplied = isFirstPeriod ? Math.min(Number(depositAmount) || 0, basePrice) : 0;
 
+  const lumpSumMonths =
+    status !== "paid" && Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
+  const amount = (lumpSumMonths ? basePrice * lumpSumMonths : basePrice) - depositApplied;
+
   return {
-    amount: basePrice - depositApplied,
+    amount,
     depositApplied,
+    lumpSumMonths,
     periodStart,
     periodEnd,
     dueDate,
@@ -78,7 +91,7 @@ router.get("/me", authenticate, async (req, res) => {
     }
 
     const [roomRows] = await pool.query(
-      `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date
+      `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
        FROM Room WHERE room_number = ?`,
       [customer.room_number],
     );
@@ -152,7 +165,7 @@ router.post("/payments/confirm", authenticate, async (req, res) => {
     }
 
     const [roomRows] = await pool.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date FROM Room WHERE room_number = ?`,
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
       [customer.room_number],
     );
     const room = roomRows[0];
@@ -179,10 +192,23 @@ router.post("/payments/confirm", authenticate, async (req, res) => {
       return res.status(409).json({ message: "ชำระค่าเช่าเดือนนี้เรียบร้อยแล้ว" });
     }
 
+    const note = currentDue.lumpSumMonths
+      ? `ชำระผ่าน PromptPay (จำลอง) - จ่ายทบ ${currentDue.lumpSumMonths} เดือน`
+      : "ชำระผ่าน PromptPay (จำลอง)";
+
     await pool.query(
       `INSERT INTO Payment (booking_id, amount, payment_date, status, note) VALUES (?, ?, CURDATE(), 'paid', ?)`,
-      [booking.id, currentDue.amount, "ชำระผ่าน PromptPay (จำลอง)"],
+      [booking.id, currentDue.amount, note],
     );
+
+    if (currentDue.lumpSumMonths) {
+      await pool.query(
+        `UPDATE Room
+         SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
+         WHERE room_number = ?`,
+        [currentDue.periodEnd, currentDue.lumpSumMonths - 1, customer.room_number],
+      );
+    }
 
     return res.status(201).json({ message: "ชำระเงินสำเร็จ" });
   } catch (error) {

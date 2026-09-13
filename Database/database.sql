@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS Room (
     rental_start_date DATETIME,
     rental_end_date DATETIME,
     
+    prepaid_until DATETIME,
+    pending_lump_sum_months INT UNSIGNED,
+
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
