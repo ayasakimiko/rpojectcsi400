@@ -1,31 +1,52 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/RegisterPage.css'
+
+const RENTAL_DATE_FORMAT = "dd/MM/yyyy 'เวลา' HH:mm"
 
 const formatDateTimeLocal = (date) => {
   const pad = (n) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-const getNowString = () => formatDateTimeLocal(new Date())
+const getNow = () => new Date()
 
-const addOneYear = (dateTimeLocalValue) => {
-  const date = new Date(dateTimeLocalValue)
-  date.setFullYear(date.getFullYear() + 1)
-  return formatDateTimeLocal(date)
+const addDefaultRentalPeriod = (date) => {
+  const next = new Date(date)
+  next.setDate(next.getDate() + 7)
+  return next
 }
 
-const formatThaiDateTime = (dateTimeLocalValue) => {
-  if (!dateTimeLocalValue) return ''
-  const date = new Date(dateTimeLocalValue)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat('th-TH', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-  }).format(date)
+const isSameDay = (a, b) => {
+  const dateA = new Date(a)
+  const dateB = new Date(b)
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  )
+}
+
+const MOBILE_QUERY = '(max-width: 576px)'
+
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches,
+  )
+
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_QUERY)
+    const handleChange = (e) => setIsMobile(e.matches)
+    mql.addEventListener('change', handleChange)
+    return () => mql.removeEventListener('change', handleChange)
+  }, [])
+
+  return isMobile
 }
 
 const initialRegisterForm = {
@@ -35,14 +56,15 @@ const initialRegisterForm = {
   phone: '',
   age: '',
   room_number: '',
-  rental_start_date: getNowString(),
-  rental_end_date: addOneYear(getNowString()),
+  rental_start_date: getNow(),
+  rental_end_date: addDefaultRentalPeriod(getNow()),
   password: '',
   confirmPassword: '',
 }
 
 function RegisterMain() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [registerForm, setRegisterForm] = useState(initialRegisterForm)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -72,13 +94,39 @@ function RegisterMain() {
 
   const handleRegisterChange = (e) => {
     const { name, value } = e.target
+    setRegisterForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handlePhoneChange = (e) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10)
+    setRegisterForm((prev) => ({ ...prev, phone: digitsOnly }))
+  }
+
+  const handleAgeChange = (e) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 2)
+    setRegisterForm((prev) => ({ ...prev, age: digitsOnly }))
+  }
+
+  const handleRentalDateChange = (name, date) => {
     setRegisterForm((prev) => {
-      const next = { ...prev, [name]: value }
-      if (name === 'rental_start_date' && value) {
-        next.rental_end_date = addOneYear(value)
+      const next = { ...prev, [name]: date }
+      if (name === 'rental_start_date' && date) {
+        next.rental_end_date = addDefaultRentalPeriod(date)
       }
       return next
     })
+  }
+
+  const filterStartTime = (time) => {
+    const now = getNow()
+    if (!isSameDay(time, now)) return true
+    return time.getTime() > now.getTime()
+  }
+
+  const filterEndTime = (time) => {
+    const start = registerForm.rental_start_date
+    if (!start || !isSameDay(time, start)) return true
+    return time.getTime() > new Date(start).getTime()
   }
 
   const handleRegisterSubmit = async (e) => {
@@ -115,6 +163,11 @@ function RegisterMain() {
       return
     }
 
+    if (!/^0\d{8,9}$/.test(phone)) {
+      setError('เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก')
+      return
+    }
+
     if (rental_end_date <= rental_start_date) {
       setError('วันที่สิ้นสุดสัญญาต้องอยู่หลังวันที่เริ่มเช่า')
       return
@@ -134,15 +187,15 @@ function RegisterMain() {
         phone,
         age,
         room_number,
-        rental_start_date,
-        rental_end_date,
+        rental_start_date: formatDateTimeLocal(rental_start_date),
+        rental_end_date: formatDateTimeLocal(rental_end_date),
         password,
       })
       setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
       setRegisterForm({
         ...initialRegisterForm,
-        rental_start_date: getNowString(),
-        rental_end_date: addOneYear(getNowString()),
+        rental_start_date: getNow(),
+        rental_end_date: addDefaultRentalPeriod(getNow()),
       })
       setTimeout(() => navigate('/login'), 1200)
     } catch (err) {
@@ -265,35 +318,54 @@ function RegisterMain() {
                     <label className="form-label" htmlFor="register-rental-start">
                       วันเวลาที่เริ่มเช่า
                     </label>
-                    <input
+                    <DatePicker
                       id="register-rental-start"
-                      type="datetime-local"
-                      min={getNowString()}
                       name="rental_start_date"
                       className="form-control"
-                      value={registerForm.rental_start_date}
-                      onChange={handleRegisterChange}
+                      wrapperClassName="w-100"
+                      selected={registerForm.rental_start_date}
+                      onChange={(date) => handleRentalDateChange('rental_start_date', date)}
+                      minDate={getNow()}
+                      filterTime={filterStartTime}
+                      showTimeSelect
+                      timeIntervals={15}
+                      timeFormat="HH:mm"
+                      timeCaption="เวลา"
+                      dateFormat={RENTAL_DATE_FORMAT}
+                      autoComplete="off"
+                      onChangeRaw={(e) => e.preventDefault()}
+                      showIcon
+                      toggleCalendarOnIconClick
+                      withPortal={isMobile}
+                      portalId="rental-date-portal"
                     />
-                    {registerForm.rental_start_date && (
-                      <div className="form-text">{formatThaiDateTime(registerForm.rental_start_date)}</div>
-                    )}
                   </div>
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-rental-end">
                       วันเวลาที่สิ้นสุดสัญญา
                     </label>
-                    <input
+                    <DatePicker
                       id="register-rental-end"
-                      type="datetime-local"
-                      min={registerForm.rental_start_date || getNowString()}
                       name="rental_end_date"
                       className="form-control"
-                      value={registerForm.rental_end_date}
-                      onChange={handleRegisterChange}
+                      wrapperClassName="w-100"
+                      selected={registerForm.rental_end_date}
+                      onChange={(date) => handleRentalDateChange('rental_end_date', date)}
+                      minDate={registerForm.rental_start_date || getNow()}
+                      openToDate={getNow()}
+                      filterTime={filterEndTime}
+                      showTimeSelect
+                      timeIntervals={15}
+                      timeFormat="HH:mm"
+                      timeCaption="เวลา"
+                      dateFormat={RENTAL_DATE_FORMAT}
+                      autoComplete="off"
+                      onChangeRaw={(e) => e.preventDefault()}
+                      showIcon
+                      toggleCalendarOnIconClick
+                      withPortal={isMobile}
+                      portalId="rental-date-portal"
                     />
-                    {registerForm.rental_end_date && (
-                      <div className="form-text">{formatThaiDateTime(registerForm.rental_end_date)}</div>
-                    )}
                   </div>
 
                   <div className="col-12 col-md-6">
@@ -303,11 +375,13 @@ function RegisterMain() {
                     <input
                       id="register-phone"
                       type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
                       name="phone"
                       className="form-control"
-                      placeholder="เบอร์โทรศัพท์"
+                      placeholder="เบอร์โทรศัพท์ เช่น 0812345678"
                       value={registerForm.phone}
-                      onChange={handleRegisterChange}
+                      onChange={handlePhoneChange}
                       autoComplete="tel"
                     />
                   </div>
@@ -318,13 +392,14 @@ function RegisterMain() {
                     <input
                       id="register-age"
                       type="number"
+                      inputMode="numeric"
                       min={1}
-                      max={120}
+                      max={99}
                       name="age"
                       className="form-control"
                       placeholder="อายุ"
                       value={registerForm.age}
-                      onChange={handleRegisterChange}
+                      onChange={handleAgeChange}
                     />
                   </div>
 

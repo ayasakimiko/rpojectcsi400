@@ -52,6 +52,9 @@ function validateRegisterInput({
   if (!/^\d{13}$/.test(idcard.trim())) {
     return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
   }
+  if (!/^0\d{8,9}$/.test(phone.trim())) {
+    return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
+  }
   if (password.length < 6 || password.length > 128) {
     return "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร";
   }

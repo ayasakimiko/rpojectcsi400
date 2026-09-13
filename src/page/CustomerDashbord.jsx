@@ -89,25 +89,6 @@ function CalendarIcon() {
   )
 }
 
-function ArrowIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="5" y1="12" x2="19" y2="12" />
-      <polyline points="12 5 19 12 12 19" />
-    </svg>
-  )
-}
-
 const STATUS_LABEL = {
   paid: 'ชำระแล้ว',
   pending: 'รอชำระ',
@@ -132,6 +113,29 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function formatRentalDuration(startValue, endValue) {
+  if (!startValue || !endValue) return null
+  const start = new Date(startValue)
+  const end = new Date(endValue)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null
+
+  const totalDays = Math.round((end.getTime() - start.getTime()) / MS_PER_DAY)
+  if (totalDays <= 0) return null
+
+  if (totalDays % 365 === 0) {
+    return `สัญญาเช่า ${totalDays / 365} ปี`
+  }
+  if (totalDays % 30 === 0) {
+    return `สัญญาเช่า ${totalDays / 30} เดือน`
+  }
+  if (totalDays % 7 === 0) {
+    return `สัญญาเช่า ${totalDays / 7} สัปดาห์`
+  }
+  return `สัญญาเช่า ${totalDays} วัน`
 }
 
 function msUntil(value) {
@@ -273,13 +277,11 @@ function CustomerDashbord() {
                     <>
                       <h3 className="dashboard-section-title">ระยะเวลาการเช่า</h3>
                       <p className="dashboard-rental-duration">
-                        สัญญาเช่า {room.rental_duration_months} เดือน
+                        {formatRentalDuration(room.rental_start_date, room.rental_end_date)}
                       </p>
                       <p className="dashboard-rental-period">
                         <CalendarIcon />
-                        {formatDateTime(room.rental_start_date)}
-                        <ArrowIcon />
-                        {formatDateTime(room.rental_end_date)}
+                        {formatDateTime(room.rental_start_date)} ถึง {formatDateTime(room.rental_end_date)}
                       </p>
                       {!hasStarted && msUntilStart !== null && (
                         <p className="dashboard-countdown is-pending">
@@ -326,13 +328,6 @@ function CustomerDashbord() {
               ) : (
                 rentalHistory.map((entry) => (
                   <div key={entry.booking_id} className="dashboard-rental-entry">
-                    <div className="dashboard-rental-entry-head">
-                      <span>ห้อง {entry.room_number}</span>
-                      <span className="dashboard-rental-entry-date">
-                        เริ่มเช่า {formatDateTime(entry.rental_start_date || entry.created_at)}
-                        {entry.rental_end_date && <> -&gt; {formatDateTime(entry.rental_end_date)}</>}
-                      </span>
-                    </div>
                     {entry.payments.length === 0 ? (
                       <p className="dashboard-empty">ยังไม่มีประวัติการชำระค่าเช่า</p>
                     ) : (
