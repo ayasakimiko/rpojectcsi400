@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS Customer (
     is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     age INT UNSIGNED NOT NULL,
     room_number INT UNSIGNED NOT NULL,
+    deposit_amount DECIMAL(10,2),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (room_number) REFERENCES Room(room_number) ON UPDATE CASCADE
@@ -91,7 +92,33 @@ CREATE TABLE IF NOT EXISTS Payment (
     payment_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     note VARCHAR(255),
+    slip_path VARCHAR(255),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (booking_id) REFERENCES Booking(id)
+);
+
+CREATE TABLE IF NOT EXISTS MaintenanceRequest (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    customer_id INT UNSIGNED NOT NULL,
+    room_number INT UNSIGNED NOT NULL,
+    description VARCHAR(500) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (customer_id) REFERENCES Customer(id)
+);
+
+CREATE TABLE IF NOT EXISTS TenantRequest (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    customer_id INT UNSIGNED NOT NULL,
+    room_number INT UNSIGNED NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    note VARCHAR(500),
+    renew_duration_months INT UNSIGNED,
+    renew_payment_type VARCHAR(20),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (customer_id) REFERENCES Customer(id)
 );

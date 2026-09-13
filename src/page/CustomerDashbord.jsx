@@ -89,10 +89,187 @@ function CalendarIcon() {
   )
 }
 
+function Modal({ title, onClose, children }) {
+  const [isClosing, setIsClosing] = useState(false)
+
+  const requestClose = () => setIsClosing(true)
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') requestClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  return (
+    <div
+      className={`dashboard-modal-overlay${isClosing ? ' is-closing' : ''}`}
+      onClick={requestClose}
+      onAnimationEnd={() => {
+        if (isClosing) onClose()
+      }}
+    >
+      <div className={`dashboard-modal${isClosing ? ' is-closing' : ''}`} onClick={(event) => event.stopPropagation()}>
+        <div className="dashboard-modal-header">
+          <h3>{title}</h3>
+          <button type="button" className="dashboard-modal-close" onClick={requestClose} aria-label="ปิด">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="dashboard-modal-body">
+          {typeof children === 'function' ? children(requestClose) : children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const FAKE_QR_SIZE = 21
+
+function isInFinderPattern(row, col, size) {
+  const corners = [
+    [0, 0],
+    [0, size - 7],
+    [size - 7, 0],
+  ]
+  return corners.some(([r, c]) => row >= r && row < r + 7 && col >= c && col < c + 7)
+}
+
+function finderModuleOn(row, col, size) {
+  const corners = [
+    [0, 0],
+    [0, size - 7],
+    [size - 7, 0],
+  ]
+  for (const [r0, c0] of corners) {
+    if (row >= r0 && row < r0 + 7 && col >= c0 && col < c0 + 7) {
+      const localRow = row - r0
+      const localCol = col - c0
+      const ring = localRow === 0 || localRow === 6 || localCol === 0 || localCol === 6
+      const core = localRow >= 2 && localRow <= 4 && localCol >= 2 && localCol <= 4
+      return ring || core
+    }
+  }
+  return false
+}
+
+function pseudoRandomModuleOn(row, col) {
+  const value = Math.sin(row * 12.9898 + col * 78.233) * 43758.5453
+  return value - Math.floor(value) > 0.55
+}
+
+function FakeQrCode() {
+  const modules = []
+  for (let row = 0; row < FAKE_QR_SIZE; row++) {
+    for (let col = 0; col < FAKE_QR_SIZE; col++) {
+      const on = isInFinderPattern(row, col, FAKE_QR_SIZE)
+        ? finderModuleOn(row, col, FAKE_QR_SIZE)
+        : pseudoRandomModuleOn(row, col)
+      if (on) modules.push(`${row}-${col}`)
+    }
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${FAKE_QR_SIZE} ${FAKE_QR_SIZE}`}
+      className="dashboard-fake-qr"
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label="QR สำหรับสแกนชำระเงิน"
+    >
+      <rect width={FAKE_QR_SIZE} height={FAKE_QR_SIZE} fill="#fff" />
+      {modules.map((key) => {
+        const [row, col] = key.split('-').map(Number)
+        return <rect key={key} x={col} y={row} width={1} height={1} fill="#0f2b52" />
+      })}
+    </svg>
+  )
+}
+
 const STATUS_LABEL = {
   paid: 'ชำระแล้ว',
   pending: 'รอชำระ',
   overdue: 'ค้างชำระ',
+}
+
+const DUE_STATUS_LABEL = {
+  paid: 'ชำระแล้ว',
+  pending: 'รอตรวจสอบ',
+  due: 'ยังไม่ครบกำหนด',
+  overdue: 'ค้างชำระ',
+}
+
+function dueBadgeClass(status) {
+  if (status === 'paid') return 'paid'
+  if (status === 'overdue') return 'overdue'
+  if (status === 'pending') return 'pending'
+  return 'due'
+}
+
+const TENANT_REQUEST_TYPE_LABEL = {
+  renew: 'ต่อสัญญา',
+  moveout: 'แจ้งย้ายออก',
+}
+
+const TENANT_REQUEST_STATUS_LABEL = {
+  pending: 'รอดำเนินการ',
+  approved: 'อนุมัติแล้ว',
+  rejected: 'ปฏิเสธ',
+}
+
+const RENEW_DURATION_OPTIONS = [
+  { value: '1', label: '1 เดือน' },
+  { value: '3', label: '3 เดือน' },
+  { value: '6', label: '6 เดือน' },
+  { value: '12', label: '1 ปี (12 เดือน)' },
+]
+
+const RENEW_PAYMENT_TYPE_OPTIONS = [
+  { value: 'monthly', label: 'จ่ายรายเดือน' },
+  { value: 'lump_sum', label: 'จ่ายล่วงหน้าทั้งก้อน' },
+]
+
+const RENEW_DURATION_LABEL = Object.fromEntries(RENEW_DURATION_OPTIONS.map((option) => [option.value, option.label]))
+const RENEW_PAYMENT_TYPE_LABEL = Object.fromEntries(
+  RENEW_PAYMENT_TYPE_OPTIONS.map((option) => [option.value, option.label]),
+)
+
+function tenantRequestBadgeClass(status) {
+  if (status === 'approved') return 'paid'
+  if (status === 'rejected') return 'overdue'
+  return 'pending'
+}
+
+const MAINTENANCE_STATUS_LABEL = {
+  pending: 'รอดำเนินการ',
+  in_progress: 'กำลังดำเนินการ',
+  done: 'เสร็จสิ้น',
+}
+
+function maintenanceBadgeClass(status) {
+  if (status === 'done') return 'paid'
+  if (status === 'in_progress') return 'due'
+  return 'pending'
+}
+
+function formatCurrency(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '-'
+  return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
 function formatDate(value) {
@@ -162,6 +339,52 @@ function CustomerDashbord() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
+  const [paymentSuccess, setPaymentSuccess] = useState('')
+
+  const [activeRequestType, setActiveRequestType] = useState(null)
+  const [requestNote, setRequestNote] = useState('')
+  const [renewDurationMonths, setRenewDurationMonths] = useState(RENEW_DURATION_OPTIONS[2].value)
+  const [renewPaymentType, setRenewPaymentType] = useState(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
+  const [requestSubmitting, setRequestSubmitting] = useState(false)
+  const [requestError, setRequestError] = useState('')
+  const [requestSuccess, setRequestSuccess] = useState('')
+
+  const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
+  const [maintenanceText, setMaintenanceText] = useState('')
+  const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false)
+  const [maintenanceError, setMaintenanceError] = useState('')
+  const [maintenanceSuccess, setMaintenanceSuccess] = useState('')
+
+  const loadDashboard = () => {
+    const token = sessionStorage.getItem('token')
+    if (!token) {
+      navigate('/login', { replace: true })
+      return Promise.resolve()
+    }
+
+    return axios
+      .get('/api/customer/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(({ data }) => {
+        setData(data)
+        setError('')
+      })
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          sessionStorage.removeItem('token')
+          sessionStorage.removeItem('user')
+          navigate('/login', { replace: true })
+          return
+        }
+        setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง')
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }
+
   useEffect(() => {
     let isMounted = true
     const token = sessionStorage.getItem('token')
@@ -193,12 +416,107 @@ function CustomerDashbord() {
     return () => {
       isMounted = false
     }
-  }, [navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLogout = () => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
     navigate('/login', { replace: true })
+  }
+
+  const openPaymentForm = () => {
+    setPaymentError('')
+    setPaymentSuccess('')
+    setShowPaymentForm(true)
+  }
+
+  const handleConfirmPayment = async (event) => {
+    event.preventDefault()
+    const token = sessionStorage.getItem('token')
+    setPaymentSubmitting(true)
+    setPaymentError('')
+    try {
+      const { data: result } = await axios.post(
+        '/api/customer/payments/confirm',
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      setPaymentSuccess(result.message || 'ชำระเงินสำเร็จ')
+      setShowPaymentForm(false)
+      await loadDashboard()
+    } catch (err) {
+      setPaymentError(err.response?.data?.message || 'ชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setPaymentSubmitting(false)
+    }
+  }
+
+  const openRequestForm = (type) => {
+    setActiveRequestType(type)
+    setRequestNote('')
+    setRenewDurationMonths(RENEW_DURATION_OPTIONS[2].value)
+    setRenewPaymentType(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
+    setRequestError('')
+    setRequestSuccess('')
+  }
+
+  const handleRequestSubmit = async (event) => {
+    event.preventDefault()
+    const token = sessionStorage.getItem('token')
+    setRequestSubmitting(true)
+    setRequestError('')
+    try {
+      const payload = { type: activeRequestType, note: requestNote.trim() || undefined }
+      if (activeRequestType === 'renew') {
+        payload.renew_duration_months = Number(renewDurationMonths)
+        payload.renew_payment_type = renewPaymentType
+      }
+      const { data: result } = await axios.post('/api/customer/requests', payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setRequestSuccess(result.message || 'ส่งคำขอสำเร็จ')
+      setActiveRequestType(null)
+      await loadDashboard()
+    } catch (err) {
+      setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setRequestSubmitting(false)
+    }
+  }
+
+  const openMaintenanceForm = () => {
+    setMaintenanceText('')
+    setMaintenanceError('')
+    setMaintenanceSuccess('')
+    setShowMaintenanceForm(true)
+  }
+
+  const handleMaintenanceSubmit = async (event) => {
+    event.preventDefault()
+    const description = maintenanceText.trim()
+    if (!description) {
+      setMaintenanceError('กรุณากรอกรายละเอียดปัญหา')
+      return
+    }
+    const token = sessionStorage.getItem('token')
+    setMaintenanceSubmitting(true)
+    setMaintenanceError('')
+    try {
+      const { data: result } = await axios.post(
+        '/api/customer/maintenance',
+        { description },
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      setMaintenanceSuccess(result.message || 'แจ้งซ่อมสำเร็จ')
+      setMaintenanceText('')
+      setShowMaintenanceForm(false)
+      await loadDashboard()
+    } catch (err) {
+      setMaintenanceError(err.response?.data?.message || 'แจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setMaintenanceSubmitting(false)
+    }
   }
 
   if (loading) {
@@ -219,12 +537,38 @@ function CustomerDashbord() {
     )
   }
 
-  const { customer, room, rentalHistory } = data
+  const { customer, room, rentalHistory, currentDue, maintenanceRequests = [], tenantRequests = [] } = data
   const msUntilStart = room?.is_booked ? msUntil(room.rental_start_date) : null
   const hasStarted = msUntilStart !== null && msUntilStart <= 0
   const msLeft = hasStarted ? msUntil(room.rental_end_date) : null
   const isExpired = msLeft !== null && msLeft < 0
   const isWarning = msLeft !== null && msLeft >= 0 && msLeft <= 30 * 24 * 60 * 60 * 1000
+
+  const latestRequestByType = (type) => tenantRequests.find((request) => request.type === type)
+  const renewRequest = latestRequestByType('renew')
+  const moveoutRequest = latestRequestByType('moveout')
+
+  const reminders = []
+  if (room?.is_booked) {
+    if (isExpired) {
+      reminders.push({ type: 'danger', text: `สัญญาเช่าห้อง ${room.room_number} หมดอายุแล้ว กรุณาต่อสัญญาหรือแจ้งย้ายออก` })
+    } else if (isWarning) {
+      reminders.push({ type: 'warning', text: `สัญญาเช่าห้อง ${room.room_number} ใกล้หมดอายุ (เหลืออีก ${formatRemaining(msLeft)})` })
+    }
+  }
+  if (currentDue) {
+    if (currentDue.status === 'overdue') {
+      reminders.push({
+        type: 'danger',
+        text: `ค้างชำระค่าเช่างวดนี้ (ครบกำหนดวันที่ ${formatDate(currentDue.dueDate)}) กรุณาชำระโดยเร็ว`,
+      })
+    } else if (currentDue.status === 'due') {
+      reminders.push({
+        type: 'warning',
+        text: `ถึงกำหนดชำระค่าเช่าประจำงวดนี้แล้ว กรุณาชำระภายในวันที่ ${formatDate(currentDue.dueDate)}`,
+      })
+    }
+  }
 
   return (
     <div className="dashboard-page">
@@ -265,6 +609,16 @@ function CustomerDashbord() {
             </button>
           </div>
         </div>
+
+        {reminders.length > 0 && (
+          <div className="dashboard-reminders">
+            {reminders.map((reminder, index) => (
+              <div key={index} className={`alert alert-${reminder.type} dashboard-reminder`}>
+                {reminder.text}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="row g-3">
           <div className="col-12 col-lg-4">
@@ -313,6 +667,58 @@ function CustomerDashbord() {
                       เตียง {room.bed ?? 0} เตียง
                     </span>
                   </div>
+
+                  {currentDue && currentDue.status !== 'paid' && (
+                    <>
+                      <h3 className="dashboard-section-title with-aside">
+                        ยอดชำระเดือนนี้
+                        <span className="dashboard-due-period">
+                          ค่าเช่ารอบ {formatDate(currentDue.periodStart)} - {formatDate(currentDue.periodEnd)}
+                        </span>
+                      </h3>
+                      <div className="dashboard-due-box">
+                        <span className="dashboard-due-amount">฿{formatCurrency(currentDue.amount)}</span>
+                        <span className={`dashboard-badge status-${dueBadgeClass(currentDue.status)}`}>
+                          {DUE_STATUS_LABEL[currentDue.status] || currentDue.status}
+                        </span>
+                      </div>
+                      <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
+                      {currentDue.depositApplied > 0 && (
+                        <p className="dashboard-due-deposit-note">
+                          หักเงินมัดจำ ฿{formatCurrency(currentDue.depositApplied)} จากค่าเช่าเดือนแรกแล้ว
+                        </p>
+                      )}
+
+                      <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
+                        ชำระเงิน
+                      </button>
+                      {paymentSuccess && !showPaymentForm && <p className="dashboard-form-success">{paymentSuccess}</p>}
+                      {showPaymentForm && (
+                        <Modal title="สแกนเพื่อชำระเงิน" onClose={() => setShowPaymentForm(false)}>
+                          {(requestClose) => (
+                            <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
+                              <div className="dashboard-qr-box">
+                                <span className="dashboard-qr-badge">PromptPay</span>
+                                <FakeQrCode />
+                                <p className="dashboard-qr-amount">฿{formatCurrency(currentDue.amount)}</p>
+                                <p className="dashboard-qr-hint">สแกนผ่านแอปธนาคารเพื่อชำระเงิน</p>
+                              </div>
+                              {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
+                              <div className="dashboard-form-actions">
+                                <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
+                                  {paymentSubmitting ? 'กำลังตรวจสอบ...' : 'ฉันชำระเงินแล้ว'}
+                                </button>
+                                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                                  ยกเลิก
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </Modal>
+                      )}
+                    </>
+                  )}
+
                 </>
               ) : (
                 <p className="dashboard-empty">ไม่พบข้อมูลห้องพัก</p>
@@ -336,6 +742,7 @@ function CustomerDashbord() {
                           <thead>
                             <tr>
                               <th>วันที่ชำระ</th>
+                              <th>จำนวนเงิน</th>
                               <th>สถานะ</th>
                               <th>หมายเหตุ</th>
                             </tr>
@@ -343,7 +750,8 @@ function CustomerDashbord() {
                           <tbody>
                             {entry.payments.map((payment) => (
                               <tr key={payment.id}>
-                                <td>{formatDate(payment.payment_date)}</td>
+                                <td>{formatDateTime(payment.created_at)}</td>
+                                <td>฿{formatCurrency(payment.amount)}</td>
                                 <td>
                                   <span className={`dashboard-badge status-${payment.status}`}>
                                     {STATUS_LABEL[payment.status] || payment.status}
@@ -358,6 +766,166 @@ function CustomerDashbord() {
                     )}
                   </div>
                 ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="row g-3 mt-1">
+          {room?.is_booked && (
+            <div className="col-12 col-lg-5">
+              <div className="dashboard-card">
+                <h2>จัดการสัญญาเช่า</h2>
+                <div className="dashboard-request-list">
+                  <div className="dashboard-request-row">
+                    <div>
+                      <p className="dashboard-request-title">ต่อสัญญา</p>
+                      <p className="dashboard-request-desc">
+                        {renewRequest?.status === 'pending'
+                          ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
+                          : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด'}
+                      </p>
+                    </div>
+                    {renewRequest?.status === 'pending' ? (
+                      <span className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)}`}>
+                        {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
+                      </span>
+                    ) : (
+                      <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
+                        ต่อสัญญา
+                      </button>
+                    )}
+                  </div>
+                  <div className="dashboard-request-row">
+                    <div>
+                      <p className="dashboard-request-title">แจ้งย้ายออก</p>
+                      <p className="dashboard-request-desc">แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา</p>
+                    </div>
+                    {moveoutRequest?.status === 'pending' ? (
+                      <span className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)}`}>
+                        {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
+                      </span>
+                    ) : (
+                      <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
+                        แจ้งย้ายออก
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {requestSuccess && !activeRequestType && <p className="dashboard-form-success">{requestSuccess}</p>}
+
+                {activeRequestType && (
+                  <Modal title={TENANT_REQUEST_TYPE_LABEL[activeRequestType]} onClose={() => setActiveRequestType(null)}>
+                    {(requestClose) => (
+                      <form className="dashboard-inline-form" onSubmit={handleRequestSubmit}>
+                        {activeRequestType === 'renew' && (
+                          <>
+                            <label>ระยะเวลาที่ต้องการต่อ</label>
+                            <select
+                              value={renewDurationMonths}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                setRenewDurationMonths(value)
+                                if (Number(value) <= 1 && renewPaymentType === 'lump_sum') {
+                                  setRenewPaymentType('monthly')
+                                }
+                              }}
+                            >
+                              {RENEW_DURATION_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <label>รูปแบบการชำระ</label>
+                            <select
+                              value={renewPaymentType}
+                              onChange={(event) => setRenewPaymentType(event.target.value)}
+                            >
+                              {RENEW_PAYMENT_TYPE_OPTIONS.filter(
+                                (option) => option.value !== 'lump_sum' || Number(renewDurationMonths) > 1,
+                              ).map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                        <label>หมายเหตุ (ถ้ามี)</label>
+                        <textarea
+                          rows={2}
+                          value={requestNote}
+                          onChange={(event) => setRequestNote(event.target.value)}
+                          placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                        />
+                        {requestError && <p className="dashboard-form-error">{requestError}</p>}
+                        <div className="dashboard-form-actions">
+                          <button type="submit" className="dashboard-action-btn is-primary" disabled={requestSubmitting}>
+                            {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
+                          </button>
+                          <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                            ยกเลิก
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </Modal>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="col-12 col-lg-7">
+            <div className="dashboard-card">
+              <div className="dashboard-card-header">
+                <h2>แจ้งซ่อม</h2>
+                <button type="button" className="dashboard-action-btn is-primary" onClick={openMaintenanceForm}>
+                  แจ้งซ่อม
+                </button>
+              </div>
+              {maintenanceSuccess && !showMaintenanceForm && <p className="dashboard-form-success">{maintenanceSuccess}</p>}
+              {showMaintenanceForm && (
+                <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
+                  {(requestClose) => (
+                    <form className="dashboard-inline-form" onSubmit={handleMaintenanceSubmit}>
+                      <label>รายละเอียดปัญหา</label>
+                      <textarea
+                        rows={3}
+                        value={maintenanceText}
+                        onChange={(event) => setMaintenanceText(event.target.value)}
+                        placeholder="อธิบายปัญหาที่ต้องการแจ้งซ่อม เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว..."
+                      />
+                      {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
+                      <div className="dashboard-form-actions">
+                        <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
+                          {maintenanceSubmitting ? 'กำลังส่ง...' : 'ยืนยันแจ้งซ่อม'}
+                        </button>
+                        <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                          ยกเลิก
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </Modal>
+              )}
+
+              {maintenanceRequests.length === 0 ? (
+                <p className="dashboard-empty">ยังไม่มีรายการแจ้งซ่อม</p>
+              ) : (
+                <div className="dashboard-maintenance-list">
+                  {maintenanceRequests.map((item) => (
+                    <div key={item.id} className="dashboard-maintenance-item">
+                      <div>
+                        <p className="dashboard-maintenance-desc">{item.description}</p>
+                        <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
+                      </div>
+                      <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
+                        {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

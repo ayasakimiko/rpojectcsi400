@@ -3,9 +3,11 @@ services:
     image: mysql:8.0
     container_name: projectcsi400-mysql
     restart: unless-stopped
+    command: --default-time-zone=+07:00
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
       MYSQL_DATABASE: ${DB_NAME:-projectcsi400}
+      TZ: Asia/Bangkok
     ports:
       - "${DB_PORT:-3306}:3306"
     volumes:

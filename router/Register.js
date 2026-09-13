@@ -26,6 +26,7 @@ function validateRegisterInput({
   room_number,
   rental_start_date,
   rental_end_date,
+  deposit_amount,
 }) {
   if (
     typeof idcard !== "string" ||
@@ -78,6 +79,12 @@ function validateRegisterInput({
   if (endDate <= startDate) {
     return "วันเวลาที่สิ้นสุดสัญญาต้องอยู่หลังวันเวลาที่เริ่มเช่า";
   }
+  if (deposit_amount !== undefined && deposit_amount !== null && deposit_amount !== "") {
+    const depositValue = Number(deposit_amount);
+    if (!Number.isFinite(depositValue) || depositValue < 0) {
+      return "จำนวนเงินมัดจำไม่ถูกต้อง";
+    }
+  }
   return null;
 }
 
@@ -85,8 +92,18 @@ router.post("/register", async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();
   try {
-    const { idcard, password, phone, first_name, last_name, age, room_number, rental_start_date, rental_end_date } =
-      req.body ?? {};
+    const {
+      idcard,
+      password,
+      phone,
+      first_name,
+      last_name,
+      age,
+      room_number,
+      rental_start_date,
+      rental_end_date,
+      deposit_amount,
+    } = req.body ?? {};
 
     const validationError = validateRegisterInput({
       idcard,
@@ -98,6 +115,7 @@ router.post("/register", async (req, res) => {
       room_number,
       rental_start_date,
       rental_end_date,
+      deposit_amount,
     });
     if (validationError) {
       return res.status(400).json({ message: validationError });
@@ -105,6 +123,10 @@ router.post("/register", async (req, res) => {
 
     const normalizedIdcard = idcard.trim();
     const normalizedRoomNumber = Number(room_number);
+    const normalizedDepositAmount =
+      deposit_amount !== undefined && deposit_amount !== null && deposit_amount !== ""
+        ? Number(deposit_amount)
+        : null;
 
     await connection.beginTransaction();
 
@@ -132,7 +154,7 @@ router.post("/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [customerResult] = await connection.query(
-      `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age, room_number) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age, room_number, deposit_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         normalizedIdcard,
         hashedPassword,
@@ -141,6 +163,7 @@ router.post("/register", async (req, res) => {
         last_name.trim(),
         Number(age),
         normalizedRoomNumber,
+        normalizedDepositAmount,
       ],
     );
 

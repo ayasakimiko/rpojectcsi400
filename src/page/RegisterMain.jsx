@@ -58,6 +58,7 @@ const initialRegisterForm = {
   room_number: '',
   rental_start_date: getNow(),
   rental_end_date: addDefaultRentalPeriod(getNow()),
+  deposit_amount: '',
   password: '',
   confirmPassword: '',
 }
@@ -107,6 +108,11 @@ function RegisterMain() {
     setRegisterForm((prev) => ({ ...prev, age: digitsOnly }))
   }
 
+  const handleDepositChange = (e) => {
+    const cleaned = e.target.value.replace(/[^\d.]/g, '')
+    setRegisterForm((prev) => ({ ...prev, deposit_amount: cleaned }))
+  }
+
   const handleRentalDateChange = (name, date) => {
     setRegisterForm((prev) => {
       const next = { ...prev, [name]: date }
@@ -143,6 +149,7 @@ function RegisterMain() {
       room_number,
       rental_start_date,
       rental_end_date,
+      deposit_amount,
       password,
       confirmPassword,
     } = registerForm
@@ -173,6 +180,11 @@ function RegisterMain() {
       return
     }
 
+    if (deposit_amount && (!Number.isFinite(Number(deposit_amount)) || Number(deposit_amount) < 0)) {
+      setError('จำนวนเงินมัดจำไม่ถูกต้อง')
+      return
+    }
+
     if (password !== confirmPassword) {
       setError('รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน')
       return
@@ -189,6 +201,7 @@ function RegisterMain() {
         room_number,
         rental_start_date: formatDateTimeLocal(rental_start_date),
         rental_end_date: formatDateTimeLocal(rental_end_date),
+        deposit_amount: deposit_amount || undefined,
         password,
       })
       setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
@@ -312,6 +325,23 @@ function RegisterMain() {
                     {!roomsLoading && availableRooms.length === 0 && (
                       <div className="form-text text-danger">ขณะนี้ไม่มีห้องว่าง</div>
                     )}
+                  </div>
+
+                  <div className="col-12">
+                    <label className="form-label" htmlFor="register-deposit">
+                      เงินมัดจำ (ถ้ามี)
+                    </label>
+                    <input
+                      id="register-deposit"
+                      type="text"
+                      inputMode="decimal"
+                      name="deposit_amount"
+                      className="form-control"
+                      placeholder="เว้นว่างไว้หากไม่มีมัดจำ"
+                      value={registerForm.deposit_amount}
+                      onChange={handleDepositChange}
+                    />
+                    <div className="form-text">ยอดมัดจำนี้จะถูกหักออกจากค่าเช่าเดือนแรกให้อัตโนมัติ</div>
                   </div>
 
                   <div className="col-12 col-md-6">
