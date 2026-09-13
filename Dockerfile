@@ -12,4 +12,4 @@ COPY middleware ./middleware
 
 EXPOSE 4000
 
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "node Database/connection.js && node server.js"]

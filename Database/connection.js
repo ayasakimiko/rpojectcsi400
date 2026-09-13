@@ -48,42 +48,6 @@ async function main() {
   const sql = fs.readFileSync(path.join(__dirname, "database.sql"), "utf8");
   await connection.query(sql);
 
-  try {
-    await connection.query("ALTER TABLE Payment ADD COLUMN slip_path VARCHAR(255)");
-  } catch (error) {
-    if (error.code !== "ER_DUP_FIELDNAME") throw error;
-  }
-
-  try {
-    await connection.query("ALTER TABLE TenantRequest ADD COLUMN renew_duration_months INT UNSIGNED");
-  } catch (error) {
-    if (error.code !== "ER_DUP_FIELDNAME") throw error;
-  }
-
-  try {
-    await connection.query("ALTER TABLE TenantRequest ADD COLUMN renew_payment_type VARCHAR(20)");
-  } catch (error) {
-    if (error.code !== "ER_DUP_FIELDNAME") throw error;
-  }
-
-  try {
-    await connection.query("ALTER TABLE Customer ADD COLUMN deposit_amount DECIMAL(10,2)");
-  } catch (error) {
-    if (error.code !== "ER_DUP_FIELDNAME") throw error;
-  }
-
-  try {
-    await connection.query("ALTER TABLE Room ADD COLUMN prepaid_until DATETIME");
-  } catch (error) {
-    if (error.code !== "ER_DUP_FIELDNAME") throw error;
-  }
-
-  try {
-    await connection.query("ALTER TABLE Room ADD COLUMN pending_lump_sum_months INT UNSIGNED");
-  } catch (error) {
-    if (error.code !== "ER_DUP_FIELDNAME") throw error;
-  }
-
   const [tables] = await connection.query("SHOW TABLES;");
   console.log(`Database "${DB_NAME}" is ready. Tables:`);
   for (const row of tables) {

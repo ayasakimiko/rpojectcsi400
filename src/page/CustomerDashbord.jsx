@@ -258,13 +258,37 @@ const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
   in_progress: 'กำลังดำเนินการ',
   done: 'เสร็จสิ้น',
+  cancelled: 'ยกเลิกแล้ว',
 }
 
 function maintenanceBadgeClass(status) {
   if (status === 'done') return 'paid'
   if (status === 'in_progress') return 'due'
+  if (status === 'cancelled') return 'cancelled'
   return 'pending'
 }
+
+const MAINTENANCE_CATEGORY_OPTIONS = [
+  { value: 'electrical', label: 'ไฟฟ้า' },
+  { value: 'plumbing', label: 'ประปา' },
+  { value: 'aircon', label: 'เครื่องปรับอากาศ' },
+  { value: 'furniture', label: 'เฟอร์นิเจอร์ / สิ่งอำนวยความสะดวก' },
+  { value: 'other', label: 'อื่นๆ' },
+]
+
+const MAINTENANCE_TIME_OPTIONS = [
+  { value: 'anytime', label: 'เวลาไหนก็ได้' },
+  { value: 'morning', label: 'ช่วงเช้า (08:00-12:00)' },
+  { value: 'afternoon', label: 'ช่วงบ่าย (12:00-16:00)' },
+  { value: 'evening', label: 'ช่วงเย็น (16:00-19:00)' },
+]
+
+const MAINTENANCE_CATEGORY_LABEL = Object.fromEntries(
+  MAINTENANCE_CATEGORY_OPTIONS.map((option) => [option.value, option.label]),
+)
+const MAINTENANCE_TIME_LABEL = Object.fromEntries(
+  MAINTENANCE_TIME_OPTIONS.map((option) => [option.value, option.label]),
+)
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -354,9 +378,14 @@ function CustomerDashbord() {
 
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
   const [maintenanceText, setMaintenanceText] = useState('')
+  const [maintenanceCategory, setMaintenanceCategory] = useState(MAINTENANCE_CATEGORY_OPTIONS[0].value)
+  const [maintenancePreferredTime, setMaintenancePreferredTime] = useState(MAINTENANCE_TIME_OPTIONS[0].value)
+  const [maintenanceContactPhone, setMaintenanceContactPhone] = useState('')
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false)
   const [maintenanceError, setMaintenanceError] = useState('')
   const [maintenanceSuccess, setMaintenanceSuccess] = useState('')
+  const [cancelingMaintenanceId, setCancelingMaintenanceId] = useState(null)
+  const [confirmCancelId, setConfirmCancelId] = useState(null)
 
   const loadDashboard = () => {
     const token = sessionStorage.getItem('token')
@@ -487,6 +516,9 @@ function CustomerDashbord() {
 
   const openMaintenanceForm = () => {
     setMaintenanceText('')
+    setMaintenanceCategory(MAINTENANCE_CATEGORY_OPTIONS[0].value)
+    setMaintenancePreferredTime(MAINTENANCE_TIME_OPTIONS[0].value)
+    setMaintenanceContactPhone(data?.customer?.phone || '')
     setMaintenanceError('')
     setMaintenanceSuccess('')
     setShowMaintenanceForm(true)
@@ -505,7 +537,12 @@ function CustomerDashbord() {
     try {
       const { data: result } = await axios.post(
         '/api/customer/maintenance',
-        { description },
+        {
+          description,
+          category: maintenanceCategory,
+          preferredTime: maintenancePreferredTime,
+          contactPhone: maintenanceContactPhone.trim() || undefined,
+        },
         { headers: { Authorization: `Bearer ${token}` } },
       )
       setMaintenanceSuccess(result.message || 'แจ้งซ่อมสำเร็จ')
@@ -516,6 +553,28 @@ function CustomerDashbord() {
       setMaintenanceError(err.response?.data?.message || 'แจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setMaintenanceSubmitting(false)
+    }
+  }
+
+  const handleCancelMaintenance = async (id) => {
+    const token = sessionStorage.getItem('token')
+    setMaintenanceError('')
+    setMaintenanceSuccess('')
+    setCancelingMaintenanceId(id)
+    try {
+      const { data: result } = await axios.post(
+        `/api/customer/maintenance/${id}/cancel`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      setMaintenanceSuccess(result.message || 'ยกเลิกรายการแจ้งซ่อมสำเร็จ')
+      await loadDashboard()
+      return true
+    } catch (err) {
+      setMaintenanceError(err.response?.data?.message || 'ยกเลิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      return false
+    } finally {
+      setCancelingMaintenanceId(null)
     }
   }
 
@@ -909,6 +968,15 @@ function CustomerDashbord() {
                 <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
                   {(requestClose) => (
                     <form className="dashboard-inline-form" onSubmit={handleMaintenanceSubmit}>
+                      <label>หมวดหมู่ปัญหา</label>
+                      <select value={maintenanceCategory} onChange={(event) => setMaintenanceCategory(event.target.value)}>
+                        {MAINTENANCE_CATEGORY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+
                       <label>รายละเอียดปัญหา</label>
                       <textarea
                         rows={3}
@@ -916,6 +984,27 @@ function CustomerDashbord() {
                         onChange={(event) => setMaintenanceText(event.target.value)}
                         placeholder="อธิบายปัญหาที่ต้องการแจ้งซ่อม เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว..."
                       />
+
+                      <label>ช่วงเวลาที่สะดวกให้เข้าซ่อม</label>
+                      <select
+                        value={maintenancePreferredTime}
+                        onChange={(event) => setMaintenancePreferredTime(event.target.value)}
+                      >
+                        {MAINTENANCE_TIME_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <label>เบอร์โทรติดต่อ (ถ้ามี)</label>
+                      <input
+                        type="tel"
+                        value={maintenanceContactPhone}
+                        onChange={(event) => setMaintenanceContactPhone(event.target.value)}
+                        placeholder="เบอร์โทรที่ติดต่อได้"
+                      />
+
                       {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
                       <div className="dashboard-form-actions">
                         <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
@@ -938,14 +1027,68 @@ function CustomerDashbord() {
                     <div key={item.id} className="dashboard-maintenance-item">
                       <div>
                         <p className="dashboard-maintenance-desc">{item.description}</p>
+                        <p className="dashboard-maintenance-meta">
+                          {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
+                          {' · '}
+                          {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
+                          {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
+                        </p>
                         <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
                       </div>
-                      <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
-                        {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
-                      </span>
+                      <div className="dashboard-maintenance-badges">
+                        <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
+                          {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                        </span>
+                        {item.status === 'pending' && (
+                          <button
+                            type="button"
+                            className="dashboard-maintenance-cancel"
+                            disabled={cancelingMaintenanceId === item.id}
+                            onClick={() => {
+                              setMaintenanceError('')
+                              setMaintenanceSuccess('')
+                              setConfirmCancelId(item.id)
+                            }}
+                          >
+                            {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
+              )}
+
+              {confirmCancelId !== null && (
+                <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)}>
+                  {(requestClose) => (
+                    <div className="dashboard-confirm-body">
+                      <div className="dashboard-confirm-icon">!</div>
+                      <p className="dashboard-confirm-message">
+                        ต้องการยกเลิกรายการแจ้งซ่อมนี้ใช่หรือไม่?
+                        <br />
+                        เมื่อยกเลิกแล้วจะไม่สามารถกู้คืนได้
+                      </p>
+                      {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
+                      <div className="dashboard-form-actions">
+                        <button
+                          type="button"
+                          className="dashboard-action-btn is-danger"
+                          disabled={cancelingMaintenanceId === confirmCancelId}
+                          onClick={async () => {
+                            const ok = await handleCancelMaintenance(confirmCancelId)
+                            if (ok) requestClose()
+                          }}
+                        >
+                          {cancelingMaintenanceId === confirmCancelId ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
+                        </button>
+                        <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                          ไม่ยกเลิก
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </Modal>
               )}
             </div>
           </div>

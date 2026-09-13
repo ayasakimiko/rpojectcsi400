@@ -106,6 +106,9 @@ CREATE TABLE IF NOT EXISTS MaintenanceRequest (
     customer_id INT UNSIGNED NOT NULL,
     room_number INT UNSIGNED NOT NULL,
     description VARCHAR(500) NOT NULL,
+    category VARCHAR(20) NOT NULL DEFAULT 'other',
+    contact_phone VARCHAR(20),
+    preferred_time VARCHAR(20) NOT NULL DEFAULT 'anytime',
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

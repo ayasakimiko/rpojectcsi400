@@ -8,6 +8,8 @@ const GRACE_DAYS = 3;
 const REQUEST_TYPES = new Set(["renew", "moveout"]);
 const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
 const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
+const MAINTENANCE_CATEGORIES = new Set(["electrical", "plumbing", "aircon", "furniture", "other"]);
+const MAINTENANCE_TIME_SLOTS = new Set(["anytime", "morning", "afternoon", "evening"]);
 
 function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
@@ -16,7 +18,7 @@ function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   const end = new Date(room.rental_end_date);
   const now = new Date();
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  
+
   if (now < start || now > end) return null;
 
   const billingDay = start.getDate();
@@ -123,7 +125,8 @@ router.get("/me", authenticate, async (req, res) => {
     }));
 
     const [maintenanceRequests] = await pool.query(
-      `SELECT id, description, status, created_at FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+      `SELECT id, description, category, contact_phone, preferred_time, status, created_at
+       FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
       [customer.id],
     );
 
@@ -235,14 +238,54 @@ router.post("/maintenance", authenticate, async (req, res) => {
       return res.status(400).json({ message: "รายละเอียดยาวเกินไป (สูงสุด 500 ตัวอักษร)" });
     }
 
+    const category = MAINTENANCE_CATEGORIES.has(req.body?.category) ? req.body.category : "other";
+    const preferredTime = MAINTENANCE_TIME_SLOTS.has(req.body?.preferredTime) ? req.body.preferredTime : "anytime";
+
+    const contactPhone = typeof req.body?.contactPhone === "string" ? req.body.contactPhone.trim() : "";
+    if (contactPhone.length > 20) {
+      return res.status(400).json({ message: "เบอร์โทรติดต่อไม่ถูกต้อง" });
+    }
+
     await pool.query(
-      `INSERT INTO MaintenanceRequest (customer_id, room_number, description) VALUES (?, ?, ?)`,
-      [customer.id, customer.room_number, description],
+      `INSERT INTO MaintenanceRequest (customer_id, room_number, description, category, contact_phone, preferred_time)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [customer.id, customer.room_number, description, category, contactPhone || null, preferredTime],
     );
 
     return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด" });
   } catch (error) {
     console.error("Create maintenance request error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/maintenance/:id/cancel", authenticate, async (req, res) => {
+  try {
+    const pool = getPool();
+
+    const [customerRows] = await pool.query(`SELECT id FROM Customer WHERE id = ?`, [req.user.id]);
+    const customer = customerRows[0];
+    if (!customer) {
+      return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+    }
+
+    const [maintenanceRows] = await pool.query(
+      `SELECT id, status FROM MaintenanceRequest WHERE id = ? AND customer_id = ?`,
+      [req.params.id, customer.id],
+    );
+    const maintenanceRequest = maintenanceRows[0];
+    if (!maintenanceRequest) {
+      return res.status(404).json({ message: "ไม่พบรายการแจ้งซ่อม" });
+    }
+    if (maintenanceRequest.status !== "pending") {
+      return res.status(400).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องแล้ว" });
+    }
+
+    await pool.query(`UPDATE MaintenanceRequest SET status = 'cancelled' WHERE id = ?`, [maintenanceRequest.id]);
+
+    return res.json({ message: "ยกเลิกรายการแจ้งซ่อมสำเร็จ" });
+  } catch (error) {
+    console.error("Cancel maintenance request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

@@ -161,7 +161,6 @@
   border-radius: 10px;
   width: 100%;
   max-width: 640px;
-  min-height: 420px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -178,7 +177,6 @@
 }
 
 .dashboard-modal-body {
-  flex: 1;
   display: flex;
   flex-direction: column;
 }
@@ -226,7 +224,6 @@
 }
 
 .dashboard-modal .dashboard-inline-form {
-  flex: 1;
   margin-top: 0;
   padding: 0;
   border: none;
@@ -482,6 +479,7 @@
 .dashboard-badge.status-pending {
   background: #fffbeb;
   color: #b45309;
+  border: 1.5px solid #fde68a;
 }
 
 .dashboard-badge.status-overdue {
@@ -493,6 +491,11 @@
   background: #eff6ff;
   color: #1d4ed8;
   border: 1.5px solid #bfdbfe;
+}
+
+.dashboard-badge.status-cancelled {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .dashboard-reminders {
@@ -664,6 +667,8 @@
 }
 
 .dashboard-inline-form input[type='number'],
+.dashboard-inline-form input[type='tel'],
+.dashboard-inline-form input[type='text'],
 .dashboard-inline-form textarea,
 .dashboard-inline-form select {
   width: 100%;
@@ -691,6 +696,8 @@
 }
 
 .dashboard-inline-form input[type='number']:focus,
+.dashboard-inline-form input[type='tel']:focus,
+.dashboard-inline-form input[type='text']:focus,
 .dashboard-inline-form textarea:focus,
 .dashboard-inline-form select:focus {
   outline: none;
@@ -713,7 +720,6 @@
 .dashboard-form-actions {
   display: flex;
   gap: 10px;
-  margin-top: auto;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1.9px solid #d1ddf0;
@@ -731,6 +737,45 @@
   font-size: 12px;
   font-weight: 600;
   margin: 4px 0 0;
+}
+
+.dashboard-confirm-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 8px 4px 4px;
+}
+
+.dashboard-confirm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+  color: #b42318;
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.dashboard-confirm-message {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f2b52;
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
+.dashboard-confirm-body .dashboard-form-actions {
+  width: 100%;
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
 }
 
 .dashboard-form-success {
@@ -762,6 +807,41 @@
   font-weight: 600;
   color: #0f2b52;
   margin: 0;
+}
+
+.dashboard-maintenance-meta {
+  font-size: 11.5px;
+  color: #3f5a7a;
+  margin: 4px 0 0;
+}
+
+.dashboard-maintenance-badges {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dashboard-maintenance-cancel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b42318;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.dashboard-maintenance-cancel:hover {
+  color: #7a1710;
+}
+
+.dashboard-maintenance-cancel:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  text-decoration: none;
 }
 
 .dashboard-maintenance-date {
