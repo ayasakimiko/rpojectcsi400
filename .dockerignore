@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.git
+src
+public
+index.html
+vite.config.js
+eslint.config.js
+README.md
