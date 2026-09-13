@@ -4,7 +4,29 @@ import { getPool } from "../Database/connection.js";
 
 const router = Router();
 
-function validateRegisterInput({ idcard, password, phone, first_name, last_name, age, room_number }) {
+function isValidDateTimeString(value) {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value) &&
+    !Number.isNaN(new Date(value).getTime())
+  );
+}
+
+function toMysqlDateTime(value) {
+  return value.replace("T", " ");
+}
+
+function validateRegisterInput({
+  idcard,
+  password,
+  phone,
+  first_name,
+  last_name,
+  age,
+  room_number,
+  rental_start_date,
+  rental_end_date,
+}) {
   if (
     typeof idcard !== "string" ||
     typeof password !== "string" ||
@@ -21,7 +43,9 @@ function validateRegisterInput({ idcard, password, phone, first_name, last_name,
     !first_name.trim() ||
     !last_name.trim() ||
     !age ||
-    !room_number
+    !room_number ||
+    !rental_start_date ||
+    !rental_end_date
   ) {
     return "กรุณากรอกข้อมูลให้ครบทุกช่อง";
   }
@@ -39,6 +63,18 @@ function validateRegisterInput({ idcard, password, phone, first_name, last_name,
   if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
     return "เลขห้องไม่ถูกต้อง";
   }
+  if (!isValidDateTimeString(rental_start_date) || !isValidDateTimeString(rental_end_date)) {
+    return "วันเวลาที่เริ่มเช่าหรือวันเวลาที่สิ้นสุดสัญญาไม่ถูกต้อง";
+  }
+  const now = new Date();
+  const startDate = new Date(rental_start_date);
+  const endDate = new Date(rental_end_date);
+  if (startDate < now) {
+    return "วันเวลาที่เริ่มเช่าต้องไม่ใช่เวลาที่ผ่านมาแล้ว";
+  }
+  if (endDate <= startDate) {
+    return "วันเวลาที่สิ้นสุดสัญญาต้องอยู่หลังวันเวลาที่เริ่มเช่า";
+  }
   return null;
 }
 
@@ -46,7 +82,8 @@ router.post("/register", async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();
   try {
-    const { idcard, password, phone, first_name, last_name, age, room_number } = req.body ?? {};
+    const { idcard, password, phone, first_name, last_name, age, room_number, rental_start_date, rental_end_date } =
+      req.body ?? {};
 
     const validationError = validateRegisterInput({
       idcard,
@@ -56,6 +93,8 @@ router.post("/register", async (req, res) => {
       last_name,
       age,
       room_number,
+      rental_start_date,
+      rental_end_date,
     });
     if (validationError) {
       return res.status(400).json({ message: validationError });
@@ -107,7 +146,18 @@ router.post("/register", async (req, res) => {
       room.id,
     ]);
 
-    await connection.query(`UPDATE Room SET is_booked = TRUE WHERE id = ?`, [room.id]);
+    const mysqlStartDateTime = toMysqlDateTime(rental_start_date);
+    const mysqlEndDateTime = toMysqlDateTime(rental_end_date);
+
+    await connection.query(
+      `UPDATE Room SET
+         is_booked = TRUE,
+         rental_duration_months = TIMESTAMPDIFF(MONTH, ?, ?),
+         rental_start_date = ?,
+         rental_end_date = ?
+       WHERE id = ?`,
+      [mysqlStartDateTime, mysqlEndDateTime, mysqlStartDateTime, mysqlEndDateTime, room.id],
+    );
 
     await connection.commit();
 

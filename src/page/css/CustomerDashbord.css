@@ -1,0 +1,321 @@
+.dashboard-page {
+  min-height: 100vh;
+  width: 100%;
+  padding: 32px 12px 48px;
+  background: linear-gradient(135deg, #eaf4ff 0%, #ffffff 55%, #e3f0ff 100%);
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.dashboard-header .auth-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 22px;
+}
+
+.dashboard-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-title-group h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f2b52;
+  margin: 0;
+}
+
+.dashboard-title-group p {
+  color: #6b859e;
+  font-size: 13px;
+  margin: 0;
+}
+
+.dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-logout-btn {
+  border: 1.5px solid #dce9fb;
+  border-radius: 12px;
+  padding: 8px 18px;
+  background: #ffffff;
+  color: #33506f;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.dashboard-logout-btn:hover {
+  background: #f8fbff;
+  border-color: #60a5fa;
+}
+
+.dashboard-card {
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.12),
+    0 4px 12px rgba(37, 99, 235, 0.08);
+  padding: 24px;
+  border: 1px solid #e6f0fd;
+  height: 100%;
+}
+
+.dashboard-card h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f2b52;
+  margin: 0 0 16px;
+}
+
+.dashboard-room-number {
+  font-size: 32px;
+  font-weight: 800;
+  color: #2563eb;
+  margin: 0;
+}
+
+.dashboard-room-status {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 10px;
+  background: #d1fae5;
+  color: #027a48;
+}
+
+.dashboard-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b859e;
+  margin: 18px 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1.8px solid #cecece;
+}
+
+.dashboard-rental-duration {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b859e;
+  margin: 10px 0 0;
+}
+
+.dashboard-rental-period {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 6px 12px;
+  margin: 6px 0 0;
+}
+
+.dashboard-rental-period svg {
+  flex-shrink: 0;
+}
+
+.dashboard-countdown {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #33506f;
+  margin: 8px 0 0;
+}
+
+.dashboard-countdown.is-warning {
+  color: #b45309;
+}
+
+.dashboard-countdown.is-expired {
+  color: #b42318;
+}
+
+.dashboard-countdown.is-pending {
+  color: #7c3aed;
+}
+
+.dashboard-amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.dashboard-amenity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f8fbff;
+  border: 1.5px solid #dce9fb;
+  color: #33506f;
+}
+
+.dashboard-amenity svg {
+  flex-shrink: 0;
+}
+
+.dashboard-amenity.is-off {
+  color: #9db4cc;
+  text-decoration: line-through;
+  background: #f5f7fa;
+}
+
+.dashboard-amenity.is-blue {
+  background: #eaf2ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.dashboard-amenity.is-purple {
+  background: #f3e8ff;
+  border-color: #e9d5ff;
+  color: #7c3aed;
+}
+
+.dashboard-amenity.is-teal {
+  background: #ecfeff;
+  border-color: #a5f3fc;
+  color: #0e7490;
+}
+
+.dashboard-amenity.is-amber {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.dashboard-amenity.is-red {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+.dashboard-amenity.is-indigo {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dashboard-table th {
+  text-align: left;
+  color: #6b859e;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1.5px solid #e6f0fd;
+}
+
+.dashboard-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f0f5fb;
+  color: #0f2b52;
+}
+
+.dashboard-rental-entry {
+  border: 1.5px solid #e6f0fd;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.dashboard-rental-entry:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard-rental-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 700;
+  color: #0f2b52;
+  margin-bottom: 10px;
+}
+
+.dashboard-rental-entry-date {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.dashboard-empty {
+  color: #9db4cc;
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.dashboard-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.dashboard-badge.status-paid {
+  background: #ecfdf5;
+  color: #027a48;
+}
+
+.dashboard-badge.status-pending {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.dashboard-badge.status-overdue {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+@media (max-width: 400px) {
+  .dashboard-page {
+    padding: 24px 12px 40px;
+  }
+
+  .dashboard-card {
+    padding: 18px;
+    border-radius: 16px;
+  }
+}

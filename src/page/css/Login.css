@@ -106,11 +106,17 @@
   transform: none;
 }
 
-.auth-page .form-text.text-danger {
+.auth-page .form-text {
   font-size: 12px;
+  font-weight: 400;
+  color: #8a94a6;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.auth-page .form-text.text-danger {
   font-weight: 500;
   color: #d92d20;
-  margin-top: 4px;
 }
 
 .auth-page .alert {

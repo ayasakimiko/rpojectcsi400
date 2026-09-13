@@ -5,6 +5,29 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/RegisterPage.css'
 
+const formatDateTimeLocal = (date) => {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const getNowString = () => formatDateTimeLocal(new Date())
+
+const addOneYear = (dateTimeLocalValue) => {
+  const date = new Date(dateTimeLocalValue)
+  date.setFullYear(date.getFullYear() + 1)
+  return formatDateTimeLocal(date)
+}
+
+const formatThaiDateTime = (dateTimeLocalValue) => {
+  if (!dateTimeLocalValue) return ''
+  const date = new Date(dateTimeLocalValue)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  }).format(date)
+}
+
 const initialRegisterForm = {
   idcard: '',
   first_name: '',
@@ -12,6 +35,8 @@ const initialRegisterForm = {
   phone: '',
   age: '',
   room_number: '',
+  rental_start_date: getNowString(),
+  rental_end_date: addOneYear(getNowString()),
   password: '',
   confirmPassword: '',
 }
@@ -47,7 +72,13 @@ function RegisterMain() {
 
   const handleRegisterChange = (e) => {
     const { name, value } = e.target
-    setRegisterForm((prev) => ({ ...prev, [name]: value }))
+    setRegisterForm((prev) => {
+      const next = { ...prev, [name]: value }
+      if (name === 'rental_start_date' && value) {
+        next.rental_end_date = addOneYear(value)
+      }
+      return next
+    })
   }
 
   const handleRegisterSubmit = async (e) => {
@@ -55,10 +86,37 @@ function RegisterMain() {
     setError('')
     setSuccess('')
 
-    const { idcard, first_name, last_name, phone, age, room_number, password, confirmPassword } = registerForm
+    const {
+      idcard,
+      first_name,
+      last_name,
+      phone,
+      age,
+      room_number,
+      rental_start_date,
+      rental_end_date,
+      password,
+      confirmPassword,
+    } = registerForm
 
-    if (!idcard || !first_name || !last_name || !phone || !age || !room_number || !password || !confirmPassword) {
+    if (
+      !idcard ||
+      !first_name ||
+      !last_name ||
+      !phone ||
+      !age ||
+      !room_number ||
+      !rental_start_date ||
+      !rental_end_date ||
+      !password ||
+      !confirmPassword
+    ) {
       setError('กรุณากรอกข้อมูลให้ครบทุกช่อง')
+      return
+    }
+
+    if (rental_end_date <= rental_start_date) {
+      setError('วันที่สิ้นสุดสัญญาต้องอยู่หลังวันที่เริ่มเช่า')
       return
     }
 
@@ -76,10 +134,16 @@ function RegisterMain() {
         phone,
         age,
         room_number,
+        rental_start_date,
+        rental_end_date,
         password,
       })
       setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
-      setRegisterForm(initialRegisterForm)
+      setRegisterForm({
+        ...initialRegisterForm,
+        rental_start_date: getNowString(),
+        rental_end_date: addOneYear(getNowString()),
+      })
       setTimeout(() => navigate('/login'), 1200)
     } catch (err) {
       setError(err.response?.data?.message || 'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -194,6 +258,41 @@ function RegisterMain() {
                     </select>
                     {!roomsLoading && availableRooms.length === 0 && (
                       <div className="form-text text-danger">ขณะนี้ไม่มีห้องว่าง</div>
+                    )}
+                  </div>
+
+                  <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="register-rental-start">
+                      วันเวลาที่เริ่มเช่า
+                    </label>
+                    <input
+                      id="register-rental-start"
+                      type="datetime-local"
+                      min={getNowString()}
+                      name="rental_start_date"
+                      className="form-control"
+                      value={registerForm.rental_start_date}
+                      onChange={handleRegisterChange}
+                    />
+                    {registerForm.rental_start_date && (
+                      <div className="form-text">{formatThaiDateTime(registerForm.rental_start_date)}</div>
+                    )}
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="register-rental-end">
+                      วันเวลาที่สิ้นสุดสัญญา
+                    </label>
+                    <input
+                      id="register-rental-end"
+                      type="datetime-local"
+                      min={registerForm.rental_start_date || getNowString()}
+                      name="rental_end_date"
+                      className="form-control"
+                      value={registerForm.rental_end_date}
+                      onChange={handleRegisterChange}
+                    />
+                    {registerForm.rental_end_date && (
+                      <div className="form-text">{formatThaiDateTime(registerForm.rental_end_date)}</div>
                     )}
                   </div>
 

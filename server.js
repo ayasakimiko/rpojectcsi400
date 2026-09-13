@@ -4,6 +4,7 @@ import "dotenv/config";
 import loginRouter from "./router/LoginRouter.js";
 import registerRouter from "./router/Register.js";
 import roomRouter from "./router/RoomRouter.js";
+import customerDashboardRouter from "./router/CustomerDashboardRouter.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -18,6 +19,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", loginRouter);
 app.use("/api/auth", registerRouter);
 app.use("/api/rooms", roomRouter);
+app.use("/api/customer", customerDashboardRouter);
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

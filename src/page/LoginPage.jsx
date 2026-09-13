@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import axios from 'axios'
+import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 
 const initialLoginForm = { username: '', password: '' }
 
 function LoginPage() {
+  const navigate = useNavigate()
   const [loginForm, setLoginForm] = useState(initialLoginForm)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -32,6 +34,7 @@ function LoginPage() {
       sessionStorage.setItem('token', data.token)
       sessionStorage.setItem('user', JSON.stringify(data.user))
       setSuccess(data.message || 'เข้าสู่ระบบสำเร็จ')
+      setTimeout(() => navigate('/dashboard'), 600)
     } catch (err) {
       setError(err.response?.data?.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {

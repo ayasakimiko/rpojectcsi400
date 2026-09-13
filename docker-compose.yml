@@ -43,6 +43,7 @@ services:
       DB_NAME: ${DB_NAME:-projectcsi400}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       PORT: 4000
+      TZ: Asia/Bangkok
     ports:
       - "${PORT:-4000}:4000"
     depends_on:

@@ -8,6 +8,7 @@ RUN npm ci --omit=dev
 COPY server.js ./
 COPY router ./router
 COPY Database ./Database
+COPY middleware ./middleware
 
 EXPOSE 4000
 
