@@ -1,0 +1,9 @@
+.auth-page .auth-card {
+  padding: 36px 36px 32px;
+}
+
+@media (max-width: 400px) {
+  .auth-page .auth-card {
+    padding: 28px 20px;
+  }
+}

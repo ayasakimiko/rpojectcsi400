@@ -3,7 +3,7 @@ import axios from 'axios'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 
-const initialLoginForm = { idcard: '', password: '' }
+const initialLoginForm = { username: '', password: '' }
 
 function LoginPage() {
   const [loginForm, setLoginForm] = useState(initialLoginForm)
@@ -21,8 +21,8 @@ function LoginPage() {
     setError('')
     setSuccess('')
 
-    if (!loginForm.idcard || !loginForm.password) {
-      setError('กรุณากรอกเลขบัตรประชาชนและรหัสผ่าน')
+    if (!loginForm.username || !loginForm.password) {
+      setError('กรุณากรอกเลขบัตรประชาชนหรือเลขห้อง และรหัสผ่าน')
       return
     }
 
@@ -72,18 +72,18 @@ function LoginPage() {
               <form onSubmit={handleLoginSubmit} noValidate>
                 <div className="row g-3">
                   <div className="col-12">
-                    <label className="form-label" htmlFor="login-idcard">
-                      เลขบัตรประชาชน
+                    <label className="form-label" htmlFor="login-username">
+                      เลขบัตรประชาชน หรือ เลขห้อง
                     </label>
                     <input
-                      id="login-idcard"
+                      id="login-username"
                       type="text"
                       inputMode="numeric"
                       maxLength={13}
-                      name="idcard"
+                      name="username"
                       className="form-control"
-                      placeholder="เลขบัตรประชาชน 13 หลัก"
-                      value={loginForm.idcard}
+                      placeholder="เลขบัตรประชาชน 13 หลัก หรือ เลขห้อง"
+                      value={loginForm.username}
                       onChange={handleLoginChange}
                       autoComplete="username"
                     />

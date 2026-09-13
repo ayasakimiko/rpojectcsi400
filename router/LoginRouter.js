@@ -14,35 +14,45 @@ function toPublicUser(row) {
   return publicUser;
 }
 
-function validateLoginInput({ idcard, password }) {
-  if (typeof idcard !== "string" || typeof password !== "string") {
+function validateLoginInput({ username, password }) {
+  if (typeof username !== "string" || typeof password !== "string") {
     return "รูปแบบข้อมูลไม่ถูกต้อง";
   }
-  if (!idcard.trim() || !password) {
-    return "กรุณากรอกเลขบัตรประชาชนและรหัสผ่าน";
+  if (!username.trim() || !password) {
+    return "กรุณากรอกเลขบัตรประชาชนหรือเลขห้อง และรหัสผ่าน";
   }
-  if (!/^\d{13}$/.test(idcard.trim())) {
-    return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
+  if (!/^\d+$/.test(username.trim())) {
+    return "กรุณากรอกเลขบัตรประชาชนหรือเลขห้องให้ถูกต้อง";
   }
   if (password.length < 6 || password.length > 128) {
-    return "เลขบัตรประชาชนหรือรหัสผ่านไม่ถูกต้อง";
+    return "เลขบัตรประชาชน เลขห้อง หรือรหัสผ่านไม่ถูกต้อง";
   }
   return null;
 }
 
 router.post("/login", async (req, res) => {
   try {
-    const { idcard, password } = req.body ?? {};
+    const { username, password } = req.body ?? {};
 
-    const validationError = validateLoginInput({ idcard, password });
+    const validationError = validateLoginInput({ username, password });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
 
-    const normalizedIdcard = idcard.trim();
+    const normalizedUsername = username.trim();
+    const isIdcard = /^\d{13}$/.test(normalizedUsername);
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT * FROM Customer WHERE idcard = ?`, [normalizedIdcard]);
+    const [rows] = isIdcard
+      ? await pool.query(`SELECT * FROM Customer WHERE idcard = ?`, [normalizedUsername])
+      : await pool.query(
+          `SELECT c.* FROM Customer c
+           JOIN Booking b ON b.customer_id = c.id
+           JOIN Room r ON r.id = b.room_id
+           WHERE r.room_number = ?
+           LIMIT 1`,
+          [normalizedUsername],
+        );
     const user = rows[0];
 
     if (!user) {

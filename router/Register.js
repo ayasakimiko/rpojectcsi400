@@ -1,0 +1,115 @@
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import { getPool } from "../Database/connection.js";
+
+const router = Router();
+
+function validateRegisterInput({ idcard, password, phone, first_name, last_name, age, room_number }) {
+  if (
+    typeof idcard !== "string" ||
+    typeof password !== "string" ||
+    typeof phone !== "string" ||
+    typeof first_name !== "string" ||
+    typeof last_name !== "string"
+  ) {
+    return "รูปแบบข้อมูลไม่ถูกต้อง";
+  }
+  if (
+    !idcard.trim() ||
+    !password ||
+    !phone.trim() ||
+    !first_name.trim() ||
+    !last_name.trim() ||
+    !age ||
+    !room_number
+  ) {
+    return "กรุณากรอกข้อมูลให้ครบทุกช่อง";
+  }
+  if (!/^\d{13}$/.test(idcard.trim())) {
+    return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
+  }
+  if (password.length < 6 || password.length > 128) {
+    return "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร";
+  }
+  const ageNumber = Number(age);
+  if (!Number.isInteger(ageNumber) || ageNumber < 1 || ageNumber > 120) {
+    return "อายุไม่ถูกต้อง";
+  }
+  const roomNumberValue = Number(room_number);
+  if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    return "เลขห้องไม่ถูกต้อง";
+  }
+  return null;
+}
+
+router.post("/register", async (req, res) => {
+  const pool = getPool();
+  const connection = await pool.getConnection();
+  try {
+    const { idcard, password, phone, first_name, last_name, age, room_number } = req.body ?? {};
+
+    const validationError = validateRegisterInput({
+      idcard,
+      password,
+      phone,
+      first_name,
+      last_name,
+      age,
+      room_number,
+    });
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const normalizedIdcard = idcard.trim();
+    const normalizedRoomNumber = Number(room_number);
+
+    await connection.beginTransaction();
+
+    const [existingRows] = await connection.query(`SELECT id FROM Customer WHERE idcard = ?`, [normalizedIdcard]);
+    if (existingRows.length > 0) {
+      await connection.rollback();
+      return res.status(409).json({ message: "เลขบัตรประชาชนนี้ถูกใช้สมัครสมาชิกแล้ว" });
+    }
+
+    const [roomRows] = await connection.query(
+      `SELECT id, is_booked FROM Room WHERE room_number = ? FOR UPDATE`,
+      [normalizedRoomNumber],
+    );
+    const room = roomRows[0];
+    if (!room) {
+      await connection.rollback();
+      return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    }
+    if (room.is_booked) {
+      await connection.rollback();
+      return res.status(409).json({ message: "ห้องพักนี้ถูกจองแล้ว" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const [customerResult] = await connection.query(
+      `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age) VALUES (?, ?, ?, ?, ?, ?)`,
+      [normalizedIdcard, hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age)],
+    );
+
+    await connection.query(`INSERT INTO Booking (customer_id, room_id) VALUES (?, ?)`, [
+      customerResult.insertId,
+      room.id,
+    ]);
+
+    await connection.query(`UPDATE Room SET is_booked = TRUE WHERE id = ?`, [room.id]);
+
+    await connection.commit();
+
+    return res.status(201).json({ message: "สมัครสมาชิกสำเร็จ" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Register error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection.release();
+  }
+});
+
+export default router;
