@@ -29,8 +29,8 @@ function LoginPage() {
     try {
       setLoading(true)
       const { data } = await axios.post('/api/auth/login', loginForm)
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      sessionStorage.setItem('token', data.token)
+      sessionStorage.setItem('user', JSON.stringify(data.user))
       setSuccess(data.message || 'เข้าสู่ระบบสำเร็จ')
     } catch (err) {
       setError(err.response?.data?.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')

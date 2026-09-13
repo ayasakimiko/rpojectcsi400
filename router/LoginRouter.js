@@ -14,16 +14,35 @@ function toPublicUser(row) {
   return publicUser;
 }
 
+function validateLoginInput({ idcard, password }) {
+  if (typeof idcard !== "string" || typeof password !== "string") {
+    return "รูปแบบข้อมูลไม่ถูกต้อง";
+  }
+  if (!idcard.trim() || !password) {
+    return "กรุณากรอกเลขบัตรประชาชนและรหัสผ่าน";
+  }
+  if (!/^\d{13}$/.test(idcard.trim())) {
+    return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
+  }
+  if (password.length < 6 || password.length > 128) {
+    return "เลขบัตรประชาชนหรือรหัสผ่านไม่ถูกต้อง";
+  }
+  return null;
+}
+
 router.post("/login", async (req, res) => {
   try {
-    const { idcard, password } = req.body;
+    const { idcard, password } = req.body ?? {};
 
-    if (!idcard || !password) {
-      return res.status(400).json({ message: "กรุณากรอกเลขบัตรประชาชนและรหัสผ่าน" });
+    const validationError = validateLoginInput({ idcard, password });
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
     }
 
+    const normalizedIdcard = idcard.trim();
+
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT * FROM Customer WHERE idcard = ?`, [idcard]);
+    const [rows] = await pool.query(`SELECT * FROM Customer WHERE idcard = ?`, [normalizedIdcard]);
     const user = rows[0];
 
     if (!user) {
