@@ -3,9 +3,6 @@ import { getPool } from "../Database/connection.js";
 
 const router = Router();
 
-// TODO: replace this placeholder with real staff/admin authentication once a
-// staff role + login system exists. For now this only checks a shared dev
-// key so the approval logic can be built and tested ahead of that work.
 const STAFF_API_KEY = process.env.STAFF_API_KEY || "dev-staff-key";
 
 function requireStaffKey(req, res, next) {
@@ -45,12 +42,6 @@ router.post("/tenant-requests/:id/approve", requireStaffKey, async (req, res) =>
       const durationMonths = tenantRequest.renew_duration_months;
       const paymentType = tenantRequest.renew_payment_type;
 
-      // Contract length always extends immediately on approval. For "monthly",
-      // billing keeps working exactly as before. For "lump_sum", we don't hide
-      // billing yet — we just flag that the NEXT due amount should be bundled to
-      // durationMonths worth of rent (see computeCurrentDue). Only once the
-      // customer actually pays that bundled amount (POST /customer/payments/confirm)
-      // does billing get hidden for the covered months.
       await connection.query(
         `UPDATE Room
          SET

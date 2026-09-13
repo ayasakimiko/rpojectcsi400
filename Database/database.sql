@@ -128,3 +128,5 @@ CREATE TABLE IF NOT EXISTS TenantRequest (
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id)
 );
+
+
