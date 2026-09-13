@@ -15,8 +15,8 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.use("/api/", loginRouter);
-app.use("/api/", registerRouter);
+app.use("/api/auth", loginRouter);
+app.use("/api/auth", registerRouter);
 app.use("/api/rooms", roomRouter);
 
 app.listen(PORT, () => {

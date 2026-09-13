@@ -76,6 +76,7 @@ router.post("/register", async (req, res) => {
       `SELECT id, is_booked FROM Room WHERE room_number = ? FOR UPDATE`,
       [normalizedRoomNumber],
     );
+
     const room = roomRows[0];
     if (!room) {
       await connection.rollback();
@@ -89,8 +90,16 @@ router.post("/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [customerResult] = await connection.query(
-      `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age) VALUES (?, ?, ?, ?, ?, ?)`,
-      [normalizedIdcard, hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age)],
+      `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age, room_number) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        normalizedIdcard,
+        hashedPassword,
+        phone.trim(),
+        first_name.trim(),
+        last_name.trim(),
+        Number(age),
+        normalizedRoomNumber,
+      ],
     );
 
     await connection.query(`INSERT INTO Booking (customer_id, room_id) VALUES (?, ?)`, [
@@ -105,6 +114,14 @@ router.post("/register", async (req, res) => {
     return res.status(201).json({ message: "สมัครสมาชิกสำเร็จ" });
   } catch (error) {
     await connection.rollback();
+    if (error.code === "ER_DUP_ENTRY") {
+      if (error.sqlMessage?.includes("idcard")) {
+        return res.status(409).json({ message: "เลขบัตรประชาชนนี้ถูกใช้สมัครสมาชิกแล้ว" });
+      }
+      if (error.sqlMessage?.includes("phone")) {
+        return res.status(409).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้สมัครสมาชิกแล้ว" });
+      }
+    }
     console.error("Register error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   } finally {
