@@ -4,6 +4,22 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './AdminBackupPage.css'
 
+let openModalCount = 0
+
+function lockBodyScroll() {
+  openModalCount += 1
+  if (openModalCount === 1) {
+    document.body.style.overflow = 'hidden'
+  }
+}
+
+function unlockBodyScroll() {
+  openModalCount = Math.max(0, openModalCount - 1)
+  if (openModalCount === 0) {
+    document.body.style.overflow = ''
+  }
+}
+
 function Modal({ title, onClose, children, variant }) {
   const [isClosing, setIsClosing] = useState(false)
   const requestClose = () => setIsClosing(true)
@@ -17,11 +33,8 @@ function Modal({ title, onClose, children, variant }) {
   }, [])
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
+    lockBodyScroll()
+    return () => unlockBodyScroll()
   }, [])
 
   return (
