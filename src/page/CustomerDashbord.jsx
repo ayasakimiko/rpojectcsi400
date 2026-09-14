@@ -68,6 +68,25 @@ function AmenityIcon({ name }) {
   )
 }
 
+function ClockIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
+}
+
 function CalendarIcon() {
   return (
     <svg
@@ -510,7 +529,7 @@ function msUntil(value) {
   return new Date(value).getTime() - Date.now()
 }
 
-const CONTRACT_WARNING_WINDOW_MS = 30 * MS_PER_DAY
+const CONTRACT_WARNING_WINDOW_MS = 10 * MS_PER_DAY
 const CONTRACT_FINAL_WARNING_WINDOW_MS = 3 * MS_PER_DAY
 
 function getContractMsLeft(room) {
@@ -538,6 +557,12 @@ function CustomerDashbord() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const [, tickCountdown] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => tickCountdown((tick) => tick + 1), 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
@@ -1293,16 +1318,24 @@ function CustomerDashbord() {
                         {formatDateTime(room.rental_start_date)} ถึง {formatDateTime(room.rental_end_date)}
                       </p>
                       {!hasStarted && msUntilStart !== null && (
-                        <p className="dashboard-countdown is-pending">
-                          เริ่มสัญญาในอีก {formatRemaining(msUntilStart)}
-                        </p>
+                        <div className="dashboard-countdown-card is-pending">
+                          <ClockIcon />
+                          <div>
+                            <p className="dashboard-countdown-label">เริ่มสัญญาในอีก</p>
+                            <p className="dashboard-countdown-value">{formatRemaining(msUntilStart)}</p>
+                          </div>
+                        </div>
                       )}
                       {msLeft !== null && (
-                        <p
-                          className={`dashboard-countdown${isExpired ? ' is-expired' : isWarning ? ' is-warning' : ''}`}
+                        <div
+                          className={`dashboard-countdown-card${isExpired ? ' is-expired' : isWarning ? ' is-warning' : ' is-active'}`}
                         >
-                          {isExpired ? `หมดสัญญาแล้ว ${formatRemaining(msLeft)}` : `เหลืออีก ${formatRemaining(msLeft)}`}
-                        </p>
+                          <ClockIcon />
+                          <div>
+                            <p className="dashboard-countdown-label">{isExpired ? 'หมดสัญญาแล้ว' : 'เหลือเวลาในสัญญา'}</p>
+                            <p className="dashboard-countdown-value">{formatRemaining(msLeft)}</p>
+                          </div>
+                        </div>
                       )}
                     </>
                   )}
@@ -1352,18 +1385,20 @@ function CustomerDashbord() {
                       <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
                       {currentDue.depositApplied > 0 && (
                         <p className="dashboard-due-deposit-note">
-                          หักเงินมัดจำ ฿{formatCurrency(currentDue.depositApplied)} จากค่าเช่าเดือนแรกแล้ว
+                          หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
                         </p>
                       )}
                       {currentDue.lumpSumMonths && (
                         <p className="dashboard-due-deposit-note">
-                          ยอดนี้รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน ตามคำขอต่อสัญญาแบบจ่ายทบ
+                          รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน
                         </p>
                       )}
 
-                      <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                        ชำระเงิน
-                      </button>
+                      <div className="dashboard-due-pay-actions">
+                        <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
+                          ชำระเงิน
+                        </button>
+                      </div>
                       {paymentSuccess && !showPaymentForm && <p className="dashboard-form-success">{paymentSuccess}</p>}
                       {showPaymentForm && (
                         <Modal title="สแกนเพื่อชำระเงิน" onClose={() => setShowPaymentForm(false)} variant="confirm">
@@ -1702,6 +1737,7 @@ function CustomerDashbord() {
                 </Modal>
               )}
 
+              <div className="dashboard-maintenance-body">
               {maintenanceRequests.length === 0 ? (
                 <p className="dashboard-empty">ยังไม่มีรายการแจ้งซ่อม</p>
               ) : filteredMaintenanceRequests.length === 0 ? (
@@ -1778,6 +1814,7 @@ function CustomerDashbord() {
                 )}
                 </>
               )}
+              </div>
 
               {confirmCancelId !== null && (
                 <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)} variant="confirm">

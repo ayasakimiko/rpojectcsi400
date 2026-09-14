@@ -123,12 +123,6 @@ function RegisterMain() {
     })
   }
 
-  const filterStartTime = (time) => {
-    const now = getNow()
-    if (!isSameDay(time, now)) return true
-    return time.getTime() > now.getTime()
-  }
-
   const filterEndTime = (time) => {
     const start = registerForm.rental_start_date
     if (!start || !isSameDay(time, start)) return true
@@ -355,8 +349,6 @@ function RegisterMain() {
                       wrapperClassName="w-100"
                       selected={registerForm.rental_start_date}
                       onChange={(date) => handleRentalDateChange('rental_start_date', date)}
-                      minDate={getNow()}
-                      filterTime={filterStartTime}
                       showTimeSelect
                       timeIntervals={15}
                       timeFormat="HH:mm"

@@ -49,6 +49,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: auto;
 }
 
 .dashboard-notif-wrap {
@@ -655,24 +656,72 @@
   flex-shrink: 0;
 }
 
-.dashboard-countdown {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  color: #33506f;
-  margin: 8px 0 0;
+.dashboard-countdown-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #eef4ff;
+  border: 1.5px solid #bfdbfe;
+  color: #1d4ed8;
+  animation: dashboard-countdown-pop 0.25s ease;
 }
 
-.dashboard-countdown.is-warning {
+.dashboard-countdown-card svg {
+  flex-shrink: 0;
+}
+
+.dashboard-countdown-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.8;
+}
+
+.dashboard-countdown-value {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.dashboard-countdown-card.is-active {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.dashboard-countdown-card.is-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
   color: #b45309;
 }
 
-.dashboard-countdown.is-expired {
+.dashboard-countdown-card.is-expired {
+  background: #fef2f2;
+  border-color: #fecaca;
   color: #b42318;
 }
 
-.dashboard-countdown.is-pending {
+.dashboard-countdown-card.is-pending {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
   color: #7c3aed;
+}
+
+@keyframes dashboard-countdown-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dashboard-amenities {
@@ -840,6 +889,7 @@
 .dashboard-badge.status-paid {
   background: #ecfdf5;
   color: #027a48;
+  border: 1.5px solid #a7f3d0;
 }
 
 .dashboard-badge.status-pending {
@@ -923,7 +973,7 @@
 }
 
 .dashboard-due-deposit-note {
-  display: inline-block;
+  display: table;
   font-size: 12px;
   font-weight: 600;
   color: #7c3aed;
@@ -931,7 +981,13 @@
   border: 1.5px solid #e9d5ff;
   border-radius: 10px;
   padding: 4px 10px;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
+}
+
+.dashboard-due-pay-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 12px;
 }
 
 .dashboard-prepaid-note {
@@ -1000,6 +1056,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 160px;
+  justify-content: center;
 }
 
 .dashboard-request-row {
@@ -1290,6 +1348,24 @@
   font-size: 12px;
   font-weight: 600;
   margin: 8px 0 0;
+}
+
+.dashboard-maintenance-body {
+  min-height: 540px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-maintenance-body .dashboard-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.dashboard-maintenance-body .dashboard-maintenance-pagination {
+  margin-top: auto;
 }
 
 .dashboard-maintenance-list {

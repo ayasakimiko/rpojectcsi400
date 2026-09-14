@@ -70,12 +70,8 @@ function validateRegisterInput({
   if (!isValidDateTimeString(rental_start_date) || !isValidDateTimeString(rental_end_date)) {
     return "วันเวลาที่เริ่มเช่าหรือวันเวลาที่สิ้นสุดสัญญาไม่ถูกต้อง";
   }
-  const now = new Date();
   const startDate = new Date(rental_start_date);
   const endDate = new Date(rental_end_date);
-  if (startDate < now) {
-    return "วันเวลาที่เริ่มเช่าต้องไม่ใช่เวลาที่ผ่านมาแล้ว";
-  }
   if (endDate <= startDate) {
     return "วันเวลาที่สิ้นสุดสัญญาต้องอยู่หลังวันเวลาที่เริ่มเช่า";
   }
@@ -174,7 +170,7 @@ router.post("/register", async (req, res) => {
 
     if (normalizedDepositAmount && normalizedDepositAmount > 0) {
       await connection.query(
-        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'deposit', 'เงินมัดจำ')`,
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'deposit', 'เงินมัดจำ (จ่ายหน้าเคาน์เตอร์)')`,
         [bookingResult.insertId, normalizedDepositAmount],
       );
     }

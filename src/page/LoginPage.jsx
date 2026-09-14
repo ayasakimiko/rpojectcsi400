@@ -102,7 +102,7 @@ function LoginPage() {
                       type="password"
                       name="password"
                       className="form-control"
-                      placeholder="กรอกรหัสผ่าน"
+                      placeholder="กรอกรหัสผ่าน (ค่าเริ่มต้นคือเบอร์โทรศัพท์)"
                       value={loginForm.password}
                       onChange={handleLoginChange}
                       autoComplete="current-password"

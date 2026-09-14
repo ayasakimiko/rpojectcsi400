@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -102,6 +102,17 @@ const MAINTENANCE_STATUS_LABEL = {
 const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
 const MODAL_ITEMS_PER_PAGE = 10
+const NOTIF_PAGE_SIZE = 6
+
+const STAFF_TENANT_NOTIF_INFO = {
+  pending: { label: 'คำขอใหม่ รอดำเนินการ', tone: 'pending' },
+  in_progress: { label: 'รับเรื่องแล้ว รอดำเนินการขั้นต่อไป', tone: 'info' },
+}
+
+const STAFF_MAINTENANCE_NOTIF_INFO = {
+  pending: { label: 'แจ้งซ่อมใหม่ รอดำเนินการ', tone: 'pending' },
+  in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'info' },
+}
 
 const DUE_STATUS_LABEL = {
   paid: 'ชำระแล้ว',
@@ -149,12 +160,145 @@ function formatDateTime(value) {
   })
 }
 
+function formatRemaining(ms) {
+  const totalMinutes = Math.floor(Math.abs(ms) / (1000 * 60))
+  const days = Math.floor(totalMinutes / (60 * 24))
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
+  const minutes = totalMinutes % 60
+
+  const parts = []
+  if (days > 0) parts.push(`${days} วัน`)
+  if (hours > 0) parts.push(`${hours} ชั่วโมง`)
+  if (days === 0 && minutes > 0) parts.push(`${minutes} นาที`)
+  return parts.length > 0 ? parts.join(' ') : 'น้อยกว่า 1 นาที'
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+const ROOM_EXPIRY_WARNING_WINDOW_MS = 10 * MS_PER_DAY
+
+function getRoomMsLeft(room) {
+  if (!room.is_booked || !room.rental_start_date || !room.rental_end_date) return null
+  const msUntilStart = new Date(room.rental_start_date).getTime() - Date.now()
+  if (msUntilStart > 0) return null
+  return new Date(room.rental_end_date).getTime() - Date.now()
+}
+
+function formatDaysLeft(ms) {
+  const days = Math.max(0, Math.ceil(Math.abs(ms) / MS_PER_DAY))
+  return days > 0 ? `${days} วัน` : 'น้อยกว่า 1 วัน'
+}
+
+function getRoomExpiryStatus(room) {
+  const msLeft = getRoomMsLeft(room)
+  if (msLeft === null) return null
+  if (msLeft < 0) return { level: 'expired', msLeft, label: `หมดแล้ว ${formatDaysLeft(msLeft)}` }
+  if (msLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS) return { level: 'warning', msLeft, label: `เหลือ ${formatDaysLeft(msLeft)}` }
+  return null
+}
+
+function buildStaffTenantNotifs(request) {
+  const info = STAFF_TENANT_NOTIF_INFO[request.status]
+  if (!info) return []
+  return [
+    {
+      key: `tenant-${request.id}-${request.status}`,
+      title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
+      ...info,
+      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      detail: `ห้อง ${request.room_number} · ${request.first_name} ${request.last_name}${
+        request.note ? ` · หมายเหตุ: ${request.note}` : ''
+      }`,
+      kind: 'tenant',
+      request,
+    },
+  ]
+}
+
+function buildStaffMaintenanceNotifs(request) {
+  const info = STAFF_MAINTENANCE_NOTIF_INFO[request.status]
+  if (!info) return []
+  return [
+    {
+      key: `maintenance-${request.id}-${request.status}`,
+      title: 'แจ้งซ่อม',
+      ...info,
+      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      detail: `ห้อง ${request.room_number} · ${request.first_name} ${request.last_name} · ${
+        MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'
+      }`,
+      kind: 'maintenance',
+      request,
+    },
+  ]
+}
+
+function getStaffRequestTimeline(kind, request) {
+  if (!request) return []
+  const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
+  if (request.accepted_at) {
+    steps.push({ label: 'รับเรื่อง', date: request.accepted_at })
+  }
+  return steps
+}
+
+function StaffRequestTimeline({ kind, request }) {
+  const timeline = getStaffRequestTimeline(kind, request)
+  if (timeline.length === 0) return null
+
+  return (
+    <div className="staff-request-log">
+      <div className="staff-request-log-items">
+        {timeline.map((step, index) => {
+          const prevStep = timeline[index - 1]
+          const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+          return (
+            <div key={step.label} className="staff-request-log-item">
+              <span className="staff-request-log-dot" />
+              <div className="staff-request-log-content">
+                <p className="staff-request-log-label">{step.label}</p>
+                <p className="staff-request-log-date">{formatDateTime(step.date)}</p>
+                {stepMs !== null && <p className="staff-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function StaffMain() {
   const navigate = useNavigate()
   const [staffUser, setStaffUser] = useState(null)
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const [, tickExpiry] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => tickExpiry((tick) => tick + 1), 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifClosing, setNotifClosing] = useState(false)
+  const [notifSeen, setNotifSeen] = useState(false)
+  const [notifPage, setNotifPage] = useState(1)
+  const [notifDetail, setNotifDetail] = useState(null)
+  const notifRef = useRef(null)
+
+  const closeNotifPanel = () => setNotifClosing(true)
+
+  useEffect(() => {
+    if (!notifOpen) return
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        closeNotifPanel()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [notifOpen])
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -185,6 +329,7 @@ function StaffMain() {
   const [maintenanceFilterDate, setMaintenanceFilterDate] = useState('')
   const [maintenanceFilterSearch, setMaintenanceFilterSearch] = useState('')
   const [moveoutConfirmRequest, setMoveoutConfirmRequest] = useState(null)
+  const [maintenanceCompleteConfirm, setMaintenanceCompleteConfirm] = useState(null)
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -291,6 +436,12 @@ function StaffMain() {
     if (success) setMoveoutConfirmRequest(null)
   }
 
+  const handleConfirmMaintenanceComplete = async () => {
+    if (!maintenanceCompleteConfirm) return
+    const success = await handleMaintenanceAction(maintenanceCompleteConfirm, 'complete')
+    if (success) setMaintenanceCompleteConfirm(null)
+  }
+
   const handleRejectTenantRequest = async (request) => {
     const key = `tenant-${request.id}`
     setProcessingRequestKey(key)
@@ -314,8 +465,10 @@ function StaffMain() {
       const { data } = await axios.post(`/api/staff/maintenance/${request.id}/${action}`, {}, { headers: authHeaders() })
       setActionSuccess(data.message || 'ดำเนินการสำเร็จ')
       await loadRequests()
+      return true
     } catch (err) {
       setRequestsError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      return false
     } finally {
       setProcessingRequestKey('')
     }
@@ -415,7 +568,7 @@ function StaffMain() {
           <p className="staff-request-date">{formatDateTime(request.created_at)}</p>
         </div>
         <div className="staff-row-actions">
-          {request.status === 'pending' && (
+          {request.status === 'pending' ? (
             <button
               type="button"
               className="staff-action-btn is-primary"
@@ -424,15 +577,16 @@ function StaffMain() {
             >
               {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
             </button>
+          ) : (
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              disabled={isProcessing}
+              onClick={() => setMaintenanceCompleteConfirm(request)}
+            >
+              {isProcessing ? 'กำลังดำเนินการ...' : 'เสร็จสิ้น'}
+            </button>
           )}
-          <button
-            type="button"
-            className="staff-action-btn is-primary"
-            disabled={isProcessing}
-            onClick={() => handleMaintenanceAction(request, 'complete')}
-          >
-            เสร็จสิ้น
-          </button>
           <button
             type="button"
             className="staff-action-btn is-ghost"
@@ -498,6 +652,20 @@ function StaffMain() {
     }
   }
 
+  const notifications = useMemo(() => {
+    return [
+      ...tenantRequests.flatMap(buildStaffTenantNotifs),
+      ...maintenanceRequests.flatMap(buildStaffMaintenanceNotifs),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date))
+  }, [tenantRequests, maintenanceRequests])
+
+  const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
+  const notifCurrentPage = Math.min(notifPage, notifTotalPages)
+  const paginatedNotifications = notifications.slice(
+    (notifCurrentPage - 1) * NOTIF_PAGE_SIZE,
+    notifCurrentPage * NOTIF_PAGE_SIZE,
+  )
+
   const summary = useMemo(() => {
     const total = rooms.length
     const booked = rooms.filter((room) => room.is_booked).length
@@ -511,6 +679,7 @@ function StaffMain() {
       if (statusFilter === 'booked' && !room.is_booked) return false
       if (statusFilter === 'vacant' && room.is_booked) return false
       if (statusFilter === 'due' && (!room.currentDue || room.currentDue.status === 'paid')) return false
+      if (statusFilter === 'expiring' && !getRoomExpiryStatus(room)) return false
 
       if (search.trim()) {
         const keyword = search.trim().toLowerCase()
@@ -632,6 +801,117 @@ function StaffMain() {
             </div>
           </div>
           <div className="staff-header-actions">
+            <div className="staff-notif-wrap" ref={notifRef}>
+              <button
+                type="button"
+                className="staff-notif-btn"
+                aria-label="การแจ้งเตือน"
+                onClick={() => {
+                  if (notifOpen) {
+                    closeNotifPanel()
+                  } else {
+                    setNotifOpen(true)
+                    setNotifSeen(true)
+                    setNotifPage(1)
+                  }
+                }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {!notifSeen && notifications.length > 0 && <span className="staff-notif-dot" />}
+              </button>
+              {notifOpen && (
+                <div
+                  className={`staff-notif-panel${notifClosing ? ' is-closing' : ''}`}
+                  onAnimationEnd={() => {
+                    if (notifClosing) {
+                      setNotifOpen(false)
+                      setNotifClosing(false)
+                    }
+                  }}
+                >
+                  <div className="staff-notif-panel-header">
+                    <span>การแจ้งเตือน</span>
+                    <button
+                      type="button"
+                      className="staff-notif-panel-close"
+                      onClick={closeNotifPanel}
+                      aria-label="ปิด"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="staff-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                  ) : (
+                    <>
+                      <div className="staff-notif-list">
+                        {paginatedNotifications.map((notif) => (
+                          <button
+                            type="button"
+                            key={notif.key}
+                            className={`staff-notif-item is-${notif.tone}`}
+                            onClick={() => setNotifDetail(notif)}
+                          >
+                            <p className="staff-notif-item-title">{notif.title}</p>
+                            <p className="staff-notif-item-status">{notif.label}</p>
+                            <p className="staff-notif-item-date">{formatDateTime(notif.date)}</p>
+                          </button>
+                        ))}
+                      </div>
+                      {notifTotalPages > 1 && (
+                        <div className="staff-notif-pagination">
+                          <button
+                            type="button"
+                            className="staff-notif-page-btn"
+                            disabled={notifCurrentPage <= 1}
+                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
+                          >
+                            ก่อนหน้า
+                          </button>
+                          <span className="staff-notif-page-info">
+                            หน้า {notifCurrentPage} / {notifTotalPages}
+                          </span>
+                          <button
+                            type="button"
+                            className="staff-notif-page-btn"
+                            disabled={notifCurrentPage >= notifTotalPages}
+                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
+                          >
+                            ถัดไป
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="staff-action-btn is-primary"
@@ -644,6 +924,56 @@ function StaffMain() {
             </button>
           </div>
         </div>
+
+        {notifDetail && (
+          <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="staff-confirm-body">
+                <div className={`staff-confirm-icon is-${notifDetail.tone}`}>
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {notifDetail.tone === 'info' ? (
+                      <>
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                      </>
+                    ) : (
+                      <>
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </>
+                    )}
+                  </svg>
+                </div>
+                <p className="staff-confirm-message">
+                  <span className={`staff-confirm-message-status is-${notifDetail.tone}`}>{notifDetail.label}</span>
+                  {notifDetail.detail && (
+                    <>
+                      <br />
+                      {notifDetail.detail}
+                    </>
+                  )}
+                </p>
+                <StaffRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
 
         {actionSuccess && <p className="staff-form-success">{actionSuccess}</p>}
 
@@ -692,6 +1022,7 @@ function StaffMain() {
                 <option value="booked">ไม่ว่าง</option>
                 <option value="vacant">ว่าง</option>
                 <option value="due">รอเก็บเงิน</option>
+                <option value="expiring">ใกล้หมดสัญญา</option>
               </select>
             </div>
           </div>
@@ -721,6 +1052,7 @@ function StaffMain() {
                   paginatedRooms.map((room) => {
                     const isExpanded = expandedRoomNumbers.has(room.room_number)
                     const hasDue = room.currentDue && room.currentDue.status !== 'paid'
+                    const expiryStatus = getRoomExpiryStatus(room)
                     return (
                       <Fragment key={room.room_number}>
                         <tr>
@@ -736,6 +1068,11 @@ function StaffMain() {
                             {room.rental_start_date && room.rental_end_date
                               ? `${formatDate(room.rental_start_date)} - ${formatDate(room.rental_end_date)}`
                               : '-'}
+                            {expiryStatus && (
+                              <span className={`staff-badge status-${expiryStatus.level} staff-expiry-badge`}>
+                                {expiryStatus.label}
+                              </span>
+                            )}
                           </td>
                           <td>
                             {room.currentDue ? (
@@ -746,7 +1083,15 @@ function StaffMain() {
                               <span className="staff-badge status-none">-</span>
                             )}
                           </td>
-                          <td className="staff-col-optional">{hasDue ? `฿${formatCurrency(room.currentDue.amount)}` : '-'}</td>
+                          <td className="staff-col-optional">
+                            {hasDue ? (
+                              <span className={`staff-due-amount is-${dueBadgeClass(room.currentDue.status)}`}>
+                                ฿{formatCurrency(room.currentDue.amount)}
+                              </span>
+                            ) : (
+                              <span className="staff-due-amount is-none">-</span>
+                            )}
+                          </td>
                           <td>
                             <div className="staff-row-actions staff-row-actions-desktop">
                               <button
@@ -805,10 +1150,21 @@ function StaffMain() {
                                         ? `${formatDate(room.rental_start_date)} - ${formatDate(room.rental_end_date)}`
                                         : '-'}
                                     </strong>
+                                    {expiryStatus && (
+                                      <span className={`staff-badge status-${expiryStatus.level} staff-expiry-badge`}>
+                                        {expiryStatus.label}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="staff-row-detail-item">
                                     <span>ยอดค้างชำระ</span>
-                                    <strong>{hasDue ? `฿${formatCurrency(room.currentDue.amount)}` : '-'}</strong>
+                                    {hasDue ? (
+                                      <strong className={`staff-due-amount is-${dueBadgeClass(room.currentDue.status)}`}>
+                                        ฿{formatCurrency(room.currentDue.amount)}
+                                      </strong>
+                                    ) : (
+                                      <strong className="staff-due-amount is-none">-</strong>
+                                    )}
                                   </div>
                                   <div className="staff-row-actions">
                                     <button
@@ -879,12 +1235,39 @@ function StaffMain() {
                 คำขอต่อสัญญา / แจ้งย้ายออก
                 {tenantRequests.length > 0 && <span className="staff-count-pill">{tenantRequests.length}</span>}
               </h2>
-              {tenantRequests.length > REQUEST_PREVIEW_COUNT && (
+              {filteredTenantRequests.length > REQUEST_PREVIEW_COUNT && (
                 <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('tenant')}>
                   ดูทั้งหมด
                 </button>
               )}
             </div>
+
+            {tenantRequests.length > 0 && (
+              <div className="staff-filters staff-card-filters">
+                <input
+                  type="text"
+                  className="staff-search-input"
+                  placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
+                  value={tenantFilterSearch}
+                  onChange={(event) => {
+                    setTenantFilterSearch(event.target.value)
+                    setTenantModalPage(1)
+                  }}
+                />
+                <select
+                  className="staff-filter-select"
+                  value={tenantFilterType}
+                  onChange={(event) => {
+                    setTenantFilterType(event.target.value)
+                    setTenantModalPage(1)
+                  }}
+                >
+                  <option value="all">ทุกประเภท</option>
+                  <option value="renew">ต่อสัญญา</option>
+                  <option value="moveout">แจ้งย้ายออก</option>
+                </select>
+              </div>
+            )}
 
             <div className="staff-card-body">
               {requestsError ? (
@@ -905,9 +1288,11 @@ function StaffMain() {
                 <p className="staff-empty">กำลังโหลดข้อมูล...</p>
               ) : tenantRequests.length === 0 ? (
                 <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
+              ) : filteredTenantRequests.length === 0 ? (
+                <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
               ) : (
                 <div className="staff-requests-list">
-                  {tenantRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderTenantRequestItem)}
+                  {filteredTenantRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderTenantRequestItem)}
                 </div>
               )}
             </div>
@@ -919,12 +1304,48 @@ function StaffMain() {
                 คำขอแจ้งซ่อม
                 {maintenanceRequests.length > 0 && <span className="staff-count-pill">{maintenanceRequests.length}</span>}
               </h2>
-              {maintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
+              {filteredMaintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
                 <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('maintenance')}>
                   ดูทั้งหมด
                 </button>
               )}
             </div>
+
+            {maintenanceRequests.length > 0 && (
+              <div className="staff-filters staff-card-filters">
+                <input
+                  type="text"
+                  className="staff-search-input"
+                  placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
+                  value={maintenanceFilterSearch}
+                  onChange={(event) => {
+                    setMaintenanceFilterSearch(event.target.value)
+                    setMaintenanceModalPage(1)
+                  }}
+                />
+                <select
+                  className="staff-filter-select"
+                  value={maintenanceFilterStatus}
+                  onChange={(event) => {
+                    setMaintenanceFilterStatus(event.target.value)
+                    setMaintenanceModalPage(1)
+                  }}
+                >
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="pending">รอดำเนินการ</option>
+                  <option value="in_progress">กำลังดำเนินการ</option>
+                </select>
+                <input
+                  type="date"
+                  className="staff-filter-select"
+                  value={maintenanceFilterDate}
+                  onChange={(event) => {
+                    setMaintenanceFilterDate(event.target.value)
+                    setMaintenanceModalPage(1)
+                  }}
+                />
+              </div>
+            )}
 
             <div className="staff-card-body">
               {requestsError ? (
@@ -945,9 +1366,11 @@ function StaffMain() {
                 <p className="staff-empty">กำลังโหลดข้อมูล...</p>
               ) : maintenanceRequests.length === 0 ? (
                 <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
+              ) : filteredMaintenanceRequests.length === 0 ? (
+                <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
               ) : (
                 <div className="staff-requests-list">
-                  {maintenanceRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderMaintenanceRequestItem)}
+                  {filteredMaintenanceRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderMaintenanceRequestItem)}
                 </div>
               )}
             </div>
@@ -1180,13 +1603,41 @@ function StaffMain() {
         >
           {(requestClose) => (
             <div className="staff-confirm-body">
-              <p className="staff-confirm-message">
-                ยืนยันการเก็บเงินค่าเช่าห้อง {collectRoom.room_number}
-                <br />
-                จากคุณ {collectRoom.tenant ? `${collectRoom.tenant.first_name} ${collectRoom.tenant.last_name}` : '-'}
-              </p>
+              <div className="staff-confirm-icon is-money">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันการเก็บเงินค่าเช่า</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{collectRoom.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {collectRoom.tenant ? `${collectRoom.tenant.first_name} ${collectRoom.tenant.last_name}` : '-'}
+                  </strong>
+                </div>
+              </div>
               {collectRoom.currentDue && (
-                <p className="staff-confirm-amount">฿{formatCurrency(collectRoom.currentDue.amount)}</p>
+                <div className="staff-confirm-amount-block">
+                  <p className="staff-confirm-amount-label">ยอดที่ต้องชำระ</p>
+                  <p className="staff-confirm-amount">
+                    <span className="staff-confirm-amount-symbol">฿</span>
+                    {formatCurrency(collectRoom.currentDue.amount)}
+                  </p>
+                </div>
               )}
               {collectError && <p className="staff-form-error">{collectError}</p>}
               <div className="staff-form-actions">
@@ -1207,18 +1658,103 @@ function StaffMain() {
         </Modal>
       )}
 
+      {maintenanceCompleteConfirm && (
+        <Modal title="ยืนยันงานเสร็จสิ้น" onClose={() => setMaintenanceCompleteConfirm(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-success">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันว่างานซ่อมเสร็จสิ้นแล้ว</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{maintenanceCompleteConfirm.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {maintenanceCompleteConfirm.first_name} {maintenanceCompleteConfirm.last_name}
+                  </strong>
+                </div>
+              </div>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}`}
+                  onClick={handleConfirmMaintenanceComplete}
+                >
+                  {processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันเสร็จสิ้น'}
+                </button>
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {moveoutConfirmRequest && (
         <Modal title="ยืนยันการย้ายออก" onClose={() => setMoveoutConfirmRequest(null)} variant="confirm">
           {(requestClose) => (
             <div className="staff-confirm-body">
-              <p className="staff-confirm-message">
-                ยืนยันอนุมัติการย้ายออกห้อง {moveoutConfirmRequest.room_number}
-                <br />
-                ของคุณ {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}?
-              </p>
-              <p className="staff-form-error staff-form-error-block">
-                การดำเนินการนี้จะระงับบัญชีผู้เช่ารายนี้ และเปลี่ยนสถานะห้องเป็นว่างทันที
-              </p>
+              <div className="staff-confirm-icon is-warning">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 9v4M12 17h.01" />
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันอนุมัติการย้ายออก</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{moveoutConfirmRequest.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}
+                  </strong>
+                </div>
+              </div>
+              <div className="staff-confirm-warning">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 9v4M12 17h.01" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+                <p>การดำเนินการนี้จะระงับบัญชีผู้เช่ารายนี้ และเปลี่ยนสถานะห้องเป็นว่างทันที</p>
+              </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
                 <button
