@@ -375,11 +375,10 @@ function getRequestTimeline(kind, request) {
   if (request.accepted_at) {
     steps.push({ label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at })
   }
-  if (request.completed_at) {
-    const label =
-      (kind === 'maintenance' ? MAINTENANCE_FINAL_LOG_LABEL[request.status] : TENANT_REQUEST_FINAL_LOG_LABEL[request.status])
-      || 'ดำเนินการเสร็จสิ้น'
-    steps.push({ label, date: request.completed_at })
+  const finalLabel = kind === 'maintenance' ? MAINTENANCE_FINAL_LOG_LABEL[request.status] : TENANT_REQUEST_FINAL_LOG_LABEL[request.status]
+  if (finalLabel) {
+    // completed_at may be missing on older records transitioned before this timestamp was tracked
+    steps.push({ label: finalLabel, date: request.completed_at || request.accepted_at || request.created_at })
   }
   return steps
 }
@@ -390,20 +389,22 @@ function RequestTimeline({ kind, request }) {
 
   return (
     <div className="dashboard-request-log">
-      {timeline.map((step, index) => {
-        const prevStep = timeline[index - 1]
-        const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
-        return (
-          <div key={step.label} className="dashboard-request-log-item">
-            <span className="dashboard-request-log-dot" />
-            <div className="dashboard-request-log-content">
-              <p className="dashboard-request-log-label">{step.label}</p>
-              <p className="dashboard-request-log-date">{formatDateTime(step.date)}</p>
-              {stepMs !== null && <p className="dashboard-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+      <div className="dashboard-request-log-items">
+        {timeline.map((step, index) => {
+          const prevStep = timeline[index - 1]
+          const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+          return (
+            <div key={step.label} className="dashboard-request-log-item">
+              <span className="dashboard-request-log-dot" />
+              <div className="dashboard-request-log-content">
+                <p className="dashboard-request-log-label">{step.label}</p>
+                <p className="dashboard-request-log-date">{formatDateTime(step.date)}</p>
+                {stepMs !== null && <p className="dashboard-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
       {timeline.length > 1 && (
         <p className="dashboard-request-log-total">
           รวมใช้เวลาทั้งหมด{' '}
