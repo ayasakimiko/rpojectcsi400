@@ -149,7 +149,6 @@ function AdminBackupPage() {
     return false
   }
 
-  /* -------------------------------- Rooms -------------------------------- */
   const [rooms, setRooms] = useState([])
   const [roomsLoading, setRoomsLoading] = useState(true)
   const [roomsError, setRoomsError] = useState('')
@@ -374,7 +373,6 @@ function AdminBackupPage() {
     })
   }, [staffList, staffSearch])
 
-  /* ------------------------------- Customers ------------------------------- */
   const [customers, setCustomers] = useState([])
   const [customersLoading, setCustomersLoading] = useState(true)
   const [customersError, setCustomersError] = useState('')
@@ -470,7 +468,6 @@ function AdminBackupPage() {
     }
   }
 
-  /* --------------------------------- Logs ---------------------------------- */
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
   const [requestLogsError, setRequestLogsError] = useState('')
@@ -519,7 +516,6 @@ function AdminBackupPage() {
       .finally(() => setMaintenanceLogsLoading(false))
   }
 
-  /* -------------------------------- Lifecycle ------------------------------- */
   useEffect(() => {
     const token = sessionStorage.getItem('token')
     if (!token) {
@@ -542,13 +538,11 @@ function AdminBackupPage() {
     loadRooms()
     loadStaff()
     loadCustomers('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
     if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
   const handleLogout = () => {
