@@ -787,6 +787,14 @@ function CustomerDashbord() {
     }
   }, [])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadDashboard()
+    }, 20000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleLogout = () => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')

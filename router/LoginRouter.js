@@ -69,7 +69,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });
     }
     if (user.is_suspended) {
-      return res.status(403).json({ message: "บัญชีนี้ถูกระงับการใช้งาน" });
+      return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });
     }
 
     const isPhoneAsPassword = Boolean(user.phone) && password === user.phone;

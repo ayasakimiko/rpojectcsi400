@@ -1189,7 +1189,33 @@ function StaffMain() {
           </Modal>
         )}
 
-        {actionSuccess && <p className="staff-form-success">{actionSuccess}</p>}
+        {actionSuccess && (
+          <Modal title="สำเร็จ" onClose={() => setActionSuccess('')} variant="confirm">
+            {(requestClose) => (
+              <div className="staff-confirm-body">
+                <div className="staff-confirm-icon is-success">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <p className="staff-confirm-message">{actionSuccess}</p>
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
 
         <div className="staff-summary-grid">
           <div className="staff-summary-card">

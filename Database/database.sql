@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS Customer (
     last_name VARCHAR(255) NOT NULL,
     is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     age INT UNSIGNED NOT NULL,
-    room_number INT UNSIGNED NOT NULL,
+    room_number INT UNSIGNED,
     deposit_amount DECIMAL(10,2),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

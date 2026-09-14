@@ -6,6 +6,20 @@ const router = Router();
 
 router.use(authenticate, requireCustomerRole);
 
+router.use(async (req, res, next) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(`SELECT is_suspended FROM Customer WHERE id = ?`, [req.user.id]);
+    if (!rows[0] || rows[0].is_suspended) {
+      return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
+    }
+    next();
+  } catch (error) {
+    console.error("Check customer suspension error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 const GRACE_DAYS = 3;
 const REQUEST_TYPES = new Set(["renew", "moveout"]);
 const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
