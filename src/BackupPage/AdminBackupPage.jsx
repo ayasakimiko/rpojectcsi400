@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -145,12 +145,97 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+function useExpandedRows() {
+  const [expanded, setExpanded] = useState(() => new Set())
+  const toggle = (id) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const reset = () => setExpanded(new Set())
+  return [expanded, toggle, reset]
+}
+
+function DetailRow({ open, colSpan, fields }) {
+  if (!open) return null
+  return (
+    <tr className="admin-detail-row">
+      <td colSpan={colSpan}>
+        <div className="admin-detail-grid">
+          {fields.map(({ label, value }) => (
+            <div className="admin-detail-item" key={label}>
+              <span className="admin-detail-item-label">{label}</span>
+              <span className="admin-detail-item-value">{value}</span>
+            </div>
+          ))}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function ExpandToggleButton({ open, onClick }) {
+  return (
+    <button type="button" className="admin-expand-btn" onClick={onClick} aria-expanded={open}>
+      {open ? 'ย่อ' : 'ดูเพิ่มเติม'}
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        style={{ transform: open ? 'rotate(180deg)' : 'none' }}
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </button>
+  )
+}
+
+function ExpandToggleRow({ open, colSpan, onClick }) {
+  return (
+    <tr className="admin-toggle-row">
+      <td colSpan={colSpan}>
+        <ExpandToggleButton open={open} onClick={onClick} />
+      </td>
+    </tr>
+  )
+}
+
 function StaffActionCell({ name, date }) {
   if (!name) return <span className="admin-cell-empty">-</span>
   return (
     <div className="admin-staff-action">
       <span className="admin-staff-action-name">{name}</span>
       <span className="admin-staff-action-date">{formatDateTime(date)}</span>
+    </div>
+  )
+}
+
+function AmenitiesList({ room }) {
+  const amenities = [
+    room.air_conditioner && 'แอร์',
+    room.wifi && 'ไวไฟ',
+    room.refrigerator && 'ตู้เย็น',
+    room.bathroom && 'ห้องน้ำในตัว',
+    room.cctv && 'CCTV',
+  ].filter(Boolean)
+  if (amenities.length === 0) return '-'
+  return (
+    <div className="admin-amenities-list">
+      {amenities.map((amenity, index) => (
+        <span key={amenity} className="admin-amenity-item">
+          {index > 0 && <span className="admin-amenity-divider" aria-hidden="true" />}
+          {amenity}
+        </span>
+      ))}
     </div>
   )
 }
@@ -323,6 +408,12 @@ function AdminBackupPage() {
     return filteredRooms.slice(start, start + ROWS_PER_PAGE)
   }, [filteredRooms, currentRoomsPage])
 
+  const [expandedRoomRows, toggleRoomRow, resetRoomRows] = useExpandedRows()
+  useEffect(() => {
+    resetRoomRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRoomsPage, activeTab])
+
   /* -------------------------------- Staff --------------------------------- */
   const [staffList, setStaffList] = useState([])
   const [staffLoading, setStaffLoading] = useState(true)
@@ -458,6 +549,16 @@ function AdminBackupPage() {
     return filteredStaff.slice(start, start + ROWS_PER_PAGE)
   }, [filteredStaff, currentStaffPage])
 
+  useEffect(() => {
+    setRevealedStaffIdCards(new Set())
+  }, [currentStaffPage, activeTab])
+
+  const [expandedStaffRows, toggleStaffRow, resetStaffRows] = useExpandedRows()
+  useEffect(() => {
+    resetStaffRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStaffPage, activeTab])
+
   const [customers, setCustomers] = useState([])
   const [customersLoading, setCustomersLoading] = useState(true)
   const [customersError, setCustomersError] = useState('')
@@ -584,6 +685,12 @@ function AdminBackupPage() {
     return filteredCustomers.slice(start, start + ROWS_PER_PAGE)
   }, [filteredCustomers, currentCustomersPage])
 
+  const [expandedCustomerRows, toggleCustomerRow, resetCustomerRows] = useExpandedRows()
+  useEffect(() => {
+    resetCustomerRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCustomersPage, activeTab])
+
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
   const [requestLogsError, setRequestLogsError] = useState('')
@@ -704,6 +811,18 @@ function AdminBackupPage() {
   const requestLogsTotalPages = Math.max(1, Math.ceil(requestLogs.total / requestLogs.pageSize))
   const maintenanceLogsTotalPages = Math.max(1, Math.ceil(maintenanceLogs.total / maintenanceLogs.pageSize))
 
+  const [expandedRequestRows, toggleRequestRow, resetRequestRows] = useExpandedRows()
+  useEffect(() => {
+    resetRequestRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestLogs.page, activeTab])
+
+  const [expandedMaintenanceRows, toggleMaintenanceRow, resetMaintenanceRows] = useExpandedRows()
+  useEffect(() => {
+    resetMaintenanceRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maintenanceLogs.page, activeTab])
+
   return (
     <div className="admin-page">
       <div className="admin-container">
@@ -753,20 +872,54 @@ function AdminBackupPage() {
 
         <div className="admin-summary-grid">
           <div className="admin-summary-card">
-            <span className="admin-summary-label">ห้องทั้งหมด</span>
-            <span className="admin-summary-value">{summary.totalRooms}</span>
+            <div className="admin-summary-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 10.5 12 3l9 7.5" />
+                <path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9" />
+              </svg>
+            </div>
+            <div className="admin-summary-text">
+              <span className="admin-summary-label">ห้องทั้งหมด</span>
+              <span className="admin-summary-value">{summary.totalRooms}</span>
+            </div>
           </div>
           <div className="admin-summary-card is-vacant">
-            <span className="admin-summary-label">ห้องว่าง</span>
-            <span className="admin-summary-value">{summary.vacantRooms}</span>
+            <div className="admin-summary-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="8 12.5 11 15.5 16 9.5" />
+              </svg>
+            </div>
+            <div className="admin-summary-text">
+              <span className="admin-summary-label">ห้องว่าง</span>
+              <span className="admin-summary-value">{summary.vacantRooms}</span>
+            </div>
           </div>
           <div className="admin-summary-card is-staff">
-            <span className="admin-summary-label">พนักงานที่ใช้งานอยู่</span>
-            <span className="admin-summary-value">{summary.activeStaff}</span>
+            <div className="admin-summary-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.3" />
+                <path d="M5.5 20c0-3.9 2.9-7 6.5-7s6.5 3.1 6.5 7" />
+              </svg>
+            </div>
+            <div className="admin-summary-text">
+              <span className="admin-summary-label">พนักงานที่ใช้งานอยู่</span>
+              <span className="admin-summary-value">{summary.activeStaff}</span>
+            </div>
           </div>
           <div className="admin-summary-card is-customer">
-            <span className="admin-summary-label">ลูกค้าที่ใช้งานอยู่</span>
-            <span className="admin-summary-value">{summary.activeCustomers}</span>
+            <div className="admin-summary-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="9" cy="8.5" r="3" />
+                <path d="M3.5 20c0-3.3 2.5-6 5.5-6s5.5 2.7 5.5 6" />
+                <path d="M15 4.3a3 3 0 0 1 0 5.7" />
+                <path d="M16.5 14c2 .4 3.5 2.7 3.5 6" />
+              </svg>
+            </div>
+            <div className="admin-summary-text">
+              <span className="admin-summary-label">ลูกค้าที่ใช้งานอยู่</span>
+              <span className="admin-summary-value">{summary.activeCustomers}</span>
+            </div>
           </div>
         </div>
 
@@ -825,7 +978,7 @@ function AdminBackupPage() {
                     <th>ราคา/เดือน</th>
                     <th className="admin-col-optional">สิ่งอำนวยความสะดวก</th>
                     <th>ผู้เช่า</th>
-                    <th>การดำเนินการ</th>
+                    <th className="admin-col-optional">การดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -843,48 +996,56 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     paginatedRooms.map((room) => (
-                      <tr key={room.room_number}>
-                        <td className="admin-strong-cell">{room.room_number}</td>
-                        <td>
-                          <span className={`admin-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
-                            {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
-                          </span>
-                        </td>
-                        <td className="admin-price-cell">฿{formatCurrency(room.price)}</td>
-                        <td className="admin-col-optional admin-amenities-cell">
-                          {(() => {
-                            const amenities = [
-                              room.air_conditioner && 'แอร์',
-                              room.wifi && 'ไวไฟ',
-                              room.refrigerator && 'ตู้เย็น',
-                              room.bathroom && 'ห้องน้ำในตัว',
-                              room.cctv && 'CCTV',
-                            ].filter(Boolean)
-                            if (amenities.length === 0) return '-'
-                            return (
-                              <div className="admin-amenities-list">
-                                {amenities.map((amenity, index) => (
-                                  <span key={amenity} className="admin-amenity-item">
-                                    {index > 0 && <span className="admin-amenity-divider" aria-hidden="true" />}
-                                    {amenity}
-                                  </span>
-                                ))}
-                              </div>
-                            )
-                          })()}
-                        </td>
-                        <td>{room.customer_id ? `${room.first_name} ${room.last_name}` : '-'}</td>
-                        <td>
-                          <div className="admin-row-actions">
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
-                              แก้ไข
-                            </button>
-                            <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
-                              ลบ
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <Fragment key={room.id}>
+                        <tr>
+                          <td className="admin-strong-cell">{room.room_number}</td>
+                          <td>
+                            <span className={`admin-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
+                              {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
+                            </span>
+                          </td>
+                          <td className="admin-price-cell">฿{formatCurrency(room.price)}</td>
+                          <td className="admin-col-optional admin-amenities-cell">
+                            <AmenitiesList room={room} />
+                          </td>
+                          <td>{room.customer_id ? `${room.first_name} ${room.last_name}` : '-'}</td>
+                          <td className="admin-col-optional">
+                            <div className="admin-row-actions">
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
+                                แก้ไข
+                              </button>
+                              <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
+                                ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <ExpandToggleRow
+                          open={expandedRoomRows.has(room.room_number)}
+                          colSpan={6}
+                          onClick={() => toggleRoomRow(room.room_number)}
+                        />
+                        <DetailRow
+                          open={expandedRoomRows.has(room.room_number)}
+                          colSpan={6}
+                          fields={[
+                            { label: 'สิ่งอำนวยความสะดวก', value: <AmenitiesList room={room} /> },
+                            {
+                              label: 'การดำเนินการ',
+                              value: (
+                                <div className="admin-row-actions">
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
+                                    แก้ไข
+                                  </button>
+                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
+                                    ลบ
+                                  </button>
+                                </div>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Fragment>
                     ))
                   )}
                 </tbody>
@@ -935,7 +1096,7 @@ function AdminBackupPage() {
                     <th>เบอร์โทร</th>
                     <th className="admin-col-optional">อายุ</th>
                     <th>สถานะ</th>
-                    <th>การดำเนินการ</th>
+                    <th className="admin-col-optional">การดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -953,44 +1114,82 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     paginatedStaff.map((member) => (
-                      <tr key={member.id}>
-                        <td className="admin-strong-cell">
-                          {member.first_name} {member.last_name}
-                        </td>
-                        <td className="admin-col-optional">
-                          <button
-                            type="button"
-                            className="admin-idcard-toggle"
-                            onClick={() => toggleStaffIdCardReveal(member.id)}
-                          >
-                            {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
-                          </button>
-                        </td>
-                        <td>{member.phone}</td>
-                        <td className="admin-col-optional">{member.age}</td>
-                        <td>
-                          <span className={`admin-badge status-${member.is_suspended ? 'suspended' : 'active'}`}>
-                            {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="admin-row-actions">
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
-                              แก้ไข
-                            </button>
+                      <Fragment key={member.id}>
+                        <tr>
+                          <td className="admin-strong-cell">
+                            {member.first_name} {member.last_name}
+                          </td>
+                          <td className="admin-col-optional">
                             <button
                               type="button"
-                              className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
-                              onClick={() => setStaffSuspendConfirm(member)}
+                              className="admin-idcard-toggle"
+                              onClick={() => toggleStaffIdCardReveal(member.id)}
                             >
-                              {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                              {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
                             </button>
-                            <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
-                              ลบ
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                          <td>{member.phone}</td>
+                          <td className="admin-col-optional">{member.age}</td>
+                          <td>
+                            <span className={`admin-badge status-${member.is_suspended ? 'suspended' : 'active'}`}>
+                              {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                            </span>
+                          </td>
+                          <td className="admin-col-optional">
+                            <div className="admin-row-actions">
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
+                                แก้ไข
+                              </button>
+                              <button
+                                type="button"
+                                className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                                onClick={() => setStaffSuspendConfirm(member)}
+                              >
+                                {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                              </button>
+                              <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
+                                ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <ExpandToggleRow open={expandedStaffRows.has(member.id)} colSpan={6} onClick={() => toggleStaffRow(member.id)} />
+                        <DetailRow
+                          open={expandedStaffRows.has(member.id)}
+                          colSpan={6}
+                          fields={[
+                            {
+                              label: 'บัตรประชาชน',
+                              value: (
+                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleStaffIdCardReveal(member.id)}>
+                                  {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                                </button>
+                              ),
+                            },
+                            { label: 'อายุ', value: member.age },
+                            {
+                              label: 'การดำเนินการ',
+                              value: (
+                                <div className="admin-row-actions">
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
+                                    แก้ไข
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                                    onClick={() => setStaffSuspendConfirm(member)}
+                                  >
+                                    {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                                  </button>
+                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
+                                    ลบ
+                                  </button>
+                                </div>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Fragment>
                     ))
                   )}
                 </tbody>
@@ -1054,7 +1253,7 @@ function AdminBackupPage() {
                     <th className="admin-col-optional">เบอร์โทร</th>
                     <th className="admin-col-optional">ระยะเวลาสัญญา</th>
                     <th>สถานะ</th>
-                    <th>การดำเนินการ</th>
+                    <th className="admin-col-optional">การดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1072,38 +1271,76 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     paginatedCustomers.map((customer) => (
-                      <tr key={customer.id}>
-                        <td className="admin-strong-cell">
-                          {customer.first_name} {customer.last_name}
-                        </td>
-                        <td>{customer.room_number ?? '-'}</td>
-                        <td className="admin-col-optional">{customer.phone}</td>
-                        <td className="admin-col-optional">
-                          <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />
-                        </td>
-                        <td>
-                          <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
-                            {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="admin-row-actions">
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerDetail(customer)}>
-                              ดูรายละเอียด
-                            </button>
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
-                              แก้ไข
-                            </button>
-                            <button
-                              type="button"
-                              className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`}
-                              onClick={() => setCustomerSuspendConfirm(customer)}
-                            >
-                              {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <Fragment key={customer.id}>
+                        <tr>
+                          <td className="admin-strong-cell">
+                            {customer.first_name} {customer.last_name}
+                          </td>
+                          <td>{customer.room_number ?? '-'}</td>
+                          <td className="admin-col-optional">{customer.phone}</td>
+                          <td className="admin-col-optional">
+                            <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />
+                          </td>
+                          <td>
+                            <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
+                              {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                            </span>
+                          </td>
+                          <td className="admin-col-optional">
+                            <div className="admin-row-actions">
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerDetail(customer)}>
+                                ดูรายละเอียด
+                              </button>
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
+                                แก้ไข
+                              </button>
+                              <button
+                                type="button"
+                                className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`}
+                                onClick={() => setCustomerSuspendConfirm(customer)}
+                              >
+                                {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <ExpandToggleRow
+                          open={expandedCustomerRows.has(customer.id)}
+                          colSpan={6}
+                          onClick={() => toggleCustomerRow(customer.id)}
+                        />
+                        <DetailRow
+                          open={expandedCustomerRows.has(customer.id)}
+                          colSpan={6}
+                          fields={[
+                            { label: 'เบอร์โทร', value: customer.phone },
+                            {
+                              label: 'ระยะเวลาสัญญา',
+                              value: <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />,
+                            },
+                            {
+                              label: 'การดำเนินการ',
+                              value: (
+                                <div className="admin-row-actions">
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerDetail(customer)}>
+                                    ดูรายละเอียด
+                                  </button>
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
+                                    แก้ไข
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`}
+                                    onClick={() => setCustomerSuspendConfirm(customer)}
+                                  >
+                                    {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                                  </button>
+                                </div>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Fragment>
                     ))
                   )}
                 </tbody>
@@ -1185,25 +1422,37 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     requestLogs.items.map((request) => (
-                      <tr key={request.id}>
-                        <td>
-                          <span className={`admin-badge type-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
-                        </td>
-                        <td>{request.room_number}</td>
-                        <td>
-                          {request.first_name} {request.last_name}
-                        </td>
-                        <td>
-                          <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
-                        </td>
-                        <td className="admin-col-optional">
-                          <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
-                        </td>
-                        <td className="admin-col-optional">
-                          <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
-                        </td>
-                        <td className="admin-col-optional">{formatDateTime(request.created_at)}</td>
-                      </tr>
+                      <Fragment key={request.id}>
+                        <tr>
+                          <td>
+                            <span className={`admin-badge type-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
+                          </td>
+                          <td>{request.room_number}</td>
+                          <td>
+                            {request.first_name} {request.last_name}
+                          </td>
+                          <td>
+                            <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
+                          </td>
+                          <td className="admin-col-optional">
+                            <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
+                          </td>
+                          <td className="admin-col-optional">
+                            <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
+                          </td>
+                          <td className="admin-col-optional">{formatDateTime(request.created_at)}</td>
+                        </tr>
+                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={7} onClick={() => toggleRequestRow(request.id)} />
+                        <DetailRow
+                          open={expandedRequestRows.has(request.id)}
+                          colSpan={7}
+                          fields={[
+                            { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
+                            { label: 'เสร็จสิ้นโดย', value: <StaffActionCell name={request.completed_by_name} date={request.completed_at} /> },
+                            { label: 'วันที่ส่งคำขอ', value: formatDateTime(request.created_at) },
+                          ]}
+                        />
+                      </Fragment>
                     ))
                   )}
                 </tbody>
@@ -1285,27 +1534,43 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     maintenanceLogs.items.map((request) => (
-                      <tr key={request.id}>
-                        <td>{request.description}</td>
-                        <td className="admin-col-optional">
-                          <MaintenanceCategoryBadge category={request.category} />
-                        </td>
-                        <td>{request.room_number}</td>
-                        <td>
-                          {request.first_name} {request.last_name}
-                        </td>
-                        <td>
-                          <span className={`admin-badge status-${request.status}`}>
-                            {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
-                          </span>
-                        </td>
-                        <td className="admin-col-optional">
-                          <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
-                        </td>
-                        <td className="admin-col-optional">
-                          <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
-                        </td>
-                      </tr>
+                      <Fragment key={request.id}>
+                        <tr>
+                          <td>{request.description}</td>
+                          <td className="admin-col-optional">
+                            <MaintenanceCategoryBadge category={request.category} />
+                          </td>
+                          <td>{request.room_number}</td>
+                          <td>
+                            {request.first_name} {request.last_name}
+                          </td>
+                          <td>
+                            <span className={`admin-badge status-${request.status}`}>
+                              {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
+                            </span>
+                          </td>
+                          <td className="admin-col-optional">
+                            <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
+                          </td>
+                          <td className="admin-col-optional">
+                            <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
+                          </td>
+                        </tr>
+                        <ExpandToggleRow
+                          open={expandedMaintenanceRows.has(request.id)}
+                          colSpan={7}
+                          onClick={() => toggleMaintenanceRow(request.id)}
+                        />
+                        <DetailRow
+                          open={expandedMaintenanceRows.has(request.id)}
+                          colSpan={7}
+                          fields={[
+                            { label: 'หมวดหมู่', value: <MaintenanceCategoryBadge category={request.category} /> },
+                            { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
+                            { label: 'เสร็จสิ้นโดย', value: <StaffActionCell name={request.completed_by_name} date={request.completed_at} /> },
+                          ]}
+                        />
+                      </Fragment>
                     ))
                   )}
                 </tbody>
