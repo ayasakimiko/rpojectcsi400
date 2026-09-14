@@ -1479,3 +1479,18 @@
     flex: 1 1 auto;
   }
 }
+
+@media (max-width: 700px) {
+  .dashboard-header-actions {
+    display: contents;
+  }
+
+  .dashboard-title-group {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dashboard-notif-wrap {
+    flex-shrink: 0;
+  }
+}

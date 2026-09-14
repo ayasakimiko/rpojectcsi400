@@ -1064,35 +1064,6 @@
   gap: 10px;
 }
 
-.staff-rental-entry {
-  border: 1.8px solid #e2e2e2;
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 14px;
-}
-
-.staff-rental-entry:last-child {
-  margin-bottom: 0;
-}
-
-.staff-rental-entry-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #0f2b52;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin: 0 0 10px;
-}
-
-.staff-rental-entry-date {
-  font-size: 11px;
-  font-weight: 600;
-  color: #6b859e;
-}
-
 .staff-confirm-body {
   display: flex;
   flex-direction: column;

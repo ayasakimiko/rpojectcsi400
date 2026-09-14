@@ -103,6 +103,7 @@ const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 6
+const PAYMENT_HISTORY_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
   pending: { label: 'คำขอใหม่ รอดำเนินการ', tone: 'pending' },
@@ -309,6 +310,9 @@ function StaffMain() {
   const [historyData, setHistoryData] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState('')
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
+  const [historyPage, setHistoryPage] = useState(1)
 
   const [collectRoom, setCollectRoom] = useState(null)
   const [collectSubmitting, setCollectSubmitting] = useState(false)
@@ -616,6 +620,9 @@ function StaffMain() {
     setHistoryRoom(room)
     setHistoryData(null)
     setHistoryError('')
+    setHistorySearch('')
+    setHistoryStatusFilter('all')
+    setHistoryPage(1)
     setHistoryLoading(true)
     try {
       const { data } = await axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: authHeaders() })
@@ -752,6 +759,45 @@ function StaffMain() {
     const start = (currentMaintenanceModalPage - 1) * MODAL_ITEMS_PER_PAGE
     return filteredMaintenanceRequests.slice(start, start + MODAL_ITEMS_PER_PAGE)
   }, [filteredMaintenanceRequests, currentMaintenanceModalPage])
+
+  const historyPayments = useMemo(() => {
+    if (!historyData) return []
+    return historyData.flatMap((entry) =>
+      entry.payments.map((payment) => ({
+        ...payment,
+        tenantName: `${entry.first_name} ${entry.last_name}`,
+      })),
+    )
+  }, [historyData])
+
+  const filteredHistoryPayments = useMemo(() => {
+    return historyPayments.filter((payment) => {
+      if (historyStatusFilter !== 'all' && payment.status !== historyStatusFilter) return false
+
+      if (historySearch.trim()) {
+        const keyword = historySearch.trim().toLowerCase()
+        const haystack = [
+          payment.tenantName,
+          formatDateTime(payment.created_at),
+          formatCurrency(payment.amount),
+          PAYMENT_STATUS_LABEL[payment.status] || payment.status,
+          payment.note,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        if (!haystack.includes(keyword)) return false
+      }
+      return true
+    })
+  }, [historyPayments, historyStatusFilter, historySearch])
+
+  const historyTotalPages = Math.max(1, Math.ceil(filteredHistoryPayments.length / PAYMENT_HISTORY_PAGE_SIZE))
+  const currentHistoryPage = Math.min(historyPage, historyTotalPages)
+  const paginatedHistoryPayments = useMemo(() => {
+    const start = (currentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE
+    return filteredHistoryPayments.slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
+  }, [filteredHistoryPayments, currentHistoryPage])
 
   if (loading) {
     return (
@@ -1545,7 +1591,15 @@ function StaffMain() {
       )}
 
       {historyRoom && (
-        <Modal title={`ประวัติการจ่ายเงิน - ห้อง ${historyRoom.room_number}`} onClose={() => setHistoryRoom(null)}>
+        <Modal
+          title={`ประวัติการจ่ายเงิน - ห้อง ${historyRoom.room_number}`}
+          onClose={() => {
+            setHistoryRoom(null)
+            setHistorySearch('')
+            setHistoryStatusFilter('all')
+            setHistoryPage(1)
+          }}
+        >
           {historyLoading ? (
             <p className="staff-empty">กำลังโหลดข้อมูล...</p>
           ) : historyError ? (
@@ -1553,29 +1607,53 @@ function StaffMain() {
           ) : !historyData || historyData.length === 0 ? (
             <p className="staff-empty">ยังไม่มีประวัติการจ่ายเงินห้องนี้</p>
           ) : (
-            historyData.map((entry) => (
-              <div key={entry.booking_id} className="staff-rental-entry">
-                <p className="staff-rental-entry-title">
-                  ผู้เช่า: {entry.first_name} {entry.last_name}
-                  <span className="staff-rental-entry-date">เริ่มสัญญา {formatDateTime(entry.created_at)}</span>
-                </p>
-                {entry.payments.length === 0 ? (
-                  <p className="staff-empty">ยังไม่มีประวัติการชำระค่าเช่า</p>
-                ) : (
+            <>
+              <div className="staff-filters staff-modal-filters">
+                <input
+                  type="text"
+                  className="staff-search-input"
+                  placeholder="ค้นหาผู้เช่า, จำนวนเงิน, หมายเหตุ..."
+                  value={historySearch}
+                  onChange={(event) => {
+                    setHistorySearch(event.target.value)
+                    setHistoryPage(1)
+                  }}
+                />
+                <select
+                  className="staff-filter-select"
+                  value={historyStatusFilter}
+                  onChange={(event) => {
+                    setHistoryStatusFilter(event.target.value)
+                    setHistoryPage(1)
+                  }}
+                >
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="paid">ชำระแล้ว</option>
+                  <option value="pending">รอชำระ</option>
+                  <option value="overdue">ค้างชำระ</option>
+                </select>
+              </div>
+
+              {filteredHistoryPayments.length === 0 ? (
+                <p className="staff-empty">ไม่พบประวัติการชำระเงินที่ตรงกับเงื่อนไข</p>
+              ) : (
+                <>
                   <div className="table-responsive">
                     <table className="staff-table">
                       <thead>
                         <tr>
                           <th>วันที่ชำระ</th>
+                          <th>ผู้เช่า</th>
                           <th>จำนวนเงิน</th>
                           <th>สถานะ</th>
                           <th>หมายเหตุ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {entry.payments.map((payment) => (
+                        {paginatedHistoryPayments.map((payment) => (
                           <tr key={payment.id}>
                             <td>{formatDateTime(payment.created_at)}</td>
+                            <td>{payment.tenantName}</td>
                             <td>฿{formatCurrency(payment.amount)}</td>
                             <td>
                               <span className={`staff-badge status-${payment.status}`}>
@@ -1588,9 +1666,39 @@ function StaffMain() {
                       </tbody>
                     </table>
                   </div>
-                )}
-              </div>
-            ))
+                  {historyTotalPages > 1 && (
+                    <div className="staff-pagination">
+                      <span className="staff-pagination-info">
+                        แสดง {(currentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE + 1}
+                        -{Math.min(currentHistoryPage * PAYMENT_HISTORY_PAGE_SIZE, filteredHistoryPayments.length)} จาก{' '}
+                        {filteredHistoryPayments.length} รายการ
+                      </span>
+                      <div className="staff-pagination-controls">
+                        <button
+                          type="button"
+                          className="staff-action-btn is-ghost"
+                          disabled={currentHistoryPage <= 1}
+                          onClick={() => setHistoryPage(Math.max(1, currentHistoryPage - 1))}
+                        >
+                          ก่อนหน้า
+                        </button>
+                        <span className="staff-pagination-page">
+                          หน้า {currentHistoryPage} / {historyTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          className="staff-action-btn is-ghost"
+                          disabled={currentHistoryPage >= historyTotalPages}
+                          onClick={() => setHistoryPage(Math.min(historyTotalPages, currentHistoryPage + 1))}
+                        >
+                          ถัดไป
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
         </Modal>
       )}
