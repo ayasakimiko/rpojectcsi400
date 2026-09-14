@@ -229,7 +229,7 @@ router.get("/requests", async (req, res) => {
               tr.room_number, c.first_name, c.last_name, c.phone
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
-       WHERE tr.status = 'pending'
+       WHERE tr.status IN ('pending', 'in_progress')
        ORDER BY tr.created_at ASC`,
     );
 
@@ -245,6 +245,29 @@ router.get("/requests", async (req, res) => {
     return res.json({ tenantRequests, maintenanceRequests });
   } catch (error) {
     console.error("Fetch staff requests error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/requests/:id/acknowledge", async (req, res) => {
+  try {
+    const pool = getPool();
+    const requestId = Number(req.params.id);
+    if (!Number.isInteger(requestId) || requestId < 1) {
+      return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+    }
+
+    const [result] = await pool.query(
+      `UPDATE TenantRequest SET status = 'in_progress', accepted_at = NOW() WHERE id = ? AND status = 'pending'`,
+      [requestId],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(409).json({ message: "ไม่พบคำขอที่รอดำเนินการนี้" });
+    }
+
+    return res.json({ message: "รับเรื่องสำเร็จ" });
+  } catch (error) {
+    console.error("Acknowledge tenant request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
@@ -270,7 +293,7 @@ router.post("/requests/:id/approve", async (req, res) => {
       await connection.rollback();
       return res.status(404).json({ message: "ไม่พบคำขอนี้" });
     }
-    if (tenantRequest.status !== "pending") {
+    if (!["pending", "in_progress"].includes(tenantRequest.status)) {
       await connection.rollback();
       return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการไปแล้ว" });
     }
@@ -307,7 +330,7 @@ router.post("/requests/:id/approve", async (req, res) => {
       );
     }
 
-    await connection.query(`UPDATE TenantRequest SET status = 'approved' WHERE id = ?`, [requestId]);
+    await connection.query(`UPDATE TenantRequest SET status = 'approved', completed_at = NOW() WHERE id = ?`, [requestId]);
 
     await connection.commit();
     return res.json({ message: "อนุมัติคำขอสำเร็จ" });
@@ -329,7 +352,7 @@ router.post("/requests/:id/reject", async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `UPDATE TenantRequest SET status = 'rejected' WHERE id = ? AND status = 'pending'`,
+      `UPDATE TenantRequest SET status = 'rejected', completed_at = NOW() WHERE id = ? AND status IN ('pending', 'in_progress')`,
       [requestId],
     );
     if (result.affectedRows === 0) {
@@ -344,9 +367,9 @@ router.post("/requests/:id/reject", async (req, res) => {
 });
 
 const MAINTENANCE_TRANSITIONS = {
-  accept: { from: ["pending"], to: "in_progress", message: "รับเรื่องแจ้งซ่อมสำเร็จ" },
-  complete: { from: ["pending", "in_progress"], to: "done", message: "บันทึกการซ่อมเสร็จสิ้นสำเร็จ" },
-  reject: { from: ["pending", "in_progress"], to: "cancelled", message: "ปฏิเสธรายการแจ้งซ่อมสำเร็จ" },
+  accept: { from: ["pending"], to: "in_progress", timestampColumn: "accepted_at", message: "รับเรื่องแจ้งซ่อมสำเร็จ" },
+  complete: { from: ["pending", "in_progress"], to: "done", timestampColumn: "completed_at", message: "บันทึกการซ่อมเสร็จสิ้นสำเร็จ" },
+  reject: { from: ["pending", "in_progress"], to: "cancelled", timestampColumn: "completed_at", message: "ปฏิเสธรายการแจ้งซ่อมสำเร็จ" },
 };
 
 router.post("/maintenance/:id/:action", async (req, res) => {
@@ -363,7 +386,7 @@ router.post("/maintenance/:id/:action", async (req, res) => {
 
     const pool = getPool();
     const [result] = await pool.query(
-      `UPDATE MaintenanceRequest SET status = ? WHERE id = ? AND status IN (?)`,
+      `UPDATE MaintenanceRequest SET status = ?, ${transition.timestampColumn} = NOW() WHERE id = ? AND status IN (?)`,
       [transition.to, requestId, transition.from],
     );
     if (result.affectedRows === 0) {

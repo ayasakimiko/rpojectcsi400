@@ -62,6 +62,11 @@ const TENANT_REQUEST_TYPE_LABEL = {
   moveout: 'แจ้งย้ายออก',
 }
 
+const TENANT_REQUEST_STATUS_LABEL = {
+  pending: 'รอดำเนินการ',
+  in_progress: 'รับเรื่องแล้ว',
+}
+
 const RENEW_DURATION_LABEL = {
   1: '1 เดือน',
   3: '3 เดือน',
@@ -179,7 +184,6 @@ function StaffMain() {
   const [maintenanceFilterStatus, setMaintenanceFilterStatus] = useState('all')
   const [maintenanceFilterDate, setMaintenanceFilterDate] = useState('')
   const [maintenanceFilterSearch, setMaintenanceFilterSearch] = useState('')
-  const [acknowledgedMoveoutIds, setAcknowledgedMoveoutIds] = useState(() => new Set())
   const [moveoutConfirmRequest, setMoveoutConfirmRequest] = useState(null)
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
@@ -266,8 +270,19 @@ function StaffMain() {
     }
   }
 
-  const acknowledgeMoveoutRequest = (requestId) => {
-    setAcknowledgedMoveoutIds((prev) => new Set(prev).add(requestId))
+  const handleAcknowledgeTenantRequest = async (request) => {
+    const key = `tenant-${request.id}`
+    setProcessingRequestKey(key)
+    setRequestsError('')
+    try {
+      const { data } = await axios.post(`/api/staff/requests/${request.id}/acknowledge`, {}, { headers: authHeaders() })
+      setActionSuccess(data.message || 'รับเรื่องสำเร็จ')
+      await loadRequests()
+    } catch (err) {
+      setRequestsError(err.response?.data?.message || 'รับเรื่องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setProcessingRequestKey('')
+    }
   }
 
   const handleConfirmMoveoutApproval = async () => {
@@ -318,6 +333,11 @@ function StaffMain() {
             </span>
             <span className="staff-request-room">ห้อง {request.room_number}</span>
             <span className="staff-request-tenant">{request.first_name} {request.last_name}</span>
+            {request.type === 'moveout' && (
+              <span className={`staff-badge status-${request.status}`}>
+                {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+              </span>
+            )}
           </div>
           <p className="staff-request-meta">
             {request.type === 'renew' &&
@@ -329,7 +349,7 @@ function StaffMain() {
         </div>
         <div className="staff-row-actions">
           {request.type === 'moveout' ? (
-            acknowledgedMoveoutIds.has(request.id) ? (
+            request.status === 'in_progress' ? (
               <button
                 type="button"
                 className="staff-action-btn is-primary"
@@ -343,9 +363,9 @@ function StaffMain() {
                 type="button"
                 className="staff-action-btn is-primary"
                 disabled={isProcessing}
-                onClick={() => acknowledgeMoveoutRequest(request.id)}
+                onClick={() => handleAcknowledgeTenantRequest(request)}
               >
-                รับเรื่อง
+                {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
               </button>
             )
           ) : (

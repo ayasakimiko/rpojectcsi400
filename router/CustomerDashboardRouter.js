@@ -126,13 +126,13 @@ router.get("/me", authenticate, async (req, res) => {
     }));
 
     const [maintenanceRequests] = await pool.query(
-      `SELECT id, description, category, contact_phone, preferred_time, status, created_at
+      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, completed_at, created_at
        FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
       [customer.id],
     );
 
     const [tenantRequests] = await pool.query(
-      `SELECT id, type, note, renew_duration_months, renew_payment_type, status, created_at
+      `SELECT id, type, note, renew_duration_months, renew_payment_type, status, accepted_at, completed_at, created_at
        FROM TenantRequest WHERE customer_id = ? ORDER BY created_at DESC`,
       [customer.id],
     );
@@ -307,7 +307,7 @@ router.post("/requests", authenticate, async (req, res) => {
     }
 
     const [pendingRows] = await pool.query(
-      `SELECT id FROM TenantRequest WHERE customer_id = ? AND type = ? AND status = 'pending'`,
+      `SELECT id FROM TenantRequest WHERE customer_id = ? AND type = ? AND status IN ('pending', 'in_progress')`,
       [customer.id, type],
     );
     if (pendingRows.length > 0) {

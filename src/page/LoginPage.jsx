@@ -33,6 +33,7 @@ function LoginPage() {
       const { data } = await axios.post('/api/auth/login', loginForm)
       sessionStorage.setItem('token', data.token)
       sessionStorage.setItem('user', JSON.stringify(data.user))
+      sessionStorage.setItem('justLoggedIn', '1')
       setSuccess(data.message || 'เข้าสู่ระบบสำเร็จ')
       const destination = data.user?.role === 'Customer' ? '/dashboard' : '/staff'
       setTimeout(() => navigate(destination), 600)

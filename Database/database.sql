@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS MaintenanceRequest (
     contact_phone VARCHAR(20),
     preferred_time VARCHAR(20) NOT NULL DEFAULT 'anytime',
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    accepted_at DATETIME NULL,
+    completed_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id)
@@ -125,6 +127,8 @@ CREATE TABLE IF NOT EXISTS TenantRequest (
     renew_duration_months INT UNSIGNED,
     renew_payment_type VARCHAR(20),
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    accepted_at DATETIME NULL,
+    completed_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id)

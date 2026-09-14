@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -89,7 +89,7 @@ function CalendarIcon() {
   )
 }
 
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, variant }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -110,7 +110,10 @@ function Modal({ title, onClose, children }) {
         if (isClosing) onClose()
       }}
     >
-      <div className={`dashboard-modal${isClosing ? ' is-closing' : ''}`} onClick={(event) => event.stopPropagation()}>
+      <div
+        className={`dashboard-modal${variant === 'confirm' ? ' dashboard-modal-confirm' : ''}${isClosing ? ' is-closing' : ''}`}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="dashboard-modal-header">
           <h3>{title}</h3>
           <button type="button" className="dashboard-modal-close" onClick={requestClose} aria-label="ปิด">
@@ -227,6 +230,7 @@ const TENANT_REQUEST_TYPE_LABEL = {
 
 const TENANT_REQUEST_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
+  in_progress: 'รับเรื่องแล้ว',
   approved: 'อนุมัติแล้ว',
   rejected: 'ปฏิเสธ',
 }
@@ -251,8 +255,169 @@ const RENEW_PAYMENT_TYPE_LABEL = Object.fromEntries(
 function tenantRequestBadgeClass(status) {
   if (status === 'approved') return 'paid'
   if (status === 'rejected') return 'overdue'
+  if (status === 'in_progress') return 'in-progress'
   return 'pending'
 }
+
+const MOVEOUT_APPROVED_CONTACT_MESSAGE =
+  'คำขอแจ้งย้ายออกของคุณได้รับการอนุมัติแล้ว กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อดำเนินการคืนกุญแจและตรวจสอบเงินประกันคืน'
+
+const MOVEOUT_IN_PROGRESS_CONTACT_MESSAGE =
+  'เจ้าหน้าที่รับเรื่องแจ้งย้ายออกของคุณแล้ว กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อพูดคุยรายละเอียดเพิ่มเติม'
+
+const MOVEOUT_REJECTED_CONTACT_MESSAGE =
+  'คำขอแจ้งย้ายออกของคุณถูกปฏิเสธ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อสอบถามรายละเอียดเพิ่มเติม'
+
+const MOVEOUT_STATUS_POPUP_CONTENT = {
+  in_progress: { title: 'เจ้าหน้าที่รับเรื่องแล้ว', message: MOVEOUT_IN_PROGRESS_CONTACT_MESSAGE, icon: 'info' },
+  approved: { title: 'แจ้งย้ายออกได้รับการอนุมัติ', message: MOVEOUT_APPROVED_CONTACT_MESSAGE, icon: 'success' },
+  rejected: { title: 'คำขอแจ้งย้ายออกไม่ได้รับการอนุมัติ', message: MOVEOUT_REJECTED_CONTACT_MESSAGE, icon: 'danger' },
+}
+
+const RENEW_RESUBMIT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000
+
+const RENEW_STATUS_POPUP_CONTENT = {
+  in_progress: {
+    title: 'เจ้าหน้าที่รับเรื่องแล้ว',
+    message: 'เจ้าหน้าที่รับเรื่องคำขอต่อสัญญาของคุณแล้ว กรุณารอการติดต่อกลับจากเจ้าหน้าที่',
+    icon: 'info',
+  },
+  approved: {
+    title: 'ต่อสัญญาสำเร็จ',
+    message: 'คำขอต่อสัญญาของคุณได้รับการอนุมัติแล้ว ระบบได้ขยายระยะเวลาสัญญาเช่าให้เรียบร้อยแล้ว',
+    icon: 'success',
+  },
+}
+
+const MAINTENANCE_STATUS_POPUP_CONTENT = {
+  in_progress: {
+    title: 'เจ้าหน้าที่รับเรื่องแล้ว',
+    message: 'เจ้าหน้าที่รับเรื่องแจ้งซ่อมของคุณแล้ว กำลังดำเนินการซ่อมแซม',
+    icon: 'info',
+  },
+  done: {
+    title: 'ซ่อมเสร็จสิ้นแล้ว',
+    message: 'การแจ้งซ่อมของคุณดำเนินการเสร็จสิ้นแล้ว ขอบคุณที่แจ้งให้เราทราบ',
+    icon: 'success',
+  },
+  cancelled: {
+    title: 'รายการแจ้งซ่อมถูกยกเลิก',
+    message: 'รายการแจ้งซ่อมของคุณถูกยกเลิกโดยเจ้าหน้าที่ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์หากต้องการสอบถามเพิ่มเติม',
+    icon: 'muted',
+  },
+}
+
+const CONTRACT_STATUS_POPUP_CONTENT = {
+  warning: {
+    title: 'สัญญาใกล้หมดอายุ',
+    message: 'สัญญาเช่าห้องของคุณใกล้ครบกำหนดแล้ว กรุณาต่อสัญญาหรือแจ้งย้ายออกล่วงหน้า',
+    icon: 'info',
+  },
+  final: {
+    title: 'สัญญาใกล้หมดอายุมากแล้ว',
+    message: 'สัญญาเช่าห้องของคุณกำลังจะหมดอายุในอีกไม่กี่วัน กรุณาดำเนินการต่อสัญญาหรือแจ้งย้ายออกโดยเร็วที่สุด',
+    icon: 'danger',
+  },
+}
+
+const STATUS_POPUP_CONTENT_BY_KIND = {
+  moveout: MOVEOUT_STATUS_POPUP_CONTENT,
+  renew: RENEW_STATUS_POPUP_CONTENT,
+  maintenance: MAINTENANCE_STATUS_POPUP_CONTENT,
+  contract: CONTRACT_STATUS_POPUP_CONTENT,
+}
+
+function StatusIconPaths({ tone }) {
+  if (tone === 'success') return <polyline points="20 6 9 17 4 12" />
+  if (tone === 'danger') {
+    return (
+      <>
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </>
+    )
+  }
+  return (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </>
+  )
+}
+
+const TENANT_REQUEST_NOTIF_INFO = {
+  in_progress: { label: 'เจ้าหน้าที่รับเรื่องแล้ว', tone: 'info' },
+  approved: { label: 'อนุมัติแล้ว', tone: 'success' },
+  rejected: { label: 'ถูกปฏิเสธ', tone: 'danger' },
+}
+
+const MAINTENANCE_NOTIF_INFO = {
+  in_progress: { label: 'กำลังดำเนินการ', tone: 'info' },
+  done: { label: 'ซ่อมเสร็จสิ้นแล้ว', tone: 'success' },
+  cancelled: { label: 'ถูกยกเลิก', tone: 'muted' },
+}
+
+const TENANT_REQUEST_FINAL_LOG_LABEL = {
+  approved: 'อนุมัติคำขอ',
+  rejected: 'ปฏิเสธคำขอ',
+}
+
+const MAINTENANCE_FINAL_LOG_LABEL = {
+  done: 'ซ่อมเสร็จสิ้น',
+  cancelled: 'ยกเลิกรายการ',
+}
+
+function getRequestTimeline(kind, request) {
+  if (!request) return []
+  const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
+  if (request.accepted_at) {
+    steps.push({ label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at })
+  }
+  if (request.completed_at) {
+    const label =
+      (kind === 'maintenance' ? MAINTENANCE_FINAL_LOG_LABEL[request.status] : TENANT_REQUEST_FINAL_LOG_LABEL[request.status])
+      || 'ดำเนินการเสร็จสิ้น'
+    steps.push({ label, date: request.completed_at })
+  }
+  return steps
+}
+
+function RequestTimeline({ kind, request }) {
+  const timeline = getRequestTimeline(kind, request)
+  if (timeline.length === 0) return null
+
+  return (
+    <div className="dashboard-request-log">
+      {timeline.map((step, index) => {
+        const prevStep = timeline[index - 1]
+        const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+        return (
+          <div key={step.label} className="dashboard-request-log-item">
+            <span className="dashboard-request-log-dot" />
+            <div className="dashboard-request-log-content">
+              <p className="dashboard-request-log-label">{step.label}</p>
+              <p className="dashboard-request-log-date">{formatDateTime(step.date)}</p>
+              {stepMs !== null && <p className="dashboard-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+            </div>
+          </div>
+        )
+      })}
+      {timeline.length > 1 && (
+        <p className="dashboard-request-log-total">
+          รวมใช้เวลาทั้งหมด{' '}
+          {formatRemaining(
+            new Date(timeline[timeline.length - 1].date).getTime() - new Date(timeline[0].date).getTime(),
+          )}
+        </p>
+      )}
+    </div>
+  )
+}
+
+const NOTIF_PAGE_SIZE = 6
+const MAINTENANCE_PAGE_SIZE = 5
 
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
@@ -344,6 +509,16 @@ function msUntil(value) {
   return new Date(value).getTime() - Date.now()
 }
 
+const CONTRACT_WARNING_WINDOW_MS = 30 * MS_PER_DAY
+const CONTRACT_FINAL_WARNING_WINDOW_MS = 3 * MS_PER_DAY
+
+function getContractMsLeft(room) {
+  if (!room?.is_booked) return null
+  const msUntilStart = msUntil(room.rental_start_date)
+  if (msUntilStart === null || msUntilStart > 0) return null
+  return msUntil(room.rental_end_date)
+}
+
 function formatRemaining(ms) {
   const totalMinutes = Math.floor(Math.abs(ms) / (1000 * 60))
   const days = Math.floor(totalMinutes / (60 * 24))
@@ -363,6 +538,26 @@ function CustomerDashbord() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifClosing, setNotifClosing] = useState(false)
+  const [notifSeen, setNotifSeen] = useState(false)
+  const [notifPage, setNotifPage] = useState(1)
+  const [notifDetail, setNotifDetail] = useState(null)
+  const notifRef = useRef(null)
+
+  const closeNotifPanel = () => setNotifClosing(true)
+
+  useEffect(() => {
+    if (!notifOpen) return
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        closeNotifPanel()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [notifOpen])
+
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentError, setPaymentError] = useState('')
@@ -376,6 +571,8 @@ function CustomerDashbord() {
   const [requestError, setRequestError] = useState('')
   const [requestSuccess, setRequestSuccess] = useState('')
 
+  const [statusPopup, setStatusPopup] = useState(null)
+
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
   const [maintenanceText, setMaintenanceText] = useState('')
   const [maintenanceCategory, setMaintenanceCategory] = useState(MAINTENANCE_CATEGORY_OPTIONS[0].value)
@@ -386,6 +583,70 @@ function CustomerDashbord() {
   const [maintenanceSuccess, setMaintenanceSuccess] = useState('')
   const [cancelingMaintenanceId, setCancelingMaintenanceId] = useState(null)
   const [confirmCancelId, setConfirmCancelId] = useState(null)
+  const [maintenancePage, setMaintenancePage] = useState(1)
+  const [maintenanceSearch, setMaintenanceSearch] = useState('')
+  const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState('all')
+
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
+
+  useEffect(() => {
+    const isAnyOverlayOpen =
+      showPaymentForm ||
+      Boolean(activeRequestType) ||
+      Boolean(statusPopup) ||
+      showMaintenanceForm ||
+      confirmCancelId !== null ||
+      notifOpen ||
+      Boolean(notifDetail)
+
+    if (!isAnyOverlayOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [
+    showPaymentForm,
+    activeRequestType,
+    statusPopup,
+    showMaintenanceForm,
+    confirmCancelId,
+    notifOpen,
+    notifDetail,
+  ])
+
+  const maybeShowStatusPopups = (dashboardData) => {
+    const tryShowStatusPopup = (kind, status, id, request) => {
+      if (!STATUS_POPUP_CONTENT_BY_KIND[kind]?.[status]) return false
+      if (status === 'in_progress') {
+        setStatusPopup({ kind, status, request })
+        return true
+      }
+      const seenKey = `${kind}_${status}_notice_seen_${id}`
+      if (localStorage.getItem(seenKey)) return false
+      localStorage.setItem(seenKey, '1')
+      setStatusPopup({ kind, status, request })
+      return true
+    }
+
+    const moveoutRequest = dashboardData?.tenantRequests?.find((request) => request.type === 'moveout')
+    if (moveoutRequest && tryShowStatusPopup('moveout', moveoutRequest.status, moveoutRequest.id, moveoutRequest)) return
+
+    const contractMsLeft = getContractMsLeft(dashboardData?.room)
+    if (contractMsLeft !== null && contractMsLeft >= 0 && contractMsLeft <= CONTRACT_WARNING_WINDOW_MS) {
+      const contractKey = `${dashboardData.room.room_number}_${dashboardData.room.rental_end_date}`
+      const status = contractMsLeft <= CONTRACT_FINAL_WARNING_WINDOW_MS ? 'final' : 'warning'
+      if (tryShowStatusPopup('contract', status, contractKey)) return
+    }
+
+    const renewRequest = dashboardData?.tenantRequests?.find((request) => request.type === 'renew')
+    if (renewRequest && tryShowStatusPopup('renew', renewRequest.status, renewRequest.id, renewRequest)) return
+
+    const latestMaintenance = dashboardData?.maintenanceRequests?.[0]
+    if (latestMaintenance) tryShowStatusPopup('maintenance', latestMaintenance.status, latestMaintenance.id, latestMaintenance)
+  }
 
   const loadDashboard = () => {
     const token = sessionStorage.getItem('token')
@@ -426,7 +687,12 @@ function CustomerDashbord() {
     axios
       .get('/api/customer/me', { headers: { Authorization: `Bearer ${token}` } })
       .then(({ data }) => {
-        if (isMounted) setData(data)
+        if (isMounted) {
+          setData(data)
+          const justLoggedIn = sessionStorage.getItem('justLoggedIn') === '1'
+          sessionStorage.removeItem('justLoggedIn')
+          if (justLoggedIn) maybeShowStatusPopups(data)
+        }
       })
       .catch((err) => {
         if (!isMounted) return
@@ -445,7 +711,6 @@ function CustomerDashbord() {
     return () => {
       isMounted = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleLogout = () => {
@@ -603,11 +868,131 @@ function CustomerDashbord() {
   const hasStarted = msUntilStart !== null && msUntilStart <= 0
   const msLeft = hasStarted ? msUntil(room.rental_end_date) : null
   const isExpired = msLeft !== null && msLeft < 0
-  const isWarning = msLeft !== null && msLeft >= 0 && msLeft <= 30 * 24 * 60 * 60 * 1000
+  const isWarning = msLeft !== null && msLeft >= 0 && msLeft <= CONTRACT_WARNING_WINDOW_MS
 
   const latestRequestByType = (type) => tenantRequests.find((request) => request.type === type)
   const renewRequest = latestRequestByType('renew')
   const moveoutRequest = latestRequestByType('moveout')
+
+  const canResubmitRenew =
+    !renewRequest
+    || renewRequest.status === 'rejected'
+    || (renewRequest.status === 'approved' && msLeft !== null && msLeft <= RENEW_RESUBMIT_WINDOW_MS)
+
+  const buildTenantRequestNotifs = (request) => {
+    const items = []
+    if (request.accepted_at) {
+      items.push({
+        key: `tenant-${request.id}-in_progress`,
+        title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
+        ...TENANT_REQUEST_NOTIF_INFO.in_progress,
+        date: request.accepted_at,
+        detail: request.note ? `หมายเหตุของคุณ: ${request.note}` : null,
+        kind: 'tenant',
+        request,
+      })
+    }
+    if (request.status !== 'in_progress' && TENANT_REQUEST_NOTIF_INFO[request.status]) {
+      items.push({
+        key: `tenant-${request.id}-${request.status}`,
+        title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
+        ...TENANT_REQUEST_NOTIF_INFO[request.status],
+        date: request.completed_at || request.created_at,
+        detail:
+          (request.type === 'moveout' && MOVEOUT_STATUS_POPUP_CONTENT[request.status]?.message)
+          || (request.note ? `หมายเหตุของคุณ: ${request.note}` : null),
+        kind: 'tenant',
+        request,
+      })
+    }
+    return items
+  }
+
+  const buildMaintenanceNotifs = (request) => {
+    const items = []
+    if (request.accepted_at) {
+      items.push({
+        key: `maintenance-${request.id}-in_progress`,
+        title: 'แจ้งซ่อม',
+        ...MAINTENANCE_NOTIF_INFO.in_progress,
+        date: request.accepted_at,
+        detail: request.description || null,
+        kind: 'maintenance',
+        request,
+      })
+    }
+    if (request.status !== 'in_progress' && MAINTENANCE_NOTIF_INFO[request.status]) {
+      items.push({
+        key: `maintenance-${request.id}-${request.status}`,
+        title: 'แจ้งซ่อม',
+        ...MAINTENANCE_NOTIF_INFO[request.status],
+        date: request.completed_at || request.created_at,
+        detail: request.description || null,
+        kind: 'maintenance',
+        request,
+      })
+    }
+    return items
+  }
+
+  const notifications = [
+    ...tenantRequests.flatMap(buildTenantRequestNotifs),
+    ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date))
+
+  const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
+  const notifCurrentPage = Math.min(notifPage, notifTotalPages)
+  const paginatedNotifications = notifications.slice(
+    (notifCurrentPage - 1) * NOTIF_PAGE_SIZE,
+    notifCurrentPage * NOTIF_PAGE_SIZE,
+  )
+
+  const maintenanceKeyword = maintenanceSearch.trim().toLowerCase()
+  const filteredMaintenanceRequests = maintenanceRequests.filter((item) => {
+    if (maintenanceStatusFilter !== 'all' && item.status !== maintenanceStatusFilter) return false
+    if (maintenanceKeyword) {
+      const haystack = [
+        item.description,
+        MAINTENANCE_CATEGORY_LABEL[item.category],
+        MAINTENANCE_TIME_LABEL[item.preferred_time],
+        item.contact_phone,
+        MAINTENANCE_STATUS_LABEL[item.status],
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (!haystack.includes(maintenanceKeyword)) return false
+    }
+    return true
+  })
+
+  const maintenanceTotalPages = Math.max(1, Math.ceil(filteredMaintenanceRequests.length / MAINTENANCE_PAGE_SIZE))
+  const maintenanceCurrentPage = Math.min(maintenancePage, maintenanceTotalPages)
+  const paginatedMaintenanceRequests = filteredMaintenanceRequests.slice(
+    (maintenanceCurrentPage - 1) * MAINTENANCE_PAGE_SIZE,
+    maintenanceCurrentPage * MAINTENANCE_PAGE_SIZE,
+  )
+
+  const historyKeyword = historySearch.trim().toLowerCase()
+  const filteredRentalHistory = rentalHistory.map((entry) => {
+    const payments = entry.payments.filter((payment) => {
+      if (historyStatusFilter !== 'all' && payment.status !== historyStatusFilter) return false
+      if (historyKeyword) {
+        const haystack = [
+          formatDateTime(payment.created_at),
+          formatCurrency(payment.amount),
+          STATUS_LABEL[payment.status] || payment.status,
+          payment.note,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        if (!haystack.includes(historyKeyword)) return false
+      }
+      return true
+    })
+    return { ...entry, payments, hasOriginalPayments: entry.payments.length > 0 }
+  })
 
   const reminders = []
   if (room?.is_booked) {
@@ -660,6 +1045,176 @@ function CustomerDashbord() {
             </div>
           </div>
           <div className="dashboard-header-actions">
+            <div className="dashboard-notif-wrap" ref={notifRef}>
+              <button
+                type="button"
+                className="dashboard-notif-btn"
+                aria-label="การแจ้งเตือน"
+                onClick={() => {
+                  if (notifOpen) {
+                    closeNotifPanel()
+                  } else {
+                    setNotifOpen(true)
+                    setNotifSeen(true)
+                    setNotifPage(1)
+                  }
+                }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {!notifSeen && notifications.length > 0 && <span className="dashboard-notif-dot" />}
+              </button>
+              {notifOpen && (
+                <div
+                  className={`dashboard-notif-panel${notifClosing ? ' is-closing' : ''}`}
+                  onAnimationEnd={() => {
+                    if (notifClosing) {
+                      setNotifOpen(false)
+                      setNotifClosing(false)
+                    }
+                  }}
+                >
+                  <div className="dashboard-notif-panel-header">
+                    <span>การแจ้งเตือน</span>
+                    <button
+                      type="button"
+                      className="dashboard-notif-panel-close"
+                      onClick={closeNotifPanel}
+                      aria-label="ปิด"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="dashboard-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                  ) : (
+                    <>
+                      <div className="dashboard-notif-list">
+                        {paginatedNotifications.map((notif) => (
+                          <button
+                            type="button"
+                            key={notif.key}
+                            className={`dashboard-notif-item is-${notif.tone}`}
+                            onClick={() => setNotifDetail(notif)}
+                          >
+                            <p className="dashboard-notif-item-title">{notif.title}</p>
+                            <p className="dashboard-notif-item-status">{notif.label}</p>
+                            <p className="dashboard-notif-item-date">{formatDateTime(notif.date)}</p>
+                          </button>
+                        ))}
+                      </div>
+                      {notifTotalPages > 1 && (
+                        <div className="dashboard-notif-pagination">
+                          <button
+                            type="button"
+                            className="dashboard-notif-page-btn"
+                            disabled={notifCurrentPage <= 1}
+                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
+                          >
+                            ก่อนหน้า
+                          </button>
+                          <span className="dashboard-notif-page-info">
+                            หน้า {notifCurrentPage} / {notifTotalPages}
+                          </span>
+                          <button
+                            type="button"
+                            className="dashboard-notif-page-btn"
+                            disabled={notifCurrentPage >= notifTotalPages}
+                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
+                          >
+                            ถัดไป
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {notifDetail && (
+              <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
+                {(requestClose) => (
+                  <div className="dashboard-confirm-body">
+                    <div className={`dashboard-confirm-icon is-${notifDetail.tone}`}>
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        {notifDetail.tone === 'success' ? (
+                          <polyline points="20 6 9 17 4 12" />
+                        ) : notifDetail.tone === 'danger' ? (
+                          <>
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                          </>
+                        ) : (
+                          <>
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="16" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12.01" y2="8" />
+                          </>
+                        )}
+                      </svg>
+                    </div>
+                    <p className="dashboard-confirm-message">
+                      <span className={`dashboard-confirm-message-status is-${notifDetail.tone}`}>
+                        {notifDetail.label}
+                      </span>
+                      {notifDetail.detail && (
+                        <>
+                          <br />
+                          {notifDetail.detail}
+                        </>
+                      )}
+                    </p>
+                    {notifDetail.request ? (
+                      <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
+                    ) : (
+                      <p className="dashboard-notif-item-date">{formatDateTime(notifDetail.date)}</p>
+                    )}
+                    <div className="dashboard-form-actions">
+                      <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                        ปิด
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Modal>
+            )}
             {room && (
               <span className="dashboard-room-status">
                 {room.is_booked ? 'กำลังเช่าอยู่' : 'ว่าง'}
@@ -670,6 +1225,44 @@ function CustomerDashbord() {
             </button>
           </div>
         </div>
+
+        {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
+          <Modal
+            title={STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status].title}
+            onClose={() => setStatusPopup(null)}
+            variant="confirm"
+          >
+            {(requestClose) => {
+              const content = STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status]
+              return (
+                <div className="dashboard-confirm-body">
+                  <div className={`dashboard-confirm-icon is-${content.icon}`}>
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <StatusIconPaths tone={content.icon} />
+                    </svg>
+                  </div>
+                  <p className="dashboard-confirm-message">{content.message}</p>
+                  {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
+                  <div className="dashboard-form-actions">
+                    <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                      รับทราบ
+                    </button>
+                  </div>
+                </div>
+              )
+            }}
+          </Modal>
+        )}
 
         {reminders.length > 0 && (
           <div className="dashboard-reminders">
@@ -729,6 +1322,18 @@ function CustomerDashbord() {
                     </span>
                   </div>
 
+                  <h3 className="dashboard-section-title">ค่าน้ำ - ค่าไฟ</h3>
+                  <div className="dashboard-utility-rates">
+                    <div className="dashboard-utility-rate is-electric">
+                      <span>ค่าไฟฟ้า</span>
+                      <strong>{formatCurrency(room.electricity_unit_price)} บาท/หน่วย</strong>
+                    </div>
+                    <div className="dashboard-utility-rate is-water">
+                      <span>ค่าน้ำ</span>
+                      <strong>{formatCurrency(room.water_price)} บาท/หน่วย</strong>
+                    </div>
+                  </div>
+
                   {currentDue && currentDue.status !== 'paid' && (
                     <>
                       <h3 className="dashboard-section-title with-aside">
@@ -760,7 +1365,7 @@ function CustomerDashbord() {
                       </button>
                       {paymentSuccess && !showPaymentForm && <p className="dashboard-form-success">{paymentSuccess}</p>}
                       {showPaymentForm && (
-                        <Modal title="สแกนเพื่อชำระเงิน" onClose={() => setShowPaymentForm(false)}>
+                        <Modal title="สแกนเพื่อชำระเงิน" onClose={() => setShowPaymentForm(false)} variant="confirm">
                           {(requestClose) => (
                             <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
                               <div className="dashboard-qr-box">
@@ -807,14 +1412,39 @@ function CustomerDashbord() {
 
           <div className="col-12 col-lg-8">
             <div className="dashboard-card">
-              <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
+              <div className="dashboard-card-header">
+                <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
+                {rentalHistory.length > 0 && (
+                  <div className="dashboard-filters">
+                    <input
+                      type="text"
+                      className="dashboard-search-input"
+                      placeholder="ค้นหาวันที่, จำนวนเงิน, หมายเหตุ..."
+                      value={historySearch}
+                      onChange={(event) => setHistorySearch(event.target.value)}
+                    />
+                    <select
+                      className="dashboard-filter-select"
+                      value={historyStatusFilter}
+                      onChange={(event) => setHistoryStatusFilter(event.target.value)}
+                    >
+                      <option value="all">ทุกสถานะ</option>
+                      <option value="paid">ชำระแล้ว</option>
+                      <option value="pending">รอชำระ</option>
+                      <option value="overdue">ค้างชำระ</option>
+                    </select>
+                  </div>
+                )}
+              </div>
               {rentalHistory.length === 0 ? (
                 <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
               ) : (
-                rentalHistory.map((entry) => (
+                filteredRentalHistory.map((entry) => (
                   <div key={entry.booking_id} className="dashboard-rental-entry">
                     {entry.payments.length === 0 ? (
-                      <p className="dashboard-empty">ยังไม่มีประวัติการชำระค่าเช่า</p>
+                      <p className="dashboard-empty">
+                        {entry.hasOriginalPayments ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีประวัติการชำระค่าเช่า'}
+                      </p>
                     ) : (
                       <div className="table-responsive">
                         <table className="dashboard-table">
@@ -851,43 +1481,67 @@ function CustomerDashbord() {
         </div>
 
         <div className="row g-3 mt-1">
-          {room?.is_booked && (
+          {(room?.is_booked || moveoutRequest?.status === 'approved') && (
             <div className="col-12 col-lg-5">
               <div className="dashboard-card">
                 <h2>จัดการสัญญาเช่า</h2>
                 <div className="dashboard-request-list">
+                  {room?.is_booked && (
+                    <div className="dashboard-request-row">
+                      <div className="dashboard-request-info">
+                        <p className="dashboard-request-title">ต่อสัญญา</p>
+                        <p className="dashboard-request-desc">
+                          {(!canResubmitRenew && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
+                            || (renewRequest?.status === 'pending'
+                              ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
+                              : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด')}
+                        </p>
+                      </div>
+                      {!canResubmitRenew && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status] ? (
+                        <button
+                          type="button"
+                          className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)} dashboard-badge-btn`}
+                          onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest })}
+                        >
+                          {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
+                        </button>
+                      ) : renewRequest?.status === 'pending' ? (
+                        <span className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)}`}>
+                          {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
+                        </span>
+                      ) : (
+                        <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
+                          ต่อสัญญา
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="dashboard-request-row">
-                    <div>
-                      <p className="dashboard-request-title">ต่อสัญญา</p>
+                    <div className="dashboard-request-info">
+                      <p className="dashboard-request-title">แจ้งย้ายออก</p>
                       <p className="dashboard-request-desc">
-                        {renewRequest?.status === 'pending'
-                          ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
-                          : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด'}
+                        {(moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
+                          || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
                       </p>
                     </div>
-                    {renewRequest?.status === 'pending' ? (
-                      <span className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)}`}>
-                        {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
-                      </span>
-                    ) : (
-                      <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
-                        ต่อสัญญา
+                    {moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status] ? (
+                      <button
+                        type="button"
+                        className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)} dashboard-badge-btn`}
+                        onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest })}
+                      >
+                        {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
                       </button>
-                    )}
-                  </div>
-                  <div className="dashboard-request-row">
-                    <div>
-                      <p className="dashboard-request-title">แจ้งย้ายออก</p>
-                      <p className="dashboard-request-desc">แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา</p>
-                    </div>
-                    {moveoutRequest?.status === 'pending' ? (
+                    ) : moveoutRequest?.status === 'pending' ? (
                       <span className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)}`}>
                         {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
                       </span>
                     ) : (
-                      <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
-                        แจ้งย้ายออก
-                      </button>
+                      room?.is_booked && (
+                        <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
+                          แจ้งย้ายออก
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
@@ -963,6 +1617,34 @@ function CustomerDashbord() {
                   แจ้งซ่อม
                 </button>
               </div>
+              {maintenanceRequests.length > 0 && (
+                <div className="dashboard-filters dashboard-filters-spaced">
+                  <input
+                    type="text"
+                    className="dashboard-search-input"
+                    placeholder="ค้นหารายละเอียด, หมวดหมู่, เบอร์โทร..."
+                    value={maintenanceSearch}
+                    onChange={(event) => {
+                      setMaintenanceSearch(event.target.value)
+                      setMaintenancePage(1)
+                    }}
+                  />
+                  <select
+                    className="dashboard-filter-select"
+                    value={maintenanceStatusFilter}
+                    onChange={(event) => {
+                      setMaintenanceStatusFilter(event.target.value)
+                      setMaintenancePage(1)
+                    }}
+                  >
+                    <option value="all">ทุกสถานะ</option>
+                    <option value="pending">รอดำเนินการ</option>
+                    <option value="in_progress">กำลังดำเนินการ</option>
+                    <option value="done">เสร็จสิ้น</option>
+                    <option value="cancelled">ยกเลิกแล้ว</option>
+                  </select>
+                </div>
+              )}
               {maintenanceSuccess && !showMaintenanceForm && <p className="dashboard-form-success">{maintenanceSuccess}</p>}
               {showMaintenanceForm && (
                 <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
@@ -1021,9 +1703,12 @@ function CustomerDashbord() {
 
               {maintenanceRequests.length === 0 ? (
                 <p className="dashboard-empty">ยังไม่มีรายการแจ้งซ่อม</p>
+              ) : filteredMaintenanceRequests.length === 0 ? (
+                <p className="dashboard-empty">ไม่พบรายการที่ตรงกับการค้นหา</p>
               ) : (
+                <>
                 <div className="dashboard-maintenance-list">
-                  {maintenanceRequests.map((item) => (
+                  {paginatedMaintenanceRequests.map((item) => (
                     <div key={item.id} className="dashboard-maintenance-item">
                       <div>
                         <p className="dashboard-maintenance-desc">{item.description}</p>
@@ -1036,9 +1721,19 @@ function CustomerDashbord() {
                         <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
                       </div>
                       <div className="dashboard-maintenance-badges">
-                        <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
-                          {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
-                        </span>
+                        {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (
+                          <button
+                            type="button"
+                            className={`dashboard-badge status-${maintenanceBadgeClass(item.status)} dashboard-badge-btn`}
+                            onClick={() => setStatusPopup({ kind: 'maintenance', status: item.status, request: item })}
+                          >
+                            {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                          </button>
+                        ) : (
+                          <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
+                            {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                          </span>
+                        )}
                         {item.status === 'pending' && (
                           <button
                             type="button"
@@ -1057,10 +1752,34 @@ function CustomerDashbord() {
                     </div>
                   ))}
                 </div>
+                {maintenanceTotalPages > 1 && (
+                  <div className="dashboard-maintenance-pagination">
+                    <button
+                      type="button"
+                      className="dashboard-notif-page-btn"
+                      disabled={maintenanceCurrentPage <= 1}
+                      onClick={() => setMaintenancePage(Math.max(1, maintenanceCurrentPage - 1))}
+                    >
+                      ก่อนหน้า
+                    </button>
+                    <span className="dashboard-notif-page-info">
+                      หน้า {maintenanceCurrentPage} / {maintenanceTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="dashboard-notif-page-btn"
+                      disabled={maintenanceCurrentPage >= maintenanceTotalPages}
+                      onClick={() => setMaintenancePage(Math.min(maintenanceTotalPages, maintenanceCurrentPage + 1))}
+                    >
+                      ถัดไป
+                    </button>
+                  </div>
+                )}
+                </>
               )}
 
               {confirmCancelId !== null && (
-                <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)}>
+                <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)} variant="confirm">
                   {(requestClose) => (
                     <div className="dashboard-confirm-body">
                       <div className="dashboard-confirm-icon">!</div>
