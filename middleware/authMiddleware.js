@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
 export const STAFF_ROLES = new Set(["Staff", "Admin", "Owner"]);
+export const ADMIN_ROLES = new Set(["Admin", "Owner"]);
 
 export function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -22,6 +23,20 @@ export function authenticate(req, res, next) {
 export function requireStaffRole(req, res, next) {
   if (!STAFF_ROLES.has(req.user?.role)) {
     return res.status(403).json({ message: "ไม่ได้รับอนุญาต (ต้องเป็นเจ้าหน้าที่)" });
+  }
+  next();
+}
+
+export function requireAdminRole(req, res, next) {
+  if (!ADMIN_ROLES.has(req.user?.role)) {
+    return res.status(403).json({ message: "ไม่ได้รับอนุญาต (ต้องเป็นผู้ดูแลระบบ)" });
+  }
+  next();
+}
+
+export function requireOwnerRole(req, res, next) {
+  if (req.user?.role !== "Owner") {
+    return res.status(403).json({ message: "ไม่ได้รับอนุญาต (ต้องเป็นเจ้าของ)" });
   }
   next();
 }

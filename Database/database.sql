@@ -138,4 +138,13 @@ CREATE TABLE IF NOT EXISTS TenantRequest (
     FOREIGN KEY (customer_id) REFERENCES Customer(id)
 );
 
+CREATE TABLE IF NOT EXISTS Expense (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    category VARCHAR(50) NOT NULL DEFAULT 'other',
+    description VARCHAR(255),
+    amount DECIMAL(10,2) NOT NULL,
+    expense_date DATE NOT NULL,
+    recorded_by_name VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
