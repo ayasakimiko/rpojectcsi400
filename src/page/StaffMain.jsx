@@ -218,9 +218,11 @@ function buildStaffTenantNotifs(request) {
       title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
       ...info,
       date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
-      detail: `ห้อง ${request.room_number} · ${request.first_name} ${request.last_name}${
-        request.note ? ` · หมายเหตุ: ${request.note}` : ''
-      }`,
+      details: [
+        { label: 'ห้อง', value: request.room_number },
+        { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
+        ...(request.note ? [{ label: 'หมายเหตุ', value: request.note }] : []),
+      ],
       kind: 'tenant',
       request,
     },
@@ -236,9 +238,11 @@ function buildStaffMaintenanceNotifs(request) {
       title: 'แจ้งซ่อม',
       ...info,
       date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
-      detail: `ห้อง ${request.room_number} · ${request.first_name} ${request.last_name} · ${
-        MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'
-      }`,
+      details: [
+        { label: 'ห้อง', value: request.room_number },
+        { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
+        { label: 'ประเภท', value: MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ' },
+      ],
       kind: 'maintenance',
       request,
     },
@@ -1171,13 +1175,17 @@ function StaffMain() {
                 </div>
                 <p className="staff-confirm-message">
                   <span className={`staff-confirm-message-status is-${notifDetail.tone}`}>{notifDetail.label}</span>
-                  {notifDetail.detail && (
-                    <>
-                      <br />
-                      {notifDetail.detail}
-                    </>
-                  )}
                 </p>
+                {notifDetail.details && notifDetail.details.length > 0 && (
+                  <div className="staff-confirm-details">
+                    {notifDetail.details.map((item) => (
+                      <div className="staff-confirm-detail-row" key={item.label}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <StaffRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
                 <div className="staff-form-actions">
                   <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>

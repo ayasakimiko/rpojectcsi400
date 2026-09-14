@@ -1505,6 +1505,23 @@
   scrollbar-color: #93c5fd #f1f5f9;
 }
 
+.staff-modal-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.staff-modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.staff-modal-body::-webkit-scrollbar-thumb {
+  background-color: #93c5fd;
+  border-radius: 999px;
+}
+
+.staff-modal-body::-webkit-scrollbar-thumb:hover {
+  background-color: #60a5fa;
+}
+
 .staff-modal-body > .staff-empty,
 .staff-modal-body > .staff-form-error {
   margin: auto 0;
