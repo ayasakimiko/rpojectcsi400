@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -67,6 +67,8 @@ function Pagination({ page, totalPages, onChange }) {
     </div>
   )
 }
+
+const ROWS_PER_PAGE = 10
 
 const TABS = [
   { key: 'rooms', label: 'ห้องพัก' },
@@ -153,6 +155,7 @@ function AdminBackupPage() {
   const [roomsLoading, setRoomsLoading] = useState(true)
   const [roomsError, setRoomsError] = useState('')
   const [roomSearch, setRoomSearch] = useState('')
+  const [roomsPage, setRoomsPage] = useState(1)
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
   const [roomSubmitting, setRoomSubmitting] = useState(false)
@@ -259,11 +262,19 @@ function AdminBackupPage() {
     })
   }, [rooms, roomSearch])
 
+  const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROWS_PER_PAGE))
+  const currentRoomsPage = Math.min(roomsPage, roomsTotalPages)
+  const paginatedRooms = useMemo(() => {
+    const start = (currentRoomsPage - 1) * ROWS_PER_PAGE
+    return filteredRooms.slice(start, start + ROWS_PER_PAGE)
+  }, [filteredRooms, currentRoomsPage])
+
   /* -------------------------------- Staff --------------------------------- */
   const [staffList, setStaffList] = useState([])
   const [staffLoading, setStaffLoading] = useState(true)
   const [staffError, setStaffError] = useState('')
   const [staffSearch, setStaffSearch] = useState('')
+  const [staffPage, setStaffPage] = useState(1)
   const [staffModal, setStaffModal] = useState(null)
   const [staffForm, setStaffForm] = useState(emptyStaffForm)
   const [staffSubmitting, setStaffSubmitting] = useState(false)
@@ -373,10 +384,19 @@ function AdminBackupPage() {
     })
   }, [staffList, staffSearch])
 
+  const staffTotalPages = Math.max(1, Math.ceil(filteredStaff.length / ROWS_PER_PAGE))
+  const currentStaffPage = Math.min(staffPage, staffTotalPages)
+  const paginatedStaff = useMemo(() => {
+    const start = (currentStaffPage - 1) * ROWS_PER_PAGE
+    return filteredStaff.slice(start, start + ROWS_PER_PAGE)
+  }, [filteredStaff, currentStaffPage])
+
   const [customers, setCustomers] = useState([])
   const [customersLoading, setCustomersLoading] = useState(true)
   const [customersError, setCustomersError] = useState('')
   const [customerSearch, setCustomerSearch] = useState('')
+  const [customerStatusFilter, setCustomerStatusFilter] = useState('all')
+  const [customersPage, setCustomersPage] = useState(1)
   const [customerModal, setCustomerModal] = useState(null)
   const [customerForm, setCustomerForm] = useState(emptyCustomerForm)
   const [customerSubmitting, setCustomerSubmitting] = useState(false)
@@ -399,6 +419,17 @@ function AdminBackupPage() {
       })
       .finally(() => setCustomersLoading(false))
   }
+
+  const isCustomerSearchMount = useRef(true)
+  useEffect(() => {
+    if (isCustomerSearchMount.current) {
+      isCustomerSearchMount.current = false
+      return
+    }
+    const timeout = setTimeout(() => loadCustomers(customerSearch), 400)
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerSearch])
 
   const openEditCustomer = (customer) => {
     setCustomerForm({
@@ -467,6 +498,19 @@ function AdminBackupPage() {
       setCustomerDetailLoading(false)
     }
   }
+
+  const filteredCustomers = useMemo(() => {
+    if (customerStatusFilter === 'all') return customers
+    const wantSuspended = customerStatusFilter === 'suspended'
+    return customers.filter((customer) => Boolean(customer.is_suspended) === wantSuspended)
+  }, [customers, customerStatusFilter])
+
+  const customersTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / ROWS_PER_PAGE))
+  const currentCustomersPage = Math.min(customersPage, customersTotalPages)
+  const paginatedCustomers = useMemo(() => {
+    const start = (currentCustomersPage - 1) * ROWS_PER_PAGE
+    return filteredCustomers.slice(start, start + ROWS_PER_PAGE)
+  }, [filteredCustomers, currentCustomersPage])
 
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
@@ -538,12 +582,38 @@ function AdminBackupPage() {
     loadRooms()
     loadStaff()
     loadCustomers('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
     if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  const isRequestSearchMount = useRef(true)
+  useEffect(() => {
+    if (isRequestSearchMount.current) {
+      isRequestSearchMount.current = false
+      return
+    }
+    if (activeTab !== 'requests') return
+    const timeout = setTimeout(() => loadRequestLogs(1, requestStatusFilter, requestSearch), 400)
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestSearch])
+
+  const isMaintenanceSearchMount = useRef(true)
+  useEffect(() => {
+    if (isMaintenanceSearchMount.current) {
+      isMaintenanceSearchMount.current = false
+      return
+    }
+    if (activeTab !== 'maintenance') return
+    const timeout = setTimeout(() => loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch), 400)
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maintenanceSearch])
 
   const handleLogout = () => {
     sessionStorage.removeItem('token')
@@ -646,14 +716,26 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <h2>รายการห้องพัก</h2>
-              <div className="admin-filters">
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="room-search">
+                  ค้นหา
+                </label>
                 <input
+                  id="room-search"
                   type="text"
                   className="form-control admin-search-input"
                   placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร..."
                   value={roomSearch}
-                  onChange={(event) => setRoomSearch(event.target.value)}
+                  onChange={(event) => {
+                    setRoomSearch(event.target.value)
+                    setRoomsPage(1)
+                  }}
                 />
+              </div>
+              <div className="admin-filters">
                 <button type="button" className="admin-action-btn is-primary" onClick={openCreateRoom}>
                   + เพิ่มห้องพัก
                 </button>
@@ -688,7 +770,7 @@ function AdminBackupPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredRooms.map((room) => (
+                    paginatedRooms.map((room) => (
                       <tr key={room.room_number}>
                         <td className="admin-strong-cell">{room.room_number}</td>
                         <td>
@@ -725,6 +807,7 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={currentRoomsPage} totalPages={roomsTotalPages} onChange={setRoomsPage} />
           </div>
         )}
 
@@ -732,14 +815,26 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <h2>รายการพนักงาน</h2>
-              <div className="admin-filters">
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="staff-search">
+                  ค้นหา
+                </label>
                 <input
+                  id="staff-search"
                   type="text"
                   className="form-control admin-search-input"
                   placeholder="ค้นหาชื่อ, เบอร์โทร, บัตร ปชช..."
                   value={staffSearch}
-                  onChange={(event) => setStaffSearch(event.target.value)}
+                  onChange={(event) => {
+                    setStaffSearch(event.target.value)
+                    setStaffPage(1)
+                  }}
                 />
+              </div>
+              <div className="admin-filters">
                 <button type="button" className="admin-action-btn is-primary" onClick={openCreateStaff}>
                   + เพิ่มพนักงาน
                 </button>
@@ -774,7 +869,7 @@ function AdminBackupPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredStaff.map((member) => (
+                    paginatedStaff.map((member) => (
                       <tr key={member.id}>
                         <td className="admin-strong-cell">
                           {member.first_name} {member.last_name}
@@ -806,6 +901,7 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={currentStaffPage} totalPages={staffTotalPages} onChange={setStaffPage} />
           </div>
         )}
 
@@ -813,20 +909,42 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <h2>รายการลูกค้า</h2>
-              <div className="admin-filters">
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="customer-search">
+                  ค้นหา
+                </label>
                 <input
+                  id="customer-search"
                   type="text"
                   className="form-control admin-search-input"
                   placeholder="ค้นหาชื่อ, เบอร์โทร, เลขห้อง, บัตร ปชช..."
                   value={customerSearch}
-                  onChange={(event) => setCustomerSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') loadCustomers(customerSearch)
+                  onChange={(event) => {
+                    setCustomerSearch(event.target.value)
+                    setCustomersPage(1)
                   }}
                 />
-                <button type="button" className="admin-action-btn is-primary" onClick={() => loadCustomers(customerSearch)}>
-                  ค้นหา
-                </button>
+              </div>
+              <div className="admin-filter-group">
+                <label className="admin-toolbar-label" htmlFor="customer-status-filter">
+                  สถานะ
+                </label>
+                <select
+                  id="customer-status-filter"
+                  className="form-select admin-filter-select"
+                  value={customerStatusFilter}
+                  onChange={(event) => {
+                    setCustomerStatusFilter(event.target.value)
+                    setCustomersPage(1)
+                  }}
+                >
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="active">ใช้งานปกติ</option>
+                  <option value="suspended">ระงับการใช้งาน</option>
+                </select>
               </div>
             </div>
 
@@ -851,14 +969,14 @@ function AdminBackupPage() {
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
-                  ) : customers.length === 0 ? (
+                  ) : filteredCustomers.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="admin-empty">
                         ไม่พบข้อมูลลูกค้า
                       </td>
                     </tr>
                   ) : (
-                    customers.map((customer) => (
+                    paginatedCustomers.map((customer) => (
                       <tr key={customer.id}>
                         <td className="admin-strong-cell">
                           {customer.first_name} {customer.last_name}
@@ -894,6 +1012,7 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={currentCustomersPage} totalPages={customersTotalPages} onChange={setCustomersPage} />
           </div>
         )}
 
@@ -901,18 +1020,28 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <h2>ประวัติคำขอผู้เช่า</h2>
-              <div className="admin-filters">
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="request-search">
+                  ค้นหา
+                </label>
                 <input
+                  id="request-search"
                   type="text"
                   className="form-control admin-search-input"
                   placeholder="ค้นหาเลขห้อง, ชื่อ, ผู้อนุมัติ..."
                   value={requestSearch}
                   onChange={(event) => setRequestSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') loadRequestLogs(1, requestStatusFilter, requestSearch)
-                  }}
                 />
+              </div>
+              <div className="admin-filter-group">
+                <label className="admin-toolbar-label" htmlFor="request-status-filter">
+                  สถานะ
+                </label>
                 <select
+                  id="request-status-filter"
                   className="form-select admin-filter-select"
                   value={requestStatusFilter}
                   onChange={(event) => {
@@ -926,9 +1055,6 @@ function AdminBackupPage() {
                   <option value="approved">อนุมัติแล้ว</option>
                   <option value="rejected">ปฏิเสธแล้ว</option>
                 </select>
-                <button type="button" className="admin-action-btn is-primary" onClick={() => loadRequestLogs(1, requestStatusFilter, requestSearch)}>
-                  ค้นหา
-                </button>
               </div>
             </div>
 
@@ -994,18 +1120,28 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <h2>ประวัติแจ้งซ่อม</h2>
-              <div className="admin-filters">
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="maintenance-search">
+                  ค้นหา
+                </label>
                 <input
+                  id="maintenance-search"
                   type="text"
                   className="form-control admin-search-input"
                   placeholder="ค้นหาเลขห้อง, ชื่อ, ผู้ดำเนินการ..."
                   value={maintenanceSearch}
                   onChange={(event) => setMaintenanceSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
-                  }}
                 />
+              </div>
+              <div className="admin-filter-group">
+                <label className="admin-toolbar-label" htmlFor="maintenance-status-filter">
+                  สถานะ
+                </label>
                 <select
+                  id="maintenance-status-filter"
                   className="form-select admin-filter-select"
                   value={maintenanceStatusFilter}
                   onChange={(event) => {
@@ -1019,13 +1155,6 @@ function AdminBackupPage() {
                   <option value="done">เสร็จสิ้น</option>
                   <option value="cancelled">ยกเลิกแล้ว</option>
                 </select>
-                <button
-                  type="button"
-                  className="admin-action-btn is-primary"
-                  onClick={() => loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)}
-                >
-                  ค้นหา
-                </button>
               </div>
             </div>
 
