@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
+import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/CustomerDashbord.css'
+
+const PAYMENT_TYPE_LABEL = {
+  rent: 'ค่าเช่าห้อง',
+  deposit: 'เงินประกัน',
+}
 
 const AMENITIES = [
   { key: 'air_conditioner', label: 'แอร์', color: 'blue' },
@@ -154,6 +161,131 @@ function Modal({ title, onClose, children, variant }) {
         </div>
         <div className="dashboard-modal-body">
           {typeof children === 'function' ? children(requestClose) : children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReceiptTemplate({ receiptRequest, customer }) {
+  if (!receiptRequest) return null
+  const { mode, entry } = receiptRequest
+  const payments = mode === 'single' ? [receiptRequest.payment] : entry.payments
+  const paidTotal = payments.filter((p) => p.status === 'paid').reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const grandTotal = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const receiptNo =
+    mode === 'single' ? `RCPT-${String(receiptRequest.payment.id).padStart(6, '0')}` : `RCPT-B${entry.booking_id}-ALL`
+
+  return (
+    <div
+      style={{
+        width: 700,
+        padding: 40,
+        background: '#ffffff',
+        color: '#0f2b52',
+        fontFamily: '"Tahoma", "Segoe UI", "Leelawadee UI", sans-serif',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>ใบเสร็จรับเงิน</div>
+          <div style={{ fontSize: 13, color: '#6b859e', marginTop: 2 }}>
+            {mode === 'single' ? 'รายการชำระเงินรายการเดียว' : 'สรุปรายการชำระเงินทั้งหมด'}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 12, color: '#6b859e' }}>
+          <div>เลขที่: {receiptNo}</div>
+          <div>วันที่ออกใบเสร็จ: {formatDateTime(new Date())}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, fontSize: 13 }}>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>ผู้เช่า</div>
+          <div>
+            {customer.first_name} {customer.last_name}
+          </div>
+          {customer.phone && <div>โทร: {customer.phone}</div>}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>ห้องพัก</div>
+          <div>ห้อง {entry.room_number}</div>
+          {entry.rental_start_date && entry.rental_end_date && (
+            <div>
+              {formatDate(entry.rental_start_date)} - {formatDate(entry.rental_end_date)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+        <thead>
+          <tr>
+            {['วันที่ชำระ', 'รายการ', 'จำนวนเงิน', 'สถานะ', 'หมายเหตุ'].map((head) => (
+              <th
+                key={head}
+                style={{
+                  textAlign: head === 'จำนวนเงิน' ? 'right' : 'left',
+                  borderBottom: '1.5px solid #0f2b52',
+                  padding: '6px 8px',
+                  color: '#33506f',
+                }}
+              >
+                {head}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {payments.map((payment) => (
+            <tr key={payment.id}>
+              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>
+                {formatDateTime(payment.created_at)}
+              </td>
+              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>
+                {PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}
+              </td>
+              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd', textAlign: 'right' }}>
+                ฿{formatCurrency(payment.amount)}
+              </td>
+              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>
+                {STATUS_LABEL[payment.status] || payment.status}
+              </td>
+              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>{payment.note || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <div style={{ width: 260, fontSize: 13 }}>
+          {mode === 'all' && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#6b859e' }}>
+              <span>ยอดรวมทั้งหมด</span>
+              <span>฿{formatCurrency(grandTotal)}</span>
+            </div>
+          )}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              padding: '8px 0',
+              borderTop: '1.5px solid #0f2b52',
+              fontWeight: 800,
+              fontSize: 15,
+            }}
+          >
+            <span>ยอดชำระแล้ว</span>
+            <span>฿{formatCurrency(paidTotal)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 48, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+        <div style={{ color: '#6b859e' }}>เอกสารนี้สร้างโดยระบบอัตโนมัติ</div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ borderBottom: '1px solid #6b859e', width: 160, marginBottom: 4 }}>&nbsp;</div>
+          <div>ผู้รับเงิน</div>
         </div>
       </div>
     </div>
@@ -660,6 +792,10 @@ function CustomerDashbord() {
   const [historySearch, setHistorySearch] = useState('')
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
 
+  const [receiptRequest, setReceiptRequest] = useState(null)
+  const [receiptGenerating, setReceiptGenerating] = useState(false)
+  const receiptRef = useRef(null)
+
   useEffect(() => {
     const isAnyOverlayOpen =
       showPaymentForm ||
@@ -920,6 +1056,78 @@ function CustomerDashbord() {
       setCancelingMaintenanceId(null)
     }
   }
+
+  const requestSingleReceipt = (entry, payment) => {
+    if (receiptGenerating) return
+    setReceiptRequest({ mode: 'single', entry, payment })
+  }
+
+  const requestCombinedReceipt = (entry) => {
+    if (receiptGenerating) return
+    setReceiptRequest({ mode: 'all', entry })
+  }
+
+  useEffect(() => {
+    if (!receiptRequest) return
+    let cancelled = false
+
+    const generate = async () => {
+      setReceiptGenerating(true)
+      try {
+        // wait a tick so the hidden receipt template renders before we capture it
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const node = receiptRef.current
+        if (!node || cancelled) return
+
+        const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff' })
+        const imageData = canvas.toDataURL('image/png')
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        const imageHeight = (canvas.height * pageWidth) / canvas.width
+
+        if (imageHeight <= pageHeight) {
+          pdf.addImage(imageData, 'PNG', 0, 0, pageWidth, imageHeight)
+        } else {
+          // split across multiple pages when the receipt is taller than one A4 page
+          let renderedHeightPx = 0
+          const pageHeightPx = (pageHeight * canvas.width) / pageWidth
+          while (renderedHeightPx < canvas.height) {
+            const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedHeightPx)
+            const sliceCanvas = document.createElement('canvas')
+            sliceCanvas.width = canvas.width
+            sliceCanvas.height = sliceHeightPx
+            sliceCanvas
+              .getContext('2d')
+              .drawImage(canvas, 0, renderedHeightPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx)
+            if (renderedHeightPx > 0) pdf.addPage()
+            pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 0, 0, pageWidth, (sliceHeightPx * pageWidth) / canvas.width)
+            renderedHeightPx += sliceHeightPx
+          }
+        }
+
+        const roomNumber = receiptRequest.entry?.room_number || 'room'
+        const fileName =
+          receiptRequest.mode === 'single'
+            ? `receipt-${roomNumber}-${receiptRequest.payment.id}.pdf`
+            : `receipt-${roomNumber}-booking-${receiptRequest.entry.booking_id}-all.pdf`
+        if (!cancelled) pdf.save(fileName)
+      } catch (err) {
+        console.error('Generate receipt PDF error:', err)
+        if (!cancelled) setError('ไม่สามารถสร้างไฟล์ใบเสร็จได้ กรุณาลองใหม่อีกครั้ง')
+      } finally {
+        if (!cancelled) {
+          setReceiptGenerating(false)
+          setReceiptRequest(null)
+        }
+      }
+    }
+
+    generate()
+    return () => {
+      cancelled = true
+    }
+  }, [receiptRequest])
 
   if (loading) {
     return (
@@ -1556,42 +1764,96 @@ function CustomerDashbord() {
               {rentalHistory.length === 0 ? (
                 <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
               ) : (
-                filteredRentalHistory.map((entry) => (
-                  <div key={entry.booking_id} className="dashboard-rental-entry">
-                    {entry.payments.length === 0 ? (
-                      <p className="dashboard-empty">
-                        {entry.hasOriginalPayments ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีประวัติการชำระค่าเช่า'}
-                      </p>
-                    ) : (
-                      <div className="table-responsive">
-                        <table className="dashboard-table">
-                          <thead>
-                            <tr>
-                              <th>วันที่ชำระ</th>
-                              <th>จำนวนเงิน</th>
-                              <th>สถานะ</th>
-                              <th>หมายเหตุ</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {entry.payments.map((payment) => (
-                              <tr key={payment.id}>
-                                <td>{formatDateTime(payment.created_at)}</td>
-                                <td>฿{formatCurrency(payment.amount)}</td>
-                                <td>
-                                  <span className={`dashboard-badge status-${payment.status}`}>
-                                    {STATUS_LABEL[payment.status] || payment.status}
-                                  </span>
-                                </td>
-                                <td>{payment.note || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                ))
+                filteredRentalHistory.map((entry) => {
+                  const originalEntry = rentalHistory.find((item) => item.booking_id === entry.booking_id) || entry
+                  return (
+                    <div key={entry.booking_id} className="dashboard-rental-entry">
+                      {entry.payments.length === 0 ? (
+                        <p className="dashboard-empty">
+                          {entry.hasOriginalPayments ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีประวัติการชำระค่าเช่า'}
+                        </p>
+                      ) : (
+                        <>
+                          <div className="dashboard-rental-entry-header">
+                            <p className="dashboard-rental-entry-title">
+                              ห้อง {entry.room_number}
+                              {entry.rental_start_date && entry.rental_end_date && (
+                                <span className="dashboard-rental-entry-dates">
+                                  {' '}
+                                  ({formatDate(entry.rental_start_date)} - {formatDate(entry.rental_end_date)})
+                                </span>
+                              )}
+                            </p>
+                            <button
+                              type="button"
+                              className="dashboard-action-btn is-ghost dashboard-receipt-all-btn"
+                              disabled={receiptGenerating}
+                              onClick={() => requestCombinedReceipt(originalEntry)}
+                            >
+                              {receiptGenerating && receiptRequest?.mode === 'all' && receiptRequest.entry.booking_id === entry.booking_id
+                                ? 'กำลังสร้าง...'
+                                : 'ดาวน์โหลดใบเสร็จรวม (PDF)'}
+                            </button>
+                          </div>
+                          <div className="table-responsive">
+                            <table className="dashboard-table">
+                              <thead>
+                                <tr>
+                                  <th>วันที่ชำระ</th>
+                                  <th>จำนวนเงิน</th>
+                                  <th>สถานะ</th>
+                                  <th>หมายเหตุ</th>
+                                  <th>ใบเสร็จ</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {entry.payments.map((payment) => (
+                                  <tr key={payment.id}>
+                                    <td>{formatDateTime(payment.created_at)}</td>
+                                    <td>฿{formatCurrency(payment.amount)}</td>
+                                    <td>
+                                      <span className={`dashboard-badge status-${payment.status}`}>
+                                        {STATUS_LABEL[payment.status] || payment.status}
+                                      </span>
+                                    </td>
+                                    <td>{payment.note || '-'}</td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className="dashboard-receipt-btn"
+                                        disabled={receiptGenerating}
+                                        onClick={() => requestSingleReceipt(entry, payment)}
+                                        aria-label="ดาวน์โหลดใบเสร็จ"
+                                        title="ดาวน์โหลดใบเสร็จ (PDF)"
+                                      >
+                                        <svg
+                                          width="16"
+                                          height="16"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          aria-hidden="true"
+                                        >
+                                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                          <polyline points="7 10 12 15 17 10" />
+                                          <line x1="12" y1="15" x2="12" y2="3" />
+                                        </svg>
+                                        ใบเสร็จ
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
@@ -1921,6 +2183,14 @@ function CustomerDashbord() {
           </div>
         </div>
       </div>
+
+      {receiptRequest && (
+        <div style={{ position: 'fixed', top: 0, left: -10000, zIndex: -1 }}>
+          <div ref={receiptRef}>
+            <ReceiptTemplate receiptRequest={receiptRequest} customer={customer} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
