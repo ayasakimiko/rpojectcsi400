@@ -112,7 +112,9 @@ CREATE TABLE IF NOT EXISTS MaintenanceRequest (
     preferred_time VARCHAR(20) NOT NULL DEFAULT 'anytime',
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     accepted_at DATETIME NULL,
+    accepted_by_name VARCHAR(255) NULL,
     completed_at DATETIME NULL,
+    completed_by_name VARCHAR(255) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id)
@@ -128,7 +130,9 @@ CREATE TABLE IF NOT EXISTS TenantRequest (
     renew_payment_type VARCHAR(20),
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     accepted_at DATETIME NULL,
+    accepted_by_name VARCHAR(255) NULL,
     completed_at DATETIME NULL,
+    completed_by_name VARCHAR(255) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id)

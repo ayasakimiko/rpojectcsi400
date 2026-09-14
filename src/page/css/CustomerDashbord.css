@@ -916,8 +916,9 @@
 }
 
 .dashboard-badge.status-cancelled {
-  background: #f1f5f9;
-  color: #64748b;
+  background: #fef2f2;
+  color: #b42318;
+  border: 1.5px solid #fecaca;
 }
 
 .dashboard-badge-btn {
@@ -1281,6 +1282,22 @@
   border-radius: 10px;
 }
 
+.dashboard-request-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.dashboard-request-log-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b859e;
+}
+
 .dashboard-request-log-item {
   display: flex;
   align-items: flex-start;
@@ -1306,6 +1323,19 @@
   margin-top: 5px;
   border-radius: 50%;
   background: #2563eb;
+}
+
+.dashboard-request-log-item.is-pending .dashboard-request-log-dot {
+  background: #fff;
+  border: 1.5px solid #cbd5e1;
+}
+
+.dashboard-request-log-item.is-pending .dashboard-request-log-label {
+  color: #94a3b8;
+}
+
+.dashboard-request-log-date.is-pending {
+  font-style: italic;
 }
 
 .dashboard-request-log-content {
@@ -1343,12 +1373,6 @@
   text-align: center;
 }
 
-.dashboard-form-success {
-  color: #027a48;
-  font-size: 12px;
-  font-weight: 600;
-  margin: 8px 0 0;
-}
 
 .dashboard-maintenance-body {
   min-height: 540px;

@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
-import { authenticate } from "../middleware/authMiddleware.js";
+import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
 
 const router = Router();
+
+router.use(authenticate, requireCustomerRole);
 
 const GRACE_DAYS = 3;
 const REQUEST_TYPES = new Set(["renew", "moveout"]);
@@ -78,7 +80,7 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   };
 }
 
-router.get("/me", authenticate, async (req, res) => {
+router.get("/me", async (req, res) => {
   try {
     const pool = getPool();
 
@@ -126,7 +128,7 @@ router.get("/me", authenticate, async (req, res) => {
     }));
 
     const [maintenanceRequests] = await pool.query(
-      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, completed_at, created_at
+      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, completed_at, completed_by_name, created_at
        FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
       [customer.id],
     );
@@ -155,7 +157,7 @@ router.get("/me", authenticate, async (req, res) => {
   }
 });
 
-router.post("/payments/confirm", authenticate, async (req, res) => {
+router.post("/payments/confirm", async (req, res) => {
   try {
     const pool = getPool();
 
@@ -221,7 +223,7 @@ router.post("/payments/confirm", authenticate, async (req, res) => {
   }
 });
 
-router.post("/maintenance", authenticate, async (req, res) => {
+router.post("/maintenance", async (req, res) => {
   try {
     const pool = getPool();
 
@@ -260,7 +262,7 @@ router.post("/maintenance", authenticate, async (req, res) => {
   }
 });
 
-router.post("/maintenance/:id/cancel", authenticate, async (req, res) => {
+router.post("/maintenance/:id/cancel", async (req, res) => {
   try {
     const pool = getPool();
 
@@ -282,7 +284,9 @@ router.post("/maintenance/:id/cancel", authenticate, async (req, res) => {
       return res.status(400).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องแล้ว" });
     }
 
-    await pool.query(`UPDATE MaintenanceRequest SET status = 'cancelled' WHERE id = ?`, [maintenanceRequest.id]);
+    await pool.query(`UPDATE MaintenanceRequest SET status = 'cancelled', completed_at = NOW() WHERE id = ?`, [
+      maintenanceRequest.id,
+    ]);
 
     return res.json({ message: "ยกเลิกรายการแจ้งซ่อมสำเร็จ" });
   } catch (error) {
@@ -291,7 +295,7 @@ router.post("/maintenance/:id/cancel", authenticate, async (req, res) => {
   }
 });
 
-router.post("/requests", authenticate, async (req, res) => {
+router.post("/requests", async (req, res) => {
   try {
     const pool = getPool();
 

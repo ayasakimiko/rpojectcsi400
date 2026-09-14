@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
+import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
@@ -84,7 +85,7 @@ function validateRegisterInput({
   return null;
 }
 
-router.post("/register", async (req, res) => {
+router.post("/register", authenticate, requireStaffRole, async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();
   try {

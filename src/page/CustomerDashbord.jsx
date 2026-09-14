@@ -288,6 +288,11 @@ const MOVEOUT_REJECTED_CONTACT_MESSAGE =
   'คำขอแจ้งย้ายออกของคุณถูกปฏิเสธ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อสอบถามรายละเอียดเพิ่มเติม'
 
 const MOVEOUT_STATUS_POPUP_CONTENT = {
+  pending: {
+    title: 'รอดำเนินการ',
+    message: 'ส่งคำขอแจ้งย้ายออกเรียบร้อยแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบและติดต่อกลับ',
+    icon: 'info',
+  },
   in_progress: { title: 'เจ้าหน้าที่รับเรื่องแล้ว', message: MOVEOUT_IN_PROGRESS_CONTACT_MESSAGE, icon: 'info' },
   approved: { title: 'แจ้งย้ายออกได้รับการอนุมัติ', message: MOVEOUT_APPROVED_CONTACT_MESSAGE, icon: 'success' },
   rejected: { title: 'คำขอแจ้งย้ายออกไม่ได้รับการอนุมัติ', message: MOVEOUT_REJECTED_CONTACT_MESSAGE, icon: 'danger' },
@@ -296,6 +301,11 @@ const MOVEOUT_STATUS_POPUP_CONTENT = {
 const RENEW_RESUBMIT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000
 
 const RENEW_STATUS_POPUP_CONTENT = {
+  pending: {
+    title: 'รอดำเนินการ',
+    message: 'ส่งคำขอต่อสัญญาเรียบร้อยแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบและติดต่อกลับ',
+    icon: 'info',
+  },
   in_progress: {
     title: 'เจ้าหน้าที่รับเรื่องแล้ว',
     message: 'เจ้าหน้าที่รับเรื่องคำขอต่อสัญญาของคุณแล้ว กรุณารอการติดต่อกลับจากเจ้าหน้าที่',
@@ -309,6 +319,11 @@ const RENEW_STATUS_POPUP_CONTENT = {
 }
 
 const MAINTENANCE_STATUS_POPUP_CONTENT = {
+  pending: {
+    title: 'รอดำเนินการ',
+    message: 'รายการแจ้งซ่อมของคุณอยู่ระหว่างรอเจ้าหน้าที่รับเรื่อง กรุณารอการติดต่อกลับจากเจ้าหน้าที่',
+    icon: 'info',
+  },
   in_progress: {
     title: 'เจ้าหน้าที่รับเรื่องแล้ว',
     message: 'เจ้าหน้าที่รับเรื่องแจ้งซ่อมของคุณแล้ว กำลังดำเนินการซ่อมแซม',
@@ -322,7 +337,7 @@ const MAINTENANCE_STATUS_POPUP_CONTENT = {
   cancelled: {
     title: 'รายการแจ้งซ่อมถูกยกเลิก',
     message: 'รายการแจ้งซ่อมของคุณถูกยกเลิกโดยเจ้าหน้าที่ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์หากต้องการสอบถามเพิ่มเติม',
-    icon: 'muted',
+    icon: 'danger',
   },
 }
 
@@ -367,15 +382,17 @@ function StatusIconPaths({ tone }) {
 }
 
 const TENANT_REQUEST_NOTIF_INFO = {
+  pending: { label: 'ส่งคำขอสำเร็จ', tone: 'info' },
   in_progress: { label: 'เจ้าหน้าที่รับเรื่องแล้ว', tone: 'info' },
   approved: { label: 'อนุมัติแล้ว', tone: 'success' },
   rejected: { label: 'ถูกปฏิเสธ', tone: 'danger' },
 }
 
 const MAINTENANCE_NOTIF_INFO = {
+  pending: { label: 'แจ้งซ่อมสำเร็จ', tone: 'info' },
   in_progress: { label: 'กำลังดำเนินการ', tone: 'info' },
   done: { label: 'ซ่อมเสร็จสิ้นแล้ว', tone: 'success' },
-  cancelled: { label: 'ถูกยกเลิก', tone: 'muted' },
+  cancelled: { label: 'ถูกยกเลิก', tone: 'danger' },
 }
 
 const TENANT_REQUEST_FINAL_LOG_LABEL = {
@@ -388,48 +405,76 @@ const MAINTENANCE_FINAL_LOG_LABEL = {
   cancelled: 'ยกเลิกรายการ',
 }
 
+const REQUEST_TIMELINE_PENDING_FINAL_LABEL = 'รอผลดำเนินการ'
+
 function getRequestTimeline(kind, request) {
   if (!request) return []
-  const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
-  if (request.accepted_at) {
-    steps.push({ label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at })
-  }
-  const finalLabel = kind === 'maintenance' ? MAINTENANCE_FINAL_LOG_LABEL[request.status] : TENANT_REQUEST_FINAL_LOG_LABEL[request.status]
-  if (finalLabel) {
-    // completed_at may be missing on older records transitioned before this timestamp was tracked
-    steps.push({ label: finalLabel, date: request.completed_at || request.accepted_at || request.created_at })
-  }
-  return steps
+  const isSelfCancelledMaintenance =
+    kind === 'maintenance' && request.status === 'cancelled' && !request.completed_by_name
+  const finalLabel = isSelfCancelledMaintenance
+    ? 'ยกเลิกรายการเอง'
+    : kind === 'maintenance'
+      ? MAINTENANCE_FINAL_LOG_LABEL[request.status]
+      : TENANT_REQUEST_FINAL_LOG_LABEL[request.status]
+  const isFinal = Boolean(finalLabel)
+
+  return [
+    { label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at, done: true },
+    { label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at, done: Boolean(request.accepted_at) },
+    {
+      label: finalLabel || REQUEST_TIMELINE_PENDING_FINAL_LABEL,
+      // completed_at may be missing on older records transitioned before this timestamp was tracked
+      date: isFinal ? request.completed_at || request.accepted_at || request.created_at : null,
+      done: isFinal,
+    },
+  ]
 }
 
 function RequestTimeline({ kind, request }) {
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
 
+  const statusBadgeClass = kind === 'maintenance' ? maintenanceBadgeClass(request.status) : tenantRequestBadgeClass(request.status)
+  const statusLabel = kind === 'maintenance' ? MAINTENANCE_STATUS_LABEL[request.status] : TENANT_REQUEST_STATUS_LABEL[request.status]
+  const lastStep = timeline[timeline.length - 1]
+  const totalMs = lastStep.done ? new Date(lastStep.date).getTime() - new Date(timeline[0].date).getTime() : null
+
   return (
     <div className="dashboard-request-log">
+      <div className="dashboard-request-log-header">
+        <span className="dashboard-request-log-title">สถานะปัจจุบัน</span>
+        <span className={`dashboard-badge status-${statusBadgeClass}`}>{statusLabel || request.status}</span>
+      </div>
       <div className="dashboard-request-log-items">
         {timeline.map((step, index) => {
           const prevStep = timeline[index - 1]
-          const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+          const stepMs =
+            step.done && prevStep?.done ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
           return (
-            <div key={step.label} className="dashboard-request-log-item">
+            <div
+              key={step.label + index}
+              className={`dashboard-request-log-item${step.done ? '' : ' is-pending'}`}
+            >
               <span className="dashboard-request-log-dot" />
               <div className="dashboard-request-log-content">
                 <p className="dashboard-request-log-label">{step.label}</p>
-                <p className="dashboard-request-log-date">{formatDateTime(step.date)}</p>
-                {stepMs !== null && <p className="dashboard-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+                {step.done ? (
+                  <>
+                    <p className="dashboard-request-log-date">{formatDateTime(step.date)}</p>
+                    {stepMs !== null && <p className="dashboard-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+                  </>
+                ) : (
+                  <p className="dashboard-request-log-date is-pending">ยังไม่ถึงขั้นตอนนี้</p>
+                )}
               </div>
             </div>
           )
         })}
       </div>
-      {timeline.length > 1 && (
+      {totalMs !== null && (
         <p className="dashboard-request-log-total">
           รวมใช้เวลาทั้งหมด{' '}
-          {formatRemaining(
-            new Date(timeline[timeline.length - 1].date).getTime() - new Date(timeline[0].date).getTime(),
-          )}
+          {formatRemaining(totalMs)}
         </p>
       )}
     </div>
@@ -584,10 +629,11 @@ function CustomerDashbord() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [notifOpen])
 
+  const [successPopup, setSuccessPopup] = useState(null)
+
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentError, setPaymentError] = useState('')
-  const [paymentSuccess, setPaymentSuccess] = useState('')
 
   const [activeRequestType, setActiveRequestType] = useState(null)
   const [requestNote, setRequestNote] = useState('')
@@ -595,7 +641,6 @@ function CustomerDashbord() {
   const [renewPaymentType, setRenewPaymentType] = useState(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
   const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
-  const [requestSuccess, setRequestSuccess] = useState('')
 
   const [statusPopup, setStatusPopup] = useState(null)
 
@@ -606,7 +651,6 @@ function CustomerDashbord() {
   const [maintenanceContactPhone, setMaintenanceContactPhone] = useState('')
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false)
   const [maintenanceError, setMaintenanceError] = useState('')
-  const [maintenanceSuccess, setMaintenanceSuccess] = useState('')
   const [cancelingMaintenanceId, setCancelingMaintenanceId] = useState(null)
   const [confirmCancelId, setConfirmCancelId] = useState(null)
   const [maintenancePage, setMaintenancePage] = useState(1)
@@ -621,6 +665,7 @@ function CustomerDashbord() {
       showPaymentForm ||
       Boolean(activeRequestType) ||
       Boolean(statusPopup) ||
+      Boolean(successPopup) ||
       showMaintenanceForm ||
       confirmCancelId !== null ||
       notifOpen ||
@@ -637,6 +682,7 @@ function CustomerDashbord() {
     showPaymentForm,
     activeRequestType,
     statusPopup,
+    successPopup,
     showMaintenanceForm,
     confirmCancelId,
     notifOpen,
@@ -646,6 +692,8 @@ function CustomerDashbord() {
   const maybeShowStatusPopups = (dashboardData) => {
     const tryShowStatusPopup = (kind, status, id, request) => {
       if (!STATUS_POPUP_CONTENT_BY_KIND[kind]?.[status]) return false
+
+      if (status === 'pending') return false
       if (status === 'in_progress') {
         setStatusPopup({ kind, status, request })
         return true
@@ -747,7 +795,6 @@ function CustomerDashbord() {
 
   const openPaymentForm = () => {
     setPaymentError('')
-    setPaymentSuccess('')
     setShowPaymentForm(true)
   }
 
@@ -762,8 +809,8 @@ function CustomerDashbord() {
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       )
-      setPaymentSuccess(result.message || 'ชำระเงินสำเร็จ')
       setShowPaymentForm(false)
+      setSuccessPopup(result.message || 'ชำระเงินสำเร็จ')
       await loadDashboard()
     } catch (err) {
       setPaymentError(err.response?.data?.message || 'ชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -778,7 +825,6 @@ function CustomerDashbord() {
     setRenewDurationMonths(RENEW_DURATION_OPTIONS[2].value)
     setRenewPaymentType(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
     setRequestError('')
-    setRequestSuccess('')
   }
 
   const handleRequestSubmit = async (event) => {
@@ -795,8 +841,8 @@ function CustomerDashbord() {
       const { data: result } = await axios.post('/api/customer/requests', payload, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      setRequestSuccess(result.message || 'ส่งคำขอสำเร็จ')
       setActiveRequestType(null)
+      setSuccessPopup(result.message || 'ส่งคำขอสำเร็จ')
       await loadDashboard()
     } catch (err) {
       setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -811,7 +857,6 @@ function CustomerDashbord() {
     setMaintenancePreferredTime(MAINTENANCE_TIME_OPTIONS[0].value)
     setMaintenanceContactPhone(data?.customer?.phone || '')
     setMaintenanceError('')
-    setMaintenanceSuccess('')
     setShowMaintenanceForm(true)
   }
 
@@ -836,9 +881,9 @@ function CustomerDashbord() {
         },
         { headers: { Authorization: `Bearer ${token}` } },
       )
-      setMaintenanceSuccess(result.message || 'แจ้งซ่อมสำเร็จ')
       setMaintenanceText('')
       setShowMaintenanceForm(false)
+      setSuccessPopup(result.message || 'แจ้งซ่อมสำเร็จ')
       await loadDashboard()
     } catch (err) {
       setMaintenanceError(err.response?.data?.message || 'แจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -850,7 +895,6 @@ function CustomerDashbord() {
   const handleCancelMaintenance = async (id) => {
     const token = sessionStorage.getItem('token')
     setMaintenanceError('')
-    setMaintenanceSuccess('')
     setCancelingMaintenanceId(id)
     try {
       const { data: result } = await axios.post(
@@ -858,7 +902,7 @@ function CustomerDashbord() {
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       )
-      setMaintenanceSuccess(result.message || 'ยกเลิกรายการแจ้งซ่อมสำเร็จ')
+      setSuccessPopup(result.message || 'ยกเลิกรายการแจ้งซ่อมสำเร็จ')
       await loadDashboard()
       return true
     } catch (err) {
@@ -1290,6 +1334,36 @@ function CustomerDashbord() {
           </Modal>
         )}
 
+        {successPopup && (
+          <Modal title="สำเร็จ" onClose={() => setSuccessPopup(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="dashboard-confirm-body">
+                <div className="dashboard-confirm-icon is-success">
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <p className="dashboard-confirm-message">{successPopup}</p>
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    รับทราบ
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
         {reminders.length > 0 && (
           <div className="dashboard-reminders">
             {reminders.map((reminder, index) => (
@@ -1399,7 +1473,6 @@ function CustomerDashbord() {
                           ชำระเงิน
                         </button>
                       </div>
-                      {paymentSuccess && !showPaymentForm && <p className="dashboard-form-success">{paymentSuccess}</p>}
                       {showPaymentForm && (
                         <Modal title="สแกนเพื่อชำระเงิน" onClose={() => setShowPaymentForm(false)} variant="confirm">
                           {(requestClose) => (
@@ -1527,7 +1600,7 @@ function CustomerDashbord() {
                       <div className="dashboard-request-info">
                         <p className="dashboard-request-title">ต่อสัญญา</p>
                         <p className="dashboard-request-desc">
-                          {(!canResubmitRenew && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
+                          {(!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
                             || (renewRequest?.status === 'pending'
                               ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
                               : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด')}
@@ -1541,10 +1614,6 @@ function CustomerDashbord() {
                         >
                           {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
                         </button>
-                      ) : renewRequest?.status === 'pending' ? (
-                        <span className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)}`}>
-                          {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
-                        </span>
                       ) : (
                         <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
                           ต่อสัญญา
@@ -1568,10 +1637,6 @@ function CustomerDashbord() {
                       >
                         {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
                       </button>
-                    ) : moveoutRequest?.status === 'pending' ? (
-                      <span className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)}`}>
-                        {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
-                      </span>
                     ) : (
                       room?.is_booked && (
                         <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
@@ -1581,7 +1646,6 @@ function CustomerDashbord() {
                     )}
                   </div>
                 </div>
-                {requestSuccess && !activeRequestType && <p className="dashboard-form-success">{requestSuccess}</p>}
 
                 {activeRequestType && (
                   <Modal title={TENANT_REQUEST_TYPE_LABEL[activeRequestType]} onClose={() => setActiveRequestType(null)}>
@@ -1681,7 +1745,6 @@ function CustomerDashbord() {
                   </select>
                 </div>
               )}
-              {maintenanceSuccess && !showMaintenanceForm && <p className="dashboard-form-success">{maintenanceSuccess}</p>}
               {showMaintenanceForm && (
                 <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
                   {(requestClose) => (
@@ -1778,7 +1841,6 @@ function CustomerDashbord() {
                             disabled={cancelingMaintenanceId === item.id}
                             onClick={() => {
                               setMaintenanceError('')
-                              setMaintenanceSuccess('')
                               setConfirmCancelId(item.id)
                             }}
                           >

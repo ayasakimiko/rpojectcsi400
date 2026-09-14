@@ -1,18 +1,18 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
-import { authenticate } from "../middleware/authMiddleware.js";
+import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 import { computeCurrentDue } from "./CustomerDashboardRouter.js";
 
 const router = Router();
 
-const STAFF_ROLES = new Set(["Staff", "Admin", "Owner"]);
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
-function requireStaffRole(req, res, next) {
-  if (!STAFF_ROLES.has(req.user?.role)) {
-    return res.status(403).json({ message: "ไม่ได้รับอนุญาต (ต้องเป็นเจ้าหน้าที่)" });
-  }
-  next();
+async function getActingStaffName(pool, user) {
+  const table = STAFF_ROLE_TABLE[user?.role];
+  if (!table) return null;
+  const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
+  const row = rows[0];
+  return row ? `${row.first_name} ${row.last_name}` : null;
 }
 
 router.use(authenticate, requireStaffRole);
@@ -249,6 +249,110 @@ router.get("/requests", async (req, res) => {
   }
 });
 
+const REQUEST_HISTORY_PAGE_SIZE = 10;
+
+router.get("/requests/history", async (req, res) => {
+  try {
+    const pool = getPool();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const offset = (page - 1) * REQUEST_HISTORY_PAGE_SIZE;
+
+    const conditions = [`tr.status IN ('approved', 'rejected')`];
+    const params = [];
+
+    if (["approved", "rejected"].includes(req.query.status)) {
+      conditions.push(`tr.status = ?`);
+      params.push(req.query.status);
+    }
+
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    if (search) {
+      conditions.push(`(CAST(tr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ?)`);
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const whereClause = conditions.join(" AND ");
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       WHERE ${whereClause}`,
+      params,
+    );
+    const total = countRows[0].total;
+
+    const [requests] = await pool.query(
+      `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
+              tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
+              tr.room_number, c.first_name, c.last_name, c.phone
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       WHERE ${whereClause}
+       ORDER BY tr.completed_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, REQUEST_HISTORY_PAGE_SIZE, offset],
+    );
+
+    return res.json({ requests, total, page, pageSize: REQUEST_HISTORY_PAGE_SIZE });
+  } catch (error) {
+    console.error("Fetch tenant request history error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/maintenance/history", async (req, res) => {
+  try {
+    const pool = getPool();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const offset = (page - 1) * REQUEST_HISTORY_PAGE_SIZE;
+
+    const conditions = [`mr.status IN ('done', 'cancelled')`];
+    const params = [];
+
+    if (["done", "cancelled"].includes(req.query.status)) {
+      conditions.push(`mr.status = ?`);
+      params.push(req.query.status);
+    }
+
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    if (search) {
+      conditions.push(
+        `(CAST(mr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ? OR mr.description LIKE ?)`,
+      );
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const whereClause = conditions.join(" AND ");
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM MaintenanceRequest mr
+       JOIN Customer c ON c.id = mr.customer_id
+       WHERE ${whereClause}`,
+      params,
+    );
+    const total = countRows[0].total;
+
+    const [requests] = await pool.query(
+      `SELECT mr.id, mr.description, mr.category, mr.contact_phone, mr.preferred_time, mr.status, mr.created_at,
+              mr.accepted_at, mr.accepted_by_name, mr.completed_at, mr.completed_by_name,
+              mr.room_number, c.first_name, c.last_name, c.phone
+       FROM MaintenanceRequest mr
+       JOIN Customer c ON c.id = mr.customer_id
+       WHERE ${whereClause}
+       ORDER BY mr.completed_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, REQUEST_HISTORY_PAGE_SIZE, offset],
+    );
+
+    return res.json({ requests, total, page, pageSize: REQUEST_HISTORY_PAGE_SIZE });
+  } catch (error) {
+    console.error("Fetch maintenance request history error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.post("/requests/:id/acknowledge", async (req, res) => {
   try {
     const pool = getPool();
@@ -257,9 +361,10 @@ router.post("/requests/:id/acknowledge", async (req, res) => {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
 
+    const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `UPDATE TenantRequest SET status = 'in_progress', accepted_at = NOW() WHERE id = ? AND status = 'pending'`,
-      [requestId],
+      `UPDATE TenantRequest SET status = 'in_progress', accepted_at = NOW(), accepted_by_name = ? WHERE id = ? AND status = 'pending'`,
+      [staffName, requestId],
     );
     if (result.affectedRows === 0) {
       return res.status(409).json({ message: "ไม่พบคำขอที่รอดำเนินการนี้" });
@@ -280,6 +385,8 @@ router.post("/requests/:id/approve", async (req, res) => {
     if (!Number.isInteger(requestId) || requestId < 1) {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
+
+    const staffName = await getActingStaffName(pool, req.user);
 
     await connection.beginTransaction();
 
@@ -330,7 +437,10 @@ router.post("/requests/:id/approve", async (req, res) => {
       );
     }
 
-    await connection.query(`UPDATE TenantRequest SET status = 'approved', completed_at = NOW() WHERE id = ?`, [requestId]);
+    await connection.query(
+      `UPDATE TenantRequest SET status = 'approved', completed_at = NOW(), completed_by_name = ? WHERE id = ?`,
+      [staffName, requestId],
+    );
 
     await connection.commit();
     return res.json({ message: "อนุมัติคำขอสำเร็จ" });
@@ -351,9 +461,10 @@ router.post("/requests/:id/reject", async (req, res) => {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
 
+    const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `UPDATE TenantRequest SET status = 'rejected', completed_at = NOW() WHERE id = ? AND status IN ('pending', 'in_progress')`,
-      [requestId],
+      `UPDATE TenantRequest SET status = 'rejected', completed_at = NOW(), completed_by_name = ? WHERE id = ? AND status IN ('pending', 'in_progress')`,
+      [staffName, requestId],
     );
     if (result.affectedRows === 0) {
       return res.status(409).json({ message: "ไม่พบคำขอที่รอดำเนินการนี้" });
@@ -367,9 +478,27 @@ router.post("/requests/:id/reject", async (req, res) => {
 });
 
 const MAINTENANCE_TRANSITIONS = {
-  accept: { from: ["pending"], to: "in_progress", timestampColumn: "accepted_at", message: "รับเรื่องแจ้งซ่อมสำเร็จ" },
-  complete: { from: ["pending", "in_progress"], to: "done", timestampColumn: "completed_at", message: "บันทึกการซ่อมเสร็จสิ้นสำเร็จ" },
-  reject: { from: ["pending", "in_progress"], to: "cancelled", timestampColumn: "completed_at", message: "ปฏิเสธรายการแจ้งซ่อมสำเร็จ" },
+  accept: {
+    from: ["pending"],
+    to: "in_progress",
+    timestampColumn: "accepted_at",
+    byNameColumn: "accepted_by_name",
+    message: "รับเรื่องแจ้งซ่อมสำเร็จ",
+  },
+  complete: {
+    from: ["pending", "in_progress"],
+    to: "done",
+    timestampColumn: "completed_at",
+    byNameColumn: "completed_by_name",
+    message: "บันทึกการซ่อมเสร็จสิ้นสำเร็จ",
+  },
+  reject: {
+    from: ["pending", "in_progress"],
+    to: "cancelled",
+    timestampColumn: "completed_at",
+    byNameColumn: "completed_by_name",
+    message: "ปฏิเสธรายการแจ้งซ่อมสำเร็จ",
+  },
 };
 
 router.post("/maintenance/:id/:action", async (req, res) => {
@@ -385,9 +514,10 @@ router.post("/maintenance/:id/:action", async (req, res) => {
     }
 
     const pool = getPool();
+    const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `UPDATE MaintenanceRequest SET status = ?, ${transition.timestampColumn} = NOW() WHERE id = ? AND status IN (?)`,
-      [transition.to, requestId, transition.from],
+      `UPDATE MaintenanceRequest SET status = ?, ${transition.timestampColumn} = NOW(), ${transition.byNameColumn} = ? WHERE id = ? AND status IN (?)`,
+      [transition.to, staffName, requestId, transition.from],
     );
     if (result.affectedRows === 0) {
       return res.status(409).json({ message: "ไม่พบรายการแจ้งซ่อมที่สามารถดำเนินการนี้ได้" });

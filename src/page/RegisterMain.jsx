@@ -186,18 +186,22 @@ function RegisterMain() {
 
     try {
       setLoading(true)
-      const { data } = await axios.post('/api/auth/register', {
-        idcard,
-        first_name,
-        last_name,
-        phone,
-        age,
-        room_number,
-        rental_start_date: formatDateTimeLocal(rental_start_date),
-        rental_end_date: formatDateTimeLocal(rental_end_date),
-        deposit_amount: deposit_amount || undefined,
-        password,
-      })
+      const { data } = await axios.post(
+        '/api/auth/register',
+        {
+          idcard,
+          first_name,
+          last_name,
+          phone,
+          age,
+          room_number,
+          rental_start_date: formatDateTimeLocal(rental_start_date),
+          rental_end_date: formatDateTimeLocal(rental_end_date),
+          deposit_amount: deposit_amount || undefined,
+          password,
+        },
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } },
+      )
       setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
       setRegisterForm({
         ...initialRegisterForm,

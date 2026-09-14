@@ -18,6 +18,14 @@ function Modal({ title, onClose, children, variant }) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
+
   return (
     <div
       className={`staff-modal-overlay${isClosing ? ' is-closing' : ''}`}
@@ -65,6 +73,8 @@ const TENANT_REQUEST_TYPE_LABEL = {
 const TENANT_REQUEST_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
   in_progress: 'รับเรื่องแล้ว',
+  approved: 'อนุมัติแล้ว',
+  rejected: 'ปฏิเสธแล้ว',
 }
 
 const RENEW_DURATION_LABEL = {
@@ -97,6 +107,8 @@ const MAINTENANCE_TIME_LABEL = {
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
   in_progress: 'กำลังดำเนินการ',
+  done: 'เสร็จสิ้น',
+  cancelled: 'ยกเลิกแล้ว',
 }
 
 const REQUEST_PREVIEW_COUNT = 3
@@ -268,6 +280,53 @@ function StaffRequestTimeline({ kind, request }) {
   )
 }
 
+const SUMMARY_ICON_PATHS = {
+  total: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  booked: (
+    <>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  vacant: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12.5l2.3 2.3L15.5 9.5" />
+    </>
+  ),
+  due: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
+    </>
+  ),
+}
+
+function SummaryIcon({ type }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {SUMMARY_ICON_PATHS[type]}
+    </svg>
+  )
+}
+
 function StaffMain() {
   const navigate = useNavigate()
   const [staffUser, setStaffUser] = useState(null)
@@ -333,7 +392,28 @@ function StaffMain() {
   const [maintenanceFilterDate, setMaintenanceFilterDate] = useState('')
   const [maintenanceFilterSearch, setMaintenanceFilterSearch] = useState('')
   const [moveoutConfirmRequest, setMoveoutConfirmRequest] = useState(null)
+  const [renewApproveConfirm, setRenewApproveConfirm] = useState(null)
+  const [moveoutAcknowledgeConfirm, setMoveoutAcknowledgeConfirm] = useState(null)
+  const [tenantRejectConfirm, setTenantRejectConfirm] = useState(null)
   const [maintenanceCompleteConfirm, setMaintenanceCompleteConfirm] = useState(null)
+
+  const [showTenantHistory, setShowTenantHistory] = useState(false)
+  const [tenantHistoryData, setTenantHistoryData] = useState([])
+  const [tenantHistoryTotal, setTenantHistoryTotal] = useState(0)
+  const [tenantHistoryPage, setTenantHistoryPage] = useState(1)
+  const [tenantHistoryLoading, setTenantHistoryLoading] = useState(false)
+  const [tenantHistoryError, setTenantHistoryError] = useState('')
+  const [tenantHistorySearch, setTenantHistorySearch] = useState('')
+  const [tenantHistoryStatusFilter, setTenantHistoryStatusFilter] = useState('all')
+
+  const [showMaintenanceHistory, setShowMaintenanceHistory] = useState(false)
+  const [maintenanceHistoryData, setMaintenanceHistoryData] = useState([])
+  const [maintenanceHistoryTotal, setMaintenanceHistoryTotal] = useState(0)
+  const [maintenanceHistoryPage, setMaintenanceHistoryPage] = useState(1)
+  const [maintenanceHistoryLoading, setMaintenanceHistoryLoading] = useState(false)
+  const [maintenanceHistoryError, setMaintenanceHistoryError] = useState('')
+  const [maintenanceHistorySearch, setMaintenanceHistorySearch] = useState('')
+  const [maintenanceHistoryStatusFilter, setMaintenanceHistoryStatusFilter] = useState('all')
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -348,6 +428,58 @@ function StaffMain() {
       .catch((err) => {
         setRequestsError(err.response?.data?.message || 'ไม่สามารถโหลดรายการคำขอได้')
       })
+  }
+
+  const loadTenantHistory = (page, search = tenantHistorySearch, status = tenantHistoryStatusFilter) => {
+    setTenantHistoryLoading(true)
+    setTenantHistoryError('')
+    return axios
+      .get('/api/staff/requests/history', {
+        headers: authHeaders(),
+        params: { page, search: search || undefined, status: status !== 'all' ? status : undefined },
+      })
+      .then(({ data }) => {
+        setTenantHistoryData(data.requests)
+        setTenantHistoryTotal(data.total)
+      })
+      .catch((err) => {
+        setTenantHistoryError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติคำขอได้')
+      })
+      .finally(() => setTenantHistoryLoading(false))
+  }
+
+  const openTenantHistory = () => {
+    setShowTenantHistory(true)
+    setTenantHistoryPage(1)
+    setTenantHistorySearch('')
+    setTenantHistoryStatusFilter('all')
+    loadTenantHistory(1, '', 'all')
+  }
+
+  const loadMaintenanceHistory = (page, search = maintenanceHistorySearch, status = maintenanceHistoryStatusFilter) => {
+    setMaintenanceHistoryLoading(true)
+    setMaintenanceHistoryError('')
+    return axios
+      .get('/api/staff/maintenance/history', {
+        headers: authHeaders(),
+        params: { page, search: search || undefined, status: status !== 'all' ? status : undefined },
+      })
+      .then(({ data }) => {
+        setMaintenanceHistoryData(data.requests)
+        setMaintenanceHistoryTotal(data.total)
+      })
+      .catch((err) => {
+        setMaintenanceHistoryError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติแจ้งซ่อมได้')
+      })
+      .finally(() => setMaintenanceHistoryLoading(false))
+  }
+
+  const openMaintenanceHistory = () => {
+    setShowMaintenanceHistory(true)
+    setMaintenanceHistoryPage(1)
+    setMaintenanceHistorySearch('')
+    setMaintenanceHistoryStatusFilter('all')
+    loadMaintenanceHistory(1, '', 'all')
   }
 
   const loadRooms = () => {
@@ -427,8 +559,10 @@ function StaffMain() {
       const { data } = await axios.post(`/api/staff/requests/${request.id}/acknowledge`, {}, { headers: authHeaders() })
       setActionSuccess(data.message || 'รับเรื่องสำเร็จ')
       await loadRequests()
+      return true
     } catch (err) {
       setRequestsError(err.response?.data?.message || 'รับเรื่องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      return false
     } finally {
       setProcessingRequestKey('')
     }
@@ -438,6 +572,18 @@ function StaffMain() {
     if (!moveoutConfirmRequest) return
     const success = await handleApproveTenantRequest(moveoutConfirmRequest)
     if (success) setMoveoutConfirmRequest(null)
+  }
+
+  const handleConfirmRenewApproval = async () => {
+    if (!renewApproveConfirm) return
+    const success = await handleApproveTenantRequest(renewApproveConfirm)
+    if (success) setRenewApproveConfirm(null)
+  }
+
+  const handleConfirmMoveoutAcknowledge = async () => {
+    if (!moveoutAcknowledgeConfirm) return
+    const success = await handleAcknowledgeTenantRequest(moveoutAcknowledgeConfirm)
+    if (success) setMoveoutAcknowledgeConfirm(null)
   }
 
   const handleConfirmMaintenanceComplete = async () => {
@@ -454,11 +600,19 @@ function StaffMain() {
       const { data } = await axios.post(`/api/staff/requests/${request.id}/reject`, {}, { headers: authHeaders() })
       setActionSuccess(data.message || 'ปฏิเสธคำขอสำเร็จ')
       await loadRequests()
+      return true
     } catch (err) {
       setRequestsError(err.response?.data?.message || 'ปฏิเสธคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      return false
     } finally {
       setProcessingRequestKey('')
     }
+  }
+
+  const handleConfirmTenantReject = async () => {
+    if (!tenantRejectConfirm) return
+    const success = await handleRejectTenantRequest(tenantRejectConfirm)
+    if (success) setTenantRejectConfirm(null)
   }
 
   const handleMaintenanceAction = async (request, action) => {
@@ -490,19 +644,23 @@ function StaffMain() {
             </span>
             <span className="staff-request-room">ห้อง {request.room_number}</span>
             <span className="staff-request-tenant">{request.first_name} {request.last_name}</span>
-            {request.type === 'moveout' && (
-              <span className={`staff-badge status-${request.status}`}>
-                {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
-              </span>
-            )}
           </div>
-          <p className="staff-request-meta">
-            {request.type === 'renew' &&
-              `ขอต่อ ${RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}`}
-            {request.phone ? ` · โทร ${request.phone}` : ''}
-          </p>
+          <div className="staff-request-meta">
+            {request.type === 'renew' && (
+              <>
+                <span>
+                  ขอต่อ {RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}
+                </span>
+                <span>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</span>
+              </>
+            )}
+            {request.phone && <span>โทร {request.phone}</span>}
+          </div>
           {request.note && <p className="staff-request-note">หมายเหตุ: {request.note}</p>}
-          <p className="staff-request-date">{formatDateTime(request.created_at)}</p>
+          <p className="staff-request-date is-submitted">
+            <span className="staff-request-date-label">ส่งคำขอ</span>
+            <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
+          </p>
         </div>
         <div className="staff-row-actions">
           {request.type === 'moveout' ? (
@@ -520,7 +678,7 @@ function StaffMain() {
                 type="button"
                 className="staff-action-btn is-primary"
                 disabled={isProcessing}
-                onClick={() => handleAcknowledgeTenantRequest(request)}
+                onClick={() => setMoveoutAcknowledgeConfirm(request)}
               >
                 {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
               </button>
@@ -530,7 +688,7 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => handleApproveTenantRequest(request)}
+              onClick={() => setRenewApproveConfirm(request)}
             >
               {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
             </button>
@@ -539,11 +697,18 @@ function StaffMain() {
             type="button"
             className="staff-action-btn is-ghost"
             disabled={isProcessing}
-            onClick={() => handleRejectTenantRequest(request)}
+            onClick={() => setTenantRejectConfirm(request)}
           >
             ปฏิเสธ
           </button>
         </div>
+        {request.type === 'moveout' && (
+          <div className="staff-status-below">
+            <span className={`staff-badge status-${request.status}`}>
+              {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+            </span>
+          </div>
+        )}
       </div>
     )
   }
@@ -552,24 +717,27 @@ function StaffMain() {
     const key = `maintenance-${request.id}`
     const isProcessing = processingRequestKey === key
     return (
-      <div key={key} className="staff-request-item">
+      <div key={key} className="staff-request-item is-maintenance">
         <div className="staff-request-main">
           <div className="staff-request-headline">
             <span className="staff-badge type-maintenance">แจ้งซ่อม</span>
             <span className="staff-request-room">ห้อง {request.room_number}</span>
             <span className="staff-request-tenant">{request.first_name} {request.last_name}</span>
-            <span className={`staff-badge status-${request.status}`}>
+            <span className="staff-status-break" aria-hidden="true" />
+            <span className={`staff-badge status-${request.status} staff-status-end`}>
               {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
             </span>
           </div>
-          <p className="staff-request-meta">
-            {MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'}
-            {' · '}
-            {MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้'}
-            {request.contact_phone ? ` · โทร ${request.contact_phone}` : ''}
-          </p>
+          <div className="staff-request-meta">
+            <span>{MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'}</span>
+            <span>{MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้'}</span>
+            {request.contact_phone && <span>โทร {request.contact_phone}</span>}
+          </div>
           <p className="staff-request-note">{request.description}</p>
-          <p className="staff-request-date">{formatDateTime(request.created_at)}</p>
+          <p className="staff-request-date is-reported">
+            <span className="staff-request-date-label">แจ้งซ่อม</span>
+            <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
+          </p>
         </div>
         <div className="staff-row-actions">
           {request.status === 'pending' ? (
@@ -1025,20 +1193,40 @@ function StaffMain() {
 
         <div className="staff-summary-grid">
           <div className="staff-summary-card">
-            <span className="staff-summary-label">ห้องทั้งหมด</span>
-            <span className="staff-summary-value">{summary.total}</span>
+            <span className="staff-summary-icon">
+              <SummaryIcon type="total" />
+            </span>
+            <span className="staff-summary-text">
+              <span className="staff-summary-label">ห้องทั้งหมด</span>
+              <span className="staff-summary-value">{summary.total}</span>
+            </span>
           </div>
           <div className="staff-summary-card is-booked">
-            <span className="staff-summary-label">ห้องไม่ว่าง</span>
-            <span className="staff-summary-value">{summary.booked}</span>
+            <span className="staff-summary-icon">
+              <SummaryIcon type="booked" />
+            </span>
+            <span className="staff-summary-text">
+              <span className="staff-summary-label">ห้องไม่ว่าง</span>
+              <span className="staff-summary-value">{summary.booked}</span>
+            </span>
           </div>
           <div className="staff-summary-card is-vacant">
-            <span className="staff-summary-label">ห้องว่าง</span>
-            <span className="staff-summary-value">{summary.vacant}</span>
+            <span className="staff-summary-icon">
+              <SummaryIcon type="vacant" />
+            </span>
+            <span className="staff-summary-text">
+              <span className="staff-summary-label">ห้องว่าง</span>
+              <span className="staff-summary-value">{summary.vacant}</span>
+            </span>
           </div>
           <div className="staff-summary-card is-due">
-            <span className="staff-summary-label">รอเก็บเงิน</span>
-            <span className="staff-summary-value">{summary.dueCount}</span>
+            <span className="staff-summary-icon">
+              <SummaryIcon type="due" />
+            </span>
+            <span className="staff-summary-text">
+              <span className="staff-summary-label">รอเก็บเงิน</span>
+              <span className="staff-summary-value">{summary.dueCount}</span>
+            </span>
           </div>
         </div>
 
@@ -1074,7 +1262,7 @@ function StaffMain() {
           </div>
 
           <div className="table-responsive">
-            <table className="staff-table">
+            <table className="staff-table staff-rooms-table">
               <thead>
                 <tr>
                   <th>เลขห้อง</th>
@@ -1281,11 +1469,16 @@ function StaffMain() {
                 คำขอต่อสัญญา / แจ้งย้ายออก
                 {tenantRequests.length > 0 && <span className="staff-count-pill">{tenantRequests.length}</span>}
               </h2>
-              {filteredTenantRequests.length > REQUEST_PREVIEW_COUNT && (
-                <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('tenant')}>
-                  ดูทั้งหมด
+              <div className="staff-card-header-actions">
+                <button type="button" className="staff-view-all-btn" onClick={openTenantHistory}>
+                  ดูประวัติ
                 </button>
-              )}
+                {filteredTenantRequests.length > REQUEST_PREVIEW_COUNT && (
+                  <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('tenant')}>
+                    ดูทั้งหมด
+                  </button>
+                )}
+              </div>
             </div>
 
             {tenantRequests.length > 0 && (
@@ -1350,11 +1543,16 @@ function StaffMain() {
                 คำขอแจ้งซ่อม
                 {maintenanceRequests.length > 0 && <span className="staff-count-pill">{maintenanceRequests.length}</span>}
               </h2>
-              {filteredMaintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
-                <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('maintenance')}>
-                  ดูทั้งหมด
+              <div className="staff-card-header-actions">
+                <button type="button" className="staff-view-all-btn" onClick={openMaintenanceHistory}>
+                  ดูประวัติ
                 </button>
-              )}
+                {filteredMaintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
+                  <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('maintenance')}>
+                    ดูทั้งหมด
+                  </button>
+                )}
+              </div>
             </div>
 
             {maintenanceRequests.length > 0 && (
@@ -1579,6 +1777,305 @@ function StaffMain() {
                       onClick={() =>
                         setMaintenanceModalPage(Math.min(maintenanceModalTotalPages, currentMaintenanceModalPage + 1))
                       }
+                    >
+                      ถัดไป
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      )}
+
+      {showTenantHistory && (
+        <Modal
+          title="ประวัติคำขอต่อสัญญา / แจ้งย้ายออก"
+          onClose={() => {
+            setShowTenantHistory(false)
+            setTenantHistoryData([])
+            setTenantHistoryTotal(0)
+            setTenantHistoryPage(1)
+            setTenantHistoryError('')
+            setTenantHistorySearch('')
+            setTenantHistoryStatusFilter('all')
+          }}
+        >
+          <div className="staff-filters staff-modal-filters">
+            <input
+              type="text"
+              className="staff-search-input"
+              placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร..."
+              value={tenantHistorySearch}
+              onChange={(event) => {
+                const value = event.target.value
+                setTenantHistorySearch(value)
+                setTenantHistoryPage(1)
+                loadTenantHistory(1, value, tenantHistoryStatusFilter)
+              }}
+            />
+            <select
+              className="staff-filter-select"
+              value={tenantHistoryStatusFilter}
+              onChange={(event) => {
+                const value = event.target.value
+                setTenantHistoryStatusFilter(value)
+                setTenantHistoryPage(1)
+                loadTenantHistory(1, tenantHistorySearch, value)
+              }}
+            >
+              <option value="all">ทุกสถานะ</option>
+              <option value="approved">อนุมัติแล้ว</option>
+              <option value="rejected">ปฏิเสธแล้ว</option>
+            </select>
+          </div>
+
+          {tenantHistoryLoading ? (
+            <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+          ) : tenantHistoryError ? (
+            <p className="staff-form-error">{tenantHistoryError}</p>
+          ) : tenantHistoryData.length === 0 ? (
+            <p className="staff-empty">ไม่พบประวัติคำขอที่ตรงกับเงื่อนไข</p>
+          ) : (
+            <>
+              <div className="staff-requests-list">
+                {tenantHistoryData.map((request) => (
+                  <div key={request.id} className="staff-request-item">
+                    <div className="staff-request-main">
+                      <div className="staff-request-headline">
+                        <span className={`staff-badge type-${request.type}`}>
+                          {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
+                        </span>
+                        <span className="staff-request-room">ห้อง {request.room_number}</span>
+                        <span className="staff-request-tenant">
+                          {request.first_name} {request.last_name}
+                        </span>
+                        <span className="staff-status-break" aria-hidden="true" />
+                        <span className={`staff-badge status-${request.status} staff-status-end`}>
+                          {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+                        </span>
+                      </div>
+                      <div className="staff-request-meta">
+                        {request.type === 'renew' && (
+                          <>
+                            <span>
+                              ขอต่อ{' '}
+                              {RENEW_DURATION_LABEL[request.renew_duration_months] ||
+                                `${request.renew_duration_months} เดือน`}
+                            </span>
+                            <span>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</span>
+                          </>
+                        )}
+                        {request.phone && <span>โทร {request.phone}</span>}
+                      </div>
+                      {request.note && <p className="staff-request-note">หมายเหตุ: {request.note}</p>}
+                      <div className="staff-request-timeline">
+                        <p className="staff-request-date is-submitted">
+                          <span className="staff-request-date-label">ส่งคำขอ</span>
+                          <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
+                        </p>
+                        {request.accepted_by_name && (
+                          <p className="staff-request-date is-accepted">
+                            <span className="staff-request-date-label">
+                              รับเรื่องโดย <span className="staff-request-date-staff">{request.accepted_by_name}</span>
+                            </span>
+                            <span className="staff-request-date-value">{formatDateTime(request.accepted_at)}</span>
+                          </p>
+                        )}
+                        {request.completed_by_name && (
+                          <p className={`staff-request-date is-${request.status === 'approved' ? 'approved' : 'rejected'}`}>
+                            <span className="staff-request-date-label">
+                              {request.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
+                              <span className="staff-request-date-staff">{request.completed_by_name}</span>
+                            </span>
+                            <span className="staff-request-date-value">{formatDateTime(request.completed_at)}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {tenantHistoryTotal > MODAL_ITEMS_PER_PAGE && (
+                <div className="staff-pagination">
+                  <span className="staff-pagination-info">
+                    แสดง {(tenantHistoryPage - 1) * MODAL_ITEMS_PER_PAGE + 1}
+                    -{Math.min(tenantHistoryPage * MODAL_ITEMS_PER_PAGE, tenantHistoryTotal)} จาก {tenantHistoryTotal}{' '}
+                    รายการ
+                  </span>
+                  <div className="staff-pagination-controls">
+                    <button
+                      type="button"
+                      className="staff-action-btn is-ghost"
+                      disabled={tenantHistoryPage <= 1}
+                      onClick={() => {
+                        const next = Math.max(1, tenantHistoryPage - 1)
+                        setTenantHistoryPage(next)
+                        loadTenantHistory(next)
+                      }}
+                    >
+                      ก่อนหน้า
+                    </button>
+                    <span className="staff-pagination-page">
+                      หน้า {tenantHistoryPage} / {Math.max(1, Math.ceil(tenantHistoryTotal / MODAL_ITEMS_PER_PAGE))}
+                    </span>
+                    <button
+                      type="button"
+                      className="staff-action-btn is-ghost"
+                      disabled={tenantHistoryPage >= Math.ceil(tenantHistoryTotal / MODAL_ITEMS_PER_PAGE)}
+                      onClick={() => {
+                        const next = Math.min(
+                          Math.ceil(tenantHistoryTotal / MODAL_ITEMS_PER_PAGE),
+                          tenantHistoryPage + 1,
+                        )
+                        setTenantHistoryPage(next)
+                        loadTenantHistory(next)
+                      }}
+                    >
+                      ถัดไป
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      )}
+
+      {showMaintenanceHistory && (
+        <Modal
+          title="ประวัติคำขอแจ้งซ่อม"
+          onClose={() => {
+            setShowMaintenanceHistory(false)
+            setMaintenanceHistoryData([])
+            setMaintenanceHistoryTotal(0)
+            setMaintenanceHistoryPage(1)
+            setMaintenanceHistoryError('')
+            setMaintenanceHistorySearch('')
+            setMaintenanceHistoryStatusFilter('all')
+          }}
+        >
+          <div className="staff-filters staff-modal-filters">
+            <input
+              type="text"
+              className="staff-search-input"
+              placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร, รายละเอียด..."
+              value={maintenanceHistorySearch}
+              onChange={(event) => {
+                const value = event.target.value
+                setMaintenanceHistorySearch(value)
+                setMaintenanceHistoryPage(1)
+                loadMaintenanceHistory(1, value, maintenanceHistoryStatusFilter)
+              }}
+            />
+            <select
+              className="staff-filter-select"
+              value={maintenanceHistoryStatusFilter}
+              onChange={(event) => {
+                const value = event.target.value
+                setMaintenanceHistoryStatusFilter(value)
+                setMaintenanceHistoryPage(1)
+                loadMaintenanceHistory(1, maintenanceHistorySearch, value)
+              }}
+            >
+              <option value="all">ทุกสถานะ</option>
+              <option value="done">เสร็จสิ้น</option>
+              <option value="cancelled">ยกเลิกแล้ว</option>
+            </select>
+          </div>
+
+          {maintenanceHistoryLoading ? (
+            <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+          ) : maintenanceHistoryError ? (
+            <p className="staff-form-error">{maintenanceHistoryError}</p>
+          ) : maintenanceHistoryData.length === 0 ? (
+            <p className="staff-empty">ไม่พบประวัติการแจ้งซ่อมที่ตรงกับเงื่อนไข</p>
+          ) : (
+            <>
+              <div className="staff-requests-list">
+                {maintenanceHistoryData.map((request) => (
+                  <div key={request.id} className="staff-request-item is-maintenance">
+                    <div className="staff-request-main">
+                      <div className="staff-request-headline">
+                        <span className="staff-badge type-maintenance">แจ้งซ่อม</span>
+                        <span className="staff-request-room">ห้อง {request.room_number}</span>
+                        <span className="staff-request-tenant">
+                          {request.first_name} {request.last_name}
+                        </span>
+                        <span className="staff-status-break" aria-hidden="true" />
+                        <span className={`staff-badge status-${request.status} staff-status-end`}>
+                          {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
+                        </span>
+                      </div>
+                      <div className="staff-request-meta">
+                        <span>{MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'}</span>
+                        <span>{MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้'}</span>
+                        {request.contact_phone && <span>โทร {request.contact_phone}</span>}
+                      </div>
+                      <p className="staff-request-note">{request.description}</p>
+                      <div className="staff-request-timeline">
+                        <p className="staff-request-date is-reported">
+                          <span className="staff-request-date-label">แจ้งซ่อม</span>
+                          <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
+                        </p>
+                        {request.accepted_by_name && (
+                          <p className="staff-request-date is-accepted">
+                            <span className="staff-request-date-label">
+                              รับเรื่องโดย <span className="staff-request-date-staff">{request.accepted_by_name}</span>
+                            </span>
+                            <span className="staff-request-date-value">{formatDateTime(request.accepted_at)}</span>
+                          </p>
+                        )}
+                        {request.completed_by_name && (
+                          <p className={`staff-request-date is-${request.status === 'done' ? 'approved' : 'rejected'}`}>
+                            <span className="staff-request-date-label">
+                              {request.status === 'done' ? 'ซ่อมเสร็จโดย' : 'ยกเลิกโดย'}{' '}
+                              <span className="staff-request-date-staff">{request.completed_by_name}</span>
+                            </span>
+                            <span className="staff-request-date-value">{formatDateTime(request.completed_at)}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {maintenanceHistoryTotal > MODAL_ITEMS_PER_PAGE && (
+                <div className="staff-pagination">
+                  <span className="staff-pagination-info">
+                    แสดง {(maintenanceHistoryPage - 1) * MODAL_ITEMS_PER_PAGE + 1}
+                    -{Math.min(maintenanceHistoryPage * MODAL_ITEMS_PER_PAGE, maintenanceHistoryTotal)} จาก{' '}
+                    {maintenanceHistoryTotal} รายการ
+                  </span>
+                  <div className="staff-pagination-controls">
+                    <button
+                      type="button"
+                      className="staff-action-btn is-ghost"
+                      disabled={maintenanceHistoryPage <= 1}
+                      onClick={() => {
+                        const next = Math.max(1, maintenanceHistoryPage - 1)
+                        setMaintenanceHistoryPage(next)
+                        loadMaintenanceHistory(next)
+                      }}
+                    >
+                      ก่อนหน้า
+                    </button>
+                    <span className="staff-pagination-page">
+                      หน้า {maintenanceHistoryPage} /{' '}
+                      {Math.max(1, Math.ceil(maintenanceHistoryTotal / MODAL_ITEMS_PER_PAGE))}
+                    </span>
+                    <button
+                      type="button"
+                      className="staff-action-btn is-ghost"
+                      disabled={maintenanceHistoryPage >= Math.ceil(maintenanceHistoryTotal / MODAL_ITEMS_PER_PAGE)}
+                      onClick={() => {
+                        const next = Math.min(
+                          Math.ceil(maintenanceHistoryTotal / MODAL_ITEMS_PER_PAGE),
+                          maintenanceHistoryPage + 1,
+                        )
+                        setMaintenanceHistoryPage(next)
+                        loadMaintenanceHistory(next)
+                      }}
                     >
                       ถัดไป
                     </button>
@@ -1872,6 +2369,163 @@ function StaffMain() {
                   onClick={handleConfirmMoveoutApproval}
                 >
                   {processingRequestKey === `tenant-${moveoutConfirmRequest.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
+                </button>
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {renewApproveConfirm && (
+        <Modal title="ยืนยันการอนุมัติต่อสัญญา" onClose={() => setRenewApproveConfirm(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-success">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันอนุมัติคำขอต่อสัญญา</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{renewApproveConfirm.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {renewApproveConfirm.first_name} {renewApproveConfirm.last_name}
+                  </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ระยะเวลา</span>
+                  <strong>
+                    {RENEW_DURATION_LABEL[renewApproveConfirm.renew_duration_months] ||
+                      `${renewApproveConfirm.renew_duration_months} เดือน`}
+                  </strong>
+                </div>
+              </div>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
+                  onClick={handleConfirmRenewApproval}
+                >
+                  {processingRequestKey === `tenant-${renewApproveConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
+                </button>
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {moveoutAcknowledgeConfirm && (
+        <Modal title="ยืนยันรับเรื่องแจ้งย้ายออก" onClose={() => setMoveoutAcknowledgeConfirm(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-info">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันรับเรื่องคำขอแจ้งย้ายออก</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{moveoutAcknowledgeConfirm.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {moveoutAcknowledgeConfirm.first_name} {moveoutAcknowledgeConfirm.last_name}
+                  </strong>
+                </div>
+              </div>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `tenant-${moveoutAcknowledgeConfirm.id}`}
+                  onClick={handleConfirmMoveoutAcknowledge}
+                >
+                  {processingRequestKey === `tenant-${moveoutAcknowledgeConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันรับเรื่อง'}
+                </button>
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {tenantRejectConfirm && (
+        <Modal title="ยืนยันการปฏิเสธคำขอ" onClose={() => setTenantRejectConfirm(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-warning">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 9v4M12 17h.01" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">
+                ยืนยันปฏิเสธคำขอ{TENANT_REQUEST_TYPE_LABEL[tenantRejectConfirm.type] || ''}
+              </p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{tenantRejectConfirm.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {tenantRejectConfirm.first_name} {tenantRejectConfirm.last_name}
+                  </strong>
+                </div>
+              </div>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `tenant-${tenantRejectConfirm.id}`}
+                  onClick={handleConfirmTenantReject}
+                >
+                  {processingRequestKey === `tenant-${tenantRejectConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันปฏิเสธ'}
                 </button>
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
