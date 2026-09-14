@@ -17,6 +17,21 @@ async function getActingStaffName(pool, user) {
 
 router.use(authenticate, requireStaffRole);
 
+router.use(async (req, res, next) => {
+  try {
+    const pool = getPool();
+    const table = STAFF_ROLE_TABLE[req.user.role];
+    const [rows] = await pool.query(`SELECT is_suspended FROM ${table} WHERE id = ?`, [req.user.id]);
+    if (!rows[0] || rows[0].is_suspended) {
+      return res.status(401).json({ message: "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" });
+    }
+    next();
+  } catch (error) {
+    console.error("Check staff suspension error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.get("/me", async (req, res) => {
   try {
     const pool = getPool();

@@ -69,6 +69,7 @@ function Pagination({ page, totalPages, onChange }) {
 }
 
 const ROWS_PER_PAGE = 10
+const DETAIL_ROWS_PER_PAGE = 5
 
 const TABS = [
   { key: 'rooms', label: 'ห้องพัก' },
@@ -98,6 +99,35 @@ const MAINTENANCE_CATEGORY_LABEL = {
   furniture: 'เฟอร์นิเจอร์',
   other: 'อื่นๆ',
 }
+const PAYMENT_STATUS_LABEL = { paid: 'ชำระแล้ว', pending: 'รอชำระ' }
+const PAYMENT_TYPE_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ' }
+
+const MAINTENANCE_CATEGORY_ICON = {
+  electrical: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
+  plumbing: <path d="M12 2S5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-7-13-7-13Z" />,
+  aircon: <path d="M12 3v18M5.6 6.5 18.4 17.5M18.4 6.5 5.6 17.5" />,
+  furniture: (
+    <g>
+      <path d="M4 13a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3Z" />
+      <path d="M5 17v2M19 17v2" />
+    </g>
+  ),
+  other: (
+    <path d="M14.5 3.5a4 4 0 0 0-5 5L4 14l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2-2 2.5-2.5Z" />
+  ),
+}
+
+function MaintenanceCategoryBadge({ category }) {
+  const key = MAINTENANCE_CATEGORY_LABEL[category] ? category : 'other'
+  return (
+    <span className={`admin-badge category-${key}`}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {MAINTENANCE_CATEGORY_ICON[key]}
+      </svg>
+      {MAINTENANCE_CATEGORY_LABEL[key]}
+    </span>
+  )
+}
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -113,6 +143,30 @@ function formatDate(value) {
 function formatDateTime(value) {
   if (!value) return '-'
   return new Date(value).toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function StaffActionCell({ name, date }) {
+  if (!name) return <span className="admin-cell-empty">-</span>
+  return (
+    <div className="admin-staff-action">
+      <span className="admin-staff-action-name">{name}</span>
+      <span className="admin-staff-action-date">{formatDateTime(date)}</span>
+    </div>
+  )
+}
+
+function RentalPeriodCell({ start, end }) {
+  if (!start || !end) return <span className="admin-cell-empty">-</span>
+  return (
+    <div className="admin-rental-period">
+      <span className="admin-rental-date">{formatDate(start)}</span>
+      <svg className="admin-rental-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <polyline points="14 6 20 12 14 18" />
+      </svg>
+      <span className="admin-rental-date">{formatDate(end)}</span>
+    </div>
+  )
 }
 
 const emptyRoomForm = {
@@ -205,7 +259,7 @@ function AdminBackupPage() {
     setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const submitRoomForm = async (event) => {
+  const submitRoomForm = async (event, requestClose) => {
     event.preventDefault()
     setRoomSubmitting(true)
     setRoomFormError('')
@@ -231,7 +285,7 @@ function AdminBackupPage() {
         const { data } = await axios.put(`/api/admin/rooms/${roomModal.room.room_number}`, editable, { headers: authHeaders() })
         setSuccessMessage(data.message || 'แก้ไขข้อมูลห้องพักสำเร็จ')
       }
-      setRoomModal(null)
+      requestClose()
       await loadRooms()
     } catch (err) {
       setRoomFormError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -240,16 +294,16 @@ function AdminBackupPage() {
     }
   }
 
-  const confirmDeleteRoom = async () => {
+  const confirmDeleteRoom = async (requestClose) => {
     if (!roomDeleteConfirm) return
     try {
       const { data } = await axios.delete(`/api/admin/rooms/${roomDeleteConfirm.room_number}`, { headers: authHeaders() })
       setSuccessMessage(data.message || 'ลบห้องพักสำเร็จ')
-      setRoomDeleteConfirm(null)
+      requestClose()
       await loadRooms()
     } catch (err) {
       setPageError(err.response?.data?.message || 'ลบห้องพักไม่สำเร็จ')
-      setRoomDeleteConfirm(null)
+      requestClose()
     }
   }
 
@@ -280,6 +334,17 @@ function AdminBackupPage() {
   const [staffSubmitting, setStaffSubmitting] = useState(false)
   const [staffFormError, setStaffFormError] = useState('')
   const [staffDeleteConfirm, setStaffDeleteConfirm] = useState(null)
+  const [staffSuspendConfirm, setStaffSuspendConfirm] = useState(null)
+  const [revealedStaffIdCards, setRevealedStaffIdCards] = useState(() => new Set())
+
+  const toggleStaffIdCardReveal = (id) => {
+    setRevealedStaffIdCards((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const loadStaff = () => {
     setStaffLoading(true)
@@ -320,7 +385,7 @@ function AdminBackupPage() {
     setStaffForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  const submitStaffForm = async (event) => {
+  const submitStaffForm = async (event, requestClose) => {
     event.preventDefault()
     setStaffSubmitting(true)
     setStaffFormError('')
@@ -339,7 +404,7 @@ function AdminBackupPage() {
         const { data } = await axios.put(`/api/admin/staff/${staffModal.staff.id}`, payload, { headers: authHeaders() })
         setSuccessMessage(data.message || 'แก้ไขข้อมูลพนักงานสำเร็จ')
       }
-      setStaffModal(null)
+      requestClose()
       await loadStaff()
     } catch (err) {
       setStaffFormError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -348,7 +413,7 @@ function AdminBackupPage() {
     }
   }
 
-  const toggleStaffSuspend = async (member) => {
+  const toggleStaffSuspend = async (member, requestClose) => {
     try {
       const { data } = await axios.patch(
         `/api/admin/staff/${member.id}/suspend`,
@@ -356,22 +421,24 @@ function AdminBackupPage() {
         { headers: authHeaders() },
       )
       setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
+      requestClose()
       await loadStaff()
     } catch (err) {
       setPageError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ')
+      requestClose()
     }
   }
 
-  const confirmDeleteStaff = async () => {
+  const confirmDeleteStaff = async (requestClose) => {
     if (!staffDeleteConfirm) return
     try {
       const { data } = await axios.delete(`/api/admin/staff/${staffDeleteConfirm.id}`, { headers: authHeaders() })
       setSuccessMessage(data.message || 'ลบพนักงานสำเร็จ')
-      setStaffDeleteConfirm(null)
+      requestClose()
       await loadStaff()
     } catch (err) {
       setPageError(err.response?.data?.message || 'ลบพนักงานไม่สำเร็จ')
-      setStaffDeleteConfirm(null)
+      requestClose()
     }
   }
 
@@ -402,8 +469,10 @@ function AdminBackupPage() {
   const [customerSubmitting, setCustomerSubmitting] = useState(false)
   const [customerFormError, setCustomerFormError] = useState('')
   const [customerDetail, setCustomerDetail] = useState(null)
+  const [customerSuspendConfirm, setCustomerSuspendConfirm] = useState(null)
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false)
   const [customerDetailError, setCustomerDetailError] = useState('')
+  const [rentalPaymentsPage, setRentalPaymentsPage] = useState({})
 
   const loadCustomers = (search = customerSearch) => {
     setCustomersLoading(true)
@@ -448,7 +517,7 @@ function AdminBackupPage() {
     setCustomerForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  const submitCustomerForm = async (event) => {
+  const submitCustomerForm = async (event, requestClose) => {
     event.preventDefault()
     setCustomerSubmitting(true)
     setCustomerFormError('')
@@ -462,7 +531,7 @@ function AdminBackupPage() {
       }
       const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload, { headers: authHeaders() })
       setSuccessMessage(data.message || 'แก้ไขข้อมูลลูกค้าสำเร็จ')
-      setCustomerModal(null)
+      requestClose()
       await loadCustomers()
     } catch (err) {
       setCustomerFormError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -471,7 +540,7 @@ function AdminBackupPage() {
     }
   }
 
-  const toggleCustomerSuspend = async (customer) => {
+  const toggleCustomerSuspend = async (customer, requestClose) => {
     try {
       const { data } = await axios.patch(
         `/api/admin/customers/${customer.id}/suspend`,
@@ -479,9 +548,11 @@ function AdminBackupPage() {
         { headers: authHeaders() },
       )
       setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
+      requestClose()
       await loadCustomers()
     } catch (err) {
       setPageError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ')
+      requestClose()
     }
   }
 
@@ -489,6 +560,7 @@ function AdminBackupPage() {
     setCustomerDetail({ customer, rentalHistory: null })
     setCustomerDetailError('')
     setCustomerDetailLoading(true)
+    setRentalPaymentsPage({})
     try {
       const { data } = await axios.get(`/api/admin/customers/${customer.id}`, { headers: authHeaders() })
       setCustomerDetail({ customer: data.customer, rentalHistory: data.rentalHistory })
@@ -778,17 +850,28 @@ function AdminBackupPage() {
                             {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
                           </span>
                         </td>
-                        <td>฿{formatCurrency(room.price)}</td>
+                        <td className="admin-price-cell">฿{formatCurrency(room.price)}</td>
                         <td className="admin-col-optional admin-amenities-cell">
-                          {[
-                            room.air_conditioner && 'แอร์',
-                            room.wifi && 'ไวไฟ',
-                            room.refrigerator && 'ตู้เย็น',
-                            room.bathroom && 'ห้องน้ำในตัว',
-                            room.cctv && 'CCTV',
-                          ]
-                            .filter(Boolean)
-                            .join(', ') || '-'}
+                          {(() => {
+                            const amenities = [
+                              room.air_conditioner && 'แอร์',
+                              room.wifi && 'ไวไฟ',
+                              room.refrigerator && 'ตู้เย็น',
+                              room.bathroom && 'ห้องน้ำในตัว',
+                              room.cctv && 'CCTV',
+                            ].filter(Boolean)
+                            if (amenities.length === 0) return '-'
+                            return (
+                              <div className="admin-amenities-list">
+                                {amenities.map((amenity, index) => (
+                                  <span key={amenity} className="admin-amenity-item">
+                                    {index > 0 && <span className="admin-amenity-divider" aria-hidden="true" />}
+                                    {amenity}
+                                  </span>
+                                ))}
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td>{room.customer_id ? `${room.first_name} ${room.last_name}` : '-'}</td>
                         <td>
@@ -874,7 +957,15 @@ function AdminBackupPage() {
                         <td className="admin-strong-cell">
                           {member.first_name} {member.last_name}
                         </td>
-                        <td className="admin-col-optional">{member.idcard}</td>
+                        <td className="admin-col-optional">
+                          <button
+                            type="button"
+                            className="admin-idcard-toggle"
+                            onClick={() => toggleStaffIdCardReveal(member.id)}
+                          >
+                            {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                          </button>
+                        </td>
                         <td>{member.phone}</td>
                         <td className="admin-col-optional">{member.age}</td>
                         <td>
@@ -887,7 +978,11 @@ function AdminBackupPage() {
                             <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
                               แก้ไข
                             </button>
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => toggleStaffSuspend(member)}>
+                            <button
+                              type="button"
+                              className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                              onClick={() => setStaffSuspendConfirm(member)}
+                            >
                               {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
                             </button>
                             <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
@@ -984,9 +1079,7 @@ function AdminBackupPage() {
                         <td>{customer.room_number ?? '-'}</td>
                         <td className="admin-col-optional">{customer.phone}</td>
                         <td className="admin-col-optional">
-                          {customer.rental_start_date && customer.rental_end_date
-                            ? `${formatDate(customer.rental_start_date)} - ${formatDate(customer.rental_end_date)}`
-                            : '-'}
+                          <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />
                         </td>
                         <td>
                           <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
@@ -1001,7 +1094,11 @@ function AdminBackupPage() {
                             <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
                               แก้ไข
                             </button>
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => toggleCustomerSuspend(customer)}>
+                            <button
+                              type="button"
+                              className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`}
+                              onClick={() => setCustomerSuspendConfirm(customer)}
+                            >
                               {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
                             </button>
                           </div>
@@ -1100,10 +1197,10 @@ function AdminBackupPage() {
                           <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
                         </td>
                         <td className="admin-col-optional">
-                          {request.accepted_by_name ? `${request.accepted_by_name} (${formatDateTime(request.accepted_at)})` : '-'}
+                          <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
                         </td>
                         <td className="admin-col-optional">
-                          {request.completed_by_name ? `${request.completed_by_name} (${formatDateTime(request.completed_at)})` : '-'}
+                          <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
                         </td>
                         <td className="admin-col-optional">{formatDateTime(request.created_at)}</td>
                       </tr>
@@ -1190,7 +1287,9 @@ function AdminBackupPage() {
                     maintenanceLogs.items.map((request) => (
                       <tr key={request.id}>
                         <td>{request.description}</td>
-                        <td className="admin-col-optional">{MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'}</td>
+                        <td className="admin-col-optional">
+                          <MaintenanceCategoryBadge category={request.category} />
+                        </td>
                         <td>{request.room_number}</td>
                         <td>
                           {request.first_name} {request.last_name}
@@ -1201,10 +1300,10 @@ function AdminBackupPage() {
                           </span>
                         </td>
                         <td className="admin-col-optional">
-                          {request.accepted_by_name ? `${request.accepted_by_name} (${formatDateTime(request.accepted_at)})` : '-'}
+                          <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
                         </td>
                         <td className="admin-col-optional">
-                          {request.completed_by_name ? `${request.completed_by_name} (${formatDateTime(request.completed_at)})` : '-'}
+                          <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
                         </td>
                       </tr>
                     ))
@@ -1223,68 +1322,122 @@ function AdminBackupPage() {
 
       {roomModal && (
         <Modal title={roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : `แก้ไขห้อง ${roomModal.room.room_number}`} onClose={() => setRoomModal(null)}>
-          <form onSubmit={submitRoomForm} noValidate>
+          {(requestClose) => (
+          <form onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
             {roomFormError && <div className="alert alert-danger py-2 px-3">{roomFormError}</div>}
-            <div className="row g-3">
-              <div className="col-6">
-                <label className="form-label">เลขห้อง</label>
-                <input
-                  type="number"
-                  name="room_number"
-                  className="form-control"
-                  value={roomForm.room_number}
-                  onChange={handleRoomFormChange}
-                  disabled={roomModal.mode === 'edit'}
-                  required
-                />
-              </div>
-              <div className="col-6">
-                <label className="form-label">ราคา/เดือน (บาท)</label>
-                <input type="number" name="price" className="form-control" value={roomForm.price} onChange={handleRoomFormChange} required />
-              </div>
-              <div className="col-4">
-                <label className="form-label">จำนวนเตียง</label>
-                <input type="number" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
-              </div>
-              <div className="col-4">
-                <label className="form-label">ค่าไฟ/หน่วย</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="electricity_unit_price"
-                  className="form-control"
-                  value={roomForm.electricity_unit_price}
-                  onChange={handleRoomFormChange}
-                />
-              </div>
-              <div className="col-4">
-                <label className="form-label">ค่าน้ำ/เดือน</label>
-                <input type="number" step="0.01" name="water_price" className="form-control" value={roomForm.water_price} onChange={handleRoomFormChange} />
-              </div>
-              <div className="col-12">
-                <label className="form-label">สิ่งอำนวยความสะดวก</label>
-                <div className="admin-checkbox-grid">
-                  {[
-                    ['air_conditioner', 'เครื่องปรับอากาศ'],
-                    ['wifi', 'ไวไฟ'],
-                    ['refrigerator', 'ตู้เย็น'],
-                    ['bathroom', 'ห้องน้ำในตัว'],
-                    ['cctv', 'กล้องวงจรปิด'],
-                  ].map(([field, label]) => (
-                    <label className="admin-checkbox" key={field}>
-                      <input type="checkbox" name={field} checked={roomForm[field]} onChange={handleRoomFormChange} />
-                      {label}
-                    </label>
-                  ))}
+
+            <div className="admin-form-section">
+              <p className="admin-form-section-title">ข้อมูลห้องพัก</p>
+              <div className="row g-3">
+                <div className="col-6">
+                  <label className="form-label">เลขห้อง</label>
+                  <input
+                    type="number"
+                    name="room_number"
+                    className="form-control"
+                    value={roomForm.room_number}
+                    onChange={handleRoomFormChange}
+                    disabled={roomModal.mode === 'edit'}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">ราคา/เดือน (บาท)</label>
+                  <div className="admin-input-group">
+                    <span className="admin-input-affix">฿</span>
+                    <input type="number" name="price" className="form-control" value={roomForm.price} onChange={handleRoomFormChange} required />
+                  </div>
+                </div>
+                <div className="col-4">
+                  <label className="form-label">จำนวนเตียง</label>
+                  <input type="number" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
+                </div>
+                <div className="col-4">
+                  <label className="form-label">ค่าไฟ/หน่วย</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="electricity_unit_price"
+                    className="form-control"
+                    value={roomForm.electricity_unit_price}
+                    onChange={handleRoomFormChange}
+                  />
+                </div>
+                <div className="col-4">
+                  <label className="form-label">ค่าน้ำ/เดือน</label>
+                  <input type="number" step="0.01" name="water_price" className="form-control" value={roomForm.water_price} onChange={handleRoomFormChange} />
                 </div>
               </div>
             </div>
+
+            <div className="admin-form-divider" />
+
+            <div className="admin-form-section">
+              <p className="admin-form-section-title">สิ่งอำนวยความสะดวก</p>
+              <div className="admin-toggle-grid">
+                {[
+                  [
+                    'air_conditioner',
+                    'เครื่องปรับอากาศ',
+                    <path key="ac" d="M12 3v18M5.6 6.5 18.4 17.5M18.4 6.5 5.6 17.5" />,
+                  ],
+                  [
+                    'wifi',
+                    'ไวไฟ',
+                    <g key="wifi">
+                      <path d="M2 8.5a16 16 0 0 1 20 0" />
+                      <path d="M5.5 12.5a11 11 0 0 1 13 0" />
+                      <path d="M9 16.5a5.5 5.5 0 0 1 6 0" />
+                      <circle cx="12" cy="19.5" r="0.5" fill="currentColor" />
+                    </g>,
+                  ],
+                  [
+                    'refrigerator',
+                    'ตู้เย็น',
+                    <g key="fridge">
+                      <rect x="5" y="2.5" width="14" height="19" rx="2" />
+                      <line x1="5" y1="10.5" x2="19" y2="10.5" />
+                      <line x1="8.5" y1="5.5" x2="8.5" y2="8" />
+                      <line x1="8.5" y1="13.5" x2="8.5" y2="16" />
+                    </g>,
+                  ],
+                  [
+                    'bathroom',
+                    'ห้องน้ำในตัว',
+                    <g key="bath">
+                      <path d="M4 12h16v3a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-3Z" />
+                      <path d="M7 12V6a2.5 2.5 0 0 1 4.6-1.4" />
+                      <line x1="3" y1="12" x2="21" y2="12" />
+                    </g>,
+                  ],
+                  [
+                    'cctv',
+                    'กล้องวงจรปิด',
+                    <g key="cctv">
+                      <rect x="2.5" y="8" width="12" height="8" rx="2" />
+                      <path d="M14.5 10.5 21 8v8l-6.5-2.5" />
+                      <line x1="6" y1="16" x2="5" y2="19" />
+                    </g>,
+                  ],
+                ].map(([field, label, icon]) => (
+                  <label className="admin-toggle-chip" key={field}>
+                    <input type="checkbox" name={field} checked={roomForm[field]} onChange={handleRoomFormChange} />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {icon}
+                    </svg>
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="admin-form-actions">
               <button type="submit" className="admin-action-btn is-primary" disabled={roomSubmitting}>
                 {roomSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
               </button>
             </div>
           </form>
+          )}
         </Modal>
       )}
 
@@ -1292,12 +1445,21 @@ function AdminBackupPage() {
         <Modal title="ยืนยันการลบห้องพัก" onClose={() => setRoomDeleteConfirm(null)} variant="confirm">
           {(requestClose) => (
             <div className="admin-confirm-body">
+              <div className="admin-confirm-icon is-danger">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </div>
               <p className="admin-confirm-message">ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?</p>
               <div className="admin-form-actions">
                 <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
                 </button>
-                <button type="button" className="admin-action-btn is-danger" onClick={confirmDeleteRoom}>
+                <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteRoom(requestClose)}>
                   ลบห้องพัก
                 </button>
               </div>
@@ -1308,7 +1470,8 @@ function AdminBackupPage() {
 
       {staffModal && (
         <Modal title={staffModal.mode === 'create' ? 'เพิ่มพนักงาน' : 'แก้ไขข้อมูลพนักงาน'} onClose={() => setStaffModal(null)}>
-          <form onSubmit={submitStaffForm} noValidate>
+          {(requestClose) => (
+          <form onSubmit={(event) => submitStaffForm(event, requestClose)} noValidate>
             {staffFormError && <div className="alert alert-danger py-2 px-3">{staffFormError}</div>}
             <div className="row g-3">
               <div className="col-12">
@@ -1358,6 +1521,7 @@ function AdminBackupPage() {
               </button>
             </div>
           </form>
+          )}
         </Modal>
       )}
 
@@ -1365,6 +1529,15 @@ function AdminBackupPage() {
         <Modal title="ยืนยันการลบพนักงาน" onClose={() => setStaffDeleteConfirm(null)} variant="confirm">
           {(requestClose) => (
             <div className="admin-confirm-body">
+              <div className="admin-confirm-icon is-danger">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </div>
               <p className="admin-confirm-message">
                 ต้องการลบพนักงาน {staffDeleteConfirm.first_name} {staffDeleteConfirm.last_name} ใช่หรือไม่?
               </p>
@@ -1372,8 +1545,43 @@ function AdminBackupPage() {
                 <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
                 </button>
-                <button type="button" className="admin-action-btn is-danger" onClick={confirmDeleteStaff}>
+                <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteStaff(requestClose)}>
                   ลบพนักงาน
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {staffSuspendConfirm && (
+        <Modal
+          title={staffSuspendConfirm.is_suspended ? 'ยืนยันการเปิดใช้งานพนักงาน' : 'ยืนยันการระงับพนักงาน'}
+          onClose={() => setStaffSuspendConfirm(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="admin-confirm-body">
+              <div className={`admin-confirm-icon ${staffSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 2v6" />
+                  <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
+                </svg>
+              </div>
+              <p className="admin-confirm-message">
+                ต้องการ{staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}พนักงาน {staffSuspendConfirm.first_name}{' '}
+                {staffSuspendConfirm.last_name} ใช่หรือไม่?
+              </p>
+              <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className={`admin-action-btn ${staffSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
+                  onClick={() => toggleStaffSuspend(staffSuspendConfirm, requestClose)}
+                >
+                  {staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
                 </button>
               </div>
             </div>
@@ -1383,7 +1591,8 @@ function AdminBackupPage() {
 
       {customerModal && (
         <Modal title={`แก้ไขข้อมูลลูกค้า - ${customerModal.first_name} ${customerModal.last_name}`} onClose={() => setCustomerModal(null)}>
-          <form onSubmit={submitCustomerForm} noValidate>
+          {(requestClose) => (
+          <form onSubmit={(event) => submitCustomerForm(event, requestClose)} noValidate>
             {customerFormError && <div className="alert alert-danger py-2 px-3">{customerFormError}</div>}
             <div className="row g-3">
               <div className="col-6">
@@ -1413,6 +1622,42 @@ function AdminBackupPage() {
               </button>
             </div>
           </form>
+          )}
+        </Modal>
+      )}
+
+      {customerSuspendConfirm && (
+        <Modal
+          title={customerSuspendConfirm.is_suspended ? 'ยืนยันการเปิดใช้งานลูกค้า' : 'ยืนยันการระงับลูกค้า'}
+          onClose={() => setCustomerSuspendConfirm(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="admin-confirm-body">
+              <div className={`admin-confirm-icon ${customerSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 2v6" />
+                  <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
+                </svg>
+              </div>
+              <p className="admin-confirm-message">
+                ต้องการ{customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}ลูกค้า {customerSuspendConfirm.first_name}{' '}
+                {customerSuspendConfirm.last_name} ใช่หรือไม่?
+              </p>
+              <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className={`admin-action-btn ${customerSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
+                  onClick={() => toggleCustomerSuspend(customerSuspendConfirm, requestClose)}
+                >
+                  {customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 
@@ -1428,35 +1673,65 @@ function AdminBackupPage() {
           ) : (
             <div className="admin-detail-list">
               {customerDetail.rentalHistory && customerDetail.rentalHistory.length > 0 ? (
-                customerDetail.rentalHistory.map((booking) => (
-                  <div className="admin-detail-block" key={booking.booking_id}>
-                    <p className="admin-detail-block-title">สัญญาเช่าเมื่อ {formatDateTime(booking.created_at)}</p>
-                    {booking.payments.length === 0 ? (
-                      <p className="admin-empty">ยังไม่มีประวัติการชำระเงิน</p>
-                    ) : (
-                      <table className="table admin-table admin-detail-table">
-                        <thead>
-                          <tr>
-                            <th>วันที่ชำระ</th>
-                            <th>จำนวนเงิน</th>
-                            <th>ประเภท</th>
-                            <th>สถานะ</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {booking.payments.map((payment) => (
-                            <tr key={payment.id}>
-                              <td>{formatDate(payment.payment_date)}</td>
-                              <td>฿{formatCurrency(payment.amount)}</td>
-                              <td>{payment.type}</td>
-                              <td>{payment.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                ))
+                customerDetail.rentalHistory.map((booking) => {
+                  const page = rentalPaymentsPage[booking.booking_id] || 1
+                  const totalPages = Math.max(1, Math.ceil(booking.payments.length / DETAIL_ROWS_PER_PAGE))
+                  const currentPage = Math.min(page, totalPages)
+                  const start = (currentPage - 1) * DETAIL_ROWS_PER_PAGE
+                  const pagePayments = booking.payments.slice(start, start + DETAIL_ROWS_PER_PAGE)
+                  return (
+                    <div className="admin-detail-block" key={booking.booking_id}>
+                      <p className="admin-detail-block-title">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+                          <path d="M14 2v6h6" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="13" y2="17" />
+                        </svg>
+                        สัญญาเช่าเมื่อ {formatDateTime(booking.created_at)}
+                      </p>
+                      {booking.payments.length === 0 ? (
+                        <p className="admin-empty">ยังไม่มีประวัติการชำระเงิน</p>
+                      ) : (
+                        <>
+                          <div className="admin-detail-table-wrap">
+                            <table className="table admin-table admin-detail-table">
+                              <thead>
+                                <tr>
+                                  <th>วันที่ชำระ</th>
+                                  <th>จำนวนเงิน</th>
+                                  <th>ประเภท</th>
+                                  <th>สถานะ</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pagePayments.map((payment) => (
+                                  <tr key={payment.id}>
+                                    <td>{formatDate(payment.payment_date)}</td>
+                                    <td className="admin-strong-cell">฿{formatCurrency(payment.amount)}</td>
+                                    <td>
+                                      <span className={`admin-badge type-${payment.type}`}>{PAYMENT_TYPE_LABEL[payment.type] || payment.type}</span>
+                                    </td>
+                                    <td>
+                                      <span className={`admin-badge status-${payment.status === 'paid' ? 'approved' : 'pending'}`}>
+                                        {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <Pagination
+                            page={currentPage}
+                            totalPages={totalPages}
+                            onChange={(nextPage) => setRentalPaymentsPage((prev) => ({ ...prev, [booking.booking_id]: nextPage }))}
+                          />
+                        </>
+                      )}
+                    </div>
+                  )
+                })
               ) : (
                 <p className="admin-empty">ยังไม่มีประวัติการเช่า</p>
               )}
