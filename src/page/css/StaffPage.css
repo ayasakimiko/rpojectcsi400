@@ -780,6 +780,20 @@
   font-weight: 600;
 }
 
+.staff-due-amount-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.staff-due-amount-btn:hover {
+  opacity: 0.8;
+}
+
 .staff-badge.status-in_progress {
   background: #eff6ff;
   color: #1d4ed8;
@@ -1182,6 +1196,98 @@
   margin: 4px 0 0;
 }
 
+.staff-form-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+}
+
+.staff-form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.staff-form-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.staff-form-mode-switch {
+  display: inline-flex;
+  border: 1.5px solid #dce9fb;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.staff-form-mode-btn {
+  border: none;
+  background: #f8fbff;
+  color: #385a80;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.staff-form-mode-btn + .staff-form-mode-btn {
+  border-left: 1.5px solid #dce9fb;
+}
+
+.staff-form-mode-btn.is-active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.staff-form-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1.5px solid #dce9fb;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #0f2b52;
+  background: #f8fbff;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.staff-form-input:focus {
+  outline: none;
+  border-color: #60a5fa;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15);
+}
+
+.staff-form-input.no-spinner {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.staff-form-input.no-spinner::-webkit-outer-spin-button,
+.staff-form-input.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.staff-form-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+}
+
 .staff-form-error-block {
   margin: 0;
   font-size: 13px;
@@ -1306,6 +1412,38 @@
   color: #0f2b52;
   font-weight: 700;
   text-align: right;
+}
+
+.staff-due-detail-paid-title {
+  align-self: flex-start;
+  margin: 4px 0 -4px;
+}
+
+.staff-due-detail-paid-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.staff-confirm-details.is-deposit {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.staff-confirm-details.is-deposit .staff-confirm-detail-row span {
+  color: #b45309;
+}
+
+.staff-confirm-details.is-deposit .staff-confirm-detail-row strong {
+  color: #92400e;
+}
+
+.staff-due-detail-paid-date {
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 .staff-confirm-amount-block {

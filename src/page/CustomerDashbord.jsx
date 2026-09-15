@@ -10,6 +10,8 @@ import './css/CustomerDashbord.css'
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
   deposit: 'เงินประกัน',
+  water: 'ค่าน้ำ',
+  electricity: 'ค่าไฟฟ้า',
 }
 
 const AMENITIES = [
@@ -251,7 +253,7 @@ function ReceiptTemplate({ receiptRequest, customer }) {
               <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>
                 {STATUS_LABEL[payment.status] || payment.status}
               </td>
-              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>{payment.note || '-'}</td>
+              <td style={{ padding: '6px 8px', borderBottom: '1px solid #e6f0fd' }}>{formatCustomerNote(payment.note)}</td>
             </tr>
           ))}
         </tbody>
@@ -615,6 +617,7 @@ function RequestTimeline({ kind, request }) {
 
 const NOTIF_PAGE_SIZE = 6
 const MAINTENANCE_PAGE_SIZE = 5
+const RENTAL_HISTORY_PAGE_SIZE = 5
 
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
@@ -656,6 +659,15 @@ function formatCurrency(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '-'
   return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatCustomerNote(note) {
+  if (!note) return '-'
+  const short = note
+    .replace(/\s*\(แจ้งโดย[^)]*\)/g, '')
+    .replace(/\s*\(จำลอง\)/g, '')
+    .trim()
+  return short || '-'
 }
 
 function formatDate(value) {
@@ -766,6 +778,7 @@ function CustomerDashbord() {
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [showDueBreakdown, setShowDueBreakdown] = useState(false)
 
   const [activeRequestType, setActiveRequestType] = useState(null)
   const [requestNote, setRequestNote] = useState('')
@@ -791,6 +804,7 @@ function CustomerDashbord() {
 
   const [historySearch, setHistorySearch] = useState('')
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
+  const [historyPageByBooking, setHistoryPageByBooking] = useState({})
 
   const [receiptRequest, setReceiptRequest] = useState(null)
   const [receiptGenerating, setReceiptGenerating] = useState(false)
@@ -1266,6 +1280,7 @@ function CustomerDashbord() {
       if (historyKeyword) {
         const haystack = [
           formatDateTime(payment.created_at),
+          PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง',
           formatCurrency(payment.amount),
           STATUS_LABEL[payment.status] || payment.status,
           payment.note,
@@ -1597,7 +1612,7 @@ function CustomerDashbord() {
               {room ? (
                 <>
                   <p className="dashboard-room-number">ห้อง {room.room_number}</p>
-                  {room.is_booked && room.rental_start_date && room.rental_end_date && (
+                  {Boolean(room.is_booked) && room.rental_start_date && room.rental_end_date && (
                     <>
                       <h3 className="dashboard-section-title">ระยะเวลาการเช่า</h3>
                       <p className="dashboard-rental-duration">
@@ -1662,9 +1677,11 @@ function CustomerDashbord() {
                     <>
                       <h3 className="dashboard-section-title with-aside">
                         ยอดชำระเดือนนี้
-                        <span className="dashboard-due-period">
-                          ค่าเช่ารอบ {formatDate(currentDue.periodStart)} - {formatDate(currentDue.periodEnd)}
-                        </span>
+                        {currentDue.periodStart && currentDue.periodEnd && (
+                          <span className="dashboard-due-period">
+                            ค่าเช่ารอบ {formatDate(currentDue.periodStart)} - {formatDate(currentDue.periodEnd)}
+                          </span>
+                        )}
                       </h3>
                       <div className="dashboard-due-box">
                         <span className="dashboard-due-amount">฿{formatCurrency(currentDue.amount)}</span>
@@ -1672,10 +1689,51 @@ function CustomerDashbord() {
                           {DUE_STATUS_LABEL[currentDue.status] || currentDue.status}
                         </span>
                       </div>
-                      <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
+                      {currentDue.items?.length > 0 && (
+                        <button
+                          type="button"
+                          className="dashboard-due-breakdown-toggle"
+                          onClick={() => setShowDueBreakdown((prev) => !prev)}
+                          aria-expanded={showDueBreakdown}
+                        >
+                          {showDueBreakdown ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียดแยกรายการ'}
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            style={{ transform: showDueBreakdown ? 'rotate(180deg)' : 'none' }}
+                          >
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                      )}
+                      {showDueBreakdown && currentDue.items?.length > 0 && (
+                        <div className="dashboard-due-breakdown">
+                          {currentDue.items.map((item, index) => (
+                            <div className="dashboard-due-breakdown-row" key={item.id ?? `${item.type}-${index}`}>
+                              <span>{item.label}</span>
+                              <strong>฿{formatCurrency(item.amount)}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {currentDue.dueDate && (
+                        <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
+                      )}
                       {currentDue.depositApplied > 0 && (
                         <p className="dashboard-due-deposit-note">
                           หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
+                        </p>
+                      )}
+                      {currentDue.overdueMonths > 0 && (
+                        <p className="dashboard-due-deposit-note is-warning">
+                          มีค่าเช่าค้างสะสมจากเดือนก่อนหน้า {currentDue.overdueMonths} เดือน ทบรวมในยอดนี้แล้ว
                         </p>
                       )}
                       {currentDue.lumpSumMonths && (
@@ -1744,7 +1802,7 @@ function CustomerDashbord() {
                     <input
                       type="text"
                       className="dashboard-search-input"
-                      placeholder="ค้นหาวันที่, จำนวนเงิน, หมายเหตุ..."
+                      placeholder="ค้นหาวันที่, รายการ, จำนวนเงิน, หมายเหตุ..."
                       value={historySearch}
                       onChange={(event) => setHistorySearch(event.target.value)}
                     />
@@ -1766,6 +1824,14 @@ function CustomerDashbord() {
               ) : (
                 filteredRentalHistory.map((entry) => {
                   const originalEntry = rentalHistory.find((item) => item.booking_id === entry.booking_id) || entry
+                  const totalPages = Math.max(1, Math.ceil(entry.payments.length / RENTAL_HISTORY_PAGE_SIZE))
+                  const currentPage = Math.min(historyPageByBooking[entry.booking_id] || 1, totalPages)
+                  const paginatedPayments = entry.payments.slice(
+                    (currentPage - 1) * RENTAL_HISTORY_PAGE_SIZE,
+                    currentPage * RENTAL_HISTORY_PAGE_SIZE,
+                  )
+                  const setBookingPage = (page) =>
+                    setHistoryPageByBooking((prev) => ({ ...prev, [entry.booking_id]: page }))
                   return (
                     <div key={entry.booking_id} className="dashboard-rental-entry">
                       {entry.payments.length === 0 ? (
@@ -1800,6 +1866,7 @@ function CustomerDashbord() {
                               <thead>
                                 <tr>
                                   <th>วันที่ชำระ</th>
+                                  <th>รายการ</th>
                                   <th>จำนวนเงิน</th>
                                   <th>สถานะ</th>
                                   <th>หมายเหตุ</th>
@@ -1807,16 +1874,17 @@ function CustomerDashbord() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {entry.payments.map((payment) => (
+                                {paginatedPayments.map((payment) => (
                                   <tr key={payment.id}>
                                     <td>{formatDateTime(payment.created_at)}</td>
+                                    <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
                                     <td>฿{formatCurrency(payment.amount)}</td>
                                     <td>
                                       <span className={`dashboard-badge status-${payment.status}`}>
                                         {STATUS_LABEL[payment.status] || payment.status}
                                       </span>
                                     </td>
-                                    <td>{payment.note || '-'}</td>
+                                    <td>{formatCustomerNote(payment.note)}</td>
                                     <td>
                                       <button
                                         type="button"
@@ -1846,9 +1914,43 @@ function CustomerDashbord() {
                                     </td>
                                   </tr>
                                 ))}
+                                {Array.from({ length: RENTAL_HISTORY_PAGE_SIZE - paginatedPayments.length }).map(
+                                  (_, index) => (
+                                    <tr
+                                      key={`filler-${entry.booking_id}-${index}`}
+                                      className="dashboard-table-filler-row"
+                                      aria-hidden="true"
+                                    >
+                                      <td colSpan={6}>&nbsp;</td>
+                                    </tr>
+                                  ),
+                                )}
                               </tbody>
                             </table>
                           </div>
+                          {totalPages > 1 && (
+                            <div className="dashboard-maintenance-pagination">
+                              <button
+                                type="button"
+                                className="dashboard-notif-page-btn"
+                                disabled={currentPage <= 1}
+                                onClick={() => setBookingPage(Math.max(1, currentPage - 1))}
+                              >
+                                ก่อนหน้า
+                              </button>
+                              <span className="dashboard-notif-page-info">
+                                หน้า {currentPage} / {totalPages}
+                              </span>
+                              <button
+                                type="button"
+                                className="dashboard-notif-page-btn"
+                                disabled={currentPage >= totalPages}
+                                onClick={() => setBookingPage(Math.min(totalPages, currentPage + 1))}
+                              >
+                                ถัดไป
+                              </button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
