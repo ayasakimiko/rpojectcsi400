@@ -27,7 +27,7 @@ const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
 const MAINTENANCE_CATEGORIES = new Set(["electrical", "plumbing", "aircon", "furniture", "other"]);
 const MAINTENANCE_TIME_SLOTS = new Set(["anytime", "morning", "afternoon", "evening"]);
 
-export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
+function computeRentDue(room, paymentsForBooking, depositAmount) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
 
   const start = new Date(room.rental_start_date);
@@ -42,55 +42,143 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   if (periodStart > now) {
     periodStart = new Date(periodStart.getFullYear(), periodStart.getMonth() - 1, billingDay, start.getHours(), start.getMinutes());
   }
-  const isFirstPeriod = periodStart <= start;
   if (periodStart < start) periodStart = start;
 
+  let earliestPeriodStart = start;
   if (room.prepaid_until) {
     const prepaidUntil = new Date(room.prepaid_until);
-    if (!Number.isNaN(prepaidUntil.getTime()) && periodStart < prepaidUntil) {
-      return null;
+    if (!Number.isNaN(prepaidUntil.getTime())) {
+      if (periodStart < prepaidUntil) return null;
+      if (prepaidUntil > earliestPeriodStart) earliestPeriodStart = prepaidUntil;
     }
   }
 
-  const periodEnd = new Date(periodStart);
-  periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-  const periodStartDay = new Date(periodStart.getFullYear(), periodStart.getMonth(), periodStart.getDate());
-  const periodEndDay = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate());
-
-  const isWithinPeriod = (value) => {
+  const isWithinPeriod = (value, periodStartDate, periodEndDate) => {
+    const periodStartDay = new Date(periodStartDate.getFullYear(), periodStartDate.getMonth(), periodStartDate.getDate());
+    const periodEndDay = new Date(periodEndDate.getFullYear(), periodEndDate.getMonth(), periodEndDate.getDate());
     const d = new Date(value);
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     return day >= periodStartDay && day < periodEndDay;
   };
 
-  const rentPayments = paymentsForBooking.filter((p) => p.type !== "deposit");
-  const paidThisPeriod = rentPayments.some((p) => p.status === "paid" && isWithinPeriod(p.payment_date));
-  const notifiedThisPeriod = rentPayments.some((p) => p.status === "pending" && isWithinPeriod(p.payment_date));
+  const rentPayments = paymentsForBooking.filter(
+    (p) => p.type !== "deposit" && p.type !== "water" && p.type !== "electricity",
+  );
 
-  const dueDate = new Date(periodStart);
-  dueDate.setDate(dueDate.getDate() + GRACE_DAYS);
-
-  let status = "paid";
-  if (!paidThisPeriod) {
-    status = notifiedThisPeriod ? "pending" : now > dueDate ? "overdue" : "due";
+  const unpaidPeriods = [];
+  let cursor = new Date(earliestPeriodStart);
+  while (cursor <= periodStart) {
+    const cursorEnd = new Date(cursor);
+    cursorEnd.setMonth(cursorEnd.getMonth() + 1);
+    const paid = rentPayments.some((p) => p.status === "paid" && isWithinPeriod(p.payment_date, cursor, cursorEnd));
+    if (!paid) {
+      unpaidPeriods.push({
+        periodStart: new Date(cursor),
+        periodEnd: new Date(cursorEnd),
+        isFirstPeriodEver: cursor.getTime() === start.getTime(),
+      });
+    }
+    cursor = cursorEnd;
   }
 
-  const basePrice = Number(room.price);
-  const depositApplied = isFirstPeriod ? Math.min(Number(depositAmount) || 0, basePrice) : 0;
+  const currentPeriodEnd = new Date(periodStart);
+  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
 
+  if (unpaidPeriods.length === 0) {
+    return {
+      amount: 0,
+      depositApplied: 0,
+      lumpSumMonths: null,
+      overdueMonths: 0,
+      periodStart,
+      periodEnd: currentPeriodEnd,
+      dueDate: null,
+      status: "paid",
+    };
+  }
+
+  const earliestUnpaid = unpaidPeriods[0];
+  const latestUnpaid = unpaidPeriods[unpaidPeriods.length - 1];
+
+  const notifiedThisPeriod = rentPayments.some(
+    (p) => p.status === "pending" && isWithinPeriod(p.payment_date, periodStart, currentPeriodEnd),
+  );
+
+  const dueDate = new Date(earliestUnpaid.periodStart);
+  dueDate.setDate(dueDate.getDate() + GRACE_DAYS);
+
+  const status = notifiedThisPeriod ? "pending" : now > dueDate ? "overdue" : "due";
+
+  const basePrice = Number(room.price);
+  const depositApplied = unpaidPeriods.some((p) => p.isFirstPeriodEver)
+    ? Math.min(Number(depositAmount) || 0, basePrice)
+    : 0;
+
+  const overdueMonths = unpaidPeriods.length - 1;
   const lumpSumMonths =
     status !== "paid" && Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
-  const amount = (lumpSumMonths ? basePrice * lumpSumMonths : basePrice) - depositApplied;
+  const currentCycleMonths = lumpSumMonths || 1;
+  const amount = basePrice * (overdueMonths + currentCycleMonths) - depositApplied;
 
   return {
     amount,
     depositApplied,
     lumpSumMonths,
-    periodStart,
-    periodEnd,
+    overdueMonths,
+    periodStart: earliestUnpaid.periodStart,
+    periodEnd: latestUnpaid.periodEnd,
     dueDate,
     status,
+  };
+}
+
+const UTILITY_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า" };
+
+export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
+  const rentDue = computeRentDue(room, paymentsForBooking, depositAmount);
+  const rentUnpaid = rentDue && rentDue.status !== "paid";
+
+  const utilityCharges = paymentsForBooking.filter(
+    (p) => (p.type === "water" || p.type === "electricity") && p.status === "pending",
+  );
+
+  const items = [];
+  if (rentUnpaid) {
+    items.push({
+      type: "rent",
+      label: rentDue.overdueMonths > 0 ? `ค่าเช่าห้อง (ค้างสะสม ${rentDue.overdueMonths + 1} เดือน)` : "ค่าเช่าห้อง",
+      amount: rentDue.amount,
+      status: rentDue.status,
+    });
+  }
+  for (const charge of utilityCharges) {
+    items.push({
+      id: charge.id,
+      type: charge.type,
+      label: UTILITY_LABEL[charge.type] || charge.type,
+      amount: Number(charge.amount),
+      status: "due",
+      note: charge.note || null,
+      payment_date: charge.payment_date,
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  const rentAmount = rentUnpaid ? rentDue.amount : 0;
+  const utilityAmount = utilityCharges.reduce((sum, charge) => sum + Number(charge.amount), 0);
+
+  return {
+    amount: rentAmount + utilityAmount,
+    rentAmount,
+    items,
+    depositApplied: rentDue?.depositApplied || 0,
+    lumpSumMonths: rentDue?.lumpSumMonths || null,
+    overdueMonths: rentUnpaid ? rentDue.overdueMonths || 0 : 0,
+    periodStart: rentDue?.periodStart || null,
+    periodEnd: rentDue?.periodEnd || null,
+    dueDate: rentDue?.dueDate || null,
+    status: rentUnpaid ? rentDue.status : "due",
   };
 }
 
@@ -200,7 +288,7 @@ router.post("/payments/confirm", async (req, res) => {
     }
 
     const [paymentsForBooking] = await pool.query(
-      `SELECT status, type, payment_date FROM Payment WHERE booking_id = ?`,
+      `SELECT id, amount, status, type, note, payment_date FROM Payment WHERE booking_id = ?`,
       [booking.id],
     );
 
@@ -208,25 +296,32 @@ router.post("/payments/confirm", async (req, res) => {
     if (!currentDue) {
       return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องชำระในขณะนี้" });
     }
-    if (currentDue.status === "paid") {
-      return res.status(409).json({ message: "ชำระค่าเช่าเดือนนี้เรียบร้อยแล้ว" });
+
+    if (currentDue.rentAmount > 0) {
+      const note = currentDue.lumpSumMonths
+        ? `ชำระผ่าน PromptPay (จำลอง) - จ่ายทบ ${currentDue.lumpSumMonths} เดือน`
+        : "ชำระผ่าน PromptPay (จำลอง)";
+
+      await pool.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?)`,
+        [booking.id, currentDue.rentAmount, note],
+      );
+
+      if (currentDue.lumpSumMonths) {
+        await pool.query(
+          `UPDATE Room
+           SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
+           WHERE room_number = ?`,
+          [currentDue.periodEnd, currentDue.lumpSumMonths - 1, customer.room_number],
+        );
+      }
     }
 
-    const note = currentDue.lumpSumMonths
-      ? `ชำระผ่าน PromptPay (จำลอง) - จ่ายทบ ${currentDue.lumpSumMonths} เดือน`
-      : "ชำระผ่าน PromptPay (จำลอง)";
-
-    await pool.query(
-      `INSERT INTO Payment (booking_id, amount, payment_date, status, note) VALUES (?, ?, CURDATE(), 'paid', ?)`,
-      [booking.id, currentDue.amount, note],
-    );
-
-    if (currentDue.lumpSumMonths) {
+    const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
+    if (utilityPaymentIds.length > 0) {
       await pool.query(
-        `UPDATE Room
-         SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
-         WHERE room_number = ?`,
-        [currentDue.periodEnd, currentDue.lumpSumMonths - 1, customer.room_number],
+        `UPDATE Payment SET status = 'paid', payment_date = CURDATE() WHERE id IN (?)`,
+        [utilityPaymentIds],
       );
     }
 

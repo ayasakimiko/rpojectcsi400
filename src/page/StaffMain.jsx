@@ -35,7 +35,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -62,6 +62,26 @@ function Modal({ title, onClose, children, variant }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function ContractArrowIcon() {
+  return (
+    <svg
+      className="staff-contract-arrow"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </svg>
   )
 }
 
@@ -140,6 +160,13 @@ const PAYMENT_STATUS_LABEL = {
   overdue: 'ค้างชำระ',
 }
 
+const PAYMENT_TYPE_LABEL = {
+  rent: 'ค่าเช่าห้อง',
+  deposit: 'เงินประกัน',
+  water: 'ค่าน้ำ',
+  electricity: 'ค่าไฟฟ้า',
+}
+
 function dueBadgeClass(status) {
   if (status === 'paid') return 'paid'
   if (status === 'overdue') return 'overdue'
@@ -151,6 +178,13 @@ function formatCurrency(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '-'
   return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function splitNote(note) {
+  if (!note) return { main: '-', extra: '' }
+  const parenIndex = note.indexOf('(')
+  if (parenIndex === -1) return { main: note, extra: '' }
+  return { main: note.slice(0, parenIndex).trim(), extra: note.slice(parenIndex).trim() }
 }
 
 function formatDate(value) {
@@ -333,7 +367,15 @@ function SummaryIcon({ type }) {
 
 function StaffMain() {
   const navigate = useNavigate()
-  const [staffUser, setStaffUser] = useState(null)
+  const [staffUser, setStaffUser] = useState(() => {
+    const storedUser = sessionStorage.getItem('user')
+    if (!storedUser) return null
+    try {
+      return JSON.parse(storedUser)
+    } catch {
+      return null
+    }
+  })
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -380,7 +422,19 @@ function StaffMain() {
   const [collectRoom, setCollectRoom] = useState(null)
   const [collectSubmitting, setCollectSubmitting] = useState(false)
   const [collectError, setCollectError] = useState('')
+
+  const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
+
+  const [utilityRoom, setUtilityRoom] = useState(null)
+  const [utilityForm, setUtilityForm] = useState({
+    electricity_mode: 'units',
+    electricity_units: '',
+    electricity_amount: '',
+    water_amount: '',
+  })
+  const [utilitySubmitting, setUtilitySubmitting] = useState(false)
+  const [utilityError, setUtilityError] = useState('')
 
   const [tenantRequests, setTenantRequests] = useState([])
   const [maintenanceRequests, setMaintenanceRequests] = useState([])
@@ -510,15 +564,6 @@ function StaffMain() {
       navigate('/login', { replace: true })
       return
     }
-    const storedUser = sessionStorage.getItem('user')
-    if (storedUser) {
-      try {
-        setStaffUser(JSON.parse(storedUser))
-      } catch {
-        setStaffUser(null)
-      }
-    }
-
     let isMounted = true
     loadRooms().finally(() => {
       if (isMounted) setLoading(false)
@@ -535,6 +580,7 @@ function StaffMain() {
   const handleLogout = () => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
+    setStaffUser(null)
     navigate('/login', { replace: true })
   }
 
@@ -806,6 +852,10 @@ function StaffMain() {
     }
   }
 
+  const openDueDetail = (room) => {
+    setDueDetailRoom(room)
+  }
+
   const openCollect = (room) => {
     setCollectRoom(room)
     setCollectError('')
@@ -828,6 +878,41 @@ function StaffMain() {
       setCollectError(err.response?.data?.message || 'บันทึกการเก็บเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setCollectSubmitting(false)
+    }
+  }
+
+  const openUtilityBill = (room) => {
+    setUtilityRoom(room)
+    setUtilityForm({
+      electricity_mode: 'units',
+      electricity_units: '',
+      electricity_amount: '',
+      water_amount: room.water_price ? String(room.water_price) : '',
+    })
+    setUtilityError('')
+  }
+
+  const handleSendUtilityBill = async () => {
+    if (!utilityRoom) return
+    setUtilitySubmitting(true)
+    setUtilityError('')
+    try {
+      const { data } = await axios.post(
+        `/api/staff/rooms/${utilityRoom.room_number}/utility-bill`,
+        {
+          electricity_units: utilityForm.electricity_mode === 'units' ? utilityForm.electricity_units : '',
+          electricity_amount: utilityForm.electricity_mode === 'amount' ? utilityForm.electricity_amount : '',
+          water_amount: utilityForm.water_amount,
+        },
+        { headers: authHeaders() },
+      )
+      setActionSuccess(data.message || 'ส่งบิลค่าน้ำ-ค่าไฟสำเร็จ')
+      setUtilityRoom(null)
+      await loadRooms()
+    } catch (err) {
+      setUtilityError(err.response?.data?.message || 'ส่งบิลค่าน้ำ-ค่าไฟไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setUtilitySubmitting(false)
     }
   }
 
@@ -953,6 +1038,7 @@ function StaffMain() {
         const haystack = [
           payment.tenantName,
           formatDateTime(payment.created_at),
+          PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง',
           formatCurrency(payment.amount),
           PAYMENT_STATUS_LABEL[payment.status] || payment.status,
           payment.note,
@@ -1335,13 +1421,21 @@ function StaffMain() {
                           <td>{room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'}</td>
                           <td className="staff-col-optional">{room.tenant?.phone || '-'}</td>
                           <td className="staff-col-optional">
-                            {room.rental_start_date && room.rental_end_date
-                              ? `${formatDate(room.rental_start_date)} - ${formatDate(room.rental_end_date)}`
-                              : '-'}
+                            <div className="staff-contract-dates">
+                              {room.rental_start_date && room.rental_end_date ? (
+                                <>
+                                  {formatDate(room.rental_start_date)}
+                                  <ContractArrowIcon />
+                                  {formatDate(room.rental_end_date)}
+                                </>
+                              ) : (
+                                '-'
+                              )}
+                            </div>
                             {expiryStatus && (
-                              <span className={`staff-badge status-${expiryStatus.level} staff-expiry-badge`}>
+                              <div className={`staff-contract-remaining is-${expiryStatus.level}`}>
                                 {expiryStatus.label}
-                              </span>
+                              </div>
                             )}
                           </td>
                           <td>
@@ -1355,22 +1449,37 @@ function StaffMain() {
                           </td>
                           <td className="staff-col-optional">
                             {hasDue ? (
-                              <span className={`staff-due-amount is-${dueBadgeClass(room.currentDue.status)}`}>
+                              <button
+                                type="button"
+                                className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
+                                onClick={() => openDueDetail(room)}
+                              >
                                 ฿{formatCurrency(room.currentDue.amount)}
-                              </span>
+                              </button>
                             ) : (
                               <span className="staff-due-amount is-none">-</span>
                             )}
                           </td>
                           <td>
                             <div className="staff-row-actions staff-row-actions-desktop">
-                              <button
-                                type="button"
-                                className="staff-action-btn is-ghost"
-                                onClick={() => openHistory(room)}
-                              >
-                                ประวัติการจ่ายเงิน
-                              </button>
+                              {Boolean(room.is_booked) && room.tenant && (
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-ghost"
+                                  onClick={() => openHistory(room)}
+                                >
+                                  ประวัติการจ่ายเงิน
+                                </button>
+                              )}
+                              {Boolean(room.is_booked) && room.tenant && (
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-ghost"
+                                  onClick={() => openUtilityBill(room)}
+                                >
+                                  ส่งค่าน้ำ-ค่าไฟ
+                                </button>
+                              )}
                               {hasDue && (
                                 <button
                                   type="button"
@@ -1381,6 +1490,88 @@ function StaffMain() {
                                 </button>
                               )}
                             </div>
+                          </td>
+                        </tr>
+                        <tr className="staff-row-detail">
+                          <td colSpan={8}>
+                            <div className={`staff-row-detail-wrap${isExpanded ? ' is-expanded' : ''}`}>
+                              <div className="staff-row-detail-scroll">
+                                <div className="staff-row-detail-content">
+                                  <div className="staff-row-detail-item">
+                                    <span>เบอร์โทร</span>
+                                    <strong>{room.tenant?.phone || '-'}</strong>
+                                  </div>
+                                  <div className="staff-row-detail-item">
+                                    <span>ระยะเวลาสัญญา</span>
+                                    <span className="staff-contract-value">
+                                      <strong>
+                                        {room.rental_start_date && room.rental_end_date ? (
+                                          <>
+                                            {formatDate(room.rental_start_date)}
+                                            <ContractArrowIcon />
+                                            {formatDate(room.rental_end_date)}
+                                          </>
+                                        ) : (
+                                          '-'
+                                        )}
+                                      </strong>
+                                      {expiryStatus && (
+                                        <span className={`staff-contract-remaining is-${expiryStatus.level}`}>
+                                          {expiryStatus.label}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="staff-row-detail-item">
+                                    <span>ยอดค้างชำระ</span>
+                                    {hasDue ? (
+                                      <button
+                                        type="button"
+                                        className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
+                                        onClick={() => openDueDetail(room)}
+                                      >
+                                        ฿{formatCurrency(room.currentDue.amount)}
+                                      </button>
+                                    ) : (
+                                      <strong className="staff-due-amount is-none">-</strong>
+                                    )}
+                                  </div>
+                                  <div className="staff-row-actions">
+                                    {Boolean(room.is_booked) && room.tenant && (
+                                      <button
+                                        type="button"
+                                        className="staff-action-btn is-ghost"
+                                        onClick={() => openHistory(room)}
+                                      >
+                                        ประวัติการจ่ายเงิน
+                                      </button>
+                                    )}
+                                    {Boolean(room.is_booked) && room.tenant && (
+                                      <button
+                                        type="button"
+                                        className="staff-action-btn is-ghost"
+                                        onClick={() => openUtilityBill(room)}
+                                      >
+                                        ส่งค่าน้ำ-ค่าไฟ
+                                      </button>
+                                    )}
+                                    {hasDue && (
+                                      <button
+                                        type="button"
+                                        className="staff-action-btn is-primary"
+                                        onClick={() => openCollect(room)}
+                                      >
+                                        เก็บเงิน
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr className="staff-row-toggle-row">
+                          <td colSpan={8}>
                             <button
                               type="button"
                               className={`staff-row-toggle${isExpanded ? ' is-expanded' : ''}`}
@@ -1402,61 +1593,6 @@ function StaffMain() {
                                 <polyline points="6 9 12 15 18 9" />
                               </svg>
                             </button>
-                          </td>
-                        </tr>
-                        <tr className="staff-row-detail">
-                          <td colSpan={8}>
-                            <div className={`staff-row-detail-wrap${isExpanded ? ' is-expanded' : ''}`}>
-                              <div className="staff-row-detail-scroll">
-                                <div className="staff-row-detail-content">
-                                  <div className="staff-row-detail-item">
-                                    <span>เบอร์โทร</span>
-                                    <strong>{room.tenant?.phone || '-'}</strong>
-                                  </div>
-                                  <div className="staff-row-detail-item">
-                                    <span>ระยะเวลาสัญญา</span>
-                                    <strong>
-                                      {room.rental_start_date && room.rental_end_date
-                                        ? `${formatDate(room.rental_start_date)} - ${formatDate(room.rental_end_date)}`
-                                        : '-'}
-                                    </strong>
-                                    {expiryStatus && (
-                                      <span className={`staff-badge status-${expiryStatus.level} staff-expiry-badge`}>
-                                        {expiryStatus.label}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="staff-row-detail-item">
-                                    <span>ยอดค้างชำระ</span>
-                                    {hasDue ? (
-                                      <strong className={`staff-due-amount is-${dueBadgeClass(room.currentDue.status)}`}>
-                                        ฿{formatCurrency(room.currentDue.amount)}
-                                      </strong>
-                                    ) : (
-                                      <strong className="staff-due-amount is-none">-</strong>
-                                    )}
-                                  </div>
-                                  <div className="staff-row-actions">
-                                    <button
-                                      type="button"
-                                      className="staff-action-btn is-ghost"
-                                      onClick={() => openHistory(room)}
-                                    >
-                                      ประวัติการจ่ายเงิน
-                                    </button>
-                                    {hasDue && (
-                                      <button
-                                        type="button"
-                                        className="staff-action-btn is-primary"
-                                        onClick={() => openCollect(room)}
-                                      >
-                                        เก็บเงิน
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
                           </td>
                         </tr>
                       </Fragment>
@@ -2132,6 +2268,7 @@ function StaffMain() {
             setHistoryStatusFilter('all')
             setHistoryPage(1)
           }}
+          variant="wide"
         >
           {historyLoading ? (
             <p className="staff-empty">กำลังโหลดข้อมูล...</p>
@@ -2177,25 +2314,37 @@ function StaffMain() {
                         <tr>
                           <th>วันที่ชำระ</th>
                           <th>ผู้เช่า</th>
+                          <th>รายการ</th>
                           <th>จำนวนเงิน</th>
                           <th>สถานะ</th>
                           <th>หมายเหตุ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedHistoryPayments.map((payment) => (
-                          <tr key={payment.id}>
-                            <td>{formatDateTime(payment.created_at)}</td>
-                            <td>{payment.tenantName}</td>
-                            <td>฿{formatCurrency(payment.amount)}</td>
-                            <td>
-                              <span className={`staff-badge status-${payment.status}`}>
-                                {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
-                              </span>
-                            </td>
-                            <td>{payment.note || '-'}</td>
-                          </tr>
-                        ))}
+                        {paginatedHistoryPayments.map((payment) => {
+                          const notePart = splitNote(payment.note)
+                          return (
+                            <tr key={payment.id}>
+                              <td>{formatDateTime(payment.created_at)}</td>
+                              <td>{payment.tenantName}</td>
+                              <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
+                              <td>฿{formatCurrency(payment.amount)}</td>
+                              <td>
+                                <span className={`staff-badge status-${payment.status}`}>
+                                  {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="staff-history-note-cell" title={payment.note || ''}>
+                                  <span className="staff-history-note-main">{notePart.main}</span>
+                                  {notePart.extra && (
+                                    <span className="staff-history-note-extra">{notePart.extra}</span>
+                                  )}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2272,13 +2421,25 @@ function StaffMain() {
                 </div>
               </div>
               {collectRoom.currentDue && (
-                <div className="staff-confirm-amount-block">
-                  <p className="staff-confirm-amount-label">ยอดที่ต้องชำระ</p>
-                  <p className="staff-confirm-amount">
-                    <span className="staff-confirm-amount-symbol">฿</span>
-                    {formatCurrency(collectRoom.currentDue.amount)}
-                  </p>
-                </div>
+                <>
+                  {collectRoom.currentDue.items?.length > 1 && (
+                    <div className="staff-confirm-details">
+                      {collectRoom.currentDue.items.map((item, index) => (
+                        <div className="staff-confirm-detail-row" key={item.id ?? `${item.type}-${index}`}>
+                          <span>{item.label}</span>
+                          <strong>฿{formatCurrency(item.amount)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="staff-confirm-amount-block">
+                    <p className="staff-confirm-amount-label">ยอดที่ต้องชำระ</p>
+                    <p className="staff-confirm-amount">
+                      <span className="staff-confirm-amount-symbol">฿</span>
+                      {formatCurrency(collectRoom.currentDue.amount)}
+                    </p>
+                  </div>
+                </>
               )}
               {collectError && <p className="staff-form-error">{collectError}</p>}
               <div className="staff-form-actions">
@@ -2296,6 +2457,223 @@ function StaffMain() {
               </div>
             </div>
           )}
+        </Modal>
+      )}
+
+      {dueDetailRoom && (
+        <Modal
+          title={`รายการค้างชำระ - ห้อง ${dueDetailRoom.room_number}`}
+          onClose={() => setDueDetailRoom(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{dueDetailRoom.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {dueDetailRoom.tenant
+                      ? `${dueDetailRoom.tenant.first_name} ${dueDetailRoom.tenant.last_name}`
+                      : '-'}
+                  </strong>
+                </div>
+              </div>
+
+              {dueDetailRoom.currentDue?.items?.length > 0 && (
+                <div className="staff-confirm-details">
+                  {dueDetailRoom.currentDue.items.map((item, index) => (
+                    <div className="staff-confirm-detail-row" key={item.id ?? `${item.type}-${index}`}>
+                      <span>{item.label}</span>
+                      <strong>฿{formatCurrency(item.amount)}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {dueDetailRoom.currentDue && (
+                <div className="staff-confirm-amount-block">
+                  <p className="staff-confirm-amount-label">ยอดค้างชำระรวม</p>
+                  <p className="staff-confirm-amount">
+                    <span className="staff-confirm-amount-symbol">฿</span>
+                    {formatCurrency(dueDetailRoom.currentDue.amount)}
+                  </p>
+                </div>
+              )}
+
+              <div className="staff-due-detail-actions">
+                <button
+                  type="button"
+                  className="staff-form-link-btn"
+                  onClick={() => {
+                    const room = dueDetailRoom
+                    setDueDetailRoom(null)
+                    openHistory(room)
+                  }}
+                >
+                  ดูประวัติการจ่ายเงิน
+                </button>
+
+                <div className="staff-form-actions">
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    onClick={() => {
+                      const room = dueDetailRoom
+                      setDueDetailRoom(null)
+                      openCollect(room)
+                    }}
+                  >
+                    เก็บเงิน
+                  </button>
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {utilityRoom && (
+        <Modal
+          title={`ส่งค่าน้ำ-ค่าไฟ - ห้อง ${utilityRoom.room_number}`}
+          onClose={() => setUtilityRoom(null)}
+          variant="confirm"
+        >
+          {(requestClose) => {
+            const unitPrice = Number(utilityRoom.electricity_unit_price) || 0
+            const isUnitsMode = utilityForm.electricity_mode === 'units'
+            const units = Number(utilityForm.electricity_units)
+            const directAmount = Number(utilityForm.electricity_amount)
+            const electricityAmount = isUnitsMode
+              ? Number.isFinite(units) && units > 0
+                ? units * unitPrice
+                : 0
+              : Number.isFinite(directAmount) && directAmount > 0
+                ? directAmount
+                : 0
+            const waterAmount = Number(utilityForm.water_amount)
+            const total = electricityAmount + (Number.isFinite(waterAmount) && waterAmount > 0 ? waterAmount : 0)
+            return (
+              <div className="staff-confirm-body">
+                <div className="staff-confirm-details">
+                  <div className="staff-confirm-detail-row">
+                    <span>ห้อง</span>
+                    <strong>{utilityRoom.room_number}</strong>
+                  </div>
+                  <div className="staff-confirm-detail-row">
+                    <span>ผู้เช่า</span>
+                    <strong>
+                      {utilityRoom.tenant ? `${utilityRoom.tenant.first_name} ${utilityRoom.tenant.last_name}` : '-'}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="staff-form-field">
+                  <div className="staff-form-label-row">
+                    <label className="staff-form-label" htmlFor="utility-electricity-input">
+                      {isUnitsMode ? `ค่าไฟฟ้า (บาท/หน่วย ฿${formatCurrency(unitPrice)})` : 'ค่าไฟฟ้า (บาท)'}
+                    </label>
+                    <div className="staff-form-mode-switch">
+                      <button
+                        type="button"
+                        className={`staff-form-mode-btn${isUnitsMode ? ' is-active' : ''}`}
+                        onClick={() => setUtilityForm((prev) => ({ ...prev, electricity_mode: 'units' }))}
+                      >
+                        คิดตามหน่วย
+                      </button>
+                      <button
+                        type="button"
+                        className={`staff-form-mode-btn${!isUnitsMode ? ' is-active' : ''}`}
+                        onClick={() => setUtilityForm((prev) => ({ ...prev, electricity_mode: 'amount' }))}
+                      >
+                        ราคาปกติ
+                      </button>
+                    </div>
+                  </div>
+                  {isUnitsMode ? (
+                    <input
+                      id="utility-electricity-input"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      className="staff-form-input no-spinner"
+                      placeholder="เช่น 50 (หน่วย)"
+                      value={utilityForm.electricity_units}
+                      onChange={(event) =>
+                        setUtilityForm((prev) => ({ ...prev, electricity_units: event.target.value }))
+                      }
+                    />
+                  ) : (
+                    <input
+                      id="utility-electricity-input"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      className="staff-form-input no-spinner"
+                      placeholder="เช่น 400 (บาท)"
+                      value={utilityForm.electricity_amount}
+                      onChange={(event) =>
+                        setUtilityForm((prev) => ({ ...prev, electricity_amount: event.target.value }))
+                      }
+                    />
+                  )}
+                  {isUnitsMode && electricityAmount > 0 && (
+                    <span className="staff-form-hint">คิดเป็น ฿{formatCurrency(electricityAmount)}</span>
+                  )}
+                </div>
+
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="utility-water-amount">
+                    ค่าน้ำ (บาท)
+                  </label>
+                  <input
+                    id="utility-water-amount"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    className="staff-form-input no-spinner"
+                    placeholder="เช่น 100"
+                    value={utilityForm.water_amount}
+                    onChange={(event) => setUtilityForm((prev) => ({ ...prev, water_amount: event.target.value }))}
+                  />
+                </div>
+
+                {total > 0 && (
+                  <div className="staff-confirm-amount-block">
+                    <p className="staff-confirm-amount-label">ยอดรวมที่จะส่งให้ลูกค้า</p>
+                    <p className="staff-confirm-amount">
+                      <span className="staff-confirm-amount-symbol">฿</span>
+                      {formatCurrency(total)}
+                    </p>
+                  </div>
+                )}
+
+                {utilityError && <p className="staff-form-error">{utilityError}</p>}
+                <div className="staff-form-actions">
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    disabled={utilitySubmitting}
+                    onClick={handleSendUtilityBill}
+                  >
+                    {utilitySubmitting ? 'กำลังส่ง...' : 'ส่งบิล'}
+                  </button>
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            )
+          }}
         </Modal>
       )}
 

@@ -59,6 +59,7 @@ router.get("/rooms", async (req, res) => {
       `SELECT
          r.id, r.room_number, r.is_booked, r.price,
          r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months,
+         r.electricity_unit_price, r.water_price,
          c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM Room r
        LEFT JOIN Customer c ON c.id = (
@@ -90,7 +91,7 @@ router.get("/rooms", async (req, res) => {
       const bookingIds = [...latestBookingByRoomId.values()].map((booking) => booking.id);
       if (bookingIds.length > 0) {
         const [payments] = await pool.query(
-          `SELECT booking_id, status, type, payment_date FROM Payment WHERE booking_id IN (?)`,
+          `SELECT id, booking_id, amount, status, type, note, payment_date FROM Payment WHERE booking_id IN (?)`,
           [bookingIds],
         );
         for (const payment of payments) {
@@ -111,6 +112,8 @@ router.get("/rooms", async (req, res) => {
         room_number: room.room_number,
         is_booked: room.is_booked,
         price: room.price,
+        electricity_unit_price: room.electricity_unit_price,
+        water_price: room.water_price,
         rental_start_date: room.rental_start_date,
         rental_end_date: room.rental_end_date,
         tenant: room.customer_id
@@ -203,7 +206,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
     }
 
     const [paymentsForBooking] = await pool.query(
-      `SELECT status, type, payment_date FROM Payment WHERE booking_id = ?`,
+      `SELECT id, amount, status, type, note, payment_date FROM Payment WHERE booking_id = ?`,
       [booking.id],
     );
 
@@ -211,31 +214,148 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
     if (!currentDue) {
       return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องเก็บในขณะนี้" });
     }
-    if (currentDue.status === "paid") {
-      return res.status(409).json({ message: "ห้องนี้ชำระค่าเช่าเดือนนี้เรียบร้อยแล้ว" });
+
+    if (currentDue.rentAmount > 0) {
+      const note = currentDue.lumpSumMonths
+        ? `เจ้าหน้าที่เก็บเงินสด (จ่ายทบ ${currentDue.lumpSumMonths} เดือน)`
+        : "เจ้าหน้าที่เก็บเงินสด";
+
+      await pool.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?)`,
+        [booking.id, currentDue.rentAmount, note],
+      );
+
+      if (currentDue.lumpSumMonths) {
+        await pool.query(
+          `UPDATE Room
+           SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
+           WHERE room_number = ?`,
+          [currentDue.periodEnd, currentDue.lumpSumMonths - 1, roomNumberValue],
+        );
+      }
     }
 
-    const note = currentDue.lumpSumMonths
-      ? `เจ้าหน้าที่เก็บเงินสด (จ่ายทบ ${currentDue.lumpSumMonths} เดือน)`
-      : "เจ้าหน้าที่เก็บเงินสด";
-
-    await pool.query(
-      `INSERT INTO Payment (booking_id, amount, payment_date, status, note) VALUES (?, ?, CURDATE(), 'paid', ?)`,
-      [booking.id, currentDue.amount, note],
-    );
-
-    if (currentDue.lumpSumMonths) {
+    const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
+    if (utilityPaymentIds.length > 0) {
       await pool.query(
-        `UPDATE Room
-         SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
-         WHERE room_number = ?`,
-        [currentDue.periodEnd, currentDue.lumpSumMonths - 1, roomNumberValue],
+        `UPDATE Payment SET status = 'paid', payment_date = CURDATE() WHERE id IN (?)`,
+        [utilityPaymentIds],
       );
     }
 
     return res.status(201).json({ message: "บันทึกการเก็บเงินสำเร็จ" });
   } catch (error) {
     console.error("Staff collect payment error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/rooms/:room_number/utility-bill", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+
+    const [customerRows] = await pool.query(
+      `SELECT id FROM Customer WHERE room_number = ? AND is_suspended = FALSE`,
+      [roomNumberValue],
+    );
+    const customer = customerRows[0];
+    if (!customer) {
+      return res.status(404).json({ message: "ไม่พบผู้เช่าของห้องนี้" });
+    }
+
+    const [roomRows] = await pool.query(
+      `SELECT is_booked, electricity_unit_price, water_price FROM Room WHERE room_number = ?`,
+      [roomNumberValue],
+    );
+    const room = roomRows[0];
+    if (!room || !room.is_booked) {
+      return res.status(400).json({ message: "ห้องนี้ไม่มีผู้เช่าอยู่ในขณะนี้" });
+    }
+
+    const [bookingRows] = await pool.query(
+      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC LIMIT 1`,
+      [customer.id],
+    );
+    const booking = bookingRows[0];
+    if (!booking) {
+      return res.status(404).json({ message: "ไม่พบสัญญาเช่าของห้องนี้" });
+    }
+
+    const electricityUnitsRaw = req.body?.electricity_units;
+    const electricityAmountRaw = req.body?.electricity_amount;
+    const waterAmountRaw = req.body?.water_amount;
+    const electricityUnits = Number(electricityUnitsRaw);
+    const electricityAmountInput = Number(electricityAmountRaw);
+    const waterAmount = Number(waterAmountRaw);
+
+    const isFilled = (raw) => raw !== undefined && raw !== "" && raw !== null;
+    const wantsElectricityByUnits = isFilled(electricityUnitsRaw);
+    const wantsElectricityByAmount = isFilled(electricityAmountRaw);
+    const wantsElectricity = wantsElectricityByUnits || wantsElectricityByAmount;
+    const wantsWater = isFilled(waterAmountRaw);
+
+    if (wantsElectricityByUnits && (!Number.isFinite(electricityUnits) || electricityUnits <= 0)) {
+      return res.status(400).json({ message: "หน่วยไฟฟ้าไม่ถูกต้อง" });
+    }
+    if (wantsElectricityByAmount && (!Number.isFinite(electricityAmountInput) || electricityAmountInput <= 0)) {
+      return res.status(400).json({ message: "ค่าไฟฟ้าไม่ถูกต้อง" });
+    }
+    if (wantsWater && (!Number.isFinite(waterAmount) || waterAmount <= 0)) {
+      return res.status(400).json({ message: "ค่าน้ำไม่ถูกต้อง" });
+    }
+    if (!wantsElectricity && !wantsWater) {
+      return res.status(400).json({ message: "กรุณากรอกค่าไฟฟ้าหรือค่าน้ำอย่างน้อยหนึ่งรายการ" });
+    }
+
+    const [existingPending] = await pool.query(
+      `SELECT type FROM Payment
+       WHERE booking_id = ? AND status = 'pending' AND type IN ('water', 'electricity')
+         AND YEAR(payment_date) = YEAR(CURDATE()) AND MONTH(payment_date) = MONTH(CURDATE())`,
+      [booking.id],
+    );
+    const existingTypes = new Set(existingPending.map((row) => row.type));
+    if (wantsElectricity && existingTypes.has("electricity")) {
+      return res.status(409).json({ message: "ส่งบิลค่าไฟของเดือนนี้ไปแล้ว รอลูกค้าชำระก่อน" });
+    }
+    if (wantsWater && existingTypes.has("water")) {
+      return res.status(409).json({ message: "ส่งบิลค่าน้ำของเดือนนี้ไปแล้ว รอลูกค้าชำระก่อน" });
+    }
+
+    const staffName = await getActingStaffName(pool, req.user);
+
+    if (wantsElectricityByUnits) {
+      const unitPrice = Number(room.electricity_unit_price) || 0;
+      const amount = Math.round(electricityUnits * unitPrice * 100) / 100;
+      await pool.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'electricity', ?)`,
+        [
+          booking.id,
+          amount,
+          `ค่าไฟฟ้า ${electricityUnits} หน่วย x ฿${unitPrice}/หน่วย (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`,
+        ],
+      );
+    } else if (wantsElectricityByAmount) {
+      await pool.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'electricity', ?)`,
+        [booking.id, electricityAmountInput, `ค่าไฟฟ้า (ราคาปกติ) (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`],
+      );
+    }
+
+    if (wantsWater) {
+      await pool.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'water', ?)`,
+        [booking.id, waterAmount, `ค่าน้ำประจำเดือน (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`],
+      );
+    }
+
+    return res.status(201).json({ message: "ส่งบิลค่าน้ำ-ค่าไฟสำเร็จ" });
+  } catch (error) {
+    console.error("Send utility bill error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

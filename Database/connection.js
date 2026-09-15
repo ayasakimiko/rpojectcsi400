@@ -32,7 +32,6 @@ export function getPool() {
   return pool;
 }
 
-// เพิ่มข้อมูลนะ
 async function seedDefaults(connection) {
   const [[{ count: staffCount }]] = await connection.query(
     "SELECT COUNT(*) AS count FROM Staff"
@@ -48,6 +47,23 @@ async function seedDefaults(connection) {
     );
     console.log(
       `Seeded default staff (idcard: ${defaultIdcard}, password: ${defaultPassword})`
+    );
+  }
+
+  const [[{ count: adminCount }]] = await connection.query(
+    "SELECT COUNT(*) AS count FROM Admin"
+  );
+  if (adminCount === 0) {
+    const defaultIdcard = process.env.DEFAULT_ADMIN_IDCARD || "1100200000201";
+    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "test1234";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    await connection.query(
+      `INSERT INTO Admin (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ["Admin", defaultIdcard, hashedPassword, "0800000001", "แอดมิน", "เริ่มต้น", false, 25]
+    );
+    console.log(
+      `Seeded default admin (idcard: ${defaultIdcard}, password: ${defaultPassword})`
     );
   }
 
