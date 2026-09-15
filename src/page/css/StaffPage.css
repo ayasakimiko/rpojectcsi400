@@ -634,6 +634,28 @@
   border-bottom: none;
 }
 
+.staff-history-note-cell {
+  display: inline-flex;
+  flex-direction: column;
+  width: 220px;
+  vertical-align: middle;
+}
+
+.staff-history-note-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-history-note-extra {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #6b859e;
+  margin-top: 2px;
+}
+
 .staff-room-number-cell {
   font-weight: 700;
   color: #2563eb;
@@ -739,22 +761,44 @@
   color: #64748b;
 }
 
-.staff-badge.status-warning {
-  background: #fffbeb;
+.staff-contract-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #0f2b52;
+  font-weight: 700;
+}
+
+.staff-contract-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.staff-contract-value strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.staff-contract-arrow {
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.staff-contract-remaining {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b859e;
+  margin-top: 2px;
+}
+
+.staff-contract-remaining.is-warning {
   color: #b45309;
-  border: 1.5px solid #fde68a;
 }
 
-.staff-badge.status-expired {
-  background: #fef2f2;
+.staff-contract-remaining.is-expired {
   color: #b42318;
-  border: 1.5px solid #fecaca;
-}
-
-.staff-expiry-badge {
-  display: block;
-  margin-top: 4px;
-  width: fit-content;
 }
 
 .staff-due-amount {
@@ -1107,6 +1151,14 @@
   padding: 0 10px;
 }
 
+.staff-row-toggle-row {
+  display: none;
+}
+
+.staff-row-toggle-row td {
+  padding: 0 10px;
+}
+
 .staff-row-detail-wrap {
   display: grid;
   grid-template-rows: 0fr;
@@ -1414,38 +1466,6 @@
   text-align: right;
 }
 
-.staff-due-detail-paid-title {
-  align-self: flex-start;
-  margin: 4px 0 -4px;
-}
-
-.staff-due-detail-paid-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.staff-confirm-details.is-deposit {
-  background: #fffbeb;
-  border-color: #fde68a;
-}
-
-.staff-confirm-details.is-deposit .staff-confirm-detail-row span {
-  color: #b45309;
-}
-
-.staff-confirm-details.is-deposit .staff-confirm-detail-row strong {
-  color: #92400e;
-}
-
-.staff-due-detail-paid-date {
-  color: #94a3b8;
-  font-weight: 500;
-}
-
 .staff-confirm-amount-block {
   width: 100%;
   display: flex;
@@ -1471,6 +1491,7 @@
   font-weight: 800;
   color: #1d4ed8;
   background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
   border-radius: 16px;
   padding: 14px 32px;
   margin: 0;
@@ -1516,6 +1537,34 @@
   padding-top: 12px;
   border-top: 1.5px solid #eef2f7;
   width: 100%;
+}
+
+.staff-due-detail-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.staff-form-link-btn {
+  display: block;
+  width: 100%;
+  text-align: right;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.staff-form-link-btn:hover {
+  text-decoration: underline;
+}
+
+.staff-due-detail-actions .staff-form-actions {
+  margin-top: 0;
 }
 
 .staff-form-actions .staff-action-btn {
@@ -1626,6 +1675,11 @@
   max-height: calc(100vh - 32px);
   padding: 22px;
   border-radius: 22px;
+}
+
+.staff-modal.staff-modal-wide {
+  width: 820px;
+  height: 580px;
 }
 
 .staff-modal-confirm .staff-modal-header {
@@ -1745,6 +1799,10 @@
   }
 
   .staff-row-detail {
+    display: table-row;
+  }
+
+  .staff-row-toggle-row {
     display: table-row;
   }
 

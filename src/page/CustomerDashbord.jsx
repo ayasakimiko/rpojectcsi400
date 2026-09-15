@@ -529,6 +529,11 @@ const MAINTENANCE_NOTIF_INFO = {
   cancelled: { label: 'ถูกยกเลิก', tone: 'danger' },
 }
 
+const UTILITY_BILL_NOTIF_INFO = {
+  water: { label: 'แจ้งบิลค่าน้ำใหม่ รอชำระ', tone: 'info' },
+  electricity: { label: 'แจ้งบิลค่าไฟใหม่ รอชำระ', tone: 'info' },
+}
+
 const TENANT_REQUEST_FINAL_LOG_LABEL = {
   approved: 'อนุมัติคำขอ',
   rejected: 'ปฏิเสธคำขอ',
@@ -778,7 +783,7 @@ function CustomerDashbord() {
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentError, setPaymentError] = useState('')
-  const [showDueBreakdown, setShowDueBreakdown] = useState(false)
+  const [showDueBreakdown, setShowDueBreakdown] = useState(true)
 
   const [activeRequestType, setActiveRequestType] = useState(null)
   const [requestNote, setRequestNote] = useState('')
@@ -1235,9 +1240,34 @@ function CustomerDashbord() {
     return items
   }
 
+  const buildUtilityBillNotifs = (payment) => {
+    const info = UTILITY_BILL_NOTIF_INFO[payment.type]
+    if (!info || payment.status !== 'pending') return []
+    const description = formatCustomerNote(payment.note)
+    return [
+      {
+        key: `utility-${payment.id}`,
+        title: PAYMENT_TYPE_LABEL[payment.type],
+        ...info,
+        date: payment.created_at,
+        detail: (
+          <span className="dashboard-notif-utility-detail">
+            <span className="dashboard-notif-utility-amount">จำนวนเงิน ฿{formatCurrency(payment.amount)}</span>
+            {description !== '-' && <span className="dashboard-notif-utility-desc">{description}</span>}
+            <span className="dashboard-notif-utility-by">แจ้งโดยพนักงาน</span>
+          </span>
+        ),
+        kind: 'utility',
+      },
+    ]
+  }
+
+  const utilityPayments = (rentalHistory || []).flatMap((entry) => entry.payments || [])
+
   const notifications = [
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
+    ...utilityPayments.flatMap(buildUtilityBillNotifs),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
@@ -1273,8 +1303,33 @@ function CustomerDashbord() {
     maintenanceCurrentPage * MAINTENANCE_PAGE_SIZE,
   )
 
+  const currentDueRentItem = currentDue?.items?.find((item) => item.type === 'rent')
+  const rentalHistoryWithDue =
+    currentDueRentItem && rentalHistory.length > 0
+      ? rentalHistory.map((entry, index) => {
+          if (index !== 0) return entry
+          const pendingRentPayment = {
+            id: `due-rent-${entry.booking_id}`,
+            booking_id: entry.booking_id,
+            created_at: currentDue.dueDate || currentDue.periodStart,
+            payment_date: currentDue.dueDate || currentDue.periodStart,
+            type: 'rent',
+            amount: currentDueRentItem.amount,
+            status: currentDueRentItem.status === 'overdue' ? 'overdue' : 'pending',
+            note:
+              currentDue.overdueMonths > 0
+                ? `ค้างสะสมจากเดือนก่อนหน้า ${currentDue.overdueMonths} เดือน`
+                : currentDue.depositApplied > 0
+                  ? `หักมัดจำ ฿${formatCurrency(currentDue.depositApplied)} แล้ว`
+                  : null,
+            isPendingRent: true,
+          }
+          return { ...entry, payments: [pendingRentPayment, ...entry.payments] }
+        })
+      : rentalHistory
+
   const historyKeyword = historySearch.trim().toLowerCase()
-  const filteredRentalHistory = rentalHistory.map((entry) => {
+  const filteredRentalHistory = rentalHistoryWithDue.map((entry) => {
     const payments = entry.payments.filter((payment) => {
       if (historyStatusFilter !== 'all' && payment.status !== historyStatusFilter) return false
       if (historyKeyword) {
@@ -1495,13 +1550,10 @@ function CustomerDashbord() {
                       <span className={`dashboard-confirm-message-status is-${notifDetail.tone}`}>
                         {notifDetail.label}
                       </span>
-                      {notifDetail.detail && (
-                        <>
-                          <br />
-                          {notifDetail.detail}
-                        </>
-                      )}
                     </p>
+                    {notifDetail.detail && (
+                      <div className="dashboard-confirm-message-detail">{notifDetail.detail}</div>
+                    )}
                     {notifDetail.request ? (
                       <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
                     ) : (
@@ -1723,9 +1775,6 @@ function CustomerDashbord() {
                           ))}
                         </div>
                       )}
-                      {currentDue.dueDate && (
-                        <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
-                      )}
                       {currentDue.depositApplied > 0 && (
                         <p className="dashboard-due-deposit-note">
                           หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
@@ -1740,6 +1789,9 @@ function CustomerDashbord() {
                         <p className="dashboard-due-deposit-note">
                           รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน
                         </p>
+                      )}
+                      {currentDue.dueDate && (
+                        <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
                       )}
 
                       <div className="dashboard-due-pay-actions">
@@ -1886,31 +1938,35 @@ function CustomerDashbord() {
                                     </td>
                                     <td>{formatCustomerNote(payment.note)}</td>
                                     <td>
-                                      <button
-                                        type="button"
-                                        className="dashboard-receipt-btn"
-                                        disabled={receiptGenerating}
-                                        onClick={() => requestSingleReceipt(entry, payment)}
-                                        aria-label="ดาวน์โหลดใบเสร็จ"
-                                        title="ดาวน์โหลดใบเสร็จ (PDF)"
-                                      >
-                                        <svg
-                                          width="16"
-                                          height="16"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          aria-hidden="true"
+                                      {payment.isPendingRent ? (
+                                        <span className="dashboard-empty-cell">-</span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="dashboard-receipt-btn"
+                                          disabled={receiptGenerating}
+                                          onClick={() => requestSingleReceipt(entry, payment)}
+                                          aria-label="ดาวน์โหลดใบเสร็จ"
+                                          title="ดาวน์โหลดใบเสร็จ (PDF)"
                                         >
-                                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                          <polyline points="7 10 12 15 17 10" />
-                                          <line x1="12" y1="15" x2="12" y2="3" />
-                                        </svg>
-                                        ใบเสร็จ
-                                      </button>
+                                          <svg
+                                            width="16"
+                                            height="16"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            aria-hidden="true"
+                                          >
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="7 10 12 15 17 10" />
+                                            <line x1="12" y1="15" x2="12" y2="3" />
+                                          </svg>
+                                          ใบเสร็จ
+                                        </button>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}

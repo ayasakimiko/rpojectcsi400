@@ -65,9 +65,6 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
     (p) => p.type !== "deposit" && p.type !== "water" && p.type !== "electricity",
   );
 
-  // Walk every billing period from the first unsettled one up to the current period,
-  // so rent that was never paid carries forward (accumulates) instead of being dropped
-  // once the next month's period begins.
   const unpaidPeriods = [];
   let cursor = new Date(earliestPeriodStart);
   while (cursor <= periodStart) {
@@ -117,8 +114,6 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
     ? Math.min(Number(depositAmount) || 0, basePrice)
     : 0;
 
-  // Any months owed before the current billing cycle are always charged in full; only the
-  // current cycle can be replaced by a larger lump-sum renewal payment when one is pending.
   const overdueMonths = unpaidPeriods.length - 1;
   const lumpSumMonths =
     status !== "paid" && Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
