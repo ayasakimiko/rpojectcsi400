@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import mysql from "mysql2/promise";
+import bcrypt from "bcryptjs";
 import "dotenv/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,43 @@ export function getPool() {
   return pool;
 }
 
+// เพิ่มข้อมูลนะ
+async function seedDefaults(connection) {
+  const [[{ count: staffCount }]] = await connection.query(
+    "SELECT COUNT(*) AS count FROM Staff"
+  );
+  if (staffCount === 0) {
+    const defaultIdcard = process.env.DEFAULT_STAFF_IDCARD || "1100200000101";
+    const defaultPassword = process.env.DEFAULT_STAFF_PASSWORD || "test1234";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    await connection.query(
+      `INSERT INTO Staff (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ["Staff", defaultIdcard, hashedPassword, "0800000000", "พนักงาน", "เริ่มต้น", false, 25]
+    );
+    console.log(
+      `Seeded default staff (idcard: ${defaultIdcard}, password: ${defaultPassword})`
+    );
+  }
+
+  const [[{ count: roomCount }]] = await connection.query(
+    "SELECT COUNT(*) AS count FROM Room"
+  );
+  if (roomCount === 0) {
+    await connection.query(
+      `INSERT INTO Room
+        (room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price)
+       VALUES
+        (101, FALSE, 3000.00, TRUE, TRUE, TRUE, 1, TRUE, TRUE, 8.00, 100.00),
+        (102, FALSE, 3200.00, TRUE, TRUE, TRUE, 1, TRUE, TRUE, 8.00, 100.00),
+        (103, FALSE, 3500.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE, 8.00, 100.00),
+        (104, FALSE, 3800.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE, 8.00, 100.00),
+        (105, FALSE, 4000.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE, 8.00, 100.00)`
+    );
+    console.log("Seeded 5 default rooms (101-105)");
+  }
+}
+
 async function main() {
   const connection = await mysql.createConnection({
     host: DB_HOST,
@@ -47,6 +85,8 @@ async function main() {
 
   const sql = fs.readFileSync(path.join(__dirname, "database.sql"), "utf8");
   await connection.query(sql);
+
+  await seedDefaults(connection);
 
   const [tables] = await connection.query("SHOW TABLES;");
   console.log(`Database "${DB_NAME}" is ready. Tables:`);
