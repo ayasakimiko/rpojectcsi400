@@ -107,6 +107,47 @@ router.get("/income", async (req, res) => {
   }
 });
 
+router.get("/trends", async (req, res) => {
+  try {
+    const pool = getPool();
+    const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+
+    const [incomeRows] = await pool.query(
+      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS total
+       FROM Payment
+       WHERE status = 'paid' AND payment_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+       GROUP BY month`,
+      [months - 1],
+    );
+    const [expenseRows] = await pool.query(
+      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS total
+       FROM Expense
+       WHERE expense_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+       GROUP BY month`,
+      [months - 1],
+    );
+
+    const incomeByMonth = new Map(incomeRows.map((row) => [row.month, Number(row.total)]));
+    const expenseByMonth = new Map(expenseRows.map((row) => [row.month, Number(row.total)]));
+
+    const trends = [];
+    const cursor = new Date();
+    cursor.setDate(1);
+    for (let i = months - 1; i >= 0; i -= 1) {
+      const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const income = incomeByMonth.get(key) || 0;
+      const expense = expenseByMonth.get(key) || 0;
+      trends.push({ month: key, income, expense, netProfit: income - expense });
+    }
+
+    return res.json({ trends });
+  } catch (error) {
+    console.error("Owner fetch trends error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 function validateExpenseInput({ category, amount, expense_date }) {
   if (typeof category !== "string" || !category.trim()) {
     return "กรุณาระบุหมวดหมู่รายจ่าย";
