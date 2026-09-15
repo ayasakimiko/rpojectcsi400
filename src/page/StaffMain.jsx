@@ -854,22 +854,24 @@ function StaffMain() {
   }, [rooms])
 
   const filteredRooms = useMemo(() => {
-    return rooms.filter((room) => {
-      if (statusFilter === 'booked' && !room.is_booked) return false
-      if (statusFilter === 'vacant' && room.is_booked) return false
-      if (statusFilter === 'due' && (!room.currentDue || room.currentDue.status === 'paid')) return false
-      if (statusFilter === 'expiring' && !getRoomExpiryStatus(room)) return false
+    return rooms
+      .filter((room) => {
+        if (statusFilter === 'booked' && !room.is_booked) return false
+        if (statusFilter === 'vacant' && room.is_booked) return false
+        if (statusFilter === 'due' && (!room.currentDue || room.currentDue.status === 'paid')) return false
+        if (statusFilter === 'expiring' && !getRoomExpiryStatus(room)) return false
 
-      if (search.trim()) {
-        const keyword = search.trim().toLowerCase()
-        const tenantName = room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}`.toLowerCase() : ''
-        const matchesRoom = String(room.room_number).includes(keyword)
-        const matchesTenant = tenantName.includes(keyword)
-        const matchesPhone = room.tenant?.phone?.includes(keyword)
-        if (!matchesRoom && !matchesTenant && !matchesPhone) return false
-      }
-      return true
-    })
+        if (search.trim()) {
+          const keyword = search.trim().toLowerCase()
+          const tenantName = room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}`.toLowerCase() : ''
+          const matchesRoom = String(room.room_number).includes(keyword)
+          const matchesTenant = tenantName.includes(keyword)
+          const matchesPhone = room.tenant?.phone?.includes(keyword)
+          if (!matchesRoom && !matchesTenant && !matchesPhone) return false
+        }
+        return true
+      })
+      .sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
   }, [rooms, search, statusFilter])
 
   const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROOMS_PER_PAGE))
