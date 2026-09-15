@@ -1125,11 +1125,12 @@ function CustomerDashbord() {
           }
         }
 
-        const roomNumber = receiptRequest.entry?.room_number || 'room'
+        const roomNumber = receiptRequest.entry?.room_number || ''
+        const dateStamp = formatDate(new Date()).replace(/\s+/g, '')
         const fileName =
           receiptRequest.mode === 'single'
-            ? `receipt-${roomNumber}-${receiptRequest.payment.id}.pdf`
-            : `receipt-${roomNumber}-booking-${receiptRequest.entry.booking_id}-all.pdf`
+            ? `ใบเสร็จ-ห้อง${roomNumber}-${PAYMENT_TYPE_LABEL[receiptRequest.payment.type] || 'ค่าเช่าห้อง'}-${dateStamp}.pdf`
+            : `ใบเสร็จรวม-ห้อง${roomNumber}-${dateStamp}.pdf`
         if (!cancelled) pdf.save(fileName)
       } catch (err) {
         console.error('Generate receipt PDF error:', err)
@@ -1322,7 +1323,6 @@ function CustomerDashbord() {
                 : currentDue.depositApplied > 0
                   ? `หักมัดจำ ฿${formatCurrency(currentDue.depositApplied)} แล้ว`
                   : null,
-            isPendingRent: true,
           }
           return { ...entry, payments: [pendingRentPayment, ...entry.payments] }
         })
@@ -1875,7 +1875,8 @@ function CustomerDashbord() {
                 <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
               ) : (
                 filteredRentalHistory.map((entry) => {
-                  const originalEntry = rentalHistory.find((item) => item.booking_id === entry.booking_id) || entry
+                  const originalEntry =
+                    rentalHistoryWithDue.find((item) => item.booking_id === entry.booking_id) || entry
                   const totalPages = Math.max(1, Math.ceil(entry.payments.length / RENTAL_HISTORY_PAGE_SIZE))
                   const currentPage = Math.min(historyPageByBooking[entry.booking_id] || 1, totalPages)
                   const paginatedPayments = entry.payments.slice(
@@ -1938,7 +1939,7 @@ function CustomerDashbord() {
                                     </td>
                                     <td>{formatCustomerNote(payment.note)}</td>
                                     <td>
-                                      {payment.isPendingRent ? (
+                                      {payment.status !== 'paid' ? (
                                         <span className="dashboard-empty-cell">-</span>
                                       ) : (
                                         <button
