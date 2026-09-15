@@ -904,6 +904,14 @@
   border-color: #fecaca;
 }
 
+.admin-status-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: #a8b3c4;
+  white-space: nowrap;
+}
+
 .admin-badge.status-pending {
   background: #fef3c7;
   color: #b45309;

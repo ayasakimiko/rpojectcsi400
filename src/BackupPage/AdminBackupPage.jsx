@@ -1732,6 +1732,9 @@ function AdminBackupPage() {
                             <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                             </span>
+                            {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
+                              <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
+                            )}
                           </td>
                           <td className="admin-col-optional">
                             <div className="admin-row-actions">
