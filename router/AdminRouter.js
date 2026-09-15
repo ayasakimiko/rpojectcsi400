@@ -19,16 +19,63 @@ function buildUpdate(allowedColumns, body) {
   return { columns, values };
 }
 
-function validateRoomInput({ room_number, price }) {
-  const roomNumberValue = Number(room_number);
-  if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
-    return "เลขห้องไม่ถูกต้อง";
+function validateRoomNumber(value) {
+  const num = Number(value);
+  if (!Number.isInteger(num) || num < 100 || num > 999) {
+    return "เลขห้องต้องเป็นตัวเลข 3 หลัก (100-999)";
   }
-  const priceValue = Number(price);
-  if (!Number.isFinite(priceValue) || priceValue < 0) {
+  return null;
+}
+
+function validatePrice(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
     return "ราคาไม่ถูกต้อง";
   }
   return null;
+}
+
+function validateBed(value) {
+  const num = Number(value);
+  if (!Number.isInteger(num) || num < 0 || num > 99) {
+    return "จำนวนเตียงต้องเป็นตัวเลข 2 หลัก (0-99)";
+  }
+  return null;
+}
+
+function validateElectricityUnitPrice(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0 || num > 99.99) {
+    return "ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)";
+  }
+  return null;
+}
+
+function validateWaterPrice(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0 || num > 999.99) {
+    return "ค่าน้ำ/เดือนต้องเป็นตัวเลข 3 หลัก (0-999.99)";
+  }
+  return null;
+}
+
+const ROOM_FIELD_VALIDATORS = {
+  room_number: validateRoomNumber,
+  price: validatePrice,
+  bed: validateBed,
+  electricity_unit_price: validateElectricityUnitPrice,
+  water_price: validateWaterPrice,
+};
+
+function validateRoomInput({ room_number, price, bed, electricity_unit_price, water_price }) {
+  return (
+    validateRoomNumber(room_number) ||
+    validatePrice(price) ||
+    validateBed(bed) ||
+    validateElectricityUnitPrice(electricity_unit_price) ||
+    validateWaterPrice(water_price) ||
+    null
+  );
 }
 
 router.get("/rooms", async (req, res) => {
@@ -42,7 +89,12 @@ router.get("/rooms", async (req, res) => {
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
          c.id AS customer_id, c.first_name, c.last_name, c.phone
        FROM Room r
-       LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
+       LEFT JOIN Customer c ON c.id = (
+         SELECT c2.id FROM Customer c2
+         WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+         ORDER BY c2.id DESC
+         LIMIT 1
+       )
        ORDER BY r.room_number ASC`,
     );
     return res.json({ rooms });
@@ -67,7 +119,7 @@ router.post("/rooms", async (req, res) => {
       water_price = 100.0,
     } = req.body ?? {};
 
-    const validationError = validateRoomInput({ room_number, price });
+    const validationError = validateRoomInput({ room_number, price, bed, electricity_unit_price, water_price });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -120,7 +172,17 @@ router.put("/rooms/:room_number", async (req, res) => {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
-    const { columns, values } = buildUpdate(ROOM_EDITABLE_COLUMNS, req.body ?? {});
+    const body = req.body ?? {};
+    for (const [field, validate] of Object.entries(ROOM_FIELD_VALIDATORS)) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        const validationError = validate(body[field]);
+        if (validationError) {
+          return res.status(400).json({ message: validationError });
+        }
+      }
+    }
+
+    const { columns, values } = buildUpdate(ROOM_EDITABLE_COLUMNS, body);
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }
@@ -560,6 +622,48 @@ router.get("/logs/maintenance", async (req, res) => {
     return res.json({ requests, total, page, pageSize: LOG_PAGE_SIZE });
   } catch (error) {
     console.error("Admin fetch maintenance request log error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/logs/moveouts", async (req, res) => {
+  try {
+    const pool = getPool();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const offset = (page - 1) * LOG_PAGE_SIZE;
+
+    const conditions = ["tr.type = 'moveout'", "tr.status = 'approved'"];
+    const params = [];
+
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    if (search) {
+      conditions.push(
+        `(CAST(tr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.idcard LIKE ? OR c.phone LIKE ?)`,
+      );
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM TenantRequest tr JOIN Customer c ON c.id = tr.customer_id ${whereClause}`,
+      params,
+    );
+    const total = countRows[0].total;
+
+    const [moveouts] = await pool.query(
+      `SELECT tr.id, tr.note, tr.created_at, tr.completed_at, tr.completed_by_name, tr.move_in_date,
+              tr.room_number, c.idcard, c.first_name, c.last_name, c.phone
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       ${whereClause}
+       ORDER BY tr.completed_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, LOG_PAGE_SIZE, offset],
+    );
+
+    return res.json({ moveouts, total, page, pageSize: LOG_PAGE_SIZE });
+  } catch (error) {
+    console.error("Admin fetch moveout log error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
