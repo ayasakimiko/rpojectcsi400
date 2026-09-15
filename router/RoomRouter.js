@@ -74,7 +74,12 @@ router.get("/", async (req, res) => {
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
          c.id AS customer_id, c.first_name, c.last_name, c.phone
        FROM Room r
-       LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
+       LEFT JOIN Customer c ON c.id = (
+         SELECT c2.id FROM Customer c2
+         WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+         ORDER BY c2.id DESC
+         LIMIT 1
+       )
        ORDER BY r.room_number ASC`,
     );
 

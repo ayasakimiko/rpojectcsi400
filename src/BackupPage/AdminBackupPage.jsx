@@ -88,6 +88,7 @@ const TABS = [
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
+  { key: 'moveouts', label: 'ผู้ย้ายออก' },
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
 ]
@@ -156,6 +157,140 @@ function formatDate(value) {
 function formatDateTime(value) {
   if (!value) return '-'
   return new Date(value).toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatRemaining(ms) {
+  const totalMinutes = Math.floor(Math.abs(ms) / (1000 * 60))
+  const days = Math.floor(totalMinutes / (60 * 24))
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
+  const minutes = totalMinutes % 60
+
+  const parts = []
+  if (days > 0) parts.push(`${days} วัน`)
+  if (hours > 0) parts.push(`${hours} ชั่วโมง`)
+  if (days === 0 && minutes > 0) parts.push(`${minutes} นาที`)
+  return parts.length > 0 ? parts.join(' ') : 'น้อยกว่า 1 นาที'
+}
+
+function calcStayDays(start, end) {
+  if (!start || !end) return null
+  const ms = new Date(end).getTime() - new Date(start).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
+  return Math.floor(ms / (1000 * 60 * 60 * 24))
+}
+
+const NOTIF_PAGE_SIZE = 6
+const ADMIN_STAFF_NOTIF_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+const ADMIN_TENANT_NOTIF_INFO = {
+  pending: { label: 'คำขอใหม่ รอดำเนินการ', tone: 'pending' },
+  in_progress: { label: 'รับเรื่องแล้ว รอดำเนินการขั้นต่อไป', tone: 'info' },
+}
+
+const ADMIN_MAINTENANCE_NOTIF_INFO = {
+  pending: { label: 'แจ้งซ่อมใหม่ รอดำเนินการ', tone: 'pending' },
+  in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'info' },
+}
+
+function buildAdminTenantNotifs(request) {
+  const info = ADMIN_TENANT_NOTIF_INFO[request.status]
+  if (!info) return []
+  return [
+    {
+      key: `tenant-${request.id}-${request.status}`,
+      title: REQUEST_TYPE_LABEL[request.type] || request.type,
+      ...info,
+      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      details: [
+        { label: 'ห้อง', value: request.room_number },
+        { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
+        ...(request.note ? [{ label: 'หมายเหตุ', value: request.note }] : []),
+      ],
+      kind: 'tenant',
+      request,
+    },
+  ]
+}
+
+function buildAdminMaintenanceNotifs(request) {
+  const info = ADMIN_MAINTENANCE_NOTIF_INFO[request.status]
+  if (!info) return []
+  return [
+    {
+      key: `maintenance-${request.id}-${request.status}`,
+      title: 'แจ้งซ่อม',
+      ...info,
+      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      details: [
+        { label: 'ห้อง', value: request.room_number },
+        { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
+        { label: 'ประเภท', value: MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ' },
+      ],
+      kind: 'maintenance',
+      request,
+    },
+  ]
+}
+
+// Staff has no updated_at column to track edits/suspensions, so "new staff" notifications
+// use a rolling window off created_at instead of a status field.
+function buildAdminStaffNotifs(member) {
+  if (!member.created_at) return []
+  const createdMs = new Date(member.created_at).getTime()
+  if (!Number.isFinite(createdMs) || Date.now() - createdMs > ADMIN_STAFF_NOTIF_WINDOW_MS) return []
+  return [
+    {
+      key: `staff-${member.id}-new`,
+      title: 'พนักงานใหม่',
+      label: 'เพิ่มพนักงานใหม่เข้าระบบ',
+      tone: 'info',
+      date: member.created_at,
+      details: [
+        { label: 'ชื่อ-นามสกุล', value: `${member.first_name} ${member.last_name}` },
+        { label: 'เบอร์โทร', value: member.phone },
+      ],
+      kind: 'staff',
+      request: member,
+    },
+  ]
+}
+
+function getAdminRequestTimeline(kind, request) {
+  if (!request || kind === 'staff') return []
+  const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
+  if (request.accepted_at) {
+    steps.push({ label: request.accepted_by_name ? `รับเรื่องโดย ${request.accepted_by_name}` : 'รับเรื่อง', date: request.accepted_at })
+  }
+  if (request.completed_at) {
+    steps.push({ label: request.completed_by_name ? `เสร็จสิ้นโดย ${request.completed_by_name}` : 'เสร็จสิ้น', date: request.completed_at })
+  }
+  return steps
+}
+
+function AdminRequestTimeline({ kind, request }) {
+  const timeline = getAdminRequestTimeline(kind, request)
+  if (timeline.length === 0) return null
+
+  return (
+    <div className="admin-request-log">
+      <div className="admin-request-log-items">
+        {timeline.map((step, index) => {
+          const prevStep = timeline[index - 1]
+          const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+          return (
+            <div key={step.label} className="admin-request-log-item">
+              <span className="admin-request-log-dot" />
+              <div className="admin-request-log-content">
+                <p className="admin-request-log-label">{step.label}</p>
+                <p className="admin-request-log-date">{formatDateTime(step.date)}</p>
+                {stepMs !== null && stepMs >= 0 && <p className="admin-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function useExpandedRows() {
@@ -232,6 +367,11 @@ function StaffActionCell({ name, date }) {
   )
 }
 
+function ActorName({ name }) {
+  if (!name) return <span className="admin-cell-empty">-</span>
+  return <span className="admin-actor-name">{name}</span>
+}
+
 function AmenitiesList({ room }) {
   const amenities = [
     room.air_conditioner && 'แอร์',
@@ -290,6 +430,28 @@ function AdminBackupPage() {
   const [activeTab, setActiveTab] = useState('rooms')
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifClosing, setNotifClosing] = useState(false)
+  const [notifSeen, setNotifSeen] = useState(false)
+  const [notifPage, setNotifPage] = useState(1)
+  const [notifDetail, setNotifDetail] = useState(null)
+  const [notifTenantItems, setNotifTenantItems] = useState([])
+  const [notifMaintenanceItems, setNotifMaintenanceItems] = useState([])
+  const notifRef = useRef(null)
+
+  const closeNotifPanel = () => setNotifClosing(true)
+
+  useEffect(() => {
+    if (!notifOpen) return
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        closeNotifPanel()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [notifOpen])
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -354,11 +516,44 @@ function AdminBackupPage() {
 
   const handleRoomFormChange = (event) => {
     const { name, type, value, checked } = event.target
+    if (name === 'room_number') {
+      setRoomForm((prev) => ({ ...prev, room_number: value.replace(/\D/g, '').slice(0, 3) }))
+      return
+    }
+    if (name === 'bed') {
+      setRoomForm((prev) => ({ ...prev, bed: value.replace(/\D/g, '').slice(0, 2) }))
+      return
+    }
+    if (name === 'electricity_unit_price' || name === 'water_price') {
+      const maxValue = name === 'water_price' ? 999.99 : 99.99
+      if (value !== '' && Number(value) > maxValue) return
+      setRoomForm((prev) => ({ ...prev, [name]: value }))
+      return
+    }
     setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
   const submitRoomForm = async (event, requestClose) => {
     event.preventDefault()
+    if (roomModal.mode === 'create' && !/^[1-9][0-9]{2}$/.test(roomForm.room_number)) {
+      setRoomFormError('เลขห้องต้องเป็นตัวเลข 3 หลัก')
+      return
+    }
+    const bedValue = Number(roomForm.bed)
+    if (!Number.isInteger(bedValue) || bedValue < 0 || bedValue > 99) {
+      setRoomFormError('จำนวนเตียงต้องเป็นตัวเลข 2 หลัก (0-99)')
+      return
+    }
+    const electricityValue = Number(roomForm.electricity_unit_price)
+    if (!Number.isFinite(electricityValue) || electricityValue < 0 || electricityValue > 99.99) {
+      setRoomFormError('ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)')
+      return
+    }
+    const waterValue = Number(roomForm.water_price)
+    if (!Number.isFinite(waterValue) || waterValue < 0 || waterValue > 999.99) {
+      setRoomFormError('ค่าน้ำ/เดือนต้องเป็นตัวเลข 3 หลัก (0-999.99)')
+      return
+    }
     setRoomSubmitting(true)
     setRoomFormError('')
     const payload = {
@@ -407,11 +602,13 @@ function AdminBackupPage() {
 
   const filteredRooms = useMemo(() => {
     const keyword = roomSearch.trim().toLowerCase()
-    if (!keyword) return rooms
-    return rooms.filter((room) => {
-      const tenantName = room.customer_id ? `${room.first_name} ${room.last_name}`.toLowerCase() : ''
-      return String(room.room_number).includes(keyword) || tenantName.includes(keyword) || (room.phone || '').includes(keyword)
-    })
+    const matched = !keyword
+      ? rooms
+      : rooms.filter((room) => {
+          const tenantName = room.customer_id ? `${room.first_name} ${room.last_name}`.toLowerCase() : ''
+          return String(room.room_number).includes(keyword) || tenantName.includes(keyword) || (room.phone || '').includes(keyword)
+        })
+    return [...matched].sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
   }, [rooms, roomSearch])
 
   const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROWS_PER_PAGE))
@@ -586,6 +783,16 @@ function AdminBackupPage() {
   const [customerSuspendConfirm, setCustomerSuspendConfirm] = useState(null)
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false)
   const [customerDetailError, setCustomerDetailError] = useState('')
+  const [revealedCustomerIdCards, setRevealedCustomerIdCards] = useState(() => new Set())
+
+  const toggleCustomerIdCardReveal = (id) => {
+    setRevealedCustomerIdCards((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [rentalPaymentsPage, setRentalPaymentsPage] = useState({})
 
   const loadCustomers = (search = customerSearch) => {
@@ -752,6 +959,50 @@ function AdminBackupPage() {
       .finally(() => setMaintenanceLogsLoading(false))
   }
 
+  const [moveoutLogs, setMoveoutLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
+  const [moveoutLogsLoading, setMoveoutLogsLoading] = useState(false)
+  const [moveoutLogsError, setMoveoutLogsError] = useState('')
+  const [moveoutSearch, setMoveoutSearch] = useState('')
+  const [revealedMoveoutIdCards, setRevealedMoveoutIdCards] = useState(() => new Set())
+
+  const toggleMoveoutIdCardReveal = (id) => {
+    setRevealedMoveoutIdCards((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const loadMoveoutLogs = (page = 1, search = moveoutSearch) => {
+    setMoveoutLogsLoading(true)
+    return axios
+      .get('/api/admin/logs/moveouts', {
+        headers: authHeaders(),
+        params: { page, search: search || undefined },
+      })
+      .then(({ data }) => {
+        setMoveoutLogs({ items: data.moveouts, total: data.total, page: data.page, pageSize: data.pageSize })
+        setMoveoutLogsError('')
+      })
+      .catch((err) => {
+        if (handleUnauthorized(err)) return
+        setMoveoutLogsError(err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อผู้ย้ายออกได้')
+      })
+      .finally(() => setMoveoutLogsLoading(false))
+  }
+
+  const loadNotifSources = () => {
+    axios
+      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { page: 1 } })
+      .then(({ data }) => setNotifTenantItems(data.requests))
+      .catch((err) => handleUnauthorized(err))
+    axios
+      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { page: 1 } })
+      .then(({ data }) => setNotifMaintenanceItems(data.requests))
+      .catch((err) => handleUnauthorized(err))
+  }
+
   useEffect(() => {
     const token = sessionStorage.getItem('token')
     if (!token) {
@@ -774,12 +1025,19 @@ function AdminBackupPage() {
     loadRooms()
     loadStaff()
     loadCustomers('')
+    loadNotifSources()
+    const interval = setInterval(() => {
+      loadNotifSources()
+      loadStaff()
+    }, 60000)
+    return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
     if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
+    if (activeTab === 'moveouts') loadMoveoutLogs(1, moveoutSearch)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
@@ -807,6 +1065,18 @@ function AdminBackupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maintenanceSearch])
 
+  const isMoveoutSearchMount = useRef(true)
+  useEffect(() => {
+    if (isMoveoutSearchMount.current) {
+      isMoveoutSearchMount.current = false
+      return
+    }
+    if (activeTab !== 'moveouts') return
+    const timeout = setTimeout(() => loadMoveoutLogs(1, moveoutSearch), 400)
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveoutSearch])
+
   const handleLogout = () => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
@@ -821,8 +1091,24 @@ function AdminBackupPage() {
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
 
+  const notifications = useMemo(() => {
+    return [
+      ...notifTenantItems.flatMap(buildAdminTenantNotifs),
+      ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
+      ...staffList.flatMap(buildAdminStaffNotifs),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date))
+  }, [notifTenantItems, notifMaintenanceItems, staffList])
+
+  const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
+  const notifCurrentPage = Math.min(notifPage, notifTotalPages)
+  const paginatedNotifications = notifications.slice(
+    (notifCurrentPage - 1) * NOTIF_PAGE_SIZE,
+    notifCurrentPage * NOTIF_PAGE_SIZE,
+  )
+
   const requestLogsTotalPages = Math.max(1, Math.ceil(requestLogs.total / requestLogs.pageSize))
   const maintenanceLogsTotalPages = Math.max(1, Math.ceil(maintenanceLogs.total / maintenanceLogs.pageSize))
+  const moveoutLogsTotalPages = Math.max(1, Math.ceil(moveoutLogs.total / moveoutLogs.pageSize))
 
   const [expandedRequestRows, toggleRequestRow, resetRequestRows] = useExpandedRows()
   useEffect(() => {
@@ -835,6 +1121,12 @@ function AdminBackupPage() {
     resetMaintenanceRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maintenanceLogs.page, activeTab])
+
+  const [expandedMoveoutRows, toggleMoveoutRow, resetMoveoutRows] = useExpandedRows()
+  useEffect(() => {
+    resetMoveoutRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveoutLogs.page, activeTab])
 
   return (
     <div className="admin-page">
@@ -851,10 +1143,142 @@ function AdminBackupPage() {
               <p>แดชบอร์ดผู้ดูแลระบบ - จัดการห้องพัก พนักงาน ลูกค้า และตรวจสอบกิจกรรม</p>
             </div>
           </div>
-          <button type="button" className="admin-logout-btn" onClick={handleLogout}>
-            ออกจากระบบ
-          </button>
+          <div className="admin-header-actions">
+            <div className="admin-notif-wrap" ref={notifRef}>
+              <button
+                type="button"
+                className="admin-notif-btn"
+                aria-label="การแจ้งเตือน"
+                onClick={() => {
+                  if (notifOpen) {
+                    closeNotifPanel()
+                  } else {
+                    setNotifOpen(true)
+                    setNotifSeen(true)
+                    setNotifPage(1)
+                  }
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {!notifSeen && notifications.length > 0 && <span className="admin-notif-dot" />}
+              </button>
+              {notifOpen && (
+                <div
+                  className={`admin-notif-panel${notifClosing ? ' is-closing' : ''}`}
+                  onAnimationEnd={() => {
+                    if (notifClosing) {
+                      setNotifOpen(false)
+                      setNotifClosing(false)
+                    }
+                  }}
+                >
+                  <div className="admin-notif-panel-header">
+                    <span>การแจ้งเตือน</span>
+                    <button type="button" className="admin-notif-panel-close" onClick={closeNotifPanel} aria-label="ปิด">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="admin-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                  ) : (
+                    <>
+                      <div className="admin-notif-list">
+                        {paginatedNotifications.map((notif) => (
+                          <button
+                            type="button"
+                            key={notif.key}
+                            className={`admin-notif-item is-${notif.tone}`}
+                            onClick={() => setNotifDetail(notif)}
+                          >
+                            <p className="admin-notif-item-title">{notif.title}</p>
+                            <p className="admin-notif-item-status">{notif.label}</p>
+                            <p className="admin-notif-item-date">{formatDateTime(notif.date)}</p>
+                          </button>
+                        ))}
+                      </div>
+                      {notifTotalPages > 1 && (
+                        <div className="admin-notif-pagination">
+                          <button
+                            type="button"
+                            className="admin-notif-page-btn"
+                            disabled={notifCurrentPage <= 1}
+                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
+                          >
+                            ก่อนหน้า
+                          </button>
+                          <span className="admin-notif-page-info">
+                            หน้า {notifCurrentPage} / {notifTotalPages}
+                          </span>
+                          <button
+                            type="button"
+                            className="admin-notif-page-btn"
+                            disabled={notifCurrentPage >= notifTotalPages}
+                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
+                          >
+                            ถัดไป
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <button type="button" className="admin-logout-btn" onClick={handleLogout}>
+              ออกจากระบบ
+            </button>
+          </div>
         </div>
+
+        {notifDetail && (
+          <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="admin-confirm-body">
+                <div className={`admin-confirm-icon is-${notifDetail.tone}`}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    {notifDetail.tone === 'info' ? (
+                      <>
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                      </>
+                    ) : (
+                      <>
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </>
+                    )}
+                  </svg>
+                </div>
+                <p className="admin-confirm-message">
+                  <span className={`admin-confirm-message-status is-${notifDetail.tone}`}>{notifDetail.label}</span>
+                </p>
+                {notifDetail.details && notifDetail.details.length > 0 && (
+                  <div className="admin-confirm-details">
+                    {notifDetail.details.map((item) => (
+                      <div className="admin-confirm-detail-row" key={item.label}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <AdminRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
+                <div className="admin-form-actions">
+                  <button type="button" className="admin-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
 
         {pageError && (
           <div className="alert alert-danger admin-alert" role="alert">
@@ -1262,6 +1686,7 @@ function AdminBackupPage() {
                 <thead>
                   <tr>
                     <th>ชื่อ-นามสกุล</th>
+                    <th className="admin-col-optional">บัตรประชาชน</th>
                     <th>ห้อง</th>
                     <th className="admin-col-optional">เบอร์โทร</th>
                     <th className="admin-col-optional">ระยะเวลาสัญญา</th>
@@ -1272,13 +1697,13 @@ function AdminBackupPage() {
                 <tbody>
                   {customersLoading ? (
                     <tr>
-                      <td colSpan={6} className="admin-empty">
+                      <td colSpan={7} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="admin-empty">
+                      <td colSpan={7} className="admin-empty">
                         ไม่พบข้อมูลลูกค้า
                       </td>
                     </tr>
@@ -1288,6 +1713,15 @@ function AdminBackupPage() {
                         <tr>
                           <td className="admin-strong-cell">
                             {customer.first_name} {customer.last_name}
+                          </td>
+                          <td className="admin-col-optional">
+                            <button
+                              type="button"
+                              className="admin-idcard-toggle"
+                              onClick={() => toggleCustomerIdCardReveal(customer.id)}
+                            >
+                              {revealedCustomerIdCards.has(customer.id) ? customer.idcard : '•'.repeat(String(customer.idcard || '').length || 13)}
+                            </button>
                           </td>
                           <td>{customer.room_number ?? '-'}</td>
                           <td className="admin-col-optional">{customer.phone}</td>
@@ -1319,13 +1753,21 @@ function AdminBackupPage() {
                         </tr>
                         <ExpandToggleRow
                           open={expandedCustomerRows.has(customer.id)}
-                          colSpan={6}
+                          colSpan={7}
                           onClick={() => toggleCustomerRow(customer.id)}
                         />
                         <DetailRow
                           open={expandedCustomerRows.has(customer.id)}
-                          colSpan={6}
+                          colSpan={7}
                           fields={[
+                            {
+                              label: 'บัตรประชาชน',
+                              value: (
+                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleCustomerIdCardReveal(customer.id)}>
+                                  {revealedCustomerIdCards.has(customer.id) ? customer.idcard : '•'.repeat(String(customer.idcard || '').length || 13)}
+                                </button>
+                              ),
+                            },
                             { label: 'เบอร์โทร', value: customer.phone },
                             {
                               label: 'ระยะเวลาสัญญา',
@@ -1460,9 +1902,7 @@ function AdminBackupPage() {
                           open={expandedRequestRows.has(request.id)}
                           colSpan={7}
                           fields={[
-                            { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
-                            { label: 'เสร็จสิ้นโดย', value: <StaffActionCell name={request.completed_by_name} date={request.completed_at} /> },
-                            { label: 'วันที่ส่งคำขอ', value: formatDateTime(request.created_at) },
+                            { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="tenant" request={request} /> },
                           ]}
                         />
                       </Fragment>
@@ -1579,8 +2019,7 @@ function AdminBackupPage() {
                           colSpan={7}
                           fields={[
                             { label: 'หมวดหมู่', value: <MaintenanceCategoryBadge category={request.category} /> },
-                            { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
-                            { label: 'เสร็จสิ้นโดย', value: <StaffActionCell name={request.completed_by_name} date={request.completed_at} /> },
+                            { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="maintenance" request={request} /> },
                           ]}
                         />
                       </Fragment>
@@ -1593,6 +2032,123 @@ function AdminBackupPage() {
               page={maintenanceLogs.page}
               totalPages={maintenanceLogsTotalPages}
               onChange={(page) => loadMaintenanceLogs(page, maintenanceStatusFilter, maintenanceSearch)}
+            />
+          </div>
+        )}
+
+        {activeTab === 'moveouts' && (
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <h2>รายชื่อผู้ย้ายออก</h2>
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="moveout-search">
+                  ค้นหา
+                </label>
+                <input
+                  id="moveout-search"
+                  type="text"
+                  className="form-control admin-search-input"
+                  placeholder="ค้นหาชื่อ, เลขห้อง, บัตร ปชช..."
+                  value={moveoutSearch}
+                  onChange={(event) => setMoveoutSearch(event.target.value)}
+                />
+              </div>
+            </div>
+
+            {moveoutLogsError && <div className="alert alert-danger">{moveoutLogsError}</div>}
+
+            <div className="table-responsive">
+              <table className="table admin-table">
+                <thead>
+                  <tr>
+                    <th>ชื่อ-นามสกุล</th>
+                    <th className="admin-col-optional">บัตรประชาชน</th>
+                    <th>ห้อง</th>
+                    <th className="admin-col-optional">เบอร์โทร</th>
+                    <th className="admin-col-optional">วันที่เข้าพัก</th>
+                    <th>วันที่ย้ายออก</th>
+                    <th>รวมวันที่พัก</th>
+                    <th className="admin-col-optional">ดำเนินการโดย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moveoutLogsLoading ? (
+                    <tr>
+                      <td colSpan={8} className="admin-empty">
+                        กำลังโหลดข้อมูล...
+                      </td>
+                    </tr>
+                  ) : moveoutLogs.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="admin-empty">
+                        ไม่พบรายชื่อผู้ย้ายออก
+                      </td>
+                    </tr>
+                  ) : (
+                    moveoutLogs.items.map((moveout) => {
+                      const stayDays = calcStayDays(moveout.move_in_date, moveout.completed_at)
+                      return (
+                      <Fragment key={moveout.id}>
+                        <tr>
+                          <td className="admin-strong-cell">
+                            {moveout.first_name} {moveout.last_name}
+                          </td>
+                          <td className="admin-col-optional">
+                            <button
+                              type="button"
+                              className="admin-idcard-toggle"
+                              onClick={() => toggleMoveoutIdCardReveal(moveout.id)}
+                            >
+                              {revealedMoveoutIdCards.has(moveout.id) ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
+                            </button>
+                          </td>
+                          <td>{moveout.room_number}</td>
+                          <td className="admin-col-optional">{moveout.phone}</td>
+                          <td className="admin-col-optional">{formatDate(moveout.move_in_date)}</td>
+                          <td>{formatDateTime(moveout.completed_at)}</td>
+                          <td>{stayDays !== null ? `${stayDays} วัน` : '-'}</td>
+                          <td className="admin-col-optional">
+                            <ActorName name={moveout.completed_by_name} />
+                          </td>
+                        </tr>
+                        <ExpandToggleRow
+                          open={expandedMoveoutRows.has(moveout.id)}
+                          colSpan={8}
+                          onClick={() => toggleMoveoutRow(moveout.id)}
+                        />
+                        <DetailRow
+                          open={expandedMoveoutRows.has(moveout.id)}
+                          colSpan={8}
+                          fields={[
+                            {
+                              label: 'บัตรประชาชน',
+                              value: (
+                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleMoveoutIdCardReveal(moveout.id)}>
+                                  {revealedMoveoutIdCards.has(moveout.id) ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
+                                </button>
+                              ),
+                            },
+                            { label: 'เบอร์โทร', value: moveout.phone },
+                            { label: 'วันที่เข้าพัก', value: formatDate(moveout.move_in_date) },
+                            { label: 'รวมวันที่พัก', value: stayDays !== null ? `${stayDays} วัน` : '-' },
+                            { label: 'ดำเนินการโดย', value: <ActorName name={moveout.completed_by_name} /> },
+                            ...(moveout.note ? [{ label: 'หมายเหตุ', value: moveout.note }] : []),
+                          ]}
+                        />
+                      </Fragment>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={moveoutLogs.page}
+              totalPages={moveoutLogsTotalPages}
+              onChange={(page) => loadMoveoutLogs(page, moveoutSearch)}
             />
           </div>
         )}
@@ -1610,12 +2166,16 @@ function AdminBackupPage() {
                 <div className="col-6">
                   <label className="form-label">เลขห้อง</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{3}"
                     name="room_number"
                     className="form-control"
                     value={roomForm.room_number}
                     onChange={handleRoomFormChange}
                     disabled={roomModal.mode === 'edit'}
+                    maxLength={3}
+                    placeholder="เช่น 101"
                     required
                   />
                 </div>
@@ -1628,13 +2188,15 @@ function AdminBackupPage() {
                 </div>
                 <div className="col-4">
                   <label className="form-label">จำนวนเตียง</label>
-                  <input type="number" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
+                  <input type="number" min="0" max="99" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
                 </div>
                 <div className="col-4">
                   <label className="form-label">ค่าไฟ/หน่วย</label>
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
+                    max="99.99"
                     name="electricity_unit_price"
                     className="form-control"
                     value={roomForm.electricity_unit_price}
@@ -1643,7 +2205,16 @@ function AdminBackupPage() {
                 </div>
                 <div className="col-4">
                   <label className="form-label">ค่าน้ำ/เดือน</label>
-                  <input type="number" step="0.01" name="water_price" className="form-control" value={roomForm.water_price} onChange={handleRoomFormChange} />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="999.99"
+                    name="water_price"
+                    className="form-control"
+                    value={roomForm.water_price}
+                    onChange={handleRoomFormChange}
+                  />
                 </div>
               </div>
             </div>

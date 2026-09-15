@@ -1,16 +1,16 @@
 CREATE TABLE IF NOT EXISTS Room (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
-    room_number INT UNSIGNED NOT NULL UNIQUE,
+    room_number INT UNSIGNED NOT NULL UNIQUE CHECK (room_number BETWEEN 100 AND 999),
     is_booked BOOLEAN NOT NULL DEFAULT FALSE,
     price DECIMAL(10,2) NOT NULL,
     air_conditioner BOOLEAN DEFAULT FALSE,
     wifi BOOLEAN DEFAULT FALSE,
     refrigerator BOOLEAN DEFAULT FALSE,
-    bed TINYINT UNSIGNED,
+    bed TINYINT UNSIGNED CHECK (bed BETWEEN 0 AND 99),
     bathroom BOOLEAN DEFAULT FALSE,
     cctv BOOLEAN DEFAULT FALSE,
-    electricity_unit_price DECIMAL(10,2) NOT NULL DEFAULT 8.00,
-    water_price DECIMAL(10,2) NOT NULL DEFAULT 100.00,
+    electricity_unit_price DECIMAL(10,2) NOT NULL DEFAULT 8.00 CHECK (electricity_unit_price BETWEEN 0 AND 99.99),
+    water_price DECIMAL(10,2) NOT NULL DEFAULT 100.00 CHECK (water_price BETWEEN 0 AND 999.99),
     
     rental_duration_months INT UNSIGNED,
     rental_start_date DATETIME,
@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS TenantRequest (
     accepted_by_name VARCHAR(255) NULL,
     completed_at DATETIME NULL,
     completed_by_name VARCHAR(255) NULL,
+    move_in_date DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id)

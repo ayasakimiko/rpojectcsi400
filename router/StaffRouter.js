@@ -61,7 +61,12 @@ router.get("/rooms", async (req, res) => {
          r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months,
          c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM Room r
-       LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
+       LEFT JOIN Customer c ON c.id = (
+         SELECT c2.id FROM Customer c2
+         WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+         ORDER BY c2.id DESC
+         LIMIT 1
+       )
        ORDER BY r.room_number ASC`,
     );
 
@@ -436,6 +441,14 @@ router.post("/requests/:id/approve", async (req, res) => {
     }
 
     if (tenantRequest.type === "moveout") {
+      const [roomBeforeReset] = await connection.query(
+        `SELECT rental_start_date FROM Room WHERE room_number = ?`,
+        [tenantRequest.room_number],
+      );
+      const moveInDate = roomBeforeReset[0]?.rental_start_date ?? null;
+
+      await connection.query(`UPDATE TenantRequest SET move_in_date = ? WHERE id = ?`, [moveInDate, requestId]);
+
       await connection.query(`UPDATE Customer SET is_suspended = TRUE WHERE id = ?`, [tenantRequest.customer_id]);
 
       await connection.query(
