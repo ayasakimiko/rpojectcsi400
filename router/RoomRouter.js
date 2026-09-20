@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
+import { authenticate, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ function validateCreateRoomInput({ room_number, price }) {
   return null;
 }
 
-router.post("/create", async (req, res) => {
+router.post("/create", authenticate, requireAdminRole, async (req, res) => {
   try {
     const {
       room_number,
@@ -63,7 +64,7 @@ router.post("/create", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+router.get("/", authenticate, requireStaffRole, async (req, res) => {
   try {
     const pool = getPool();
     const [rooms] = await pool.query(
