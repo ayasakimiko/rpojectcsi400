@@ -3,7 +3,7 @@ import LoginPage from './page/LoginPage.jsx'
 import RegisterMain from './page/RegisterMain.jsx'
 import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
-import AdminBackupPage from './BackupPage/AdminBackupPage.jsx'
+import AdminBackupPage from './page/AdminPage.jsx'
 import OwnerBackupPage from './BackupPage/OwnerBackupPage.jsx'
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
