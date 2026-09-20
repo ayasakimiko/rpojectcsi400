@@ -408,10 +408,17 @@ router.get("/logs/payments", async (req, res) => {
 
     const [payments] = await pool.query(
       `SELECT p.id, p.amount, p.payment_date, p.status, p.type, p.note, p.created_at,
-              c.id AS customer_id, c.first_name, c.last_name, c.room_number
+              c.id AS customer_id, c.first_name, c.last_name, c.room_number, c.deposit_amount,
+              r.price AS room_price,
+              COALESCE((
+                SELECT SUM(p2.amount) FROM Payment p2
+                JOIN Booking b2 ON b2.id = p2.booking_id
+                WHERE b2.customer_id = c.id AND p2.status != 'paid' AND p2.type IN ('water', 'electricity')
+              ), 0) AS unpaid_utilities
        FROM Payment p
        JOIN Booking b ON b.id = p.booking_id
        JOIN Customer c ON c.id = b.customer_id
+       LEFT JOIN Room r ON r.room_number = c.room_number
        ${whereClause}
        ORDER BY p.payment_date DESC, p.created_at DESC
        LIMIT ? OFFSET ?`,

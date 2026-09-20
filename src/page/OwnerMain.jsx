@@ -47,6 +47,17 @@ function formatSignedCurrency(value) {
   return amount < 0 ? `-฿${formatCurrency(Math.abs(amount))}` : `฿${formatCurrency(amount)}`
 }
 
+const PAYMENT_TYPE_LABELS = {
+  rent: 'ค่าเช่า',
+  deposit: 'เงินมัดจำ',
+  water: 'ค่าน้ำ',
+  electricity: 'ค่าไฟ',
+}
+
+function formatPaymentType(type) {
+  return PAYMENT_TYPE_LABELS[type] || type
+}
+
 function parseInputDate(value) {
   return value ? new Date(`${value}T00:00:00`) : null
 }
@@ -103,6 +114,8 @@ function OwnerMain() {
   })
   const [roomDetail, setRoomDetail] = useState(null)
   const [isRoomDetailLoading, setIsRoomDetailLoading] = useState(false)
+  const [roomListFilter, setRoomListFilter] = useState(null)
+  const [paymentHistoryPage, setPaymentHistoryPage] = useState(1)
 
   const totalIncome = Number(overview?.finance?.totalIncome ?? incomeSummary?.totalIncome ?? 0)
   const totalExpense = Number(overview?.finance?.totalExpense ?? 0)
@@ -137,6 +150,30 @@ function OwnerMain() {
     ],
     [overview, roomStatus, totalExpense, totalIncome, netProfit],
   )
+
+  const roomListItems = useMemo(() => {
+    if (roomListFilter === 'occupied') return (roomStatus.rooms || []).filter((room) => room.is_booked)
+    if (roomListFilter === 'vacant') return (roomStatus.rooms || []).filter((room) => room.status === 'vacant')
+    return []
+  }, [roomListFilter, roomStatus.rooms])
+
+  const roomDetailBalance = useMemo(() => {
+    if (!roomDetail?.tenant) return null
+    const rent = Number(roomDetail.room?.price) || 0
+    const unpaidUtilities = (roomDetail.payments || [])
+      .filter((payment) => payment.status !== 'paid' && (payment.type === 'water' || payment.type === 'electricity'))
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    const deposit = Number(roomDetail.tenant.deposit_amount) || 0
+    const totalDue = rent + unpaidUtilities
+    return { rent, unpaidUtilities, deposit, totalDue, netBalance: totalDue - deposit }
+  }, [roomDetail])
+
+  const PAYMENT_HISTORY_PAGE_SIZE = 5
+  const paymentHistoryTotalPages = Math.max(1, Math.ceil((roomDetail?.payments?.length || 0) / PAYMENT_HISTORY_PAGE_SIZE))
+  const paginatedPaymentHistory = useMemo(() => {
+    const start = (paymentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE
+    return (roomDetail?.payments || []).slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
+  }, [roomDetail, paymentHistoryPage])
 
   const setMessage = (type, message) => {
     setNotice({ type, message })
@@ -216,6 +253,7 @@ function OwnerMain() {
 
   const handleRoomClick = async (room) => {
     setRoomDetail({ room, tenant: null, payments: [] })
+    setPaymentHistoryPage(1)
     setIsRoomDetailLoading(true)
     try {
       const { data } = await axios.get(`/api/owner/rooms/${room.room_number}`, { headers: getAuthHeaders() })
@@ -243,6 +281,25 @@ function OwnerMain() {
 
     fetchAll()
   }, [])
+
+  useEffect(() => {
+    const isModalOpen = Boolean(roomDetail) || Boolean(roomListFilter)
+    if (!isModalOpen) return undefined
+
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    const previousOverflow = document.body.style.overflow
+    const previousPaddingRight = document.body.style.paddingRight
+
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.body.style.paddingRight = previousPaddingRight
+    }
+  }, [roomDetail, roomListFilter])
 
   const handleExpenseFilterChange = async (field, value) => {
     const nextFilters = { ...expenseFilter, [field]: value }
@@ -450,49 +507,22 @@ function OwnerMain() {
                     <p>{roomStatus?.occupiedCount ?? 0} ห้องใช้งาน / {roomStatus?.totalRooms ?? 0} ห้องทั้งหมด</p>
                   </div>
                 </div>
-
-                <div className="owner-room-list">
-                  {roomStatus.rooms?.length ? (
-                    roomStatus.rooms.map((room) => {
-                      const statusLabels = { vacant: 'ว่าง', occupied: 'มีผู้เช่า', overdue: 'ค้างชำระ', maintenance: 'ซ่อมบำรุง' }
-                      return (
-                        <button
-                          key={room.room_number}
-                          type="button"
-                          className={`owner-room-pill room-${room.status}`}
-                          onClick={() => handleRoomClick(room)}
-                        >
-                          <span>ห้อง {room.room_number}</span>
-                          <strong>{statusLabels[room.status] || 'มีผู้เช่า'}</strong>
-                        </button>
-                      )
-                    })
-                  ) : (
-                    <div className="owner-empty">ไม่มีห้องว่างในระบบ</div>
-                  )}
-                </div>
-              </div>
-              <div className="owner-room-legend" aria-label="คำอธิบายสถานะห้อง">
-                <span><i className="room-dot vacant" />ว่าง</span>
-                <span><i className="room-dot occupied" />มีผู้เช่า</span>
-                <span><i className="room-dot overdue" />ค้างชำระ</span>
-                <span><i className="room-dot maintenance" />ซ่อมบำรุง</span>
               </div>
               <div className="owner-room-status-summary">
-                <div className="owner-room-status-card occupied">
+                <button type="button" className="owner-room-status-card occupied" onClick={() => setRoomListFilter('occupied')}>
                   <span className="owner-room-status-icon" aria-hidden="true" />
                   <div>
                     <strong>{roomStatus?.occupiedCount ?? 0} ห้อง</strong>
                     <span>มีผู้เช่า</span>
                   </div>
-                </div>
-                <div className="owner-room-status-card vacant">
+                </button>
+                <button type="button" className="owner-room-status-card vacant" onClick={() => setRoomListFilter('vacant')}>
                   <span className="owner-room-status-icon" aria-hidden="true" />
                   <div>
                     <strong>{roomStatus?.vacantCount ?? 0} ห้อง</strong>
                     <span>ห้องว่าง</span>
                   </div>
-                </div>
+                </button>
               </div>
             </section>
 
@@ -506,7 +536,7 @@ function OwnerMain() {
                     incomeSummary.byType.map((item) => (
                       <div key={item.type} className="owner-summary-item">
                         <div>
-                          <span className="owner-summary-label">{item.type || 'ไม่ระบุ'}</span>
+                          <span className="owner-summary-label">{item.type ? formatPaymentType(item.type) : 'ไม่ระบุ'}</span>
                           <small>{item.count || 0} รายการ</small>
                         </div>
                         <strong>฿{formatCurrency(item.total)}</strong>
@@ -789,7 +819,7 @@ function OwnerMain() {
                         <th>ชื่อ-นามสกุล</th>
                         <th>ตำแหน่ง</th>
                         <th>เบอร์</th>
-                        <th>สถานะ</th>
+                        <th className="owner-col-status">สถานะ</th>
                         <th>จัดการ</th>
                       </tr>
                     </thead>
@@ -800,7 +830,7 @@ function OwnerMain() {
                             <td>{`${member.first_name || ''} ${member.last_name || ''}`.trim() || '-'}</td>
                             <td>{member.role}</td>
                             <td>{member.phone || '-'}</td>
-                            <td>
+                            <td className="owner-col-status">
                               <span className={`owner-status-badge ${member.is_suspended ? 'disabled' : 'active'}`}>
                                 {member.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}
                               </span>
@@ -873,30 +903,40 @@ function OwnerMain() {
                       <th>ห้อง</th>
                       <th>ประเภท</th>
                       <th>จำนวน</th>
-                      <th>สถานะ</th>
+                      <th className="owner-col-status">สถานะ</th>
+                      <th>ค้างค่าห้อง</th>
                       <th>หมายเหตุ</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paymentLogs.payments?.length ? (
-                      paymentLogs.payments.map((payment) => (
-                        <tr key={payment.id}>
-                          <td>{formatDate(payment.payment_date)}</td>
-                          <td>{`${payment.first_name || ''} ${payment.last_name || ''}`.trim() || '-'}</td>
-                          <td>{payment.room_number || '-'}</td>
-                          <td>{payment.type || '-'}</td>
-                          <td>฿{formatCurrency(payment.amount)}</td>
-                          <td>
-                            <span className={`owner-status-badge ${payment.status === 'paid' ? 'active' : 'disabled'}`}>
-                              {payment.status === 'paid' ? 'ชำระแล้ว' : payment.status}
-                            </span>
-                          </td>
-                          <td>{payment.note || '-'}</td>
-                        </tr>
-                      ))
+                      paymentLogs.payments.map((payment) => {
+                        const roomPrice = Number(payment.room_price) || 0
+                        const unpaidUtilities = Number(payment.unpaid_utilities) || 0
+                        const deposit = Number(payment.deposit_amount) || 0
+                        const netBalance = roomPrice + unpaidUtilities - deposit
+                        return (
+                          <tr key={payment.id}>
+                            <td>{formatDate(payment.payment_date)}</td>
+                            <td>{`${payment.first_name || ''} ${payment.last_name || ''}`.trim() || '-'}</td>
+                            <td>{payment.room_number || '-'}</td>
+                            <td>{payment.type ? formatPaymentType(payment.type) : '-'}</td>
+                            <td>฿{formatCurrency(payment.amount)}</td>
+                            <td className="owner-col-status">
+                              <span className={`owner-status-badge ${payment.status === 'paid' ? 'active' : payment.status === 'pending' ? 'pending' : 'disabled'}`}>
+                                {payment.status === 'paid' ? 'ชำระแล้ว' : payment.status === 'pending' ? 'รอชำระ' : payment.status}
+                              </span>
+                            </td>
+                            <td className={netBalance > 0 ? 'owner-balance-cell is-owed' : 'owner-balance-cell is-refund'}>
+                              ฿{formatCurrency(Math.abs(netBalance))}
+                            </td>
+                            <td>{payment.note || '-'}</td>
+                          </tr>
+                        )
+                      })
                     ) : (
                       <tr>
-                        <td colSpan="7" className="owner-empty-row">
+                        <td colSpan="8" className="owner-empty-row">
                           ไม่มีข้อมูลบันทึกการชำระเงิน
                         </td>
                       </tr>
@@ -928,36 +968,243 @@ function OwnerMain() {
                       </span>
                       <h3 id="room-detail-title">รายละเอียดห้องพัก</h3>
                     </div>
-                    <button type="button" className="owner-modal-close" onClick={() => setRoomDetail(null)} aria-label="ปิดรายละเอียด">×</button>
+                    <button type="button" className="owner-modal-close" onClick={() => setRoomDetail(null)} aria-label="ปิดรายละเอียด">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                      </svg>
+                    </button>
                   </div>
+                  <div className="owner-modal-body">
                   {isRoomDetailLoading ? (
                     <div className="owner-loading-box">กำลังโหลดรายละเอียดห้อง...</div>
                   ) : (
                     <>
                       <div className="owner-detail-grid">
-                        <div><span>ผู้เช่า</span><strong>{roomDetail.tenant ? `${roomDetail.tenant.first_name} ${roomDetail.tenant.last_name}` : 'ห้องว่าง'}</strong></div>
-                        <div><span>เบอร์โทรศัพท์</span><strong>{roomDetail.tenant?.phone || '-'}</strong></div>
-                        <div><span>วันเริ่มสัญญา</span><strong>{formatDate(roomDetail.room.rental_start_date)}</strong></div>
-                        <div><span>วันสิ้นสุดสัญญา</span><strong>{formatDate(roomDetail.room.rental_end_date)}</strong></div>
-                        <div><span>ค่าเช่ารายเดือน</span><strong>฿{formatCurrency(roomDetail.room.price)}</strong></div>
-                        <div><span>มัดจำ</span><strong>฿{formatCurrency(roomDetail.tenant?.deposit_amount)}</strong></div>
+                        <div>
+                          <div className="owner-detail-icon blue" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="8" r="3.3" />
+                              <path d="M5.5 20c0-3.9 2.9-7 6.5-7s6.5 3.1 6.5 7" />
+                            </svg>
+                          </div>
+                          <div className="owner-detail-text">
+                            <span>ผู้เช่า</span>
+                            <strong>{roomDetail.tenant ? `${roomDetail.tenant.first_name} ${roomDetail.tenant.last_name}` : 'ห้องว่าง'}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="owner-detail-icon purple" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />
+                            </svg>
+                          </div>
+                          <div className="owner-detail-text">
+                            <span>เบอร์โทรศัพท์</span>
+                            <strong>{roomDetail.tenant?.phone || '-'}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="owner-detail-icon green" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="4" width="18" height="18" rx="3" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                          </div>
+                          <div className="owner-detail-text">
+                            <span>วันเริ่มสัญญา</span>
+                            <strong>{formatDate(roomDetail.room.rental_start_date)}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="owner-detail-icon amber" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="4" width="18" height="18" rx="3" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                          </div>
+                          <div className="owner-detail-text">
+                            <span>วันสิ้นสุดสัญญา</span>
+                            <strong>{formatDate(roomDetail.room.rental_end_date)}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="owner-detail-icon cyan" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="12" y1="1" x2="12" y2="23" />
+                              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                            </svg>
+                          </div>
+                          <div className="owner-detail-text">
+                            <span>ค่าเช่ารายเดือน</span>
+                            <strong>฿{formatCurrency(roomDetail.room.price)}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="owner-detail-icon rose" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2 4 5v6c0 5.25 3.6 9.74 8 11 4.4-1.26 8-5.75 8-11V5l-8-3Z" />
+                            </svg>
+                          </div>
+                          <div className="owner-detail-text">
+                            <span>มัดจำ</span>
+                            <strong>฿{formatCurrency(roomDetail.tenant?.deposit_amount)}</strong>
+                          </div>
+                        </div>
                       </div>
                       {!roomDetail.tenant && (
                         <button type="button" className="owner-primary-btn" onClick={() => navigate('/register')}>เพิ่มผู้เช่า</button>
                       )}
-                      <h4 className="owner-modal-subtitle">ประวัติการชำระเงิน</h4>
-                      {roomDetail.payments?.length ? (
-                        <div className="owner-payment-history">
-                          {roomDetail.payments.slice(0, 8).map((payment) => (
-                            <div key={payment.id}>
-                              <span>{formatDate(payment.payment_date)} · {payment.type || 'ไม่ระบุ'}</span>
-                              <strong>฿{formatCurrency(payment.amount)}</strong>
-                            </div>
-                          ))}
+                      {roomDetailBalance && (
+                        <div className="owner-balance-summary">
+                          <div>
+                            <span>ค่าเช่ารายเดือน</span>
+                            <strong>฿{formatCurrency(roomDetailBalance.rent)}</strong>
+                          </div>
+                          <div>
+                            <span>ค่าน้ำ-ไฟค้างชำระ</span>
+                            <strong>฿{formatCurrency(roomDetailBalance.unpaidUtilities)}</strong>
+                          </div>
+                          <div>
+                            <span>หักเงินมัดจำ</span>
+                            <strong>-฿{formatCurrency(roomDetailBalance.deposit)}</strong>
+                          </div>
+                          <div className={roomDetailBalance.netBalance > 0 ? 'is-owed' : 'is-refund'}>
+                            <span>{roomDetailBalance.netBalance > 0 ? 'เก็บเพิ่ม' : 'มัดจำคงเหลือ (คืนลูกค้า)'}</span>
+                            <strong>฿{formatCurrency(Math.abs(roomDetailBalance.netBalance))}</strong>
+                          </div>
                         </div>
-                      ) : <div className="owner-empty">ยังไม่มีประวัติการชำระเงิน</div>}
+                      )}
+                      <h4 className="owner-modal-subtitle">ประวัติการชำระเงิน</h4>
+                      <div className="owner-table-wrap">
+                        <table className="owner-table">
+                          <thead>
+                            <tr>
+                              <th>วันที่</th>
+                              <th>ประเภท</th>
+                              <th className="owner-col-status">สถานะ</th>
+                              <th>จำนวนเงิน</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {roomDetailBalance && (
+                              <tr className="owner-room-balance-row">
+                                <td>{formatDate(new Date())}</td>
+                                <td>ค่าห้อง</td>
+                                <td className="owner-col-status">
+                                  <span className={`owner-status-badge ${roomDetailBalance.rent - roomDetailBalance.deposit > 0 ? 'pending' : 'active'}`}>
+                                    {roomDetailBalance.rent - roomDetailBalance.deposit > 0 ? 'รอชำระ' : 'ชำระแล้ว'}
+                                  </span>
+                                </td>
+                                <td>฿{formatCurrency(Math.abs(roomDetailBalance.rent - roomDetailBalance.deposit))}</td>
+                              </tr>
+                            )}
+                            {roomDetail.payments?.length ? (
+                              paginatedPaymentHistory.map((payment) => (
+                                <tr key={payment.id}>
+                                  <td>{formatDate(payment.payment_date)}</td>
+                                  <td>{payment.type ? formatPaymentType(payment.type) : 'ไม่ระบุ'}</td>
+                                  <td className="owner-col-status">
+                                    <span className={`owner-status-badge ${payment.status === 'paid' ? 'active' : payment.status === 'pending' ? 'pending' : 'disabled'}`}>
+                                      {payment.status === 'paid' ? 'ชำระแล้ว' : payment.status === 'pending' ? 'รอชำระ' : payment.status}
+                                    </span>
+                                  </td>
+                                  <td>฿{formatCurrency(payment.amount)}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              !roomDetailBalance && (
+                                <tr>
+                                  <td colSpan="4" className="owner-empty-row">
+                                    ยังไม่มีประวัติการชำระเงิน
+                                  </td>
+                                </tr>
+                              )
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      {roomDetail.payments?.length > PAYMENT_HISTORY_PAGE_SIZE && (
+                        <div className="owner-pagination">
+                          <button type="button" disabled={paymentHistoryPage <= 1} onClick={() => setPaymentHistoryPage((page) => page - 1)}>
+                            ก่อนหน้า
+                          </button>
+                          <span>
+                            หน้า {paymentHistoryPage}/{paymentHistoryTotalPages}
+                          </span>
+                          <button type="button" disabled={paymentHistoryPage >= paymentHistoryTotalPages} onClick={() => setPaymentHistoryPage((page) => page + 1)}>
+                            ถัดไป
+                          </button>
+                        </div>
+                      )}
+                      {roomDetailBalance && (
+                        <div className="owner-payment-history-footer">
+                          <span>คงเหลือหลังหักมัดจำ</span>
+                          <span className={`owner-status-badge ${roomDetailBalance.netBalance > 0 ? 'pending' : 'active'}`}>
+                            {roomDetailBalance.netBalance > 0
+                              ? `ค้างชำระ ฿${formatCurrency(roomDetailBalance.netBalance)}`
+                              : `คืนลูกค้า ฿${formatCurrency(Math.abs(roomDetailBalance.netBalance))}`}
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {roomListFilter && (
+              <div className="owner-modal-backdrop" role="presentation" onClick={() => setRoomListFilter(null)}>
+                <section className="owner-modal" role="dialog" aria-modal="true" aria-labelledby="room-list-title" onClick={(event) => event.stopPropagation()}>
+                  <div className="owner-modal-header">
+                    <div>
+                      <h3 id="room-list-title">{roomListFilter === 'occupied' ? 'ห้องที่มีผู้เช่า' : 'ห้องว่าง'}</h3>
+                    </div>
+                    <button type="button" className="owner-modal-close" onClick={() => setRoomListFilter(null)} aria-label="ปิดรายการห้อง">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="owner-modal-body">
+                  <div className="owner-room-list">
+                    {roomListItems.length ? (
+                      roomListItems.map((room) => {
+                        const statusLabels = { vacant: 'ว่าง', occupied: 'มีผู้เช่า', overdue: 'ค้างชำระ', maintenance: 'ซ่อมบำรุง' }
+                        return (
+                          <button
+                            key={room.room_number}
+                            type="button"
+                            className={`owner-room-pill room-${room.status}`}
+                            onClick={() => {
+                              setRoomListFilter(null)
+                              handleRoomClick(room)
+                            }}
+                          >
+                            <span>ห้อง {room.room_number}</span>
+                            <strong>{statusLabels[room.status] || 'มีผู้เช่า'}</strong>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="owner-empty">ไม่มีห้องในหมวดนี้</div>
+                    )}
+                  </div>
+
+                  <div className="owner-room-legend" aria-label="คำอธิบายสถานะห้อง">
+                    <span><i className="room-dot vacant" />ว่าง</span>
+                    <span><i className="room-dot occupied" />มีผู้เช่า</span>
+                    <span><i className="room-dot overdue" />ค้างชำระ</span>
+                    <span><i className="room-dot maintenance" />ซ่อมบำรุง</span>
+                  </div>
+                  </div>
                 </section>
               </div>
             )}
