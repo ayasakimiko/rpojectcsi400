@@ -3,7 +3,7 @@ import LoginPage from './page/LoginPage.jsx'
 import RegisterMain from './page/RegisterMain.jsx'
 import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
-import AdminBackupPage from './page/AdminPage.jsx'
+import AdminPage from './page/AdminPage.jsx'
 import OwnerMain from './page/OwnerMain.jsx'
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
@@ -89,7 +89,7 @@ function App() {
           path="/admin"
           element={
             <RequireAdminAuth>
-              <AdminBackupPage />
+              <AdminPage />
             </RequireAdminAuth>
           }
         />

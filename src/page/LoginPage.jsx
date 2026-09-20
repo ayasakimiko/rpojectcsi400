@@ -41,7 +41,7 @@ function LoginPage() {
           : data.user?.role === 'Owner'
             ? '/owner'
             : data.user?.role === 'Admin'
-              ? '/staff'
+              ? '/admin'
               : '/staff'
       setTimeout(() => navigate(destination), 600)
     } catch (err) {
