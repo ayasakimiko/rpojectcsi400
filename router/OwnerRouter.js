@@ -160,7 +160,6 @@ router.get("/income", async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 router.get("/trends", async (req, res) => {
   try {
     const pool = getPool();
@@ -198,7 +197,10 @@ router.get("/trends", async (req, res) => {
     return res.json({ trends });
   } catch (error) {
     console.error("Owner fetch trends error:", error);
-=======
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.get("/rooms/:roomNumber", async (req, res) => {
   try {
     const roomNumber = Number(req.params.roomNumber);
@@ -236,7 +238,6 @@ router.get("/rooms/:roomNumber", async (req, res) => {
     return res.json({ room, tenant: room.customer_id ? room : null, payments });
   } catch (error) {
     console.error("Owner fetch room detail error:", error);
->>>>>>> Owner
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

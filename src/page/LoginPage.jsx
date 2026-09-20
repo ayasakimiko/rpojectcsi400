@@ -35,9 +35,6 @@ function LoginPage() {
       sessionStorage.setItem('user', JSON.stringify(data.user))
       sessionStorage.setItem('justLoggedIn', '1')
       setSuccess(data.message || 'เข้าสู่ระบบสำเร็จ')
-<<<<<<< HEAD
-      const destination = data.user?.role === 'Customer' ? '/dashboard' : '/staff'
-=======
       const destination =
         data.user?.role === 'Customer'
           ? '/dashboard'
@@ -46,7 +43,6 @@ function LoginPage() {
             : data.user?.role === 'Admin'
               ? '/staff'
               : '/staff'
->>>>>>> Owner
       setTimeout(() => navigate(destination), 600)
     } catch (err) {
       setError(err.response?.data?.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
