@@ -67,6 +67,23 @@ async function seedDefaults(connection) {
     );
   }
 
+  const [[{ count: ownerCount }]] = await connection.query(
+    "SELECT COUNT(*) AS count FROM Owner"
+  );
+  if (ownerCount === 0) {
+    const defaultIdcard = process.env.DEFAULT_OWNER_IDCARD || "1100200000301";
+    const defaultPassword = process.env.DEFAULT_OWNER_PASSWORD || "test1234";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    await connection.query(
+      `INSERT INTO Owner (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ["Owner", defaultIdcard, hashedPassword, "0800000002", "เจ้าของ", "หอพัก", false, 45]
+    );
+    console.log(
+      `Seeded default owner (idcard: ${defaultIdcard}, password: ${defaultPassword})`
+    );
+  }
+
   const [[{ count: roomCount }]] = await connection.query(
     "SELECT COUNT(*) AS count FROM Room"
   );

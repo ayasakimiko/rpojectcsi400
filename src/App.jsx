@@ -3,8 +3,12 @@ import LoginPage from './page/LoginPage.jsx'
 import RegisterMain from './page/RegisterMain.jsx'
 import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
+<<<<<<< HEAD
 import AdminBackupPage from './page/AdminPage.jsx'
 import OwnerBackupPage from './BackupPage/OwnerBackupPage.jsx'
+=======
+import OwnerMain from './page/OwnerMain.jsx'
+>>>>>>> Owner
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
 const ADMIN_ROLES = new Set(['Admin', 'Owner'])
@@ -30,6 +34,7 @@ function RequireStaffAuth({ children }) {
   return children
 }
 
+<<<<<<< HEAD
 function RequireAdminAuth({ children }) {
   const token = sessionStorage.getItem('token')
   if (!token) {
@@ -43,11 +48,17 @@ function RequireAdminAuth({ children }) {
   return children
 }
 
+=======
+>>>>>>> Owner
 function RequireOwnerAuth({ children }) {
   const token = sessionStorage.getItem('token')
   if (!token) {
     return <Navigate to="/login" replace />
   }
+<<<<<<< HEAD
+=======
+
+>>>>>>> Owner
   const storedUser = sessionStorage.getItem('user')
   const role = storedUser ? JSON.parse(storedUser)?.role : null
   if (role !== 'Owner') {
@@ -86,6 +97,7 @@ function App() {
           }
         />
         <Route
+<<<<<<< HEAD
           path="/admin"
           element={
             <RequireAdminAuth>
@@ -98,6 +110,12 @@ function App() {
           element={
             <RequireOwnerAuth>
               <OwnerBackupPage />
+=======
+          path="/owner"
+          element={
+            <RequireOwnerAuth>
+              <OwnerMain />
+>>>>>>> Owner
             </RequireOwnerAuth>
           }
         />

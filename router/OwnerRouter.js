@@ -27,9 +27,22 @@ async function getOwnerName(pool, user) {
 
 const LOG_PAGE_SIZE = 20;
 
+function getSelectedMonthRange(query) {
+  const year = Number(query.year);
+  const month = Number(query.month);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+
+  const from = `${year}-${String(month).padStart(2, "0")}-01`;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const toExclusive = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+  return { from, toExclusive };
+}
+
 router.get("/overview", async (req, res) => {
   try {
     const pool = getPool();
+    const selectedRange = getSelectedMonthRange(req.query);
 
     const [roomRows] = await pool.query(
       `SELECT COUNT(*) AS totalRooms, SUM(is_booked = TRUE) AS occupiedRooms FROM Room`,
@@ -38,8 +51,22 @@ router.get("/overview", async (req, res) => {
     const occupiedRooms = Number(roomRows[0].occupiedRooms) || 0;
     const vacantRooms = totalRooms - occupiedRooms;
 
-    const [incomeRows] = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM Payment WHERE status = 'paid'`);
-    const [expenseRows] = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM Expense`);
+    const incomeParams = ["paid"];
+    const expenseParams = [];
+    const incomeDateClause = selectedRange ? " AND payment_date >= ? AND payment_date < ?" : "";
+    const expenseDateClause = selectedRange ? " WHERE expense_date >= ? AND expense_date < ?" : "";
+    if (selectedRange) {
+      incomeParams.push(selectedRange.from, selectedRange.toExclusive);
+      expenseParams.push(selectedRange.from, selectedRange.toExclusive);
+    }
+    const [incomeRows] = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM Payment WHERE status = ?${incomeDateClause}`,
+      incomeParams,
+    );
+    const [expenseRows] = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM Expense${expenseDateClause}`,
+      expenseParams,
+    );
 
     const totalIncome = Number(incomeRows[0].total);
     const totalExpense = Number(expenseRows[0].total);
@@ -62,8 +89,28 @@ router.get("/overview", async (req, res) => {
 router.get("/rooms/status", async (req, res) => {
   try {
     const pool = getPool();
-    const [rooms] = await pool.query(`SELECT room_number, is_booked, price FROM Room ORDER BY room_number ASC`);
-    const vacantRooms = rooms.filter((room) => !room.is_booked);
+    const [rooms] = await pool.query(
+      `SELECT r.room_number, r.is_booked, r.price, r.rental_start_date, r.rental_end_date,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone,
+              CASE
+                WHEN r.is_booked = FALSE THEN 'vacant'
+                WHEN EXISTS (
+                  SELECT 1 FROM MaintenanceRequest mr
+                  WHERE mr.room_number = r.room_number AND mr.status IN ('pending', 'accepted')
+                ) THEN 'maintenance'
+                WHEN NOT EXISTS (
+                  SELECT 1 FROM Booking b
+                  JOIN Payment p ON p.booking_id = b.id
+                  WHERE b.room_id = r.id AND p.status = 'paid'
+                    AND p.payment_date >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')
+                ) THEN 'overdue'
+                ELSE 'occupied'
+              END AS status
+       FROM Room r
+       LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
+       ORDER BY r.room_number ASC`,
+    );
+    const vacantRooms = rooms.filter((room) => room.status === "vacant");
     const occupiedRooms = rooms.filter((room) => room.is_booked);
 
     return res.json({
@@ -71,6 +118,7 @@ router.get("/rooms/status", async (req, res) => {
       vacantCount: vacantRooms.length,
       occupiedCount: occupiedRooms.length,
       vacantRooms,
+      rooms,
     });
   } catch (error) {
     console.error("Owner fetch room status error:", error);
@@ -92,6 +140,11 @@ router.get("/income", async (req, res) => {
       conditions.push(`payment_date <= ?`);
       params.push(req.query.to);
     }
+    const selectedRange = getSelectedMonthRange(req.query);
+    if (selectedRange) {
+      conditions.push(`payment_date >= ? AND payment_date < ?`);
+      params.push(selectedRange.from, selectedRange.toExclusive);
+    }
     const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
     const [totalRows] = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM Payment ${whereClause}`, params);
@@ -107,6 +160,7 @@ router.get("/income", async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 router.get("/trends", async (req, res) => {
   try {
     const pool = getPool();
@@ -144,6 +198,45 @@ router.get("/trends", async (req, res) => {
     return res.json({ trends });
   } catch (error) {
     console.error("Owner fetch trends error:", error);
+=======
+router.get("/rooms/:roomNumber", async (req, res) => {
+  try {
+    const roomNumber = Number(req.params.roomNumber);
+    if (!Number.isInteger(roomNumber) || roomNumber < 1) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [roomRows] = await pool.query(
+      `SELECT r.id, r.room_number, r.is_booked, r.price, r.rental_start_date, r.rental_end_date,
+              r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv,
+              r.electricity_unit_price, r.water_price,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
+       FROM Room r
+       LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
+       WHERE r.room_number = ?`,
+      [roomNumber],
+    );
+    const room = roomRows[0];
+    if (!room) return res.status(404).json({ message: "ไม่พบห้องพักนี้" });
+
+    let payments = [];
+    if (room.customer_id) {
+      const [paymentRows] = await pool.query(
+        `SELECT p.id, p.amount, p.payment_date, p.status, p.type, p.note
+         FROM Payment p
+         JOIN Booking b ON b.id = p.booking_id
+         WHERE b.room_id = ? AND b.customer_id = ?
+         ORDER BY p.payment_date DESC, p.created_at DESC`,
+        [room.id, room.customer_id],
+      );
+      payments = paymentRows;
+    }
+
+    return res.json({ room, tenant: room.customer_id ? room : null, payments });
+  } catch (error) {
+    console.error("Owner fetch room detail error:", error);
+>>>>>>> Owner
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
