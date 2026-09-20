@@ -3,6 +3,7 @@ import LoginPage from './page/LoginPage.jsx'
 import RegisterMain from './page/RegisterMain.jsx'
 import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
+import OwnerMain from './page/OwnerMain.jsx'
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
 
@@ -22,6 +23,20 @@ function RequireStaffAuth({ children }) {
   const storedUser = sessionStorage.getItem('user')
   const role = storedUser ? JSON.parse(storedUser)?.role : null
   if (!STAFF_ROLES.has(role)) {
+    return <Navigate to="/login" replace />
+  }
+  return children
+}
+
+function RequireOwnerAuth({ children }) {
+  const token = sessionStorage.getItem('token')
+  if (!token) {
+    return <Navigate to="/login" replace />
+  }
+
+  const storedUser = sessionStorage.getItem('user')
+  const role = storedUser ? JSON.parse(storedUser)?.role : null
+  if (role !== 'Owner') {
     return <Navigate to="/login" replace />
   }
   return children
@@ -54,6 +69,14 @@ function App() {
             <RequireStaffAuth>
               <StaffMain />
             </RequireStaffAuth>
+          }
+        />
+        <Route
+          path="/owner"
+          element={
+            <RequireOwnerAuth>
+              <OwnerMain />
+            </RequireOwnerAuth>
           }
         />
         <Route path="" element={<Navigate to="/login" replace />} />

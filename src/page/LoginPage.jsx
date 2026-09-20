@@ -35,7 +35,14 @@ function LoginPage() {
       sessionStorage.setItem('user', JSON.stringify(data.user))
       sessionStorage.setItem('justLoggedIn', '1')
       setSuccess(data.message || 'เข้าสู่ระบบสำเร็จ')
-      const destination = data.user?.role === 'Customer' ? '/dashboard' : data.user?.role === 'Admin' ? '/admin' : '/staff'
+      const destination =
+        data.user?.role === 'Customer'
+          ? '/dashboard'
+          : data.user?.role === 'Owner'
+            ? '/owner'
+            : data.user?.role === 'Admin'
+              ? '/staff'
+              : '/staff'
       setTimeout(() => navigate(destination), 600)
     } catch (err) {
       setError(err.response?.data?.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
