@@ -91,6 +91,7 @@ const TABS = [
   { key: 'moveouts', label: 'ผู้ย้ายออก' },
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
+  { key: 'expenses', label: 'รายจ่าย' },
 ]
 
 const REQUEST_TYPE_LABEL = { renew: 'ต่อสัญญา', moveout: 'แจ้งย้ายออก' }
@@ -157,6 +158,14 @@ function formatDate(value) {
 function formatDateTime(value) {
   if (!value) return '-'
   return new Date(value).toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function getTodayInputDate() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function formatRemaining(ms) {
@@ -424,6 +433,8 @@ const emptyStaffForm = { idcard: '', password: '', phone: '', first_name: '', la
 
 const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '' }
 
+const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
+
 function AdminBackupPage() {
   const navigate = useNavigate()
   const [adminUser, setAdminUser] = useState(null)
@@ -475,6 +486,99 @@ function AdminBackupPage() {
   const [roomSubmitting, setRoomSubmitting] = useState(false)
   const [roomFormError, setRoomFormError] = useState('')
   const [roomDeleteConfirm, setRoomDeleteConfirm] = useState(null)
+
+  /* ------------------------------- Expenses -------------------------------- */
+  const [expenses, setExpenses] = useState([])
+  const [expensesLoading, setExpensesLoading] = useState(true)
+  const [expensesError, setExpensesError] = useState('')
+  const [expensesPage, setExpensesPage] = useState(1)
+  const [expensesTotalPages, setExpensesTotalPages] = useState(1)
+  const [expenseModal, setExpenseModal] = useState(null)
+  const [expenseForm, setExpenseForm] = useState(emptyExpenseForm)
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false)
+  const [expenseFormError, setExpenseFormError] = useState('')
+
+  const loadExpenses = (page = 1) => {
+    setExpensesLoading(true)
+    return axios
+      .get('/api/admin/expenses', { headers: authHeaders(), params: { page } })
+      .then(({ data }) => {
+        setExpenses(data.expenses)
+        setExpensesPage(data.page)
+        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20))))
+        setExpensesError('')
+      })
+      .catch((err) => {
+        if (handleUnauthorized(err)) return
+        setExpensesError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลรายจ่ายได้')
+      })
+      .finally(() => setExpensesLoading(false))
+  }
+
+  const openCreateExpense = () => {
+    setExpenseForm({ ...emptyExpenseForm, expense_date: getTodayInputDate() })
+    setExpenseFormError('')
+    setExpenseModal({ mode: 'create' })
+  }
+
+  const openEditExpense = (expense) => {
+    setExpenseForm({
+      category: expense.category || '',
+      description: expense.description || '',
+      amount: String(expense.amount ?? ''),
+      expense_date: (expense.expense_date || '').slice(0, 10),
+    })
+    setExpenseFormError('')
+    setExpenseModal({ mode: 'edit', expense })
+  }
+
+  const handleExpenseFormChange = (event) => {
+    const { name, value } = event.target
+    setExpenseForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const submitExpenseForm = (event, requestClose) => {
+    event.preventDefault()
+    if (!expenseForm.category.trim()) {
+      setExpenseFormError('กรุณาระบุหมวดหมู่รายจ่าย')
+      return
+    }
+    const amountValue = Number(expenseForm.amount)
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setExpenseFormError('กรุณาระบุจำนวนเงินให้ถูกต้อง')
+      return
+    }
+    if (!expenseForm.expense_date) {
+      setExpenseFormError('กรุณาระบุวันที่')
+      return
+    }
+
+    setExpenseSubmitting(true)
+    setExpenseFormError('')
+    const payload = {
+      category: expenseForm.category.trim(),
+      description: expenseForm.description.trim() || null,
+      amount: amountValue,
+      expense_date: expenseForm.expense_date,
+    }
+    const request =
+      expenseModal.mode === 'create'
+        ? axios.post('/api/admin/expenses', payload, { headers: authHeaders() })
+        : axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+
+    request
+      .then(() => {
+        setSuccessMessage(expenseModal.mode === 'create' ? 'บันทึกรายจ่ายสำเร็จ' : 'แก้ไขรายจ่ายสำเร็จ')
+        requestClose()
+        loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
+      })
+      .catch((err) => {
+        if (handleUnauthorized(err)) return
+        setExpenseFormError(err.response?.data?.message || 'ไม่สามารถบันทึกรายจ่ายได้')
+      })
+      .finally(() => setExpenseSubmitting(false))
+  }
+
 
   const loadRooms = () => {
     setRoomsLoading(true)
@@ -1038,6 +1142,7 @@ function AdminBackupPage() {
     if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
     if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
     if (activeTab === 'moveouts') loadMoveoutLogs(1, moveoutSearch)
+    if (activeTab === 'expenses') loadExpenses(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
@@ -2155,7 +2260,117 @@ function AdminBackupPage() {
             />
           </div>
         )}
+
+        {activeTab === 'expenses' && (
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <h2>รายจ่าย</h2>
+            </div>
+
+            <div className="admin-toolbar">
+              <div className="admin-filters">
+                <button type="button" className="admin-action-btn is-primary" onClick={openCreateExpense}>
+                  + บันทึกรายจ่าย
+                </button>
+              </div>
+            </div>
+
+            {expensesError && <div className="alert alert-danger">{expensesError}</div>}
+
+            <div className="table-responsive">
+              <table className="table admin-table">
+                <thead>
+                  <tr>
+                    <th>วันที่</th>
+                    <th>หมวดหมู่</th>
+                    <th className="admin-col-optional">รายละเอียด</th>
+                    <th className="admin-col-optional">บันทึกโดย</th>
+                    <th>จำนวนเงิน</th>
+                    <th>จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expensesLoading ? (
+                    <tr>
+                      <td colSpan={6} className="admin-empty">
+                        กำลังโหลดข้อมูล...
+                      </td>
+                    </tr>
+                  ) : expenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="admin-empty">
+                        ยังไม่มีรายการรายจ่าย
+                      </td>
+                    </tr>
+                  ) : (
+                    expenses.map((expense) => (
+                      <tr key={expense.id}>
+                        <td>{formatDate(expense.expense_date)}</td>
+                        <td className="admin-strong-cell">{expense.category}</td>
+                        <td className="admin-col-optional">{expense.description || '-'}</td>
+                        <td className="admin-col-optional">{expense.recorded_by_name || '-'}</td>
+                        <td>฿{Number(expense.amount).toLocaleString('th-TH')}</td>
+                        <td>
+                          <div className="admin-row-actions">
+                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditExpense(expense)}>
+                              แก้ไข
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={expensesPage} totalPages={expensesTotalPages} onChange={(page) => loadExpenses(page)} />
+          </div>
+        )}
       </div>
+
+      {expenseModal && (
+        <Modal title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'} onClose={() => setExpenseModal(null)}>
+          {(requestClose) => (
+            <form onSubmit={(event) => submitExpenseForm(event, requestClose)} noValidate>
+              {expenseFormError && <div className="alert alert-danger py-2 px-3">{expenseFormError}</div>}
+              <div className="row g-3">
+                <div className="col-12">
+                  <label className="form-label">หมวดหมู่</label>
+                  <input
+                    type="text"
+                    name="category"
+                    className="form-control"
+                    value={expenseForm.category}
+                    onChange={handleExpenseFormChange}
+                    placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซ่อมบำรุง"
+                    required
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label">รายละเอียด (ไม่บังคับ)</label>
+                  <input type="text" name="description" className="form-control" value={expenseForm.description} onChange={handleExpenseFormChange} />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">จำนวนเงิน (บาท)</label>
+                  <div className="admin-input-group">
+                    <span className="admin-input-affix">฿</span>
+                    <input type="number" step="0.01" min="0" name="amount" className="form-control" value={expenseForm.amount} onChange={handleExpenseFormChange} required />
+                  </div>
+                </div>
+                <div className="col-6">
+                  <label className="form-label">วันที่</label>
+                  <input type="date" name="expense_date" className="form-control" value={expenseForm.expense_date} onChange={handleExpenseFormChange} required />
+                </div>
+              </div>
+              <div className="admin-form-actions">
+                <button type="submit" className="admin-action-btn is-primary" disabled={expenseSubmitting}>
+                  {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
 
       {roomModal && (
         <Modal title={roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : `แก้ไขห้อง ${roomModal.room.room_number}`} onClose={() => setRoomModal(null)}>

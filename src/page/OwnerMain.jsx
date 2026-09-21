@@ -357,10 +357,20 @@ function OwnerMain() {
   const [editingStaff, setEditingStaff] = useState(null)
   const [viewingStaff, setViewingStaff] = useState(null)
 
+  const [isExpenseManagerOpen, setIsExpenseManagerOpen] = useState(false)
+  const [expenseEditModal, setExpenseEditModal] = useState(null)
+  const [expenseEditForm, setExpenseEditForm] = useState({ category: '', description: '', amount: '', expense_date: '' })
+  const [expenseEditFormError, setExpenseEditFormError] = useState('')
+  const [isExpenseEditSubmitting, setIsExpenseEditSubmitting] = useState(false)
+  const [expenseDeleteConfirm, setExpenseDeleteConfirm] = useState(null)
+
   const [displayRoomDetail, isRoomDetailClosing] = useClosingValue(roomDetail)
   const [displayRoomListFilter, isRoomListClosing] = useClosingValue(roomListFilter)
   const [displayStaffModalOpen, isStaffModalClosing] = useClosingValue(isStaffModalOpen)
   const [displayViewingStaff, isViewingStaffClosing] = useClosingValue(viewingStaff)
+  const [displayExpenseManagerOpen, isExpenseManagerClosing] = useClosingValue(isExpenseManagerOpen)
+  const [displayExpenseEditModal, isExpenseEditClosing] = useClosingValue(expenseEditModal)
+  const [displayExpenseDeleteConfirm, isExpenseDeleteClosing] = useClosingValue(expenseDeleteConfirm)
 
   const totalIncome = Number(overview?.finance?.totalIncome ?? incomeSummary?.totalIncome ?? 0)
   const totalExpense = Number(overview?.finance?.totalExpense ?? 0)
@@ -380,15 +390,10 @@ function OwnerMain() {
 
   const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
 
-  const expenseByCategoryTotal = useMemo(
-    () => (expenses.byCategory || []).reduce((sum, item) => sum + Number(item.total || 0), 0),
-    [expenses],
-  )
-
-  const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.byCategory?.length || 0) / SUMMARY_PAGE_SIZE))
+  const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.expenses?.length || 0) / SUMMARY_PAGE_SIZE))
   const paginatedExpenseCategories = useMemo(() => {
     const start = (expenseCategoryPage - 1) * SUMMARY_PAGE_SIZE
-    return (expenses.byCategory || []).slice(start, start + SUMMARY_PAGE_SIZE)
+    return (expenses.expenses || []).slice(start, start + SUMMARY_PAGE_SIZE)
   }, [expenses, expenseCategoryPage])
 
   const financeExpensePage = Number(expenses.page || 1)
@@ -614,6 +619,67 @@ function OwnerMain() {
     })
     setExpenses(data)
     setExpenseCategoryPage(1)
+  }
+
+  const openExpenseEdit = (expense) => {
+    setExpenseEditForm({
+      category: expense.category || '',
+      description: expense.description || '',
+      amount: String(expense.amount ?? ''),
+      expense_date: (expense.expense_date || '').slice(0, 10),
+    })
+    setExpenseEditFormError('')
+    setExpenseEditModal(expense)
+  }
+
+  const submitExpenseEdit = async (event, requestClose) => {
+    event.preventDefault()
+    if (!expenseEditForm.category.trim()) {
+      setExpenseEditFormError('กรุณาระบุหมวดหมู่รายจ่าย')
+      return
+    }
+    const amountValue = Number(expenseEditForm.amount)
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setExpenseEditFormError('กรุณาระบุจำนวนเงินให้ถูกต้อง')
+      return
+    }
+    if (!expenseEditForm.expense_date) {
+      setExpenseEditFormError('กรุณาระบุวันที่')
+      return
+    }
+
+    setIsExpenseEditSubmitting(true)
+    setExpenseEditFormError('')
+    try {
+      await axios.put(
+        `/api/owner/expenses/${expenseEditModal.id}`,
+        {
+          category: expenseEditForm.category.trim(),
+          description: expenseEditForm.description.trim() || null,
+          amount: amountValue,
+          expense_date: expenseEditForm.expense_date,
+        },
+        { headers: getAuthHeaders() },
+      )
+      setMessage('success', 'แก้ไขรายจ่ายสำเร็จ')
+      requestClose()
+      await loadExpenses(financeExpensePage)
+    } catch (error) {
+      setExpenseEditFormError(error.response?.data?.message || 'ไม่สามารถแก้ไขรายจ่ายได้')
+    } finally {
+      setIsExpenseEditSubmitting(false)
+    }
+  }
+
+  const confirmDeleteExpenseRecord = async (requestClose) => {
+    try {
+      await axios.delete(`/api/owner/expenses/${expenseDeleteConfirm.id}`, { headers: getAuthHeaders() })
+      setMessage('success', 'ลบรายจ่ายสำเร็จ')
+      requestClose()
+      await loadExpenses(financeExpensePage)
+    } catch (error) {
+      setMessage('danger', error.response?.data?.message || 'ไม่สามารถลบรายจ่ายได้')
+    }
   }
 
   const loadTrends = async (overrides = {}) => {
@@ -1788,37 +1854,31 @@ function OwnerMain() {
               <div className="owner-panel">
                 <div className="owner-panel-header">
                   <h3>รายจ่ายตามหมวดหมู่</h3>
+                  <button type="button" className="owner-panel-header-link" onClick={() => setIsExpenseManagerOpen(true)}>
+                    จัดการ
+                  </button>
                 </div>
-                <div className="owner-income-type-list">
+                <div className="owner-category-list">
                   {paginatedExpenseCategories.length ? (
-                    paginatedExpenseCategories.map((item) => {
-                      const percent = expenseByCategoryTotal > 0 ? (Number(item.total || 0) / expenseByCategoryTotal) * 100 : 0
-                      return (
-                        <div key={item.category} className="owner-income-type-item">
-                          <span className="owner-income-type-icon" style={{ color: '#d97706', background: 'rgba(217, 119, 6, 0.12)' }}>
-                            <StatIcon name="expense" />
-                          </span>
-                          <div className="owner-income-type-body">
-                            <div className="owner-income-type-row">
-                              <span className="owner-summary-label">{item.category || 'ไม่ระบุ'}</span>
-                              <strong>฿{formatCurrency(item.total)}</strong>
-                            </div>
-                            <div className="owner-income-type-progress">
-                              <div className="owner-income-type-progress-fill" style={{ width: `${percent}%`, background: '#d97706' }} />
-                            </div>
-                            <div className="owner-income-type-row">
-                              <small>{item.count || 0} รายการ</small>
-                              <small>{percent.toFixed(0)}%</small>
-                            </div>
-                          </div>
+                    paginatedExpenseCategories.map((item) => (
+                      <div key={item.id} className="owner-category-item">
+                        <span className="owner-category-icon" style={{ color: '#d97706', background: 'rgba(217, 119, 6, 0.12)' }}>
+                          <StatIcon name="expense" />
+                        </span>
+                        <div className="owner-category-info">
+                          <span className="owner-category-name">{item.category || 'ไม่ระบุ'}</span>
+                          <span className="owner-category-count">{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</span>
                         </div>
-                      )
-                    })
+                        <div className="owner-category-amount">
+                          <strong>฿{formatCurrency(item.amount)}</strong>
+                        </div>
+                      </div>
+                    ))
                   ) : (
                     <div className="owner-empty">ยังไม่มีข้อมูลรายจ่าย</div>
                   )}
                 </div>
-                {expenses.byCategory?.length > SUMMARY_PAGE_SIZE && (
+                {expenses.expenses?.length > SUMMARY_PAGE_SIZE && (
                   <div className="owner-pagination">
                     <button type="button" disabled={expenseCategoryPage <= 1} onClick={() => setExpenseCategoryPage((page) => page - 1)}>
                       ก่อนหน้า
@@ -1978,6 +2038,197 @@ function OwnerMain() {
               </div>
             </section>
           </>
+        )}
+
+        {displayExpenseManagerOpen && (
+          <div className={`owner-modal-backdrop${isExpenseManagerClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setIsExpenseManagerOpen(false)}>
+            <section className={`owner-modal${isExpenseManagerClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-manager-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header">
+                <div>
+                  <h3 id="expense-manager-title">จัดการรายจ่าย</h3>
+                  <p className="owner-modal-subtext">แก้ไขหรือลบรายการรายจ่าย</p>
+                </div>
+                <button type="button" className="owner-modal-close" onClick={() => setIsExpenseManagerOpen(false)} aria-label="ปิดหน้าต่างจัดการรายจ่าย">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="owner-modal-body">
+                <div className="owner-table-wrap">
+                  <table className="owner-table">
+                    <thead>
+                      <tr>
+                        <th>วันที่</th>
+                        <th>หมวดหมู่</th>
+                        <th>รายละเอียด</th>
+                        <th>บันทึกโดย</th>
+                        <th>จำนวนเงิน</th>
+                        <th>จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenses.expenses?.length ? (
+                        expenses.expenses.map((item) => (
+                          <tr key={item.id}>
+                            <td>{formatDate(item.expense_date)}</td>
+                            <td>{item.category || '-'}</td>
+                            <td>{item.description || '-'}</td>
+                            <td>{item.recorded_by_name || '-'}</td>
+                            <td>฿{formatCurrency(item.amount)}</td>
+                            <td>
+                              <div className="owner-inline-actions">
+                                <button type="button" className="owner-action-btn update" onClick={() => openExpenseEdit(item)}>
+                                  แก้ไข
+                                </button>
+                                <button type="button" className="owner-action-btn delete" onClick={() => setExpenseDeleteConfirm(item)}>
+                                  ลบ
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="6" className="owner-empty-row">
+                            ไม่มีรายการรายจ่ายในช่วงที่เลือก
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="owner-pagination">
+                  <button type="button" disabled={financeExpensePage <= 1} onClick={() => loadExpenses(financeExpensePage - 1)}>
+                    ก่อนหน้า
+                  </button>
+                  <span>
+                    หน้า {financeExpensePage}/{financeExpenseTotalPages}
+                  </span>
+                  <button type="button" disabled={financeExpensePage >= financeExpenseTotalPages} onClick={() => loadExpenses(financeExpensePage + 1)}>
+                    ถัดไป
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {displayExpenseEditModal && (
+          <div className={`owner-modal-backdrop${isExpenseEditClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setExpenseEditModal(null)}>
+            <section className={`owner-modal${isExpenseEditClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-edit-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header">
+                <div>
+                  <h3 id="expense-edit-title">แก้ไขรายจ่าย</h3>
+                </div>
+                <button type="button" className="owner-modal-close" onClick={() => setExpenseEditModal(null)} aria-label="ปิดหน้าต่างแก้ไขรายจ่าย">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="owner-modal-body">
+                <form onSubmit={(event) => submitExpenseEdit(event, () => setExpenseEditModal(null))} className="owner-form-group">
+                  {expenseEditFormError && <div className="owner-alert owner-alert-danger">{expenseEditFormError}</div>}
+                  <label>
+                    หมวดหมู่
+                    <input
+                      type="text"
+                      value={expenseEditForm.category}
+                      onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, category: event.target.value }))}
+                      placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซ่อมบำรุง"
+                    />
+                  </label>
+                  <label>
+                    รายละเอียด (ไม่บังคับ)
+                    <input
+                      type="text"
+                      value={expenseEditForm.description}
+                      onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, description: event.target.value }))}
+                    />
+                  </label>
+                  <div className="owner-form-row">
+                    <label>
+                      จำนวนเงิน (บาท)
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={expenseEditForm.amount}
+                        onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, amount: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      วันที่
+                      <input
+                        type="date"
+                        value={expenseEditForm.expense_date}
+                        onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, expense_date: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="owner-form-actions">
+                    <button type="button" className="owner-secondary-btn" onClick={() => setExpenseEditModal(null)}>
+                      ยกเลิก
+                    </button>
+                    <button type="submit" className="owner-primary-btn" disabled={isExpenseEditSubmitting}>
+                      {isExpenseEditSubmitting ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {displayExpenseDeleteConfirm && (
+          <div className={`owner-modal-backdrop${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setExpenseDeleteConfirm(null)}>
+            <section className={`owner-modal${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-delete-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header">
+                <div>
+                  <h3 id="expense-delete-title">ยืนยันการลบรายจ่าย</h3>
+                </div>
+                <button type="button" className="owner-modal-close" onClick={() => setExpenseDeleteConfirm(null)} aria-label="ปิด">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="owner-modal-body">
+                <div className="owner-confirm-body">
+                  <div className="owner-confirm-icon is-danger">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                  </div>
+                  <p className="owner-confirm-message">
+                    ต้องการลบรายจ่าย <strong>"{displayExpenseDeleteConfirm.category}"</strong>
+                    <br />
+                    จำนวน <strong>฿{formatCurrency(displayExpenseDeleteConfirm.amount)}</strong> ใช่หรือไม่?
+                  </p>
+                  <div className="owner-form-actions">
+                    <button type="button" className="owner-secondary-btn" onClick={() => setExpenseDeleteConfirm(null)}>
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      className="owner-danger-btn"
+                      onClick={() => confirmDeleteExpenseRecord(() => setExpenseDeleteConfirm(null))}
+                    >
+                      ลบรายจ่าย
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
         )}
 
         {!isLoading && ['moveouts', 'requests', 'maintenance'].includes(activeTab) && (

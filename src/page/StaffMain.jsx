@@ -207,6 +207,14 @@ function formatDateTime(value) {
   })
 }
 
+function getTodayInputDate() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function formatRemaining(ms) {
   const totalMinutes = Math.floor(Math.abs(ms) / (1000 * 60))
   const days = Math.floor(totalMinutes / (60 * 24))
@@ -475,6 +483,88 @@ function StaffMain() {
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
+  const [expenses, setExpenses] = useState([])
+  const [expensesLoading, setExpensesLoading] = useState(true)
+  const [expensesError, setExpensesError] = useState('')
+  const [expensesPage, setExpensesPage] = useState(1)
+  const [expensesTotalPages, setExpensesTotalPages] = useState(1)
+  const [expenseModal, setExpenseModal] = useState(null)
+  const [expenseForm, setExpenseForm] = useState({ category: '', description: '', amount: '', expense_date: '' })
+  const [expenseFormError, setExpenseFormError] = useState('')
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false)
+
+  const loadExpenses = (page = 1) => {
+    return axios
+      .get('/api/staff/expenses', { headers: authHeaders(), params: { page } })
+      .then(({ data }) => {
+        setExpenses(data.expenses)
+        setExpensesPage(data.page)
+        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20))))
+        setExpensesError('')
+      })
+      .catch((err) => {
+        setExpensesError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลรายจ่ายได้')
+      })
+      .finally(() => setExpensesLoading(false))
+  }
+
+  const openCreateExpense = () => {
+    setExpenseForm({ category: '', description: '', amount: '', expense_date: getTodayInputDate() })
+    setExpenseFormError('')
+    setExpenseModal({ mode: 'create' })
+  }
+
+  const openEditExpense = (expense) => {
+    setExpenseForm({
+      category: expense.category || '',
+      description: expense.description || '',
+      amount: String(expense.amount ?? ''),
+      expense_date: (expense.expense_date || '').slice(0, 10),
+    })
+    setExpenseFormError('')
+    setExpenseModal({ mode: 'edit', expense })
+  }
+
+  const submitExpenseForm = (event, requestClose) => {
+    event.preventDefault()
+    if (!expenseForm.category.trim()) {
+      setExpenseFormError('กรุณาระบุหมวดหมู่รายจ่าย')
+      return
+    }
+    const amountValue = Number(expenseForm.amount)
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setExpenseFormError('กรุณาระบุจำนวนเงินให้ถูกต้อง')
+      return
+    }
+    if (!expenseForm.expense_date) {
+      setExpenseFormError('กรุณาระบุวันที่')
+      return
+    }
+
+    setExpenseSubmitting(true)
+    setExpenseFormError('')
+    const payload = {
+      category: expenseForm.category.trim(),
+      description: expenseForm.description.trim() || null,
+      amount: amountValue,
+      expense_date: expenseForm.expense_date,
+    }
+    const request =
+      expenseModal.mode === 'create'
+        ? axios.post('/api/staff/expenses', payload, { headers: authHeaders() })
+        : axios.put(`/api/staff/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+
+    request
+      .then(() => {
+        requestClose()
+        loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
+      })
+      .catch((err) => {
+        setExpenseFormError(err.response?.data?.message || 'ไม่สามารถบันทึกรายจ่ายได้')
+      })
+      .finally(() => setExpenseSubmitting(false))
+  }
+
   const loadRequests = () => {
     return axios
       .get('/api/staff/requests', { headers: authHeaders() })
@@ -571,6 +661,7 @@ function StaffMain() {
     loadRequests().finally(() => {
       if (isMounted) setRequestsLoading(false)
     })
+    loadExpenses(1)
     return () => {
       isMounted = false
     }
@@ -1792,7 +1883,164 @@ function StaffMain() {
             </div>
           </div>
         </div>
+
+        <div className="staff-card">
+          <div className="staff-card-header">
+            <h2>รายจ่าย</h2>
+            <div className="staff-card-header-actions">
+              <button type="button" className="staff-action-btn is-primary" onClick={openCreateExpense}>
+                + บันทึกรายจ่าย
+              </button>
+            </div>
+          </div>
+
+          <div className="staff-card-body">
+            {expensesError ? (
+              <div className="staff-inline-error">
+                <p className="staff-form-error staff-form-error-block">{expensesError}</p>
+                <button type="button" className="staff-action-btn is-ghost" onClick={() => loadExpenses(expensesPage)}>
+                  ลองใหม่
+                </button>
+              </div>
+            ) : expensesLoading ? (
+              <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+            ) : expenses.length === 0 ? (
+              <p className="staff-empty">ยังไม่มีรายการรายจ่าย</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="staff-table">
+                  <thead>
+                    <tr>
+                      <th>วันที่</th>
+                      <th>หมวดหมู่</th>
+                      <th>รายละเอียด</th>
+                      <th>บันทึกโดย</th>
+                      <th>จำนวนเงิน</th>
+                      <th>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses.map((expense) => (
+                      <tr key={expense.id}>
+                        <td>{formatDate(expense.expense_date)}</td>
+                        <td>{expense.category}</td>
+                        <td>{expense.description || '-'}</td>
+                        <td>{expense.recorded_by_name || '-'}</td>
+                        <td>฿{formatCurrency(expense.amount)}</td>
+                        <td>
+                          <button type="button" className="staff-action-btn is-ghost" onClick={() => openEditExpense(expense)}>
+                            แก้ไข
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {expensesTotalPages > 1 && (
+              <div className="staff-pagination">
+                <span className="staff-pagination-info">
+                  หน้า {expensesPage} / {expensesTotalPages}
+                </span>
+                <div className="staff-pagination-controls">
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    disabled={expensesPage <= 1}
+                    onClick={() => loadExpenses(expensesPage - 1)}
+                  >
+                    ก่อนหน้า
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    disabled={expensesPage >= expensesTotalPages}
+                    onClick={() => loadExpenses(expensesPage + 1)}
+                  >
+                    ถัดไป
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {expenseModal && (
+        <Modal title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'} onClose={() => setExpenseModal(null)}>
+          {(requestClose) => (
+            <form onSubmit={(event) => submitExpenseForm(event, requestClose)}>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="expense-category">
+                  หมวดหมู่
+                </label>
+                <input
+                  id="expense-category"
+                  type="text"
+                  className="staff-form-input"
+                  placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซ่อมบำรุง"
+                  value={expenseForm.category}
+                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, category: event.target.value }))}
+                />
+              </div>
+
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="expense-description">
+                  รายละเอียด (ไม่บังคับ)
+                </label>
+                <input
+                  id="expense-description"
+                  type="text"
+                  className="staff-form-input"
+                  value={expenseForm.description}
+                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, description: event.target.value }))}
+                />
+              </div>
+
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="expense-amount">
+                  จำนวนเงิน (บาท)
+                </label>
+                <input
+                  id="expense-amount"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  className="staff-form-input no-spinner"
+                  value={expenseForm.amount}
+                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))}
+                />
+              </div>
+
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="expense-date">
+                  วันที่
+                </label>
+                <input
+                  id="expense-date"
+                  type="date"
+                  className="staff-form-input"
+                  value={expenseForm.expense_date}
+                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, expense_date: event.target.value }))}
+                />
+              </div>
+
+              {expenseFormError && <p className="staff-form-error">{expenseFormError}</p>}
+              <div className="staff-form-actions">
+                <button type="submit" className="staff-action-btn is-primary" disabled={expenseSubmitting}>
+                  {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
 
       {viewAllRequests === 'tenant' && (
         <Modal

@@ -2,10 +2,12 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireAdminRole } from "../middleware/authMiddleware.js";
+import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
 
 router.use(authenticate, requireAdminRole);
+router.use("/expenses", expenseRouter);
 
 function buildUpdate(allowedColumns, body) {
   const columns = [];

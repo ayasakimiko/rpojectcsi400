@@ -148,6 +148,9 @@
   border: 1.5px solid #fecaca;
   background: #fff5f5;
   color: #b42318;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  border-radius: 10px;
 }
 
 .owner-logout-btn:hover {
@@ -829,6 +832,77 @@
   transition: width 0.3s ease;
 }
 
+.owner-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.owner-category-list:has(.owner-empty) {
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  border: 1px dashed #dce9f5;
+  border-radius: 16px;
+  background: #fbfdff;
+}
+
+.owner-category-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid #e8eefa;
+}
+
+.owner-category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+}
+
+.owner-category-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.owner-category-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #153b64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-category-count {
+  font-size: 11px;
+  color: #7c90a8;
+}
+
+.owner-category-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.owner-category-amount strong {
+  font-size: 14.5px;
+  color: #0f2b52;
+  white-space: nowrap;
+}
+
 .owner-form-group,
 .owner-staff-form {
   display: flex;
@@ -1301,6 +1375,59 @@
 
 .owner-modal-body::-webkit-scrollbar-track {
   background: #f4f8fd;
+}
+
+.owner-confirm-body {
+  text-align: center;
+}
+
+.owner-confirm-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  border: 1.5px solid transparent;
+}
+
+.owner-confirm-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.owner-confirm-icon.is-danger {
+  background: #fff1f2;
+  color: #b42318;
+  border-color: #fecaca;
+}
+
+.owner-confirm-message {
+  margin: 0 0 4px;
+  color: #33506f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.owner-confirm-message strong {
+  color: #14365c;
+}
+
+.owner-danger-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+  font: inherit;
+  background: linear-gradient(135deg, #f87171, #dc2626);
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(220, 38, 38, 0.2);
+  transition: all 0.15s ease;
+}
+
+.owner-danger-btn:hover {
+  filter: brightness(0.98);
 }
 
 .owner-modal-body::-webkit-scrollbar-thumb {

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 import { computeCurrentDue } from "./CustomerDashboardRouter.js";
+import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
 
@@ -31,6 +32,8 @@ router.use(async (req, res, next) => {
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
+
+router.use("/expenses", expenseRouter);
 
 router.get("/me", async (req, res) => {
   try {
