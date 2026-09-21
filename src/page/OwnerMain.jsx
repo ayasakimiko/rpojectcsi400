@@ -146,11 +146,8 @@ const THAI_MONTHS = [
 
 const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปรายระเอียด' },
+  { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
-  { key: 'customers', label: 'ลูกค้า' },
-  { key: 'moveouts', label: 'ผู้ย้ายออก' },
-  { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
-  { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
 ]
 
 const PAYMENT_DATE_PRESETS = [
@@ -219,6 +216,7 @@ function OwnerMain() {
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1)
   const [incomeTypePage, setIncomeTypePage] = useState(1)
   const [expensePreviewPage, setExpensePreviewPage] = useState(1)
+  const [staffPage, setStaffPage] = useState(1)
   const [occupancySummary, setOccupancySummary] = useState(null)
   const [isOccupancySummaryLoading, setIsOccupancySummaryLoading] = useState(false)
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false)
@@ -246,6 +244,14 @@ function OwnerMain() {
     const start = (expensePreviewPage - 1) * SUMMARY_PAGE_SIZE
     return (expenses.expenses || []).slice(start, start + SUMMARY_PAGE_SIZE)
   }, [expenses, expensePreviewPage])
+
+  const STAFF_PAGE_SIZE = 10
+  const staffTotalPages = Math.max(1, Math.ceil(staffList.length / STAFF_PAGE_SIZE))
+  const clampedStaffPage = Math.min(staffPage, staffTotalPages)
+  const paginatedStaff = useMemo(() => {
+    const start = (clampedStaffPage - 1) * STAFF_PAGE_SIZE
+    return staffList.slice(start, start + STAFF_PAGE_SIZE)
+  }, [staffList, clampedStaffPage])
 
   const statCards = useMemo(
     () => [
@@ -844,7 +850,7 @@ function OwnerMain() {
                 </button>
               </div>
 
-                <div className="owner-table-wrap">
+                <div className="owner-table-wrap owner-staff-table-wrap">
                   <table className="owner-table">
                     <thead>
                       <tr>
@@ -856,8 +862,8 @@ function OwnerMain() {
                       </tr>
                     </thead>
                     <tbody>
-                      {staffList.length ? (
-                        staffList.map((member) => (
+                      {paginatedStaff.length ? (
+                        paginatedStaff.map((member) => (
                           <tr key={`${member.role}-${member.id}`}>
                             <td>{`${member.first_name || ''} ${member.last_name || ''}`.trim() || '-'}</td>
                             <td>{member.role}</td>
@@ -895,6 +901,19 @@ function OwnerMain() {
                     </tbody>
                   </table>
                 </div>
+                {staffList.length > STAFF_PAGE_SIZE && (
+                  <div className="owner-pagination">
+                    <button type="button" disabled={clampedStaffPage <= 1} onClick={() => setStaffPage((page) => page - 1)}>
+                      ก่อนหน้า
+                    </button>
+                    <span>
+                      หน้า {clampedStaffPage}/{staffTotalPages}
+                    </span>
+                    <button type="button" disabled={clampedStaffPage >= staffTotalPages} onClick={() => setStaffPage((page) => page + 1)}>
+                      ถัดไป
+                    </button>
+                  </div>
+                )}
           </section>
         )}
 
@@ -1149,7 +1168,7 @@ function OwnerMain() {
           </div>
         )}
 
-        {!isLoading && ['customers', 'moveouts', 'requests', 'maintenance'].includes(activeTab) && (
+        {!isLoading && ['finance', 'moveouts', 'requests', 'maintenance'].includes(activeTab) && (
           <section className="owner-panel">
             <div className="owner-panel-header">
               <h3>{OWNER_TABS.find((tab) => tab.key === activeTab)?.label}</h3>

@@ -323,9 +323,12 @@ router.get("/rooms/:roomNumber", async (req, res) => {
   }
 });
 
-function validateExpenseInput({ category, amount, expense_date }) {
+function validateExpenseInput({ category, description, amount, expense_date }) {
   if (typeof category !== "string" || !category.trim()) {
     return "กรุณาระบุหมวดหมู่รายจ่าย";
+  }
+  if (description !== undefined && description !== null && typeof description !== "string") {
+    return "รูปแบบคำอธิบายไม่ถูกต้อง";
   }
   const amountValue = Number(amount);
   if (!Number.isFinite(amountValue) || amountValue <= 0) {
@@ -333,6 +336,31 @@ function validateExpenseInput({ category, amount, expense_date }) {
   }
   if (typeof expense_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(expense_date)) {
     return "วันที่ไม่ถูกต้อง";
+  }
+  return null;
+}
+
+function validateExpenseUpdateInput(body) {
+  if (Object.prototype.hasOwnProperty.call(body, "category")) {
+    if (typeof body.category !== "string" || !body.category.trim()) {
+      return "กรุณาระบุหมวดหมู่รายจ่าย";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "description") && body.description !== null) {
+    if (typeof body.description !== "string") {
+      return "รูปแบบคำอธิบายไม่ถูกต้อง";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "amount")) {
+    const amountValue = Number(body.amount);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      return "จำนวนเงินไม่ถูกต้อง";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "expense_date")) {
+    if (typeof body.expense_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.expense_date)) {
+      return "วันที่ไม่ถูกต้อง";
+    }
   }
   return null;
 }
@@ -381,7 +409,7 @@ router.get("/expenses", async (req, res) => {
 router.post("/expenses", async (req, res) => {
   try {
     const { category, description, amount, expense_date } = req.body ?? {};
-    const validationError = validateExpenseInput({ category, amount, expense_date });
+    const validationError = validateExpenseInput({ category, description, amount, expense_date });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -409,7 +437,18 @@ router.put("/expenses/:id", async (req, res) => {
       return res.status(400).json({ message: "รหัสรายจ่ายไม่ถูกต้อง" });
     }
 
-    const { columns, values } = buildUpdate(EXPENSE_EDITABLE_COLUMNS, req.body ?? {});
+    const body = req.body ?? {};
+    const validationError = validateExpenseUpdateInput(body);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const sanitizedBody = { ...body };
+    if (typeof sanitizedBody.category === "string") sanitizedBody.category = sanitizedBody.category.trim();
+    if (typeof sanitizedBody.description === "string") sanitizedBody.description = sanitizedBody.description.trim() || null;
+    if (Object.prototype.hasOwnProperty.call(sanitizedBody, "amount")) sanitizedBody.amount = Number(sanitizedBody.amount);
+
+    const { columns, values } = buildUpdate(EXPENSE_EDITABLE_COLUMNS, sanitizedBody);
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }
@@ -571,6 +610,31 @@ function validateStaffInput({ idcard, password, phone, first_name, last_name, ag
   return null;
 }
 
+function validateStaffUpdateInput(body) {
+  if (Object.prototype.hasOwnProperty.call(body, "first_name")) {
+    if (typeof body.first_name !== "string" || !body.first_name.trim()) {
+      return "กรุณาระบุชื่อ";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "last_name")) {
+    if (typeof body.last_name !== "string" || !body.last_name.trim()) {
+      return "กรุณาระบุนามสกุล";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "phone")) {
+    if (typeof body.phone !== "string" || !/^0\d{8,9}$/.test(body.phone.trim())) {
+      return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "age")) {
+    const ageNumber = Number(body.age);
+    if (!Number.isInteger(ageNumber) || ageNumber < 1 || ageNumber > 120) {
+      return "อายุไม่ถูกต้อง";
+    }
+  }
+  return null;
+}
+
 router.get("/staff", async (req, res) => {
   try {
     const pool = getPool();
@@ -644,7 +708,18 @@ router.put("/staff/:role/:id", async (req, res) => {
     }
 
     const body = req.body ?? {};
-    const { columns, values } = buildUpdate(STAFF_EDITABLE_COLUMNS, body);
+    const validationError = validateStaffUpdateInput(body);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const sanitizedBody = { ...body };
+    if (typeof sanitizedBody.first_name === "string") sanitizedBody.first_name = sanitizedBody.first_name.trim();
+    if (typeof sanitizedBody.last_name === "string") sanitizedBody.last_name = sanitizedBody.last_name.trim();
+    if (typeof sanitizedBody.phone === "string") sanitizedBody.phone = sanitizedBody.phone.trim();
+    if (Object.prototype.hasOwnProperty.call(sanitizedBody, "age")) sanitizedBody.age = Number(sanitizedBody.age);
+
+    const { columns, values } = buildUpdate(STAFF_EDITABLE_COLUMNS, sanitizedBody);
 
     if (typeof body.password === "string" && body.password) {
       if (body.password.length < 6 || body.password.length > 128) {

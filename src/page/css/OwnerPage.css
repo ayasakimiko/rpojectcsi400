@@ -10,6 +10,17 @@
   box-sizing: border-box;
 }
 
+.owner-page input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.owner-page input[type='number']::-webkit-inner-spin-button,
+.owner-page input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .owner-container {
   max-width: 1360px;
   margin: 0 auto;
@@ -1064,6 +1075,10 @@
   border: 1px solid #edf1f8;
   border-radius: 14px;
   box-shadow: 0 4px 14px rgba(15, 43, 82, 0.025);
+}
+
+.owner-staff-table-wrap {
+  min-height: 500px;
 }
 
 .owner-table {
