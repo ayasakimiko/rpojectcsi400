@@ -5,7 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import DatePicker, { registerLocale } from 'react-datepicker'
 import { th } from 'date-fns/locale/th'
 import 'react-datepicker/dist/react-datepicker.css'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
 
 registerLocale('th', th)
@@ -37,6 +37,23 @@ const STAT_ICON_PATHS = {
       <path d="M3 17l6-6 4 4 8-8" />
       <path d="M15 7h6v6" />
     </>
+  ),
+  margin: (
+    <>
+      <line x1="19" y1="5" x2="5" y2="19" />
+      <circle cx="6.5" cy="6.5" r="2.5" />
+      <circle cx="17.5" cy="17.5" r="2.5" />
+    </>
+  ),
+  overdue: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="8" x2="12" y2="13" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </>
+  ),
+  maintenance: (
+    <path d="M21 7.5a5.5 5.5 0 0 1-7.6 5.1L6 20l-3-3 7.4-7.4A5.5 5.5 0 1 1 21 7.5Z" />
   ),
 }
 
@@ -89,6 +106,12 @@ function formatDate(value) {
 function formatSignedCurrency(value) {
   const amount = Number(value) || 0
   return amount < 0 ? `-฿${formatCurrency(Math.abs(amount))}` : `฿${formatCurrency(amount)}`
+}
+
+function formatPercent(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '0%'
+  return `${num.toFixed(1)}%`
 }
 
 const PAYMENT_TYPE_LABELS = {
@@ -144,19 +167,94 @@ const THAI_MONTHS = [
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
 ]
 
+const THAI_MONTHS_SHORT = [
+  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+]
+
+function formatTrendMonth(monthKey) {
+  if (typeof monthKey !== 'string' || !/^\d{4}-\d{2}$/.test(monthKey)) return monthKey
+  const [year, month] = monthKey.split('-').map(Number)
+  const shortYear = String(year + 543).slice(-2)
+  return `${THAI_MONTHS_SHORT[month - 1]} ${shortYear}`
+}
+
+function formatTrendDay(dayKey) {
+  if (typeof dayKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return dayKey
+  const [, month, day] = dayKey.split('-').map(Number)
+  return `${day} ${THAI_MONTHS_SHORT[month - 1]}`
+}
+
+const FINANCE_TREND_COLORS = { income: '#2563eb', expense: '#d97706', net: '#7c3aed' }
+const FINANCE_TREND_SERIES = [
+  { key: 'income', label: 'รายรับ', color: FINANCE_TREND_COLORS.income },
+  { key: 'expense', label: 'รายจ่าย', color: FINANCE_TREND_COLORS.expense },
+  { key: 'netProfit', label: 'กำไร/ขาดทุน', color: FINANCE_TREND_COLORS.net },
+]
+
+const OCCUPANCY_TREND_SERIES = [
+  { key: 'occupied', label: 'มีผู้เช่า', color: ROOM_OCCUPANCY_COLORS.occupied },
+  { key: 'vacant', label: 'ว่าง', color: ROOM_OCCUPANCY_COLORS.vacant },
+]
+
+function TrendTooltip({ active, payload, label, series, formatValue }) {
+  if (!active || !payload || !payload.length) return null
+  return (
+    <div className="owner-chart-tooltip owner-chart-tooltip-multi">
+      <strong className="owner-chart-tooltip-title">{label}</strong>
+      {payload.map((item) => (
+        <div key={item.dataKey} className="owner-chart-tooltip-row">
+          <span className="owner-chart-tooltip-dot" style={{ background: item.color }} />
+          <span>{series.find((s) => s.key === item.dataKey)?.label || item.dataKey}</span>
+          <strong>{formatValue(item.value)}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FinanceTrendTooltip(props) {
+  return <TrendTooltip {...props} series={FINANCE_TREND_SERIES} formatValue={formatSignedCurrency} />
+}
+
+function OccupancyTrendTooltip(props) {
+  return <TrendTooltip {...props} series={OCCUPANCY_TREND_SERIES} formatValue={(value) => `${value} ห้อง`} />
+}
+
 const OWNER_TABS = [
-  { key: 'rooms', label: 'สรุปรายระเอียด' },
+  { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
 ]
 
+const OWNER_PERIOD_BAR_CONTENT = {
+  rooms: { title: 'สรุปข้อมูลห้องพัก', subtitle: 'ภาพรวมห้องพักและผู้เข้าพักประจำเดือน' },
+  finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
+  staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
+}
+
 const PAYMENT_DATE_PRESETS = [
   { key: 'all', label: 'ทั้งหมด' },
   { key: 'today', label: 'วันนี้' },
+  { key: 'month', label: 'เดือนนี้' },
   { key: '7d', label: '7 วัน' },
   { key: '30d', label: '30 วัน' },
-  { key: 'month', label: 'เดือนนี้' },
+  { key: '3m', label: '3 เดือน' },
+  { key: '6m', label: '6 เดือน' },
+  { key: '1y', label: '1 ปี' },
 ]
+
+const OCCUPANCY_TYPE_FILTERS = [
+  { key: 'all', label: 'ทั้งหมด' },
+  { key: 'move_in', label: 'เข้าพัก' },
+  { key: 'move_out', label: 'ย้ายออก' },
+]
+
+const OCCUPANCY_EVENT_LABELS = { move_in: 'เข้าพัก', move_out: 'ย้ายออก' }
+
+function formatOccupancyEventType(type) {
+  return OCCUPANCY_EVENT_LABELS[type] || type
+}
 
 function parseInputDate(value) {
   return value ? new Date(`${value}T00:00:00`) : null
@@ -189,18 +287,55 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+const MODAL_CLOSE_ANIMATION_MS = 110
+
+function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
+  const [prevValue, setPrevValue] = useState(value)
+  const [closingValue, setClosingValue] = useState(null)
+
+  if (value !== prevValue) {
+    if (!value && prevValue) {
+      setClosingValue(prevValue)
+    } else if (value && closingValue) {
+      setClosingValue(null)
+    }
+    setPrevValue(value)
+  }
+
+  useEffect(() => {
+    if (!closingValue) return undefined
+    const timeoutId = setTimeout(() => setClosingValue(null), duration)
+    return () => clearTimeout(timeoutId)
+  }, [closingValue, duration])
+
+  const display = value || closingValue
+  const isClosing = !value && Boolean(closingValue)
+  return [display, isClosing]
+}
+
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
   const [overview, setOverview] = useState({ rooms: {}, finance: {} })
   const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, vacantRooms: [], rooms: [] })
   const [incomeSummary, setIncomeSummary] = useState({ totalIncome: 0, byType: [] })
-  const [expenses, setExpenses] = useState({ expenses: [], total: 0, totalAmount: 0, page: 1, pageSize: 10 })
+  const [expenses, setExpenses] = useState({ expenses: [], byCategory: [], total: 0, totalAmount: 0, page: 1, pageSize: 10 })
+  const [financeTrends, setFinanceTrends] = useState({ trends: [], granularity: 'month' })
+  const [isTrendsLoading, setIsTrendsLoading] = useState(false)
+  const [occupancyTrend, setOccupancyTrend] = useState({ trends: [], granularity: 'month' })
+  const [isOccupancyTrendLoading, setIsOccupancyTrendLoading] = useState(false)
+  const [expenseCategoryPage, setExpenseCategoryPage] = useState(1)
   const [staffList, setStaffList] = useState([])
   const [paymentLogs, setPaymentLogs] = useState({ payments: [], total: 0, page: 1, pageSize: 20 })
+  const [occupancyLogs, setOccupancyLogs] = useState({ logs: [], total: 0, page: 1, pageSize: 10 })
+  const [occupancyFilter, setOccupancyFilter] = useState({ search: '', type: 'all' })
+  const [occupantsPage, setOccupantsPage] = useState(1)
+  const [vacantRoomsPage, setVacantRoomsPage] = useState(1)
+  const [maintenanceRoomsPage, setMaintenanceRoomsPage] = useState(1)
   const [staffForm, setStaffForm] = useState(EMPTY_STAFF)
-  const [paymentFilter, setPaymentFilter] = useState({ search: '', from: '', to: '', onlyOverdue: false })
+  const [paymentFilter, setPaymentFilter] = useState({ from: '', to: '' })
   const [paymentDatePreset, setPaymentDatePreset] = useState('all')
+  const [paymentLogFilter, setPaymentLogFilter] = useState({ search: '', from: '', to: '', onlyOverdue: false })
   const [notice, setNotice] = useState({ type: '', message: '' })
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false)
@@ -215,13 +350,17 @@ function OwnerMain() {
   const [roomListFilter, setRoomListFilter] = useState(null)
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1)
   const [incomeTypePage, setIncomeTypePage] = useState(1)
-  const [expensePreviewPage, setExpensePreviewPage] = useState(1)
   const [staffPage, setStaffPage] = useState(1)
   const [occupancySummary, setOccupancySummary] = useState(null)
   const [isOccupancySummaryLoading, setIsOccupancySummaryLoading] = useState(false)
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
   const [viewingStaff, setViewingStaff] = useState(null)
+
+  const [displayRoomDetail, isRoomDetailClosing] = useClosingValue(roomDetail)
+  const [displayRoomListFilter, isRoomListClosing] = useClosingValue(roomListFilter)
+  const [displayStaffModalOpen, isStaffModalClosing] = useClosingValue(isStaffModalOpen)
+  const [displayViewingStaff, isViewingStaffClosing] = useClosingValue(viewingStaff)
 
   const totalIncome = Number(overview?.finance?.totalIncome ?? incomeSummary?.totalIncome ?? 0)
   const totalExpense = Number(overview?.finance?.totalExpense ?? 0)
@@ -239,11 +378,87 @@ function OwnerMain() {
     return (incomeSummary.byType || []).slice(start, start + SUMMARY_PAGE_SIZE)
   }, [incomeSummary, incomeTypePage])
 
-  const expensePreviewTotalPages = Math.max(1, Math.ceil((expenses.expenses?.length || 0) / SUMMARY_PAGE_SIZE))
-  const paginatedExpensePreview = useMemo(() => {
-    const start = (expensePreviewPage - 1) * SUMMARY_PAGE_SIZE
-    return (expenses.expenses || []).slice(start, start + SUMMARY_PAGE_SIZE)
-  }, [expenses, expensePreviewPage])
+  const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
+
+  const expenseByCategoryTotal = useMemo(
+    () => (expenses.byCategory || []).reduce((sum, item) => sum + Number(item.total || 0), 0),
+    [expenses],
+  )
+
+  const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.byCategory?.length || 0) / SUMMARY_PAGE_SIZE))
+  const paginatedExpenseCategories = useMemo(() => {
+    const start = (expenseCategoryPage - 1) * SUMMARY_PAGE_SIZE
+    return (expenses.byCategory || []).slice(start, start + SUMMARY_PAGE_SIZE)
+  }, [expenses, expenseCategoryPage])
+
+  const financeExpensePage = Number(expenses.page || 1)
+  const financeExpenseTotalPages = Math.max(1, Math.ceil((Number(expenses.total) || 0) / (Number(expenses.pageSize) || 10)))
+
+  const trendChartData = useMemo(() => {
+    const formatLabel = financeTrends.granularity === 'day' ? formatTrendDay : formatTrendMonth
+    return (financeTrends.trends || []).map((item) => ({ ...item, monthLabel: formatLabel(item.period) }))
+  }, [financeTrends])
+
+  const trendSummary = useMemo(() => {
+    const totalIncome = trendChartData.reduce((sum, item) => sum + Number(item.income || 0), 0)
+    const totalExpense = trendChartData.reduce((sum, item) => sum + Number(item.expense || 0), 0)
+    const totalNet = totalIncome - totalExpense
+    const avgNet = trendChartData.length ? totalNet / trendChartData.length : 0
+    return { totalIncome, totalExpense, totalNet, avgNet }
+  }, [trendChartData])
+
+  const occupancyTrendChartData = useMemo(() => {
+    const formatLabel = occupancyTrend.granularity === 'day' ? formatTrendDay : formatTrendMonth
+    return (occupancyTrend.trends || []).map((item) => ({ ...item, periodLabel: formatLabel(item.period) }))
+  }, [occupancyTrend])
+
+  const occupancyTrendSummary = useMemo(() => {
+    const count = occupancyTrendChartData.length
+    if (!count) return { currentOccupied: 0, currentVacant: 0, avgRate: 0, peakOccupied: 0 }
+    const latest = occupancyTrendChartData[count - 1]
+    const totalOccupied = occupancyTrendChartData.reduce((sum, item) => sum + Number(item.occupied || 0), 0)
+    const totalRooms = occupancyTrendChartData.reduce((sum, item) => sum + Number(item.total || 0), 0)
+    const peakOccupied = Math.max(...occupancyTrendChartData.map((item) => Number(item.occupied || 0)))
+    return {
+      currentOccupied: Number(latest.occupied || 0),
+      currentVacant: Number(latest.vacant || 0),
+      avgRate: totalRooms > 0 ? (totalOccupied / totalRooms) * 100 : 0,
+      peakOccupied,
+    }
+  }, [occupancyTrendChartData])
+
+  const currentOccupants = useMemo(
+    () => (roomStatus.rooms || []).filter((room) => room.customer_id).sort((a, b) => a.room_number - b.room_number),
+    [roomStatus],
+  )
+  const occupantsTotalPages = Math.max(1, Math.ceil(currentOccupants.length / SUMMARY_PAGE_SIZE))
+  const paginatedOccupants = useMemo(() => {
+    const start = (occupantsPage - 1) * SUMMARY_PAGE_SIZE
+    return currentOccupants.slice(start, start + SUMMARY_PAGE_SIZE)
+  }, [currentOccupants, occupantsPage])
+
+  const vacantRoomsList = useMemo(
+    () => (roomStatus.vacantRooms || []).slice().sort((a, b) => a.room_number - b.room_number),
+    [roomStatus],
+  )
+  const vacantRoomsTotalPages = Math.max(1, Math.ceil(vacantRoomsList.length / SUMMARY_PAGE_SIZE))
+  const paginatedVacantRooms = useMemo(() => {
+    const start = (vacantRoomsPage - 1) * SUMMARY_PAGE_SIZE
+    return vacantRoomsList.slice(start, start + SUMMARY_PAGE_SIZE)
+  }, [vacantRoomsList, vacantRoomsPage])
+
+  const maintenanceRoomsList = useMemo(
+    () => (roomStatus.rooms || []).filter((room) => room.status === 'maintenance').sort((a, b) => a.room_number - b.room_number),
+    [roomStatus],
+  )
+  const maintenanceRoomsTotalPages = Math.max(1, Math.ceil(maintenanceRoomsList.length / SUMMARY_PAGE_SIZE))
+  const paginatedMaintenanceRooms = useMemo(() => {
+    const start = (maintenanceRoomsPage - 1) * SUMMARY_PAGE_SIZE
+    return maintenanceRoomsList.slice(start, start + SUMMARY_PAGE_SIZE)
+  }, [maintenanceRoomsList, maintenanceRoomsPage])
+
+  const occupancyPage = Number(occupancyLogs.page || 1)
+  const totalOccupancyPages = Math.max(1, Math.ceil((Number(occupancyLogs.total) || 0) / (Number(occupancyLogs.pageSize) || 10)))
 
   const STAFF_PAGE_SIZE = 10
   const staffTotalPages = Math.max(1, Math.ceil(staffList.length / STAFF_PAGE_SIZE))
@@ -253,46 +468,13 @@ function OwnerMain() {
     return staffList.slice(start, start + STAFF_PAGE_SIZE)
   }, [staffList, clampedStaffPage])
 
-  const statCards = useMemo(
-    () => [
-      {
-        label: 'ห้องทั้งหมด',
-        value: overview?.rooms?.totalRooms ?? roomStatus?.totalRooms ?? 0,
-        subtitle: `${roomStatus?.occupiedCount ?? 0} ทราบว่าใช้งาน / ${roomStatus?.vacantCount ?? 0} ว่าง`,
-        tone: 'blue',
-        icon: 'rooms',
-      },
-      {
-        label: 'รายได้รวม',
-        value: formatSignedCurrency(totalIncome),
-        subtitle: 'ตามรายการจ่ายชำระที่สำเร็จ',
-        tone: 'green',
-        icon: 'income',
-      },
-      {
-        label: 'ค่าใช้จ่าย',
-        value: formatSignedCurrency(totalExpense),
-        subtitle: 'ค่าใช้จ่ายทั้งหมดของหอพัก',
-        tone: 'orange',
-        icon: 'expense',
-      },
-      {
-        label: 'กำไรสุทธิ',
-        value: formatSignedCurrency(netProfit),
-        subtitle: 'รายได้ - ค่าใช้จ่าย',
-        tone: netProfit < 0 ? 'red' : 'green',
-        icon: 'profit',
-      },
-    ],
-    [overview, roomStatus, totalExpense, totalIncome, netProfit],
-  )
-
   const roomListItems = useMemo(() => {
-    if (roomListFilter === 'occupied') return (roomStatus.rooms || []).filter((room) => room.is_booked)
-    if (roomListFilter === 'vacant') return (roomStatus.rooms || []).filter((room) => room.status === 'vacant')
-    if (roomListFilter === 'all') return roomStatus.rooms || []
+    if (displayRoomListFilter === 'occupied') return (roomStatus.rooms || []).filter((room) => room.is_booked)
+    if (displayRoomListFilter === 'vacant') return (roomStatus.rooms || []).filter((room) => room.status === 'vacant')
+    if (displayRoomListFilter === 'maintenance') return (roomStatus.rooms || []).filter((room) => room.status === 'maintenance')
+    if (displayRoomListFilter === 'all') return roomStatus.rooms || []
     return []
-  }, [roomListFilter, roomStatus.rooms])
+  }, [displayRoomListFilter, roomStatus.rooms])
 
   const roomOccupancyStats = useMemo(() => {
     const source = occupancySummary || roomStatus
@@ -315,23 +497,64 @@ function OwnerMain() {
     [roomOccupancyStats],
   )
 
+  const overdueRoomsCount = useMemo(
+    () => (roomStatus.rooms || []).filter((room) => room.status === 'overdue').length,
+    [roomStatus],
+  )
+  const maintenanceRoomsCount = maintenanceRoomsList.length
+
+  const statCards = useMemo(() => {
+    const periodOverdueCount = overview?.rooms?.overdueRoomsCount ?? overdueRoomsCount
+    const periodMaintenanceCount = overview?.rooms?.maintenanceRoomsCount ?? maintenanceRoomsCount
+    return [
+      {
+        label: 'ห้องทั้งหมด',
+        value: overview?.rooms?.totalRooms ?? roomStatus?.totalRooms ?? 0,
+        subtitle: `${roomStatus?.occupiedCount ?? 0} มีผู้เช่า / ${roomStatus?.vacantCount ?? 0} ว่าง`,
+        tone: 'blue',
+        icon: 'rooms',
+      },
+      {
+        label: 'อัตราการเข้าพัก',
+        value: `${roomOccupancyStats.occupancyRate}%`,
+        subtitle: `จาก ${roomOccupancyStats.total} ห้องทั้งหมด`,
+        tone: 'purple',
+        icon: 'margin',
+      },
+      {
+        label: 'ห้องค้างชำระ',
+        value: periodOverdueCount,
+        subtitle: 'ยังไม่ชำระในช่วงเวลาที่เลือก',
+        tone: periodOverdueCount > 0 ? 'red' : 'green',
+        icon: 'overdue',
+      },
+      {
+        label: 'ห้องซ่อมบำรุง',
+        value: periodMaintenanceCount,
+        subtitle: 'แจ้งซ่อมในช่วงเวลาที่เลือก',
+        tone: periodMaintenanceCount > 0 ? 'orange' : 'green',
+        icon: 'maintenance',
+      },
+    ]
+  }, [overview, roomStatus, roomOccupancyStats, overdueRoomsCount, maintenanceRoomsCount])
+
   const roomDetailBalance = useMemo(() => {
-    if (!roomDetail?.tenant) return null
-    const rent = Number(roomDetail.room?.price) || 0
-    const unpaidUtilities = (roomDetail.payments || [])
+    if (!displayRoomDetail?.tenant) return null
+    const rent = Number(displayRoomDetail.room?.price) || 0
+    const unpaidUtilities = (displayRoomDetail.payments || [])
       .filter((payment) => payment.status !== 'paid' && (payment.type === 'water' || payment.type === 'electricity'))
       .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-    const deposit = Number(roomDetail.tenant.deposit_amount) || 0
+    const deposit = Number(displayRoomDetail.tenant.deposit_amount) || 0
     const totalDue = rent + unpaidUtilities
     return { rent, unpaidUtilities, deposit, totalDue, netBalance: totalDue - deposit }
-  }, [roomDetail])
+  }, [displayRoomDetail])
 
   const PAYMENT_HISTORY_PAGE_SIZE = 5
-  const paymentHistoryTotalPages = Math.max(1, Math.ceil((roomDetail?.payments?.length || 0) / PAYMENT_HISTORY_PAGE_SIZE))
+  const paymentHistoryTotalPages = Math.max(1, Math.ceil((displayRoomDetail?.payments?.length || 0) / PAYMENT_HISTORY_PAGE_SIZE))
   const paginatedPaymentHistory = useMemo(() => {
     const start = (paymentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE
-    return (roomDetail?.payments || []).slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
-  }, [roomDetail, paymentHistoryPage])
+    return (displayRoomDetail?.payments || []).slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
+  }, [displayRoomDetail, paymentHistoryPage])
 
   const setMessage = (type, message) => {
     setNotice({ type, message })
@@ -383,13 +606,42 @@ function OwnerMain() {
     setIncomeTypePage(1)
   }
 
-  const loadExpenses = async (page = expenses.page || 1) => {
+  const loadExpenses = async (page = expenses.page || 1, overrides = {}) => {
+    const nextFilters = { ...paymentFilter, ...overrides }
     const { data } = await axios.get('/api/owner/expenses', {
       headers: getAuthHeaders(),
-      params: { page },
+      params: { page, from: nextFilters.from || undefined, to: nextFilters.to || undefined },
     })
     setExpenses(data)
-    setExpensePreviewPage(1)
+    setExpenseCategoryPage(1)
+  }
+
+  const loadTrends = async (overrides = {}) => {
+    const nextFilters = { ...paymentFilter, ...overrides }
+    setIsTrendsLoading(true)
+    try {
+      const { data } = await axios.get('/api/owner/trends', {
+        headers: getAuthHeaders(),
+        params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
+      })
+      setFinanceTrends(data)
+    } finally {
+      setIsTrendsLoading(false)
+    }
+  }
+
+  const loadOccupancyTrend = async (overrides = {}) => {
+    const nextFilters = { ...paymentFilter, ...overrides }
+    setIsOccupancyTrendLoading(true)
+    try {
+      const { data } = await axios.get('/api/owner/rooms/occupancy-trend', {
+        headers: getAuthHeaders(),
+        params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
+      })
+      setOccupancyTrend(data)
+    } finally {
+      setIsOccupancyTrendLoading(false)
+    }
   }
 
   const loadStaff = async () => {
@@ -398,7 +650,7 @@ function OwnerMain() {
   }
 
   const loadPaymentLogs = async (page = paymentLogs.page || 1, overrides = {}) => {
-    const nextFilters = { ...paymentFilter, ...overrides }
+    const nextFilters = { ...paymentLogFilter, ...overrides }
     const { data } = await axios.get('/api/owner/logs/payments', {
       headers: getAuthHeaders(),
       params: {
@@ -410,6 +662,21 @@ function OwnerMain() {
       },
     })
     setPaymentLogs(data)
+  }
+
+  const loadOccupancyLogs = async (page = occupancyLogs.page || 1, overrides = {}) => {
+    const nextFilters = { search: occupancyFilter.search, type: occupancyFilter.type, from: paymentFilter.from, to: paymentFilter.to, ...overrides }
+    const { data } = await axios.get('/api/owner/logs/occupancy', {
+      headers: getAuthHeaders(),
+      params: {
+        page,
+        from: nextFilters.from || undefined,
+        to: nextFilters.to || undefined,
+        search: nextFilters.search || undefined,
+        type: nextFilters.type && nextFilters.type !== 'all' ? nextFilters.type : undefined,
+      },
+    })
+    setOccupancyLogs(data)
   }
 
   const handleRoomClick = async (room) => {
@@ -431,7 +698,7 @@ function OwnerMain() {
     const fetchAll = async () => {
       try {
         setIsLoading(true)
-        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadExpenses(1), loadStaff(), loadPaymentLogs(1)])
+        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadExpenses(1), loadTrends(), loadOccupancyTrend(), loadStaff(), loadPaymentLogs(1), loadOccupancyLogs(1)])
       } catch (error) {
         const message = error.response?.data?.message || 'ไม่สามารถโหลดข้อมูลหอพักได้'
         setMessage('danger', message)
@@ -444,7 +711,7 @@ function OwnerMain() {
   }, [])
 
   useEffect(() => {
-    const isModalOpen = Boolean(roomDetail) || Boolean(roomListFilter) || isStaffModalOpen || Boolean(viewingStaff)
+    const isModalOpen = Boolean(displayRoomDetail) || Boolean(displayRoomListFilter) || displayStaffModalOpen || Boolean(displayViewingStaff)
     if (!isModalOpen) return undefined
 
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
@@ -460,19 +727,15 @@ function OwnerMain() {
       document.body.style.overflow = previousOverflow
       document.body.style.paddingRight = previousPaddingRight
     }
-  }, [roomDetail, roomListFilter, isStaffModalOpen, viewingStaff])
+  }, [displayRoomDetail, displayRoomListFilter, displayStaffModalOpen, displayViewingStaff])
 
-  const handlePaymentFilterChange = async (field, value) => {
-    const nextFilters = { ...paymentFilter, [field]: value }
-    setPaymentFilter(nextFilters)
-    if (field === 'from' || field === 'to') setPaymentDatePreset('custom')
+  const handlePaymentLogFilterChange = async (field, value) => {
+    const nextFilters = { ...paymentLogFilter, [field]: value }
+    setPaymentLogFilter(nextFilters)
     try {
       await loadPaymentLogs(1, nextFilters)
-      if (field === 'from' || field === 'to') {
-        await Promise.all([loadIncome(nextFilters), loadOverview(nextFilters), loadOccupancySummary(nextFilters)])
-      }
     } catch (error) {
-      setMessage('danger', error.response?.data?.message || 'ไม่สามารถกรองข้อมูลการเงินได้')
+      setMessage('danger', error.response?.data?.message || 'ไม่สามารถกรองข้อมูลการชำระเงินได้')
     }
   }
 
@@ -493,19 +756,41 @@ function OwnerMain() {
     } else if (presetKey === 'month') {
       from = toInputDate(new Date(today.getFullYear(), today.getMonth(), 1))
       to = toInputDate(today)
+    } else if (presetKey === '3m') {
+      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 2, 1))
+      to = toInputDate(today)
+    } else if (presetKey === '6m') {
+      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 5, 1))
+      to = toInputDate(today)
+    } else if (presetKey === '1y') {
+      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 11, 1))
+      to = toInputDate(today)
     }
 
     const nextFilters = { ...paymentFilter, from, to }
     setPaymentFilter(nextFilters)
     try {
       await Promise.all([
-        loadPaymentLogs(1, nextFilters),
         loadIncome(nextFilters),
         loadOverview(nextFilters),
         loadOccupancySummary(nextFilters),
+        loadExpenses(1, nextFilters),
+        loadOccupancyLogs(1, { from: nextFilters.from, to: nextFilters.to }),
+        loadTrends(nextFilters),
+        loadOccupancyTrend(nextFilters),
       ])
     } catch (error) {
       setMessage('danger', error.response?.data?.message || 'ไม่สามารถกรองข้อมูลการเงินได้')
+    }
+  }
+
+  const handleOccupancyFilterChange = async (field, value) => {
+    const nextFilters = { ...occupancyFilter, [field]: value }
+    setOccupancyFilter(nextFilters)
+    try {
+      await loadOccupancyLogs(1, nextFilters)
+    } catch (error) {
+      setMessage('danger', error.response?.data?.message || 'ไม่สามารถกรองข้อมูลการเข้าพักได้')
     }
   }
 
@@ -639,8 +924,8 @@ function OwnerMain() {
 
         <section className="owner-period-bar">
           <div>
-            <strong>สรุปข้อมูลประจำเดือน</strong>
-            <span>ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน</span>
+            <strong>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</strong>
+            <span>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).subtitle}</span>
           </div>
           <span className="owner-period-badge">
             {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
@@ -754,50 +1039,120 @@ function OwnerMain() {
               </div>
             </section>
 
+            <section className="owner-panel">
+              <div className="owner-panel-header">
+                <h3>เปรียบเทียบจำนวนผู้เข้าพัก{occupancyTrend.granularity === 'day' ? 'รายวัน' : 'รายเดือน'}</h3>
+              </div>
+
+              <div className="owner-finance-chart-legend">
+                {OCCUPANCY_TREND_SERIES.map((series) => (
+                  <span key={series.key}>
+                    <i className="owner-chart-tooltip-dot" style={{ background: series.color }} />
+                    {series.label}
+                  </span>
+                ))}
+              </div>
+
+              {occupancyTrendChartData.length ? (
+                <>
+                <div className={`owner-linecard-chart owner-finance-trend-chart ${isOccupancyTrendLoading ? 'is-loading' : ''}`}>
+                  <ResponsiveContainer width="100%" height={280}>
+                    {occupancyTrendChartData.length >= 2 ? (
+                      <LineChart data={occupancyTrendChartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                        <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={36} />
+                        <Tooltip content={<OccupancyTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
+                        <Line type="monotone" dataKey="occupied" name="มีผู้เช่า" stroke={ROOM_OCCUPANCY_COLORS.occupied} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                        <Line type="monotone" dataKey="vacant" name="ว่าง" stroke={ROOM_OCCUPANCY_COLORS.vacant} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={occupancyTrendChartData} barGap={4} barCategoryGap="40%">
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                        <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={36} />
+                        <Tooltip content={<OccupancyTrendTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
+                        <Bar dataKey="occupied" name="มีผู้เช่า" fill={ROOM_OCCUPANCY_COLORS.occupied} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                        <Bar dataKey="vacant" name="ว่าง" fill={ROOM_OCCUPANCY_COLORS.vacant} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="owner-balance-summary">
+                  <div>
+                    <span>ปัจจุบันมีผู้เช่า</span>
+                    <strong>{occupancyTrendSummary.currentOccupied} ห้อง</strong>
+                  </div>
+                  <div>
+                    <span>ปัจจุบันห้องว่าง</span>
+                    <strong>{occupancyTrendSummary.currentVacant} ห้อง</strong>
+                  </div>
+                  <div>
+                    <span>อัตราการเข้าพักเฉลี่ย</span>
+                    <strong>{occupancyTrendSummary.avgRate.toFixed(1)}%</strong>
+                  </div>
+                  <div>
+                    <span>สูงสุด</span>
+                    <strong>{occupancyTrendSummary.peakOccupied} ห้อง</strong>
+                  </div>
+                </div>
+                </>
+              ) : (
+                <div className="owner-empty">ยังไม่มีข้อมูลแนวโน้มย้อนหลัง</div>
+              )}
+            </section>
+
             <section className="owner-shell-grid">
               <div className="owner-panel">
                 <div className="owner-panel-header">
-                  <h3>รายรับตามประเภท</h3>
+                  <h3>ผู้เข้าพักปัจจุบัน</h3>
+                  <div className="owner-panel-header-actions">
+                    <span className="owner-panel-header-count">{currentOccupants.length} คน</span>
+                    <button type="button" className="owner-panel-header-link" onClick={() => setRoomListFilter('occupied')}>
+                      ดูทั้งหมด
+                    </button>
+                  </div>
                 </div>
+                <p className="owner-panel-hint">คลิกที่รายการเพื่อดูรายละเอียดห้อง</p>
                 <div className="owner-income-type-list">
-                  {paginatedIncomeByType.length ? (
-                    paginatedIncomeByType.map((item) => {
-                      const color = getPaymentTypeColor(item.type)
-                      const percent = incomeByTypeTotal > 0 ? (Number(item.total || 0) / incomeByTypeTotal) * 100 : 0
-                      return (
-                        <div key={item.type} className="owner-income-type-item">
-                          <span className="owner-income-type-icon" style={{ color, background: `${color}1f` }}>
-                            <PaymentTypeIcon type={item.type} />
-                          </span>
-                          <div className="owner-income-type-body">
-                            <div className="owner-income-type-row">
-                              <span className="owner-summary-label">{item.type ? formatPaymentType(item.type) : 'ไม่ระบุ'}</span>
-                              <strong>฿{formatCurrency(item.total)}</strong>
-                            </div>
-                            <div className="owner-income-type-progress">
-                              <div className="owner-income-type-progress-fill" style={{ width: `${percent}%`, background: color }} />
-                            </div>
-                            <div className="owner-income-type-row">
-                              <small>{item.count || 0} รายการ</small>
-                              <small>{percent.toFixed(0)}%</small>
-                            </div>
+                  {paginatedOccupants.length ? (
+                    paginatedOccupants.map((room) => (
+                      <button
+                        key={room.room_number}
+                        type="button"
+                        className="owner-income-type-item owner-income-type-item-button"
+                        onClick={() => handleRoomClick(room)}
+                      >
+                        <span className="owner-income-type-icon" style={{ color: '#2563eb', background: 'rgba(37, 99, 235, 0.12)' }}>
+                          <StatIcon name="rooms" />
+                        </span>
+                        <div className="owner-income-type-body">
+                          <div className="owner-income-type-row">
+                            <span className="owner-summary-label">
+                              ห้อง {room.room_number} · {`${room.first_name || ''} ${room.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}
+                            </span>
+                            <strong>{room.phone || '-'}</strong>
+                          </div>
+                          <div className="owner-income-type-row">
+                            <small>เข้าพักตั้งแต่ {formatDate(room.rental_start_date)}</small>
                           </div>
                         </div>
-                      )
-                    })
+                      </button>
+                    ))
                   ) : (
-                    <div className="owner-empty">ยังไม่มีข้อมูลรายรับ</div>
+                    <div className="owner-empty">ยังไม่มีผู้เข้าพัก</div>
                   )}
                 </div>
-                {incomeSummary.byType?.length > SUMMARY_PAGE_SIZE && (
+                {currentOccupants.length > SUMMARY_PAGE_SIZE && (
                   <div className="owner-pagination">
-                    <button type="button" disabled={incomeTypePage <= 1} onClick={() => setIncomeTypePage((page) => page - 1)}>
+                    <button type="button" disabled={occupantsPage <= 1} onClick={() => setOccupantsPage((page) => page - 1)}>
                       ก่อนหน้า
                     </button>
                     <span>
-                      หน้า {incomeTypePage}/{incomeTypeTotalPages}
+                      หน้า {occupantsPage}/{occupantsTotalPages}
                     </span>
-                    <button type="button" disabled={incomeTypePage >= incomeTypeTotalPages} onClick={() => setIncomeTypePage((page) => page + 1)}>
+                    <button type="button" disabled={occupantsPage >= occupantsTotalPages} onClick={() => setOccupantsPage((page) => page + 1)}>
                       ถัดไป
                     </button>
                   </div>
@@ -806,37 +1161,111 @@ function OwnerMain() {
 
               <div className="owner-panel">
                 <div className="owner-panel-header">
-                  <h3>ค่าใช้จ่ายล่าสุด</h3>
+                  <h3>ห้องว่าง</h3>
+                  <div className="owner-panel-header-actions">
+                    <span className="owner-panel-header-count">{vacantRoomsList.length} ห้อง</span>
+                    <button type="button" className="owner-panel-header-link" onClick={() => setRoomListFilter('vacant')}>
+                      ดูทั้งหมด
+                    </button>
+                  </div>
                 </div>
-                <div className="owner-summary-list">
-                  {paginatedExpensePreview.length ? (
-                    paginatedExpensePreview.map((item) => (
-                      <div key={item.id} className="owner-summary-item">
-                        <div>
-                          <span className="owner-summary-label">{item.category}</span>
-                          <small>{item.recorded_by_name || 'เจ้าของหอพัก'}</small>
+                <p className="owner-panel-hint">คลิกที่รายการเพื่อดูรายละเอียดห้อง</p>
+                <div className="owner-income-type-list">
+                  {paginatedVacantRooms.length ? (
+                    paginatedVacantRooms.map((room) => (
+                      <button
+                        key={room.room_number}
+                        type="button"
+                        className="owner-income-type-item owner-income-type-item-button"
+                        onClick={() => handleRoomClick(room)}
+                      >
+                        <span className="owner-income-type-icon" style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.14)' }}>
+                          <StatIcon name="rooms" />
+                        </span>
+                        <div className="owner-income-type-body">
+                          <div className="owner-income-type-row">
+                            <span className="owner-summary-label">ห้อง {room.room_number}</span>
+                            <strong>฿{formatCurrency(room.price)}/เดือน</strong>
+                          </div>
+                          <div className="owner-income-type-row">
+                            <small>ว่าง พร้อมให้เช่า</small>
+                          </div>
                         </div>
-                        <strong>฿{formatCurrency(item.amount)}</strong>
-                      </div>
+                      </button>
                     ))
                   ) : (
-                    <div className="owner-empty">ยังไม่มีรายการรายจ่าย</div>
+                    <div className="owner-empty">ไม่มีห้องว่างในขณะนี้</div>
                   )}
                 </div>
-                {expenses.expenses?.length > SUMMARY_PAGE_SIZE && (
+                {vacantRoomsList.length > SUMMARY_PAGE_SIZE && (
                   <div className="owner-pagination">
-                    <button type="button" disabled={expensePreviewPage <= 1} onClick={() => setExpensePreviewPage((page) => page - 1)}>
+                    <button type="button" disabled={vacantRoomsPage <= 1} onClick={() => setVacantRoomsPage((page) => page - 1)}>
                       ก่อนหน้า
                     </button>
                     <span>
-                      หน้า {expensePreviewPage}/{expensePreviewTotalPages}
+                      หน้า {vacantRoomsPage}/{vacantRoomsTotalPages}
                     </span>
-                    <button type="button" disabled={expensePreviewPage >= expensePreviewTotalPages} onClick={() => setExpensePreviewPage((page) => page + 1)}>
+                    <button type="button" disabled={vacantRoomsPage >= vacantRoomsTotalPages} onClick={() => setVacantRoomsPage((page) => page + 1)}>
                       ถัดไป
                     </button>
                   </div>
                 )}
               </div>
+            </section>
+
+            <section className="owner-panel">
+              <div className="owner-panel-header">
+                <h3>ห้องที่กำลังซ่อม</h3>
+                <div className="owner-panel-header-actions">
+                  <span className="owner-panel-header-count">{maintenanceRoomsList.length} ห้อง</span>
+                  <button type="button" className="owner-panel-header-link" onClick={() => setRoomListFilter('maintenance')}>
+                    ดูทั้งหมด
+                  </button>
+                </div>
+              </div>
+              <p className="owner-panel-hint">คลิกที่รายการเพื่อดูรายละเอียดห้อง</p>
+              <div className="owner-income-type-list">
+                {paginatedMaintenanceRooms.length ? (
+                  paginatedMaintenanceRooms.map((room) => (
+                    <button
+                      key={room.room_number}
+                      type="button"
+                      className="owner-income-type-item owner-income-type-item-button"
+                      onClick={() => handleRoomClick(room)}
+                    >
+                      <span className="owner-income-type-icon" style={{ color: '#e11d48', background: 'rgba(225, 29, 72, 0.12)' }}>
+                        <StatIcon name="maintenance" />
+                      </span>
+                      <div className="owner-income-type-body">
+                        <div className="owner-income-type-row">
+                          <span className="owner-summary-label">
+                            ห้อง {room.room_number} · {`${room.first_name || ''} ${room.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}
+                          </span>
+                          <strong>{room.phone || '-'}</strong>
+                        </div>
+                        <div className="owner-income-type-row">
+                          <small>กำลังซ่อมบำรุง</small>
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="owner-empty">ไม่มีห้องที่กำลังซ่อมบำรุงในขณะนี้</div>
+                )}
+              </div>
+              {maintenanceRoomsList.length > SUMMARY_PAGE_SIZE && (
+                <div className="owner-pagination">
+                  <button type="button" disabled={maintenanceRoomsPage <= 1} onClick={() => setMaintenanceRoomsPage((page) => page - 1)}>
+                    ก่อนหน้า
+                  </button>
+                  <span>
+                    หน้า {maintenanceRoomsPage}/{maintenanceRoomsTotalPages}
+                  </span>
+                  <button type="button" disabled={maintenanceRoomsPage >= maintenanceRoomsTotalPages} onClick={() => setMaintenanceRoomsPage((page) => page + 1)}>
+                    ถัดไป
+                  </button>
+                </div>
+              )}
             </section>
           </>
         )}
@@ -917,9 +1346,9 @@ function OwnerMain() {
           </section>
         )}
 
-        {isStaffModalOpen && (
-          <div className="owner-modal-backdrop" role="presentation" onClick={closeStaffModal}>
-            <section className="owner-modal" role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" onClick={(event) => event.stopPropagation()}>
+        {displayStaffModalOpen && (
+          <div className={`owner-modal-backdrop${isStaffModalClosing ? ' is-closing' : ''}`} role="presentation" onClick={closeStaffModal}>
+            <section className={`owner-modal${isStaffModalClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" onClick={(event) => event.stopPropagation()}>
               <div className="owner-modal-header">
                 <div>
                   <h3 id="staff-modal-title">{editingStaff ? 'แก้ไขพนักงาน' : 'เพิ่มพนักงาน'}</h3>
@@ -1041,13 +1470,13 @@ function OwnerMain() {
           </div>
         )}
 
-        {viewingStaff && (
-          <div className="owner-modal-backdrop" role="presentation" onClick={() => setViewingStaff(null)}>
-            <section className="owner-modal" role="dialog" aria-modal="true" aria-labelledby="staff-detail-title" onClick={(event) => event.stopPropagation()}>
+        {displayViewingStaff && (
+          <div className={`owner-modal-backdrop${isViewingStaffClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setViewingStaff(null)}>
+            <section className={`owner-modal${isViewingStaffClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="staff-detail-title" onClick={(event) => event.stopPropagation()}>
               <div className="owner-modal-header">
                 <div>
-                  <span className={`owner-status-badge ${viewingStaff.is_suspended ? 'disabled' : 'active'}`}>
-                    {viewingStaff.role}
+                  <span className={`owner-status-badge ${displayViewingStaff.is_suspended ? 'disabled' : 'active'}`}>
+                    {displayViewingStaff.role}
                   </span>
                   <h3 id="staff-detail-title">รายละเอียดพนักงาน</h3>
                 </div>
@@ -1069,7 +1498,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>ชื่อ-นามสกุล</span>
-                      <strong>{`${viewingStaff.first_name || ''} ${viewingStaff.last_name || ''}`.trim() || '-'}</strong>
+                      <strong>{`${displayViewingStaff.first_name || ''} ${displayViewingStaff.last_name || ''}`.trim() || '-'}</strong>
                     </div>
                   </div>
                   <div>
@@ -1080,7 +1509,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>เบอร์โทรศัพท์</span>
-                      <strong>{viewingStaff.phone || '-'}</strong>
+                      <strong>{displayViewingStaff.phone || '-'}</strong>
                     </div>
                   </div>
                   <div>
@@ -1094,7 +1523,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>เลขบัตรประชาชน</span>
-                      <strong>{viewingStaff.idcard || '-'}</strong>
+                      <strong>{displayViewingStaff.idcard || '-'}</strong>
                     </div>
                   </div>
                   <div>
@@ -1108,7 +1537,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>อายุ</span>
-                      <strong>{viewingStaff.age ? `${viewingStaff.age} ปี` : '-'}</strong>
+                      <strong>{displayViewingStaff.age ? `${displayViewingStaff.age} ปี` : '-'}</strong>
                     </div>
                   </div>
                   <div>
@@ -1120,7 +1549,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>ตำแหน่ง</span>
-                      <strong>{viewingStaff.role}</strong>
+                      <strong>{displayViewingStaff.role}</strong>
                     </div>
                   </div>
                   <div>
@@ -1131,7 +1560,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>สถานะ</span>
-                      <strong>{viewingStaff.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}</strong>
+                      <strong>{displayViewingStaff.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}</strong>
                     </div>
                   </div>
                   <div>
@@ -1145,7 +1574,7 @@ function OwnerMain() {
                     </div>
                     <div className="owner-detail-text">
                       <span>วันที่เพิ่มเข้าระบบ</span>
-                      <strong>{formatDate(viewingStaff.created_at)}</strong>
+                      <strong>{formatDate(displayViewingStaff.created_at)}</strong>
                     </div>
                   </div>
                 </div>
@@ -1168,17 +1597,292 @@ function OwnerMain() {
           </div>
         )}
 
-        {!isLoading && ['finance', 'moveouts', 'requests', 'maintenance'].includes(activeTab) && (
-          <section className="owner-panel">
-            <div className="owner-panel-header">
-              <h3>{OWNER_TABS.find((tab) => tab.key === activeTab)?.label}</h3>
-            </div>
-            <div className="owner-empty">กำลังพัฒนาฟีเจอร์นี้ เร็ว ๆ นี้</div>
-          </section>
-        )}
-
-        {!isLoading && activeTab === 'rooms' && (
+        {!isLoading && activeTab === 'finance' && (
           <>
+            <div className="owner-filter-presets owner-filter-presets-top">
+              {PAYMENT_DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  className={`owner-filter-preset-btn${paymentDatePreset === preset.key ? ' active' : ''}`}
+                  onClick={() => handlePaymentDatePreset(preset.key)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <section className="owner-card-grid">
+              <article className="owner-stat-card blue">
+                <div className="owner-stat-header">
+                  <span>รายรับรวม</span>
+                  <span className="owner-stat-badge"><StatIcon name="income" /></span>
+                </div>
+                <h2>{formatSignedCurrency(totalIncome)}</h2>
+                <p>รวมรายการชำระเงินที่สำเร็จตามช่วงที่เลือก</p>
+              </article>
+              <article className="owner-stat-card orange">
+                <div className="owner-stat-header">
+                  <span>รายจ่ายรวม</span>
+                  <span className="owner-stat-badge"><StatIcon name="expense" /></span>
+                </div>
+                <h2>{formatSignedCurrency(totalExpense)}</h2>
+                <p>รวมรายจ่ายทั้งหมดตามช่วงที่เลือก</p>
+              </article>
+              <article className={`owner-stat-card ${netProfit < 0 ? 'red' : 'green'}`}>
+                <div className="owner-stat-header">
+                  <span>{netProfit < 0 ? 'ขาดทุนสุทธิ' : 'กำไรสุทธิ'}</span>
+                  <span className="owner-stat-badge"><StatIcon name="profit" /></span>
+                </div>
+                <h2>{formatSignedCurrency(netProfit)}</h2>
+                <p>รายรับ - รายจ่าย</p>
+              </article>
+              <article className={`owner-stat-card ${netProfit < 0 ? 'red' : 'purple'}`}>
+                <div className="owner-stat-header">
+                  <span>อัตรากำไร</span>
+                  <span className="owner-stat-badge"><StatIcon name="margin" /></span>
+                </div>
+                <h2>{formatPercent(profitMargin)}</h2>
+                <p>กำไรสุทธิเทียบกับรายรับรวม</p>
+              </article>
+            </section>
+
+            <section className="owner-panel">
+              <div className="owner-panel-header">
+                <h3>เปรียบเทียบรายรับ-รายจ่าย{financeTrends.granularity === 'day' ? 'รายวัน' : 'รายเดือน'}</h3>
+              </div>
+
+              <div className="owner-finance-chart-legend">
+                {FINANCE_TREND_SERIES.map((series) => (
+                  <span key={series.key}>
+                    <i className="owner-chart-tooltip-dot" style={{ background: series.color }} />
+                    {series.label}
+                  </span>
+                ))}
+              </div>
+
+              {trendChartData.length ? (
+                <>
+                <div className={`owner-linecard-chart owner-finance-trend-chart ${isTrendsLoading ? 'is-loading' : ''}`}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    {trendChartData.length >= 2 ? (
+                      <LineChart data={trendChartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                        <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
+                        <Tooltip content={<FinanceTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
+                        <ReferenceLine y={0} stroke="#d8e2ee" />
+                        <Line type="monotone" dataKey="income" name="รายรับ" stroke={FINANCE_TREND_COLORS.income} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                        <Line type="monotone" dataKey="expense" name="รายจ่าย" stroke={FINANCE_TREND_COLORS.expense} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                        <Line
+                          type="monotone"
+                          dataKey="netProfit"
+                          name="กำไร/ขาดทุน"
+                          stroke={FINANCE_TREND_COLORS.net}
+                          strokeWidth={2}
+                          dot={(props) => (
+                            <circle
+                              key={`net-dot-${props.payload.period}`}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={4}
+                              fill={props.payload.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net}
+                              stroke="none"
+                            />
+                          )}
+                          activeDot={{ r: 5 }}
+                        />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={trendChartData} barGap={4} barCategoryGap="40%">
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                        <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
+                        <Tooltip content={<FinanceTrendTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
+                        <Bar dataKey="income" name="รายรับ" fill={FINANCE_TREND_COLORS.income} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                        <Bar dataKey="expense" name="รายจ่าย" fill={FINANCE_TREND_COLORS.expense} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                        <Bar dataKey="netProfit" name="กำไร/ขาดทุน" fill={FINANCE_TREND_COLORS.net} radius={[4, 4, 0, 0]} maxBarSize={48}>
+                          {trendChartData.map((entry) => (
+                            <Cell key={entry.period} fill={entry.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="owner-balance-summary">
+                  <div>
+                    <span>รวมรายรับ</span>
+                    <strong>{formatSignedCurrency(trendSummary.totalIncome)}</strong>
+                  </div>
+                  <div>
+                    <span>รวมรายจ่าย</span>
+                    <strong>{formatSignedCurrency(trendSummary.totalExpense)}</strong>
+                  </div>
+                  <div className={trendSummary.totalNet < 0 ? 'is-owed' : 'is-refund'}>
+                    <span>กำไร/ขาดทุนสุทธิ</span>
+                    <strong>{formatSignedCurrency(trendSummary.totalNet)}</strong>
+                  </div>
+                  <div className={trendSummary.avgNet < 0 ? 'is-owed' : 'is-refund'}>
+                    <span>เฉลี่ยต่อ{financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
+                    <strong>{formatSignedCurrency(trendSummary.avgNet)}</strong>
+                  </div>
+                </div>
+                </>
+              ) : (
+                <div className="owner-empty">ยังไม่มีข้อมูลแนวโน้มย้อนหลัง</div>
+              )}
+            </section>
+
+            <section className="owner-shell-grid">
+              <div className="owner-panel">
+                <div className="owner-panel-header">
+                  <h3>รายรับตามประเภท</h3>
+                </div>
+                <div className="owner-income-type-list">
+                  {paginatedIncomeByType.length ? (
+                    paginatedIncomeByType.map((item) => {
+                      const color = getPaymentTypeColor(item.type)
+                      const percent = incomeByTypeTotal > 0 ? (Number(item.total || 0) / incomeByTypeTotal) * 100 : 0
+                      return (
+                        <div key={item.type} className="owner-income-type-item">
+                          <span className="owner-income-type-icon" style={{ color, background: `${color}1f` }}>
+                            <PaymentTypeIcon type={item.type} />
+                          </span>
+                          <div className="owner-income-type-body">
+                            <div className="owner-income-type-row">
+                              <span className="owner-summary-label">{item.type ? formatPaymentType(item.type) : 'ไม่ระบุ'}</span>
+                              <strong>฿{formatCurrency(item.total)}</strong>
+                            </div>
+                            <div className="owner-income-type-progress">
+                              <div className="owner-income-type-progress-fill" style={{ width: `${percent}%`, background: color }} />
+                            </div>
+                            <div className="owner-income-type-row">
+                              <small>{item.count || 0} รายการ</small>
+                              <small>{percent.toFixed(0)}%</small>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="owner-empty">ยังไม่มีข้อมูลรายรับ</div>
+                  )}
+                </div>
+                {incomeSummary.byType?.length > SUMMARY_PAGE_SIZE && (
+                  <div className="owner-pagination">
+                    <button type="button" disabled={incomeTypePage <= 1} onClick={() => setIncomeTypePage((page) => page - 1)}>
+                      ก่อนหน้า
+                    </button>
+                    <span>
+                      หน้า {incomeTypePage}/{incomeTypeTotalPages}
+                    </span>
+                    <button type="button" disabled={incomeTypePage >= incomeTypeTotalPages} onClick={() => setIncomeTypePage((page) => page + 1)}>
+                      ถัดไป
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="owner-panel">
+                <div className="owner-panel-header">
+                  <h3>รายจ่ายตามหมวดหมู่</h3>
+                </div>
+                <div className="owner-income-type-list">
+                  {paginatedExpenseCategories.length ? (
+                    paginatedExpenseCategories.map((item) => {
+                      const percent = expenseByCategoryTotal > 0 ? (Number(item.total || 0) / expenseByCategoryTotal) * 100 : 0
+                      return (
+                        <div key={item.category} className="owner-income-type-item">
+                          <span className="owner-income-type-icon" style={{ color: '#d97706', background: 'rgba(217, 119, 6, 0.12)' }}>
+                            <StatIcon name="expense" />
+                          </span>
+                          <div className="owner-income-type-body">
+                            <div className="owner-income-type-row">
+                              <span className="owner-summary-label">{item.category || 'ไม่ระบุ'}</span>
+                              <strong>฿{formatCurrency(item.total)}</strong>
+                            </div>
+                            <div className="owner-income-type-progress">
+                              <div className="owner-income-type-progress-fill" style={{ width: `${percent}%`, background: '#d97706' }} />
+                            </div>
+                            <div className="owner-income-type-row">
+                              <small>{item.count || 0} รายการ</small>
+                              <small>{percent.toFixed(0)}%</small>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="owner-empty">ยังไม่มีข้อมูลรายจ่าย</div>
+                  )}
+                </div>
+                {expenses.byCategory?.length > SUMMARY_PAGE_SIZE && (
+                  <div className="owner-pagination">
+                    <button type="button" disabled={expenseCategoryPage <= 1} onClick={() => setExpenseCategoryPage((page) => page - 1)}>
+                      ก่อนหน้า
+                    </button>
+                    <span>
+                      หน้า {expenseCategoryPage}/{expenseCategoryTotalPages}
+                    </span>
+                    <button type="button" disabled={expenseCategoryPage >= expenseCategoryTotalPages} onClick={() => setExpenseCategoryPage((page) => page + 1)}>
+                      ถัดไป
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="owner-panel">
+              <div className="owner-panel-header">
+                <h3>รายการรายจ่ายทั้งหมด</h3>
+              </div>
+              <div className="owner-table-wrap">
+                <table className="owner-table">
+                  <thead>
+                    <tr>
+                      <th>วันที่</th>
+                      <th>หมวดหมู่</th>
+                      <th>รายละเอียด</th>
+                      <th>บันทึกโดย</th>
+                      <th>จำนวนเงิน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses.expenses?.length ? (
+                      expenses.expenses.map((item) => (
+                        <tr key={item.id}>
+                          <td>{formatDate(item.expense_date)}</td>
+                          <td>{item.category || '-'}</td>
+                          <td>{item.description || '-'}</td>
+                          <td>{item.recorded_by_name || 'เจ้าของหอพัก'}</td>
+                          <td>฿{formatCurrency(item.amount)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="owner-empty-row">
+                          ไม่มีรายการรายจ่ายในช่วงที่เลือก
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="owner-pagination">
+                <button type="button" disabled={financeExpensePage <= 1} onClick={() => loadExpenses(financeExpensePage - 1)}>
+                  ก่อนหน้า
+                </button>
+                <span>
+                  หน้า {financeExpensePage}/{financeExpenseTotalPages}
+                </span>
+                <button type="button" disabled={financeExpensePage >= financeExpenseTotalPages} onClick={() => loadExpenses(financeExpensePage + 1)}>
+                  ถัดไป
+                </button>
+              </div>
+            </section>
+
             <section className="owner-panel">
               <div className="owner-panel-header">
                 <h3>บันทึกการชำระเงิน</h3>
@@ -1191,8 +1895,8 @@ function OwnerMain() {
                 </svg>
                 <input
                   type="text"
-                  value={paymentFilter.search}
-                  onChange={(event) => handlePaymentFilterChange('search', event.target.value)}
+                  value={paymentLogFilter.search}
+                  onChange={(event) => handlePaymentLogFilterChange('search', event.target.value)}
                   placeholder="ค้นหาห้อง / ลูกค้า / หมายเหตุ"
                 />
               </label>
@@ -1201,17 +1905,17 @@ function OwnerMain() {
                 <div className="owner-filter-row">
                   <label className="owner-date-field">
                     จาก
-                    <ThaiDatePicker value={paymentFilter.from} onChange={(value) => handlePaymentFilterChange('from', value)} />
+                    <ThaiDatePicker value={paymentLogFilter.from} onChange={(value) => handlePaymentLogFilterChange('from', value)} />
                   </label>
                   <label className="owner-date-field">
                     ถึง
-                    <ThaiDatePicker value={paymentFilter.to} onChange={(value) => handlePaymentFilterChange('to', value)} />
+                    <ThaiDatePicker value={paymentLogFilter.to} onChange={(value) => handlePaymentLogFilterChange('to', value)} />
                   </label>
                   <label className="owner-search-box">
                     สถานะการชำระ
                     <select
-                      value={paymentFilter.onlyOverdue ? 'overdue' : 'all'}
-                      onChange={(event) => handlePaymentFilterChange('onlyOverdue', event.target.value === 'overdue')}
+                      value={paymentLogFilter.onlyOverdue ? 'overdue' : 'all'}
+                      onChange={(event) => handlePaymentLogFilterChange('onlyOverdue', event.target.value === 'overdue')}
                     >
                       <option value="all">ทั้งหมด</option>
                       <option value="overdue">แสดงเฉพาะที่ค้างชำระ</option>
@@ -1273,14 +1977,113 @@ function OwnerMain() {
                 </button>
               </div>
             </section>
+          </>
+        )}
 
-            {roomDetail && (
-              <div className="owner-modal-backdrop" role="presentation" onClick={() => setRoomDetail(null)}>
-                <section className="owner-modal" role="dialog" aria-modal="true" aria-labelledby="room-detail-title" onClick={(event) => event.stopPropagation()}>
+        {!isLoading && ['moveouts', 'requests', 'maintenance'].includes(activeTab) && (
+          <section className="owner-panel">
+            <div className="owner-panel-header">
+              <h3>{OWNER_TABS.find((tab) => tab.key === activeTab)?.label}</h3>
+            </div>
+            <div className="owner-empty">กำลังพัฒนาฟีเจอร์นี้ เร็ว ๆ นี้</div>
+          </section>
+        )}
+
+        {!isLoading && activeTab === 'rooms' && (
+          <>
+            <section className="owner-panel">
+              <div className="owner-panel-header">
+                <h3>บันทึกการเข้าพักและย้ายออก</h3>
+              </div>
+
+              <label className="owner-search-standalone">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  value={occupancyFilter.search}
+                  onChange={(event) => handleOccupancyFilterChange('search', event.target.value)}
+                  placeholder="ค้นหาห้อง / ผู้เข้าพัก"
+                />
+              </label>
+
+              <div className="owner-filter-box">
+                <div className="owner-filter-row owner-occupancy-filter-row">
+                  <label className="owner-search-box">
+                    ประเภทเหตุการณ์
+                    <select
+                      value={occupancyFilter.type}
+                      onChange={(event) => handleOccupancyFilterChange('type', event.target.value)}
+                    >
+                      {OCCUPANCY_TYPE_FILTERS.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="owner-table-wrap">
+                <table className="owner-table">
+                  <thead>
+                    <tr>
+                      <th>วันที่</th>
+                      <th>เหตุการณ์</th>
+                      <th>ห้อง</th>
+                      <th>ผู้เข้าพัก</th>
+                      <th>เบอร์โทร</th>
+                      <th>หมายเหตุ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {occupancyLogs.logs?.length ? (
+                      occupancyLogs.logs.map((log) => (
+                        <tr key={log.id}>
+                          <td>{formatDate(log.event_date)}</td>
+                          <td className="owner-col-status">
+                            <span className={`owner-status-badge ${log.event_type === 'move_in' ? 'active' : 'disabled'}`}>
+                              {formatOccupancyEventType(log.event_type)}
+                            </span>
+                          </td>
+                          <td>{log.room_number || '-'}</td>
+                          <td>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || '-'}</td>
+                          <td>{log.phone || '-'}</td>
+                          <td>{log.note || '-'}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6" className="owner-empty-row">
+                          ไม่มีข้อมูลการเข้าพักหรือย้ายออก
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="owner-pagination">
+                <button type="button" disabled={occupancyPage <= 1} onClick={() => loadOccupancyLogs(occupancyPage - 1)}>
+                  ก่อนหน้า
+                </button>
+                <span>
+                  หน้า {occupancyPage}/{totalOccupancyPages}
+                </span>
+                <button type="button" disabled={occupancyPage >= totalOccupancyPages} onClick={() => loadOccupancyLogs(occupancyPage + 1)}>
+                  ถัดไป
+                </button>
+              </div>
+            </section>
+
+            {displayRoomDetail && (
+              <div className={`owner-modal-backdrop${isRoomDetailClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setRoomDetail(null)}>
+                <section className={`owner-modal${isRoomDetailClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="room-detail-title" onClick={(event) => event.stopPropagation()}>
                   <div className="owner-modal-header">
                     <div>
-                      <span className={`owner-status-badge ${roomDetail.room.status === 'vacant' ? 'active' : roomDetail.room.status === 'overdue' ? 'disabled' : ''}`}>
-                        ห้อง {roomDetail.room.room_number}
+                      <span className={`owner-status-badge ${displayRoomDetail.room.status === 'vacant' ? 'active' : displayRoomDetail.room.status === 'overdue' ? 'disabled' : ''}`}>
+                        ห้อง {displayRoomDetail.room.room_number}
                       </span>
                       <h3 id="room-detail-title">รายละเอียดห้องพัก</h3>
                     </div>
@@ -1306,7 +2109,7 @@ function OwnerMain() {
                           </div>
                           <div className="owner-detail-text">
                             <span>ผู้เช่า</span>
-                            <strong>{roomDetail.tenant ? `${roomDetail.tenant.first_name} ${roomDetail.tenant.last_name}` : 'ห้องว่าง'}</strong>
+                            <strong>{displayRoomDetail.tenant ? `${displayRoomDetail.tenant.first_name} ${displayRoomDetail.tenant.last_name}` : 'ห้องว่าง'}</strong>
                           </div>
                         </div>
                         <div>
@@ -1317,7 +2120,7 @@ function OwnerMain() {
                           </div>
                           <div className="owner-detail-text">
                             <span>เบอร์โทรศัพท์</span>
-                            <strong>{roomDetail.tenant?.phone || '-'}</strong>
+                            <strong>{displayRoomDetail.tenant?.phone || '-'}</strong>
                           </div>
                         </div>
                         <div>
@@ -1331,7 +2134,7 @@ function OwnerMain() {
                           </div>
                           <div className="owner-detail-text">
                             <span>วันเริ่มสัญญา</span>
-                            <strong>{formatDate(roomDetail.room.rental_start_date)}</strong>
+                            <strong>{formatDate(displayRoomDetail.room.rental_start_date)}</strong>
                           </div>
                         </div>
                         <div>
@@ -1345,7 +2148,7 @@ function OwnerMain() {
                           </div>
                           <div className="owner-detail-text">
                             <span>วันสิ้นสุดสัญญา</span>
-                            <strong>{formatDate(roomDetail.room.rental_end_date)}</strong>
+                            <strong>{formatDate(displayRoomDetail.room.rental_end_date)}</strong>
                           </div>
                         </div>
                         <div>
@@ -1357,7 +2160,7 @@ function OwnerMain() {
                           </div>
                           <div className="owner-detail-text">
                             <span>ค่าเช่ารายเดือน</span>
-                            <strong>฿{formatCurrency(roomDetail.room.price)}</strong>
+                            <strong>฿{formatCurrency(displayRoomDetail.room.price)}</strong>
                           </div>
                         </div>
                         <div>
@@ -1368,11 +2171,11 @@ function OwnerMain() {
                           </div>
                           <div className="owner-detail-text">
                             <span>มัดจำ</span>
-                            <strong>฿{formatCurrency(roomDetail.tenant?.deposit_amount)}</strong>
+                            <strong>฿{formatCurrency(displayRoomDetail.tenant?.deposit_amount)}</strong>
                           </div>
                         </div>
                       </div>
-                      {!roomDetail.tenant && (
+                      {!displayRoomDetail.tenant && (
                         <button type="button" className="owner-primary-btn" onClick={() => navigate('/register')}>เพิ่มผู้เช่า</button>
                       )}
                       {roomDetailBalance && (
@@ -1419,7 +2222,7 @@ function OwnerMain() {
                                 <td>฿{formatCurrency(Math.abs(roomDetailBalance.rent - roomDetailBalance.deposit))}</td>
                               </tr>
                             )}
-                            {roomDetail.payments?.length ? (
+                            {displayRoomDetail.payments?.length ? (
                               paginatedPaymentHistory.map((payment) => (
                                 <tr key={payment.id}>
                                   <td>{formatDate(payment.payment_date)}</td>
@@ -1444,7 +2247,7 @@ function OwnerMain() {
                           </tbody>
                         </table>
                       </div>
-                      {roomDetail.payments?.length > PAYMENT_HISTORY_PAGE_SIZE && (
+                      {displayRoomDetail.payments?.length > PAYMENT_HISTORY_PAGE_SIZE && (
                         <div className="owner-pagination">
                           <button type="button" disabled={paymentHistoryPage <= 1} onClick={() => setPaymentHistoryPage((page) => page - 1)}>
                             ก่อนหน้า
@@ -1474,13 +2277,19 @@ function OwnerMain() {
               </div>
             )}
 
-            {roomListFilter && (
-              <div className="owner-modal-backdrop" role="presentation" onClick={() => setRoomListFilter(null)}>
-                <section className="owner-modal" role="dialog" aria-modal="true" aria-labelledby="room-list-title" onClick={(event) => event.stopPropagation()}>
+            {displayRoomListFilter && (
+              <div className={`owner-modal-backdrop${isRoomListClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setRoomListFilter(null)}>
+                <section className={`owner-modal${isRoomListClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="room-list-title" onClick={(event) => event.stopPropagation()}>
                   <div className="owner-modal-header">
                     <div>
                       <h3 id="room-list-title">
-                        {roomListFilter === 'occupied' ? 'ห้องที่มีผู้เช่า' : roomListFilter === 'vacant' ? 'ห้องว่าง' : 'ห้องทั้งหมด'}
+                        {displayRoomListFilter === 'occupied'
+                          ? 'ห้องที่มีผู้เช่า'
+                          : displayRoomListFilter === 'vacant'
+                            ? 'ห้องว่าง'
+                            : displayRoomListFilter === 'maintenance'
+                              ? 'ห้องที่กำลังซ่อม'
+                              : 'ห้องทั้งหมด'}
                       </h3>
                       <p className="owner-modal-subtext">คลิกที่ห้องเพื่อดูรายละเอียด</p>
                     </div>

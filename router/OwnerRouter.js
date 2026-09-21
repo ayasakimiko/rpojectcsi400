@@ -55,22 +55,30 @@ router.get("/overview", async (req, res) => {
     const to = typeof req.query.to === "string" && req.query.to ? req.query.to : null;
 
     let rangeParams = [];
-    let incomeDateClause = "";
-    let expenseDateClause = "";
+    let dateConditions = [];
     if (from || to) {
-      const conditions = [];
-      if (from) { conditions.push(">= ?"); rangeParams.push(from); }
-      if (to) { conditions.push("<= ?"); rangeParams.push(to); }
-      incomeDateClause = `AND ${conditions.map((c) => `payment_date ${c}`).join(" AND ")}`;
-      expenseDateClause = `WHERE ${conditions.map((c) => `expense_date ${c}`).join(" AND ")}`;
+      if (from) { dateConditions.push(">= ?"); rangeParams.push(from); }
+      if (to) { dateConditions.push("<= ?"); rangeParams.push(to); }
     } else {
       const selectedRange = getSelectedMonthRange(req.query);
       if (selectedRange) {
+        dateConditions = [">= ?", "< ?"];
         rangeParams = [selectedRange.from, selectedRange.toExclusive];
-        incomeDateClause = "AND payment_date >= ? AND payment_date < ?";
-        expenseDateClause = "WHERE expense_date >= ? AND expense_date < ?";
       }
     }
+
+    const incomeDateClause = dateConditions.length
+      ? `AND ${dateConditions.map((c) => `payment_date ${c}`).join(" AND ")}`
+      : "";
+    const expenseDateClause = dateConditions.length
+      ? `WHERE ${dateConditions.map((c) => `expense_date ${c}`).join(" AND ")}`
+      : "";
+    const overduePaymentClause = dateConditions.length
+      ? `AND ${dateConditions.map((c) => `p.payment_date ${c}`).join(" AND ")}`
+      : "";
+    const maintenanceDateClause = dateConditions.length
+      ? `AND ${dateConditions.map((c) => `mr.created_at ${c}`).join(" AND ")}`
+      : "";
 
     const [[{ total: incomeTotal }]] = await pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS total FROM Payment WHERE status = 'paid' ${incomeDateClause}`,
@@ -78,6 +86,30 @@ router.get("/overview", async (req, res) => {
     );
     const [[{ total: expenseTotal }]] = await pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS total FROM Expense ${expenseDateClause}`,
+      rangeParams,
+    );
+
+    // Rooms currently booked with no paid payment inside the selected window (or
+    // this month, when no filter is given) — the same rule /rooms/status uses live,
+    // generalized to whatever period the owner has selected.
+    const [[{ overdueCount }]] = await pool.query(
+      `SELECT COUNT(*) AS overdueCount
+       FROM Room r
+       WHERE r.is_booked = TRUE
+         AND NOT EXISTS (
+           SELECT 1 FROM Booking b
+           JOIN Payment p ON p.booking_id = b.id
+           WHERE b.room_id = r.id AND p.status = 'paid' ${overduePaymentClause}
+         )`,
+      rangeParams,
+    );
+
+    // Rooms with a maintenance request still open, filed inside the selected
+    // window (or all currently open ones, when no filter is given).
+    const [[{ maintenanceCount }]] = await pool.query(
+      `SELECT COUNT(DISTINCT mr.room_number) AS maintenanceCount
+       FROM MaintenanceRequest mr
+       WHERE mr.status IN ('pending', 'accepted') ${maintenanceDateClause}`,
       rangeParams,
     );
 
@@ -90,6 +122,8 @@ router.get("/overview", async (req, res) => {
         occupiedRooms,
         vacantRooms,
         occupancyRate: totalRooms > 0 ? occupiedRooms / totalRooms : 0,
+        overdueRoomsCount: Number(overdueCount) || 0,
+        maintenanceRoomsCount: Number(maintenanceCount) || 0,
       },
       finance: { totalIncome, totalExpense, netProfit: totalIncome - totalExpense },
     });
@@ -241,43 +275,207 @@ router.get("/income", async (req, res) => {
   }
 });
 
+function toDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const TRENDS_DAILY_THRESHOLD_DAYS = 31;
+
 router.get("/trends", async (req, res) => {
   try {
     const pool = getPool();
-    const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+
+    const from = typeof req.query.from === "string" && req.query.from ? req.query.from : null;
+    const to = typeof req.query.to === "string" && req.query.to ? req.query.to : null;
+
+    const toDate = to ? new Date(`${to}T00:00:00`) : new Date();
+    const fromDate = from ? new Date(`${from}T00:00:00`) : new Date(toDate.getFullYear(), toDate.getMonth() - 5, 1);
+
+    const daySpan = Math.round((toDate - fromDate) / 86400000) + 1;
+
+    if (daySpan >= 1 && daySpan <= TRENDS_DAILY_THRESHOLD_DAYS) {
+      const fromKey = toDateKey(fromDate);
+      const toKey = toDateKey(toDate);
+
+      const [incomeRows] = await pool.query(
+        `SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS period, COALESCE(SUM(amount), 0) AS total
+         FROM Payment
+         WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
+         GROUP BY period`,
+        [fromKey, toKey],
+      );
+      const [expenseRows] = await pool.query(
+        `SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS period, COALESCE(SUM(amount), 0) AS total
+         FROM Expense
+         WHERE expense_date >= ? AND expense_date <= ?
+         GROUP BY period`,
+        [fromKey, toKey],
+      );
+
+      const incomeByDay = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));
+      const expenseByDay = new Map(expenseRows.map((row) => [row.period, Number(row.total)]));
+
+      const trends = [];
+      const cursor = new Date(fromDate);
+      for (let i = 0; i < daySpan; i += 1) {
+        const key = toDateKey(cursor);
+        const income = incomeByDay.get(key) || 0;
+        const expense = expenseByDay.get(key) || 0;
+        trends.push({ period: key, income, expense, netProfit: income - expense });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      return res.json({ trends, granularity: "day" });
+    }
+
+    const rangeEndMonth = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
+    const rangeStartMonthRaw = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+
+    const monthsSpan = Math.min(
+      24,
+      Math.max(
+        1,
+        (rangeEndMonth.getFullYear() - rangeStartMonthRaw.getFullYear()) * 12 +
+          (rangeEndMonth.getMonth() - rangeStartMonthRaw.getMonth()) +
+          1,
+      ),
+    );
+    const rangeStartMonth = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - (monthsSpan - 1), 1);
+    const rangeStartKey = `${rangeStartMonth.getFullYear()}-${String(rangeStartMonth.getMonth() + 1).padStart(2, "0")}-01`;
 
     const [incomeRows] = await pool.query(
-      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS total
+      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
        FROM Payment
-       WHERE status = 'paid' AND payment_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
-       GROUP BY month`,
-      [months - 1],
+       WHERE status = 'paid' AND payment_date >= ?
+       GROUP BY period`,
+      [rangeStartKey],
     );
     const [expenseRows] = await pool.query(
-      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS total
+      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
        FROM Expense
-       WHERE expense_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
-       GROUP BY month`,
-      [months - 1],
+       WHERE expense_date >= ?
+       GROUP BY period`,
+      [rangeStartKey],
     );
 
-    const incomeByMonth = new Map(incomeRows.map((row) => [row.month, Number(row.total)]));
-    const expenseByMonth = new Map(expenseRows.map((row) => [row.month, Number(row.total)]));
+    const incomeByMonth = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));
+    const expenseByMonth = new Map(expenseRows.map((row) => [row.period, Number(row.total)]));
 
     const trends = [];
-    const cursor = new Date();
-    cursor.setDate(1);
-    for (let i = months - 1; i >= 0; i -= 1) {
-      const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+    for (let i = monthsSpan - 1; i >= 0; i -= 1) {
+      const d = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const income = incomeByMonth.get(key) || 0;
       const expense = expenseByMonth.get(key) || 0;
-      trends.push({ month: key, income, expense, netProfit: income - expense });
+      trends.push({ period: key, income, expense, netProfit: income - expense });
     }
 
-    return res.json({ trends });
+    return res.json({ trends, granularity: "month" });
   } catch (error) {
     console.error("Owner fetch trends error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/rooms/occupancy-trend", async (req, res) => {
+  try {
+    const pool = getPool();
+
+    const from = typeof req.query.from === "string" && req.query.from ? req.query.from : null;
+    const to = typeof req.query.to === "string" && req.query.to ? req.query.to : null;
+
+    const toDate = to ? new Date(`${to}T00:00:00`) : new Date();
+    const fromDate = from ? new Date(`${from}T00:00:00`) : new Date(toDate.getFullYear(), toDate.getMonth() - 5, 1);
+
+    const daySpan = Math.round((toDate - fromDate) / 86400000) + 1;
+
+    if (daySpan >= 1 && daySpan <= TRENDS_DAILY_THRESHOLD_DAYS) {
+      const fromKey = toDateKey(fromDate);
+      const toKey = toDateKey(toDate);
+
+      const [rows] = await pool.query(
+        `SELECT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS period, total_rooms, occupied_count, vacant_count
+         FROM RoomOccupancySnapshot
+         WHERE snapshot_date <= ?
+         ORDER BY snapshot_date ASC`,
+        [toKey],
+      );
+      const byDay = new Map(rows.map((row) => [row.period, row]));
+
+      let lastKnown = null;
+      for (const row of rows) {
+        if (row.period > fromKey) break;
+        lastKnown = row;
+      }
+
+      const trends = [];
+      const cursor = new Date(fromDate);
+      for (let i = 0; i < daySpan; i += 1) {
+        const key = toDateKey(cursor);
+        if (byDay.has(key)) lastKnown = byDay.get(key);
+        trends.push({
+          period: key,
+          occupied: lastKnown ? Number(lastKnown.occupied_count) : 0,
+          vacant: lastKnown ? Number(lastKnown.vacant_count) : 0,
+          total: lastKnown ? Number(lastKnown.total_rooms) : 0,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      return res.json({ trends, granularity: "day" });
+    }
+
+    const rangeEndMonth = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
+    const rangeStartMonthRaw = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+
+    const monthsSpan = Math.min(
+      24,
+      Math.max(
+        1,
+        (rangeEndMonth.getFullYear() - rangeStartMonthRaw.getFullYear()) * 12 +
+          (rangeEndMonth.getMonth() - rangeStartMonthRaw.getMonth()) +
+          1,
+      ),
+    );
+    const rangeStartMonth = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - (monthsSpan - 1), 1);
+    const rangeStartKey = `${rangeStartMonth.getFullYear()}-${String(rangeStartMonth.getMonth() + 1).padStart(2, "0")}`;
+
+    const [rows] = await pool.query(
+      `SELECT DATE_FORMAT(snapshot_date, '%Y-%m') AS period,
+              AVG(total_rooms) AS total_rooms, AVG(occupied_count) AS occupied_count, AVG(vacant_count) AS vacant_count
+       FROM RoomOccupancySnapshot
+       WHERE snapshot_date <= ?
+       GROUP BY period
+       ORDER BY period ASC`,
+      [toDateKey(toDate)],
+    );
+    const byMonth = new Map(rows.map((row) => [row.period, row]));
+
+    let lastKnownMonth = null;
+    for (const row of rows) {
+      if (row.period >= rangeStartKey) break;
+      lastKnownMonth = row;
+    }
+
+    const trends = [];
+    for (let i = monthsSpan - 1; i >= 0; i -= 1) {
+      const d = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (byMonth.has(key)) lastKnownMonth = byMonth.get(key);
+      trends.push({
+        period: key,
+        occupied: lastKnownMonth ? Math.round(Number(lastKnownMonth.occupied_count)) : 0,
+        vacant: lastKnownMonth ? Math.round(Number(lastKnownMonth.vacant_count)) : 0,
+        total: lastKnownMonth ? Math.round(Number(lastKnownMonth.total_rooms)) : 0,
+      });
+    }
+
+    return res.json({ trends, granularity: "month" });
+  } catch (error) {
+    console.error("Owner fetch occupancy trend error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
@@ -393,8 +591,17 @@ router.get("/expenses", async (req, res) => {
       [...params, LOG_PAGE_SIZE, offset],
     );
 
+    const [byCategory] = await pool.query(
+      `SELECT category, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
+       FROM Expense ${whereClause}
+       GROUP BY category
+       ORDER BY total DESC`,
+      params,
+    );
+
     return res.json({
       expenses,
+      byCategory,
       total: countRows[0].total,
       totalAmount: countRows[0].totalAmount,
       page,
@@ -575,6 +782,75 @@ router.get("/logs/payments", async (req, res) => {
     return res.json({ payments, total, page, pageSize: PAYMENT_LOG_PAGE_SIZE });
   } catch (error) {
     console.error("Owner fetch payment log error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+const OCCUPANCY_LOG_PAGE_SIZE = 10;
+
+router.get("/logs/occupancy", async (req, res) => {
+  try {
+    const pool = getPool();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const offset = (page - 1) * OCCUPANCY_LOG_PAGE_SIZE;
+
+    const conditions = [];
+    const params = [];
+
+    if (typeof req.query.from === "string" && req.query.from) {
+      conditions.push(`DATE(event_date) >= ?`);
+      params.push(req.query.from);
+    }
+    if (typeof req.query.to === "string" && req.query.to) {
+      conditions.push(`DATE(event_date) <= ?`);
+      params.push(req.query.to);
+    }
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    if (search) {
+      conditions.push(`(CAST(room_number AS CHAR) LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ?)`);
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    if (req.query.type === "move_in" || req.query.type === "move_out") {
+      conditions.push(`event_type = ?`);
+      params.push(req.query.type);
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // Combines Booking rows (move-in, permanent history) with approved "moveout"
+    // TenantRequest rows (move-out) into one chronological tenancy log.
+    const combinedQuery = `
+      SELECT CONCAT('movein-', b.id) AS id, b.created_at AS event_date, 'move_in' AS event_type,
+             r.room_number, c.first_name, c.last_name, c.phone, NULL AS note
+      FROM Booking b
+      JOIN Customer c ON c.id = b.customer_id
+      JOIN Room r ON r.id = b.room_id
+
+      UNION ALL
+
+      SELECT CONCAT('moveout-', tr.id) AS id, tr.completed_at AS event_date, 'move_out' AS event_type,
+             tr.room_number, c.first_name, c.last_name, c.phone, tr.note
+      FROM TenantRequest tr
+      JOIN Customer c ON c.id = tr.customer_id
+      WHERE tr.type = 'moveout' AND tr.status = 'approved'
+    `;
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM (${combinedQuery}) AS combined ${whereClause}`,
+      params,
+    );
+    const total = countRows[0].total;
+
+    const [logs] = await pool.query(
+      `SELECT * FROM (${combinedQuery}) AS combined
+       ${whereClause}
+       ORDER BY event_date DESC
+       LIMIT ? OFFSET ?`,
+      [...params, OCCUPANCY_LOG_PAGE_SIZE, offset],
+    );
+
+    return res.json({ logs, total, page, pageSize: OCCUPANCY_LOG_PAGE_SIZE });
+  } catch (error) {
+    console.error("Owner fetch occupancy log error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
