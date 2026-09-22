@@ -1580,6 +1580,15 @@ function StaffMain() {
                                   เก็บเงิน
                                 </button>
                               )}
+                              {!room.is_booked && (
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-primary"
+                                  onClick={() => navigate('/register', { state: { roomNumber: room.room_number } })}
+                                >
+                                  เพิ่มผู้เช่า
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1653,6 +1662,15 @@ function StaffMain() {
                                         onClick={() => openCollect(room)}
                                       >
                                         เก็บเงิน
+                                      </button>
+                                    )}
+                                    {!room.is_booked && (
+                                      <button
+                                        type="button"
+                                        className="staff-action-btn is-primary"
+                                        onClick={() => navigate('/register', { state: { roomNumber: room.room_number } })}
+                                      >
+                                        เพิ่มผู้เช่า
                                       </button>
                                     )}
                                   </div>

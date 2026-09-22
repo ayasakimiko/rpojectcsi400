@@ -767,6 +767,11 @@
   gap: 12px;
 }
 
+.owner-income-type-item:not(:last-child) {
+  padding-bottom: 14px;
+  border-bottom: 1px dashed #e2e9f5;
+}
+
 .owner-income-type-item-button {
   width: 100%;
   border: 1px solid transparent;
@@ -783,6 +788,10 @@
 .owner-income-type-item-button:hover {
   background: #f8fbff;
   border-color: #e8eefa;
+}
+
+.owner-income-type-item-button:not(:last-child) {
+  padding-bottom: 20px;
 }
 
 .owner-income-type-icon {
@@ -1546,6 +1555,11 @@
 .owner-detail-grid > div:hover {
   border-color: #dfeaf8;
   background: #f4f9ff;
+}
+
+.owner-add-tenant-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .owner-detail-icon {

@@ -12,7 +12,22 @@ import ownerRouter from "./router/OwnerRouter.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173"];
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(",").map((origin) => origin.trim())
+  : DEFAULT_ALLOWED_ORIGINS;
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {

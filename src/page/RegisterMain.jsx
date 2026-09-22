@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -65,6 +65,8 @@ const initialRegisterForm = {
 
 function RegisterMain() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const preselectedRoomNumber = location.state?.roomNumber
   const isMobile = useIsMobile()
   const [registerForm, setRegisterForm] = useState(initialRegisterForm)
   const [loading, setLoading] = useState(false)
@@ -79,7 +81,12 @@ function RegisterMain() {
     axios
       .get('/api/rooms/available')
       .then(({ data }) => {
-        if (isMounted) setAvailableRooms(data.rooms || [])
+        if (!isMounted) return
+        const rooms = data.rooms || []
+        setAvailableRooms(rooms)
+        if (preselectedRoomNumber && rooms.some((room) => room.room_number === preselectedRoomNumber)) {
+          setRegisterForm((prev) => ({ ...prev, room_number: preselectedRoomNumber }))
+        }
       })
       .catch(() => {
         if (isMounted) setError('ไม่สามารถโหลดรายการห้องว่างได้ กรุณาลองใหม่อีกครั้ง')
@@ -468,9 +475,9 @@ function RegisterMain() {
                   type="button"
                   className="auth-secondary-btn"
                   disabled={loading}
-                  onClick={() => navigate('/staff')}
+                  onClick={() => navigate(-1)}
                 >
-                  ยกเลิก กลับหน้าแดชบอร์ด
+                  ยกเลิก
                 </button>
               </form>
             </div>

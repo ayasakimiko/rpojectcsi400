@@ -2427,7 +2427,15 @@ function OwnerMain() {
                         </div>
                       </div>
                       {!displayRoomDetail.tenant && (
-                        <button type="button" className="owner-primary-btn" onClick={() => navigate('/register')}>เพิ่มผู้เช่า</button>
+                        <div className="owner-add-tenant-row">
+                          <button
+                            type="button"
+                            className="owner-primary-btn small"
+                            onClick={() => navigate('/register', { state: { roomNumber: displayRoomDetail.room.room_number } })}
+                          >
+                            เพิ่มผู้เช่า
+                          </button>
+                        </div>
                       )}
                       {roomDetailBalance && (
                         <div className="owner-balance-summary">

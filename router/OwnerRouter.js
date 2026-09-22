@@ -545,9 +545,7 @@ router.get("/logs/payments", async (req, res) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (req.query.onlyOverdue === "true") {
-      conditions.push(
-        `(COALESCE(room_price, 0) + COALESCE(unpaid_utilities, 0) - COALESCE(deposit_amount, 0)) > 0`,
-      );
+      conditions.push(`status != 'paid'`);
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
