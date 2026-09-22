@@ -1742,6 +1742,7 @@
 
 .owner-occupancy-filter-row {
   grid-template-columns: minmax(0, 220px);
+  justify-content: end;
 }
 
 .owner-panel-header-count {
