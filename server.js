@@ -1,47 +1,37 @@
 import express from "express";
-import cors from "cors";
 import "dotenv/config";
-import loginRouter from "./router/LoginRouter.js";
-import registerRouter from "./router/Register.js";
-import roomRouter from "./router/RoomRouter.js";
-import customerDashboardRouter from "./router/CustomerDashboardRouter.js";
-import staffRouter from "./router/StaffRouter.js";
-import adminRouter from "./router/AdminRouter.js";
-import ownerRouter from "./router/OwnerRouter.js";
+import { createProxyMiddleware } from "http-proxy-middleware";
+import { createCorsMiddleware } from "./middleware/cors.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173"];
-const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(",").map((origin) => origin.trim())
-  : DEFAULT_ALLOWED_ORIGINS;
+const ROUTES = {
+  "/api/auth": process.env.AUTH_SERVICE_URL || "http://localhost:4001",
+  "/api/rooms": process.env.ROOM_SERVICE_URL || "http://localhost:4002",
+  "/api/customer": process.env.CUSTOMER_SERVICE_URL || "http://localhost:4003",
+  "/api/staff": process.env.STAFF_SERVICE_URL || "http://localhost:4004",
+  "/api/admin": process.env.ADMIN_SERVICE_URL || "http://localhost:4005",
+  "/api/owner": process.env.OWNER_SERVICE_URL || "http://localhost:4006",
+};
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  }),
-);
-app.use(express.json());
+app.use(createCorsMiddleware());
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", service: "gateway" });
 });
 
-app.use("/api/auth", loginRouter);
-app.use("/api/auth", registerRouter);
-app.use("/api/rooms", roomRouter);
-app.use("/api/customer", customerDashboardRouter);
-app.use("/api/staff", staffRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api/owner", ownerRouter);
+for (const [path, target] of Object.entries(ROUTES)) {
+  app.use(
+    path,
+    createProxyMiddleware({
+      target,
+      changeOrigin: true,
+      pathRewrite: (_path, req) => req.originalUrl,
+    }),
+  );
+}
 
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`API gateway is running on http://localhost:${PORT}`);
 });

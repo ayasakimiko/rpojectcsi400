@@ -7,7 +7,22 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 - **Frontend:** React 19, Vite, React Router, Bootstrap, Axios
 - **Backend:** Express 5, mysql2, bcryptjs, jsonwebtoken
 - **Database:** MySQL 8.0 (+ phpMyAdmin)
-- **Infra:** Docker / docker-compose
+- **Infra:** Docker / docker-compose — backend เป็น microservice แยกต่อ role อยู่หลัง API Gateway (`server.js`)
+
+## สถาปัตยกรรม Backend
+
+`server.js` เป็น **API Gateway** — รับ request ทั้งหมดที่ `/api/*` บน port เดียว (4000) แล้ว proxy ต่อไปยัง microservice ที่ถูก role ตาม path prefix (ด้วย `http-proxy-middleware`) โดยแต่ละ service มี Express app + DB connection + CORS ของตัวเอง แยกรันคนละ process/container:
+
+| Path prefix | Microservice | Port |
+|---|---|---|
+| `/api/auth` | `services/authService.js` | 4001 |
+| `/api/rooms` | `services/roomService.js` | 4002 |
+| `/api/customer` | `services/customerService.js` | 4003 |
+| `/api/staff` | `services/staffService.js` | 4004 |
+| `/api/admin` | `services/adminService.js` | 4005 |
+| `/api/owner` | `services/ownerService.js` | 4006 |
+
+Frontend (และ Vite dev proxy) คุยกับ Gateway ที่ port 4000 เท่านั้น ไม่รู้จัก service ย่อยโดยตรง
 
 ## การรันโปรเจกต์
 
@@ -17,14 +32,30 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 docker compose up -d --build
 ```
 
-จะรัน 3 container พร้อมกัน:
+รวม 10 container:
 | Service | Container | Port |
 |---|---|---|
 | MySQL | `projectcsi400-mysql` | 3306 |
 | phpMyAdmin | `projectcsi400-phpmyadmin` | 8080 |
-| Express server | `projectcsi400-server` | 4000 |
+| DB init (migrate + seed, รันครั้งเดียวแล้วจบ) | `projectcsi400-db-init` | - |
+| **API Gateway** | `projectcsi400-gateway` | **4000** |
+| Auth service | `projectcsi400-auth` | 4001 |
+| Room service | `projectcsi400-room` | 4002 |
+| Customer service | `projectcsi400-customer` | 4003 |
+| Staff service | `projectcsi400-staff` | 4004 |
+| Admin service | `projectcsi400-admin` | 4005 |
+| Owner service | `projectcsi400-owner` | 4006 |
 
-> หมายเหตุ: Dockerfile จะ copy source เข้า image ตอน build เท่านั้น (ไม่ใช่ live-reload) — แก้ `server.js` / `router/*` / `Database/*` แล้วต้องรัน `docker compose up -d --build` ใหม่ทุกครั้งถึงจะมีผล
+Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
+
+> หมายเหตุ: Dockerfile จะ copy source เข้า image ตอน build เท่านั้น (ไม่ใช่ live-reload) — แก้ `server.js` / `services/*` / `router/*` / `Database/*` แล้วต้องรัน `docker compose up -d --build` ใหม่ทุกครั้งถึงจะมีผล
+
+### รัน backend แบบ dev (ไม่ผ่าน Docker)
+
+```bash
+npm run server:all   # รัน gateway + ทั้ง 6 service พร้อมกัน (ต้องมี MySQL รันอยู่ก่อน เช่น npm run db:setup)
+```
+หรือรันทีละตัวด้วย `npm run server`, `server:auth`, `server:room`, `server:customer`, `server:staff`, `server:admin`, `server:owner`
 
 ### ตั้งค่าฐานข้อมูลครั้งแรก
 

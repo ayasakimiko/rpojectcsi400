@@ -13,10 +13,11 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD:-rootpassword}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_PASSWORD:-rootpass}"]
       interval: 5s
       timeout: 5s
       retries: 20
+      start_period: 10s
 
   phpmyadmin:
     image: phpmyadmin:latest
@@ -31,26 +32,125 @@ services:
       db:
         condition: service_healthy
 
-  server:
+  db-init:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: projectcsi400-server
-    restart: unless-stopped
+    container_name: projectcsi400-db-init
+    command: ["node", "Database/connection.js"]
+    restart: "no"
     environment:
       DB_HOST: db
       DB_PORT: 3306
       DB_USER: ${DB_USER:-root}
       DB_PASSWORD: ${DB_PASSWORD:-rootpass}
       DB_NAME: ${DB_NAME:-projectcsi400}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      TZ: Asia/Bangkok
+    depends_on:
+      db:
+        condition: service_healthy
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: projectcsi400-gateway
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    environment:
       PORT: 4000
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+      AUTH_SERVICE_URL: http://auth-service:4001
+      ROOM_SERVICE_URL: http://room-service:4002
+      CUSTOMER_SERVICE_URL: http://customer-service:4003
+      STAFF_SERVICE_URL: http://staff-service:4004
+      ADMIN_SERVICE_URL: http://admin-service:4005
+      OWNER_SERVICE_URL: http://owner-service:4006
       TZ: Asia/Bangkok
     ports:
       - "${PORT:-4000}:4000"
     depends_on:
+      - auth-service
+      - room-service
+      - customer-service
+      - staff-service
+      - admin-service
+      - owner-service
+
+  auth-service: &service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: projectcsi400-auth
+    command: ["node", "services/authService.js"]
+    restart: unless-stopped
+    environment: &service-env
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
+      DB_NAME: ${DB_NAME:-projectcsi400}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+      TZ: Asia/Bangkok
+      AUTH_PORT: 4001
+    ports:
+      - "${AUTH_PORT:-4001}:4001"
+    depends_on:
       db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
+  room-service:
+    <<: *service-defaults
+    container_name: projectcsi400-room
+    command: ["node", "services/roomService.js"]
+    environment:
+      <<: *service-env
+      ROOM_PORT: 4002
+    ports:
+      - "${ROOM_PORT:-4002}:4002"
+
+  customer-service:
+    <<: *service-defaults
+    container_name: projectcsi400-customer
+    command: ["node", "services/customerService.js"]
+    environment:
+      <<: *service-env
+      CUSTOMER_PORT: 4003
+    ports:
+      - "${CUSTOMER_PORT:-4003}:4003"
+
+  staff-service:
+    <<: *service-defaults
+    container_name: projectcsi400-staff
+    command: ["node", "services/staffService.js"]
+    environment:
+      <<: *service-env
+      STAFF_PORT: 4004
+    ports:
+      - "${STAFF_PORT:-4004}:4004"
+
+  admin-service:
+    <<: *service-defaults
+    container_name: projectcsi400-admin
+    command: ["node", "services/adminService.js"]
+    environment:
+      <<: *service-env
+      ADMIN_PORT: 4005
+    ports:
+      - "${ADMIN_PORT:-4005}:4005"
+
+  owner-service:
+    <<: *service-defaults
+    container_name: projectcsi400-owner
+    command: ["node", "services/ownerService.js"]
+    environment:
+      <<: *service-env
+      OWNER_PORT: 4006
+    ports:
+      - "${OWNER_PORT:-4006}:4006"
 
 volumes:
   db_data:

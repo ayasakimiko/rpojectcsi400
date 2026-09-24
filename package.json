@@ -9,7 +9,14 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "db:setup": "node Database/connection.js",
-    "server": "node server.js"
+    "server": "node server.js",
+    "server:auth": "node services/authService.js",
+    "server:room": "node services/roomService.js",
+    "server:customer": "node services/customerService.js",
+    "server:staff": "node services/staffService.js",
+    "server:admin": "node services/adminService.js",
+    "server:owner": "node services/ownerService.js",
+    "server:all": "concurrently -n gateway,auth,room,customer,staff,admin,owner -c white,blue,green,yellow,magenta,cyan,red \"npm:server\" \"npm:server:auth\" \"npm:server:room\" \"npm:server:customer\" \"npm:server:staff\" \"npm:server:admin\" \"npm:server:owner\""
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -19,6 +26,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "html2canvas": "^1.4.1",
+    "http-proxy-middleware": "^4.2.0",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "multer": "^2.3.0",
@@ -34,6 +42,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.2.4",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",
