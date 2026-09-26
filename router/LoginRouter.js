@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getPool } from "../Database/connection.js";
+import { validateLoginInput } from "../middleware/validation.js";
 
 const router = Router();
 
@@ -12,22 +13,6 @@ function toPublicUser(row) {
   const publicUser = { ...row };
   delete publicUser.password;
   return publicUser;
-}
-
-function validateLoginInput({ username, password }) {
-  if (typeof username !== "string" || typeof password !== "string") {
-    return "รูปแบบข้อมูลไม่ถูกต้อง";
-  }
-  if (!username.trim() || !password) {
-    return "กรุณากรอกเลขบัตรประชาชนหรือเลขห้อง และรหัสผ่าน";
-  }
-  if (!/^\d+$/.test(username.trim())) {
-    return "กรุณากรอกเลขบัตรประชาชนหรือเลขห้องให้ถูกต้อง";
-  }
-  if (password.length < 6 || password.length > 128) {
-    return "เลขบัตรประชาชน เลขห้อง หรือรหัสผ่านไม่ถูกต้อง";
-  }
-  return null;
 }
 
 router.post("/login", async (req, res) => {

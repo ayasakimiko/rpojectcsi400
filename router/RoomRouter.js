@@ -1,20 +1,9 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
+import { isPositiveId, validateRoomFields } from "../middleware/validation.js";
 
 const router = Router();
-
-function validateCreateRoomInput({ room_number, price }) {
-  const roomNumberValue = Number(room_number);
-  if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
-    return "เลขห้องไม่ถูกต้อง";
-  }
-  const priceValue = Number(price);
-  if (!Number.isFinite(priceValue) || priceValue < 0) {
-    return "ราคาไม่ถูกต้อง";
-  }
-  return null;
-}
 
 router.post("/create", authenticate, requireAdminRole, async (req, res) => {
   try {
@@ -31,7 +20,18 @@ router.post("/create", authenticate, requireAdminRole, async (req, res) => {
       water_price = 100.0,
     } = req.body ?? {};
 
-    const validationError = validateCreateRoomInput({ room_number, price });
+    const validationError = validateRoomFields({
+      room_number,
+      price,
+      air_conditioner,
+      wifi,
+      refrigerator,
+      bed,
+      bathroom,
+      cctv,
+      electricity_unit_price,
+      water_price,
+    });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -108,7 +108,7 @@ router.get("/available", async (req, res) => {
 router.get("/:room_number", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
-    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 

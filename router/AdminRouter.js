@@ -2,6 +2,17 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireAdminRole } from "../middleware/authMiddleware.js";
+import {
+  hasField,
+  isPositiveId,
+  isValidMoney,
+  normalizePersonUpdate,
+  parsePage,
+  parseSearch,
+  validatePersonInput,
+  validatePersonUpdateInput,
+  validateRoomFields,
+} from "../middleware/validation.js";
 import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
@@ -19,65 +30,6 @@ function buildUpdate(allowedColumns, body) {
     }
   }
   return { columns, values };
-}
-
-function validateRoomNumber(value) {
-  const num = Number(value);
-  if (!Number.isInteger(num) || num < 100 || num > 999) {
-    return "เลขห้องต้องเป็นตัวเลข 3 หลัก (100-999)";
-  }
-  return null;
-}
-
-function validatePrice(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num < 0) {
-    return "ราคาไม่ถูกต้อง";
-  }
-  return null;
-}
-
-function validateBed(value) {
-  const num = Number(value);
-  if (!Number.isInteger(num) || num < 0 || num > 99) {
-    return "จำนวนเตียงต้องเป็นตัวเลข 2 หลัก (0-99)";
-  }
-  return null;
-}
-
-function validateElectricityUnitPrice(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num < 0 || num > 99.99) {
-    return "ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)";
-  }
-  return null;
-}
-
-function validateWaterPrice(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num < 0 || num > 999.99) {
-    return "ค่าน้ำ/เดือนต้องเป็นตัวเลข 3 หลัก (0-999.99)";
-  }
-  return null;
-}
-
-const ROOM_FIELD_VALIDATORS = {
-  room_number: validateRoomNumber,
-  price: validatePrice,
-  bed: validateBed,
-  electricity_unit_price: validateElectricityUnitPrice,
-  water_price: validateWaterPrice,
-};
-
-function validateRoomInput({ room_number, price, bed, electricity_unit_price, water_price }) {
-  return (
-    validateRoomNumber(room_number) ||
-    validatePrice(price) ||
-    validateBed(bed) ||
-    validateElectricityUnitPrice(electricity_unit_price) ||
-    validateWaterPrice(water_price) ||
-    null
-  );
 }
 
 router.get("/rooms", async (req, res) => {
@@ -121,7 +73,18 @@ router.post("/rooms", async (req, res) => {
       water_price = 100.0,
     } = req.body ?? {};
 
-    const validationError = validateRoomInput({ room_number, price, bed, electricity_unit_price, water_price });
+    const validationError = validateRoomFields({
+      room_number,
+      price,
+      air_conditioner,
+      wifi,
+      refrigerator,
+      bed,
+      bathroom,
+      cctv,
+      electricity_unit_price,
+      water_price,
+    });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -170,18 +133,14 @@ const ROOM_EDITABLE_COLUMNS = [
 router.put("/rooms/:room_number", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
-    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
     const body = req.body ?? {};
-    for (const [field, validate] of Object.entries(ROOM_FIELD_VALIDATORS)) {
-      if (Object.prototype.hasOwnProperty.call(body, field)) {
-        const validationError = validate(body[field]);
-        if (validationError) {
-          return res.status(400).json({ message: validationError });
-        }
-      }
+    const validationError = validateRoomFields(body);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
     }
 
     const { columns, values } = buildUpdate(ROOM_EDITABLE_COLUMNS, body);
@@ -211,7 +170,7 @@ router.put("/rooms/:room_number", async (req, res) => {
 router.delete("/rooms/:room_number", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
-    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
@@ -236,35 +195,6 @@ router.delete("/rooms/:room_number", async (req, res) => {
   }
 });
 
-function validateStaffInput({ idcard, password, phone, first_name, last_name, age }) {
-  if (
-    typeof idcard !== "string" ||
-    typeof password !== "string" ||
-    typeof phone !== "string" ||
-    typeof first_name !== "string" ||
-    typeof last_name !== "string"
-  ) {
-    return "รูปแบบข้อมูลไม่ถูกต้อง";
-  }
-  if (!idcard.trim() || !password || !phone.trim() || !first_name.trim() || !last_name.trim() || !age) {
-    return "กรุณากรอกข้อมูลให้ครบทุกช่อง";
-  }
-  if (!/^\d{13}$/.test(idcard.trim())) {
-    return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
-  }
-  if (!/^0\d{8,9}$/.test(phone.trim())) {
-    return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
-  }
-  if (password.length < 6 || password.length > 128) {
-    return "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร";
-  }
-  const ageNumber = Number(age);
-  if (!Number.isInteger(ageNumber) || ageNumber < 1 || ageNumber > 120) {
-    return "อายุไม่ถูกต้อง";
-  }
-  return null;
-}
-
 router.get("/staff", async (req, res) => {
   try {
     const pool = getPool();
@@ -283,7 +213,7 @@ router.post("/staff", async (req, res) => {
   try {
     const { idcard, password, phone, first_name, last_name, age } = req.body ?? {};
 
-    const validationError = validateStaffInput({ idcard, password, phone, first_name, last_name, age });
+    const validationError = validatePersonInput({ idcard, password, phone, first_name, last_name, age });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -315,17 +245,19 @@ const STAFF_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age"];
 router.put("/staff/:id", async (req, res) => {
   try {
     const staffId = Number(req.params.id);
-    if (!Number.isInteger(staffId) || staffId < 1) {
+    if (!isPositiveId(staffId)) {
       return res.status(400).json({ message: "รหัสพนักงานไม่ถูกต้อง" });
     }
 
     const body = req.body ?? {};
-    const { columns, values } = buildUpdate(STAFF_EDITABLE_COLUMNS, body);
+    const validationError = validatePersonUpdateInput(body);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const { columns, values } = buildUpdate(STAFF_EDITABLE_COLUMNS, normalizePersonUpdate(body));
 
     if (typeof body.password === "string" && body.password) {
-      if (body.password.length < 6 || body.password.length > 128) {
-        return res.status(400).json({ message: "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร" });
-      }
       columns.push("password = ?");
       values.push(await bcrypt.hash(body.password, 10));
     }
@@ -353,7 +285,7 @@ router.put("/staff/:id", async (req, res) => {
 router.patch("/staff/:id/suspend", async (req, res) => {
   try {
     const staffId = Number(req.params.id);
-    if (!Number.isInteger(staffId) || staffId < 1) {
+    if (!isPositiveId(staffId)) {
       return res.status(400).json({ message: "รหัสพนักงานไม่ถูกต้อง" });
     }
     const { is_suspended } = req.body ?? {};
@@ -377,7 +309,7 @@ router.patch("/staff/:id/suspend", async (req, res) => {
 router.delete("/staff/:id", async (req, res) => {
   try {
     const staffId = Number(req.params.id);
-    if (!Number.isInteger(staffId) || staffId < 1) {
+    if (!isPositiveId(staffId)) {
       return res.status(400).json({ message: "รหัสพนักงานไม่ถูกต้อง" });
     }
 
@@ -397,7 +329,7 @@ router.delete("/staff/:id", async (req, res) => {
 router.get("/customers", async (req, res) => {
   try {
     const pool = getPool();
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
 
     const conditions = [];
     const params = [];
@@ -430,7 +362,7 @@ router.get("/customers", async (req, res) => {
 router.get("/customers/:id", async (req, res) => {
   try {
     const customerId = Number(req.params.id);
-    if (!Number.isInteger(customerId) || customerId < 1) {
+    if (!isPositiveId(customerId)) {
       return res.status(400).json({ message: "รหัสลูกค้าไม่ถูกต้อง" });
     }
 
@@ -477,11 +409,23 @@ const CUSTOMER_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age", "d
 router.put("/customers/:id", async (req, res) => {
   try {
     const customerId = Number(req.params.id);
-    if (!Number.isInteger(customerId) || customerId < 1) {
+    if (!isPositiveId(customerId)) {
       return res.status(400).json({ message: "รหัสลูกค้าไม่ถูกต้อง" });
     }
 
-    const { columns, values } = buildUpdate(CUSTOMER_EDITABLE_COLUMNS, req.body ?? {});
+    const body = req.body ?? {};
+    const validationError = validatePersonUpdateInput(body);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+    if (hasField(body, "deposit_amount") && body.deposit_amount !== null && !isValidMoney(body.deposit_amount)) {
+      return res.status(400).json({ message: "จำนวนเงินมัดจำไม่ถูกต้อง" });
+    }
+
+    const normalizedBody = normalizePersonUpdate(body);
+    if (normalizedBody.deposit_amount != null) normalizedBody.deposit_amount = Number(normalizedBody.deposit_amount);
+
+    const { columns, values } = buildUpdate(CUSTOMER_EDITABLE_COLUMNS, normalizedBody);
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }
@@ -508,7 +452,7 @@ router.put("/customers/:id", async (req, res) => {
 router.patch("/customers/:id/suspend", async (req, res) => {
   try {
     const customerId = Number(req.params.id);
-    if (!Number.isInteger(customerId) || customerId < 1) {
+    if (!isPositiveId(customerId)) {
       return res.status(400).json({ message: "รหัสลูกค้าไม่ถูกต้อง" });
     }
     const { is_suspended } = req.body ?? {};
@@ -537,7 +481,7 @@ const LOG_PAGE_SIZE = 20;
 router.get("/logs/requests", async (req, res) => {
   try {
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * LOG_PAGE_SIZE;
 
     const conditions = [];
@@ -547,7 +491,7 @@ router.get("/logs/requests", async (req, res) => {
       conditions.push(`tr.status = ?`);
       params.push(req.query.status);
     }
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(
         `(CAST(tr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR tr.accepted_by_name LIKE ? OR tr.completed_by_name LIKE ?)`,
@@ -584,7 +528,7 @@ router.get("/logs/requests", async (req, res) => {
 router.get("/logs/maintenance", async (req, res) => {
   try {
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * LOG_PAGE_SIZE;
 
     const conditions = [];
@@ -594,7 +538,7 @@ router.get("/logs/maintenance", async (req, res) => {
       conditions.push(`mr.status = ?`);
       params.push(req.query.status);
     }
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(
         `(CAST(mr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR mr.accepted_by_name LIKE ? OR mr.completed_by_name LIKE ?)`,
@@ -631,13 +575,13 @@ router.get("/logs/maintenance", async (req, res) => {
 router.get("/logs/moveouts", async (req, res) => {
   try {
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * LOG_PAGE_SIZE;
 
     const conditions = ["tr.type = 'moveout'", "tr.status = 'approved'"];
     const params = [];
 
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(
         `(CAST(tr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.idcard LIKE ? OR c.phone LIKE ?)`,

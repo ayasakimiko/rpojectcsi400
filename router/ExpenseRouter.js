@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
+import { isPositiveId, parsePage, validateDateQuery, validateExpenseInput } from "../middleware/validation.js";
 
 const router = Router();
 
@@ -26,54 +27,15 @@ function buildUpdate(allowedColumns, body) {
   return { columns, values };
 }
 
-function validateExpenseInput({ category, description, amount, expense_date }) {
-  if (typeof category !== "string" || !category.trim()) {
-    return "กรุณาระบุหมวดหมู่รายจ่าย";
-  }
-  if (description !== undefined && description !== null && typeof description !== "string") {
-    return "รูปแบบคำอธิบายไม่ถูกต้อง";
-  }
-  const amountValue = Number(amount);
-  if (!Number.isFinite(amountValue) || amountValue <= 0) {
-    return "จำนวนเงินไม่ถูกต้อง";
-  }
-  if (typeof expense_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(expense_date)) {
-    return "วันที่ไม่ถูกต้อง";
-  }
-  return null;
-}
-
-function validateExpenseUpdateInput(body) {
-  if (Object.prototype.hasOwnProperty.call(body, "category")) {
-    if (typeof body.category !== "string" || !body.category.trim()) {
-      return "กรุณาระบุหมวดหมู่รายจ่าย";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(body, "description") && body.description !== null) {
-    if (typeof body.description !== "string") {
-      return "รูปแบบคำอธิบายไม่ถูกต้อง";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(body, "amount")) {
-    const amountValue = Number(body.amount);
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      return "จำนวนเงินไม่ถูกต้อง";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(body, "expense_date")) {
-    if (typeof body.expense_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.expense_date)) {
-      return "วันที่ไม่ถูกต้อง";
-    }
-  }
-  return null;
-}
-
 const EXPENSE_EDITABLE_COLUMNS = ["category", "description", "amount", "expense_date"];
 
 router.get("/", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * EXPENSE_LOG_PAGE_SIZE;
 
     const conditions = [];
@@ -123,7 +85,7 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { category, description, amount, expense_date } = req.body ?? {};
-    const validationError = validateExpenseInput({ category, description, amount, expense_date });
+    const validationError = validateExpenseInput({ category, description, amount, expense_date }, { partial: false });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -145,12 +107,12 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const expenseId = Number(req.params.id);
-    if (!Number.isInteger(expenseId) || expenseId < 1) {
+    if (!isPositiveId(expenseId)) {
       return res.status(400).json({ message: "รหัสรายจ่ายไม่ถูกต้อง" });
     }
 
     const body = req.body ?? {};
-    const validationError = validateExpenseUpdateInput(body);
+    const validationError = validateExpenseInput(body, { partial: true });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -186,7 +148,7 @@ router.delete("/:id", async (req, res) => {
     }
 
     const expenseId = Number(req.params.id);
-    if (!Number.isInteger(expenseId) || expenseId < 1) {
+    if (!isPositiveId(expenseId)) {
       return res.status(400).json({ message: "รหัสรายจ่ายไม่ถูกต้อง" });
     }
 

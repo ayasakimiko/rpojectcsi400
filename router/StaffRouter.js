@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
+import { isPositiveId, lookup, parsePage, parseSearch, parseUtilityBillInput } from "../middleware/validation.js";
 import { computeCurrentDue } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
@@ -136,7 +137,7 @@ router.get("/rooms", async (req, res) => {
 router.get("/rooms/:room_number/history", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
-    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
@@ -178,7 +179,7 @@ router.get("/rooms/:room_number/history", async (req, res) => {
 router.post("/rooms/:room_number/collect-payment", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
-    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
@@ -256,7 +257,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
 router.post("/rooms/:room_number/utility-bill", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
-    if (!Number.isInteger(roomNumberValue) || roomNumberValue < 1) {
+    if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
@@ -289,31 +290,15 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบสัญญาเช่าของห้องนี้" });
     }
 
-    const electricityUnitsRaw = req.body?.electricity_units;
-    const electricityAmountRaw = req.body?.electricity_amount;
-    const waterAmountRaw = req.body?.water_amount;
-    const electricityUnits = Number(electricityUnitsRaw);
-    const electricityAmountInput = Number(electricityAmountRaw);
-    const waterAmount = Number(waterAmountRaw);
-
-    const isFilled = (raw) => raw !== undefined && raw !== "" && raw !== null;
-    const wantsElectricityByUnits = isFilled(electricityUnitsRaw);
-    const wantsElectricityByAmount = isFilled(electricityAmountRaw);
+    const { error, value } = parseUtilityBillInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    const { electricityUnits, electricityAmount: electricityAmountInput, waterAmount } = value;
+    const wantsElectricityByUnits = electricityUnits !== null;
+    const wantsElectricityByAmount = electricityAmountInput !== null;
     const wantsElectricity = wantsElectricityByUnits || wantsElectricityByAmount;
-    const wantsWater = isFilled(waterAmountRaw);
-
-    if (wantsElectricityByUnits && (!Number.isFinite(electricityUnits) || electricityUnits <= 0)) {
-      return res.status(400).json({ message: "หน่วยไฟฟ้าไม่ถูกต้อง" });
-    }
-    if (wantsElectricityByAmount && (!Number.isFinite(electricityAmountInput) || electricityAmountInput <= 0)) {
-      return res.status(400).json({ message: "ค่าไฟฟ้าไม่ถูกต้อง" });
-    }
-    if (wantsWater && (!Number.isFinite(waterAmount) || waterAmount <= 0)) {
-      return res.status(400).json({ message: "ค่าน้ำไม่ถูกต้อง" });
-    }
-    if (!wantsElectricity && !wantsWater) {
-      return res.status(400).json({ message: "กรุณากรอกค่าไฟฟ้าหรือค่าน้ำอย่างน้อยหนึ่งรายการ" });
-    }
+    const wantsWater = waterAmount !== null;
 
     const [existingPending] = await pool.query(
       `SELECT type FROM Payment
@@ -397,7 +382,7 @@ const REQUEST_HISTORY_PAGE_SIZE = 10;
 router.get("/requests/history", async (req, res) => {
   try {
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * REQUEST_HISTORY_PAGE_SIZE;
 
     const conditions = [`tr.status IN ('approved', 'rejected')`];
@@ -408,7 +393,7 @@ router.get("/requests/history", async (req, res) => {
       params.push(req.query.status);
     }
 
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(`(CAST(tr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ?)`);
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -447,7 +432,7 @@ router.get("/requests/history", async (req, res) => {
 router.get("/maintenance/history", async (req, res) => {
   try {
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * REQUEST_HISTORY_PAGE_SIZE;
 
     const conditions = [`mr.status IN ('done', 'cancelled')`];
@@ -458,7 +443,7 @@ router.get("/maintenance/history", async (req, res) => {
       params.push(req.query.status);
     }
 
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(
         `(CAST(mr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ? OR mr.description LIKE ?)`,
@@ -500,7 +485,7 @@ router.post("/requests/:id/acknowledge", async (req, res) => {
   try {
     const pool = getPool();
     const requestId = Number(req.params.id);
-    if (!Number.isInteger(requestId) || requestId < 1) {
+    if (!isPositiveId(requestId)) {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
 
@@ -525,7 +510,7 @@ router.post("/requests/:id/approve", async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const requestId = Number(req.params.id);
-    if (!Number.isInteger(requestId) || requestId < 1) {
+    if (!isPositiveId(requestId)) {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
 
@@ -608,7 +593,7 @@ router.post("/requests/:id/reject", async (req, res) => {
   try {
     const pool = getPool();
     const requestId = Number(req.params.id);
-    if (!Number.isInteger(requestId) || requestId < 1) {
+    if (!isPositiveId(requestId)) {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
 
@@ -654,13 +639,13 @@ const MAINTENANCE_TRANSITIONS = {
 
 router.post("/maintenance/:id/:action", async (req, res) => {
   try {
-    const transition = MAINTENANCE_TRANSITIONS[req.params.action];
+    const transition = lookup(MAINTENANCE_TRANSITIONS, req.params.action);
     if (!transition) {
       return res.status(404).json({ message: "ไม่พบการดำเนินการนี้" });
     }
 
     const requestId = Number(req.params.id);
-    if (!Number.isInteger(requestId) || requestId < 1) {
+    if (!isPositiveId(requestId)) {
       return res.status(400).json({ message: "รหัสรายการแจ้งซ่อมไม่ถูกต้อง" });
     }
 

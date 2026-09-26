@@ -2,6 +2,17 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireOwnerRole } from "../middleware/authMiddleware.js";
+import {
+  isPositiveId,
+  lookup,
+  normalizePersonUpdate,
+  parsePage,
+  parseSearch,
+  parseYearMonthQuery,
+  validateDateQuery,
+  validatePersonInput,
+  validatePersonUpdateInput,
+} from "../middleware/validation.js";
 import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
@@ -24,9 +35,9 @@ function buildUpdate(allowedColumns, body) {
 const PAYMENT_LOG_PAGE_SIZE = 10;
 
 function getSelectedMonthRange(query) {
-  const year = Number(query.year);
-  const month = Number(query.month);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  const yearMonth = parseYearMonthQuery(query);
+  if (!yearMonth) return null;
+  const { year, month } = yearMonth;
 
   const from = `${year}-${String(month).padStart(2, "0")}-01`;
   const nextMonth = month === 12 ? 1 : month + 1;
@@ -37,6 +48,9 @@ function getSelectedMonthRange(query) {
 
 router.get("/overview", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
 
     const [roomRows] = await pool.query(
@@ -181,6 +195,9 @@ router.get("/rooms/status", async (req, res) => {
 
 router.get("/rooms/occupancy-summary", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
 
     const liveCountsFallback = async () => {
@@ -238,6 +255,9 @@ router.get("/rooms/occupancy-summary", async (req, res) => {
 
 router.get("/income", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
     const conditions = [`status = 'paid'`];
     const params = [];
@@ -281,6 +301,9 @@ const TRENDS_DAILY_THRESHOLD_DAYS = 31;
 
 router.get("/trends", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
 
     const from = typeof req.query.from === "string" && req.query.from ? req.query.from : null;
@@ -377,6 +400,9 @@ router.get("/trends", async (req, res) => {
 
 router.get("/rooms/occupancy-trend", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
 
     const from = typeof req.query.from === "string" && req.query.from ? req.query.from : null;
@@ -478,7 +504,7 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
 router.get("/rooms/:roomNumber", async (req, res) => {
   try {
     const roomNumber = Number(req.params.roomNumber);
-    if (!Number.isInteger(roomNumber) || roomNumber < 1) {
+    if (!isPositiveId(roomNumber)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
@@ -518,8 +544,11 @@ router.get("/rooms/:roomNumber", async (req, res) => {
 
 router.get("/logs/payments", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["date", "from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * PAYMENT_LOG_PAGE_SIZE;
 
     const conditions = [];
@@ -537,7 +566,7 @@ router.get("/logs/payments", async (req, res) => {
       conditions.push(`payment_date <= ?`);
       params.push(req.query.to);
     }
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(
         `(CAST(room_number AS CHAR) LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ? OR note LIKE ?)`,
@@ -611,8 +640,11 @@ const OCCUPANCY_LOG_PAGE_SIZE = 10;
 
 router.get("/logs/occupancy", async (req, res) => {
   try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
     const pool = getPool();
-    const page = Math.max(1, Number(req.query.page) || 1);
+    const page = parsePage(req.query.page);
     const offset = (page - 1) * OCCUPANCY_LOG_PAGE_SIZE;
 
     const conditions = [];
@@ -626,7 +658,7 @@ router.get("/logs/occupancy", async (req, res) => {
       conditions.push(`DATE(event_date) <= ?`);
       params.push(req.query.to);
     }
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(`(CAST(room_number AS CHAR) LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ?)`);
       params.push(`%${search}%`, `%${search}%`);
@@ -678,60 +710,6 @@ router.get("/logs/occupancy", async (req, res) => {
 
 const STAFF_MANAGEABLE_TABLES = { Staff: "Staff", Admin: "Admin" };
 
-function validateStaffInput({ idcard, password, phone, first_name, last_name, age }) {
-  if (
-    typeof idcard !== "string" ||
-    typeof password !== "string" ||
-    typeof phone !== "string" ||
-    typeof first_name !== "string" ||
-    typeof last_name !== "string"
-  ) {
-    return "รูปแบบข้อมูลไม่ถูกต้อง";
-  }
-  if (!idcard.trim() || !password || !phone.trim() || !first_name.trim() || !last_name.trim() || !age) {
-    return "กรุณากรอกข้อมูลให้ครบทุกช่อง";
-  }
-  if (!/^\d{13}$/.test(idcard.trim())) {
-    return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
-  }
-  if (!/^0\d{8,9}$/.test(phone.trim())) {
-    return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
-  }
-  if (password.length < 6 || password.length > 128) {
-    return "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร";
-  }
-  const ageNumber = Number(age);
-  if (!Number.isInteger(ageNumber) || ageNumber < 1 || ageNumber > 120) {
-    return "อายุไม่ถูกต้อง";
-  }
-  return null;
-}
-
-function validateStaffUpdateInput(body) {
-  if (Object.prototype.hasOwnProperty.call(body, "first_name")) {
-    if (typeof body.first_name !== "string" || !body.first_name.trim()) {
-      return "กรุณาระบุชื่อ";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(body, "last_name")) {
-    if (typeof body.last_name !== "string" || !body.last_name.trim()) {
-      return "กรุณาระบุนามสกุล";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(body, "phone")) {
-    if (typeof body.phone !== "string" || !/^0\d{8,9}$/.test(body.phone.trim())) {
-      return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(body, "age")) {
-    const ageNumber = Number(body.age);
-    if (!Number.isInteger(ageNumber) || ageNumber < 1 || ageNumber > 120) {
-      return "อายุไม่ถูกต้อง";
-    }
-  }
-  return null;
-}
-
 router.get("/staff", async (req, res) => {
   try {
     const pool = getPool();
@@ -756,12 +734,12 @@ router.get("/staff", async (req, res) => {
 router.post("/staff", async (req, res) => {
   try {
     const { role, idcard, password, phone, first_name, last_name, age } = req.body ?? {};
-    const table = STAFF_MANAGEABLE_TABLES[role];
+    const table = lookup(STAFF_MANAGEABLE_TABLES, role);
     if (!table) {
       return res.status(400).json({ message: "ตำแหน่งไม่ถูกต้อง (ต้องเป็น Staff หรือ Admin)" });
     }
 
-    const validationError = validateStaffInput({ idcard, password, phone, first_name, last_name, age });
+    const validationError = validatePersonInput({ idcard, password, phone, first_name, last_name, age });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -795,33 +773,24 @@ const STAFF_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age"];
 
 router.put("/staff/:role/:id", async (req, res) => {
   try {
-    const table = STAFF_MANAGEABLE_TABLES[req.params.role];
+    const table = lookup(STAFF_MANAGEABLE_TABLES, req.params.role);
     if (!table) {
       return res.status(400).json({ message: "ตำแหน่งไม่ถูกต้อง (ต้องเป็น Staff หรือ Admin)" });
     }
     const staffId = Number(req.params.id);
-    if (!Number.isInteger(staffId) || staffId < 1) {
+    if (!isPositiveId(staffId)) {
       return res.status(400).json({ message: "รหัสไม่ถูกต้อง" });
     }
 
     const body = req.body ?? {};
-    const validationError = validateStaffUpdateInput(body);
+    const validationError = validatePersonUpdateInput(body);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
 
-    const sanitizedBody = { ...body };
-    if (typeof sanitizedBody.first_name === "string") sanitizedBody.first_name = sanitizedBody.first_name.trim();
-    if (typeof sanitizedBody.last_name === "string") sanitizedBody.last_name = sanitizedBody.last_name.trim();
-    if (typeof sanitizedBody.phone === "string") sanitizedBody.phone = sanitizedBody.phone.trim();
-    if (Object.prototype.hasOwnProperty.call(sanitizedBody, "age")) sanitizedBody.age = Number(sanitizedBody.age);
-
-    const { columns, values } = buildUpdate(STAFF_EDITABLE_COLUMNS, sanitizedBody);
+    const { columns, values } = buildUpdate(STAFF_EDITABLE_COLUMNS, normalizePersonUpdate(body));
 
     if (typeof body.password === "string" && body.password) {
-      if (body.password.length < 6 || body.password.length > 128) {
-        return res.status(400).json({ message: "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร" });
-      }
       columns.push("password = ?");
       values.push(await bcrypt.hash(body.password, 10));
     }
@@ -848,12 +817,12 @@ router.put("/staff/:role/:id", async (req, res) => {
 
 router.patch("/staff/:role/:id/suspend", async (req, res) => {
   try {
-    const table = STAFF_MANAGEABLE_TABLES[req.params.role];
+    const table = lookup(STAFF_MANAGEABLE_TABLES, req.params.role);
     if (!table) {
       return res.status(400).json({ message: "ตำแหน่งไม่ถูกต้อง (ต้องเป็น Staff หรือ Admin)" });
     }
     const staffId = Number(req.params.id);
-    if (!Number.isInteger(staffId) || staffId < 1) {
+    if (!isPositiveId(staffId)) {
       return res.status(400).json({ message: "รหัสไม่ถูกต้อง" });
     }
     const { is_suspended } = req.body ?? {};
@@ -876,12 +845,12 @@ router.patch("/staff/:role/:id/suspend", async (req, res) => {
 
 router.delete("/staff/:role/:id", async (req, res) => {
   try {
-    const table = STAFF_MANAGEABLE_TABLES[req.params.role];
+    const table = lookup(STAFF_MANAGEABLE_TABLES, req.params.role);
     if (!table) {
       return res.status(400).json({ message: "ตำแหน่งไม่ถูกต้อง (ต้องเป็น Staff หรือ Admin)" });
     }
     const staffId = Number(req.params.id);
-    if (!Number.isInteger(staffId) || staffId < 1) {
+    if (!isPositiveId(staffId)) {
       return res.status(400).json({ message: "รหัสไม่ถูกต้อง" });
     }
 

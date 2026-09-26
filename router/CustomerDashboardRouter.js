@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
+import { isPositiveId, parseMaintenanceInput, parseTenantRequestInput } from "../middleware/validation.js";
 
 const router = Router();
 
@@ -21,11 +22,6 @@ router.use(async (req, res, next) => {
 });
 
 const GRACE_DAYS = 3;
-const REQUEST_TYPES = new Set(["renew", "moveout"]);
-const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
-const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
-const MAINTENANCE_CATEGORIES = new Set(["electrical", "plumbing", "aircon", "furniture", "other"]);
-const MAINTENANCE_TIME_SLOTS = new Set(["anytime", "morning", "afternoon", "evening"]);
 
 function computeRentDue(room, paymentsForBooking, depositAmount) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
@@ -342,26 +338,16 @@ router.post("/maintenance", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
 
-    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
-    if (!description) {
-      return res.status(400).json({ message: "กรุณากรอกรายละเอียดปัญหาที่ต้องการแจ้งซ่อม" });
+    const { error, value } = parseMaintenanceInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
     }
-    if (description.length > 500) {
-      return res.status(400).json({ message: "รายละเอียดยาวเกินไป (สูงสุด 500 ตัวอักษร)" });
-    }
-
-    const category = MAINTENANCE_CATEGORIES.has(req.body?.category) ? req.body.category : "other";
-    const preferredTime = MAINTENANCE_TIME_SLOTS.has(req.body?.preferredTime) ? req.body.preferredTime : "anytime";
-
-    const contactPhone = typeof req.body?.contactPhone === "string" ? req.body.contactPhone.trim() : "";
-    if (contactPhone.length > 20) {
-      return res.status(400).json({ message: "เบอร์โทรติดต่อไม่ถูกต้อง" });
-    }
+    const { description, category, preferredTime, contactPhone } = value;
 
     await pool.query(
       `INSERT INTO MaintenanceRequest (customer_id, room_number, description, category, contact_phone, preferred_time)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [customer.id, customer.room_number, description, category, contactPhone || null, preferredTime],
+      [customer.id, customer.room_number, description, category, contactPhone, preferredTime],
     );
 
     return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด" });
@@ -373,6 +359,10 @@ router.post("/maintenance", async (req, res) => {
 
 router.post("/maintenance/:id/cancel", async (req, res) => {
   try {
+    if (!isPositiveId(req.params.id)) {
+      return res.status(400).json({ message: "รหัสรายการแจ้งซ่อมไม่ถูกต้อง" });
+    }
+
     const pool = getPool();
 
     const [customerRows] = await pool.query(`SELECT id FROM Customer WHERE id = ?`, [req.user.id]);
@@ -414,10 +404,11 @@ router.post("/requests", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
 
-    const type = req.body?.type;
-    if (!REQUEST_TYPES.has(type)) {
-      return res.status(400).json({ message: "ประเภทคำขอไม่ถูกต้อง" });
+    const { error, value } = parseTenantRequestInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
     }
+    const { type, note, renewDurationMonths, renewPaymentType } = value;
 
     const [pendingRows] = await pool.query(
       `SELECT id FROM TenantRequest WHERE customer_id = ? AND type = ? AND status IN ('pending', 'in_progress')`,
@@ -425,24 +416,6 @@ router.post("/requests", async (req, res) => {
     );
     if (pendingRows.length > 0) {
       return res.status(409).json({ message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
-    }
-
-    const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 500) || null : null;
-
-    let renewDurationMonths = null;
-    let renewPaymentType = null;
-    if (type === "renew") {
-      renewDurationMonths = Number(req.body?.renew_duration_months);
-      if (!RENEW_DURATION_MONTHS.has(renewDurationMonths)) {
-        return res.status(400).json({ message: "กรุณาเลือกระยะเวลาที่ต้องการต่อสัญญา" });
-      }
-      renewPaymentType = req.body?.renew_payment_type;
-      if (!RENEW_PAYMENT_TYPES.has(renewPaymentType)) {
-        return res.status(400).json({ message: "กรุณาเลือกรูปแบบการชำระเงิน" });
-      }
-      if (renewPaymentType === "lump_sum" && renewDurationMonths <= 1) {
-        return res.status(400).json({ message: "จ่ายล่วงหน้าทั้งก้อนเลือกได้เฉพาะระยะเวลาต่อสัญญามากกว่า 1 เดือน" });
-      }
     }
 
     await pool.query(
