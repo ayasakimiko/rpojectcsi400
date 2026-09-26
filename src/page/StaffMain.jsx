@@ -1987,9 +1987,13 @@ function StaffMain() {
       </div>
 
       {expenseModal && (
-        <Modal title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'} onClose={() => setExpenseModal(null)}>
+        <Modal
+          title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'}
+          onClose={() => setExpenseModal(null)}
+          variant="confirm"
+        >
           {(requestClose) => (
-            <form onSubmit={(event) => submitExpenseForm(event, requestClose)}>
+            <form className="staff-confirm-body" onSubmit={(event) => submitExpenseForm(event, requestClose)} noValidate>
               <div className="staff-form-field">
                 <label className="staff-form-label" htmlFor="expense-category">
                   หมวดหมู่

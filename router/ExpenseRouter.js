@@ -142,7 +142,6 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    // Staff and Admin can log and edit expenses, but only the Owner can delete one.
     if (req.user?.role !== "Owner") {
       return res.status(403).json({ message: "ไม่ได้รับอนุญาต (ต้องเป็นเจ้าของ)" });
     }
