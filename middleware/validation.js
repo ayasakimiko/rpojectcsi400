@@ -1,4 +1,3 @@
-// DECIMAL(10,2) upper bound; anything larger makes MySQL throw instead of returning a 400.
 export const MAX_MONEY = 99_999_999.99;
 export const MAX_NAME_LENGTH = 100;
 const MAX_SEARCH_LENGTH = 100;
@@ -104,7 +103,6 @@ export function validatePersonInput({ idcard, password, phone, first_name, last_
   return validateName(first_name, "ชื่อ") || validateName(last_name, "นามสกุล") || (isValidAge(age) ? null : "อายุไม่ถูกต้อง");
 }
 
-// Checks only the fields present in a partial-update body.
 export function validatePersonUpdateInput(body) {
   if (hasField(body, "first_name")) {
     const error = validateName(body.first_name, "ชื่อ");
