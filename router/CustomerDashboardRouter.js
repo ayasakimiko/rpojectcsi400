@@ -6,6 +6,8 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
+import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
+import { listAnnouncements } from "./AnnouncementRouter.js";
 import {
   isPositiveId,
   isValidPassword,
@@ -16,8 +18,8 @@ import {
 } from "../middleware/validation.js";
 
 const router = Router();
-const UPLOAD_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads"));
-const PAYMENT_SLIP_DIR = path.join(UPLOAD_DIR, "payment-slips");
+const PAYMENT_SLIP_FOLDER = "payment-slips";
+const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
 fs.mkdirSync(PAYMENT_SLIP_DIR, { recursive: true });
 
 const slipUpload = multer({
@@ -339,10 +341,7 @@ router.get("/me", async (req, res) => {
       [customer.id],
     );
 
-    const [announcements] = await pool.query(
-      `SELECT id, title, message, tone, author_name AS author, created_at
-       FROM Announcement ORDER BY created_at DESC, id DESC LIMIT 50`,
-    );
+    const announcements = await listAnnouncements(pool);
 
     const latestBookingId = bookings[0]?.booking_id;
     const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
@@ -411,7 +410,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       return res.status(409).json({ message: "มีสลิปที่รอตรวจสอบอยู่แล้ว" });
     }
 
-    const slipPath = path.join("payment-slips", path.basename(req.file.filename));
+    const slipPath = `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
     connection = await pool.getConnection();
     await connection.beginTransaction();
 

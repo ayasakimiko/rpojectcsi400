@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS Announcement (
     message VARCHAR(1000) NOT NULL,
     tone VARCHAR(20) NOT NULL DEFAULT 'info',
     author_name VARCHAR(255),
+    expires_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

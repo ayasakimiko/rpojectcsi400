@@ -336,6 +336,7 @@ export function parsePhotoList(photos) {
 }
 
 const ANNOUNCEMENT_TONES = new Set(["info", "warning"]);
+const MAX_EXPIRY_MINUTES = 30 * 24 * 60;
 
 export function parseAnnouncementInput(body = {}) {
   const error =
@@ -344,7 +345,32 @@ export function parseAnnouncementInput(body = {}) {
   if (error) return { error };
   const tone = body.tone ?? "info";
   if (!ANNOUNCEMENT_TONES.has(tone)) return { error: "ประเภทประกาศไม่ถูกต้อง" };
-  return { value: { title: body.title.trim(), message: body.message.trim(), tone } };
+
+  const isGiven = (field) => body[field] !== undefined && body[field] !== null && body[field] !== "";
+  if (isGiven("expires_at") && isGiven("expires_in_minutes")) {
+    return { error: "เลือกกำหนดเวลาลบประกาศได้อย่างใดอย่างหนึ่ง (วันและเวลา หรือระยะเวลา)" };
+  }
+
+  // A fixed moment: "YYYY-MM-DDTHH:mm" from the date dropdowns, stored as "YYYY-MM-DD HH:mm:00".
+  let expiresAt = null;
+  if (isGiven("expires_at")) {
+    if (!isValidDateTimeString(body.expires_at)) return { error: "วันและเวลาที่ลบประกาศไม่ถูกต้อง" };
+    expiresAt = `${body.expires_at.slice(0, 10)} ${body.expires_at.slice(11, 16)}:00`;
+  }
+
+  // A countdown: delete this many minutes after the announcement is saved (the database clock does the adding).
+  let expiresInMinutes = null;
+  if (isGiven("expires_in_minutes")) {
+    // Only a number or a string of digits: Number(true), Number([5]) and the like must not slip through.
+    const raw = body.expires_in_minutes;
+    const isNumeric = typeof raw === "number" || (typeof raw === "string" && /^\d+$/.test(raw.trim()));
+    const minutes = isNumeric ? Number(raw) : Number.NaN;
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_EXPIRY_MINUTES) {
+      return { error: "ระยะเวลาที่ลบประกาศต้องอยู่ระหว่าง 1 นาที ถึง 30 วัน" };
+    }
+    expiresInMinutes = minutes;
+  }
+  return { value: { title: body.title.trim(), message: body.message.trim(), tone, expiresAt, expiresInMinutes } };
 }
 
 const WAITING_LIST_STATUSES = new Set(["waiting", "contacted", "reserved", "closed"]);

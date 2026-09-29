@@ -407,6 +407,54 @@
   gap: 16px;
 }
 
+.staff-tabs {
+  border-bottom: 1.9px solid #c5deff;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.nav-tabs.staff-tabs .nav-link.staff-tab-link {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: #4b6a88;
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 10px 16px;
+  border-radius: 10px 10px 0 0;
+  transition: color 0.15s ease;
+}
+
+.nav-tabs.staff-tabs .nav-link.staff-tab-link::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 3px;
+  background: #2563eb;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.2s ease;
+}
+
+.nav-tabs.staff-tabs .nav-link.staff-tab-link.active {
+  color: #2563eb;
+  background: transparent;
+}
+
+.nav-tabs.staff-tabs .nav-link.staff-tab-link.active::after {
+  transform: scaleX(1);
+}
+
+.nav-tabs.staff-tabs .nav-link.staff-tab-link:hover:not(.active) {
+  color: #1d4ed8;
+}
+
+.nav-tabs.staff-tabs .nav-link.staff-tab-link:hover:not(.active)::after {
+  transform: scaleX(1);
+}
+
 .staff-summary-card {
   display: flex;
   align-items: center;
@@ -1310,6 +1358,15 @@
 
 .staff-action-btn.is-ghost:hover:not(:disabled) {
   background: #eef2f7;
+}
+.staff-action-btn.is-danger {
+  background: #fff5f5;
+  color: #b42318;
+  border-color: #fecaca;
+}
+.staff-action-btn.is-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
 }
 
 .staff-action-btn:disabled {

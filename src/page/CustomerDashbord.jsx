@@ -1001,6 +1001,17 @@ function CustomerDashbord() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const now = Date.now()
+    const upcoming = (data?.announcements ?? [])
+      .map((item) => (item.expires_epoch ? item.expires_epoch * 1000 - now : Number.NaN))
+      .filter((wait) => Number.isFinite(wait) && wait > 0)
+    if (upcoming.length === 0) return undefined
+    const timer = setTimeout(loadDashboard, Math.min(Math.min(...upcoming) + 1000, 2147483647))
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
   const handleLogout = () => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
@@ -1387,7 +1398,16 @@ function CustomerDashbord() {
       label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
       tone: item.tone === 'warning' ? 'pending' : 'info',
       date: item.created_at,
-      detail: item.message,
+      detail: item.expires_at ? (
+        <>
+          {item.message}
+          <span className="dashboard-notif-expiry">
+            ประกาศนี้จะถูกลบอัตโนมัติเมื่อ {formatDateTime(item.expires_at)} น.
+          </span>
+        </>
+      ) : (
+        item.message
+      ),
       kind: 'announcement',
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))

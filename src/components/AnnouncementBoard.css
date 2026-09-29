@@ -28,24 +28,25 @@
 .announcement-table th,
 .announcement-table td {
   vertical-align: middle;
+  text-align: left;
 }
 
 .announcement-table .dashboard-empty {
   padding: 2rem 0;
 }
 
-.announcement-cell-title {
-  min-width: 170px;
+.announcement-table td.announcement-empty-cell {
+  text-align: center;
 }
 
-.announcement-cell-title strong {
-  display: block;
-  margin-bottom: 5px;
+.announcement-cell-title {
+  min-width: 150px;
   font-weight: 700;
 }
 
 .announcement-tone {
   display: inline-block;
+  white-space: nowrap;
   border-radius: 999px;
   padding: 2px 9px;
   font-size: 11px;
@@ -65,11 +66,15 @@
 .announcement-cell-message {
   min-width: 220px;
   max-width: 420px;
+}
+
+/* The line clamp lives on an inner div: display:-webkit-box on the <td> itself stops it acting as a table cell. */
+.announcement-message {
+  display: -webkit-box;
   overflow: hidden;
   color: #33506f;
   line-height: 1.5;
   white-space: pre-wrap;
-  display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -77,6 +82,132 @@
 
 .announcement-cell-date {
   white-space: nowrap;
+}
+
+.announcement-row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.announcement-no-expiry {
+  color: #94a3b8;
+}
+
+.announcement-expiry {
+  display: grid;
+  gap: 6px;
+  color: #33506f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.announcement-expiry-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.announcement-expiry-mode {
+  border: 1.5px solid #dce9fb;
+  border-radius: 10px;
+  padding: 8px 6px;
+  background: #f8fbff;
+  color: #33506f;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.announcement-expiry-mode:hover {
+  background: #eef5ff;
+}
+
+.announcement-expiry-mode.is-active {
+  border-color: #2563eb;
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.announcement-expiry-mode:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.25);
+  outline-offset: 2px;
+}
+
+.announcement-expiry-row.is-after {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.announcement-remaining {
+  display: block;
+  margin-top: 2px;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.announcement-expiry-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.announcement-expiry-clear {
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 8px;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.announcement-expiry-clear:hover {
+  background: #eaf2ff;
+}
+
+.announcement-expiry-row {
+  display: grid;
+  grid-template-columns: 0.8fr 1.5fr 1fr 0.95fr 1.15fr;
+  gap: 8px;
+}
+
+.announcement-expiry-row select {
+  padding-right: 6px;
+  padding-left: 8px;
+}
+
+.announcement-expiry-summary {
+  margin: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.announcement-expiry-summary.is-none {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.announcement-expiry-summary.is-set {
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.announcement-expiry-summary.is-error {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.announcement-field-hint {
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .announcement-pagination {
@@ -128,6 +259,92 @@
 @keyframes announcement-rise-in {
   from { opacity: 0; transform: translateY(8px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.announcement-overlay.is-confirm {
+  z-index: 1300;
+}
+
+.announcement-dialog.announcement-confirm {
+  width: min(400px, 100%);
+  align-items: center;
+  gap: 4px;
+  padding: 24px 22px 20px;
+  text-align: center;
+}
+
+.announcement-confirm-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  margin-bottom: 8px;
+  border-radius: 50%;
+}
+
+.announcement-confirm-icon.is-publish,
+.announcement-confirm-icon.is-edit {
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.announcement-confirm-icon.is-delete {
+  background: #fff1f0;
+  color: #dc2626;
+}
+
+.announcement-confirm h3 {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.announcement-confirm-message {
+  margin: 4px 0 12px;
+  color: #6b859e;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.announcement-confirm-detail {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  border: 1px solid #e6f0fd;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #f8fbff;
+  font-size: 13px;
+  text-align: left;
+}
+
+.announcement-confirm-detail span {
+  flex: 0 0 auto;
+  color: #6b859e;
+}
+
+.announcement-confirm-detail strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f2b52;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcement-confirm .announcement-form-actions {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+  border-top: 0;
+}
+
+.announcement-confirm .announcement-form-actions button {
+  flex: 1;
 }
 
 .announcement-dialog-header {
@@ -274,6 +491,16 @@
   box-shadow: 0 5px 12px rgba(37, 99, 235, 0.22);
 }
 
+.announcement-board-submit.is-danger {
+  border-color: #dc2626;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.announcement-board-submit.is-danger:hover:not(:disabled) {
+  box-shadow: 0 5px 12px rgba(220, 38, 38, 0.25);
+}
+
+.announcement-board-cancel:disabled,
 .announcement-board-submit:disabled {
   opacity: 0.65;
   cursor: not-allowed;
@@ -294,6 +521,10 @@
 
   .announcement-board-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .announcement-expiry-row {
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .announcement-form-actions button {

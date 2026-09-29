@@ -1376,6 +1376,14 @@
   margin: 0 0 4px;
 }
 
+.dashboard-notif-expiry {
+  display: block;
+  margin-top: 8px;
+  color: #6b859e;
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .dashboard-notif-utility-detail {
   display: flex;
   flex-direction: column;

@@ -98,6 +98,7 @@ function buildAnnouncementNotif(item) {
     details: [
       { label: 'รายละเอียด', value: item.message },
       { label: 'ประกาศโดย', value: item.author || 'เจ้าหน้าที่' },
+      { label: 'ลบอัตโนมัติ', value: item.expires_at ? `${formatDateTime(item.expires_at)} น.` : 'ไม่กำหนด' },
     ],
     kind: 'announcement',
   }
@@ -684,6 +685,17 @@ function AdminBackupPage() {
       .then(({ data }) => setAnnouncements(data.announcements))
       .catch((err) => handleUnauthorized(err))
   }
+
+  useEffect(() => {
+    const now = Date.now()
+    const upcoming = announcements
+      .map((item) => (item.expires_epoch ? item.expires_epoch * 1000 - now : Number.NaN))
+      .filter((wait) => Number.isFinite(wait) && wait > 0)
+    if (upcoming.length === 0) return undefined
+    const timer = setTimeout(loadAnnouncements, Math.min(Math.min(...upcoming) + 1000, 2147483647))
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [announcements])
 
   const submitWaitingListForm = async (event, requestClose) => {
     event.preventDefault()

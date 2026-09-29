@@ -122,7 +122,7 @@ services:
     ports:
       - "${CUSTOMER_PORT:-4003}:4003"
     volumes:
-      - payment_slips:/app/uploads
+      - ./public/uploads:/app/public/uploads
 
   staff-service:
     <<: *service-defaults
@@ -134,7 +134,6 @@ services:
     ports:
       - "${STAFF_PORT:-4004}:4004"
     volumes:
-      - payment_slips:/app/uploads
       - ./public/uploads:/app/public/uploads
 
   admin-service:
@@ -161,4 +160,3 @@ services:
 
 volumes:
   db_data:
-  payment_slips:

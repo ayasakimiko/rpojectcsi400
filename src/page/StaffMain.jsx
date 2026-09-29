@@ -123,6 +123,7 @@ function buildAnnouncementNotif(item) {
     details: [
       { label: 'รายละเอียด', value: item.message },
       { label: 'ประกาศโดย', value: item.author || 'เจ้าหน้าที่' },
+      { label: 'ลบอัตโนมัติ', value: item.expires_at ? `${formatDateTime(item.expires_at)} น.` : 'ไม่กำหนด' },
     ],
     kind: 'announcement',
   }
@@ -251,6 +252,13 @@ const MAINTENANCE_STATUS_LABEL = {
   done: 'เสร็จสิ้น',
   cancelled: 'ยกเลิกแล้ว',
 }
+
+const STAFF_TABS = [
+  { key: 'home', label: 'หน้าแรก' },
+  { key: 'announcements', label: 'ประกาศจากหอพัก' },
+  { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
+  { key: 'move-out-inspections', label: 'ตรวจห้องตอนย้ายออก' },
+]
 
 const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
@@ -542,24 +550,9 @@ function StaffPaymentReview() {
     }
   }, [])
 
-  useEffect(
-    () => () => {
-      if (preview?.url) URL.revokeObjectURL(preview.url)
-    },
-    [preview],
-  )
-
-  const openSlip = async (payment) => {
+  const openSlip = (payment) => {
     setError('')
-    try {
-      const { data } = await axios.get(`/api/staff/payment-verifications/${payment.id}/slip`, {
-        headers: authHeaders(),
-        responseType: 'blob',
-      })
-      setPreview({ payment, url: URL.createObjectURL(data) })
-    } catch (err) {
-      setError(err.response?.data?.message || 'เปิดสลิปไม่สำเร็จ')
-    }
+    setPreview({ payment, url: payment.slip_path })
   }
 
   const reviewPayment = async (payment, decision) => {
@@ -760,6 +753,7 @@ function StaffMain() {
 
   const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
+  const [staffTab, setStaffTab] = useState('home')
 
   const [utilityRoom, setUtilityRoom] = useState(null)
   const [utilityForm, setUtilityForm] = useState({
@@ -830,6 +824,17 @@ function StaffMain() {
       .then(({ data }) => setAnnouncements(data.announcements))
       .catch(() => {})
   }
+
+  useEffect(() => {
+    const now = Date.now()
+    const upcoming = announcements
+      .map((item) => (item.expires_epoch ? item.expires_epoch * 1000 - now : Number.NaN))
+      .filter((wait) => Number.isFinite(wait) && wait > 0)
+    if (upcoming.length === 0) return undefined
+    const timer = setTimeout(loadAnnouncements, Math.min(Math.min(...upcoming) + 1000, 2147483647))
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [announcements])
 
   const submitWaitingListEntry = async (event, requestClose) => {
     event.preventDefault()
@@ -1125,8 +1130,10 @@ function StaffMain() {
     loadWaitingList()
     loadMoveOutInspections()
     loadAnnouncements()
+    const announcementsInterval = setInterval(loadAnnouncements, 30000)
     return () => {
       isMounted = false
+      clearInterval(announcementsInterval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -2105,699 +2112,723 @@ function StaffMain() {
           </div>
         </div>
 
-        <AnnouncementBoard
-          variant="staff"
-          announcements={announcements}
-          canManage
-          apiBase="/api/staff/announcements"
-          onChange={loadAnnouncements}
-        />
-
-        <div className="staff-card">
-          <div className="staff-card-header">
-            <div>
-              <h2>
-                รายชื่อคนรอห้องว่าง <span className="staff-count-pill">{waitingList.length}</span>
-              </h2>
-              <p className="waiting-list-storage-note">Admin เห็นรายชื่อนี้และจัดการสถานะต่อได้</p>
-            </div>
-            <button
-              type="button"
-              className="staff-action-btn is-primary"
-              onClick={() => {
-                setWaitingListError('')
-                setWaitingListModalOpen(true)
-              }}
-            >
-              + เพิ่มผู้สนใจ
-            </button>
-          </div>
-          <div className="table-responsive">
-            <table className="staff-table">
-              <thead>
-                <tr>
-                  <th>ชื่อผู้สนใจ</th>
-                  <th>เบอร์โทร</th>
-                  <th>ประเภทห้อง</th>
-                  <th>วันที่แจ้ง</th>
-                  <th>บันทึกโดย</th>
-                </tr>
-              </thead>
-              <tbody>
-                {waitingList.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="staff-empty">
-                      ยังไม่มีรายชื่อผู้รอห้องว่าง
-                    </td>
-                  </tr>
-                ) : (
-                  waitingList.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.full_name}</td>
-                      <td>{item.phone}</td>
-                      <td>{item.room_preference || '-'}</td>
-                      <td>{formatDate(item.created_at)}</td>
-                      <td>{item.submitted_by_name || '-'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="staff-card">
-          <div className="staff-card-header">
-            <div>
-              <h2>
-                ตรวจห้องตอนย้ายออก <span className="staff-count-pill">{moveOutInspections.length}</span>
-              </h2>
-              <p className="waiting-list-storage-note">Checklist, รูป และความเสียหายที่ส่งให้ Admin</p>
-            </div>
-            <button
-              type="button"
-              className="staff-action-btn is-primary"
-              onClick={openMoveOutInspection}
-              disabled={!rooms.some((room) => room.is_booked && room.tenant)}
-            >
-              + เริ่มตรวจห้อง
-            </button>
-          </div>
-          <div className="table-responsive">
-            <table className="staff-table">
-              <thead>
-                <tr>
-                  <th>ห้อง</th>
-                  <th>ผู้เช่า</th>
-                  <th>วันที่ตรวจ</th>
-                  <th>ผลตรวจ</th>
-                  <th>Admin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {moveOutInspections.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="staff-empty">
-                      ยังไม่มีผลตรวจห้องย้ายออก
-                    </td>
-                  </tr>
-                ) : (
-                  moveOutInspections.map((inspection) => (
-                    <tr key={inspection.id}>
-                      <td>{inspection.room_number}</td>
-                      <td>{inspection.tenant_name}</td>
-                      <td>{formatDateTime(inspection.created_at)}</td>
-                      <td>
-                        {inspection.checklist && Object.values(inspection.checklist).includes('damaged')
-                          ? 'พบความเสียหาย'
-                          : 'บันทึกแล้ว'}
-                      </td>
-                      <td>
-                        {inspection.status === 'pending'
-                          ? 'รอตรวจ'
-                          : inspection.status === 'reviewed'
-                            ? 'ตรวจแล้ว'
-                            : 'ต้องติดตาม'}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="staff-card">
-          <div className="staff-card-header">
-            <h2>รายการห้องพัก</h2>
-            <div className="staff-card-header-actions">
+        <ul className="nav nav-tabs staff-tabs">
+          {STAFF_TABS.map((tab) => (
+            <li className="nav-item" key={tab.key}>
               <button
                 type="button"
-                className="staff-action-btn is-ghost"
-                onClick={handlePrintMonthlyInvoices}
-                disabled={invoiceGenerating}
+                className={`nav-link staff-tab-link${staffTab === tab.key ? ' active' : ''}`}
+                onClick={() => setStaffTab(tab.key)}
               >
-                {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้รวม / PDF'}
+                {tab.label}
               </button>
-              <div className="staff-filters">
-                <input
-                  type="text"
-                  className="staff-search-input"
-                  placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร..."
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value)
-                    setRoomsPage(1)
-                  }}
-                />
-                <select
-                  className="staff-filter-select"
-                  value={statusFilter}
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value)
-                    setRoomsPage(1)
-                  }}
-                >
-                  <option value="all">ทุกสถานะ</option>
-                  <option value="booked">ไม่ว่าง</option>
-                  <option value="vacant">ว่าง</option>
-                  <option value="due">รอเก็บเงิน</option>
-                  <option value="expiring">ใกล้หมดสัญญา</option>
-                </select>
+            </li>
+          ))}
+        </ul>
+
+        {staffTab === 'announcements' && (
+          <AnnouncementBoard
+            variant="staff"
+            announcements={announcements}
+            canManage
+            apiBase="/api/staff/announcements"
+            onChange={loadAnnouncements}
+          />
+        )}
+
+        {staffTab === 'waiting-list' && (
+          <div className="staff-card">
+            <div className="staff-card-header">
+              <div>
+                <h2>
+                  รายชื่อคนรอห้องว่าง <span className="staff-count-pill">{waitingList.length}</span>
+                </h2>
+                <p className="waiting-list-storage-note">Admin เห็นรายชื่อนี้และจัดการสถานะต่อได้</p>
               </div>
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                onClick={() => {
+                  setWaitingListError('')
+                  setWaitingListModalOpen(true)
+                }}
+              >
+                + เพิ่มผู้สนใจ
+              </button>
             </div>
-          </div>
-
-          {invoicePrintError && (
-            <div className="staff-inline-error" role="alert">
-              {invoicePrintError}
-            </div>
-          )}
-
-          <div className="table-responsive">
-            <table className="staff-table staff-rooms-table">
-              <thead>
-                <tr>
-                  <th>เลขห้อง</th>
-                  <th>สถานะห้อง</th>
-                  <th>ผู้เช่า</th>
-                  <th className="staff-col-optional">เบอร์โทร</th>
-                  <th className="staff-col-optional">ระยะเวลาสัญญา</th>
-                  <th>สถานะการชำระเงิน</th>
-                  <th className="staff-col-optional">ยอดค้างชำระ</th>
-                  <th>การดำเนินการ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRooms.length === 0 ? (
+            <div className="table-responsive">
+              <table className="staff-table">
+                <thead>
                   <tr>
-                    <td colSpan={8} className="staff-empty">
-                      ไม่พบข้อมูลห้องพักที่ตรงกับเงื่อนไข
-                    </td>
+                    <th>ชื่อผู้สนใจ</th>
+                    <th>เบอร์โทร</th>
+                    <th>ประเภทห้อง</th>
+                    <th>วันที่แจ้ง</th>
+                    <th>บันทึกโดย</th>
                   </tr>
-                ) : (
-                  paginatedRooms.map((room) => {
-                    const isExpanded = expandedRoomNumbers.has(room.room_number)
-                    const hasDue = room.currentDue && room.currentDue.status !== 'paid'
-                    const expiryStatus = getRoomExpiryStatus(room)
-                    return (
-                      <Fragment key={room.room_number}>
-                        <tr>
-                          <td className="staff-room-number-cell">{room.room_number}</td>
-                          <td>
-                            <span className={`staff-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
-                              {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
-                            </span>
-                          </td>
-                          <td>{room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'}</td>
-                          <td className="staff-col-optional">{room.tenant?.phone || '-'}</td>
-                          <td className="staff-col-optional">
-                            <div className="staff-contract-dates">
-                              {room.rental_start_date && room.rental_end_date ? (
-                                <>
-                                  {formatDate(room.rental_start_date)}
-                                  <ContractArrowIcon />
-                                  {formatDate(room.rental_end_date)}
-                                </>
-                              ) : (
-                                '-'
-                              )}
-                            </div>
-                            {expiryStatus && (
-                              <div className={`staff-contract-remaining is-${expiryStatus.level}`}>
-                                {expiryStatus.label}
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            {room.currentDue ? (
-                              <span className={`staff-badge status-${dueBadgeClass(room.currentDue.status)}`}>
-                                {DUE_STATUS_LABEL[room.currentDue.status] || room.currentDue.status}
-                              </span>
-                            ) : (
-                              <span className="staff-badge status-none">-</span>
-                            )}
-                          </td>
-                          <td className="staff-col-optional">
-                            {hasDue ? (
-                              <button
-                                type="button"
-                                className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
-                                onClick={() => openDueDetail(room)}
-                              >
-                                ฿{formatCurrency(room.currentDue.amount)}
-                              </button>
-                            ) : (
-                              <span className="staff-due-amount is-none">-</span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="staff-row-actions staff-row-actions-desktop">
-                              {Boolean(room.is_booked) && room.tenant && (
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-ghost"
-                                  onClick={() => openHistory(room)}
-                                >
-                                  ประวัติการจ่ายเงิน
-                                </button>
-                              )}
-                              {Boolean(room.is_booked) && room.tenant && (
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-ghost"
-                                  onClick={() => openUtilityBill(room)}
-                                >
-                                  ส่งค่าน้ำ-ค่าไฟ
-                                </button>
-                              )}
-                              {hasDue && (
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-primary"
-                                  onClick={() => openCollect(room)}
-                                >
-                                  เก็บเงิน
-                                </button>
-                              )}
-                              {!room.is_booked && (
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-primary"
-                                  onClick={() => navigate('/register', { state: { roomNumber: room.room_number } })}
-                                >
-                                  เพิ่มผู้เช่า
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        <tr className="staff-row-detail">
-                          <td colSpan={8}>
-                            <div className={`staff-row-detail-wrap${isExpanded ? ' is-expanded' : ''}`}>
-                              <div className="staff-row-detail-scroll">
-                                <div className="staff-row-detail-content">
-                                  <div className="staff-row-detail-item">
-                                    <span>เบอร์โทร</span>
-                                    <strong>{room.tenant?.phone || '-'}</strong>
-                                  </div>
-                                  <div className="staff-row-detail-item">
-                                    <span>ระยะเวลาสัญญา</span>
-                                    <span className="staff-contract-value">
-                                      <strong>
-                                        {room.rental_start_date && room.rental_end_date ? (
-                                          <>
-                                            {formatDate(room.rental_start_date)}
-                                            <ContractArrowIcon />
-                                            {formatDate(room.rental_end_date)}
-                                          </>
-                                        ) : (
-                                          '-'
-                                        )}
-                                      </strong>
-                                      {expiryStatus && (
-                                        <span className={`staff-contract-remaining is-${expiryStatus.level}`}>
-                                          {expiryStatus.label}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                  <div className="staff-row-detail-item">
-                                    <span>ยอดค้างชำระ</span>
-                                    {hasDue ? (
-                                      <button
-                                        type="button"
-                                        className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
-                                        onClick={() => openDueDetail(room)}
-                                      >
-                                        ฿{formatCurrency(room.currentDue.amount)}
-                                      </button>
-                                    ) : (
-                                      <strong className="staff-due-amount is-none">-</strong>
-                                    )}
-                                  </div>
-                                  <div className="staff-row-actions">
-                                    {Boolean(room.is_booked) && room.tenant && (
-                                      <button
-                                        type="button"
-                                        className="staff-action-btn is-ghost"
-                                        onClick={() => openHistory(room)}
-                                      >
-                                        ประวัติการจ่ายเงิน
-                                      </button>
-                                    )}
-                                    {Boolean(room.is_booked) && room.tenant && (
-                                      <button
-                                        type="button"
-                                        className="staff-action-btn is-ghost"
-                                        onClick={() => openUtilityBill(room)}
-                                      >
-                                        ส่งค่าน้ำ-ค่าไฟ
-                                      </button>
-                                    )}
-                                    {hasDue && (
-                                      <button
-                                        type="button"
-                                        className="staff-action-btn is-primary"
-                                        onClick={() => openCollect(room)}
-                                      >
-                                        เก็บเงิน
-                                      </button>
-                                    )}
-                                    {!room.is_booked && (
-                                      <button
-                                        type="button"
-                                        className="staff-action-btn is-primary"
-                                        onClick={() =>
-                                          navigate('/register', { state: { roomNumber: room.room_number } })
-                                        }
-                                      >
-                                        เพิ่มผู้เช่า
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr className="staff-row-toggle-row">
-                          <td colSpan={8}>
-                            <button
-                              type="button"
-                              className={`staff-row-toggle${isExpanded ? ' is-expanded' : ''}`}
-                              onClick={() => toggleRoomExpanded(room.room_number)}
-                              aria-expanded={isExpanded}
-                            >
-                              ดูเพิ่มเติม
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                              >
-                                <polyline points="6 9 12 15 18 9" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      </Fragment>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredRooms.length > 0 && (
-            <div className="staff-pagination">
-              <span className="staff-pagination-info">
-                แสดง {(currentRoomsPage - 1) * ROOMS_PER_PAGE + 1}-
-                {Math.min(currentRoomsPage * ROOMS_PER_PAGE, filteredRooms.length)} จาก {filteredRooms.length} รายการ
-              </span>
-              <div className="staff-pagination-controls">
-                <button
-                  type="button"
-                  className="staff-action-btn is-ghost"
-                  disabled={currentRoomsPage <= 1}
-                  onClick={() => setRoomsPage(Math.max(1, currentRoomsPage - 1))}
-                >
-                  ก่อนหน้า
-                </button>
-                <span className="staff-pagination-page">
-                  หน้า {currentRoomsPage} / {roomsTotalPages}
-                </span>
-                <button
-                  type="button"
-                  className="staff-action-btn is-ghost"
-                  disabled={currentRoomsPage >= roomsTotalPages}
-                  onClick={() => setRoomsPage(Math.min(roomsTotalPages, currentRoomsPage + 1))}
-                >
-                  ถัดไป
-                </button>
-              </div>
+                </thead>
+                <tbody>
+                  {waitingList.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="staff-empty">
+                        ยังไม่มีรายชื่อผู้รอห้องว่าง
+                      </td>
+                    </tr>
+                  ) : (
+                    waitingList.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.full_name}</td>
+                        <td>{item.phone}</td>
+                        <td>{item.room_preference || '-'}</td>
+                        <td>{formatDate(item.created_at)}</td>
+                        <td>{item.submitted_by_name || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <StaffPaymentReview />
-
-        <div className="staff-requests-grid">
+        {staffTab === 'move-out-inspections' && (
           <div className="staff-card">
             <div className="staff-card-header">
-              <h2>
-                คำขอต่อสัญญา / แจ้งย้ายออก
-                {tenantRequests.length > 0 && <span className="staff-count-pill">{tenantRequests.length}</span>}
-              </h2>
-              <div className="staff-card-header-actions">
-                <button type="button" className="staff-view-all-btn" onClick={openTenantHistory}>
-                  ดูประวัติ
-                </button>
-                {filteredTenantRequests.length > REQUEST_PREVIEW_COUNT && (
-                  <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('tenant')}>
-                    ดูทั้งหมด
-                  </button>
-                )}
+              <div>
+                <h2>
+                  ตรวจห้องตอนย้ายออก <span className="staff-count-pill">{moveOutInspections.length}</span>
+                </h2>
+                <p className="waiting-list-storage-note">Checklist, รูป และความเสียหายที่ส่งให้ Admin</p>
               </div>
-            </div>
-
-            {tenantRequests.length > 0 && (
-              <div className="staff-filters staff-card-filters">
-                <input
-                  type="text"
-                  className="staff-search-input"
-                  placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
-                  value={tenantFilterSearch}
-                  onChange={(event) => {
-                    setTenantFilterSearch(event.target.value)
-                    setTenantModalPage(1)
-                  }}
-                />
-                <select
-                  className="staff-filter-select"
-                  value={tenantFilterType}
-                  onChange={(event) => {
-                    setTenantFilterType(event.target.value)
-                    setTenantModalPage(1)
-                  }}
-                >
-                  <option value="all">ทุกประเภท</option>
-                  <option value="renew">ต่อสัญญา</option>
-                  <option value="moveout">แจ้งย้ายออก</option>
-                </select>
-              </div>
-            )}
-
-            <div className="staff-card-body">
-              {requestsError ? (
-                <div className="staff-inline-error">
-                  <p className="staff-form-error staff-form-error-block">{requestsError}</p>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-ghost"
-                    onClick={() => {
-                      setRequestsLoading(true)
-                      loadRequests().finally(() => setRequestsLoading(false))
-                    }}
-                  >
-                    ลองใหม่
-                  </button>
-                </div>
-              ) : requestsLoading ? (
-                <p className="staff-empty">กำลังโหลดข้อมูล...</p>
-              ) : tenantRequests.length === 0 ? (
-                <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
-              ) : filteredTenantRequests.length === 0 ? (
-                <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
-              ) : (
-                <div className="staff-requests-list">
-                  {filteredTenantRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderTenantRequestItem)}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="staff-card">
-            <div className="staff-card-header">
-              <h2>
-                คำขอแจ้งซ่อม
-                {maintenanceRequests.length > 0 && (
-                  <span className="staff-count-pill">{maintenanceRequests.length}</span>
-                )}
-              </h2>
-              <div className="staff-card-header-actions">
-                <button type="button" className="staff-view-all-btn" onClick={openMaintenanceHistory}>
-                  ดูประวัติ
-                </button>
-                {filteredMaintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
-                  <button
-                    type="button"
-                    className="staff-view-all-btn"
-                    onClick={() => setViewAllRequests('maintenance')}
-                  >
-                    ดูทั้งหมด
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {maintenanceRequests.length > 0 && (
-              <div className="staff-filters staff-card-filters">
-                <input
-                  type="text"
-                  className="staff-search-input"
-                  placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
-                  value={maintenanceFilterSearch}
-                  onChange={(event) => {
-                    setMaintenanceFilterSearch(event.target.value)
-                    setMaintenanceModalPage(1)
-                  }}
-                />
-                <select
-                  className="staff-filter-select"
-                  value={maintenanceFilterStatus}
-                  onChange={(event) => {
-                    setMaintenanceFilterStatus(event.target.value)
-                    setMaintenanceModalPage(1)
-                  }}
-                >
-                  <option value="all">ทุกสถานะ</option>
-                  <option value="pending">รอดำเนินการ</option>
-                  <option value="in_progress">กำลังดำเนินการ</option>
-                </select>
-                <input
-                  type="date"
-                  className="staff-filter-select"
-                  value={maintenanceFilterDate}
-                  onChange={(event) => {
-                    setMaintenanceFilterDate(event.target.value)
-                    setMaintenanceModalPage(1)
-                  }}
-                />
-              </div>
-            )}
-
-            <div className="staff-card-body">
-              {requestsError ? (
-                <div className="staff-inline-error">
-                  <p className="staff-form-error staff-form-error-block">{requestsError}</p>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-ghost"
-                    onClick={() => {
-                      setRequestsLoading(true)
-                      loadRequests().finally(() => setRequestsLoading(false))
-                    }}
-                  >
-                    ลองใหม่
-                  </button>
-                </div>
-              ) : requestsLoading ? (
-                <p className="staff-empty">กำลังโหลดข้อมูล...</p>
-              ) : maintenanceRequests.length === 0 ? (
-                <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
-              ) : filteredMaintenanceRequests.length === 0 ? (
-                <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
-              ) : (
-                <div className="staff-requests-list">
-                  {filteredMaintenanceRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderMaintenanceRequestItem)}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="staff-card">
-          <div className="staff-card-header">
-            <h2>รายจ่าย</h2>
-            <div className="staff-card-header-actions">
-              <button type="button" className="staff-action-btn is-primary" onClick={openCreateExpense}>
-                + บันทึกรายจ่าย
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                onClick={openMoveOutInspection}
+                disabled={!rooms.some((room) => room.is_booked && room.tenant)}
+              >
+                + เริ่มตรวจห้อง
               </button>
             </div>
+            <div className="table-responsive">
+              <table className="staff-table">
+                <thead>
+                  <tr>
+                    <th>ห้อง</th>
+                    <th>ผู้เช่า</th>
+                    <th>วันที่ตรวจ</th>
+                    <th>ผลตรวจ</th>
+                    <th>Admin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moveOutInspections.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="staff-empty">
+                        ยังไม่มีผลตรวจห้องย้ายออก
+                      </td>
+                    </tr>
+                  ) : (
+                    moveOutInspections.map((inspection) => (
+                      <tr key={inspection.id}>
+                        <td>{inspection.room_number}</td>
+                        <td>{inspection.tenant_name}</td>
+                        <td>{formatDateTime(inspection.created_at)}</td>
+                        <td>
+                          {inspection.checklist && Object.values(inspection.checklist).includes('damaged')
+                            ? 'พบความเสียหาย'
+                            : 'บันทึกแล้ว'}
+                        </td>
+                        <td>
+                          {inspection.status === 'pending'
+                            ? 'รอตรวจ'
+                            : inspection.status === 'reviewed'
+                              ? 'ตรวจแล้ว'
+                              : 'ต้องติดตาม'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
+        )}
 
-          <div className="staff-card-body">
-            {expensesError ? (
-              <div className="staff-inline-error">
-                <p className="staff-form-error staff-form-error-block">{expensesError}</p>
-                <button type="button" className="staff-action-btn is-ghost" onClick={() => loadExpenses(expensesPage)}>
-                  ลองใหม่
-                </button>
+        {staffTab === 'home' && (
+          <>
+            <div className="staff-card">
+              <div className="staff-card-header">
+                <h2>รายการห้องพัก</h2>
+                <div className="staff-card-header-actions">
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    onClick={handlePrintMonthlyInvoices}
+                    disabled={invoiceGenerating}
+                  >
+                    {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้รวม / PDF'}
+                  </button>
+                  <div className="staff-filters">
+                    <input
+                      type="text"
+                      className="staff-search-input"
+                      placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร..."
+                      value={search}
+                      onChange={(event) => {
+                        setSearch(event.target.value)
+                        setRoomsPage(1)
+                      }}
+                    />
+                    <select
+                      className="staff-filter-select"
+                      value={statusFilter}
+                      onChange={(event) => {
+                        setStatusFilter(event.target.value)
+                        setRoomsPage(1)
+                      }}
+                    >
+                      <option value="all">ทุกสถานะ</option>
+                      <option value="booked">ไม่ว่าง</option>
+                      <option value="vacant">ว่าง</option>
+                      <option value="due">รอเก็บเงิน</option>
+                      <option value="expiring">ใกล้หมดสัญญา</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-            ) : expensesLoading ? (
-              <p className="staff-empty">กำลังโหลดข้อมูล...</p>
-            ) : expenses.length === 0 ? (
-              <p className="staff-empty">ยังไม่มีรายการรายจ่าย</p>
-            ) : (
+
+              {invoicePrintError && (
+                <div className="staff-inline-error" role="alert">
+                  {invoicePrintError}
+                </div>
+              )}
+
               <div className="table-responsive">
-                <table className="staff-table">
+                <table className="staff-table staff-rooms-table">
                   <thead>
                     <tr>
-                      <th>วันที่</th>
-                      <th>หมวดหมู่</th>
-                      <th>รายละเอียด</th>
-                      <th>บันทึกโดย</th>
-                      <th>จำนวนเงิน</th>
-                      <th>จัดการ</th>
+                      <th>เลขห้อง</th>
+                      <th>สถานะห้อง</th>
+                      <th>ผู้เช่า</th>
+                      <th className="staff-col-optional">เบอร์โทร</th>
+                      <th className="staff-col-optional">ระยะเวลาสัญญา</th>
+                      <th>สถานะการชำระเงิน</th>
+                      <th className="staff-col-optional">ยอดค้างชำระ</th>
+                      <th>การดำเนินการ</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {expenses.map((expense) => (
-                      <tr key={expense.id}>
-                        <td>{formatDate(expense.expense_date)}</td>
-                        <td>{expense.category}</td>
-                        <td>{expense.description || '-'}</td>
-                        <td>{expense.recorded_by_name || '-'}</td>
-                        <td>฿{formatCurrency(expense.amount)}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="staff-action-btn is-ghost"
-                            onClick={() => openEditExpense(expense)}
-                          >
-                            แก้ไข
-                          </button>
+                    {filteredRooms.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="staff-empty">
+                          ไม่พบข้อมูลห้องพักที่ตรงกับเงื่อนไข
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      paginatedRooms.map((room) => {
+                        const isExpanded = expandedRoomNumbers.has(room.room_number)
+                        const hasDue = room.currentDue && room.currentDue.status !== 'paid'
+                        const expiryStatus = getRoomExpiryStatus(room)
+                        return (
+                          <Fragment key={room.room_number}>
+                            <tr>
+                              <td className="staff-room-number-cell">{room.room_number}</td>
+                              <td>
+                                <span className={`staff-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
+                                  {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
+                                </span>
+                              </td>
+                              <td>{room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'}</td>
+                              <td className="staff-col-optional">{room.tenant?.phone || '-'}</td>
+                              <td className="staff-col-optional">
+                                <div className="staff-contract-dates">
+                                  {room.rental_start_date && room.rental_end_date ? (
+                                    <>
+                                      {formatDate(room.rental_start_date)}
+                                      <ContractArrowIcon />
+                                      {formatDate(room.rental_end_date)}
+                                    </>
+                                  ) : (
+                                    '-'
+                                  )}
+                                </div>
+                                {expiryStatus && (
+                                  <div className={`staff-contract-remaining is-${expiryStatus.level}`}>
+                                    {expiryStatus.label}
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                {room.currentDue ? (
+                                  <span className={`staff-badge status-${dueBadgeClass(room.currentDue.status)}`}>
+                                    {DUE_STATUS_LABEL[room.currentDue.status] || room.currentDue.status}
+                                  </span>
+                                ) : (
+                                  <span className="staff-badge status-none">-</span>
+                                )}
+                              </td>
+                              <td className="staff-col-optional">
+                                {hasDue ? (
+                                  <button
+                                    type="button"
+                                    className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
+                                    onClick={() => openDueDetail(room)}
+                                  >
+                                    ฿{formatCurrency(room.currentDue.amount)}
+                                  </button>
+                                ) : (
+                                  <span className="staff-due-amount is-none">-</span>
+                                )}
+                              </td>
+                              <td>
+                                <div className="staff-row-actions staff-row-actions-desktop">
+                                  {Boolean(room.is_booked) && room.tenant && (
+                                    <button
+                                      type="button"
+                                      className="staff-action-btn is-ghost"
+                                      onClick={() => openHistory(room)}
+                                    >
+                                      ประวัติการจ่ายเงิน
+                                    </button>
+                                  )}
+                                  {Boolean(room.is_booked) && room.tenant && (
+                                    <button
+                                      type="button"
+                                      className="staff-action-btn is-ghost"
+                                      onClick={() => openUtilityBill(room)}
+                                    >
+                                      ส่งค่าน้ำ-ค่าไฟ
+                                    </button>
+                                  )}
+                                  {hasDue && (
+                                    <button
+                                      type="button"
+                                      className="staff-action-btn is-primary"
+                                      onClick={() => openCollect(room)}
+                                    >
+                                      เก็บเงิน
+                                    </button>
+                                  )}
+                                  {!room.is_booked && (
+                                    <button
+                                      type="button"
+                                      className="staff-action-btn is-primary"
+                                      onClick={() => navigate('/register', { state: { roomNumber: room.room_number } })}
+                                    >
+                                      เพิ่มผู้เช่า
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            <tr className="staff-row-detail">
+                              <td colSpan={8}>
+                                <div className={`staff-row-detail-wrap${isExpanded ? ' is-expanded' : ''}`}>
+                                  <div className="staff-row-detail-scroll">
+                                    <div className="staff-row-detail-content">
+                                      <div className="staff-row-detail-item">
+                                        <span>เบอร์โทร</span>
+                                        <strong>{room.tenant?.phone || '-'}</strong>
+                                      </div>
+                                      <div className="staff-row-detail-item">
+                                        <span>ระยะเวลาสัญญา</span>
+                                        <span className="staff-contract-value">
+                                          <strong>
+                                            {room.rental_start_date && room.rental_end_date ? (
+                                              <>
+                                                {formatDate(room.rental_start_date)}
+                                                <ContractArrowIcon />
+                                                {formatDate(room.rental_end_date)}
+                                              </>
+                                            ) : (
+                                              '-'
+                                            )}
+                                          </strong>
+                                          {expiryStatus && (
+                                            <span className={`staff-contract-remaining is-${expiryStatus.level}`}>
+                                              {expiryStatus.label}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="staff-row-detail-item">
+                                        <span>ยอดค้างชำระ</span>
+                                        {hasDue ? (
+                                          <button
+                                            type="button"
+                                            className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
+                                            onClick={() => openDueDetail(room)}
+                                          >
+                                            ฿{formatCurrency(room.currentDue.amount)}
+                                          </button>
+                                        ) : (
+                                          <strong className="staff-due-amount is-none">-</strong>
+                                        )}
+                                      </div>
+                                      <div className="staff-row-actions">
+                                        {Boolean(room.is_booked) && room.tenant && (
+                                          <button
+                                            type="button"
+                                            className="staff-action-btn is-ghost"
+                                            onClick={() => openHistory(room)}
+                                          >
+                                            ประวัติการจ่ายเงิน
+                                          </button>
+                                        )}
+                                        {Boolean(room.is_booked) && room.tenant && (
+                                          <button
+                                            type="button"
+                                            className="staff-action-btn is-ghost"
+                                            onClick={() => openUtilityBill(room)}
+                                          >
+                                            ส่งค่าน้ำ-ค่าไฟ
+                                          </button>
+                                        )}
+                                        {hasDue && (
+                                          <button
+                                            type="button"
+                                            className="staff-action-btn is-primary"
+                                            onClick={() => openCollect(room)}
+                                          >
+                                            เก็บเงิน
+                                          </button>
+                                        )}
+                                        {!room.is_booked && (
+                                          <button
+                                            type="button"
+                                            className="staff-action-btn is-primary"
+                                            onClick={() =>
+                                              navigate('/register', { state: { roomNumber: room.room_number } })
+                                            }
+                                          >
+                                            เพิ่มผู้เช่า
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr className="staff-row-toggle-row">
+                              <td colSpan={8}>
+                                <button
+                                  type="button"
+                                  className={`staff-row-toggle${isExpanded ? ' is-expanded' : ''}`}
+                                  onClick={() => toggleRoomExpanded(room.room_number)}
+                                  aria-expanded={isExpanded}
+                                >
+                                  ดูเพิ่มเติม
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <polyline points="6 9 12 15 18 9" />
+                                  </svg>
+                                </button>
+                              </td>
+                            </tr>
+                          </Fragment>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
-            )}
 
-            {expensesTotalPages > 1 && (
-              <div className="staff-pagination">
-                <span className="staff-pagination-info">
-                  หน้า {expensesPage} / {expensesTotalPages}
-                </span>
-                <div className="staff-pagination-controls">
-                  <button
-                    type="button"
-                    className="staff-action-btn is-ghost"
-                    disabled={expensesPage <= 1}
-                    onClick={() => loadExpenses(expensesPage - 1)}
-                  >
-                    ก่อนหน้า
-                  </button>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-ghost"
-                    disabled={expensesPage >= expensesTotalPages}
-                    onClick={() => loadExpenses(expensesPage + 1)}
-                  >
-                    ถัดไป
+              {filteredRooms.length > 0 && (
+                <div className="staff-pagination">
+                  <span className="staff-pagination-info">
+                    แสดง {(currentRoomsPage - 1) * ROOMS_PER_PAGE + 1}-
+                    {Math.min(currentRoomsPage * ROOMS_PER_PAGE, filteredRooms.length)} จาก {filteredRooms.length} รายการ
+                  </span>
+                  <div className="staff-pagination-controls">
+                    <button
+                      type="button"
+                      className="staff-action-btn is-ghost"
+                      disabled={currentRoomsPage <= 1}
+                      onClick={() => setRoomsPage(Math.max(1, currentRoomsPage - 1))}
+                    >
+                      ก่อนหน้า
+                    </button>
+                    <span className="staff-pagination-page">
+                      หน้า {currentRoomsPage} / {roomsTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="staff-action-btn is-ghost"
+                      disabled={currentRoomsPage >= roomsTotalPages}
+                      onClick={() => setRoomsPage(Math.min(roomsTotalPages, currentRoomsPage + 1))}
+                    >
+                      ถัดไป
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <StaffPaymentReview />
+
+            <div className="staff-requests-grid">
+              <div className="staff-card">
+                <div className="staff-card-header">
+                  <h2>
+                    คำขอต่อสัญญา / แจ้งย้ายออก
+                    {tenantRequests.length > 0 && <span className="staff-count-pill">{tenantRequests.length}</span>}
+                  </h2>
+                  <div className="staff-card-header-actions">
+                    <button type="button" className="staff-view-all-btn" onClick={openTenantHistory}>
+                      ดูประวัติ
+                    </button>
+                    {filteredTenantRequests.length > REQUEST_PREVIEW_COUNT && (
+                      <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('tenant')}>
+                        ดูทั้งหมด
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {tenantRequests.length > 0 && (
+                  <div className="staff-filters staff-card-filters">
+                    <input
+                      type="text"
+                      className="staff-search-input"
+                      placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
+                      value={tenantFilterSearch}
+                      onChange={(event) => {
+                        setTenantFilterSearch(event.target.value)
+                        setTenantModalPage(1)
+                      }}
+                    />
+                    <select
+                      className="staff-filter-select"
+                      value={tenantFilterType}
+                      onChange={(event) => {
+                        setTenantFilterType(event.target.value)
+                        setTenantModalPage(1)
+                      }}
+                    >
+                      <option value="all">ทุกประเภท</option>
+                      <option value="renew">ต่อสัญญา</option>
+                      <option value="moveout">แจ้งย้ายออก</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="staff-card-body">
+                  {requestsError ? (
+                    <div className="staff-inline-error">
+                      <p className="staff-form-error staff-form-error-block">{requestsError}</p>
+                      <button
+                        type="button"
+                        className="staff-action-btn is-ghost"
+                        onClick={() => {
+                          setRequestsLoading(true)
+                          loadRequests().finally(() => setRequestsLoading(false))
+                        }}
+                      >
+                        ลองใหม่
+                      </button>
+                    </div>
+                  ) : requestsLoading ? (
+                    <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+                  ) : tenantRequests.length === 0 ? (
+                    <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
+                  ) : filteredTenantRequests.length === 0 ? (
+                    <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
+                  ) : (
+                    <div className="staff-requests-list">
+                      {filteredTenantRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderTenantRequestItem)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="staff-card">
+                <div className="staff-card-header">
+                  <h2>
+                    คำขอแจ้งซ่อม
+                    {maintenanceRequests.length > 0 && (
+                      <span className="staff-count-pill">{maintenanceRequests.length}</span>
+                    )}
+                  </h2>
+                  <div className="staff-card-header-actions">
+                    <button type="button" className="staff-view-all-btn" onClick={openMaintenanceHistory}>
+                      ดูประวัติ
+                    </button>
+                    {filteredMaintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
+                      <button
+                        type="button"
+                        className="staff-view-all-btn"
+                        onClick={() => setViewAllRequests('maintenance')}
+                      >
+                        ดูทั้งหมด
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {maintenanceRequests.length > 0 && (
+                  <div className="staff-filters staff-card-filters">
+                    <input
+                      type="text"
+                      className="staff-search-input"
+                      placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
+                      value={maintenanceFilterSearch}
+                      onChange={(event) => {
+                        setMaintenanceFilterSearch(event.target.value)
+                        setMaintenanceModalPage(1)
+                      }}
+                    />
+                    <select
+                      className="staff-filter-select"
+                      value={maintenanceFilterStatus}
+                      onChange={(event) => {
+                        setMaintenanceFilterStatus(event.target.value)
+                        setMaintenanceModalPage(1)
+                      }}
+                    >
+                      <option value="all">ทุกสถานะ</option>
+                      <option value="pending">รอดำเนินการ</option>
+                      <option value="in_progress">กำลังดำเนินการ</option>
+                    </select>
+                    <input
+                      type="date"
+                      className="staff-filter-select"
+                      value={maintenanceFilterDate}
+                      onChange={(event) => {
+                        setMaintenanceFilterDate(event.target.value)
+                        setMaintenanceModalPage(1)
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="staff-card-body">
+                  {requestsError ? (
+                    <div className="staff-inline-error">
+                      <p className="staff-form-error staff-form-error-block">{requestsError}</p>
+                      <button
+                        type="button"
+                        className="staff-action-btn is-ghost"
+                        onClick={() => {
+                          setRequestsLoading(true)
+                          loadRequests().finally(() => setRequestsLoading(false))
+                        }}
+                      >
+                        ลองใหม่
+                      </button>
+                    </div>
+                  ) : requestsLoading ? (
+                    <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+                  ) : maintenanceRequests.length === 0 ? (
+                    <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
+                  ) : filteredMaintenanceRequests.length === 0 ? (
+                    <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
+                  ) : (
+                    <div className="staff-requests-list">
+                      {filteredMaintenanceRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderMaintenanceRequestItem)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="staff-card">
+              <div className="staff-card-header">
+                <h2>รายจ่าย</h2>
+                <div className="staff-card-header-actions">
+                  <button type="button" className="staff-action-btn is-primary" onClick={openCreateExpense}>
+                    + บันทึกรายจ่าย
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
+
+              <div className="staff-card-body">
+                {expensesError ? (
+                  <div className="staff-inline-error">
+                    <p className="staff-form-error staff-form-error-block">{expensesError}</p>
+                    <button type="button" className="staff-action-btn is-ghost" onClick={() => loadExpenses(expensesPage)}>
+                      ลองใหม่
+                    </button>
+                  </div>
+                ) : expensesLoading ? (
+                  <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+                ) : expenses.length === 0 ? (
+                  <p className="staff-empty">ยังไม่มีรายการรายจ่าย</p>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="staff-table">
+                      <thead>
+                        <tr>
+                          <th>วันที่</th>
+                          <th>หมวดหมู่</th>
+                          <th>รายละเอียด</th>
+                          <th>บันทึกโดย</th>
+                          <th>จำนวนเงิน</th>
+                          <th>จัดการ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expenses.map((expense) => (
+                          <tr key={expense.id}>
+                            <td>{formatDate(expense.expense_date)}</td>
+                            <td>{expense.category}</td>
+                            <td>{expense.description || '-'}</td>
+                            <td>{expense.recorded_by_name || '-'}</td>
+                            <td>฿{formatCurrency(expense.amount)}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="staff-action-btn is-ghost"
+                                onClick={() => openEditExpense(expense)}
+                              >
+                                แก้ไข
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {expensesTotalPages > 1 && (
+                  <div className="staff-pagination">
+                    <span className="staff-pagination-info">
+                      หน้า {expensesPage} / {expensesTotalPages}
+                    </span>
+                    <div className="staff-pagination-controls">
+                      <button
+                        type="button"
+                        className="staff-action-btn is-ghost"
+                        disabled={expensesPage <= 1}
+                        onClick={() => loadExpenses(expensesPage - 1)}
+                      >
+                        ก่อนหน้า
+                      </button>
+                      <button
+                        type="button"
+                        className="staff-action-btn is-ghost"
+                        disabled={expensesPage >= expensesTotalPages}
+                        onClick={() => loadExpenses(expensesPage + 1)}
+                      >
+                        ถัดไป
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {expenseModal && (

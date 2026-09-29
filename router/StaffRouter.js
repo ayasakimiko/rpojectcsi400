@@ -1,6 +1,4 @@
 import { Router } from "express";
-import fs from "node:fs";
-import path from "node:path";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 import {
@@ -18,7 +16,6 @@ import { attachMaintenancePhotos, computeCurrentDue } from "./CustomerDashboardR
 import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
-const PAYMENT_SLIP_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads"), "payment-slips");
 
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
@@ -88,25 +85,6 @@ router.get("/payment-verifications", async (_req, res) => {
   } catch (error) {
     console.error("Fetch payment verifications error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
-  }
-});
-
-router.get("/payment-verifications/:id/slip", async (req, res) => {
-  try {
-    if (!isPositiveId(req.params.id)) return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
-    const pool = getPool();
-    const [rows] = await pool.query(
-      `SELECT slip_path FROM Payment WHERE id = ? AND status = 'pending' AND slip_path IS NOT NULL`,
-      [req.params.id],
-    );
-    if (!rows[0]) return res.status(404).json({ message: "ไม่พบสลิปรอตรวจสอบ" });
-    const fileName = path.basename(rows[0].slip_path);
-    const filePath = path.join(PAYMENT_SLIP_DIR, fileName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "ไม่พบไฟล์สลิป" });
-    return res.sendFile(filePath);
-  } catch (error) {
-    console.error("Read payment slip error:", error);
-    return res.status(500).json({ message: "ไม่สามารถเปิดไฟล์สลิปได้" });
   }
 });
 
