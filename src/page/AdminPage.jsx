@@ -5,6 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import DateDropdowns from '../components/DateDropdowns.jsx'
+import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
   waiting: 'รอห้องว่าง',
@@ -543,13 +544,8 @@ const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', d
 
 const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
 const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '' }
-const PHOTO_ZOOM_MAX = 5
 const INSPECTION_PHOTO_PREVIEW_COUNT = 4
 const INSPECTION_GALLERY_PAGE_SIZE = 8
-const PHOTO_CLOSE_ANIMATION_MS = 160 // keep in step with .moveout-photo-preview.is-closing in AdminPage.css
-const PHOTO_ZOOM_STEP = 0.5
-const PHOTO_CLICK_ZOOM = 2.5
-const PHOTO_DRAG_THRESHOLD = 4
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 
@@ -565,13 +561,7 @@ function AdminBackupPage() {
   const [inspectionDetail, setInspectionDetail] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
   const [photoGalleryPage, setPhotoGalleryPage] = useState(null)
-  const [photoZoom, setPhotoZoom] = useState(1)
-  const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 })
-  const [photoDragging, setPhotoDragging] = useState(false)
-  const [photoClosing, setPhotoClosing] = useState(false)
   const [slipPreview, setSlipPreview] = useState(null)
-  const photoDragRef = useRef(null)
-  const photoDragMovedRef = useRef(false)
   const [waitingListSearch, setWaitingListSearch] = useState('')
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListModal, setWaitingListModal] = useState(null)
@@ -584,7 +574,8 @@ function AdminBackupPage() {
   const [notifClosing, setNotifClosing] = useState(false)
   const [notifSeen, setNotifSeen] = useState(false)
   const [notifPage, setNotifPage] = useState(1)
-  const [notifDetail, setNotifDetail] = useState(null)
+  const notifTargetRef = useRef(null)
+  const [notifTargetReady, setNotifTargetReady] = useState(0)
   const [notifTenantItems, setNotifTenantItems] = useState([])
   const [notifMaintenanceItems, setNotifMaintenanceItems] = useState([])
   const notifRef = useRef(null)
@@ -696,10 +687,7 @@ function AdminBackupPage() {
       name: `สลิปโอนเงิน ${formatDate(payment.payment_date)}`,
       subtitle: `${customer.first_name} ${customer.last_name} · ฿${formatCurrency(payment.amount)} · ${PAYMENT_TYPE_LABEL[payment.type] || payment.type}`,
     })
-    setPhotoClosing(false)
     setPhotoPreview(0)
-    setPhotoZoom(1)
-    setPhotoPan({ x: 0, y: 0 })
   }
 
   const renderInspectionPhoto = (photo, index) => (
@@ -713,91 +701,7 @@ function AdminBackupPage() {
   const galleryPage = Math.min(photoGalleryPage || 1, galleryTotalPages)
   const galleryStart = (galleryPage - 1) * INSPECTION_GALLERY_PAGE_SIZE
 
-  const showPhoto = (index) => {
-    setPhotoClosing(false)
-    setPhotoPreview(index)
-    setPhotoZoom(1)
-    setPhotoPan({ x: 0, y: 0 })
-  }
-  const stepPhotoPreview = (step) => showPhoto((photoPreview + step + photoPreviewCount) % photoPreviewCount)
-
-  const changePhotoZoom = (next) => {
-    const zoom = Math.min(PHOTO_ZOOM_MAX, Math.max(1, Math.round(next * 100) / 100))
-    setPhotoZoom(zoom)
-    if (zoom === 1) setPhotoPan({ x: 0, y: 0 })
-  }
-
-  const startPhotoDrag = (event) => {
-    photoDragMovedRef.current = false
-    if (photoZoom <= 1) return
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-    photoDragRef.current = {
-      x: event.clientX - photoPan.x,
-      y: event.clientY - photoPan.y,
-      startX: event.clientX,
-      startY: event.clientY,
-    }
-    setPhotoDragging(true)
-  }
-  const movePhotoDrag = (event) => {
-    const drag = photoDragRef.current
-    if (!drag) return
-    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > PHOTO_DRAG_THRESHOLD) {
-      photoDragMovedRef.current = true
-    }
-    setPhotoPan({ x: event.clientX - drag.x, y: event.clientY - drag.y })
-  }
-  const endPhotoDrag = () => {
-    photoDragRef.current = null
-    setPhotoDragging(false)
-  }
-  const togglePhotoZoom = () => {
-    if (photoDragMovedRef.current) {
-      photoDragMovedRef.current = false
-      return
-    }
-    changePhotoZoom(photoZoom > 1 ? 1 : PHOTO_CLICK_ZOOM)
-  }
-
-  // Closing plays the fade-out first; the preview is removed once it has had time to finish.
-  useEffect(() => {
-    if (!photoClosing) return undefined
-    const timer = setTimeout(() => {
-      setPhotoPreview(null)
-      setSlipPreview(null)
-      setPhotoClosing(false)
-    }, PHOTO_CLOSE_ANIMATION_MS)
-    return () => clearTimeout(timer)
-  }, [photoClosing])
-
-  // Runs in the capture phase so Esc / arrows act on the preview instead of closing the modal behind it.
-  // Esc first returns a zoomed photo to 100%, and closes the preview on the next press.
-  useEffect(() => {
-    if (photoPreview === null) return undefined
-    const handleKeyDown = (event) => {
-      if (!['Escape', 'ArrowLeft', 'ArrowRight', '+', '=', '-'].includes(event.key)) return
-      event.stopImmediatePropagation()
-      if (event.key === 'Escape') {
-        if (photoZoom > 1) {
-          setPhotoZoom(1)
-          setPhotoPan({ x: 0, y: 0 })
-        } else setPhotoClosing(true)
-      } else if (event.key === '+' || event.key === '=') {
-        setPhotoZoom(Math.min(PHOTO_ZOOM_MAX, Math.round((photoZoom + PHOTO_ZOOM_STEP) * 100) / 100))
-      } else if (event.key === '-') {
-        const zoom = Math.max(1, Math.round((photoZoom - PHOTO_ZOOM_STEP) * 100) / 100)
-        setPhotoZoom(zoom)
-        if (zoom === 1) setPhotoPan({ x: 0, y: 0 })
-      } else if (photoPreviewCount > 1) {
-        const step = event.key === 'ArrowRight' ? 1 : -1
-        setPhotoPreview((photoPreview + step + photoPreviewCount) % photoPreviewCount)
-        setPhotoZoom(1)
-        setPhotoPan({ x: 0, y: 0 })
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [photoPreview, photoPreviewCount, photoZoom])
+  const showPhoto = (index) => setPhotoPreview(index)
 
   const openWaitingListForm = (entry = null) => {
     setWaitingListForm(entry ? {
@@ -1697,6 +1601,47 @@ function AdminBackupPage() {
     resetMoveoutRows()
   }, [moveoutLogs.page, activeTab])
 
+  // A notification opens the detail of its own item: switch to the matching tab and expand that row.
+  const openNotification = (notif) => {
+    closeNotifPanel()
+    if (notif.kind === 'announcement') {
+      setActiveTab('announcements')
+      return
+    }
+    if (notif.kind === 'staff') {
+      setStaffSearch('')
+      setStaffPage(1)
+      setActiveTab('staff')
+      notifTargetRef.current = { tab: 'staff', id: notif.request.id }
+      setNotifTargetReady((count) => count + 1)
+      return
+    }
+    if (notif.kind === 'tenant') {
+      setRequestStatusFilter('all')
+      setRequestSearch('')
+      setActiveTab('requests')
+      notifTargetRef.current = { tab: 'requests', id: notif.request.id }
+      loadRequestLogs(1, 'all', '').finally(() => setNotifTargetReady((count) => count + 1))
+      return
+    }
+    setMaintenanceStatusFilter('all')
+    setMaintenanceSearch('')
+    setActiveTab('maintenance')
+    notifTargetRef.current = { tab: 'maintenance', id: notif.request.id }
+    loadMaintenanceLogs(1, 'all', '').finally(() => setNotifTargetReady((count) => count + 1))
+  }
+
+  // Declared after the row-reset effects above so the reset runs first and the target row is expanded afterwards.
+  useEffect(() => {
+    const target = notifTargetRef.current
+    if (!target || activeTab !== target.tab) return
+    const { tab, id } = target
+    if (tab === 'requests' && requestLogs.items.some((item) => item.id === id)) toggleRequestRow(id)
+    else if (tab === 'maintenance' && maintenanceLogs.items.some((item) => item.id === id)) toggleMaintenanceRow(id)
+    else if (tab === 'staff' && staffList.some((member) => member.id === id)) toggleStaffRow(id)
+    notifTargetRef.current = null
+  }, [notifTargetReady, activeTab, requestLogs.items, maintenanceLogs.items, staffList])
+
   return (
     <div className="admin-page">
       <div className="admin-container">
@@ -1763,7 +1708,7 @@ function AdminBackupPage() {
                             type="button"
                             key={notif.key}
                             className={`admin-notif-item is-${notif.tone}`}
-                            onClick={() => setNotifDetail(notif)}
+                            onClick={() => openNotification(notif)}
                           >
                             <p className="admin-notif-item-title">{notif.title}</p>
                             <p className="admin-notif-item-status">{notif.label}</p>
@@ -1804,50 +1749,6 @@ function AdminBackupPage() {
             </button>
           </div>
         </div>
-
-        {notifDetail && (
-          <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
-            {(requestClose) => (
-              <div className="admin-confirm-body">
-                <div className={`admin-confirm-icon is-${notifDetail.tone}`}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    {notifDetail.tone === 'info' ? (
-                      <>
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="16" x2="12" y2="12" />
-                        <line x1="12" y1="8" x2="12.01" y2="8" />
-                      </>
-                    ) : (
-                      <>
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </>
-                    )}
-                  </svg>
-                </div>
-                <p className="admin-confirm-message">
-                  <span className={`admin-confirm-message-status is-${notifDetail.tone}`}>{notifDetail.label}</span>
-                </p>
-                {notifDetail.details && notifDetail.details.length > 0 && (
-                  <div className="admin-confirm-details">
-                    {notifDetail.details.map((item) => (
-                      <div className="admin-confirm-detail-row" key={item.label}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <AdminRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
-                <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
-              </div>
-            )}
-          </Modal>
-        )}
 
         {pageError && (
           <div className="alert alert-danger admin-alert" role="alert">
@@ -2965,89 +2866,17 @@ function AdminBackupPage() {
       )}
 
       {previewSource && photoPreview !== null && previewPhotos[photoPreview] && (
-        <div className={`moveout-photo-preview${photoClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label={previewSource.title} onClick={() => setPhotoClosing(true)}>
-          <header className="moveout-photo-preview-bar" onClick={(event) => event.stopPropagation()}>
-            <div className="moveout-photo-preview-heading">
-              <strong>{previewSource.title}</strong>
-              <span>{previewSource.subtitle}</span>
-            </div>
-            {photoPreviewCount > 1 && <span className="moveout-photo-preview-counter">{photoPreview + 1} / {photoPreviewCount}</span>}
-            <div className="moveout-photo-preview-zoom" role="group" aria-label="ซูมภาพ">
-              <button type="button" onClick={() => changePhotoZoom(photoZoom - PHOTO_ZOOM_STEP)} disabled={photoZoom <= 1} aria-label="ซูมออก">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-              <button type="button" className="is-level" onClick={() => changePhotoZoom(1)} disabled={photoZoom === 1} aria-label="รีเซ็ตขนาดภาพ">
-                {Math.round(photoZoom * 100)}%
-              </button>
-              <button type="button" onClick={() => changePhotoZoom(photoZoom + PHOTO_ZOOM_STEP)} disabled={photoZoom >= PHOTO_ZOOM_MAX} aria-label="ซูมเข้า">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-            </div>
-            <button type="button" className="moveout-photo-preview-close" onClick={() => setPhotoClosing(true)} aria-label="ปิด">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </header>
-
-          <div className="moveout-photo-preview-stage" onWheel={(event) => changePhotoZoom(photoZoom - event.deltaY * 0.0015)}>
-            {photoPreviewCount > 1 && (
-              <button type="button" className="moveout-photo-preview-nav is-prev" onClick={(event) => { event.stopPropagation(); stepPhotoPreview(-1) }} aria-label="ภาพก่อนหน้า">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-            )}
-            <figure className="moveout-photo-preview-figure" onClick={(event) => event.stopPropagation()}>
-              <img
-                key={photoPreview}
-                className={`moveout-photo-preview-image${photoZoom > 1 ? (photoDragging ? ' is-dragging' : ' is-zoomed') : ''}`}
-                src={previewPhotos[photoPreview].url}
-                alt={`${previewSource.label} ${photoPreview + 1}`}
-                style={{ transform: `translate(${photoPan.x}px, ${photoPan.y}px) scale(${photoZoom})` }}
-                draggable={false}
-                onClick={togglePhotoZoom}
-                onPointerDown={startPhotoDrag}
-                onPointerMove={movePhotoDrag}
-                onPointerUp={endPhotoDrag}
-                onPointerCancel={endPhotoDrag}
-              />
-              <figcaption>{previewPhotos[photoPreview].name}</figcaption>
-            </figure>
-            {photoPreviewCount > 1 && (
-              <button type="button" className="moveout-photo-preview-nav is-next" onClick={(event) => { event.stopPropagation(); stepPhotoPreview(1) }} aria-label="ภาพถัดไป">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
-            )}
-          </div>
-
-          {photoPreviewCount > 1 && (
-            <div className="moveout-photo-preview-thumbs" role="tablist" aria-label="รูปภาพทั้งหมด" onClick={(event) => event.stopPropagation()}>
-              {previewPhotos.map((photo, index) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={index === photoPreview}
-                  aria-label={`ภาพที่ ${index + 1}`}
-                  key={`${photo.name}-${index}`}
-                  ref={index === photoPreview ? (node) => node?.scrollIntoView?.({ block: 'nearest', inline: 'center' }) : null}
-                  className={`moveout-photo-preview-thumb${index === photoPreview ? ' is-active' : ''}`}
-                  onClick={() => showPhoto(index)}
-                >
-                  <img src={photo.url} alt="" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <PhotoLightbox
+          photos={previewPhotos}
+          initialIndex={photoPreview}
+          title={previewSource.title}
+          subtitle={previewSource.subtitle}
+          label={previewSource.label}
+          onClose={() => {
+            setPhotoPreview(null)
+            setSlipPreview(null)
+          }}
+        />
       )}
 
       {waitingListModal && (

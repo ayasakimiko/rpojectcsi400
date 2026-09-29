@@ -346,7 +346,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   }
 
   return (
-    <section className={`${classes.card} announcement-board`}>
+    <section className={`${classes.card} announcement-board${variant === 'staff' ? ' staff-tab-card' : ''}`}>
       <div className={classes.header}>
         <div>
           <h2>

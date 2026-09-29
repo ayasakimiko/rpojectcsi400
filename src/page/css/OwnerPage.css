@@ -1741,8 +1741,34 @@
 }
 
 .owner-occupancy-filter-row {
-  grid-template-columns: minmax(0, 220px);
-  justify-content: end;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 220px);
+  align-items: end;
+}
+
+.owner-occupancy-filter-row .owner-search-standalone {
+  flex-direction: row;
+  gap: 10px;
+  margin-top: 0;
+  height: 42px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.owner-occupancy-filter-row .owner-search-standalone input {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .owner-occupancy-filter-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .owner-panel-header-count {

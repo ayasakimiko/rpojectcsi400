@@ -37,6 +37,7 @@ const slipUpload = multer({
 function parsePaymentSlip(req, res, next) {
   slipUpload.single("slip")(req, res, (error) => {
     if (!error) return next();
+    if (error.code === "LIMIT_FILE_SIZE") return res.status(400).json({ message: "ไฟล์สลิปต้องมีขนาดไม่เกิน 5 MB" });
     return res.status(400).json({ message: error.message || "อัปโหลดสลิปไม่สำเร็จ" });
   });
 }
@@ -464,6 +465,9 @@ router.post("/maintenance", async (req, res) => {
     const photos = parsePhotoList(req.body?.photos);
     if (photos.error) {
       return res.status(400).json({ message: photos.error });
+    }
+    if (photos.value.length === 0) {
+      return res.status(400).json({ message: "กรุณาแนบรูปปัญหาอย่างน้อย 1 รูป" });
     }
 
     const connection = await pool.getConnection();

@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.CUSTOMER_PORT || 4003;
 
 app.use(createCorsMiddleware());
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "12mb" }));
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "customer" });

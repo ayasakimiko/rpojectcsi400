@@ -7,10 +7,11 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
-  if (file.size > 15 * 1024 * 1024) return Promise.reject(new Error('รูปภาพต้องมีขนาดไม่เกิน 15 MB'))
+  if (file.size > 5 * 1024 * 1024) return Promise.reject(new Error('รูปภาพต้องมีขนาดไม่เกิน 5 MB'))
 
   return new Promise((resolve, reject) => {
     const imageUrl = URL.createObjectURL(file)
@@ -135,6 +136,145 @@ function formatFileSize(bytes) {
 }
 
 // A framed area for attaching the payment slip: click it to browse, or drag an image onto it.
+const MAINTENANCE_MAX_PHOTOS = 6
+const MAINTENANCE_MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+function formatPhotoSize(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+function MaintenancePhotoPicker({ id, files, onChange, onError }) {
+  const [dragging, setDragging] = useState(false)
+  const previewUrls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files])
+
+  useEffect(
+    () => () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    },
+    [previewUrls],
+  )
+
+  const addFiles = (incoming) => {
+    const list = Array.from(incoming || [])
+    if (list.length === 0) return
+    const images = list.filter((file) => file.type.startsWith('image/'))
+    const withinSize = images.filter((file) => file.size <= MAINTENANCE_MAX_PHOTO_BYTES)
+    const room = MAINTENANCE_MAX_PHOTOS - files.length
+    const accepted = withinSize.slice(0, Math.max(0, room))
+    if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
+    else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 5 MB ต่อรูป')
+    else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${MAINTENANCE_MAX_PHOTOS} รูป`)
+    else onError('')
+    if (accepted.length > 0) onChange([...files, ...accepted])
+  }
+
+  const dragsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files')
+
+  return (
+    <div
+      className={`maint-photo-field${dragging ? ' is-dragging' : ''}`}
+      onDragEnter={(event) => {
+        if (!dragsFiles(event)) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => {
+        if (!dragsFiles(event)) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        addFiles(event.dataTransfer?.files)
+      }}
+    >
+      <input
+        id={id}
+        className="maint-photo-input"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(event) => {
+          addFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
+      {files.length === 0 ? (
+        <label htmlFor={id} className="maint-photo-dropzone">
+          <span className="maint-photo-dropzone-icon" aria-hidden="true">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+          </span>
+          <span className="maint-photo-dropzone-title">
+            {dragging ? 'ปล่อยรูปที่นี่' : 'ลากรูปมาวางที่นี่ หรือ '}
+            {!dragging && <span className="maint-photo-dropzone-link">คลิกเพื่อเลือกรูป</span>}
+          </span>
+          <span className="maint-photo-dropzone-hint">สูงสุด {MAINTENANCE_MAX_PHOTOS} รูป รูปละไม่เกิน 5 MB</span>
+        </label>
+      ) : (
+        <div className="maint-photo-grid">
+          {files.map((file, index) => (
+            <figure className="maint-photo-tile" key={`${file.name}-${index}`}>
+              <img src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
+              <figcaption title={file.name}>
+                <span>{file.name}</span>
+                <small>{formatPhotoSize(file.size)}</small>
+              </figcaption>
+              <button
+                type="button"
+                className="maint-photo-remove"
+                aria-label={`ลบรูป ${file.name}`}
+                onClick={() => {
+                  onError('')
+                  onChange(files.filter((_, fileIndex) => fileIndex !== index))
+                }}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </figure>
+          ))}
+          {files.length < MAINTENANCE_MAX_PHOTOS && (
+            <label htmlFor={id} className="maint-photo-add">
+              <span aria-hidden="true">+</span>
+              <small>{dragging ? 'ปล่อยเพื่อเพิ่ม' : 'เพิ่มรูป'}</small>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SlipDropZone({ id, file, onChange, onError }) {
   const [dragging, setDragging] = useState(false)
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
@@ -792,6 +932,70 @@ const MAINTENANCE_FINAL_LOG_LABEL = {
 
 const REQUEST_TIMELINE_PENDING_FINAL_LABEL = 'รอผลดำเนินการ'
 
+function StatusAlert({ content }) {
+  if (!content) return null
+  return (
+    <div className={`dashboard-maintenance-alert is-${content.icon}`} role="status">
+      <span className="dashboard-maintenance-alert-icon">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <StatusIconPaths tone={content.icon} />
+        </svg>
+      </span>
+      <div>
+        <p className="dashboard-maintenance-alert-title">{content.title}</p>
+        <p className="dashboard-maintenance-alert-message">{content.message}</p>
+      </div>
+    </div>
+  )
+}
+
+function TenantRequestDetailCard({ request, roomNumber }) {
+  return (
+    <div className="dashboard-maintenance-detail-card">
+      <div className="dashboard-maintenance-detail-row">
+        <span>ประเภทคำขอ</span>
+        <strong>{TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}</strong>
+      </div>
+      {roomNumber && (
+        <div className="dashboard-maintenance-detail-row">
+          <span>ห้อง</span>
+          <strong>{roomNumber}</strong>
+        </div>
+      )}
+      {request.type === 'renew' && (
+        <>
+          <div className="dashboard-maintenance-detail-row">
+            <span>ระยะเวลาที่ขอต่อ</span>
+            <strong>{RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}</strong>
+          </div>
+          <div className="dashboard-maintenance-detail-row">
+            <span>รูปแบบการชำระ</span>
+            <strong>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</strong>
+          </div>
+        </>
+      )}
+      <div className="dashboard-maintenance-detail-row">
+        <span>วันที่ส่งคำขอ</span>
+        <strong>{formatDateTime(request.created_at)}</strong>
+      </div>
+      <div className="dashboard-maintenance-detail-row is-note">
+        <span>{request.type === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
+        <strong>{request.note || '-'}</strong>
+      </div>
+    </div>
+  )
+}
+
 function getRequestTimeline(kind, request) {
   if (!request || kind === 'announcement') return []
   const isSelfCancelledMaintenance =
@@ -1050,6 +1254,9 @@ function CustomerDashbord() {
   const [requestError, setRequestError] = useState('')
 
   const [statusPopup, setStatusPopup] = useState(null)
+  const [maintenanceDetail, setMaintenanceDetail] = useState(null)
+  const [maintenancePhotoPreview, setMaintenancePhotoPreview] = useState(null)
+  const [tenantDetail, setTenantDetail] = useState(null)
 
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
   const [maintenanceText, setMaintenanceText] = useState('')
@@ -1082,7 +1289,9 @@ function CustomerDashbord() {
       showMaintenanceForm ||
       confirmCancelId !== null ||
       notifOpen ||
-      Boolean(notifDetail)
+      Boolean(notifDetail) ||
+      Boolean(maintenanceDetail) ||
+      Boolean(tenantDetail)
 
     if (!isAnyOverlayOpen) return
 
@@ -1100,6 +1309,8 @@ function CustomerDashbord() {
     confirmCancelId,
     notifOpen,
     notifDetail,
+    maintenanceDetail,
+    tenantDetail,
   ])
 
   const maybeShowStatusPopups = (dashboardData) => {
@@ -1324,7 +1535,7 @@ function CustomerDashbord() {
   const handleRequestSubmit = async (event) => {
     event.preventDefault()
     if (activeRequestType === 'moveout' && !requestNote.trim()) {
-      setRequestError('กรุณาระบุเหตุผลที่ต้องการย้ายออก')
+      setRequestError('กรุณากรอกรายละเอียดการย้ายออก')
       return
     }
     const token = sessionStorage.getItem('token')
@@ -1364,6 +1575,10 @@ function CustomerDashbord() {
     const description = maintenanceText.trim()
     if (!description) {
       setMaintenanceError('กรุณากรอกรายละเอียดปัญหา')
+      return
+    }
+    if (maintenancePhotos.length === 0) {
+      setMaintenanceError('กรุณาแนบรูปปัญหาอย่างน้อย 1 รูป')
       return
     }
     const token = sessionStorage.getItem('token')
@@ -1871,7 +2086,11 @@ function CustomerDashbord() {
                             type="button"
                             key={notif.key}
                             className={`dashboard-notif-item is-${notif.tone}`}
-                            onClick={() => setNotifDetail(notif)}
+                            onClick={() => {
+                              if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
+                              else if (notif.kind === 'tenant') setTenantDetail(notif.request)
+                              else setNotifDetail(notif)
+                            }}
                           >
                             <p className="dashboard-notif-item-title">{notif.title}</p>
                             <p className="dashboard-notif-item-status">{notif.label}</p>
@@ -1978,6 +2197,104 @@ function CustomerDashbord() {
           </div>
         </div>
 
+        {maintenanceDetail && (
+          <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)}>
+            {(requestClose) => (
+              <div className="dashboard-maintenance-detail">
+                <StatusAlert content={MAINTENANCE_STATUS_POPUP_CONTENT[maintenanceDetail.status]} />
+                <div className="dashboard-maintenance-detail-card">
+                  <div className="dashboard-maintenance-detail-row">
+                    <span>ประเภท</span>
+                    <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceDetail.category] || 'อื่นๆ'}</strong>
+                  </div>
+                  <div className="dashboard-maintenance-detail-row">
+                    <span>ช่วงเวลาที่สะดวก</span>
+                    <strong>{MAINTENANCE_TIME_LABEL[maintenanceDetail.preferred_time] || 'เวลาไหนก็ได้'}</strong>
+                  </div>
+                  {maintenanceDetail.contact_phone && (
+                    <div className="dashboard-maintenance-detail-row">
+                      <span>เบอร์โทร</span>
+                      <strong>{maintenanceDetail.contact_phone}</strong>
+                    </div>
+                  )}
+                  <div className="dashboard-maintenance-detail-row">
+                    <span>วันที่แจ้งซ่อม</span>
+                    <strong>{formatDateTime(maintenanceDetail.created_at)}</strong>
+                  </div>
+                  <div className="dashboard-maintenance-detail-row is-note">
+                    <span>รายละเอียดปัญหา</span>
+                    <strong>{maintenanceDetail.description || '-'}</strong>
+                  </div>
+                </div>
+                <RequestTimeline kind="maintenance" request={maintenanceDetail} />
+                {maintenanceDetail.photos?.length > 0 && (
+                  <div className="dashboard-maintenance-photos-section">
+                    <p className="dashboard-maintenance-photos-title">รูปประกอบ ({maintenanceDetail.photos.length})</p>
+                    <div className="dashboard-maintenance-photos">
+                      {maintenanceDetail.photos.map((photo, index) => (
+                        <a
+                          key={`${photo.name}-${index}`}
+                          href={photo.dataUrl}
+                          title="คลิกเพื่อดูตัวอย่างรูป"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            setMaintenancePhotoPreview({ index })
+                          }}
+                        >
+                          <img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} />
+                          <span className="dashboard-maintenance-photo-caption">
+                            <span>{photo.name || `รูปที่ ${index + 1}`}</span>
+                            <small>รูปที่ {index + 1}</small>
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
+        {maintenanceDetail && maintenancePhotoPreview && (
+          <PhotoLightbox
+            photos={(maintenanceDetail.photos || []).map((photo, index) => ({
+              name: photo.name || `รูปที่ ${index + 1}`,
+              url: photo.dataUrl,
+            }))}
+            initialIndex={maintenancePhotoPreview.index}
+            title="รูปแจ้งซ่อม"
+            subtitle={maintenanceDetail.description}
+            label="รูปแจ้งซ่อม"
+            onClose={() => setMaintenancePhotoPreview(null)}
+          />
+        )}
+
+        {tenantDetail && (
+          <Modal
+            title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[tenantDetail.type] || 'คำขอ'}`}
+            onClose={() => setTenantDetail(null)}
+          >
+            {(requestClose) => (
+              <div className="dashboard-maintenance-detail">
+                <StatusAlert content={STATUS_POPUP_CONTENT_BY_KIND[tenantDetail.type]?.[tenantDetail.status]} />
+                <TenantRequestDetailCard request={tenantDetail} roomNumber={room?.room_number} />
+                <RequestTimeline kind={tenantDetail.type} request={tenantDetail} />
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
         {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
           <Modal
             title={STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status].title}
@@ -2004,6 +2321,12 @@ function CustomerDashbord() {
                     </svg>
                   </div>
                   <p className="dashboard-confirm-message">{content.message}</p>
+                  {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout') && (
+                    <TenantRequestDetailCard
+                      request={{ ...statusPopup.request, type: statusPopup.kind }}
+                      roomNumber={room?.room_number}
+                    />
+                  )}
                   {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
                   <div className="dashboard-form-actions">
                     <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
@@ -2575,7 +2898,7 @@ function CustomerDashbord() {
                     <h2>จัดการสัญญาเช่า</h2>
                     <div className="dashboard-request-list">
                       {room?.is_booked && (
-                        <div className="dashboard-request-row">
+                        <div className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
                           <div className="dashboard-request-info">
                             <p className="dashboard-request-title">ต่อสัญญา</p>
                             <p className="dashboard-request-desc">
@@ -2598,9 +2921,18 @@ function CustomerDashbord() {
                               ต่อสัญญา
                             </button>
                           )}
+                          {renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] && (
+                            <button
+                              type="button"
+                              className="dashboard-maintenance-more"
+                              onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest })}
+                            >
+                              ดูรายละเอียด
+                            </button>
+                          )}
                         </div>
                       )}
-                      <div className="dashboard-request-row">
+                      <div className={`dashboard-request-row${moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">แจ้งย้ายออก</p>
                           <p className="dashboard-request-desc">
@@ -2622,6 +2954,15 @@ function CustomerDashbord() {
                               แจ้งย้ายออก
                             </button>
                           )
+                        )}
+                        {moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] && (
+                          <button
+                            type="button"
+                            className="dashboard-maintenance-more"
+                            onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest })}
+                          >
+                            ดูรายละเอียด
+                          </button>
                         )}
                       </div>
                     </div>
@@ -2667,7 +3008,7 @@ function CustomerDashbord() {
                             <label>
                               {activeRequestType === 'moveout' ? (
                                 <>
-                                  เหตุผลที่ต้องการย้ายออก <span className="dashboard-required">*</span>
+                                  รายละเอียดการย้ายออก <span className="dashboard-required">*</span>
                                 </>
                               ) : (
                                 'หมายเหตุ (ถ้ามี)'
@@ -2758,11 +3099,18 @@ function CustomerDashbord() {
                             ))}
                           </select>
 
-                          <label>รายละเอียดปัญหา</label>
+                          <label>
+                            รายละเอียดปัญหา <span className="dashboard-required">*</span>
+                          </label>
                           <textarea
                             rows={3}
+                            maxLength={500}
+                            required
                             value={maintenanceText}
-                            onChange={(event) => setMaintenanceText(event.target.value)}
+                            onChange={(event) => {
+                              setMaintenanceText(event.target.value)
+                              if (maintenanceError) setMaintenanceError('')
+                            }}
                             placeholder="อธิบายปัญหาที่ต้องการแจ้งซ่อม เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว..."
                           />
 
@@ -2786,23 +3134,22 @@ function CustomerDashbord() {
                             placeholder="เบอร์โทรที่ติดต่อได้"
                           />
 
-                          <label htmlFor="maintenance-photos">แนบรูปปัญหา (สูงสุด 3 รูป)</label>
-                          <input id="maintenance-photos" className="dashboard-file-input" type="file" accept="image/*" multiple onChange={(event) => {
-                            const files = Array.from(event.target.files || [])
-                            if (files.length > 3) setMaintenanceError('แนบรูปได้ไม่เกิน 3 รูป')
-                            else {
-                              setMaintenanceError('')
-                              setMaintenancePhotos(files)
-                            }
-                          }} />
-                          {maintenancePhotos.length > 0 && <p className="dashboard-file-name">เลือกแล้ว {maintenancePhotos.length} รูป</p>}
+                          <label htmlFor="maintenance-photos">
+                            แนบรูปปัญหา (อย่างน้อย 1 รูป สูงสุด {MAINTENANCE_MAX_PHOTOS} รูป) <span className="dashboard-required">*</span>
+                          </label>
+                          <MaintenancePhotoPicker
+                            id="maintenance-photos"
+                            files={maintenancePhotos}
+                            onChange={setMaintenancePhotos}
+                            onError={setMaintenanceError}
+                          />
 
                           {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
                           <div className="dashboard-form-actions">
                             <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                               ยกเลิก
                             </button>
-                            <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
+                            <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting || !maintenanceText.trim() || maintenancePhotos.length === 0}>
                               {maintenanceSubmitting ? 'กำลังส่ง...' : 'ยืนยันแจ้งซ่อม'}
                             </button>
                           </div>
@@ -2829,12 +3176,10 @@ function CustomerDashbord() {
                               {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
                               {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
                             </p>
-                            {item.photos?.length > 0 && (
-                              <div className="dashboard-maintenance-photos">
-                                {item.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} /></a>)}
-                              </div>
-                            )}
                             <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
+                            <button type="button" className="dashboard-maintenance-more" onClick={() => setMaintenanceDetail(item)}>
+                              ดูเพิ่มเติม
+                            </button>
                           </div>
                           <div className="dashboard-maintenance-badges">
                             {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (

@@ -827,7 +827,12 @@ router.get("/maintenance/history", async (req, res) => {
       [...params, REQUEST_HISTORY_PAGE_SIZE, offset],
     );
 
-    return res.json({ requests, total, page, pageSize: REQUEST_HISTORY_PAGE_SIZE });
+    return res.json({
+      requests: await attachMaintenancePhotos(pool, requests),
+      total,
+      page,
+      pageSize: REQUEST_HISTORY_PAGE_SIZE,
+    });
   } catch (error) {
     console.error("Fetch maintenance request history error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });

@@ -2245,21 +2245,20 @@ function OwnerMain() {
                 <h3>บันทึกการเข้าพักและย้ายออก</h3>
               </div>
 
-              <label className="owner-search-standalone">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  type="text"
-                  value={occupancyFilter.search}
-                  onChange={(event) => handleOccupancyFilterChange('search', event.target.value)}
-                  placeholder="ค้นหาห้อง / ผู้เข้าพัก"
-                />
-              </label>
-
               <div className="owner-filter-box">
                 <div className="owner-filter-row owner-occupancy-filter-row">
+                  <label className="owner-search-standalone">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="7" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={occupancyFilter.search}
+                      onChange={(event) => handleOccupancyFilterChange('search', event.target.value)}
+                      placeholder="ค้นหาห้อง / ผู้เข้าพัก"
+                    />
+                  </label>
                   <label className="owner-search-box">
                     ประเภทเหตุการณ์
                     <select

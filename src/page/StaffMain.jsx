@@ -6,6 +6,7 @@ import './css/Login.css'
 import './css/StaffPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import DateDropdowns from '../components/DateDropdowns.jsx'
+import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const MOVE_OUT_CHECKLIST = [
   { key: 'walls', label: 'ผนังและสี' },
@@ -24,7 +25,7 @@ const CHECKLIST_RESULT_OPTIONS = [
   { key: 'not_applicable', label: 'ไม่เกี่ยวข้อง', title: 'ไม่มี / ไม่เกี่ยวข้อง' },
 ]
 const INSPECTION_MAX_PHOTOS = 15
-const INSPECTION_MAX_PHOTO_BYTES = 15 * 1024 * 1024
+const INSPECTION_MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
 function formatPhotoSize(bytes) {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -245,7 +246,7 @@ function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChang
     const room = INSPECTION_MAX_PHOTOS - existing.length - files.length
     const accepted = withinSize.slice(0, Math.max(0, room))
     if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
-    else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 15 MB ต่อรูป')
+    else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 5 MB ต่อรูป')
     else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${INSPECTION_MAX_PHOTOS} รูป`)
     else onError('')
     if (accepted.length > 0) onChange([...files, ...accepted])
@@ -310,7 +311,7 @@ function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChang
               {dragging ? 'ปล่อยรูปที่นี่' : 'ลากรูปมาวางที่นี่ หรือ '}
               {!dragging && <span className="photo-dropzone-link">คลิกเพื่อเลือกรูป</span>}
             </span>
-            <span className="photo-dropzone-hint">สูงสุด {INSPECTION_MAX_PHOTOS} รูป ระบบจะย่อขนาดก่อนบันทึก</span>
+            <span className="photo-dropzone-hint">สูงสุด {INSPECTION_MAX_PHOTOS} รูป รูปละไม่เกิน 5 MB</span>
           </span>
         </label>
       ) : (
@@ -389,7 +390,7 @@ function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChang
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
-  if (file.size > 15 * 1024 * 1024) return Promise.reject(new Error('รูปภาพต้องมีขนาดไม่เกิน 15 MB'))
+  if (file.size > 5 * 1024 * 1024) return Promise.reject(new Error('รูปภาพต้องมีขนาดไม่เกิน 5 MB'))
 
   return new Promise((resolve, reject) => {
     const imageUrl = URL.createObjectURL(file)
@@ -499,17 +500,25 @@ function buildAnnouncementNotif(item) {
   }
 }
 
+// Modals can stack (e.g. a detail popup over a history list); Esc closes only the topmost one.
+const openModalStack = []
+
 function Modal({ title, onClose, children, variant }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
 
   useEffect(() => {
+    const token = {}
+    openModalStack.push(token)
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') requestClose()
+      if (event.key === 'Escape' && openModalStack[openModalStack.length - 1] === token) requestClose()
     }
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      openModalStack.splice(openModalStack.indexOf(token), 1)
+    }
   }, [])
 
   useEffect(() => {
@@ -529,7 +538,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -1028,7 +1037,7 @@ function StaffPaymentReview({ onCountChange }) {
   }
 
   return (
-    <section className="staff-card payment-review-card">
+    <section className="staff-card staff-tab-card payment-review-card">
       <div className="staff-card-header">
         <h2>
           สลิปรอตรวจสอบ{' '}
@@ -1498,11 +1507,16 @@ function StaffMain() {
   const [maintenanceFilterStatus, setMaintenanceFilterStatus] = useState('all')
   const [maintenanceFilterDate, setMaintenanceFilterDate] = useState('')
   const [maintenanceFilterSearch, setMaintenanceFilterSearch] = useState('')
+  const [tenantRequestDetail, setTenantRequestDetail] = useState(null)
+  const [maintenanceDetail, setMaintenanceDetail] = useState(null)
+  const [maintenancePhotoPreview, setMaintenancePhotoPreview] = useState(null)
   const [moveoutConfirmRequest, setMoveoutConfirmRequest] = useState(null)
   const [renewApproveConfirm, setRenewApproveConfirm] = useState(null)
   const [moveoutAcknowledgeConfirm, setMoveoutAcknowledgeConfirm] = useState(null)
   const [tenantRejectConfirm, setTenantRejectConfirm] = useState(null)
   const [maintenanceCompleteConfirm, setMaintenanceCompleteConfirm] = useState(null)
+  const [maintenanceAcceptConfirm, setMaintenanceAcceptConfirm] = useState(null)
+  const [maintenanceRejectConfirm, setMaintenanceRejectConfirm] = useState(null)
 
   const [showTenantHistory, setShowTenantHistory] = useState(false)
   const [tenantHistoryData, setTenantHistoryData] = useState([])
@@ -2094,6 +2108,18 @@ function StaffMain() {
     if (success) setMoveoutAcknowledgeConfirm(null)
   }
 
+  const handleConfirmMaintenanceAccept = async () => {
+    if (!maintenanceAcceptConfirm) return
+    const success = await handleMaintenanceAction(maintenanceAcceptConfirm, 'accept')
+    if (success) setMaintenanceAcceptConfirm(null)
+  }
+
+  const handleConfirmMaintenanceReject = async () => {
+    if (!maintenanceRejectConfirm) return
+    const success = await handleMaintenanceAction(maintenanceRejectConfirm, 'reject')
+    if (success) setMaintenanceRejectConfirm(null)
+  }
+
   const handleConfirmMaintenanceComplete = async () => {
     if (!maintenanceCompleteConfirm) return
     const success = await handleMaintenanceAction(maintenanceCompleteConfirm, 'complete')
@@ -2148,7 +2174,7 @@ function StaffMain() {
     const key = `tenant-${request.id}`
     const isProcessing = processingRequestKey === key
     return (
-      <div key={key} className="staff-request-item">
+      <div key={key} className="staff-request-item has-detail-link">
         <div className="staff-request-main">
           <div className="staff-request-headline">
             <span className={`staff-badge type-${request.type}`}>
@@ -2177,6 +2203,7 @@ function StaffMain() {
             <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
           </p>
         </div>
+        <div className="staff-request-side">
         <div className="staff-row-actions">
           {request.type === 'moveout' ? (
             request.status === 'in_progress' ? (
@@ -2218,12 +2245,14 @@ function StaffMain() {
           </button>
         </div>
         {request.type === 'moveout' && (
-          <div className="staff-status-below">
-            <span className={`staff-badge status-${request.status}`}>
-              {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
-            </span>
-          </div>
+          <span className={`staff-badge status-${request.status}`}>
+            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+          </span>
         )}
+        <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
+          ดูรายละเอียด
+        </button>
+        </div>
       </div>
     )
   }
@@ -2240,10 +2269,6 @@ function StaffMain() {
             <span className="staff-request-tenant">
               {request.first_name} {request.last_name}
             </span>
-            <span className="staff-status-break" aria-hidden="true" />
-            <span className={`staff-badge status-${request.status} staff-status-end`}>
-              {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
-            </span>
           </div>
           <div className="staff-request-meta">
             <span>{MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'}</span>
@@ -2251,15 +2276,6 @@ function StaffMain() {
             {request.contact_phone && <span>โทร {request.contact_phone}</span>}
           </div>
           <p className="staff-request-note">{request.description}</p>
-          {request.photos?.length > 0 && (
-            <div className="staff-maintenance-photos">
-              {request.photos.map((photo, index) => (
-                <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer">
-                  <img src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${request.room_number} ${index + 1}`} />
-                </a>
-              ))}
-            </div>
-          )}
           <p className="staff-request-date is-reported">
             <span className="staff-request-date-label">แจ้งซ่อม</span>
             <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
@@ -2271,7 +2287,7 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => handleMaintenanceAction(request, 'accept')}
+              onClick={() => setMaintenanceAcceptConfirm(request)}
             >
               {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
             </button>
@@ -2289,9 +2305,17 @@ function StaffMain() {
             type="button"
             className="staff-action-btn is-ghost"
             disabled={isProcessing}
-            onClick={() => handleMaintenanceAction(request, 'reject')}
+            onClick={() => setMaintenanceRejectConfirm(request)}
           >
             ปฏิเสธ
+          </button>
+        </div>
+        <div className="staff-request-footer">
+          <span className={`staff-badge status-${request.status}`}>
+            {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
+          </span>
+          <button type="button" className="staff-text-link" onClick={() => setMaintenanceDetail(request)}>
+            ดูเพิ่มเติม
           </button>
         </div>
       </div>
@@ -2702,7 +2726,12 @@ function StaffMain() {
                             type="button"
                             key={notif.key}
                             className={`staff-notif-item is-${notif.tone}`}
-                            onClick={() => setNotifDetail(notif)}
+                            onClick={() => {
+                              closeNotifPanel()
+                              if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
+                              else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
+                              else setNotifDetail(notif)
+                            }}
                           >
                             <p className="staff-notif-item-title">{notif.title}</p>
                             <p className="staff-notif-item-status">{notif.label}</p>
@@ -3373,7 +3402,7 @@ function StaffMain() {
         )}
 
         {staffTab === 'waiting-list' && (
-          <div className="staff-card">
+          <div className="staff-card staff-tab-card">
             <div className="staff-card-header">
               <div>
                 <h2>
@@ -3448,7 +3477,7 @@ function StaffMain() {
         )}
 
         {staffTab === 'move-out-inspections' && (
-          <div className="staff-card">
+          <div className="staff-card staff-tab-card">
             <div className="staff-card-header">
               <div>
                 <h2>
@@ -4512,7 +4541,7 @@ function StaffMain() {
             <>
               <div className="staff-requests-list">
                 {tenantHistoryData.map((request) => (
-                  <div key={request.id} className="staff-request-item">
+                  <div key={request.id} className="staff-request-item has-detail-link">
                     <div className="staff-request-main">
                       <div className="staff-request-headline">
                         <span className={`staff-badge type-${request.type}`}>
@@ -4569,6 +4598,9 @@ function StaffMain() {
                         )}
                       </div>
                     </div>
+                    <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
+                      ดูรายละเอียด
+                    </button>
                   </div>
                 ))}
               </div>
@@ -4670,7 +4702,7 @@ function StaffMain() {
             <>
               <div className="staff-requests-list">
                 {maintenanceHistoryData.map((request) => (
-                  <div key={request.id} className="staff-request-item is-maintenance">
+                  <div key={request.id} className="staff-request-item is-maintenance has-detail-link">
                     <div className="staff-request-main">
                       <div className="staff-request-headline">
                         <span className="staff-badge type-maintenance">แจ้งซ่อม</span>
@@ -4713,6 +4745,9 @@ function StaffMain() {
                         )}
                       </div>
                     </div>
+                    <button type="button" className="staff-text-link" onClick={() => setMaintenanceDetail(request)}>
+                      ดูรายละเอียด
+                    </button>
                   </div>
                 ))}
               </div>
@@ -5279,6 +5314,157 @@ function StaffMain() {
         </Modal>
       )}
 
+      {maintenanceAcceptConfirm && (
+        <Modal title="ยืนยันรับเรื่องแจ้งซ่อม" onClose={() => setMaintenanceAcceptConfirm(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-info">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันรับเรื่องคำขอแจ้งซ่อม</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{maintenanceAcceptConfirm.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {maintenanceAcceptConfirm.first_name} {maintenanceAcceptConfirm.last_name}
+                  </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ประเภท</span>
+                  <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceAcceptConfirm.category] || 'อื่นๆ'}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ช่วงเวลาที่สะดวก</span>
+                  <strong>{MAINTENANCE_TIME_LABEL[maintenanceAcceptConfirm.preferred_time] || 'เวลาไหนก็ได้'}</strong>
+                </div>
+                {maintenanceAcceptConfirm.contact_phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{maintenanceAcceptConfirm.contact_phone}</strong>
+                  </div>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่แจ้งซ่อม</span>
+                  <strong>{formatDateTime(maintenanceAcceptConfirm.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>รายละเอียดปัญหา</span>
+                  <strong>{maintenanceAcceptConfirm.description || '-'}</strong>
+                </div>
+              </div>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `maintenance-${maintenanceAcceptConfirm.id}`}
+                  onClick={handleConfirmMaintenanceAccept}
+                >
+                  {processingRequestKey === `maintenance-${maintenanceAcceptConfirm.id}`
+                    ? 'กำลังดำเนินการ...'
+                    : 'ยืนยันรับเรื่อง'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {maintenanceRejectConfirm && (
+        <Modal title="ยืนยันการปฏิเสธแจ้งซ่อม" onClose={() => setMaintenanceRejectConfirm(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-warning">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 9v4M12 17h.01" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ยืนยันปฏิเสธคำขอแจ้งซ่อม</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{maintenanceRejectConfirm.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {maintenanceRejectConfirm.first_name} {maintenanceRejectConfirm.last_name}
+                  </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ประเภท</span>
+                  <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceRejectConfirm.category] || 'อื่นๆ'}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ช่วงเวลาที่สะดวก</span>
+                  <strong>{MAINTENANCE_TIME_LABEL[maintenanceRejectConfirm.preferred_time] || 'เวลาไหนก็ได้'}</strong>
+                </div>
+                {maintenanceRejectConfirm.contact_phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{maintenanceRejectConfirm.contact_phone}</strong>
+                  </div>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>สถานะ</span>
+                  <strong>{MAINTENANCE_STATUS_LABEL[maintenanceRejectConfirm.status] || maintenanceRejectConfirm.status}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่แจ้งซ่อม</span>
+                  <strong>{formatDateTime(maintenanceRejectConfirm.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>รายละเอียดปัญหา</span>
+                  <strong>{maintenanceRejectConfirm.description || '-'}</strong>
+                </div>
+              </div>
+              {requestsError && <p className="staff-form-error">{requestsError}</p>}
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processingRequestKey === `maintenance-${maintenanceRejectConfirm.id}`}
+                  onClick={handleConfirmMaintenanceReject}
+                >
+                  {processingRequestKey === `maintenance-${maintenanceRejectConfirm.id}`
+                    ? 'กำลังดำเนินการ...'
+                    : 'ยืนยันปฏิเสธ'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {maintenanceCompleteConfirm && (
         <Modal title="ยืนยันงานเสร็จสิ้น" onClose={() => setMaintenanceCompleteConfirm(null)} variant="confirm">
           {(requestClose) => (
@@ -5328,6 +5514,166 @@ function StaffMain() {
             </div>
           )}
         </Modal>
+      )}
+
+      {tenantRequestDetail && (
+        <Modal
+          title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[tenantRequestDetail.type] || 'คำขอ'}`}
+          onClose={() => setTenantRequestDetail(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ประเภทคำขอ</span>
+                  <strong>{TENANT_REQUEST_TYPE_LABEL[tenantRequestDetail.type] || tenantRequestDetail.type}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{tenantRequestDetail.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {tenantRequestDetail.first_name} {tenantRequestDetail.last_name}
+                  </strong>
+                </div>
+                {tenantRequestDetail.phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{tenantRequestDetail.phone}</strong>
+                  </div>
+                )}
+                {tenantRequestDetail.type === 'renew' && (
+                  <>
+                    <div className="staff-confirm-detail-row">
+                      <span>ระยะเวลาที่ขอต่อ</span>
+                      <strong>
+                        {RENEW_DURATION_LABEL[tenantRequestDetail.renew_duration_months] ||
+                          `${tenantRequestDetail.renew_duration_months} เดือน`}
+                      </strong>
+                    </div>
+                    <div className="staff-confirm-detail-row">
+                      <span>รูปแบบการชำระ</span>
+                      <strong>
+                        {RENEW_PAYMENT_TYPE_LABEL[tenantRequestDetail.renew_payment_type] ||
+                          tenantRequestDetail.renew_payment_type}
+                      </strong>
+                    </div>
+                  </>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>สถานะ</span>
+                  <strong>{TENANT_REQUEST_STATUS_LABEL[tenantRequestDetail.status] || tenantRequestDetail.status}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่ส่งคำขอ</span>
+                  <strong>{formatDateTime(tenantRequestDetail.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>{tenantRequestDetail.type === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
+                  <strong>{tenantRequestDetail.note || '-'}</strong>
+                </div>
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {maintenanceDetail && (
+        <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="detail">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{maintenanceDetail.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {maintenanceDetail.first_name} {maintenanceDetail.last_name}
+                  </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ประเภท</span>
+                  <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceDetail.category] || 'อื่นๆ'}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ช่วงเวลาที่สะดวก</span>
+                  <strong>{MAINTENANCE_TIME_LABEL[maintenanceDetail.preferred_time] || 'เวลาไหนก็ได้'}</strong>
+                </div>
+                {maintenanceDetail.contact_phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{maintenanceDetail.contact_phone}</strong>
+                  </div>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>สถานะ</span>
+                  <strong>{MAINTENANCE_STATUS_LABEL[maintenanceDetail.status] || maintenanceDetail.status}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่แจ้งซ่อม</span>
+                  <strong>{formatDateTime(maintenanceDetail.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>รายละเอียดปัญหา</span>
+                  <strong>{maintenanceDetail.description || '-'}</strong>
+                </div>
+              </div>
+              {maintenanceDetail.photos?.length > 0 && (
+                <div className="staff-maintenance-photos-section">
+                  <p className="staff-maintenance-photos-title">รูปประกอบ ({maintenanceDetail.photos.length})</p>
+                  <div className="staff-maintenance-photos">
+                    {maintenanceDetail.photos.map((photo, index) => (
+                      <a
+                        key={`${photo.name}-${index}`}
+                        href={photo.dataUrl}
+                        title="คลิกเพื่อดูตัวอย่างรูป"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setMaintenancePhotoPreview({ index })
+                        }}
+                      >
+                        <img src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
+                        <span className="staff-maintenance-photo-caption">
+                          <span>{photo.name || `รูปที่ ${index + 1}`}</span>
+                          <small>รูปที่ {index + 1}</small>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {maintenanceDetail && maintenancePhotoPreview && (
+        <PhotoLightbox
+          photos={(maintenanceDetail.photos || []).map((photo, index) => ({
+            name: photo.name || `รูปที่ ${index + 1}`,
+            url: photo.dataUrl,
+          }))}
+          initialIndex={maintenancePhotoPreview.index}
+          title={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number}`}
+          subtitle={`${maintenanceDetail.first_name} ${maintenanceDetail.last_name}`}
+          label="รูปแจ้งซ่อม"
+          onClose={() => setMaintenancePhotoPreview(null)}
+        />
       )}
 
       {moveoutConfirmRequest && (
@@ -5435,6 +5781,27 @@ function StaffMain() {
                       `${renewApproveConfirm.renew_duration_months} เดือน`}
                   </strong>
                 </div>
+                <div className="staff-confirm-detail-row">
+                  <span>รูปแบบการชำระ</span>
+                  <strong>
+                    {RENEW_PAYMENT_TYPE_LABEL[renewApproveConfirm.renew_payment_type] ||
+                      renewApproveConfirm.renew_payment_type}
+                  </strong>
+                </div>
+                {renewApproveConfirm.phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{renewApproveConfirm.phone}</strong>
+                  </div>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่ส่งคำขอ</span>
+                  <strong>{formatDateTime(renewApproveConfirm.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>หมายเหตุ</span>
+                  <strong>{renewApproveConfirm.note || '-'}</strong>
+                </div>
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
@@ -5483,6 +5850,20 @@ function StaffMain() {
                   <strong>
                     {moveoutAcknowledgeConfirm.first_name} {moveoutAcknowledgeConfirm.last_name}
                   </strong>
+                </div>
+                {moveoutAcknowledgeConfirm.phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{moveoutAcknowledgeConfirm.phone}</strong>
+                  </div>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่ส่งคำขอ</span>
+                  <strong>{formatDateTime(moveoutAcknowledgeConfirm.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>เหตุผล/รายละเอียดการย้ายออก</span>
+                  <strong>{moveoutAcknowledgeConfirm.note || '-'}</strong>
                 </div>
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
@@ -5537,6 +5918,38 @@ function StaffMain() {
                   <strong>
                     {tenantRejectConfirm.first_name} {tenantRejectConfirm.last_name}
                   </strong>
+                </div>
+                {tenantRejectConfirm.type === 'renew' && (
+                  <>
+                    <div className="staff-confirm-detail-row">
+                      <span>ระยะเวลาที่ขอต่อ</span>
+                      <strong>
+                        {RENEW_DURATION_LABEL[tenantRejectConfirm.renew_duration_months] ||
+                          `${tenantRejectConfirm.renew_duration_months} เดือน`}
+                      </strong>
+                    </div>
+                    <div className="staff-confirm-detail-row">
+                      <span>รูปแบบการชำระ</span>
+                      <strong>
+                        {RENEW_PAYMENT_TYPE_LABEL[tenantRejectConfirm.renew_payment_type] ||
+                          tenantRejectConfirm.renew_payment_type}
+                      </strong>
+                    </div>
+                  </>
+                )}
+                {tenantRejectConfirm.phone && (
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{tenantRejectConfirm.phone}</strong>
+                  </div>
+                )}
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่ส่งคำขอ</span>
+                  <strong>{formatDateTime(tenantRejectConfirm.created_at)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row is-note">
+                  <span>{tenantRejectConfirm.type === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
+                  <strong>{tenantRejectConfirm.note || '-'}</strong>
                 </div>
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}

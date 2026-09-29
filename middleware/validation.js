@@ -274,7 +274,7 @@ export function parseTenantRequestInput(body = {}) {
   }
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
   if (type === "moveout" && !note) {
-    return { error: "กรุณาระบุเหตุผลที่ต้องการย้ายออก" };
+    return { error: "กรุณากรอกรายละเอียดการย้ายออก" };
   }
   if (type !== "renew") {
     return { value: { type, note, renewDurationMonths: null, renewPaymentType: null } };
@@ -317,8 +317,9 @@ export function parseUtilityBillInput(body = {}) {
   return { value: { electricityUnits, electricityAmount, waterAmount } };
 }
 
-const MAX_PHOTOS = 3;
-const MAX_PHOTO_DATA_URL_LENGTH = 2_000_000;
+const MAX_PHOTOS = 6;
+// 5 MB of binary is ~6.7M characters once base64-encoded
+const MAX_PHOTO_DATA_URL_LENGTH = 7_000_000;
 const PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 export function parsePhotoList(photos, maxPhotos = MAX_PHOTOS) {
@@ -354,17 +355,14 @@ export function parseAnnouncementInput(body = {}) {
     return { error: "เลือกกำหนดเวลาลบประกาศได้อย่างใดอย่างหนึ่ง (วันและเวลา หรือระยะเวลา)" };
   }
 
-  // A fixed moment: "YYYY-MM-DDTHH:mm" from the date dropdowns, stored as "YYYY-MM-DD HH:mm:00".
   let expiresAt = null;
   if (isGiven("expires_at")) {
     if (!isValidDateTimeString(body.expires_at)) return { error: "วันและเวลาที่ลบประกาศไม่ถูกต้อง" };
     expiresAt = `${body.expires_at.slice(0, 10)} ${body.expires_at.slice(11, 16)}:00`;
   }
 
-  // A countdown: delete this many minutes after the announcement is saved (the database clock does the adding).
   let expiresInMinutes = null;
   if (isGiven("expires_in_minutes")) {
-    // Only a number or a string of digits: Number(true), Number([5]) and the like must not slip through.
     const raw = body.expires_in_minutes;
     const isNumeric = typeof raw === "number" || (typeof raw === "string" && /^\d+$/.test(raw.trim()));
     const minutes = isNumeric ? Number(raw) : Number.NaN;
@@ -436,8 +434,6 @@ export function parseMoveOutInspectionInput(body = {}) {
   return { value: { roomNumber, ...core.value, photos: photos.value } };
 }
 
-// Editing keeps the room and tenant. `keep_photos` lists the urls of the saved photos to keep (all of them when
-// omitted); `photos` are new uploads. existingPhotos are the photos currently stored on the inspection.
 export function parseMoveOutInspectionUpdate(body = {}, existingPhotos = []) {
   const core = parseMoveOutChecklistAndNote(body);
   if (core.error) return core;
