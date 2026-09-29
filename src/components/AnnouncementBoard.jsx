@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import './AnnouncementBoard.css'
 
-const ANNOUNCEMENTS_PER_PAGE = 5
+const ANNOUNCEMENTS_PER_PAGE = 10
 const CLOSE_ANIMATION_MS = 160 // keep in step with the closing animation in AnnouncementBoard.css
 const EMPTY_FORM = {
   title: '',
@@ -151,8 +151,10 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [result, setResult] = useState(null) // { message, title } shown after a successful publish / edit / delete
   const [formClosing, setFormClosing] = useState(false)
   const [confirmClosing, setConfirmClosing] = useState(false)
+  const [resultClosing, setResultClosing] = useState(false)
   const [page, setPage] = useState(1)
   const [now, setNow] = useState(() => Date.now())
 
@@ -160,7 +162,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const currentPage = Math.min(page, totalPages)
   const pageItems = announcements.slice((currentPage - 1) * ANNOUNCEMENTS_PER_PAGE, currentPage * ANNOUNCEMENTS_PER_PAGE)
 
-  const hasCountdown = announcements.some((item) => item.expires_epoch)
+  const hasCountdown = canManage && announcements.some((item) => item.expires_epoch)
   useEffect(() => {
     if (!hasCountdown) return undefined
     const interval = setInterval(() => setNow(Date.now()), 30000)
@@ -187,23 +189,38 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     return () => clearTimeout(timer)
   }, [confirmClosing])
 
+  useEffect(() => {
+    if (!resultClosing) return undefined
+    const timer = setTimeout(() => {
+      setResult(null)
+      setResultClosing(false)
+    }, CLOSE_ANIMATION_MS)
+    return () => clearTimeout(timer)
+  }, [resultClosing])
+
   const closeForm = () => setFormClosing(true)
   const closeConfirm = () => setConfirmClosing(true)
+  const closeResult = () => setResultClosing(true)
+  const showResult = (next) => {
+    setResultClosing(false)
+    setResult(next)
+  }
   const openConfirm = (next) => {
     setConfirmClosing(false)
     setConfirm(next)
   }
 
   useEffect(() => {
-    if (!isCreating && !confirm) return undefined
+    if (!isCreating && !confirm && !result) return undefined
     const handleKeyDown = (event) => {
       if (event.key !== 'Escape' || submitting) return
-      if (confirm) setConfirmClosing(true)
+      if (result) setResultClosing(true)
+      else if (confirm) setConfirmClosing(true)
       else setFormClosing(true)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isCreating, confirm, submitting])
+  }, [isCreating, confirm, result, submitting])
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -293,14 +310,19 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     if (expiry.kind === 'after') payload.expires_in_minutes = expiry.minutes
     else payload.expires_at = expiry.kind === 'at' ? expiry.expiresAt : ''
     try {
+      let response
       if (editingId) {
-        await axios.patch(`${apiBase}/${editingId}`, payload, { headers: authHeaders() })
+        response = await axios.patch(`${apiBase}/${editingId}`, payload, { headers: authHeaders() })
       } else {
-        await axios.post(apiBase, payload, { headers: authHeaders() })
+        response = await axios.post(apiBase, payload, { headers: authHeaders() })
         setPage(1)
       }
       closeConfirm()
       closeForm()
+      showResult({
+        title: payload.title,
+        message: response?.data?.message || (editingId ? 'แก้ไขประกาศสำเร็จ' : 'เผยแพร่ประกาศสำเร็จ'),
+      })
       await onChange?.()
     } catch (err) {
       closeConfirm()
@@ -316,9 +338,10 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const deleteAnnouncement = async () => {
     setSubmitting(true)
     try {
-      await axios.delete(`${apiBase}/${confirm.id}`, { headers: authHeaders() })
+      const response = await axios.delete(`${apiBase}/${confirm.id}`, { headers: authHeaders() })
       setError('')
       closeConfirm()
+      showResult({ title: confirm.title, message: response?.data?.message || 'ลบประกาศสำเร็จ' })
       await onChange?.()
     } catch (err) {
       closeConfirm()
@@ -363,14 +386,14 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               <th>รายละเอียด</th>
               <th>ประกาศโดย</th>
               <th>วันที่ประกาศ</th>
-              <th>ลบอัตโนมัติ</th>
+              {canManage && <th>ลบอัตโนมัติ</th>}
               {canManage && <th>จัดการ</th>}
             </tr>
           </thead>
           <tbody>
             {announcements.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 7 : 6} className={`${classes.empty} announcement-empty-cell`}>
+                <td colSpan={canManage ? 7 : 5} className={`${classes.empty} announcement-empty-cell`}>
                   ยังไม่มีประกาศ
                 </td>
               </tr>
@@ -390,18 +413,22 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                   </td>
                   <td>{item.author || 'เจ้าหน้าที่'}</td>
                   <td className="announcement-cell-date">{formatAnnouncementDate(item.created_at)}</td>
-                  <td className="announcement-cell-date">
-                    {item.expires_at ? (
-                      <>
-                        <div>{formatExpiryDate(item.expires_at)}</div>
-                        {item.expires_epoch && (
-                          <small className="announcement-remaining">{formatRemaining(item.expires_epoch * 1000 - now)}</small>
-                        )}
-                      </>
-                    ) : (
-                      <span className="announcement-no-expiry">ไม่กำหนด</span>
-                    )}
-                  </td>
+                  {canManage && (
+                    <td className="announcement-cell-date">
+                      {item.expires_at ? (
+                        <>
+                          <div>{formatExpiryDate(item.expires_at)}</div>
+                          {item.expires_epoch && (
+                            <small className="announcement-remaining">
+                              {formatRemaining(item.expires_epoch * 1000 - now)}
+                            </small>
+                          )}
+                        </>
+                      ) : (
+                        <span className="announcement-no-expiry">ไม่กำหนด</span>
+                      )}
+                    </td>
+                  )}
                   {canManage && (
                     <td>
                       <div className="announcement-row-actions">
@@ -705,6 +732,49 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 disabled={submitting}
               >
                 {submitting ? 'กำลังดำเนินการ...' : CONFIRM_TEXT[confirm.kind].button}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {result && (
+        <div
+          className={`announcement-overlay is-confirm${resultClosing ? ' is-closing' : ''}`}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeResult()
+          }}
+        >
+          <section
+            className="announcement-dialog announcement-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="announcement-result-title"
+          >
+            <div className="announcement-confirm-icon is-success">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <h3 id="announcement-result-title">สำเร็จ</h3>
+            <p className="announcement-confirm-message">{result.message}</p>
+            <div className="announcement-confirm-detail">
+              <span>หัวข้อ</span>
+              <strong>{result.title}</strong>
+            </div>
+            <div className="announcement-form-actions">
+              <button type="button" className="announcement-board-submit" onClick={closeResult} autoFocus>
+                ปิด
               </button>
             </div>
           </section>

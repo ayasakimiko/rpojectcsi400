@@ -311,6 +311,11 @@
   color: #2563eb;
 }
 
+.announcement-confirm-icon.is-success {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
 .announcement-confirm-icon.is-delete {
   background: #fff1f0;
   color: #dc2626;

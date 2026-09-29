@@ -17,6 +17,349 @@ const MOVE_OUT_CHECKLIST = [
   { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์' },
 ]
 
+const CHECKLIST_RESULT_OPTIONS = [
+  { key: 'good', label: 'ปกติ', title: 'ปกติ' },
+  { key: 'damaged', label: 'ชำรุด', title: 'ชำรุด' },
+  { key: 'not_applicable', label: 'ไม่เกี่ยวข้อง', title: 'ไม่มี / ไม่เกี่ยวข้อง' },
+]
+const INSPECTION_MAX_PHOTOS = 3
+const INSPECTION_MAX_PHOTO_BYTES = 15 * 1024 * 1024
+
+function formatPhotoSize(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+// A nicer replacement for the native room <select>: shows the tenant on the button, and the list can be searched
+// (room number, name or phone) and used with the keyboard (arrows, Enter, Esc).
+function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const rootRef = useRef(null)
+  const listId = `${id}-list`
+
+  const selected = rooms.find((room) => String(room.room_number) === value)
+  const keyword = query.trim().toLowerCase()
+  const options = keyword
+    ? rooms.filter((room) =>
+        [room.room_number, room.tenant.first_name, room.tenant.last_name, room.tenant.phone]
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : rooms
+
+  useEffect(() => {
+    if (!open) return undefined
+    const closeOutside = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', closeOutside)
+    return () => document.removeEventListener('mousedown', closeOutside)
+  }, [open])
+
+  useEffect(() => {
+    if (open) document.getElementById(`${id}-opt-${activeIndex}`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [open, activeIndex, id])
+
+  const openPicker = () => {
+    setQuery('')
+    setActiveIndex(Math.max(0, rooms.findIndex((room) => String(room.room_number) === value)))
+    setOpen(true)
+  }
+
+  const choose = (room) => {
+    onChange(String(room.room_number))
+    setOpen(false)
+  }
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      if (!open) return
+      // Close only the list, not the whole modal around it.
+      event.preventDefault()
+      event.nativeEvent.stopPropagation()
+      setOpen(false)
+      return
+    }
+    if (event.key === 'Tab') {
+      setOpen(false)
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (!open) openPicker()
+      else setActiveIndex((index) => Math.min(options.length - 1, index + 1))
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!open) openPicker()
+      else setActiveIndex((index) => Math.max(0, index - 1))
+    } else if (event.key === 'Enter' && open) {
+      event.preventDefault()
+      if (options[activeIndex]) choose(options[activeIndex])
+    }
+  }
+
+  return (
+    <div className="room-picker" ref={rootRef} onKeyDown={handleKeyDown}>
+      <button
+        type="button"
+        id={id}
+        className={`room-picker-trigger${invalid ? ' is-invalid' : ''}${open ? ' is-open' : ''}`}
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => (open ? setOpen(false) : openPicker())}
+      >
+        {selected ? (
+          <>
+            <span className="room-picker-avatar" aria-hidden="true">
+              {selected.tenant.first_name?.[0] || '?'}
+            </span>
+            <span className="room-picker-main">
+              <strong>
+                {selected.tenant.first_name} {selected.tenant.last_name}
+              </strong>
+              <small>
+                ห้อง {selected.room_number}
+                {selected.tenant.phone ? ` · โทร ${selected.tenant.phone}` : ''}
+              </small>
+            </span>
+          </>
+        ) : (
+          <span className="room-picker-placeholder">เลือกห้อง / ผู้เช่า</span>
+        )}
+        <svg
+          className="room-picker-chevron"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="room-picker-panel">
+          <div className="room-picker-search">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              autoFocus
+              autoComplete="off"
+              placeholder="ค้นหาห้อง ชื่อ หรือเบอร์โทร"
+              aria-label="ค้นหาห้อง"
+              aria-controls={listId}
+              aria-activedescendant={options[activeIndex] ? `${id}-opt-${activeIndex}` : undefined}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setActiveIndex(0)
+              }}
+            />
+          </div>
+          <ul id={listId} className="room-picker-list" role="listbox" aria-label="ห้องที่มีผู้เช่า">
+            {options.length === 0 ? (
+              <li className="room-picker-empty">ไม่พบห้องที่ตรงกับคำค้น</li>
+            ) : (
+              options.map((room, index) => {
+                const isSelected = String(room.room_number) === value
+                return (
+                  <li
+                    key={room.room_number}
+                    id={`${id}-opt-${index}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`room-picker-option${index === activeIndex ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => choose(room)}
+                  >
+                    <span className="room-picker-room">{room.room_number}</span>
+                    <span className="room-picker-main">
+                      <strong>
+                        {room.tenant.first_name} {room.tenant.last_name}
+                      </strong>
+                      {room.tenant.phone && <small>โทร {room.tenant.phone}</small>}
+                    </span>
+                    {isSelected && (
+                      <svg
+                        className="room-picker-check"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </li>
+                )
+              })
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Photos for the move-out inspection: click to browse or drag images onto it, with thumbnails you can remove.
+function InspectionPhotoPicker({ files, onChange, onError }) {
+  const [dragging, setDragging] = useState(false)
+  const previewUrls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files])
+
+  useEffect(
+    () => () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    },
+    [previewUrls],
+  )
+
+  const addFiles = (incoming) => {
+    const list = Array.from(incoming || [])
+    if (list.length === 0) return
+    const images = list.filter((file) => file.type.startsWith('image/'))
+    const withinSize = images.filter((file) => file.size <= INSPECTION_MAX_PHOTO_BYTES)
+    const room = INSPECTION_MAX_PHOTOS - files.length
+    const accepted = withinSize.slice(0, Math.max(0, room))
+    if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
+    else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 15 MB ต่อรูป')
+    else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${INSPECTION_MAX_PHOTOS} รูป`)
+    else onError('')
+    if (accepted.length > 0) onChange([...files, ...accepted])
+  }
+
+  const dragsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files')
+  const canAddMore = files.length < INSPECTION_MAX_PHOTOS
+
+  return (
+    <div
+      className={`photo-field${dragging ? ' is-dragging' : ''}`}
+      onDragEnter={(event) => {
+        if (!dragsFiles(event)) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => {
+        if (!dragsFiles(event)) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        addFiles(event.dataTransfer?.files)
+      }}
+    >
+      <input
+        id="inspection-photos"
+        className="photo-input"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(event) => {
+          addFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
+      {files.length === 0 ? (
+        <label htmlFor="inspection-photos" className="photo-dropzone">
+          <span className="photo-dropzone-icon" aria-hidden="true">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+          </span>
+          <span className="photo-dropzone-text">
+            <span className="photo-dropzone-title">
+              {dragging ? 'ปล่อยรูปที่นี่' : 'ลากรูปมาวางที่นี่ หรือ '}
+              {!dragging && <span className="photo-dropzone-link">คลิกเพื่อเลือกรูป</span>}
+            </span>
+            <span className="photo-dropzone-hint">สูงสุด {INSPECTION_MAX_PHOTOS} รูป ระบบจะย่อขนาดก่อนบันทึก</span>
+          </span>
+        </label>
+      ) : (
+        <div className="photo-grid">
+          {files.map((file, index) => (
+            <figure className="photo-tile" key={`${file.name}-${index}`}>
+              <img src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
+              <figcaption title={file.name}>
+                <span>{file.name}</span>
+                <small>{formatPhotoSize(file.size)}</small>
+              </figcaption>
+              <button
+                type="button"
+                className="photo-tile-remove"
+                aria-label={`ลบรูป ${file.name}`}
+                onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </figure>
+          ))}
+          {canAddMore && (
+            <label htmlFor="inspection-photos" className="photo-add-tile">
+              <span aria-hidden="true">+</span>
+              <small>{dragging ? 'ปล่อยเพื่อเพิ่ม' : 'เพิ่มรูป'}</small>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
   if (file.size > 15 * 1024 * 1024) return Promise.reject(new Error('รูปภาพต้องมีขนาดไม่เกิน 15 MB'))
@@ -159,7 +502,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -255,6 +598,7 @@ const MAINTENANCE_STATUS_LABEL = {
 
 const STAFF_TABS = [
   { key: 'home', label: 'หน้าแรก' },
+  { key: 'payment-review', label: 'สลิปรอตรวจสอบ' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจห้องตอนย้ายออก' },
@@ -265,6 +609,7 @@ const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
+const STAFF_LIST_PAGE_SIZE = 10
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 6
 const PAYMENT_HISTORY_PAGE_SIZE = 5
@@ -508,15 +853,59 @@ function SummaryIcon({ type }) {
 
 const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ' }
 
-function StaffPaymentReview() {
+// Previous / next controls for the staff lists (10 rows per page). Renders nothing when everything fits on one page.
+function StaffPagination({ page, total, onChange }) {
+  if (total <= STAFF_LIST_PAGE_SIZE) return null
+  const totalPages = Math.ceil(total / STAFF_LIST_PAGE_SIZE)
+  const current = Math.min(page, totalPages)
+  return (
+    <div className="staff-pagination">
+      <span className="staff-pagination-info">
+        แสดง {(current - 1) * STAFF_LIST_PAGE_SIZE + 1}-{Math.min(current * STAFF_LIST_PAGE_SIZE, total)} จาก {total}{' '}
+        รายการ
+      </span>
+      <div className="staff-pagination-controls">
+        <button
+          type="button"
+          className="staff-action-btn is-ghost"
+          disabled={current <= 1}
+          onClick={() => onChange(Math.max(1, current - 1))}
+        >
+          ก่อนหน้า
+        </button>
+        <span className="staff-pagination-page">
+          หน้า {current} / {totalPages}
+        </span>
+        <button
+          type="button"
+          className="staff-action-btn is-ghost"
+          disabled={current >= totalPages}
+          onClick={() => onChange(Math.min(totalPages, current + 1))}
+        >
+          ถัดไป
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function StaffPaymentReview({ onCountChange }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState(null) // { type: 'success' | 'error', message } shown as a popup
+  const [confirmReview, setConfirmReview] = useState(null) // { payment, decision } waiting for a yes/no
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [previewClosing, setPreviewClosing] = useState(false)
+  const [page, setPage] = useState(1)
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+
+  const showError = (message) => {
+    setError(message)
+    setNotice({ type: 'error', message })
+  }
 
   const loadPayments = () => {
     setLoading(true)
@@ -524,9 +913,10 @@ function StaffPaymentReview() {
       .get('/api/staff/payment-verifications', { headers: authHeaders() })
       .then(({ data }) => {
         setPayments(data.payments || [])
+        onCountChange?.((data.payments || []).length)
         setError('')
       })
-      .catch((err) => setError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ'))
+      .catch((err) => showError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ'))
       .finally(() => setLoading(false))
   }
 
@@ -539,11 +929,12 @@ function StaffPaymentReview() {
       .then(({ data }) => {
         if (!cancelled) {
           setPayments(data.payments || [])
+          onCountChange?.((data.payments || []).length)
           setError('')
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ')
+        if (!cancelled) showError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -551,29 +942,65 @@ function StaffPaymentReview() {
     return () => {
       cancelled = true
     }
+    // Runs once on mount; onCountChange is only a state setter passed down by the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Closing plays the reverse animation first; the dialog is removed once it has had time to finish.
+  // (A timer rather than animationend, so it also closes when animations are turned off.)
+  useEffect(() => {
+    if (!previewClosing) return undefined
+    const timer = setTimeout(() => {
+      setPreview(null)
+      setPreviewClosing(false)
+    }, 160)
+    return () => clearTimeout(timer)
+  }, [previewClosing])
+
+  useEffect(() => {
+    if (!preview) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !confirmReview) setPreviewClosing(true)
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [preview, confirmReview])
+
+  // If reviewing empties the last page, fall back to the new last page.
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
+  const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
   const openSlip = (payment) => {
     setError('')
+    setPreviewClosing(false)
     setPreview({ payment, url: payment.slip_path })
   }
 
-  const reviewPayment = async (payment, decision) => {
-    if (decision === 'rejected' && !window.confirm(`ปฏิเสธสลิปของห้อง ${payment.room_number} หรือไม่?`)) return
+  const closeSlip = () => setPreviewClosing(true)
+
+  const requestReview = (payment, decision) => setConfirmReview({ payment, decision })
+
+  const submitReview = async (requestClose) => {
+    const { payment, decision } = confirmReview
     setBusyId(payment.id)
-    setError('')
-    setMessage('')
     try {
       const { data } = await axios.patch(
         `/api/staff/payment-verifications/${payment.id}`,
         { decision },
         { headers: authHeaders() },
       )
-      setMessage(data.message)
-      setPreview((current) => (current?.payment.id === payment.id ? null : current))
+      setNotice({ type: 'success', message: data.message || 'บันทึกผลการตรวจสลิปแล้ว' })
+      if (preview?.payment.id === payment.id) setPreviewClosing(true)
+      requestClose()
       await loadPayments()
     } catch (err) {
-      setError(err.response?.data?.message || 'ตรวจสลิปไม่สำเร็จ')
+      setNotice({ type: 'error', message: err.response?.data?.message || 'ตรวจสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' })
+      requestClose()
     } finally {
       setBusyId(null)
     }
@@ -591,11 +1018,11 @@ function StaffPaymentReview() {
         </button>
       </div>
       <p className="payment-review-note">อนุมัติแล้วจึงเปลี่ยนสถานะรายการชำระเป็น “ชำระแล้ว”</p>
-      {error && <div className="alert alert-danger py-2">{error}</div>}
-      {message && <div className="alert alert-success py-2">{message}</div>}
       {loading && payments.length === 0 ? (
         <p className="staff-empty">กำลังโหลดรายการ...</p>
-      ) : payments.length === 0 && error ? null : payments.length === 0 ? (
+      ) : payments.length === 0 && error ? (
+        <p className="staff-empty">โหลดรายการไม่สำเร็จ กดรีเฟรชเพื่อลองใหม่</p>
+      ) : payments.length === 0 ? (
         <p className="staff-empty">ไม่มีสลิปรอตรวจสอบ</p>
       ) : (
         <div className="table-responsive">
@@ -611,7 +1038,7 @@ function StaffPaymentReview() {
               </tr>
             </thead>
             <tbody>
-              {payments.map((payment) => (
+              {pagePayments.map((payment) => (
                 <tr key={payment.id}>
                   <td>{payment.room_number}</td>
                   <td>
@@ -641,7 +1068,7 @@ function StaffPaymentReview() {
                         type="button"
                         className="staff-action-btn is-primary"
                         disabled={busyId === payment.id}
-                        onClick={() => reviewPayment(payment, 'approved')}
+                        onClick={() => requestReview(payment, 'approved')}
                       >
                         อนุมัติ
                       </button>
@@ -649,7 +1076,7 @@ function StaffPaymentReview() {
                         type="button"
                         className="staff-action-btn is-danger"
                         disabled={busyId === payment.id}
-                        onClick={() => reviewPayment(payment, 'rejected')}
+                        onClick={() => requestReview(payment, 'rejected')}
                       >
                         ปฏิเสธ
                       </button>
@@ -661,22 +1088,267 @@ function StaffPaymentReview() {
           </table>
         </div>
       )}
+      <StaffPagination page={currentPage} total={payments.length} onChange={setPage} />
+      {confirmReview && (
+        <Modal
+          title={confirmReview.decision === 'approved' ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป'}
+          onClose={() => setConfirmReview(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className={`staff-confirm-icon ${confirmReview.decision === 'approved' ? 'is-success' : 'is-warning'}`}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {confirmReview.decision === 'approved' ? (
+                    <polyline points="20 6 9 17 4 12" />
+                  ) : (
+                    <>
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="15" y1="9" x2="9" y2="15" />
+                      <line x1="9" y1="9" x2="15" y2="15" />
+                    </>
+                  )}
+                </svg>
+              </div>
+              <p className="staff-confirm-message">
+                {confirmReview.decision === 'approved' ? 'ยืนยันอนุมัติสลิปโอนเงินนี้?' : 'ยืนยันปฏิเสธสลิปโอนเงินนี้?'}
+              </p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{confirmReview.payment.room_number}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ผู้เช่า</span>
+                  <strong>
+                    {confirmReview.payment.first_name} {confirmReview.payment.last_name}
+                  </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>รายการ</span>
+                  <strong>
+                    {String(confirmReview.payment.payment_types || '')
+                      .split(',')
+                      .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
+                      .join(', ')}
+                  </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ยอดรวม</span>
+                  <strong>
+                    ฿
+                    {Number(confirmReview.payment.amount).toLocaleString('th-TH', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </strong>
+                </div>
+              </div>
+              {confirmReview.decision === 'approved' ? (
+                <p className="staff-confirm-note">
+                  เมื่ออนุมัติ ระบบจะเปลี่ยนสถานะรายการชำระเป็น “ชำระแล้ว”
+                </p>
+              ) : (
+                <div className="staff-confirm-warning">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 9v4M12 17h.01" />
+                    <circle cx="12" cy="12" r="9" />
+                  </svg>
+                  <p>สลิปนี้จะไม่ผ่านการตรวจสอบ ผู้เช่าจะต้องส่งสลิปใหม่อีกครั้ง</p>
+                </div>
+              )}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className={`staff-action-btn ${confirmReview.decision === 'approved' ? 'is-primary' : 'is-danger'}`}
+                  disabled={busyId === confirmReview.payment.id}
+                  onClick={() => submitReview(requestClose)}
+                >
+                  {busyId === confirmReview.payment.id
+                    ? 'กำลังดำเนินการ...'
+                    : confirmReview.decision === 'approved'
+                      ? 'ยืนยันอนุมัติ'
+                      : 'ยืนยันปฏิเสธ'}
+                </button>
+                <button
+                  type="button"
+                  className="staff-action-btn is-ghost"
+                  disabled={busyId === confirmReview.payment.id}
+                  onClick={requestClose}
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {notice && (
+        <Modal
+          title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'}
+          onClose={() => setNotice(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {notice.type === 'success' ? (
+                    <polyline points="20 6 9 17 4 12" />
+                  ) : (
+                    <>
+                      <path d="M12 9v4M12 17h.01" />
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                    </>
+                  )}
+                </svg>
+              </div>
+              <p className="staff-confirm-message">{notice.message}</p>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {preview && (
-        <div className="payment-slip-overlay" role="presentation" onClick={() => setPreview(null)}>
+        <div
+          className={`payment-slip-overlay${previewClosing ? ' is-closing' : ''}`}
+          role="presentation"
+          onClick={closeSlip}
+        >
           <section
             className="payment-slip-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label={`สลิปห้อง ${preview.payment.room_number}`}
+            aria-labelledby="payment-slip-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <header>
-              <h3>สลิปห้อง {preview.payment.room_number}</h3>
-              <button type="button" onClick={() => setPreview(null)} aria-label="ปิด">
-                ×
+            <header className="payment-slip-header">
+              <div className="payment-slip-heading">
+                <h3 id="payment-slip-title">สลิปโอนเงิน</h3>
+                <span className="payment-slip-room">ห้อง {preview.payment.room_number}</span>
+              </div>
+              <button type="button" className="payment-slip-close" onClick={closeSlip} aria-label="ปิด">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             </header>
-            <img src={preview.url} alt={`สลิปชำระเงินห้อง ${preview.payment.room_number}`} />
+
+            <div className="payment-slip-body">
+              <div className="payment-slip-image-frame">
+                <a href={preview.url} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                  <img src={preview.url} alt={`สลิปชำระเงินห้อง ${preview.payment.room_number}`} />
+                </a>
+                <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
+              </div>
+
+              <dl className="payment-slip-details">
+                <div className="payment-slip-amount">
+                  <dt>ยอดรวม</dt>
+                  <dd>
+                    ฿
+                    {Number(preview.payment.amount).toLocaleString('th-TH', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </dd>
+                </div>
+                <div>
+                  <dt>ผู้เช่า</dt>
+                  <dd>
+                    {preview.payment.first_name} {preview.payment.last_name}
+                  </dd>
+                </div>
+                <div>
+                  <dt>เบอร์โทร</dt>
+                  <dd>{preview.payment.phone || '-'}</dd>
+                </div>
+                <div>
+                  <dt>รายการ</dt>
+                  <dd>
+                    {String(preview.payment.payment_types || '')
+                      .split(',')
+                      .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
+                      .join(', ')}
+                  </dd>
+                </div>
+                <div>
+                  <dt>วันที่ส่ง</dt>
+                  <dd>
+                    {new Date(preview.payment.payment_date).toLocaleDateString('th-TH', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <footer className="payment-slip-footer">
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                disabled={busyId === preview.payment.id || previewClosing}
+                onClick={() => requestReview(preview.payment, 'approved')}
+              >
+                อนุมัติ
+              </button>
+              <button
+                type="button"
+                className="staff-action-btn is-danger"
+                disabled={busyId === preview.payment.id || previewClosing}
+                onClick={() => requestReview(preview.payment, 'rejected')}
+              >
+                ปฏิเสธ
+              </button>
+              <button type="button" className="staff-action-btn is-ghost" onClick={closeSlip}>
+                ปิด
+              </button>
+            </footer>
           </section>
         </div>
       )}
@@ -701,6 +1373,8 @@ function StaffMain() {
   const [waitingListError, setWaitingListError] = useState('')
   const [waitingListFieldErrors, setWaitingListFieldErrors] = useState({})
   const [waitingListSubmitting, setWaitingListSubmitting] = useState(false)
+  const [waitingListPage, setWaitingListPage] = useState(1)
+  const [inspectionsPage, setInspectionsPage] = useState(1)
   const [waitingListDelete, setWaitingListDelete] = useState(null)
   const [waitingListDeleting, setWaitingListDeleting] = useState(false)
   const [waitingListDeleteError, setWaitingListDeleteError] = useState('')
@@ -709,6 +1383,7 @@ function StaffMain() {
   const [inspectionModal, setInspectionModal] = useState(false)
   const [inspectionForm, setInspectionForm] = useState({ room_number: '', checklist: {}, damage_note: '', photos: [] })
   const [inspectionError, setInspectionError] = useState('')
+  const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
   const [invoicePrintError, setInvoicePrintError] = useState('')
   const [invoiceGenerating, setInvoiceGenerating] = useState(false)
@@ -762,6 +1437,7 @@ function StaffMain() {
   const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
+  const [pendingSlipCount, setPendingSlipCount] = useState(0)
 
   const [utilityRoom, setUtilityRoom] = useState(null)
   const [utilityForm, setUtilityForm] = useState({
@@ -823,6 +1499,13 @@ function StaffMain() {
     return axios
       .get('/api/staff/move-out-inspections', { headers: authHeaders() })
       .then(({ data }) => setMoveOutInspections(data.inspections))
+      .catch(() => {})
+  }
+
+  const loadPendingSlipCount = () => {
+    return axios
+      .get('/api/staff/payment-verifications', { headers: authHeaders() })
+      .then(({ data }) => setPendingSlipCount((data.payments || []).length))
       .catch(() => {})
   }
 
@@ -913,6 +1596,7 @@ function StaffMain() {
       )
       setWaitingListForm({ full_name: '', phone: '', room_preference: '', note: '' })
       setWaitingListError('')
+      setWaitingListPage(1)
       requestClose()
       await loadWaitingList()
     } catch (err) {
@@ -931,7 +1615,25 @@ function StaffMain() {
       photos: [],
     })
     setInspectionError('')
+    setInspectionFieldErrors({})
     setInspectionModal(true)
+  }
+
+  const setChecklistResult = (key, value) => {
+    setInspectionForm((form) => ({ ...form, checklist: { ...form.checklist, [key]: value } }))
+    setInspectionFieldErrors((errors) => ({ ...errors, checklist: (errors.checklist || []).filter((k) => k !== key) }))
+  }
+
+  // Marks every item that has no answer yet as "ปกติ", so only the exceptions need to be picked by hand.
+  const markRemainingGood = () => {
+    setInspectionForm((form) => ({
+      ...form,
+      checklist: {
+        ...Object.fromEntries(MOVE_OUT_CHECKLIST.map((item) => [item.key, 'good'])),
+        ...form.checklist,
+      },
+    }))
+    setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
   }
 
   const submitMoveOutInspection = async (event, requestClose) => {
@@ -939,16 +1641,20 @@ function StaffMain() {
     const room = rooms.find(
       (item) => String(item.room_number) === inspectionForm.room_number && item.is_booked && item.tenant,
     )
-    if (!room) {
-      setInspectionError('กรุณาเลือกห้องที่มีผู้เช่า')
-      return
-    }
-    if (MOVE_OUT_CHECKLIST.some((item) => !inspectionForm.checklist[item.key])) {
-      setInspectionError('กรุณาตรวจและเลือกผลให้ครบทุกหัวข้อ')
-      return
-    }
+    const fieldErrors = {}
+    if (!room) fieldErrors.room = 'กรุณาเลือกห้องที่มีผู้เช่า'
+    const missing = MOVE_OUT_CHECKLIST.filter((item) => !inspectionForm.checklist[item.key]).map((item) => item.key)
+    if (missing.length > 0) fieldErrors.checklist = missing
     if (Object.values(inspectionForm.checklist).includes('damaged') && !inspectionForm.damage_note.trim()) {
-      setInspectionError('กรุณาระบุรายละเอียดความเสียหาย')
+      fieldErrors.damage_note = 'กรุณาระบุรายละเอียดความเสียหายที่พบ'
+    }
+    setInspectionFieldErrors(fieldErrors)
+    if (Object.keys(fieldErrors).length > 0) {
+      setInspectionError(
+        missing.length > 0
+          ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
+          : 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
+      )
       return
     }
 
@@ -967,6 +1673,7 @@ function StaffMain() {
         { headers: authHeaders() },
       )
       setActionSuccess(data.message || 'ส่งผลตรวจห้องให้ Admin แล้ว')
+      setInspectionsPage(1)
       requestClose()
       await loadMoveOutInspections()
     } catch (error) {
@@ -1188,10 +1895,13 @@ function StaffMain() {
     loadWaitingList()
     loadMoveOutInspections()
     loadAnnouncements()
+    loadPendingSlipCount()
     const announcementsInterval = setInterval(loadAnnouncements, 30000)
+    const slipCountInterval = setInterval(loadPendingSlipCount, 30000)
     return () => {
       isMounted = false
       clearInterval(announcementsInterval)
+      clearInterval(slipCountInterval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1560,6 +2270,31 @@ function StaffMain() {
       ...announcements.map(buildAnnouncementNotif),
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [tenantRequests, maintenanceRequests, announcements])
+
+  const inspectionResults = MOVE_OUT_CHECKLIST.map((item) => inspectionForm.checklist[item.key]).filter(Boolean)
+  const inspectionCounts = {
+    good: inspectionResults.filter((result) => result === 'good').length,
+    damaged: inspectionResults.filter((result) => result === 'damaged').length,
+    not_applicable: inspectionResults.filter((result) => result === 'not_applicable').length,
+  }
+
+  // Staff lists show 10 rows per page; the page number is clamped when rows are removed.
+  const currentWaitingListPage = Math.min(
+    waitingListPage,
+    Math.max(1, Math.ceil(waitingList.length / STAFF_LIST_PAGE_SIZE)),
+  )
+  const waitingListPageItems = waitingList.slice(
+    (currentWaitingListPage - 1) * STAFF_LIST_PAGE_SIZE,
+    currentWaitingListPage * STAFF_LIST_PAGE_SIZE,
+  )
+  const currentInspectionsPage = Math.min(
+    inspectionsPage,
+    Math.max(1, Math.ceil(moveOutInspections.length / STAFF_LIST_PAGE_SIZE)),
+  )
+  const inspectionsPageItems = moveOutInspections.slice(
+    (currentInspectionsPage - 1) * STAFF_LIST_PAGE_SIZE,
+    currentInspectionsPage * STAFF_LIST_PAGE_SIZE,
+  )
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
   const notifCurrentPage = Math.min(notifPage, notifTotalPages)
@@ -2141,113 +2876,158 @@ function StaffMain() {
         )}
 
         {inspectionModal && (
-          <Modal title="Checklist ตรวจห้องย้ายออก" onClose={() => setInspectionModal(false)} variant="wide">
+          <Modal title="Checklist ตรวจห้องย้ายออก" onClose={() => setInspectionModal(false)} variant="inspection">
             {(requestClose) => (
-              <form onSubmit={(event) => submitMoveOutInspection(event, requestClose)} noValidate>
-                {inspectionError && <div className="alert alert-danger py-2 px-3">{inspectionError}</div>}
-                <div className="row g-3 mb-3">
-                  <div className="col-12 col-md-6">
-                    <label className="form-label" htmlFor="inspection-room">
-                      ห้อง / ผู้เช่า
+              <form
+                className="inspection-form"
+                onSubmit={(event) => submitMoveOutInspection(event, requestClose)}
+                noValidate
+              >
+                <section className="inspection-section">
+                  <h4 className="inspection-section-title">
+                    <span className="inspection-step">1</span> เลือกห้องที่ตรวจ
+                  </h4>
+                  <div className="staff-form-field">
+                    <label className="staff-form-label" htmlFor="inspection-room">
+                      ห้อง / ผู้เช่า <span className="staff-form-required">*</span>
                     </label>
-                    <select
+                    <InspectionRoomPicker
                       id="inspection-room"
-                      className="form-select"
+                      rooms={rooms.filter((room) => room.is_booked && room.tenant)}
                       value={inspectionForm.room_number}
-                      onChange={(event) => setInspectionForm((form) => ({ ...form, room_number: event.target.value }))}
-                      required
-                    >
-                      <option value="">เลือกห้อง</option>
-                      {rooms
-                        .filter((room) => room.is_booked && room.tenant)
-                        .map((room) => (
-                          <option key={room.room_number} value={room.room_number}>
-                            {room.room_number} - {room.tenant.first_name} {room.tenant.last_name}
-                          </option>
-                        ))}
-                    </select>
+                      invalid={Boolean(inspectionFieldErrors.room)}
+                      onChange={(roomNumber) => {
+                        setInspectionForm((form) => ({ ...form, room_number: roomNumber }))
+                        setInspectionFieldErrors((errors) => ({ ...errors, room: undefined }))
+                      }}
+                    />
+                    {inspectionFieldErrors.room && (
+                      <span className="staff-form-field-error">{inspectionFieldErrors.room}</span>
+                    )}
                   </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label">ผู้เช่า</label>
-                    <div className="form-control-plaintext">
-                      {rooms.find((room) => String(room.room_number) === inspectionForm.room_number)?.tenant
-                        ? `${rooms.find((room) => String(room.room_number) === inspectionForm.room_number).tenant.first_name} ${rooms.find((room) => String(room.room_number) === inspectionForm.room_number).tenant.last_name}`
-                        : '-'}
+                </section>
+
+                <section className="inspection-section">
+                  <div className="inspection-section-head">
+                    <h4 className="inspection-section-title">
+                      <span className="inspection-step">2</span> ตรวจสภาพห้อง
+                    </h4>
+                    <button type="button" className="inspection-link-btn" onClick={markRemainingGood}>
+                      ตั้งที่เหลือเป็น “ปกติ” ทั้งหมด
+                    </button>
+                  </div>
+                  <div className="inspection-progress" aria-live="polite">
+                    <div className="inspection-progress-text">
+                      <span>
+                        ตรวจแล้ว <strong>{inspectionResults.length}</strong> / {MOVE_OUT_CHECKLIST.length} ข้อ
+                      </span>
+                      <span className="inspection-counts">
+                        <span className="is-good">ปกติ {inspectionCounts.good}</span>
+                        <span className="is-damaged">ชำรุด {inspectionCounts.damaged}</span>
+                        <span className="is-not_applicable">ไม่เกี่ยวข้อง {inspectionCounts.not_applicable}</span>
+                      </span>
                     </div>
+                    <span className="inspection-progress-bar">
+                      <span style={{ width: `${(inspectionResults.length / MOVE_OUT_CHECKLIST.length) * 100}%` }} />
+                    </span>
                   </div>
-                </div>
-                <div className="moveout-inspection-checklist">
-                  <div className="moveout-inspection-checklist-heading">
-                    <strong>รายการตรวจ</strong>
-                    <span>เลือกผลการตรวจทุกข้อ</span>
+                  <div className="inspection-list">
+                    {MOVE_OUT_CHECKLIST.map((item) => {
+                      const result = inspectionForm.checklist[item.key] || ''
+                      const isMissing = (inspectionFieldErrors.checklist || []).includes(item.key)
+                      return (
+                        <div
+                          key={item.key}
+                          className={`inspection-row${result ? ` is-${result}` : ''}${isMissing ? ' is-missing' : ''}`}
+                        >
+                          <span className="inspection-row-label">
+                            {item.label}
+                            {isMissing && <small>ยังไม่ได้เลือก</small>}
+                          </span>
+                          <div className="inspection-choices" role="radiogroup" aria-label={item.label}>
+                            {CHECKLIST_RESULT_OPTIONS.map((option) => (
+                              <button
+                                key={option.key}
+                                type="button"
+                                role="radio"
+                                aria-checked={result === option.key}
+                                title={option.title}
+                                className={`inspection-choice is-${option.key}${result === option.key ? ' is-selected' : ''}`}
+                                onClick={() => setChecklistResult(item.key, option.key)}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                  {MOVE_OUT_CHECKLIST.map((item) => (
-                    <label className="moveout-inspection-checklist-row" key={item.key}>
-                      <span>{item.label}</span>
-                      <select
-                        className="form-select"
-                        value={inspectionForm.checklist[item.key] || ''}
-                        onChange={(event) =>
-                          setInspectionForm((form) => ({
-                            ...form,
-                            checklist: { ...form.checklist, [item.key]: event.target.value },
-                          }))
-                        }
-                      >
-                        <option value="">เลือกผล</option>
-                        <option value="good">ปกติ</option>
-                        <option value="damaged">ชำรุด</option>
-                        <option value="not_applicable">ไม่มี/ไม่เกี่ยวข้อง</option>
-                      </select>
-                    </label>
-                  ))}
-                </div>
-                <div className="row g-3 mt-1">
-                  <div className="col-12">
-                    <label className="form-label" htmlFor="inspection-damage-note">
-                      รายละเอียดความเสียหาย / หมายเหตุ
-                    </label>
+                </section>
+
+                <section className="inspection-section">
+                  <h4 className="inspection-section-title">
+                    <span className="inspection-step">3</span> รายละเอียดและรูปภาพ
+                  </h4>
+                  <div className="staff-form-field">
+                    <div className="staff-form-label-row">
+                      <label className="staff-form-label" htmlFor="inspection-damage-note">
+                        รายละเอียดความเสียหาย / หมายเหตุ{' '}
+                        {inspectionCounts.damaged > 0 ? (
+                          <span className="staff-form-required">*</span>
+                        ) : (
+                          <span className="staff-form-optional">(ไม่บังคับ)</span>
+                        )}
+                      </label>
+                      <span className="staff-form-counter">{inspectionForm.damage_note.length}/1000</span>
+                    </div>
                     <textarea
                       id="inspection-damage-note"
-                      className="form-control"
+                      className={`staff-form-input staff-form-textarea${inspectionFieldErrors.damage_note ? ' is-invalid' : ''}`}
                       rows={3}
                       maxLength={1000}
                       value={inspectionForm.damage_note}
-                      onChange={(event) => setInspectionForm((form) => ({ ...form, damage_note: event.target.value }))}
-                      placeholder="ระบุตำแหน่งและรายละเอียดความเสียหาย"
-                    />
-                  </div>
-                  <div className="col-12">
-                    <label className="form-label" htmlFor="inspection-photos">
-                      แนบรูปภาพ (สูงสุด 3 รูป)
-                    </label>
-                    <input
-                      id="inspection-photos"
-                      className="form-control"
-                      type="file"
-                      accept="image/*"
-                      multiple
                       onChange={(event) => {
-                        const files = Array.from(event.target.files || [])
-                        if (files.length > 3) setInspectionError('แนบรูปได้ไม่เกิน 3 รูป')
-                        else {
-                          setInspectionError('')
-                          setInspectionForm((form) => ({ ...form, photos: files }))
-                        }
+                        setInspectionForm((form) => ({ ...form, damage_note: event.target.value }))
+                        setInspectionFieldErrors((errors) => ({ ...errors, damage_note: undefined }))
                       }}
+                      placeholder={
+                        inspectionCounts.damaged > 0
+                          ? 'ระบุตำแหน่งและรายละเอียดของสิ่งที่ชำรุด'
+                          : 'หมายเหตุเพิ่มเติม (ถ้ามี)'
+                      }
                     />
-                    {inspectionForm.photos.length > 0 && (
-                      <small className="text-muted">
-                        เลือกแล้ว {inspectionForm.photos.length} รูป ระบบจะย่อขนาดก่อนบันทึก
-                      </small>
+                    {inspectionFieldErrors.damage_note && (
+                      <span className="staff-form-field-error">{inspectionFieldErrors.damage_note}</span>
                     )}
                   </div>
-                </div>
-                <p className="waiting-list-storage-note mt-3">ผลตรวจและรูปจะถูกบันทึกในระบบ และส่งให้ Admin ตรวจสอบ</p>
-                <div className="staff-form-actions">
-                  <button type="submit" className="staff-action-btn is-primary" disabled={inspectionSubmitting}>
-                    {inspectionSubmitting ? 'กำลังบันทึก...' : 'ส่งผลตรวจให้ Admin'}
-                  </button>
+                  <div className="staff-form-field">
+                    <span className="staff-form-label">
+                      รูปภาพประกอบ <span className="staff-form-optional">(ไม่บังคับ · สูงสุด {INSPECTION_MAX_PHOTOS} รูป)</span>
+                    </span>
+                    <InspectionPhotoPicker
+                      files={inspectionForm.photos}
+                      onChange={(photos) => setInspectionForm((form) => ({ ...form, photos }))}
+                      onError={setInspectionError}
+                    />
+                  </div>
+                </section>
+
+                <div className="inspection-footer">
+                  {inspectionError && (
+                    <p className="staff-form-error inspection-footer-error" role="alert">
+                      {inspectionError}
+                    </p>
+                  )}
+                  <p className="inspection-footer-note">ผลตรวจและรูปจะถูกบันทึกในระบบ และส่งให้ Admin ตรวจสอบ</p>
+                  <div className="inspection-footer-actions">
+                    <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                      ยกเลิก
+                    </button>
+                    <button type="submit" className="staff-action-btn is-primary" disabled={inspectionSubmitting}>
+                      {inspectionSubmitting ? 'กำลังบันทึก...' : 'ส่งผลตรวจให้ Admin'}
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
@@ -2302,10 +3082,17 @@ function StaffMain() {
                 onClick={() => setStaffTab(tab.key)}
               >
                 {tab.label}
+                {tab.key === 'payment-review' && pendingSlipCount > 0 && (
+                  <span className="staff-tab-badge" aria-label={`${pendingSlipCount} รายการรอตรวจ`}>
+                    {pendingSlipCount}
+                  </span>
+                )}
               </button>
             </li>
           ))}
         </ul>
+
+        {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}
 
         {staffTab === 'announcements' && (
           <AnnouncementBoard
@@ -2354,7 +3141,7 @@ function StaffMain() {
                       </td>
                     </tr>
                   ) : (
-                    waitingList.map((item) => (
+                    waitingListPageItems.map((item) => (
                       <tr key={item.id}>
                         <td>{item.full_name}</td>
                         <td>{item.phone}</td>
@@ -2379,6 +3166,7 @@ function StaffMain() {
                 </tbody>
               </table>
             </div>
+            <StaffPagination page={currentWaitingListPage} total={waitingList.length} onChange={setWaitingListPage} />
           </div>
         )}
 
@@ -2419,7 +3207,7 @@ function StaffMain() {
                       </td>
                     </tr>
                   ) : (
-                    moveOutInspections.map((inspection) => (
+                    inspectionsPageItems.map((inspection) => (
                       <tr key={inspection.id}>
                         <td>{inspection.room_number}</td>
                         <td>{inspection.tenant_name}</td>
@@ -2442,6 +3230,11 @@ function StaffMain() {
                 </tbody>
               </table>
             </div>
+            <StaffPagination
+              page={currentInspectionsPage}
+              total={moveOutInspections.length}
+              onChange={setInspectionsPage}
+            />
           </div>
         )}
 
@@ -2764,8 +3557,6 @@ function StaffMain() {
                 </div>
               )}
             </div>
-
-            <StaffPaymentReview />
 
             <div className="staff-requests-grid">
               <div className="staff-card">

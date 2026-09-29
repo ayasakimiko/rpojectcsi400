@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -43,6 +43,209 @@ function compressImageFile(file) {
     }
     image.src = imageUrl
   })
+}
+
+const PROFILE_FIELD_ICONS = {
+  user: (
+    <>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+  phone: (
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+  ),
+  lock: (
+    <>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </>
+  ),
+}
+
+// One labelled text box for the profile form: an icon on the left, a show/hide button for passwords,
+// and a small hint underneath that turns red or green as the value is checked.
+function ProfileField({ id, label, icon, hint, hintTone, invalid, type = 'text', ...inputProps }) {
+  const [revealed, setRevealed] = useState(false)
+  const isPassword = type === 'password'
+  return (
+    <div className="profile-field">
+      <label htmlFor={id}>{label}</label>
+      <div className={`profile-field-control${invalid ? ' is-invalid' : ''}`}>
+        <svg
+          className="profile-field-icon"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          {PROFILE_FIELD_ICONS[icon]}
+        </svg>
+        <input id={id} type={isPassword && revealed ? 'text' : type} aria-invalid={invalid || undefined} {...inputProps} />
+        {isPassword && (
+          <button
+            type="button"
+            className="profile-field-toggle"
+            aria-label={revealed ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+            aria-pressed={revealed}
+            onClick={() => setRevealed((value) => !value)}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              {revealed ? (
+                <>
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </>
+              ) : (
+                <>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              )}
+            </svg>
+          </button>
+        )}
+      </div>
+      {hint && <small className={`profile-field-hint${hintTone ? ` is-${hintTone}` : ''}`}>{hint}</small>}
+    </div>
+  )
+}
+
+const SLIP_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const SLIP_MAX_BYTES = 5 * 1024 * 1024
+
+function formatFileSize(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+// A framed area for attaching the payment slip: click it to browse, or drag an image onto it.
+function SlipDropZone({ id, file, onChange, onError }) {
+  const [dragging, setDragging] = useState(false)
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
+
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    },
+    [previewUrl],
+  )
+
+  const acceptFiles = (files) => {
+    const list = Array.from(files || [])
+    if (list.length === 0) return
+    if (list.length > 1) {
+      onError('แนบสลิปได้ครั้งละ 1 ไฟล์')
+      return
+    }
+    const [picked] = list
+    if (!SLIP_ACCEPTED_TYPES.includes(picked.type)) {
+      onError('ไฟล์สลิปต้องเป็น JPG, PNG หรือ WebP เท่านั้น')
+      return
+    }
+    if (picked.size > SLIP_MAX_BYTES) {
+      onError('ไฟล์สลิปต้องมีขนาดไม่เกิน 5 MB')
+      return
+    }
+    onError('')
+    onChange(picked)
+  }
+
+  const dragsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files')
+
+  return (
+    <div
+      className={`slip-field${dragging ? ' is-dragging' : ''}`}
+      onDragEnter={(event) => {
+        if (!dragsFiles(event)) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => {
+        if (!dragsFiles(event)) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        acceptFiles(event.dataTransfer?.files)
+      }}
+    >
+      <input
+        id={id}
+        className="slip-input"
+        type="file"
+        accept={SLIP_ACCEPTED_TYPES.join(',')}
+        onChange={(event) => {
+          acceptFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
+      {file ? (
+        <div className="slip-preview">
+          <img className="slip-preview-image" src={previewUrl} alt="ตัวอย่างสลิปที่แนบ" />
+          <div className="slip-preview-info">
+            <strong title={file.name}>{file.name}</strong>
+            <span>{formatFileSize(file.size)}</span>
+            {dragging && <span className="slip-preview-replace">ปล่อยเพื่อเปลี่ยนเป็นไฟล์ใหม่</span>}
+          </div>
+          <div className="slip-preview-actions">
+            <label htmlFor={id} className="slip-preview-btn">
+              เปลี่ยนไฟล์
+            </label>
+            <button type="button" className="slip-preview-btn is-remove" onClick={() => onChange(null)}>
+              ลบ
+            </button>
+          </div>
+        </div>
+      ) : (
+        <label htmlFor={id} className="slip-dropzone">
+          <span className="slip-dropzone-icon" aria-hidden="true">
+            <svg
+              width="26"
+              height="26"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </span>
+          <span className="slip-dropzone-title">
+            {dragging ? 'ปล่อยไฟล์ที่นี่เพื่อแนบสลิป' : 'ลากรูปสลิปมาวางที่นี่'}
+          </span>
+          <span className="slip-dropzone-sub">
+            หรือ <span className="slip-dropzone-link">คลิกเพื่อเลือกไฟล์</span>
+          </span>
+          <span className="slip-dropzone-hint">JPG, PNG หรือ WebP ไม่เกิน 5 MB</span>
+        </label>
+      )}
+    </div>
+  )
 }
 
 const PAYMENT_TYPE_LABEL = {
@@ -664,6 +867,12 @@ function RequestTimeline({ kind, request }) {
 }
 
 const NOTIF_PAGE_SIZE = 6
+
+const CUSTOMER_TABS = [
+  { key: 'home', label: 'หน้าแรก' },
+  { key: 'announcements', label: 'ประกาศจากหอพัก' },
+  { key: 'profile', label: 'โปรไฟล์และรหัสผ่าน' },
+]
 const MAINTENANCE_PAGE_SIZE = 5
 const RENTAL_HISTORY_PAGE_SIZE = 5
 
@@ -801,6 +1010,7 @@ function CustomerDashbord() {
     return () => clearInterval(interval)
   }, [])
 
+  const [customerTab, setCustomerTab] = useState('home')
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
   const [notifSeen, setNotifSeen] = useState(false)
@@ -822,7 +1032,6 @@ function CustomerDashbord() {
   }, [notifOpen])
 
   const [successPopup, setSuccessPopup] = useState(null)
-  const [showProfileForm, setShowProfileForm] = useState(false)
   const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', current_password: '', new_password: '', confirm_password: '' })
   const [profileSubmitting, setProfileSubmitting] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -867,7 +1076,6 @@ function CustomerDashbord() {
   useEffect(() => {
     const isAnyOverlayOpen =
       showPaymentForm ||
-      showProfileForm ||
       Boolean(activeRequestType) ||
       Boolean(statusPopup) ||
       Boolean(successPopup) ||
@@ -885,7 +1093,6 @@ function CustomerDashbord() {
     }
   }, [
     showPaymentForm,
-    showProfileForm,
     activeRequestType,
     statusPopup,
     successPopup,
@@ -1052,7 +1259,8 @@ function CustomerDashbord() {
     }
   }
 
-  const openProfileForm = () => {
+  // Fills the profile form with what is currently saved and clears the password boxes.
+  const resetProfileForm = () => {
     setProfileForm({
       first_name: data?.customer?.first_name || '',
       last_name: data?.customer?.last_name || '',
@@ -1062,11 +1270,19 @@ function CustomerDashbord() {
       confirm_password: '',
     })
     setProfileError('')
-    setShowProfileForm(true)
   }
 
-  const handleProfileSubmit = async (event, requestClose) => {
+  const selectCustomerTab = (key) => {
+    if (key === 'profile') resetProfileForm()
+    setCustomerTab(key)
+  }
+
+  const handleProfileSubmit = async (event) => {
     event.preventDefault()
+    if (!/^0\d{8,9}$/.test(profileForm.phone.trim())) {
+      setProfileError('เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก')
+      return
+    }
     if (profileForm.new_password && profileForm.new_password !== profileForm.confirm_password) {
       setProfileError('รหัสผ่านใหม่และการยืนยันไม่ตรงกัน')
       return
@@ -1088,7 +1304,7 @@ function CustomerDashbord() {
         headers: { Authorization: `Bearer ${token}` },
       })
       setSuccessPopup(result.message || 'บันทึกข้อมูลสำเร็จ')
-      requestClose()
+      setProfileForm((form) => ({ ...form, current_password: '', new_password: '', confirm_password: '' }))
       await loadDashboard()
     } catch (err) {
       setProfileError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -1398,16 +1614,15 @@ function CustomerDashbord() {
       label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
       tone: item.tone === 'warning' ? 'pending' : 'info',
       date: item.created_at,
-      detail: item.expires_at ? (
+      detail: (
         <>
-          {item.message}
-          <span className="dashboard-notif-expiry">
-            ประกาศนี้จะถูกลบอัตโนมัติเมื่อ {formatDateTime(item.expires_at)} น.
+          <span className={`dashboard-notif-message${item.message.length > 70 || item.message.includes('\n') ? ' is-long' : ''}`}>
+            {item.message}
           </span>
         </>
-      ) : (
-        item.message
       ),
+      byline: `ประกาศโดย ${item.author || 'เจ้าหน้าที่'}`,
+      preview: item.message,
       kind: 'announcement',
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -1542,9 +1757,6 @@ function CustomerDashbord() {
             </div>
           </div>
           <div className="dashboard-header-actions">
-            <button type="button" className="dashboard-profile-btn" onClick={openProfileForm}>
-              โปรไฟล์
-            </button>
             <div className="dashboard-notif-wrap" ref={notifRef}>
               <button
                 type="button"
@@ -1587,7 +1799,24 @@ function CustomerDashbord() {
                   }}
                 >
                   <div className="dashboard-notif-panel-header">
-                    <span>การแจ้งเตือน</span>
+                    <span className="dashboard-notif-panel-title">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      การแจ้งเตือน
+                      {notifications.length > 0 && <span className="dashboard-notif-count">{notifications.length}</span>}
+                    </span>
                     <button
                       type="button"
                       className="dashboard-notif-panel-close"
@@ -1611,7 +1840,25 @@ function CustomerDashbord() {
                     </button>
                   </div>
                   {notifications.length === 0 ? (
-                    <p className="dashboard-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                    <div className="dashboard-notif-empty">
+                      <span className="dashboard-notif-empty-icon">
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                      </span>
+                      ยังไม่มีการแจ้งเตือน
+                    </div>
                   ) : (
                     <>
                       <div className="dashboard-notif-list">
@@ -1624,6 +1871,7 @@ function CustomerDashbord() {
                           >
                             <p className="dashboard-notif-item-title">{notif.title}</p>
                             <p className="dashboard-notif-item-status">{notif.label}</p>
+                            {notif.preview && <p className="dashboard-notif-item-preview">{notif.preview}</p>}
                             <p className="dashboard-notif-item-date">{formatDateTime(notif.date)}</p>
                           </button>
                         ))}
@@ -1701,7 +1949,10 @@ function CustomerDashbord() {
                     {notifDetail.request ? (
                       <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
                     ) : (
-                      <p className="dashboard-notif-item-date">{formatDateTime(notifDetail.date)}</p>
+                      <p className="dashboard-notif-item-date">
+                        {notifDetail.byline ? `${notifDetail.byline} · ` : ''}
+                        {formatDateTime(notifDetail.date)}
+                      </p>
                     )}
                     <div className="dashboard-form-actions">
                       <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
@@ -1722,8 +1973,6 @@ function CustomerDashbord() {
             </button>
           </div>
         </div>
-
-        <AnnouncementBoard variant="dashboard" announcements={announcements} />
 
         {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
           <Modal
@@ -1803,700 +2052,859 @@ function CustomerDashbord() {
           </div>
         )}
 
-        <div className="row g-3">
-          <div className="col-12 col-lg-4">
-            <div className="dashboard-card">
-              <h2>ห้องของฉัน</h2>
-              {room ? (
-                <>
-                  <p className="dashboard-room-number">ห้อง {room.room_number}</p>
-                  {Boolean(room.is_booked) && room.rental_start_date && room.rental_end_date && (
-                    <>
-                      <h3 className="dashboard-section-title">ระยะเวลาการเช่า</h3>
-                      <p className="dashboard-rental-duration">
-                        {formatRentalDuration(room.rental_start_date, room.rental_end_date)}
-                      </p>
-                      <p className="dashboard-rental-period">
-                        <CalendarIcon />
-                        {formatDateTime(room.rental_start_date)} ถึง {formatDateTime(room.rental_end_date)}
-                      </p>
-                      {!hasStarted && msUntilStart !== null && (
-                        <div className="dashboard-countdown-card is-pending">
-                          <ClockIcon />
-                          <div>
-                            <p className="dashboard-countdown-label">เริ่มสัญญาในอีก</p>
-                            <p className="dashboard-countdown-value">{formatRemaining(msUntilStart)}</p>
-                          </div>
-                        </div>
-                      )}
-                      {msLeft !== null && (
-                        <div
-                          className={`dashboard-countdown-card${isExpired ? ' is-expired' : isWarning ? ' is-warning' : ' is-active'}`}
-                        >
-                          <ClockIcon />
-                          <div>
-                            <p className="dashboard-countdown-label">{isExpired ? 'หมดสัญญาแล้ว' : 'เหลือเวลาในสัญญา'}</p>
-                            <p className="dashboard-countdown-value">{formatRemaining(msLeft)}</p>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <h3 className="dashboard-section-title">สิ่งอำนวยความสะดวก</h3>
-                  <div className="dashboard-amenities">
-                    {AMENITIES.map((amenity) => (
-                      <span
-                        key={amenity.key}
-                        className={`dashboard-amenity${room[amenity.key] ? ` is-${amenity.color}` : ' is-off'}`}
-                      >
-                        <AmenityIcon name={amenity.key} />
-                        {amenity.label}
-                      </span>
-                    ))}
-                    <span className="dashboard-amenity is-indigo">
-                      <AmenityIcon name="bed" />
-                      เตียง {room.bed ?? 0} เตียง
-                    </span>
-                  </div>
+        <ul className="nav nav-tabs dashboard-tabs">
+          {CUSTOMER_TABS.map((tab) => (
+            <li className="nav-item" key={tab.key}>
+              <button
+                type="button"
+                className={`nav-link dashboard-tab-link${customerTab === tab.key ? ' active' : ''}`}
+                onClick={() => selectCustomerTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            </li>
+          ))}
+        </ul>
 
-                  <h3 className="dashboard-section-title">ค่าน้ำ - ค่าไฟ</h3>
-                  <div className="dashboard-utility-rates">
-                    <div className="dashboard-utility-rate is-electric">
-                      <span>ค่าไฟฟ้า</span>
-                      <strong>{formatCurrency(room.electricity_unit_price)} บาท/หน่วย</strong>
-                    </div>
-                    <div className="dashboard-utility-rate is-water">
-                      <span>ค่าน้ำ</span>
-                      <strong>{formatCurrency(room.water_price)} บาท/หน่วย</strong>
-                    </div>
-                  </div>
+        {customerTab === 'announcements' && <AnnouncementBoard variant="dashboard" announcements={announcements} />}
 
-                  {currentDue && currentDue.status !== 'paid' && (
-                    <>
-                      <h3 className="dashboard-section-title with-aside">
-                        ยอดชำระเดือนนี้
-                        {currentDue.periodStart && currentDue.periodEnd && (
-                          <span className="dashboard-due-period">
-                            ค่าเช่ารอบ {formatDate(currentDue.periodStart)} - {formatDate(currentDue.periodEnd)}
-                          </span>
-                        )}
-                      </h3>
-                      <div className="dashboard-due-box">
-                        <span className="dashboard-due-amount">฿{formatCurrency(currentDue.amount)}</span>
-                        <span className={`dashboard-badge status-${dueBadgeClass(currentDue.status)}`}>
-                          {DUE_STATUS_LABEL[currentDue.status] || currentDue.status}
-                        </span>
-                      </div>
-                      {currentDue.items?.length > 0 && (
-                        <button
-                          type="button"
-                          className="dashboard-due-breakdown-toggle"
-                          onClick={() => setShowDueBreakdown((prev) => !prev)}
-                          aria-expanded={showDueBreakdown}
-                        >
-                          {showDueBreakdown ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียดแยกรายการ'}
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                            style={{ transform: showDueBreakdown ? 'rotate(180deg)' : 'none' }}
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
-                        </button>
-                      )}
-                      {showDueBreakdown && currentDue.items?.length > 0 && (
-                        <div className="dashboard-due-breakdown">
-                          {currentDue.items.map((item, index) => (
-                            <div className="dashboard-due-breakdown-row" key={item.id ?? `${item.type}-${index}`}>
-                              <span>{item.label}</span>
-                              <strong>฿{formatCurrency(item.amount)}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {currentDue.depositApplied > 0 && (
-                        <p className="dashboard-due-deposit-note">
-                          หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
-                        </p>
-                      )}
-                      {currentDue.overdueMonths > 0 && (
-                        <p className="dashboard-due-deposit-note is-warning">
-                          มีค่าเช่าค้างสะสมจากเดือนก่อนหน้า {currentDue.overdueMonths} เดือน ทบรวมในยอดนี้แล้ว
-                        </p>
-                      )}
-                      {currentDue.lumpSumMonths && (
-                        <p className="dashboard-due-deposit-note">
-                          รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน
-                        </p>
-                      )}
-                      {currentDue.dueDate && (
-                        <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
-                      )}
-
-                      <div className="dashboard-due-pay-actions">
-                        {paymentUnderReview ? (
-                          <span className="dashboard-badge status-pending">ส่งสลิปแล้ว · รอเจ้าหน้าที่ตรวจสอบ</span>
-                        ) : (
-                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>แนบสลิปโอนเงิน</button>
-                        )}
-                      </div>
-                      {showPaymentForm && (
-                        <Modal title="ชำระเงินและแนบสลิป" onClose={() => setShowPaymentForm(false)} variant="confirm">
-                          {(requestClose) => (
-                            <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
-                              <div className="dashboard-qr-box">
-                                <span className="dashboard-qr-badge">PromptPay</span>
-                                <FakeQrCode />
-                                <p className="dashboard-qr-amount">฿{formatCurrency(currentDue.amount)}</p>
-                                <p className="dashboard-qr-hint">
-                                  {currentDue.lumpSumMonths
-                                    ? `ยอดรวมค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน — สแกนผ่านแอปธนาคารเพื่อชำระเงิน`
-                                    : 'สแกนผ่านแอปธนาคารเพื่อชำระเงิน'}
-                                </p>
-                              </div>
-                              <label htmlFor="payment-slip-file">แนบสลิป (JPG, PNG หรือ WebP ไม่เกิน 5 MB)</label>
-                              <input id="payment-slip-file" className="dashboard-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPaymentSlip(event.target.files?.[0] || null)} />
-                              {paymentSlip && <p className="dashboard-file-name">ไฟล์ที่เลือก: {paymentSlip.name}</p>}
-                              {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
-                              <div className="dashboard-form-actions">
-                                <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
-                                  {paymentSubmitting ? 'กำลังส่งสลิป...' : 'ส่งสลิปรอตรวจสอบ'}
-                                </button>
-                                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                                  ยกเลิก
-                                </button>
-                              </div>
-                            </form>
-                          )}
-                        </Modal>
-                      )}
-                    </>
-                  )}
-
-                  {isPrepaid && (
-                    <>
-                      <h3 className="dashboard-section-title">ยอดชำระเดือนนี้</h3>
-                      <p className="dashboard-prepaid-note">
-                        ชำระค่าเช่าล่วงหน้าแบบทบยอดไว้แล้วถึงวันที่ {formatDate(room.prepaid_until)} —
-                        ระบบจะเริ่มแสดงยอดชำระรายเดือนอีกครั้งหลังจากวันนั้น
-                      </p>
-                    </>
-                  )}
-                </>
-              ) : (
-                <p className="dashboard-empty">ไม่พบข้อมูลห้องพัก</p>
-              )}
-            </div>
-          </div>
-
-          <div className="col-12 col-lg-8">
-            <div className="dashboard-card">
-              <div className="dashboard-card-header">
-                <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
-                {rentalHistory.length > 0 && (
-                  <div className="dashboard-filters">
-                    <input
-                      type="text"
-                      className="dashboard-search-input"
-                      placeholder="ค้นหาวันที่, รายการ, จำนวนเงิน, หมายเหตุ..."
-                      value={historySearch}
-                      onChange={(event) => setHistorySearch(event.target.value)}
-                    />
-                    <select
-                      className="dashboard-filter-select"
-                      value={historyStatusFilter}
-                      onChange={(event) => setHistoryStatusFilter(event.target.value)}
-                    >
-                      <option value="all">ทุกสถานะ</option>
-                      <option value="paid">ชำระแล้ว</option>
-                      <option value="pending">รอชำระ</option>
-                      <option value="overdue">ค้างชำระ</option>
-                    </select>
-                  </div>
-                )}
+        {customerTab === 'profile' && (
+          <div className="dashboard-card dashboard-profile-card">
+            <div className="dashboard-card-header">
+              <div>
+                <h2>โปรไฟล์และรหัสผ่าน</h2>
+                <p className="dashboard-profile-subtitle">แก้ไขข้อมูลส่วนตัว และเปลี่ยนรหัสผ่านของคุณ</p>
               </div>
-              {rentalHistory.length === 0 ? (
-                <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
-              ) : (
-                filteredRentalHistory.map((entry) => {
-                  const originalEntry =
-                    rentalHistoryWithDue.find((item) => item.booking_id === entry.booking_id) || entry
-                  const totalPages = Math.max(1, Math.ceil(entry.payments.length / RENTAL_HISTORY_PAGE_SIZE))
-                  const currentPage = Math.min(historyPageByBooking[entry.booking_id] || 1, totalPages)
-                  const paginatedPayments = entry.payments.slice(
-                    (currentPage - 1) * RENTAL_HISTORY_PAGE_SIZE,
-                    currentPage * RENTAL_HISTORY_PAGE_SIZE,
-                  )
-                  const setBookingPage = (page) =>
-                    setHistoryPageByBooking((prev) => ({ ...prev, [entry.booking_id]: page }))
-                  return (
-                    <div key={entry.booking_id} className="dashboard-rental-entry">
-                      {entry.payments.length === 0 ? (
-                        <p className="dashboard-empty">
-                          {entry.hasOriginalPayments ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีประวัติการชำระค่าเช่า'}
-                        </p>
-                      ) : (
+            </div>
+            <form className="dashboard-inline-form dashboard-profile-form" onSubmit={handleProfileSubmit}>
+              <div className="dashboard-profile-grid">
+                <section className="dashboard-profile-section">
+                  <h3 className="dashboard-section-title">ข้อมูลส่วนตัว</h3>
+                  <ProfileField
+                    id="profile-first-name"
+                    label="ชื่อ"
+                    icon="user"
+                    placeholder="ชื่อ"
+                    maxLength={100}
+                    autoComplete="given-name"
+                    required
+                    value={profileForm.first_name}
+                    onChange={(event) => setProfileForm((form) => ({ ...form, first_name: event.target.value }))}
+                  />
+                  <ProfileField
+                    id="profile-last-name"
+                    label="นามสกุล"
+                    icon="user"
+                    placeholder="นามสกุล"
+                    maxLength={100}
+                    autoComplete="family-name"
+                    required
+                    value={profileForm.last_name}
+                    onChange={(event) => setProfileForm((form) => ({ ...form, last_name: event.target.value }))}
+                  />
+                  <ProfileField
+                    id="profile-phone"
+                    label="เบอร์โทรศัพท์"
+                    icon="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="เช่น 0812345678"
+                    maxLength={10}
+                    autoComplete="tel"
+                    required
+                    invalid={Boolean(profileForm.phone) && !/^0\d{8,9}$/.test(profileForm.phone)}
+                    hint={
+                      profileForm.phone && !/^0\d{8,9}$/.test(profileForm.phone)
+                        ? 'ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก'
+                        : 'ตัวเลข 9-10 หลัก ขึ้นต้นด้วย 0'
+                    }
+                    hintTone={profileForm.phone && !/^0\d{8,9}$/.test(profileForm.phone) ? 'error' : undefined}
+                    value={profileForm.phone}
+                    onChange={(event) => setProfileForm((form) => ({ ...form, phone: event.target.value.replace(/\D/g, '') }))}
+                  />
+                </section>
+                <section className="dashboard-profile-section">
+                  <h3 className="dashboard-section-title">เปลี่ยนรหัสผ่าน</h3>
+                  <p className="dashboard-profile-hint">หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นช่องด้านล่างว่างไว้</p>
+                  <ProfileField
+                    id="profile-current-password"
+                    label="รหัสผ่านปัจจุบัน"
+                    icon="lock"
+                    type="password"
+                    placeholder="กรอกเมื่อต้องการเปลี่ยนรหัสผ่าน"
+                    autoComplete="current-password"
+                    value={profileForm.current_password}
+                    onChange={(event) => setProfileForm((form) => ({ ...form, current_password: event.target.value }))}
+                  />
+                  <ProfileField
+                    id="profile-new-password"
+                    label="รหัสผ่านใหม่"
+                    icon="lock"
+                    type="password"
+                    placeholder="อย่างน้อย 6 ตัวอักษร"
+                    autoComplete="new-password"
+                    minLength={6}
+                    invalid={Boolean(profileForm.new_password) && profileForm.new_password.length < 6}
+                    hint={
+                      profileForm.new_password && profileForm.new_password.length < 6
+                        ? 'ต้องมีอย่างน้อย 6 ตัวอักษร'
+                        : profileForm.new_password
+                          ? 'ความยาวใช้ได้'
+                          : 'อย่างน้อย 6 ตัวอักษร'
+                    }
+                    hintTone={
+                      profileForm.new_password
+                        ? profileForm.new_password.length < 6
+                          ? 'error'
+                          : 'ok'
+                        : undefined
+                    }
+                    value={profileForm.new_password}
+                    onChange={(event) => setProfileForm((form) => ({ ...form, new_password: event.target.value }))}
+                  />
+                  <ProfileField
+                    id="profile-confirm-password"
+                    label="ยืนยันรหัสผ่านใหม่"
+                    icon="lock"
+                    type="password"
+                    placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
+                    autoComplete="new-password"
+                    minLength={6}
+                    invalid={Boolean(profileForm.confirm_password) && profileForm.confirm_password !== profileForm.new_password}
+                    hint={
+                      profileForm.confirm_password
+                        ? profileForm.confirm_password === profileForm.new_password
+                          ? 'รหัสผ่านตรงกัน'
+                          : 'รหัสผ่านไม่ตรงกัน'
+                        : undefined
+                    }
+                    hintTone={
+                      profileForm.confirm_password
+                        ? profileForm.confirm_password === profileForm.new_password
+                          ? 'ok'
+                          : 'error'
+                        : undefined
+                    }
+                    value={profileForm.confirm_password}
+                    onChange={(event) => setProfileForm((form) => ({ ...form, confirm_password: event.target.value }))}
+                  />
+                </section>
+              </div>
+              {profileError && <p className="dashboard-form-error">{profileError}</p>}
+              <div className="dashboard-form-actions">
+                <button type="submit" className="dashboard-action-btn is-primary" disabled={profileSubmitting}>
+                  {profileSubmitting ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}
+                </button>
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={resetProfileForm}>
+                  คืนค่าเดิม
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {customerTab === 'home' && (
+          <>
+            <div className="row g-3">
+              <div className="col-12 col-lg-4">
+                <div className="dashboard-card">
+                  <h2>ห้องของฉัน</h2>
+                  {room ? (
+                    <>
+                      <p className="dashboard-room-number">ห้อง {room.room_number}</p>
+                      {Boolean(room.is_booked) && room.rental_start_date && room.rental_end_date && (
                         <>
-                          <div className="dashboard-rental-entry-header">
-                            <p className="dashboard-rental-entry-title">
-                              ห้อง {entry.room_number}
-                              {entry.rental_start_date && entry.rental_end_date && (
-                                <span className="dashboard-rental-entry-dates">
-                                  {' '}
-                                  ({formatDate(entry.rental_start_date)} - {formatDate(entry.rental_end_date)})
-                                </span>
-                              )}
-                            </p>
-                            <button
-                              type="button"
-                              className="dashboard-action-btn is-ghost dashboard-receipt-all-btn"
-                              disabled={receiptGenerating}
-                              onClick={() => requestCombinedReceipt(originalEntry)}
+                          <h3 className="dashboard-section-title">ระยะเวลาการเช่า</h3>
+                          <p className="dashboard-rental-duration">
+                            {formatRentalDuration(room.rental_start_date, room.rental_end_date)}
+                          </p>
+                          <p className="dashboard-rental-period">
+                            <CalendarIcon />
+                            {formatDateTime(room.rental_start_date)} ถึง {formatDateTime(room.rental_end_date)}
+                          </p>
+                          {!hasStarted && msUntilStart !== null && (
+                            <div className="dashboard-countdown-card is-pending">
+                              <ClockIcon />
+                              <div>
+                                <p className="dashboard-countdown-label">เริ่มสัญญาในอีก</p>
+                                <p className="dashboard-countdown-value">{formatRemaining(msUntilStart)}</p>
+                              </div>
+                            </div>
+                          )}
+                          {msLeft !== null && (
+                            <div
+                              className={`dashboard-countdown-card${isExpired ? ' is-expired' : isWarning ? ' is-warning' : ' is-active'}`}
                             >
-                              {receiptGenerating && receiptRequest?.mode === 'all' && receiptRequest.entry.booking_id === entry.booking_id
-                                ? 'กำลังสร้าง...'
-                                : 'ดาวน์โหลดใบเสร็จรวม (PDF)'}
-                            </button>
-                          </div>
-                          <div className="table-responsive">
-                            <table className="dashboard-table">
-                              <thead>
-                                <tr>
-                                  <th>วันที่ชำระ</th>
-                                  <th>รายการ</th>
-                                  <th>จำนวนเงิน</th>
-                                  <th>สถานะ</th>
-                                  <th>หมายเหตุ</th>
-                                  <th>ใบเสร็จ</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {paginatedPayments.map((payment) => (
-                                  <tr key={payment.id}>
-                                    <td>{formatDateTime(payment.created_at)}</td>
-                                    <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
-                                    <td>฿{formatCurrency(payment.amount)}</td>
-                                    <td>
-                                      <span className={`dashboard-badge status-${payment.status}`}>
-                                        {payment.status === 'pending' && payment.slip_path ? 'รอตรวจสอบสลิป' : STATUS_LABEL[payment.status] || payment.status}
-                                      </span>
-                                    </td>
-                                    <td>{formatCustomerNote(payment.note)}</td>
-                                    <td>
-                                      {payment.status !== 'paid' ? (
-                                        <span className="dashboard-empty-cell">-</span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          className="dashboard-receipt-btn"
-                                          disabled={receiptGenerating}
-                                          onClick={() => requestSingleReceipt(entry, payment)}
-                                          aria-label="ดาวน์โหลดใบเสร็จ"
-                                          title="ดาวน์โหลดใบเสร็จ (PDF)"
-                                        >
-                                          <svg
-                                            width="16"
-                                            height="16"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            aria-hidden="true"
-                                          >
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                            <polyline points="7 10 12 15 17 10" />
-                                            <line x1="12" y1="15" x2="12" y2="3" />
-                                          </svg>
-                                          ใบเสร็จ
-                                        </button>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {totalPages > 1 && (
-                            <div className="dashboard-maintenance-pagination">
-                              <button
-                                type="button"
-                                className="dashboard-notif-page-btn"
-                                disabled={currentPage <= 1}
-                                onClick={() => setBookingPage(Math.max(1, currentPage - 1))}
-                              >
-                                ก่อนหน้า
-                              </button>
-                              <span className="dashboard-notif-page-info">
-                                หน้า {currentPage} / {totalPages}
-                              </span>
-                              <button
-                                type="button"
-                                className="dashboard-notif-page-btn"
-                                disabled={currentPage >= totalPages}
-                                onClick={() => setBookingPage(Math.min(totalPages, currentPage + 1))}
-                              >
-                                ถัดไป
-                              </button>
+                              <ClockIcon />
+                              <div>
+                                <p className="dashboard-countdown-label">{isExpired ? 'หมดสัญญาแล้ว' : 'เหลือเวลาในสัญญา'}</p>
+                                <p className="dashboard-countdown-value">{formatRemaining(msLeft)}</p>
+                              </div>
                             </div>
                           )}
                         </>
                       )}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="row g-3 mt-1">
-          {(room?.is_booked || moveoutRequest?.status === 'approved') && (
-            <div className="col-12 col-lg-5">
-              <div className="dashboard-card">
-                <h2>จัดการสัญญาเช่า</h2>
-                <div className="dashboard-request-list">
-                  {room?.is_booked && (
-                    <div className="dashboard-request-row">
-                      <div className="dashboard-request-info">
-                        <p className="dashboard-request-title">ต่อสัญญา</p>
-                        <p className="dashboard-request-desc">
-                          {(!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
-                            || (renewRequest?.status === 'pending'
-                              ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
-                              : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด')}
-                        </p>
+                      <h3 className="dashboard-section-title">สิ่งอำนวยความสะดวก</h3>
+                      <div className="dashboard-amenities">
+                        {AMENITIES.map((amenity) => (
+                          <span
+                            key={amenity.key}
+                            className={`dashboard-amenity${room[amenity.key] ? ` is-${amenity.color}` : ' is-off'}`}
+                          >
+                            <AmenityIcon name={amenity.key} />
+                            {amenity.label}
+                          </span>
+                        ))}
+                        <span className="dashboard-amenity is-indigo">
+                          <AmenityIcon name="bed" />
+                          เตียง {room.bed ?? 0} เตียง
+                        </span>
                       </div>
-                      {!canResubmitRenew && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status] ? (
-                        <button
-                          type="button"
-                          className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)} dashboard-badge-btn`}
-                          onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest })}
-                        >
-                          {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
-                        </button>
-                      ) : (
-                        <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
-                          ต่อสัญญา
-                        </button>
+
+                      <h3 className="dashboard-section-title">ค่าน้ำ - ค่าไฟ</h3>
+                      <div className="dashboard-utility-rates">
+                        <div className="dashboard-utility-rate is-electric">
+                          <span>ค่าไฟฟ้า</span>
+                          <strong>{formatCurrency(room.electricity_unit_price)} บาท/หน่วย</strong>
+                        </div>
+                        <div className="dashboard-utility-rate is-water">
+                          <span>ค่าน้ำ</span>
+                          <strong>{formatCurrency(room.water_price)} บาท/หน่วย</strong>
+                        </div>
+                      </div>
+
+                      {currentDue && currentDue.status !== 'paid' && (
+                        <>
+                          <h3 className="dashboard-section-title with-aside">
+                            ยอดชำระเดือนนี้
+                            {currentDue.periodStart && currentDue.periodEnd && (
+                              <span className="dashboard-due-period">
+                                ค่าเช่ารอบ {formatDate(currentDue.periodStart)} - {formatDate(currentDue.periodEnd)}
+                              </span>
+                            )}
+                          </h3>
+                          <div className="dashboard-due-box">
+                            <span className="dashboard-due-amount">฿{formatCurrency(currentDue.amount)}</span>
+                            <span className={`dashboard-badge status-${dueBadgeClass(currentDue.status)}`}>
+                              {DUE_STATUS_LABEL[currentDue.status] || currentDue.status}
+                            </span>
+                          </div>
+                          {currentDue.items?.length > 0 && (
+                            <button
+                              type="button"
+                              className="dashboard-due-breakdown-toggle"
+                              onClick={() => setShowDueBreakdown((prev) => !prev)}
+                              aria-expanded={showDueBreakdown}
+                            >
+                              {showDueBreakdown ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียดแยกรายการ'}
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                style={{ transform: showDueBreakdown ? 'rotate(180deg)' : 'none' }}
+                              >
+                                <polyline points="6 9 12 15 18 9" />
+                              </svg>
+                            </button>
+                          )}
+                          {showDueBreakdown && currentDue.items?.length > 0 && (
+                            <div className="dashboard-due-breakdown">
+                              {currentDue.items.map((item, index) => (
+                                <div className="dashboard-due-breakdown-row" key={item.id ?? `${item.type}-${index}`}>
+                                  <span>{item.label}</span>
+                                  <strong>฿{formatCurrency(item.amount)}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {currentDue.depositApplied > 0 && (
+                            <p className="dashboard-due-deposit-note">
+                              หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
+                            </p>
+                          )}
+                          {currentDue.overdueMonths > 0 && (
+                            <p className="dashboard-due-deposit-note is-warning">
+                              มีค่าเช่าค้างสะสมจากเดือนก่อนหน้า {currentDue.overdueMonths} เดือน ทบรวมในยอดนี้แล้ว
+                            </p>
+                          )}
+                          {currentDue.lumpSumMonths && (
+                            <p className="dashboard-due-deposit-note">
+                              รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน
+                            </p>
+                          )}
+                          {currentDue.dueDate && (
+                            <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
+                          )}
+
+                          <div className="dashboard-due-pay-actions">
+                            {paymentUnderReview ? (
+                              <span className="dashboard-badge status-pending">ส่งสลิปแล้ว · รอเจ้าหน้าที่ตรวจสอบ</span>
+                            ) : (
+                              <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>แนบสลิปโอนเงิน</button>
+                            )}
+                          </div>
+                          {showPaymentForm && (
+                            <Modal title="ชำระเงินและแนบสลิป" onClose={() => setShowPaymentForm(false)} variant="confirm">
+                              {(requestClose) => (
+                                <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
+                                  <div className="dashboard-qr-box">
+                                    <span className="dashboard-qr-badge">PromptPay</span>
+                                    <FakeQrCode />
+                                    <p className="dashboard-qr-amount">฿{formatCurrency(currentDue.amount)}</p>
+                                    <p className="dashboard-qr-hint">
+                                      {currentDue.lumpSumMonths
+                                        ? `ยอดรวมค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน — สแกนผ่านแอปธนาคารเพื่อชำระเงิน`
+                                        : 'สแกนผ่านแอปธนาคารเพื่อชำระเงิน'}
+                                    </p>
+                                  </div>
+                                  <span className="slip-field-label">แนบสลิปโอนเงิน</span>
+                                  <SlipDropZone
+                                    id="payment-slip-file"
+                                    file={paymentSlip}
+                                    onChange={setPaymentSlip}
+                                    onError={setPaymentError}
+                                  />
+                                  {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
+                                  <div className="dashboard-form-actions">
+                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
+                                      {paymentSubmitting ? 'กำลังส่งสลิป...' : 'ส่งสลิปรอตรวจสอบ'}
+                                    </button>
+                                    <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                                      ยกเลิก
+                                    </button>
+                                  </div>
+                                </form>
+                              )}
+                            </Modal>
+                          )}
+                        </>
                       )}
-                    </div>
+
+                      {isPrepaid && (
+                        <>
+                          <h3 className="dashboard-section-title">ยอดชำระเดือนนี้</h3>
+                          <p className="dashboard-prepaid-note">
+                            ชำระค่าเช่าล่วงหน้าแบบทบยอดไว้แล้วถึงวันที่ {formatDate(room.prepaid_until)} —
+                            ระบบจะเริ่มแสดงยอดชำระรายเดือนอีกครั้งหลังจากวันนั้น
+                          </p>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <p className="dashboard-empty">ไม่พบข้อมูลห้องพัก</p>
                   )}
-                  <div className="dashboard-request-row">
-                    <div className="dashboard-request-info">
-                      <p className="dashboard-request-title">แจ้งย้ายออก</p>
-                      <p className="dashboard-request-desc">
-                        {(moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
-                          || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
-                      </p>
-                    </div>
-                    {moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status] ? (
-                      <button
-                        type="button"
-                        className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)} dashboard-badge-btn`}
-                        onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest })}
-                      >
-                        {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
-                      </button>
-                    ) : (
-                      room?.is_booked && (
-                        <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
-                          แจ้งย้ายออก
-                        </button>
-                      )
+                </div>
+              </div>
+
+              <div className="col-12 col-lg-8">
+                <div className="dashboard-card">
+                  <div className="dashboard-card-header">
+                    <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
+                    {rentalHistory.length > 0 && (
+                      <div className="dashboard-filters">
+                        <input
+                          type="text"
+                          className="dashboard-search-input"
+                          placeholder="ค้นหาวันที่, รายการ, จำนวนเงิน, หมายเหตุ..."
+                          value={historySearch}
+                          onChange={(event) => setHistorySearch(event.target.value)}
+                        />
+                        <select
+                          className="dashboard-filter-select"
+                          value={historyStatusFilter}
+                          onChange={(event) => setHistoryStatusFilter(event.target.value)}
+                        >
+                          <option value="all">ทุกสถานะ</option>
+                          <option value="paid">ชำระแล้ว</option>
+                          <option value="pending">รอชำระ</option>
+                          <option value="overdue">ค้างชำระ</option>
+                        </select>
+                      </div>
                     )}
                   </div>
-                </div>
-
-                {activeRequestType && (
-                  <Modal title={TENANT_REQUEST_TYPE_LABEL[activeRequestType]} onClose={() => setActiveRequestType(null)}>
-                    {(requestClose) => (
-                      <form className="dashboard-inline-form" onSubmit={handleRequestSubmit}>
-                        {activeRequestType === 'renew' && (
-                          <>
-                            <label>ระยะเวลาที่ต้องการต่อ</label>
-                            <select
-                              value={renewDurationMonths}
-                              onChange={(event) => {
-                                const value = event.target.value
-                                setRenewDurationMonths(value)
-                                if (Number(value) <= 1 && renewPaymentType === 'lump_sum') {
-                                  setRenewPaymentType('monthly')
-                                }
-                              }}
-                            >
-                              {RENEW_DURATION_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                            <label>รูปแบบการชำระ</label>
-                            <select
-                              value={renewPaymentType}
-                              onChange={(event) => setRenewPaymentType(event.target.value)}
-                            >
-                              {RENEW_PAYMENT_TYPE_OPTIONS.filter(
-                                (option) => option.value !== 'lump_sum' || Number(renewDurationMonths) > 1,
-                              ).map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </>
-                        )}
-                        <label>หมายเหตุ (ถ้ามี)</label>
-                        <textarea
-                          rows={2}
-                          value={requestNote}
-                          onChange={(event) => setRequestNote(event.target.value)}
-                          placeholder="ระบุรายละเอียดเพิ่มเติม..."
-                        />
-                        {requestError && <p className="dashboard-form-error">{requestError}</p>}
-                        <div className="dashboard-form-actions">
-                          <button type="submit" className="dashboard-action-btn is-primary" disabled={requestSubmitting}>
-                            {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
-                          </button>
-                          <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                            ยกเลิก
-                          </button>
+                  {rentalHistory.length === 0 ? (
+                    <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
+                  ) : (
+                    filteredRentalHistory.map((entry) => {
+                      const originalEntry =
+                        rentalHistoryWithDue.find((item) => item.booking_id === entry.booking_id) || entry
+                      const totalPages = Math.max(1, Math.ceil(entry.payments.length / RENTAL_HISTORY_PAGE_SIZE))
+                      const currentPage = Math.min(historyPageByBooking[entry.booking_id] || 1, totalPages)
+                      const paginatedPayments = entry.payments.slice(
+                        (currentPage - 1) * RENTAL_HISTORY_PAGE_SIZE,
+                        currentPage * RENTAL_HISTORY_PAGE_SIZE,
+                      )
+                      const setBookingPage = (page) =>
+                        setHistoryPageByBooking((prev) => ({ ...prev, [entry.booking_id]: page }))
+                      return (
+                        <div key={entry.booking_id} className="dashboard-rental-entry">
+                          {entry.payments.length === 0 ? (
+                            <p className="dashboard-empty">
+                              {entry.hasOriginalPayments ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีประวัติการชำระค่าเช่า'}
+                            </p>
+                          ) : (
+                            <>
+                              <div className="dashboard-rental-entry-header">
+                                <p className="dashboard-rental-entry-title">
+                                  ห้อง {entry.room_number}
+                                  {entry.rental_start_date && entry.rental_end_date && (
+                                    <span className="dashboard-rental-entry-dates">
+                                      {' '}
+                                      ({formatDate(entry.rental_start_date)} - {formatDate(entry.rental_end_date)})
+                                    </span>
+                                  )}
+                                </p>
+                                <button
+                                  type="button"
+                                  className="dashboard-action-btn is-ghost dashboard-receipt-all-btn"
+                                  disabled={receiptGenerating}
+                                  onClick={() => requestCombinedReceipt(originalEntry)}
+                                >
+                                  {receiptGenerating && receiptRequest?.mode === 'all' && receiptRequest.entry.booking_id === entry.booking_id
+                                    ? 'กำลังสร้าง...'
+                                    : 'ดาวน์โหลดใบเสร็จรวม (PDF)'}
+                                </button>
+                              </div>
+                              <div className="table-responsive">
+                                <table className="dashboard-table">
+                                  <thead>
+                                    <tr>
+                                      <th>วันที่ชำระ</th>
+                                      <th>รายการ</th>
+                                      <th>จำนวนเงิน</th>
+                                      <th>สถานะ</th>
+                                      <th>หมายเหตุ</th>
+                                      <th>ใบเสร็จ</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {paginatedPayments.map((payment) => (
+                                      <tr key={payment.id}>
+                                        <td>{formatDateTime(payment.created_at)}</td>
+                                        <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
+                                        <td>฿{formatCurrency(payment.amount)}</td>
+                                        <td>
+                                          <span className={`dashboard-badge status-${payment.status}`}>
+                                            {payment.status === 'pending' && payment.slip_path ? 'รอตรวจสอบสลิป' : STATUS_LABEL[payment.status] || payment.status}
+                                          </span>
+                                        </td>
+                                        <td>{formatCustomerNote(payment.note)}</td>
+                                        <td>
+                                          {payment.status !== 'paid' ? (
+                                            <span className="dashboard-empty-cell">-</span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              className="dashboard-receipt-btn"
+                                              disabled={receiptGenerating}
+                                              onClick={() => requestSingleReceipt(entry, payment)}
+                                              aria-label="ดาวน์โหลดใบเสร็จ"
+                                              title="ดาวน์โหลดใบเสร็จ (PDF)"
+                                            >
+                                              <svg
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                              >
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                <polyline points="7 10 12 15 17 10" />
+                                                <line x1="12" y1="15" x2="12" y2="3" />
+                                              </svg>
+                                              ใบเสร็จ
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              {totalPages > 1 && (
+                                <div className="dashboard-maintenance-pagination">
+                                  <button
+                                    type="button"
+                                    className="dashboard-notif-page-btn"
+                                    disabled={currentPage <= 1}
+                                    onClick={() => setBookingPage(Math.max(1, currentPage - 1))}
+                                  >
+                                    ก่อนหน้า
+                                  </button>
+                                  <span className="dashboard-notif-page-info">
+                                    หน้า {currentPage} / {totalPages}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="dashboard-notif-page-btn"
+                                    disabled={currentPage >= totalPages}
+                                    onClick={() => setBookingPage(Math.min(totalPages, currentPage + 1))}
+                                  >
+                                    ถัดไป
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
-                      </form>
-                    )}
-                  </Modal>
-                )}
+                      )
+                    })
+                  )}
+                </div>
               </div>
             </div>
-          )}
 
-          <div className="col-12 col-lg-7">
-            <div className="dashboard-card">
-              <div className="dashboard-card-header">
-                <h2>แจ้งซ่อม</h2>
-                <button type="button" className="dashboard-action-btn is-primary" onClick={openMaintenanceForm}>
-                  แจ้งซ่อม
-                </button>
-              </div>
-              {maintenanceRequests.length > 0 && (
-                <div className="dashboard-filters dashboard-filters-spaced">
-                  <input
-                    type="text"
-                    className="dashboard-search-input"
-                    placeholder="ค้นหารายละเอียด, หมวดหมู่, เบอร์โทร..."
-                    value={maintenanceSearch}
-                    onChange={(event) => {
-                      setMaintenanceSearch(event.target.value)
-                      setMaintenancePage(1)
-                    }}
-                  />
-                  <select
-                    className="dashboard-filter-select"
-                    value={maintenanceStatusFilter}
-                    onChange={(event) => {
-                      setMaintenanceStatusFilter(event.target.value)
-                      setMaintenancePage(1)
-                    }}
-                  >
-                    <option value="all">ทุกสถานะ</option>
-                    <option value="pending">รอดำเนินการ</option>
-                    <option value="in_progress">กำลังดำเนินการ</option>
-                    <option value="done">เสร็จสิ้น</option>
-                    <option value="cancelled">ยกเลิกแล้ว</option>
-                  </select>
-                </div>
-              )}
-              {showMaintenanceForm && (
-                <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
-                  {(requestClose) => (
-                    <form className="dashboard-inline-form" onSubmit={handleMaintenanceSubmit}>
-                      <label>หมวดหมู่ปัญหา</label>
-                      <select value={maintenanceCategory} onChange={(event) => setMaintenanceCategory(event.target.value)}>
-                        {MAINTENANCE_CATEGORY_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-
-                      <label>รายละเอียดปัญหา</label>
-                      <textarea
-                        rows={3}
-                        value={maintenanceText}
-                        onChange={(event) => setMaintenanceText(event.target.value)}
-                        placeholder="อธิบายปัญหาที่ต้องการแจ้งซ่อม เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว..."
-                      />
-
-                      <label>ช่วงเวลาที่สะดวกให้เข้าซ่อม</label>
-                      <select
-                        value={maintenancePreferredTime}
-                        onChange={(event) => setMaintenancePreferredTime(event.target.value)}
-                      >
-                        {MAINTENANCE_TIME_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-
-                      <label>เบอร์โทรติดต่อ (ถ้ามี)</label>
-                      <input
-                        type="tel"
-                        value={maintenanceContactPhone}
-                        onChange={(event) => setMaintenanceContactPhone(event.target.value)}
-                        placeholder="เบอร์โทรที่ติดต่อได้"
-                      />
-
-                      <label htmlFor="maintenance-photos">แนบรูปปัญหา (สูงสุด 3 รูป)</label>
-                      <input id="maintenance-photos" className="dashboard-file-input" type="file" accept="image/*" multiple onChange={(event) => {
-                        const files = Array.from(event.target.files || [])
-                        if (files.length > 3) setMaintenanceError('แนบรูปได้ไม่เกิน 3 รูป')
-                        else {
-                          setMaintenanceError('')
-                          setMaintenancePhotos(files)
-                        }
-                      }} />
-                      {maintenancePhotos.length > 0 && <p className="dashboard-file-name">เลือกแล้ว {maintenancePhotos.length} รูป</p>}
-
-                      {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
-                      <div className="dashboard-form-actions">
-                        <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
-                          {maintenanceSubmitting ? 'กำลังส่ง...' : 'ยืนยันแจ้งซ่อม'}
-                        </button>
-                        <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                          ยกเลิก
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </Modal>
-              )}
-
-              <div className="dashboard-maintenance-body">
-              {maintenanceRequests.length === 0 ? (
-                <p className="dashboard-empty">ยังไม่มีรายการแจ้งซ่อม</p>
-              ) : filteredMaintenanceRequests.length === 0 ? (
-                <p className="dashboard-empty">ไม่พบรายการที่ตรงกับการค้นหา</p>
-              ) : (
-                <>
-                <div className="dashboard-maintenance-list">
-                  {paginatedMaintenanceRequests.map((item) => (
-                    <div key={item.id} className="dashboard-maintenance-item">
-                      <div>
-                        <p className="dashboard-maintenance-desc">{item.description}</p>
-                        <p className="dashboard-maintenance-meta">
-                          {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
-                          {' · '}
-                          {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
-                          {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
-                        </p>
-                        {item.photos?.length > 0 && (
-                          <div className="dashboard-maintenance-photos">
-                            {item.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} /></a>)}
+            <div className="row g-3 mt-1">
+              {(room?.is_booked || moveoutRequest?.status === 'approved') && (
+                <div className="col-12 col-lg-5">
+                  <div className="dashboard-card">
+                    <h2>จัดการสัญญาเช่า</h2>
+                    <div className="dashboard-request-list">
+                      {room?.is_booked && (
+                        <div className="dashboard-request-row">
+                          <div className="dashboard-request-info">
+                            <p className="dashboard-request-title">ต่อสัญญา</p>
+                            <p className="dashboard-request-desc">
+                              {(!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
+                                || (renewRequest?.status === 'pending'
+                                  ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
+                                  : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด')}
+                            </p>
                           </div>
-                        )}
-                        <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
-                      </div>
-                      <div className="dashboard-maintenance-badges">
-                        {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (
+                          {!canResubmitRenew && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status] ? (
+                            <button
+                              type="button"
+                              className={`dashboard-badge status-${tenantRequestBadgeClass(renewRequest.status)} dashboard-badge-btn`}
+                              onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest })}
+                            >
+                              {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
+                            </button>
+                          ) : (
+                            <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
+                              ต่อสัญญา
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <div className="dashboard-request-row">
+                        <div className="dashboard-request-info">
+                          <p className="dashboard-request-title">แจ้งย้ายออก</p>
+                          <p className="dashboard-request-desc">
+                            {(moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
+                              || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
+                          </p>
+                        </div>
+                        {moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status] ? (
                           <button
                             type="button"
-                            className={`dashboard-badge status-${maintenanceBadgeClass(item.status)} dashboard-badge-btn`}
-                            onClick={() => setStatusPopup({ kind: 'maintenance', status: item.status, request: item })}
+                            className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)} dashboard-badge-btn`}
+                            onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest })}
                           >
-                            {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                            {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
                           </button>
                         ) : (
-                          <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
-                            {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
-                          </span>
-                        )}
-                        {item.status === 'pending' && (
-                          <button
-                            type="button"
-                            className="dashboard-maintenance-cancel"
-                            disabled={cancelingMaintenanceId === item.id}
-                            onClick={() => {
-                              setMaintenanceError('')
-                              setConfirmCancelId(item.id)
-                            }}
-                          >
-                            {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
-                          </button>
+                          room?.is_booked && (
+                            <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
+                              แจ้งย้ายออก
+                            </button>
+                          )
                         )}
                       </div>
                     </div>
-                  ))}
+
+                    {activeRequestType && (
+                      <Modal title={TENANT_REQUEST_TYPE_LABEL[activeRequestType]} onClose={() => setActiveRequestType(null)}>
+                        {(requestClose) => (
+                          <form className="dashboard-inline-form" onSubmit={handleRequestSubmit}>
+                            {activeRequestType === 'renew' && (
+                              <>
+                                <label>ระยะเวลาที่ต้องการต่อ</label>
+                                <select
+                                  value={renewDurationMonths}
+                                  onChange={(event) => {
+                                    const value = event.target.value
+                                    setRenewDurationMonths(value)
+                                    if (Number(value) <= 1 && renewPaymentType === 'lump_sum') {
+                                      setRenewPaymentType('monthly')
+                                    }
+                                  }}
+                                >
+                                  {RENEW_DURATION_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <label>รูปแบบการชำระ</label>
+                                <select
+                                  value={renewPaymentType}
+                                  onChange={(event) => setRenewPaymentType(event.target.value)}
+                                >
+                                  {RENEW_PAYMENT_TYPE_OPTIONS.filter(
+                                    (option) => option.value !== 'lump_sum' || Number(renewDurationMonths) > 1,
+                                  ).map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </>
+                            )}
+                            <label>หมายเหตุ (ถ้ามี)</label>
+                            <textarea
+                              rows={2}
+                              value={requestNote}
+                              onChange={(event) => setRequestNote(event.target.value)}
+                              placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                            />
+                            {requestError && <p className="dashboard-form-error">{requestError}</p>}
+                            <div className="dashboard-form-actions">
+                              <button type="submit" className="dashboard-action-btn is-primary" disabled={requestSubmitting}>
+                                {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
+                              </button>
+                              <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                                ยกเลิก
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </Modal>
+                    )}
+                  </div>
                 </div>
-                {maintenanceTotalPages > 1 && (
-                  <div className="dashboard-maintenance-pagination">
-                    <button
-                      type="button"
-                      className="dashboard-notif-page-btn"
-                      disabled={maintenanceCurrentPage <= 1}
-                      onClick={() => setMaintenancePage(Math.max(1, maintenanceCurrentPage - 1))}
-                    >
-                      ก่อนหน้า
-                    </button>
-                    <span className="dashboard-notif-page-info">
-                      หน้า {maintenanceCurrentPage} / {maintenanceTotalPages}
-                    </span>
-                    <button
-                      type="button"
-                      className="dashboard-notif-page-btn"
-                      disabled={maintenanceCurrentPage >= maintenanceTotalPages}
-                      onClick={() => setMaintenancePage(Math.min(maintenanceTotalPages, maintenanceCurrentPage + 1))}
-                    >
-                      ถัดไป
+              )}
+
+              <div className="col-12 col-lg-7">
+                <div className="dashboard-card">
+                  <div className="dashboard-card-header">
+                    <h2>แจ้งซ่อม</h2>
+                    <button type="button" className="dashboard-action-btn is-primary" onClick={openMaintenanceForm}>
+                      แจ้งซ่อม
                     </button>
                   </div>
-                )}
-                </>
-              )}
-              </div>
-
-              {confirmCancelId !== null && (
-                <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)} variant="confirm">
-                  {(requestClose) => (
-                    <div className="dashboard-confirm-body">
-                      <div className="dashboard-confirm-icon">!</div>
-                      <p className="dashboard-confirm-message">
-                        ต้องการยกเลิกรายการแจ้งซ่อมนี้ใช่หรือไม่?
-                        <br />
-                        เมื่อยกเลิกแล้วจะไม่สามารถกู้คืนได้
-                      </p>
-                      {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
-                      <div className="dashboard-form-actions">
-                        <button
-                          type="button"
-                          className="dashboard-action-btn is-danger"
-                          disabled={cancelingMaintenanceId === confirmCancelId}
-                          onClick={async () => {
-                            const ok = await handleCancelMaintenance(confirmCancelId)
-                            if (ok) requestClose()
-                          }}
-                        >
-                          {cancelingMaintenanceId === confirmCancelId ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
-                        </button>
-                        <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                          ไม่ยกเลิก
-                        </button>
-                      </div>
+                  {maintenanceRequests.length > 0 && (
+                    <div className="dashboard-filters dashboard-filters-spaced">
+                      <input
+                        type="text"
+                        className="dashboard-search-input"
+                        placeholder="ค้นหารายละเอียด, หมวดหมู่, เบอร์โทร..."
+                        value={maintenanceSearch}
+                        onChange={(event) => {
+                          setMaintenanceSearch(event.target.value)
+                          setMaintenancePage(1)
+                        }}
+                      />
+                      <select
+                        className="dashboard-filter-select"
+                        value={maintenanceStatusFilter}
+                        onChange={(event) => {
+                          setMaintenanceStatusFilter(event.target.value)
+                          setMaintenancePage(1)
+                        }}
+                      >
+                        <option value="all">ทุกสถานะ</option>
+                        <option value="pending">รอดำเนินการ</option>
+                        <option value="in_progress">กำลังดำเนินการ</option>
+                        <option value="done">เสร็จสิ้น</option>
+                        <option value="cancelled">ยกเลิกแล้ว</option>
+                      </select>
                     </div>
                   )}
-                </Modal>
-              )}
+                  {showMaintenanceForm && (
+                    <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
+                      {(requestClose) => (
+                        <form className="dashboard-inline-form" onSubmit={handleMaintenanceSubmit}>
+                          <label>หมวดหมู่ปัญหา</label>
+                          <select value={maintenanceCategory} onChange={(event) => setMaintenanceCategory(event.target.value)}>
+                            {MAINTENANCE_CATEGORY_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <label>รายละเอียดปัญหา</label>
+                          <textarea
+                            rows={3}
+                            value={maintenanceText}
+                            onChange={(event) => setMaintenanceText(event.target.value)}
+                            placeholder="อธิบายปัญหาที่ต้องการแจ้งซ่อม เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว..."
+                          />
+
+                          <label>ช่วงเวลาที่สะดวกให้เข้าซ่อม</label>
+                          <select
+                            value={maintenancePreferredTime}
+                            onChange={(event) => setMaintenancePreferredTime(event.target.value)}
+                          >
+                            {MAINTENANCE_TIME_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <label>เบอร์โทรติดต่อ (ถ้ามี)</label>
+                          <input
+                            type="tel"
+                            value={maintenanceContactPhone}
+                            onChange={(event) => setMaintenanceContactPhone(event.target.value)}
+                            placeholder="เบอร์โทรที่ติดต่อได้"
+                          />
+
+                          <label htmlFor="maintenance-photos">แนบรูปปัญหา (สูงสุด 3 รูป)</label>
+                          <input id="maintenance-photos" className="dashboard-file-input" type="file" accept="image/*" multiple onChange={(event) => {
+                            const files = Array.from(event.target.files || [])
+                            if (files.length > 3) setMaintenanceError('แนบรูปได้ไม่เกิน 3 รูป')
+                            else {
+                              setMaintenanceError('')
+                              setMaintenancePhotos(files)
+                            }
+                          }} />
+                          {maintenancePhotos.length > 0 && <p className="dashboard-file-name">เลือกแล้ว {maintenancePhotos.length} รูป</p>}
+
+                          {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
+                          <div className="dashboard-form-actions">
+                            <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
+                              {maintenanceSubmitting ? 'กำลังส่ง...' : 'ยืนยันแจ้งซ่อม'}
+                            </button>
+                            <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                              ยกเลิก
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </Modal>
+                  )}
+
+                  <div className="dashboard-maintenance-body">
+                  {maintenanceRequests.length === 0 ? (
+                    <p className="dashboard-empty">ยังไม่มีรายการแจ้งซ่อม</p>
+                  ) : filteredMaintenanceRequests.length === 0 ? (
+                    <p className="dashboard-empty">ไม่พบรายการที่ตรงกับการค้นหา</p>
+                  ) : (
+                    <>
+                    <div className="dashboard-maintenance-list">
+                      {paginatedMaintenanceRequests.map((item) => (
+                        <div key={item.id} className="dashboard-maintenance-item">
+                          <div>
+                            <p className="dashboard-maintenance-desc">{item.description}</p>
+                            <p className="dashboard-maintenance-meta">
+                              {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
+                              {' · '}
+                              {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
+                              {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
+                            </p>
+                            {item.photos?.length > 0 && (
+                              <div className="dashboard-maintenance-photos">
+                                {item.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} /></a>)}
+                              </div>
+                            )}
+                            <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
+                          </div>
+                          <div className="dashboard-maintenance-badges">
+                            {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (
+                              <button
+                                type="button"
+                                className={`dashboard-badge status-${maintenanceBadgeClass(item.status)} dashboard-badge-btn`}
+                                onClick={() => setStatusPopup({ kind: 'maintenance', status: item.status, request: item })}
+                              >
+                                {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                              </button>
+                            ) : (
+                              <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
+                                {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                              </span>
+                            )}
+                            {item.status === 'pending' && (
+                              <button
+                                type="button"
+                                className="dashboard-maintenance-cancel"
+                                disabled={cancelingMaintenanceId === item.id}
+                                onClick={() => {
+                                  setMaintenanceError('')
+                                  setConfirmCancelId(item.id)
+                                }}
+                              >
+                                {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {maintenanceTotalPages > 1 && (
+                      <div className="dashboard-maintenance-pagination">
+                        <button
+                          type="button"
+                          className="dashboard-notif-page-btn"
+                          disabled={maintenanceCurrentPage <= 1}
+                          onClick={() => setMaintenancePage(Math.max(1, maintenanceCurrentPage - 1))}
+                        >
+                          ก่อนหน้า
+                        </button>
+                        <span className="dashboard-notif-page-info">
+                          หน้า {maintenanceCurrentPage} / {maintenanceTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          className="dashboard-notif-page-btn"
+                          disabled={maintenanceCurrentPage >= maintenanceTotalPages}
+                          onClick={() => setMaintenancePage(Math.min(maintenanceTotalPages, maintenanceCurrentPage + 1))}
+                        >
+                          ถัดไป
+                        </button>
+                      </div>
+                    )}
+                    </>
+                  )}
+                  </div>
+
+                  {confirmCancelId !== null && (
+                    <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)} variant="confirm">
+                      {(requestClose) => (
+                        <div className="dashboard-confirm-body">
+                          <div className="dashboard-confirm-icon">!</div>
+                          <p className="dashboard-confirm-message">
+                            ต้องการยกเลิกรายการแจ้งซ่อมนี้ใช่หรือไม่?
+                            <br />
+                            เมื่อยกเลิกแล้วจะไม่สามารถกู้คืนได้
+                          </p>
+                          {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
+                          <div className="dashboard-form-actions">
+                            <button
+                              type="button"
+                              className="dashboard-action-btn is-danger"
+                              disabled={cancelingMaintenanceId === confirmCancelId}
+                              onClick={async () => {
+                                const ok = await handleCancelMaintenance(confirmCancelId)
+                                if (ok) requestClose()
+                              }}
+                            >
+                              {cancelingMaintenanceId === confirmCancelId ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
+                            </button>
+                            <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                              ไม่ยกเลิก
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </Modal>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       {receiptRequest && (
@@ -2505,34 +2913,6 @@ function CustomerDashbord() {
             <ReceiptTemplate receiptRequest={receiptRequest} customer={customer} />
           </div>
         </div>
-      )}
-
-      {showProfileForm && (
-        <Modal title="โปรไฟล์และรหัสผ่าน" onClose={() => setShowProfileForm(false)}>
-          {(requestClose) => (
-            <form className="dashboard-inline-form" onSubmit={(event) => handleProfileSubmit(event, requestClose)}>
-              <label htmlFor="profile-first-name">ชื่อ</label>
-              <input id="profile-first-name" maxLength={100} value={profileForm.first_name} onChange={(event) => setProfileForm((form) => ({ ...form, first_name: event.target.value }))} required />
-              <label htmlFor="profile-last-name">นามสกุล</label>
-              <input id="profile-last-name" maxLength={100} value={profileForm.last_name} onChange={(event) => setProfileForm((form) => ({ ...form, last_name: event.target.value }))} required />
-              <label htmlFor="profile-phone">เบอร์โทรศัพท์</label>
-              <input id="profile-phone" type="tel" maxLength={10} value={profileForm.phone} onChange={(event) => setProfileForm((form) => ({ ...form, phone: event.target.value }))} required />
-              <div className="dashboard-profile-divider" />
-              <p className="dashboard-profile-hint">หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นช่องด้านล่างว่างไว้</p>
-              <label htmlFor="profile-current-password">รหัสผ่านปัจจุบัน</label>
-              <input id="profile-current-password" type="password" autoComplete="current-password" value={profileForm.current_password} onChange={(event) => setProfileForm((form) => ({ ...form, current_password: event.target.value }))} />
-              <label htmlFor="profile-new-password">รหัสผ่านใหม่</label>
-              <input id="profile-new-password" type="password" autoComplete="new-password" minLength={6} value={profileForm.new_password} onChange={(event) => setProfileForm((form) => ({ ...form, new_password: event.target.value }))} />
-              <label htmlFor="profile-confirm-password">ยืนยันรหัสผ่านใหม่</label>
-              <input id="profile-confirm-password" type="password" autoComplete="new-password" minLength={6} value={profileForm.confirm_password} onChange={(event) => setProfileForm((form) => ({ ...form, confirm_password: event.target.value }))} />
-              {profileError && <p className="dashboard-form-error">{profileError}</p>}
-              <div className="dashboard-form-actions">
-                <button type="submit" className="dashboard-action-btn is-primary" disabled={profileSubmitting}>{profileSubmitting ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}</button>
-                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
-              </div>
-            </form>
-          )}
-        </Modal>
       )}
     </div>
   )
