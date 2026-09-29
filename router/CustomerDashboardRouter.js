@@ -6,7 +6,14 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
-import { isPositiveId, isValidPassword, parseMaintenanceInput, parseTenantRequestInput, validatePersonUpdateInput } from "../middleware/validation.js";
+import {
+  isPositiveId,
+  isValidPassword,
+  parseMaintenanceInput,
+  parsePhotoList,
+  parseTenantRequestInput,
+  validatePersonUpdateInput,
+} from "../middleware/validation.js";
 
 const router = Router();
 const UPLOAD_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads"));
@@ -30,6 +37,22 @@ function parsePaymentSlip(req, res, next) {
     if (!error) return next();
     return res.status(400).json({ message: error.message || "อัปโหลดสลิปไม่สำเร็จ" });
   });
+}
+
+export async function attachMaintenancePhotos(pool, requests) {
+  if (requests.length === 0) return requests;
+  const [photos] = await pool.query(
+    `SELECT maintenance_request_id, name, data_url FROM MaintenancePhoto
+     WHERE maintenance_request_id IN (?) ORDER BY id ASC`,
+    [requests.map((request) => request.id)],
+  );
+  const photosByRequestId = new Map();
+  for (const photo of photos) {
+    const list = photosByRequestId.get(photo.maintenance_request_id) || [];
+    list.push({ name: photo.name, dataUrl: photo.data_url });
+    photosByRequestId.set(photo.maintenance_request_id, list);
+  }
+  return requests.map((request) => ({ ...request, photos: photosByRequestId.get(request.id) || [] }));
 }
 
 router.use(authenticate, requireCustomerRole);
@@ -316,6 +339,11 @@ router.get("/me", async (req, res) => {
       [customer.id],
     );
 
+    const [announcements] = await pool.query(
+      `SELECT id, title, message, tone, author_name AS author, created_at
+       FROM Announcement ORDER BY created_at DESC, id DESC LIMIT 50`,
+    );
+
     const latestBookingId = bookings[0]?.booking_id;
     const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
     const currentDue = computeCurrentDue(roomRows[0], paymentsForCurrentBooking, customer.deposit_amount);
@@ -324,8 +352,9 @@ router.get("/me", async (req, res) => {
       customer,
       room: roomRows[0] || null,
       rentalHistory,
-      maintenanceRequests,
+      maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests),
       tenantRequests,
+      announcements,
       currentDue,
     });
   } catch (error) {
@@ -433,13 +462,32 @@ router.post("/maintenance", async (req, res) => {
     }
     const { description, category, preferredTime, contactPhone } = value;
 
-    const [result] = await pool.query(
-      `INSERT INTO MaintenanceRequest (customer_id, room_number, description, category, contact_phone, preferred_time)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [customer.id, customer.room_number, description, category, contactPhone, preferredTime],
-    );
+    const photos = parsePhotoList(req.body?.photos);
+    if (photos.error) {
+      return res.status(400).json({ message: photos.error });
+    }
 
-    return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด", maintenanceId: result.insertId });
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query(
+        `INSERT INTO MaintenanceRequest (customer_id, room_number, description, category, contact_phone, preferred_time)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [customer.id, customer.room_number, description, category, contactPhone, preferredTime],
+      );
+      if (photos.value.length > 0) {
+        await connection.query(`INSERT INTO MaintenancePhoto (maintenance_request_id, name, data_url) VALUES ?`, [
+          photos.value.map((photo) => [result.insertId, photo.name, photo.dataUrl]),
+        ]);
+      }
+      await connection.commit();
+      return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด", maintenanceId: result.insertId });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     console.error("Create maintenance request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });

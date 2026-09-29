@@ -7,13 +7,43 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
-import { readAnnouncements, subscribeAnnouncements } from '../utils/announcements.js'
-import { compressImageFile } from '../utils/moveOutInspections.js'
-import {
-  readMaintenanceAttachments,
-  saveMaintenanceRequestPhotos,
-  subscribeMaintenanceAttachments,
-} from '../utils/maintenanceAttachments.js'
+
+function compressImageFile(file) {
+  if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
+  if (file.size > 15 * 1024 * 1024) return Promise.reject(new Error('รูปภาพต้องมีขนาดไม่เกิน 15 MB'))
+
+  return new Promise((resolve, reject) => {
+    const imageUrl = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      const maxDimension = 1400
+      const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(image.width * scale))
+      canvas.height = Math.max(1, Math.round(image.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) {
+        URL.revokeObjectURL(imageUrl)
+        reject(new Error('ไม่สามารถประมวลผลรูปภาพได้'))
+        return
+      }
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(imageUrl)
+      resolve({
+        name: file.name,
+        dataUrl: canvas.toDataURL('image/jpeg', 0.65),
+        contentType: 'image/jpeg',
+      })
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl)
+      reject(new Error('อ่านรูปภาพไม่สำเร็จ'))
+    }
+    image.src = imageUrl
+  })
+}
 
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
@@ -818,8 +848,6 @@ function CustomerDashbord() {
   const [maintenancePreferredTime, setMaintenancePreferredTime] = useState(MAINTENANCE_TIME_OPTIONS[0].value)
   const [maintenanceContactPhone, setMaintenanceContactPhone] = useState('')
   const [maintenancePhotos, setMaintenancePhotos] = useState([])
-  const [maintenanceAttachments, setMaintenanceAttachments] = useState(readMaintenanceAttachments)
-  const [announcementItems, setAnnouncementItems] = useState(readAnnouncements)
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false)
   const [maintenanceError, setMaintenanceError] = useState('')
   const [cancelingMaintenanceId, setCancelingMaintenanceId] = useState(null)
@@ -866,11 +894,6 @@ function CustomerDashbord() {
     notifOpen,
     notifDetail,
   ])
-
-  useEffect(() => subscribeMaintenanceAttachments(setMaintenanceAttachments), [])
-  useEffect(() => subscribeAnnouncements(setAnnouncementItems), [])
-
-  useEffect(() => subscribeMaintenanceAttachments(setMaintenanceAttachments), [])
 
   const maybeShowStatusPopups = (dashboardData) => {
     const tryShowStatusPopup = (kind, status, id, request) => {
@@ -1124,24 +1147,17 @@ function CustomerDashbord() {
           category: maintenanceCategory,
           preferredTime: maintenancePreferredTime,
           contactPhone: maintenanceContactPhone.trim() || undefined,
+          photos: compressedPhotos,
         },
         { headers: { Authorization: `Bearer ${token}` } },
       )
-      let message = result.message || 'แจ้งซ่อมสำเร็จ'
-      if (compressedPhotos.length && result.maintenanceId) {
-        try {
-          saveMaintenanceRequestPhotos(result.maintenanceId, compressedPhotos)
-        } catch {
-          message = 'แจ้งซ่อมสำเร็จ แต่เก็บรูปในเบราว์เซอร์ไม่สำเร็จ'
-        }
-      }
       setMaintenanceText('')
       setMaintenancePhotos([])
       setShowMaintenanceForm(false)
-      setSuccessPopup(message)
+      setSuccessPopup(result.message || 'แจ้งซ่อมสำเร็จ')
       await loadDashboard()
     } catch (err) {
-      setMaintenanceError(err.response?.data?.message || 'แจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      setMaintenanceError(err.response?.data?.message || err.message || 'แจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setMaintenanceSubmitting(false)
     }
@@ -1259,7 +1275,7 @@ function CustomerDashbord() {
     )
   }
 
-  const { customer, room, rentalHistory, currentDue, maintenanceRequests = [], tenantRequests = [] } = data
+  const { customer, room, rentalHistory, currentDue, maintenanceRequests = [], tenantRequests = [], announcements = [] } = data
   const currentBooking = rentalHistory?.[0]
   const paymentUnderReview = currentBooking?.payments?.some((payment) => payment.status === 'pending' && payment.slip_path)
   const prepaidUntilDate = room?.prepaid_until ? new Date(room.prepaid_until) : null
@@ -1365,7 +1381,7 @@ function CustomerDashbord() {
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
-    ...announcementItems.map((item) => ({
+    ...announcements.map((item) => ({
       key: `announcement-${item.id}`,
       title: item.title,
       label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
@@ -1687,7 +1703,7 @@ function CustomerDashbord() {
           </div>
         </div>
 
-        <AnnouncementBoard />
+        <AnnouncementBoard variant="dashboard" announcements={announcements} />
 
         {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
           <Modal
@@ -2328,7 +2344,7 @@ function CustomerDashbord() {
                           setMaintenancePhotos(files)
                         }
                       }} />
-                      {maintenancePhotos.length > 0 && <p className="dashboard-file-name">เลือกแล้ว {maintenancePhotos.length} รูป (รูปจะเก็บในเบราว์เซอร์นี้)</p>}
+                      {maintenancePhotos.length > 0 && <p className="dashboard-file-name">เลือกแล้ว {maintenancePhotos.length} รูป</p>}
 
                       {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
                       <div className="dashboard-form-actions">
@@ -2362,9 +2378,9 @@ function CustomerDashbord() {
                           {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
                           {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
                         </p>
-                        {(maintenanceAttachments[item.id] || []).length > 0 && (
+                        {item.photos?.length > 0 && (
                           <div className="dashboard-maintenance-photos">
-                            {maintenanceAttachments[item.id].map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} /></a>)}
+                            {item.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} /></a>)}
                           </div>
                         )}
                         <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>

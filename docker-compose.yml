@@ -135,6 +135,7 @@ services:
       - "${STAFF_PORT:-4004}:4004"
     volumes:
       - payment_slips:/app/uploads
+      - ./public/uploads:/app/public/uploads
 
   admin-service:
     <<: *service-defaults
@@ -145,6 +146,8 @@ services:
       ADMIN_PORT: 4005
     ports:
       - "${ADMIN_PORT:-4005}:4005"
+    volumes:
+      - ./public/uploads:/app/public/uploads
 
   owner-service:
     <<: *service-defaults

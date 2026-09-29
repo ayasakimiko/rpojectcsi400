@@ -3,8 +3,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
-import { isPositiveId, lookup, parsePage, parseSearch, parseUtilityBillInput } from "../middleware/validation.js";
-import { computeCurrentDue } from "./CustomerDashboardRouter.js";
+import {
+  isPositiveId,
+  lookup,
+  parseMoveOutInspectionInput,
+  parsePage,
+  parseSearch,
+  parseUtilityBillInput,
+  parseWaitingListInput,
+} from "../middleware/validation.js";
+import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
+import announcementRouter from "./AnnouncementRouter.js";
+import { attachMaintenancePhotos, computeCurrentDue } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
@@ -38,6 +48,7 @@ router.use(async (req, res, next) => {
 });
 
 router.use("/expenses", expenseRouter);
+router.use("/announcements", announcementRouter);
 
 router.get("/me", async (req, res) => {
   try {
@@ -176,6 +187,106 @@ router.patch("/payment-verifications/:id", async (req, res) => {
     return res.status(500).json({ message: "ตรวจสอบสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
   } finally {
     connection.release();
+  }
+});
+
+router.get("/waiting-list", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [waitingList] = await pool.query(
+      `SELECT id, full_name, phone, room_preference, note, status, submitted_by_name, created_at
+       FROM WaitingList ORDER BY created_at DESC, id DESC`,
+    );
+    return res.json({ waitingList });
+  } catch (error) {
+    console.error("Fetch waiting list error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/waiting-list", async (req, res) => {
+  try {
+    const { error, value } = parseWaitingListInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const pool = getPool();
+    const staffName = await getActingStaffName(pool, req.user);
+    const [result] = await pool.query(
+      `INSERT INTO WaitingList (full_name, phone, room_preference, note, submitted_by_name) VALUES (?, ?, ?, ?, ?)`,
+      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, staffName],
+    );
+    return res.status(201).json({ message: "เพิ่มรายชื่อผู้สนใจสำเร็จ", waitingListId: result.insertId });
+  } catch (error) {
+    console.error("Create waiting list entry error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-out-inspections", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [inspections] = await pool.query(
+      `SELECT id, room_number, tenant_name, checklist, status, created_at
+       FROM MoveOutInspection ORDER BY created_at DESC, id DESC`,
+    );
+    return res.json({
+      inspections: inspections.map((inspection) => ({ ...inspection, checklist: JSON.parse(inspection.checklist) })),
+    });
+  } catch (error) {
+    console.error("Fetch move-out inspections error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/move-out-inspections", async (req, res) => {
+  try {
+    const { error, value } = parseMoveOutInspectionInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const pool = getPool();
+    const [tenantRows] = await pool.query(
+      `SELECT c.first_name, c.last_name, c.phone
+       FROM Room r
+       JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
+       WHERE r.room_number = ? AND r.is_booked = TRUE
+       ORDER BY c.id DESC
+       LIMIT 1`,
+      [value.roomNumber],
+    );
+    const tenant = tenantRows[0];
+    if (!tenant) {
+      return res.status(400).json({ message: "กรุณาเลือกห้องที่มีผู้เช่า" });
+    }
+
+    const staffName = await getActingStaffName(pool, req.user);
+    const photos = await savePublicImages("move-out-inspections", value.photos);
+    let result;
+    try {
+      [result] = await pool.query(
+        `INSERT INTO MoveOutInspection (room_number, tenant_name, tenant_phone, checklist, damage_note, photos, inspected_by_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          value.roomNumber,
+          `${tenant.first_name} ${tenant.last_name}`,
+          tenant.phone || null,
+          JSON.stringify(value.checklist),
+          value.damageNote,
+          JSON.stringify(photos),
+          staffName,
+        ],
+      );
+    } catch (error) {
+      await deletePublicImages(photos.map((photo) => photo.url));
+      throw error;
+    }
+    return res.status(201).json({ message: "ส่งผลตรวจห้องให้ Admin แล้ว", inspectionId: result.insertId });
+  } catch (error) {
+    console.error("Create move-out inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
 
@@ -494,7 +605,7 @@ router.get("/requests", async (req, res) => {
        ORDER BY mr.created_at ASC`,
     );
 
-    return res.json({ tenantRequests, maintenanceRequests });
+    return res.json({ tenantRequests, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
   } catch (error) {
     console.error("Fetch staff requests error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });

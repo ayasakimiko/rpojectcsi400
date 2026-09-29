@@ -6,19 +6,24 @@ import {
   hasField,
   isPositiveId,
   isValidMoney,
+  MOVE_OUT_INSPECTION_STATUSES,
   normalizePersonUpdate,
   parsePage,
   parseSearch,
+  parseWaitingListInput,
   validatePersonInput,
   validatePersonUpdateInput,
   validateRoomFields,
 } from "../middleware/validation.js";
+import { deletePublicImages } from "../middleware/publicUploads.js";
+import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
 
 router.use(authenticate, requireAdminRole);
 router.use("/expenses", expenseRouter);
+router.use("/announcements", announcementRouter);
 
 function buildUpdate(allowedColumns, body) {
   const columns = [];
@@ -31,6 +36,187 @@ function buildUpdate(allowedColumns, body) {
   }
   return { columns, values };
 }
+
+const ADMIN_ROLE_TABLE = { Admin: "Admin", Owner: "Owner" };
+
+async function getActingAdminName(pool, user) {
+  const table = ADMIN_ROLE_TABLE[user?.role];
+  if (!table) return null;
+  const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
+  const row = rows[0];
+  return row ? `${row.first_name} ${row.last_name}` : null;
+}
+
+router.get("/waiting-list", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [waitingList] = await pool.query(
+      `SELECT id, full_name, phone, room_preference, note, status, submitted_by_name, created_at
+       FROM WaitingList ORDER BY created_at DESC, id DESC`,
+    );
+    return res.json({ waitingList });
+  } catch (error) {
+    console.error("Fetch waiting list error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/waiting-list", async (req, res) => {
+  try {
+    const { error, value } = parseWaitingListInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const pool = getPool();
+    const adminName = await getActingAdminName(pool, req.user);
+    const [result] = await pool.query(
+      `INSERT INTO WaitingList (full_name, phone, room_preference, note, submitted_by_name) VALUES (?, ?, ?, ?, ?)`,
+      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, adminName],
+    );
+    return res.status(201).json({ message: "เพิ่มรายชื่อผู้สนใจสำเร็จ", waitingListId: result.insertId });
+  } catch (error) {
+    console.error("Create waiting list entry error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.patch("/waiting-list/:id", async (req, res) => {
+  try {
+    const entryId = Number(req.params.id);
+    if (!isPositiveId(entryId)) {
+      return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+    }
+    const { error, value } = parseWaitingListInput(req.body ?? {}, { partial: true });
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    const { columns, values } = buildUpdate(["full_name", "phone", "room_preference", "note", "status"], value);
+    if (columns.length === 0) {
+      return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
+    }
+
+    const pool = getPool();
+    const [result] = await pool.query(`UPDATE WaitingList SET ${columns.join(", ")} WHERE id = ?`, [...values, entryId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "ไม่พบรายชื่อผู้สนใจ" });
+    }
+    return res.json({ message: "แก้ไขรายชื่อผู้สนใจสำเร็จ" });
+  } catch (error) {
+    console.error("Update waiting list entry error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.delete("/waiting-list/:id", async (req, res) => {
+  try {
+    const entryId = Number(req.params.id);
+    if (!isPositiveId(entryId)) {
+      return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [result] = await pool.query(`DELETE FROM WaitingList WHERE id = ?`, [entryId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "ไม่พบรายชื่อผู้สนใจ" });
+    }
+    return res.json({ message: "ลบรายชื่อผู้สนใจสำเร็จ" });
+  } catch (error) {
+    console.error("Delete waiting list entry error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-out-inspections", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [inspections] = await pool.query(
+      `SELECT id, room_number, tenant_name, tenant_phone, checklist, damage_note, JSON_LENGTH(photos) AS photo_count,
+              status, inspected_by_name AS inspected_by, reviewed_at, created_at
+       FROM MoveOutInspection ORDER BY created_at DESC, id DESC`,
+    );
+    return res.json({
+      inspections: inspections.map((inspection) => ({ ...inspection, checklist: JSON.parse(inspection.checklist) })),
+    });
+  } catch (error) {
+    console.error("Fetch move-out inspections error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-out-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT id, room_number, tenant_name, tenant_phone, checklist, damage_note, photos,
+              status, inspected_by_name AS inspected_by, reviewed_at, created_at
+       FROM MoveOutInspection WHERE id = ?`,
+      [inspectionId],
+    );
+    const inspection = rows[0];
+    if (!inspection) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    return res.json({
+      inspection: { ...inspection, checklist: JSON.parse(inspection.checklist), photos: JSON.parse(inspection.photos) },
+    });
+  } catch (error) {
+    console.error("Fetch move-out inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.patch("/move-out-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+    const status = req.body?.status;
+    if (!MOVE_OUT_INSPECTION_STATUSES.has(status)) {
+      return res.status(400).json({ message: "สถานะไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [result] = await pool.query(`UPDATE MoveOutInspection SET status = ?, reviewed_at = NOW() WHERE id = ?`, [
+      status,
+      inspectionId,
+    ]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    return res.json({ message: "เปลี่ยนสถานะผลตรวจสำเร็จ" });
+  } catch (error) {
+    console.error("Update move-out inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.delete("/move-out-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    await pool.query(`DELETE FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    await deletePublicImages(JSON.parse(rows[0].photos).map((photo) => photo.url));
+    return res.json({ message: "ลบผลตรวจห้องสำเร็จ" });
+  } catch (error) {
+    console.error("Delete move-out inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
 
 router.get("/rooms", async (req, res) => {
   try {

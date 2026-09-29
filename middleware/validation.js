@@ -313,3 +313,87 @@ export function parseUtilityBillInput(body = {}) {
   }
   return { value: { electricityUnits, electricityAmount, waterAmount } };
 }
+
+const MAX_PHOTOS = 3;
+const MAX_PHOTO_DATA_URL_LENGTH = 2_000_000;
+const PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+
+export function parsePhotoList(photos) {
+  if (photos === undefined || photos === null) return { value: [] };
+  if (!Array.isArray(photos) || photos.length > MAX_PHOTOS) {
+    return { error: `แนบรูปได้ไม่เกิน ${MAX_PHOTOS} รูป` };
+  }
+  const value = [];
+  for (const photo of photos) {
+    const dataUrl = photo?.dataUrl;
+    if (typeof dataUrl !== "string" || dataUrl.length > MAX_PHOTO_DATA_URL_LENGTH || !PHOTO_DATA_URL_PATTERN.test(dataUrl)) {
+      return { error: "รูปภาพไม่ถูกต้องหรือมีขนาดใหญ่เกินไป" };
+    }
+    const name = typeof photo.name === "string" ? photo.name.trim().slice(0, 255) : "";
+    value.push({ name: name || "photo.jpg", dataUrl });
+  }
+  return { value };
+}
+
+const ANNOUNCEMENT_TONES = new Set(["info", "warning"]);
+
+export function parseAnnouncementInput(body = {}) {
+  const error =
+    validateText(body.title, "หัวข้อประกาศ", { maxLength: 120 }) ||
+    validateText(body.message, "รายละเอียดประกาศ", { maxLength: 1000 });
+  if (error) return { error };
+  const tone = body.tone ?? "info";
+  if (!ANNOUNCEMENT_TONES.has(tone)) return { error: "ประเภทประกาศไม่ถูกต้อง" };
+  return { value: { title: body.title.trim(), message: body.message.trim(), tone } };
+}
+
+const WAITING_LIST_STATUSES = new Set(["waiting", "contacted", "reserved", "closed"]);
+const WAITING_LIST_REQUIRED_FIELDS = new Set(["full_name", "phone"]);
+const WAITING_LIST_FIELD_VALIDATORS = {
+  full_name: (value) => validateText(value, "ชื่อผู้สนใจ", { maxLength: 255 }),
+  phone: (value) => validateText(value, "เบอร์โทรศัพท์", { maxLength: 20 }),
+  room_preference: (value) => validateText(value, "ประเภทห้องที่สนใจ", { maxLength: 100, required: false }),
+  note: (value) => validateText(value, "หมายเหตุ", { maxLength: 500, required: false }),
+  status: (value) => (WAITING_LIST_STATUSES.has(value) ? null : "สถานะไม่ถูกต้อง"),
+};
+
+export function parseWaitingListInput(body = {}, { partial = false } = {}) {
+  const value = {};
+  for (const [field, validate] of Object.entries(WAITING_LIST_FIELD_VALIDATORS)) {
+    if (!partial && field === "status") continue;
+    if (!hasField(body, field)) {
+      if (!partial && WAITING_LIST_REQUIRED_FIELDS.has(field)) return { error: validate(undefined) };
+      continue;
+    }
+    const error = validate(body[field]);
+    if (error) return { error };
+    value[field] = typeof body[field] === "string" ? body[field].trim() || null : null;
+  }
+  return { value };
+}
+
+const MOVE_OUT_CHECKLIST_KEYS = ["walls", "floor", "ceiling", "doors", "windows", "electrical", "bathroom", "furniture"];
+const MOVE_OUT_RESULTS = new Set(["good", "damaged", "not_applicable"]);
+export const MOVE_OUT_INSPECTION_STATUSES = new Set(["pending", "reviewed", "follow_up"]);
+
+export function parseMoveOutInspectionInput(body = {}) {
+  const roomNumber = Number(body.room_number);
+  if (!Number.isInteger(roomNumber) || roomNumber < 100 || roomNumber > 999) {
+    return { error: "เลขห้องไม่ถูกต้อง" };
+  }
+  const checklist = {};
+  for (const key of MOVE_OUT_CHECKLIST_KEYS) {
+    const result = body.checklist?.[key];
+    if (!MOVE_OUT_RESULTS.has(result)) return { error: "กรุณาตรวจและเลือกผลให้ครบทุกหัวข้อ" };
+    checklist[key] = result;
+  }
+  const noteError = validateText(body.damage_note, "รายละเอียดความเสียหาย", { maxLength: 1000, required: false });
+  if (noteError) return { error: noteError };
+  const damageNote = typeof body.damage_note === "string" ? body.damage_note.trim() : "";
+  if (Object.values(checklist).includes("damaged") && !damageNote) {
+    return { error: "กรุณาระบุรายละเอียดความเสียหาย" };
+  }
+  const photos = parsePhotoList(body.photos);
+  if (photos.error) return photos;
+  return { value: { roomNumber, checklist, damageNote: damageNote || null, photos: photos.value } };
+}

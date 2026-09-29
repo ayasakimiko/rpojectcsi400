@@ -1,6 +1,35 @@
-import { useEffect, useRef, useState } from 'react'
-import { createAnnouncement, deleteAnnouncement, readAnnouncements, subscribeAnnouncements } from '../utils/announcements.js'
+import { useEffect, useState } from 'react'
+import axios from 'axios'
 import './AnnouncementBoard.css'
+
+const ANNOUNCEMENTS_PER_PAGE = 5
+const EMPTY_FORM = { title: '', message: '', tone: 'info' }
+const TONE_LABEL = { info: 'ทั่วไป', warning: 'แจ้งเตือน' }
+
+// Each page styles its cards and tables with its own class prefix, so the board borrows the host page's classes.
+const VARIANT_CLASSES = {
+  staff: {
+    card: 'staff-card',
+    header: 'staff-card-header',
+    table: 'staff-table',
+    button: 'staff-action-btn',
+    empty: 'staff-empty',
+  },
+  admin: {
+    card: 'admin-card',
+    header: 'admin-card-header',
+    table: 'table admin-table',
+    button: 'admin-action-btn',
+    empty: 'admin-empty',
+  },
+  dashboard: {
+    card: 'dashboard-card',
+    header: 'dashboard-card-header',
+    table: 'dashboard-table',
+    button: 'dashboard-action-btn',
+    empty: 'dashboard-empty',
+  },
+}
 
 function formatAnnouncementDate(value) {
   return new Date(value).toLocaleString('th-TH', {
@@ -12,120 +41,244 @@ function formatAnnouncementDate(value) {
   })
 }
 
-function AnnouncementBoard({ canManage = false, author = 'เจ้าหน้าที่' }) {
-  const [announcements, setAnnouncements] = useState(readAnnouncements)
-  const [isOpen, setIsOpen] = useState(false)
+function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onChange, variant = 'staff' }) {
+  const classes = VARIANT_CLASSES[variant] || VARIANT_CLASSES.staff
   const [isCreating, setIsCreating] = useState(false)
-  const [form, setForm] = useState({ title: '', message: '', tone: 'info' })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [error, setError] = useState('')
-  const launcherRef = useRef(null)
-  const closeButtonRef = useRef(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [page, setPage] = useState(1)
 
-  useEffect(() => subscribeAnnouncements(setAnnouncements), [])
+  const totalPages = Math.max(1, Math.ceil(announcements.length / ANNOUNCEMENTS_PER_PAGE))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = announcements.slice((currentPage - 1) * ANNOUNCEMENTS_PER_PAGE, currentPage * ANNOUNCEMENTS_PER_PAGE)
 
   useEffect(() => {
-    if (!isOpen) return undefined
-    const launcher = launcherRef.current
+    if (!isCreating) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setIsOpen(false)
+      if (event.key === 'Escape') setIsCreating(false)
     }
     window.addEventListener('keydown', handleKeyDown)
-    closeButtonRef.current?.focus()
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      launcher?.focus()
-    }
-  }, [isOpen])
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isCreating])
 
-  const submitAnnouncement = (event) => {
+  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+
+  const openCreateForm = () => {
+    setForm(EMPTY_FORM)
+    setError('')
+    setIsCreating(true)
+  }
+
+  const submitAnnouncement = async (event) => {
     event.preventDefault()
     if (!form.title.trim() || !form.message.trim()) {
       setError('กรุณากรอกหัวข้อและรายละเอียดประกาศ')
       return
     }
+    setSubmitting(true)
     try {
-      createAnnouncement({
-        title: form.title.trim(),
-        message: form.message.trim(),
-        tone: form.tone,
-        author,
-      })
-      setForm({ title: '', message: '', tone: 'info' })
-      setError('')
+      await axios.post(
+        apiBase,
+        { title: form.title.trim(), message: form.message.trim(), tone: form.tone },
+        { headers: authHeaders() },
+      )
       setIsCreating(false)
-    } catch {
-      setError('บันทึกไม่ได้ พื้นที่จัดเก็บในเบราว์เซอร์อาจเต็ม')
+      setPage(1)
+      await onChange?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'เผยแพร่ประกาศไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const removeAnnouncement = (id) => {
+  const removeAnnouncement = async (item) => {
+    if (!window.confirm(`ลบประกาศ "${item.title}" หรือไม่?`)) return
     try {
-      deleteAnnouncement(id)
-    } catch {
-      setError('ลบประกาศไม่สำเร็จ')
+      await axios.delete(`${apiBase}/${item.id}`, { headers: authHeaders() })
+      setError('')
+      await onChange?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'ลบประกาศไม่สำเร็จ')
     }
   }
 
   return (
-    <section className="announcement-board">
-      <button
-        ref={launcherRef}
-        type="button"
-        className="announcement-launcher"
-        aria-haspopup="dialog"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen(true)}
-      >
-        <span>ประกาศจากหอพัก</span>
-        <span className="announcement-count" aria-label={`${announcements.length} ประกาศ`}>{announcements.length}</span>
-      </button>
+    <section className={`${classes.card} announcement-board`}>
+      <div className={classes.header}>
+        <div>
+          <h2>
+            ประกาศจากหอพัก <span className="announcement-count">{announcements.length}</span>
+          </h2>
+          <p className="announcement-board-subtitle">
+            {canManage
+              ? 'ผู้เช่าและเจ้าหน้าที่ทุกคนจะเห็นประกาศนี้ และจะแสดงในการแจ้งเตือนด้วย'
+              : 'ข่าวสารและประกาศล่าสุดจากหอพัก'}
+          </p>
+        </div>
+        {canManage && (
+          <button type="button" className={`${classes.button} is-primary`} onClick={openCreateForm}>
+            + เพิ่มประกาศ
+          </button>
+        )}
+      </div>
 
-      {isOpen && (
-        <div className="announcement-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsOpen(false) }}>
-          <section className="announcement-dialog" role="dialog" aria-modal="true" aria-labelledby="announcement-board-title">
-            <header className="announcement-board-header">
-              <div>
-                <h2 id="announcement-board-title">ประกาศจากหอพัก</h2>
-                <p>ข้อมูลแสดงในเบราว์เซอร์นี้เท่านั้น</p>
-              </div>
-              <div className="announcement-dialog-actions">
-                {canManage && (
-                  <button type="button" className="announcement-board-add" onClick={() => { setError(''); setIsCreating((open) => !open) }}>
-                    {isCreating ? 'ปิดฟอร์ม' : '+ สร้างประกาศ'}
-                  </button>
-                )}
-                <button ref={closeButtonRef} type="button" className="announcement-dialog-close" aria-label="ปิดประกาศ" onClick={() => setIsOpen(false)}>×</button>
-              </div>
-            </header>
+      {!isCreating && error && (
+        <p className="announcement-board-error" role="alert">
+          {error}
+        </p>
+      )}
 
-            {isCreating && canManage && (
-              <form className="announcement-board-form" onSubmit={submitAnnouncement}>
-                <div className="announcement-board-form-row">
-                  <label>หัวข้อ<input maxLength={120} value={form.title} onChange={(event) => setForm((value) => ({ ...value, title: event.target.value }))} required /></label>
-                  <label>ประเภท<select value={form.tone} onChange={(event) => setForm((value) => ({ ...value, tone: event.target.value }))}><option value="info">ทั่วไป</option><option value="warning">แจ้งเตือน</option></select></label>
-                </div>
-                <label>รายละเอียด<textarea rows={3} maxLength={1000} value={form.message} onChange={(event) => setForm((value) => ({ ...value, message: event.target.value }))} required /></label>
-                {error && <p className="announcement-board-error" role="alert">{error}</p>}
-                <button type="submit" className="announcement-board-submit">เผยแพร่ประกาศ</button>
-              </form>
-            )}
-
+      <div className="table-responsive">
+        <table className={`${classes.table} announcement-table`}>
+          <thead>
+            <tr>
+              <th>หัวข้อ</th>
+              <th>รายละเอียด</th>
+              <th>ประกาศโดย</th>
+              <th>วันที่ประกาศ</th>
+              {canManage && <th>จัดการ</th>}
+            </tr>
+          </thead>
+          <tbody>
             {announcements.length === 0 ? (
-              <p className="announcement-board-empty">ยังไม่มีประกาศ</p>
+              <tr>
+                <td colSpan={canManage ? 5 : 4} className={classes.empty}>
+                  ยังไม่มีประกาศ
+                </td>
+              </tr>
             ) : (
-              <div className="announcement-board-list">
-                {announcements.map((item) => (
-                  <article className={`announcement-board-item is-${item.tone || 'info'}`} key={item.id}>
-                    <div className="announcement-board-item-heading">
-                      <h3>{item.title}</h3>
-                      <time dateTime={item.created_at}>{formatAnnouncementDate(item.created_at)}</time>
-                    </div>
-                    <p>{item.message}</p>
-                    <footer><span>ประกาศโดย {item.author || 'เจ้าหน้าที่'}</span>{canManage && <button type="button" onClick={() => removeAnnouncement(item.id)}>ลบ</button>}</footer>
-                  </article>
-                ))}
-              </div>
+              pageItems.map((item) => (
+                <tr key={item.id}>
+                  <td className="announcement-cell-title">
+                    <strong>{item.title}</strong>
+                    <span className={`announcement-tone is-${item.tone || 'info'}`}>
+                      {TONE_LABEL[item.tone] || TONE_LABEL.info}
+                    </span>
+                  </td>
+                  <td className="announcement-cell-message" title={item.message}>
+                    {item.message}
+                  </td>
+                  <td>{item.author || 'เจ้าหน้าที่'}</td>
+                  <td className="announcement-cell-date">{formatAnnouncementDate(item.created_at)}</td>
+                  {canManage && (
+                    <td>
+                      <button
+                        type="button"
+                        className={`${classes.button} is-danger`}
+                        onClick={() => removeAnnouncement(item)}
+                      >
+                        ลบ
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))
             )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="announcement-pagination">
+          <span>
+            หน้า {currentPage} / {totalPages}
+          </span>
+          <div className="announcement-pagination-controls">
+            <button
+              type="button"
+              className={`${classes.button} is-ghost`}
+              disabled={currentPage <= 1}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              ก่อนหน้า
+            </button>
+            <button
+              type="button"
+              className={`${classes.button} is-ghost`}
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              ถัดไป
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isCreating && canManage && (
+        <div
+          className="announcement-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreating(false)
+          }}
+        >
+          <section
+            className="announcement-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="announcement-dialog-title"
+          >
+            <header className="announcement-dialog-header">
+              <h3 id="announcement-dialog-title">เพิ่มประกาศ</h3>
+              <button
+                type="button"
+                className="announcement-dialog-close"
+                aria-label="ปิด"
+                onClick={() => setIsCreating(false)}
+              >
+                ×
+              </button>
+            </header>
+            <form className="announcement-board-form" onSubmit={submitAnnouncement} noValidate>
+              <div className="announcement-board-form-row">
+                <label>
+                  หัวข้อ
+                  <input
+                    maxLength={120}
+                    autoFocus
+                    value={form.title}
+                    onChange={(event) => setForm((value) => ({ ...value, title: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  ประเภท
+                  <select
+                    value={form.tone}
+                    onChange={(event) => setForm((value) => ({ ...value, tone: event.target.value }))}
+                  >
+                    <option value="info">ทั่วไป</option>
+                    <option value="warning">แจ้งเตือน</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                รายละเอียด
+                <textarea
+                  rows={4}
+                  maxLength={1000}
+                  value={form.message}
+                  onChange={(event) => setForm((value) => ({ ...value, message: event.target.value }))}
+                />
+              </label>
+              {error && (
+                <p className="announcement-board-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="announcement-form-actions">
+                <button
+                  type="button"
+                  className="announcement-board-cancel"
+                  onClick={() => setIsCreating(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button type="submit" className="announcement-board-submit" disabled={submitting}>
+                  {submitting ? 'กำลังเผยแพร่...' : 'เผยแพร่ประกาศ'}
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       )}

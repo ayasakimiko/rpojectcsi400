@@ -157,3 +157,46 @@ CREATE TABLE IF NOT EXISTS RoomOccupancySnapshot (
     recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS Announcement (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    title VARCHAR(120) NOT NULL,
+    message VARCHAR(1000) NOT NULL,
+    tone VARCHAR(20) NOT NULL DEFAULT 'info',
+    author_name VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS WaitingList (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    full_name VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    room_preference VARCHAR(100),
+    note VARCHAR(500),
+    status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+    submitted_by_name VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS MoveOutInspection (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    room_number INT UNSIGNED NOT NULL,
+    tenant_name VARCHAR(255) NOT NULL,
+    tenant_phone VARCHAR(20),
+    checklist TEXT NOT NULL,
+    damage_note VARCHAR(1000),
+    photos LONGTEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    inspected_by_name VARCHAR(255),
+    reviewed_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS MaintenancePhoto (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    maintenance_request_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    data_url MEDIUMTEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (maintenance_request_id) REFERENCES MaintenanceRequest(id) ON DELETE CASCADE
+);
