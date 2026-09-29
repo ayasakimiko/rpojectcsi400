@@ -5,6 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import DateDropdowns from '../components/DateDropdowns.jsx'
 
 const MOVE_OUT_CHECKLIST = [
   { key: 'walls', label: 'ผนังและสี' },
@@ -22,7 +23,7 @@ const CHECKLIST_RESULT_OPTIONS = [
   { key: 'damaged', label: 'ชำรุด', title: 'ชำรุด' },
   { key: 'not_applicable', label: 'ไม่เกี่ยวข้อง', title: 'ไม่มี / ไม่เกี่ยวข้อง' },
 ]
-const INSPECTION_MAX_PHOTOS = 3
+const INSPECTION_MAX_PHOTOS = 15
 const INSPECTION_MAX_PHOTO_BYTES = 15 * 1024 * 1024
 
 function formatPhotoSize(bytes) {
@@ -30,8 +31,6 @@ function formatPhotoSize(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-// A nicer replacement for the native room <select>: shows the tenant on the button, and the list can be searched
-// (room number, name or phone) and used with the keyboard (arrows, Enter, Esc).
 function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -77,7 +76,6 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
   const handleKeyDown = (event) => {
     if (event.key === 'Escape') {
       if (!open) return
-      // Close only the list, not the whole modal around it.
       event.preventDefault()
       event.nativeEvent.stopPropagation()
       setOpen(false)
@@ -228,8 +226,7 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
   )
 }
 
-// Photos for the move-out inspection: click to browse or drag images onto it, with thumbnails you can remove.
-function InspectionPhotoPicker({ files, onChange, onError }) {
+function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChange, onError }) {
   const [dragging, setDragging] = useState(false)
   const previewUrls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files])
 
@@ -245,7 +242,7 @@ function InspectionPhotoPicker({ files, onChange, onError }) {
     if (list.length === 0) return
     const images = list.filter((file) => file.type.startsWith('image/'))
     const withinSize = images.filter((file) => file.size <= INSPECTION_MAX_PHOTO_BYTES)
-    const room = INSPECTION_MAX_PHOTOS - files.length
+    const room = INSPECTION_MAX_PHOTOS - existing.length - files.length
     const accepted = withinSize.slice(0, Math.max(0, room))
     if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
     else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 15 MB ต่อรูป')
@@ -255,7 +252,7 @@ function InspectionPhotoPicker({ files, onChange, onError }) {
   }
 
   const dragsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files')
-  const canAddMore = files.length < INSPECTION_MAX_PHOTOS
+  const canAddMore = existing.length + files.length < INSPECTION_MAX_PHOTOS
 
   return (
     <div
@@ -290,7 +287,7 @@ function InspectionPhotoPicker({ files, onChange, onError }) {
           event.target.value = ''
         }}
       />
-      {files.length === 0 ? (
+      {existing.length + files.length === 0 ? (
         <label htmlFor="inspection-photos" className="photo-dropzone">
           <span className="photo-dropzone-icon" aria-hidden="true">
             <svg
@@ -318,6 +315,36 @@ function InspectionPhotoPicker({ files, onChange, onError }) {
         </label>
       ) : (
         <div className="photo-grid">
+          {existing.map((photo, index) => (
+            <figure className="photo-tile" key={`saved-${photo.url}`}>
+              <img src={photo.url} alt={`รูปที่บันทึกไว้ ${index + 1}`} />
+              <figcaption title={photo.name}>
+                <span>{photo.name}</span>
+                <small>บันทึกไว้แล้ว</small>
+              </figcaption>
+              <button
+                type="button"
+                className="photo-tile-remove"
+                aria-label={`ลบรูป ${photo.name}`}
+                onClick={() => onRemoveExisting?.(photo.url)}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </figure>
+          ))}
           {files.map((file, index) => (
             <figure className="photo-tile" key={`${file.name}-${index}`}>
               <img src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
@@ -853,7 +880,6 @@ function SummaryIcon({ type }) {
 
 const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ' }
 
-// Previous / next controls for the staff lists (10 rows per page). Renders nothing when everything fits on one page.
 function StaffPagination({ page, total, onChange }) {
   if (total <= STAFF_LIST_PAGE_SIZE) return null
   const totalPages = Math.ceil(total / STAFF_LIST_PAGE_SIZE)
@@ -893,8 +919,8 @@ function StaffPaymentReview({ onCountChange }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState(null) // { type: 'success' | 'error', message } shown as a popup
-  const [confirmReview, setConfirmReview] = useState(null) // { payment, decision } waiting for a yes/no
+  const [notice, setNotice] = useState(null) 
+  const [confirmReview, setConfirmReview] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
   const [previewClosing, setPreviewClosing] = useState(false)
@@ -942,12 +968,8 @@ function StaffPaymentReview({ onCountChange }) {
     return () => {
       cancelled = true
     }
-    // Runs once on mount; onCountChange is only a state setter passed down by the page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Closing plays the reverse animation first; the dialog is removed once it has had time to finish.
-  // (A timer rather than animationend, so it also closes when animations are turned off.)
   useEffect(() => {
     if (!previewClosing) return undefined
     const timer = setTimeout(() => {
@@ -971,7 +993,6 @@ function StaffPaymentReview({ onCountChange }) {
     }
   }, [preview, confirmReview])
 
-  // If reviewing empties the last page, fall back to the new last page.
   const currentPage = Math.min(page, Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
   const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
@@ -1369,6 +1390,7 @@ function StaffMain() {
   })
   const [waitingList, setWaitingList] = useState([])
   const [waitingListModalOpen, setWaitingListModalOpen] = useState(false)
+  const [waitingListEditing, setWaitingListEditing] = useState(null)
   const [waitingListForm, setWaitingListForm] = useState({ full_name: '', phone: '', room_preference: '', note: '' })
   const [waitingListError, setWaitingListError] = useState('')
   const [waitingListFieldErrors, setWaitingListFieldErrors] = useState({})
@@ -1381,7 +1403,19 @@ function StaffMain() {
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionModal, setInspectionModal] = useState(false)
-  const [inspectionForm, setInspectionForm] = useState({ room_number: '', checklist: {}, damage_note: '', photos: [] })
+  const [inspectionForm, setInspectionForm] = useState({
+    room_number: '',
+    checklist: {},
+    damage_note: '',
+    photos: [],
+    existingPhotos: [],
+  })
+  const [inspectionEditing, setInspectionEditing] = useState(null)
+  const [inspectionLoadingId, setInspectionLoadingId] = useState(null)
+  const [inspectionListError, setInspectionListError] = useState('')
+  const [inspectionDelete, setInspectionDelete] = useState(null)
+  const [inspectionDeleting, setInspectionDeleting] = useState(false)
+  const [inspectionDeleteError, setInspectionDeleteError] = useState('')
   const [inspectionError, setInspectionError] = useState('')
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
@@ -1423,6 +1457,8 @@ function StaffMain() {
   const [expandedRoomNumbers, setExpandedRoomNumbers] = useState(() => new Set())
 
   const [historyRoom, setHistoryRoom] = useState(null)
+  const [historySlip, setHistorySlip] = useState(null)
+  const [historySlipClosing, setHistorySlipClosing] = useState(false)
   const [historyData, setHistoryData] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState('')
@@ -1524,7 +1560,6 @@ function StaffMain() {
     if (upcoming.length === 0) return undefined
     const timer = setTimeout(loadAnnouncements, Math.min(Math.min(...upcoming) + 1000, 2147483647))
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [announcements])
 
   const confirmDeleteWaitingListEntry = async (requestClose) => {
@@ -1537,15 +1572,24 @@ function StaffMain() {
       await loadWaitingList()
     } catch (err) {
       setWaitingListDeleteError(err.response?.data?.message || 'ลบรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
-      // Someone (e.g. an admin) may already have removed it: refresh so the row disappears.
       if (err.response?.status === 404) await loadWaitingList()
     } finally {
       setWaitingListDeleting(false)
     }
   }
 
-  const openWaitingListModal = () => {
-    setWaitingListForm({ full_name: '', phone: '', room_preference: '', note: '' })
+  const openWaitingListModal = (entry = null) => {
+    setWaitingListForm(
+      entry
+        ? {
+            full_name: entry.full_name || '',
+            phone: entry.phone || '',
+            room_preference: entry.room_preference || '',
+            note: entry.note || '',
+          }
+        : { full_name: '', phone: '', room_preference: '', note: '' },
+    )
+    setWaitingListEditing(entry)
     setWaitingListError('')
     setWaitingListFieldErrors({})
     setWaitingListModalOpen(true)
@@ -1557,7 +1601,7 @@ function StaffMain() {
   }
 
   const waitingListPreferences = waitingListForm.room_preference
-    .split(',')
+    .split('|')
     .map((item) => item.trim())
     .filter(Boolean)
 
@@ -1565,7 +1609,7 @@ function StaffMain() {
     const next = waitingListPreferences.includes(chip)
       ? waitingListPreferences.filter((item) => item !== chip)
       : [...waitingListPreferences, chip]
-    const text = next.join(', ')
+    const text = next.join(' | ')
     if (text.length <= 100) updateWaitingListField('room_preference', text)
   }
 
@@ -1584,23 +1628,25 @@ function StaffMain() {
     }
     setWaitingListSubmitting(true)
     try {
-      await axios.post(
-        '/api/staff/waiting-list',
-        {
-          full_name: fullName,
-          phone,
-          room_preference: waitingListForm.room_preference.trim(),
-          note: waitingListForm.note.trim(),
-        },
-        { headers: authHeaders() },
-      )
+      const payload = {
+        full_name: fullName,
+        phone,
+        room_preference: waitingListForm.room_preference.trim(),
+        note: waitingListForm.note.trim(),
+      }
+      if (waitingListEditing) {
+        await axios.patch(`/api/staff/waiting-list/${waitingListEditing.id}`, payload, { headers: authHeaders() })
+      } else {
+        await axios.post('/api/staff/waiting-list', payload, { headers: authHeaders() })
+        setWaitingListPage(1)
+      }
       setWaitingListForm({ full_name: '', phone: '', room_preference: '', note: '' })
       setWaitingListError('')
-      setWaitingListPage(1)
       requestClose()
       await loadWaitingList()
     } catch (err) {
       setWaitingListError(err.response?.data?.message || 'บันทึกรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (err.response?.status === 404) await loadWaitingList()
     } finally {
       setWaitingListSubmitting(false)
     }
@@ -1613,18 +1659,76 @@ function StaffMain() {
       checklist: {},
       damage_note: '',
       photos: [],
+      existingPhotos: [],
     })
+    setInspectionEditing(null)
     setInspectionError('')
     setInspectionFieldErrors({})
     setInspectionModal(true)
   }
 
+  const openEditInspection = async (inspection) => {
+    setInspectionLoadingId(inspection.id)
+    setInspectionListError('')
+    try {
+      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      const detail = data.inspection
+      setInspectionForm({
+        room_number: String(detail.room_number),
+        checklist: detail.checklist,
+        damage_note: detail.damage_note || '',
+        photos: [],
+        existingPhotos: detail.photos || [],
+      })
+      setInspectionEditing({
+        id: detail.id,
+        room_number: detail.room_number,
+        tenant_name: detail.tenant_name,
+        tenant_phone: detail.tenant_phone,
+      })
+      setInspectionError('')
+      setInspectionFieldErrors({})
+      setInspectionModal(true)
+    } catch (error) {
+      setInspectionListError(error.response?.data?.message || 'โหลดผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (error.response?.status === 404) await loadMoveOutInspections()
+    } finally {
+      setInspectionLoadingId(null)
+    }
+  }
+
+  const confirmDeleteInspection = async (requestClose) => {
+    setInspectionDeleting(true)
+    setInspectionDeleteError('')
+    try {
+      const { data } = await axios.delete(`/api/staff/move-out-inspections/${inspectionDelete.id}`, {
+        headers: authHeaders(),
+      })
+      setActionSuccess(data.message || 'ลบผลตรวจห้องสำเร็จ')
+      requestClose()
+      await loadMoveOutInspections()
+    } catch (error) {
+      setInspectionDeleteError(error.response?.data?.message || 'ลบผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (error.response?.status === 404) await loadMoveOutInspections()
+    } finally {
+      setInspectionDeleting(false)
+    }
+  }
+
+  // Choosing the answer that is already selected clears it again.
   const setChecklistResult = (key, value) => {
-    setInspectionForm((form) => ({ ...form, checklist: { ...form.checklist, [key]: value } }))
+    setInspectionForm((form) => {
+      const { [key]: current, ...rest } = form.checklist
+      return { ...form, checklist: current === value ? rest : { ...rest, [key]: value } }
+    })
     setInspectionFieldErrors((errors) => ({ ...errors, checklist: (errors.checklist || []).filter((k) => k !== key) }))
   }
 
-  // Marks every item that has no answer yet as "ปกติ", so only the exceptions need to be picked by hand.
+  const resetChecklist = () => {
+    setInspectionForm((form) => ({ ...form, checklist: {} }))
+    setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
+  }
+
   const markRemainingGood = () => {
     setInspectionForm((form) => ({
       ...form,
@@ -1642,7 +1746,7 @@ function StaffMain() {
       (item) => String(item.room_number) === inspectionForm.room_number && item.is_booked && item.tenant,
     )
     const fieldErrors = {}
-    if (!room) fieldErrors.room = 'กรุณาเลือกห้องที่มีผู้เช่า'
+    if (!inspectionEditing && !room) fieldErrors.room = 'กรุณาเลือกห้องที่มีผู้เช่า'
     const missing = MOVE_OUT_CHECKLIST.filter((item) => !inspectionForm.checklist[item.key]).map((item) => item.key)
     if (missing.length > 0) fieldErrors.checklist = missing
     if (Object.values(inspectionForm.checklist).includes('damaged') && !inspectionForm.damage_note.trim()) {
@@ -1662,22 +1766,29 @@ function StaffMain() {
     setInspectionError('')
     try {
       const photos = await Promise.all(inspectionForm.photos.map(compressImageFile))
-      const { data } = await axios.post(
-        '/api/staff/move-out-inspections',
-        {
-          room_number: room.room_number,
-          checklist: inspectionForm.checklist,
-          damage_note: inspectionForm.damage_note.trim(),
-          photos,
-        },
-        { headers: authHeaders() },
-      )
-      setActionSuccess(data.message || 'ส่งผลตรวจห้องให้ Admin แล้ว')
-      setInspectionsPage(1)
+      const details = {
+        checklist: inspectionForm.checklist,
+        damage_note: inspectionForm.damage_note.trim(),
+        photos,
+      }
+      const { data } = inspectionEditing
+        ? await axios.patch(
+            `/api/staff/move-out-inspections/${inspectionEditing.id}`,
+            { ...details, keep_photos: inspectionForm.existingPhotos.map((photo) => photo.url) },
+            { headers: authHeaders() },
+          )
+        : await axios.post(
+            '/api/staff/move-out-inspections',
+            { room_number: room.room_number, ...details },
+            { headers: authHeaders() },
+          )
+      setActionSuccess(data.message || (inspectionEditing ? 'แก้ไขผลตรวจห้องสำเร็จ' : 'ส่งผลตรวจห้องให้ Admin แล้ว'))
+      if (!inspectionEditing) setInspectionsPage(1)
       requestClose()
       await loadMoveOutInspections()
     } catch (error) {
       setInspectionError(error.response?.data?.message || error.message || 'บันทึกผลตรวจไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (error.response?.status === 404) loadMoveOutInspections()
     } finally {
       setInspectionSubmitting(false)
     }
@@ -1719,6 +1830,9 @@ function StaffMain() {
   const [expensesPage, setExpensesPage] = useState(1)
   const [expensesTotalPages, setExpensesTotalPages] = useState(1)
   const [expenseModal, setExpenseModal] = useState(null)
+  const [expenseDelete, setExpenseDelete] = useState(null)
+  const [expenseDeleting, setExpenseDeleting] = useState(false)
+  const [expenseDeleteError, setExpenseDeleteError] = useState('')
   const [expenseForm, setExpenseForm] = useState({ category: '', description: '', amount: '', expense_date: '' })
   const [expenseFormError, setExpenseFormError] = useState('')
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
@@ -1753,6 +1867,22 @@ function StaffMain() {
     })
     setExpenseFormError('')
     setExpenseModal({ mode: 'edit', expense })
+  }
+
+  const confirmDeleteExpense = async (requestClose) => {
+    setExpenseDeleting(true)
+    setExpenseDeleteError('')
+    try {
+      const { data } = await axios.delete(`/api/staff/expenses/${expenseDelete.id}`, { headers: authHeaders() })
+      setActionSuccess(data.message || 'ลบรายจ่ายสำเร็จ')
+      requestClose()
+      loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
+    } catch (err) {
+      setExpenseDeleteError(err.response?.data?.message || 'ลบรายจ่ายไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (err.response?.status === 404) loadExpenses(expensesPage)
+    } finally {
+      setExpenseDeleting(false)
+    }
   }
 
   const submitExpenseForm = (event, requestClose) => {
@@ -1903,7 +2033,6 @@ function StaffMain() {
       clearInterval(announcementsInterval)
       clearInterval(slipCountInterval)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleLogout = () => {
@@ -2181,6 +2310,27 @@ function StaffMain() {
     })
   }
 
+  // The slip viewer in the payment history: Esc closes only the viewer, not the history window behind it.
+  useEffect(() => {
+    if (!historySlip) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      event.stopImmediatePropagation()
+      setHistorySlipClosing(true)
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [historySlip])
+
+  useEffect(() => {
+    if (!historySlipClosing) return undefined
+    const timer = setTimeout(() => {
+      setHistorySlip(null)
+      setHistorySlipClosing(false)
+    }, 160)
+    return () => clearTimeout(timer)
+  }, [historySlipClosing])
+
   const openHistory = async (room) => {
     setHistoryRoom(room)
     setHistoryData(null)
@@ -2277,8 +2427,7 @@ function StaffMain() {
     damaged: inspectionResults.filter((result) => result === 'damaged').length,
     not_applicable: inspectionResults.filter((result) => result === 'not_applicable').length,
   }
-
-  // Staff lists show 10 rows per page; the page number is clamped when rows are removed.
+  
   const currentWaitingListPage = Math.min(
     waitingListPage,
     Math.max(1, Math.ceil(waitingList.length / STAFF_LIST_PAGE_SIZE)),
@@ -2744,7 +2893,14 @@ function StaffMain() {
         )}
 
         {waitingListModalOpen && (
-          <Modal title="เพิ่มผู้สนใจเช่าห้อง" onClose={() => setWaitingListModalOpen(false)} variant="form">
+          <Modal
+            title={waitingListEditing ? 'แก้ไขรายชื่อผู้สนใจ' : 'เพิ่มผู้สนใจเช่าห้อง'}
+            onClose={() => {
+              setWaitingListModalOpen(false)
+              setWaitingListEditing(null)
+            }}
+            variant="form"
+          >
             {(requestClose) => (
               <form
                 className="waiting-form"
@@ -2867,7 +3023,11 @@ function StaffMain() {
                     ยกเลิก
                   </button>
                   <button type="submit" className="staff-action-btn is-primary" disabled={waitingListSubmitting}>
-                    {waitingListSubmitting ? 'กำลังบันทึก...' : 'บันทึกรายชื่อ'}
+                    {waitingListSubmitting
+                      ? 'กำลังบันทึก...'
+                      : waitingListEditing
+                        ? 'บันทึกการแก้ไข'
+                        : 'บันทึกรายชื่อ'}
                   </button>
                 </div>
               </form>
@@ -2875,8 +3035,76 @@ function StaffMain() {
           </Modal>
         )}
 
+        {inspectionDelete && (
+          <Modal title="ยืนยันการลบผลตรวจห้อง" onClose={() => setInspectionDelete(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="staff-confirm-body">
+                <div className="staff-confirm-icon is-warning">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 9v4M12 17h.01" />
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                  </svg>
+                </div>
+                <p className="staff-confirm-message">ลบผลตรวจห้องนี้ออกจากระบบ? รูปที่แนบจะถูกลบด้วย</p>
+                <div className="staff-confirm-details">
+                  <div className="staff-confirm-detail-row">
+                    <span>ห้อง</span>
+                    <strong>{inspectionDelete.room_number}</strong>
+                  </div>
+                  <div className="staff-confirm-detail-row">
+                    <span>ผู้เช่า</span>
+                    <strong>{inspectionDelete.tenant_name}</strong>
+                  </div>
+                  <div className="staff-confirm-detail-row">
+                    <span>วันที่ตรวจ</span>
+                    <strong>{formatDateTime(inspectionDelete.created_at)}</strong>
+                  </div>
+                </div>
+                {inspectionDeleteError && (
+                  <p className="staff-form-error" role="alert">
+                    {inspectionDeleteError}
+                  </p>
+                )}
+                <div className="staff-form-actions">
+                  <button
+                    type="button"
+                    className="staff-action-btn is-danger"
+                    disabled={inspectionDeleting}
+                    onClick={() => confirmDeleteInspection(requestClose)}
+                  >
+                    {inspectionDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    disabled={inspectionDeleting}
+                    onClick={requestClose}
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
         {inspectionModal && (
-          <Modal title="Checklist ตรวจห้องย้ายออก" onClose={() => setInspectionModal(false)} variant="inspection">
+          <Modal
+            title={inspectionEditing ? `แก้ไขผลตรวจห้อง ${inspectionEditing.room_number}` : 'Checklist ตรวจห้องย้ายออก'}
+            onClose={() => {
+              setInspectionModal(false)
+              setInspectionEditing(null)
+            }}
+            variant="inspection"
+          >
             {(requestClose) => (
               <form
                 className="inspection-form"
@@ -2885,22 +3113,37 @@ function StaffMain() {
               >
                 <section className="inspection-section">
                   <h4 className="inspection-section-title">
-                    <span className="inspection-step">1</span> เลือกห้องที่ตรวจ
+                    <span className="inspection-step">1</span> {inspectionEditing ? 'ห้องที่ตรวจ' : 'เลือกห้องที่ตรวจ'}
                   </h4>
                   <div className="staff-form-field">
                     <label className="staff-form-label" htmlFor="inspection-room">
                       ห้อง / ผู้เช่า <span className="staff-form-required">*</span>
                     </label>
-                    <InspectionRoomPicker
-                      id="inspection-room"
-                      rooms={rooms.filter((room) => room.is_booked && room.tenant)}
-                      value={inspectionForm.room_number}
-                      invalid={Boolean(inspectionFieldErrors.room)}
-                      onChange={(roomNumber) => {
-                        setInspectionForm((form) => ({ ...form, room_number: roomNumber }))
-                        setInspectionFieldErrors((errors) => ({ ...errors, room: undefined }))
-                      }}
-                    />
+                    {inspectionEditing ? (
+                      <div className="room-picker-trigger inspection-room-fixed" id="inspection-room">
+                        <span className="room-picker-avatar" aria-hidden="true">
+                          {inspectionEditing.tenant_name?.[0] || '?'}
+                        </span>
+                        <span className="room-picker-main">
+                          <strong>{inspectionEditing.tenant_name}</strong>
+                          <small>
+                            ห้อง {inspectionEditing.room_number}
+                            {inspectionEditing.tenant_phone ? ` · โทร ${inspectionEditing.tenant_phone}` : ''}
+                          </small>
+                        </span>
+                      </div>
+                    ) : (
+                      <InspectionRoomPicker
+                        id="inspection-room"
+                        rooms={rooms.filter((room) => room.is_booked && room.tenant)}
+                        value={inspectionForm.room_number}
+                        invalid={Boolean(inspectionFieldErrors.room)}
+                        onChange={(roomNumber) => {
+                          setInspectionForm((form) => ({ ...form, room_number: roomNumber }))
+                          setInspectionFieldErrors((errors) => ({ ...errors, room: undefined }))
+                        }}
+                      />
+                    )}
                     {inspectionFieldErrors.room && (
                       <span className="staff-form-field-error">{inspectionFieldErrors.room}</span>
                     )}
@@ -2912,9 +3155,19 @@ function StaffMain() {
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">2</span> ตรวจสภาพห้อง
                     </h4>
-                    <button type="button" className="inspection-link-btn" onClick={markRemainingGood}>
-                      ตั้งที่เหลือเป็น “ปกติ” ทั้งหมด
-                    </button>
+                    <div className="inspection-head-actions">
+                      <button type="button" className="inspection-link-btn" onClick={markRemainingGood}>
+                        ตั้งที่เหลือเป็น “ปกติ” ทั้งหมด
+                      </button>
+                      <button
+                        type="button"
+                        className="inspection-link-btn is-reset"
+                        onClick={resetChecklist}
+                        disabled={inspectionResults.length === 0}
+                      >
+                        รีเซ็ตทั้งหมด
+                      </button>
+                    </div>
                   </div>
                   <div className="inspection-progress" aria-live="polite">
                     <div className="inspection-progress-text">
@@ -2951,7 +3204,7 @@ function StaffMain() {
                                 type="button"
                                 role="radio"
                                 aria-checked={result === option.key}
-                                title={option.title}
+                                title={result === option.key ? `${option.title} (กดอีกครั้งเพื่อยกเลิก)` : option.title}
                                 className={`inspection-choice is-${option.key}${result === option.key ? ' is-selected' : ''}`}
                                 onClick={() => setChecklistResult(item.key, option.key)}
                               >
@@ -3007,6 +3260,13 @@ function StaffMain() {
                     </span>
                     <InspectionPhotoPicker
                       files={inspectionForm.photos}
+                      existing={inspectionForm.existingPhotos}
+                      onRemoveExisting={(url) =>
+                        setInspectionForm((form) => ({
+                          ...form,
+                          existingPhotos: form.existingPhotos.filter((photo) => photo.url !== url),
+                        }))
+                      }
                       onChange={(photos) => setInspectionForm((form) => ({ ...form, photos }))}
                       onError={setInspectionError}
                     />
@@ -3019,13 +3279,21 @@ function StaffMain() {
                       {inspectionError}
                     </p>
                   )}
-                  <p className="inspection-footer-note">ผลตรวจและรูปจะถูกบันทึกในระบบ และส่งให้ Admin ตรวจสอบ</p>
+                  <p className="inspection-footer-note">
+                    {inspectionEditing
+                      ? 'เมื่อแก้ไข สถานะจะกลับเป็น "รอตรวจ" เพื่อให้ Admin ตรวจสอบอีกครั้ง'
+                      : 'ผลตรวจและรูปจะถูกบันทึกในระบบ และส่งให้ Admin ตรวจสอบ'}
+                  </p>
                   <div className="inspection-footer-actions">
                     <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                       ยกเลิก
                     </button>
                     <button type="submit" className="staff-action-btn is-primary" disabled={inspectionSubmitting}>
-                      {inspectionSubmitting ? 'กำลังบันทึก...' : 'ส่งผลตรวจให้ Admin'}
+                      {inspectionSubmitting
+                        ? 'กำลังบันทึก...'
+                        : inspectionEditing
+                          ? 'บันทึกการแก้ไข'
+                          : 'ส่งผลตรวจให้ Admin'}
                     </button>
                   </div>
                 </div>
@@ -3116,7 +3384,7 @@ function StaffMain() {
               <button
                 type="button"
                 className="staff-action-btn is-primary"
-                onClick={openWaitingListModal}
+                onClick={() => openWaitingListModal()}
               >
                 + เพิ่มผู้สนใจ
               </button>
@@ -3149,16 +3417,25 @@ function StaffMain() {
                         <td>{formatDate(item.created_at)}</td>
                         <td>{item.submitted_by_name || '-'}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="staff-action-btn is-danger"
-                            onClick={() => {
-                              setWaitingListDeleteError('')
-                              setWaitingListDelete(item)
-                            }}
-                          >
-                            ลบ
-                          </button>
+                          <div className="staff-row-actions">
+                            <button
+                              type="button"
+                              className="staff-action-btn is-ghost"
+                              onClick={() => openWaitingListModal(item)}
+                            >
+                              แก้ไข
+                            </button>
+                            <button
+                              type="button"
+                              className="staff-action-btn is-danger"
+                              onClick={() => {
+                                setWaitingListDeleteError('')
+                                setWaitingListDelete(item)
+                              }}
+                            >
+                              ลบ
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -3188,6 +3465,11 @@ function StaffMain() {
                 + เริ่มตรวจห้อง
               </button>
             </div>
+            {inspectionListError && (
+              <p className="staff-form-error staff-form-error-block" role="alert">
+                {inspectionListError}
+              </p>
+            )}
             <div className="table-responsive">
               <table className="staff-table">
                 <thead>
@@ -3197,12 +3479,13 @@ function StaffMain() {
                     <th>วันที่ตรวจ</th>
                     <th>ผลตรวจ</th>
                     <th>Admin</th>
+                    <th>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {moveOutInspections.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="staff-empty">
+                      <td colSpan={6} className="staff-empty">
                         ยังไม่มีผลตรวจห้องย้ายออก
                       </td>
                     </tr>
@@ -3223,6 +3506,28 @@ function StaffMain() {
                             : inspection.status === 'reviewed'
                               ? 'ตรวจแล้ว'
                               : 'ต้องติดตาม'}
+                        </td>
+                        <td>
+                          <div className="staff-row-actions">
+                            <button
+                              type="button"
+                              className="staff-action-btn is-ghost"
+                              disabled={inspectionLoadingId === inspection.id}
+                              onClick={() => openEditInspection(inspection)}
+                            >
+                              {inspectionLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
+                            </button>
+                            <button
+                              type="button"
+                              className="staff-action-btn is-danger"
+                              onClick={() => {
+                                setInspectionDeleteError('')
+                                setInspectionDelete(inspection)
+                              }}
+                            >
+                              ลบ
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -3681,15 +3986,27 @@ function StaffMain() {
                       <option value="pending">รอดำเนินการ</option>
                       <option value="in_progress">กำลังดำเนินการ</option>
                     </select>
-                    <input
-                      type="date"
-                      className="staff-filter-select"
+                    <DateDropdowns
+                      inline
+                      selectClassName="staff-filter-select"
                       value={maintenanceFilterDate}
-                      onChange={(event) => {
-                        setMaintenanceFilterDate(event.target.value)
+                      onChange={(date) => {
+                        setMaintenanceFilterDate(date)
                         setMaintenanceModalPage(1)
                       }}
                     />
+                    {maintenanceFilterDate && (
+                      <button
+                        type="button"
+                        className="staff-action-btn is-ghost"
+                        onClick={() => {
+                          setMaintenanceFilterDate('')
+                          setMaintenanceModalPage(1)
+                        }}
+                      >
+                        ล้างวันที่
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -3767,13 +4084,25 @@ function StaffMain() {
                             <td>{expense.recorded_by_name || '-'}</td>
                             <td>฿{formatCurrency(expense.amount)}</td>
                             <td>
-                              <button
-                                type="button"
-                                className="staff-action-btn is-ghost"
-                                onClick={() => openEditExpense(expense)}
-                              >
-                                แก้ไข
-                              </button>
+                              <div className="staff-row-actions">
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-ghost"
+                                  onClick={() => openEditExpense(expense)}
+                                >
+                                  แก้ไข
+                                </button>
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-danger"
+                                  onClick={() => {
+                                    setExpenseDeleteError('')
+                                    setExpenseDelete(expense)
+                                  }}
+                                >
+                                  ลบ
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -3812,6 +4141,67 @@ function StaffMain() {
           </>
         )}
       </div>
+
+      {expenseDelete && (
+        <Modal title="ยืนยันการลบรายจ่าย" onClose={() => setExpenseDelete(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className="staff-confirm-icon is-warning">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 9v4M12 17h.01" />
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                </svg>
+              </div>
+              <p className="staff-confirm-message">ลบรายจ่ายนี้ออกจากระบบ?</p>
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>วันที่</span>
+                  <strong>{formatDate(expenseDelete.expense_date)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>หมวดหมู่</span>
+                  <strong>{expenseDelete.category}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>จำนวนเงิน</span>
+                  <strong>฿{formatCurrency(expenseDelete.amount)}</strong>
+                </div>
+              </div>
+              {expenseDeleteError && (
+                <p className="staff-form-error" role="alert">
+                  {expenseDeleteError}
+                </p>
+              )}
+              <div className="staff-form-actions">
+                <button
+                  type="button"
+                  className="staff-action-btn is-danger"
+                  disabled={expenseDeleting}
+                  onClick={() => confirmDeleteExpense(requestClose)}
+                >
+                  {expenseDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
+                </button>
+                <button
+                  type="button"
+                  className="staff-action-btn is-ghost"
+                  disabled={expenseDeleting}
+                  onClick={requestClose}
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
 
       {expenseModal && (
         <Modal
@@ -3872,12 +4262,11 @@ function StaffMain() {
                 <label className="staff-form-label" htmlFor="expense-date">
                   วันที่
                 </label>
-                <input
+                <DateDropdowns
                   id="expense-date"
-                  type="date"
-                  className="staff-form-input"
+                  selectClassName="staff-form-input"
                   value={expenseForm.expense_date}
-                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, expense_date: event.target.value }))}
+                  onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
                 />
               </div>
 
@@ -4004,15 +4393,27 @@ function StaffMain() {
               <option value="pending">รอดำเนินการ</option>
               <option value="in_progress">กำลังดำเนินการ</option>
             </select>
-            <input
-              type="date"
-              className="staff-filter-select"
+            <DateDropdowns
+              inline
+              selectClassName="staff-filter-select"
               value={maintenanceFilterDate}
-              onChange={(event) => {
-                setMaintenanceFilterDate(event.target.value)
+              onChange={(date) => {
+                setMaintenanceFilterDate(date)
                 setMaintenanceModalPage(1)
               }}
             />
+            {maintenanceFilterDate && (
+              <button
+                type="button"
+                className="staff-action-btn is-ghost"
+                onClick={() => {
+                  setMaintenanceFilterDate('')
+                  setMaintenanceModalPage(1)
+                }}
+              >
+                ล้างวันที่
+              </button>
+            )}
           </div>
 
           {filteredMaintenanceRequests.length === 0 ? (
@@ -4362,10 +4763,93 @@ function StaffMain() {
         </Modal>
       )}
 
+      {historySlip && (
+        <div
+          className={`payment-slip-overlay is-above-modal${historySlipClosing ? ' is-closing' : ''}`}
+          role="presentation"
+          onClick={() => setHistorySlipClosing(true)}
+        >
+          <section
+            className="payment-slip-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-slip-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="payment-slip-header">
+              <div className="payment-slip-heading">
+                <h3 id="history-slip-title">สลิปโอนเงิน</h3>
+                {historyRoom && <span className="payment-slip-room">ห้อง {historyRoom.room_number}</span>}
+              </div>
+              <button
+                type="button"
+                className="payment-slip-close"
+                onClick={() => setHistorySlipClosing(true)}
+                aria-label="ปิด"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="payment-slip-body">
+              <div className="payment-slip-image-frame">
+                <a href={historySlip.slip_path} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                  <img src={historySlip.slip_path} alt="สลิปโอนเงิน" />
+                </a>
+                <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
+              </div>
+
+              <dl className="payment-slip-details">
+                <div className="payment-slip-amount">
+                  <dt>จำนวนเงิน</dt>
+                  <dd>฿{formatCurrency(historySlip.amount)}</dd>
+                </div>
+                <div>
+                  <dt>ผู้เช่า</dt>
+                  <dd>{historySlip.tenantName}</dd>
+                </div>
+                <div>
+                  <dt>รายการ</dt>
+                  <dd>{PAYMENT_TYPE_LABEL[historySlip.type] || 'ค่าเช่าห้อง'}</dd>
+                </div>
+                <div>
+                  <dt>สถานะ</dt>
+                  <dd>{PAYMENT_STATUS_LABEL[historySlip.status] || historySlip.status}</dd>
+                </div>
+                <div>
+                  <dt>วันที่</dt>
+                  <dd>{formatDateTime(historySlip.created_at)}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <footer className="payment-slip-footer">
+              <button type="button" className="staff-action-btn is-ghost" onClick={() => setHistorySlipClosing(true)}>
+                ปิด
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
       {historyRoom && (
         <Modal
           title={`ประวัติการจ่ายเงิน - ห้อง ${historyRoom.room_number}`}
           onClose={() => {
+            setHistorySlip(null)
             setHistoryRoom(null)
             setHistorySearch('')
             setHistoryStatusFilter('all')
@@ -4421,6 +4905,7 @@ function StaffMain() {
                           <th>จำนวนเงิน</th>
                           <th>สถานะ</th>
                           <th>หมายเหตุ</th>
+                          <th>สลิป</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -4442,6 +4927,22 @@ function StaffMain() {
                                   <span className="staff-history-note-main">{notePart.main}</span>
                                   {notePart.extra && <span className="staff-history-note-extra">{notePart.extra}</span>}
                                 </span>
+                              </td>
+                              <td>
+                                {payment.slip_path ? (
+                                  <button
+                                    type="button"
+                                    className="staff-action-btn is-ghost"
+                                    onClick={() => {
+                                      setHistorySlipClosing(false)
+                                      setHistorySlip(payment)
+                                    }}
+                                  >
+                                    ดูสลิป
+                                  </button>
+                                ) : (
+                                  '-'
+                                )}
                               </td>
                             </tr>
                           )

@@ -613,13 +613,11 @@
   object-fit: cover;
 }
 
-/* ---------- Move-out inspection modal ---------- */
 .staff-modal.staff-modal-inspection {
   width: 760px;
   height: auto;
 }
 
-/* keep a gap between the content and the scrollbar */
 .staff-modal-inspection .staff-modal-body {
   padding-right: 16px;
   scrollbar-gutter: stable;
@@ -668,7 +666,7 @@
 }
 
 .inspection-link-btn {
-  border: 0;
+  border: 1.5px solid #bcd3f8;
   border-radius: 8px;
   padding: 4px 10px;
   background: #eaf2ff;
@@ -677,11 +675,38 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .inspection-link-btn:hover {
+  border-color: #93b8f3;
   background: #dbeafe;
+}
+
+.inspection-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspection-link-btn.is-reset {
+  border-color: #cfd9e6;
+  background: #f1f5f9;
+  color: #475f7a;
+}
+
+.inspection-link-btn.is-reset:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b42318;
+}
+
+.inspection-link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Room picker */
@@ -708,6 +733,13 @@
     border-color 0.15s ease,
     background 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.room-picker-trigger.inspection-room-fixed,
+.room-picker-trigger.inspection-room-fixed:hover {
+  border-color: #dce9fb;
+  background: #f1f6fd;
+  cursor: default;
 }
 
 .room-picker-trigger:hover {
@@ -925,16 +957,19 @@
 
 .inspection-counts .is-good {
   background: #dcfce7;
+  border: 1px solid #5cfd4798;
   color: #15803d;
 }
 
 .inspection-counts .is-damaged {
   background: #fee2e2;
+  border: 1px solid #fd474798;
   color: #b42318;
 }
 
 .inspection-counts .is-not_applicable {
   background: #f1f5f9;
+  border: 1px solid #aeafaf;
   color: #64748b;
 }
 
@@ -2806,7 +2841,6 @@
   }
 }
 
-/* Staff payment review */
 .payment-review-note {
   margin: -8px 0 14px;
   color: #6b859e;
@@ -2856,6 +2890,11 @@
   background: rgba(15, 43, 82, 0.55);
   backdrop-filter: blur(2px);
   animation: payment-slip-fade-in 0.18s ease-out;
+}
+
+/* Opened from inside a staff modal (z-index 1200), so it has to sit above it */
+.payment-slip-overlay.is-above-modal {
+  z-index: 1300;
 }
 
 .payment-slip-overlay.is-closing {

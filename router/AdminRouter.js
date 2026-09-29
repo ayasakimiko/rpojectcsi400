@@ -572,7 +572,7 @@ router.get("/customers/:id", async (req, res) => {
     let payments = [];
     if (bookingIds.length > 0) {
       [payments] = await pool.query(
-        `SELECT id, booking_id, amount, payment_date, status, type, note, created_at
+        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
          FROM Payment WHERE booking_id IN (?) ORDER BY payment_date DESC, created_at DESC`,
         [bookingIds],
       );

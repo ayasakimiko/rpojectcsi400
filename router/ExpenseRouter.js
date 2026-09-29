@@ -142,8 +142,8 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    if (req.user?.role !== "Owner") {
-      return res.status(403).json({ message: "ไม่ได้รับอนุญาต (ต้องเป็นเจ้าของ)" });
+    if (!RECORDER_ROLE_TABLE[req.user?.role]) {
+      return res.status(403).json({ message: "ไม่ได้รับอนุญาต" });
     }
 
     const expenseId = Number(req.params.id);

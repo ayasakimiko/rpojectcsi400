@@ -7,6 +7,7 @@ import { th } from 'date-fns/locale/th'
 import 'react-datepicker/dist/react-datepicker.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
+import DateDropdowns from '../components/DateDropdowns.jsx'
 
 registerLocale('th', th)
 
@@ -2149,26 +2150,23 @@ function OwnerMain() {
                       onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, description: event.target.value }))}
                     />
                   </label>
-                  <div className="owner-form-row">
-                    <label>
-                      จำนวนเงิน (บาท)
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={expenseEditForm.amount}
-                        onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, amount: event.target.value }))}
-                      />
-                    </label>
-                    <label>
-                      วันที่
-                      <input
-                        type="date"
-                        value={expenseEditForm.expense_date}
-                        onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, expense_date: event.target.value }))}
-                      />
-                    </label>
-                  </div>
+                  <label>
+                    จำนวนเงิน (บาท)
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={expenseEditForm.amount}
+                      onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, amount: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    วันที่
+                    <DateDropdowns
+                      value={expenseEditForm.expense_date}
+                      onChange={(date) => setExpenseEditForm((prev) => ({ ...prev, expense_date: date }))}
+                    />
+                  </label>
                   <div className="owner-form-actions">
                     <button type="button" className="owner-secondary-btn" onClick={() => setExpenseEditModal(null)}>
                       ยกเลิก

@@ -371,79 +371,83 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
         </p>
       )}
 
-      <div className="table-responsive">
-        <table className={`${classes.table} announcement-table`}>
-          <thead>
-            <tr>
-              <th>หัวข้อ</th>
-              <th>ประเภท</th>
-              <th>รายละเอียด</th>
-              <th>ประกาศโดย</th>
-              <th>วันที่ประกาศ</th>
-              {canManage && <th>ลบอัตโนมัติ</th>}
-              {canManage && <th>จัดการ</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {announcements.length === 0 ? (
+      <div className={`table-responsive announcement-scroll${announcements.length === 0 && variant === 'dashboard' ? ' is-empty' : ''}`}>
+        {announcements.length === 0 && variant === 'dashboard' ? (
+          <p className="announcement-empty-state">ยังไม่มีประกาศ</p>
+        ) : (
+          <table className={`${classes.table} announcement-table`}>
+            <thead>
               <tr>
-                <td colSpan={canManage ? 7 : 5} className={`${classes.empty} announcement-empty-cell`}>
-                  ยังไม่มีประกาศ
-                </td>
+                <th>หัวข้อ</th>
+                <th>ประเภท</th>
+                <th>รายละเอียด</th>
+                <th>ประกาศโดย</th>
+                <th>วันที่ประกาศ</th>
+                {canManage && <th>ลบอัตโนมัติ</th>}
+                {canManage && <th>จัดการ</th>}
               </tr>
-            ) : (
-              pageItems.map((item) => (
-                <tr key={item.id}>
-                  <td className="announcement-cell-title">{item.title}</td>
-                  <td>
-                    <span className={`announcement-tone is-${item.tone || 'info'}`}>
-                      {TONE_LABEL[item.tone] || TONE_LABEL.info}
-                    </span>
+            </thead>
+            <tbody>
+              {announcements.length === 0 ? (
+                <tr>
+                  <td colSpan={canManage ? 7 : 5} className={`${classes.empty} announcement-empty-cell`}>
+                    ยังไม่มีประกาศ
                   </td>
-                  <td className="announcement-cell-message">
-                    <div className="announcement-message" title={item.message}>
-                      {item.message}
-                    </div>
-                  </td>
-                  <td>{item.author || 'เจ้าหน้าที่'}</td>
-                  <td className="announcement-cell-date">{formatAnnouncementDate(item.created_at)}</td>
-                  {canManage && (
-                    <td className="announcement-cell-date">
-                      {item.expires_at ? (
-                        <>
-                          <div>{formatExpiryDate(item.expires_at)}</div>
-                          {item.expires_epoch && (
-                            <small className="announcement-remaining">
-                              {formatRemaining(item.expires_epoch * 1000 - now)}
-                            </small>
-                          )}
-                        </>
-                      ) : (
-                        <span className="announcement-no-expiry">ไม่กำหนด</span>
-                      )}
-                    </td>
-                  )}
-                  {canManage && (
+                </tr>
+              ) : (
+                pageItems.map((item) => (
+                  <tr key={item.id}>
+                    <td className="announcement-cell-title">{item.title}</td>
                     <td>
-                      <div className="announcement-row-actions">
-                        <button type="button" className={`${classes.button} is-ghost`} onClick={() => openEditForm(item)}>
-                          แก้ไข
-                        </button>
-                        <button
-                          type="button"
-                          className={`${classes.button} is-danger`}
-                          onClick={() => openConfirm({ kind: 'delete', id: item.id, title: item.title })}
-                        >
-                          ลบ
-                        </button>
+                      <span className={`announcement-tone is-${item.tone || 'info'}`}>
+                        {TONE_LABEL[item.tone] || TONE_LABEL.info}
+                      </span>
+                    </td>
+                    <td className="announcement-cell-message">
+                      <div className="announcement-message" title={item.message}>
+                        {item.message}
                       </div>
                     </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    <td>{item.author || 'เจ้าหน้าที่'}</td>
+                    <td className="announcement-cell-date">{formatAnnouncementDate(item.created_at)}</td>
+                    {canManage && (
+                      <td className="announcement-cell-date">
+                        {item.expires_at ? (
+                          <>
+                            <div>{formatExpiryDate(item.expires_at)}</div>
+                            {item.expires_epoch && (
+                              <small className="announcement-remaining">
+                                {formatRemaining(item.expires_epoch * 1000 - now)}
+                              </small>
+                            )}
+                          </>
+                        ) : (
+                          <span className="announcement-no-expiry">ไม่กำหนด</span>
+                        )}
+                      </td>
+                    )}
+                    {canManage && (
+                      <td>
+                        <div className="announcement-row-actions">
+                          <button type="button" className={`${classes.button} is-ghost`} onClick={() => openEditForm(item)}>
+                            แก้ไข
+                          </button>
+                          <button
+                            type="button"
+                            className={`${classes.button} is-danger`}
+                            onClick={() => openConfirm({ kind: 'delete', id: item.id, title: item.title })}
+                          >
+                            ลบ
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {totalPages > 1 && (

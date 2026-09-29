@@ -318,10 +318,10 @@ const MAX_PHOTOS = 3;
 const MAX_PHOTO_DATA_URL_LENGTH = 2_000_000;
 const PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
-export function parsePhotoList(photos) {
+export function parsePhotoList(photos, maxPhotos = MAX_PHOTOS) {
   if (photos === undefined || photos === null) return { value: [] };
-  if (!Array.isArray(photos) || photos.length > MAX_PHOTOS) {
-    return { error: `แนบรูปได้ไม่เกิน ${MAX_PHOTOS} รูป` };
+  if (!Array.isArray(photos) || photos.length > maxPhotos) {
+    return { error: `แนบรูปได้ไม่เกิน ${maxPhotos} รูป` };
   }
   const value = [];
   for (const photo of photos) {
@@ -401,14 +401,11 @@ export function parseWaitingListInput(body = {}, { partial = false } = {}) {
 }
 
 const MOVE_OUT_CHECKLIST_KEYS = ["walls", "floor", "ceiling", "doors", "windows", "electrical", "bathroom", "furniture"];
+const MOVE_OUT_MAX_PHOTOS = 15;
 const MOVE_OUT_RESULTS = new Set(["good", "damaged", "not_applicable"]);
 export const MOVE_OUT_INSPECTION_STATUSES = new Set(["pending", "reviewed", "follow_up"]);
 
-export function parseMoveOutInspectionInput(body = {}) {
-  const roomNumber = Number(body.room_number);
-  if (!Number.isInteger(roomNumber) || roomNumber < 100 || roomNumber > 999) {
-    return { error: "เลขห้องไม่ถูกต้อง" };
-  }
+function parseMoveOutChecklistAndNote(body) {
   const checklist = {};
   for (const key of MOVE_OUT_CHECKLIST_KEYS) {
     const result = body.checklist?.[key];
@@ -421,7 +418,36 @@ export function parseMoveOutInspectionInput(body = {}) {
   if (Object.values(checklist).includes("damaged") && !damageNote) {
     return { error: "กรุณาระบุรายละเอียดความเสียหาย" };
   }
-  const photos = parsePhotoList(body.photos);
+  return { value: { checklist, damageNote: damageNote || null } };
+}
+
+export function parseMoveOutInspectionInput(body = {}) {
+  const roomNumber = Number(body.room_number);
+  if (!Number.isInteger(roomNumber) || roomNumber < 100 || roomNumber > 999) {
+    return { error: "เลขห้องไม่ถูกต้อง" };
+  }
+  const core = parseMoveOutChecklistAndNote(body);
+  if (core.error) return core;
+  const photos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
   if (photos.error) return photos;
-  return { value: { roomNumber, checklist, damageNote: damageNote || null, photos: photos.value } };
+  return { value: { roomNumber, ...core.value, photos: photos.value } };
+}
+
+// Editing keeps the room and tenant. `keep_photos` lists the urls of the saved photos to keep (all of them when
+// omitted); `photos` are new uploads. existingPhotos are the photos currently stored on the inspection.
+export function parseMoveOutInspectionUpdate(body = {}, existingPhotos = []) {
+  const core = parseMoveOutChecklistAndNote(body);
+  if (core.error) return core;
+  let keptPhotos = existingPhotos;
+  if (body.keep_photos !== undefined) {
+    if (!Array.isArray(body.keep_photos)) return { error: "รายการรูปที่เก็บไว้ไม่ถูกต้อง" };
+    const keepUrls = new Set(body.keep_photos);
+    keptPhotos = existingPhotos.filter((photo) => keepUrls.has(photo.url));
+  }
+  const newPhotos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
+  if (newPhotos.error) return newPhotos;
+  if (keptPhotos.length + newPhotos.value.length > MOVE_OUT_MAX_PHOTOS) {
+    return { error: `แนบรูปได้ไม่เกิน ${MOVE_OUT_MAX_PHOTOS} รูป` };
+  }
+  return { value: { ...core.value, keptPhotos, newPhotos: newPhotos.value } };
 }

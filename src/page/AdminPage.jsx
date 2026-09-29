@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import DateDropdowns from '../components/DateDropdowns.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
   waiting: 'รอห้องว่าง',
@@ -105,6 +106,7 @@ function buildAnnouncementNotif(item) {
 }
 
 let openModalCount = 0
+const modalStack = []
 
 function lockBodyScroll() {
   openModalCount += 1
@@ -125,11 +127,16 @@ function Modal({ title, onClose, children, variant }) {
   const requestClose = () => setIsClosing(true)
 
   useEffect(() => {
+    const token = Symbol('modal')
+    modalStack.push(token)
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') requestClose()
+      if (event.key === 'Escape' && modalStack[modalStack.length - 1] === token) requestClose()
     }
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      modalStack.splice(modalStack.indexOf(token), 1)
+    }
   }, [])
 
   useEffect(() => {
@@ -146,7 +153,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
@@ -344,8 +351,6 @@ function buildAdminMaintenanceNotifs(request) {
   ]
 }
 
-// Staff has no updated_at column to track edits/suspensions, so "new staff" notifications
-// use a rolling window off created_at instead of a status field.
 function buildAdminStaffNotifs(member) {
   if (!member.created_at) return []
   const createdMs = new Date(member.created_at).getTime()
@@ -538,6 +543,13 @@ const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', d
 
 const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
 const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '' }
+const PHOTO_ZOOM_MAX = 5
+const INSPECTION_PHOTO_PREVIEW_COUNT = 4
+const INSPECTION_GALLERY_PAGE_SIZE = 8
+const PHOTO_CLOSE_ANIMATION_MS = 160 // keep in step with .moveout-photo-preview.is-closing in AdminPage.css
+const PHOTO_ZOOM_STEP = 0.5
+const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
+const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 
 function AdminBackupPage() {
   const navigate = useNavigate()
@@ -549,11 +561,21 @@ function AdminBackupPage() {
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionDetail, setInspectionDetail] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [photoGalleryPage, setPhotoGalleryPage] = useState(null)
+  const [photoZoom, setPhotoZoom] = useState(1)
+  const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 })
+  const [photoDragging, setPhotoDragging] = useState(false)
+  const [photoClosing, setPhotoClosing] = useState(false)
+  const [slipPreview, setSlipPreview] = useState(null)
+  const photoDragRef = useRef(null)
   const [waitingListSearch, setWaitingListSearch] = useState('')
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListModal, setWaitingListModal] = useState(null)
   const [waitingListForm, setWaitingListForm] = useState(emptyWaitingListForm)
   const [waitingListFormError, setWaitingListFormError] = useState('')
+  const [waitingListFieldErrors, setWaitingListFieldErrors] = useState({})
+  const [waitingListSubmitting, setWaitingListSubmitting] = useState(false)
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
@@ -648,6 +670,118 @@ function AdminBackupPage() {
     setExpenseModal({ mode: 'edit', expense })
   }
 
+  // The full-screen preview is shared: it shows either a payment slip or the photos of an inspection.
+  const previewSource = slipPreview
+    ? {
+        title: 'สลิปโอนเงิน',
+        subtitle: slipPreview.subtitle,
+        label: 'สลิปโอนเงิน',
+        photos: [{ name: slipPreview.name, url: slipPreview.url }],
+      }
+    : inspectionDetail
+      ? {
+          title: `ผลตรวจห้อง ${inspectionDetail.room_number}`,
+          subtitle: inspectionDetail.tenant_name,
+          label: `ภาพตรวจห้อง ${inspectionDetail.room_number}`,
+          photos: inspectionDetail.photos || [],
+        }
+      : null
+  const previewPhotos = previewSource?.photos || []
+  const photoPreviewCount = previewPhotos.length
+
+  const openSlipPreview = (customer, payment) => {
+    setSlipPreview({
+      url: payment.slip_path,
+      name: `สลิปโอนเงิน ${formatDate(payment.payment_date)}`,
+      subtitle: `${customer.first_name} ${customer.last_name} · ฿${formatCurrency(payment.amount)} · ${PAYMENT_TYPE_LABEL[payment.type] || payment.type}`,
+    })
+    setPhotoClosing(false)
+    setPhotoPreview(0)
+    setPhotoZoom(1)
+    setPhotoPan({ x: 0, y: 0 })
+  }
+
+  const renderInspectionPhoto = (photo, index) => (
+    <button type="button" key={`${photo.name}-${index}`} onClick={() => showPhoto(index)} aria-label={`ดูภาพ ${photo.name}`}>
+      <img src={photo.url} alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`} />
+      <span>{photo.name}</span>
+    </button>
+  )
+
+  const galleryTotalPages = Math.max(1, Math.ceil(photoPreviewCount / INSPECTION_GALLERY_PAGE_SIZE))
+  const galleryPage = Math.min(photoGalleryPage || 1, galleryTotalPages)
+  const galleryStart = (galleryPage - 1) * INSPECTION_GALLERY_PAGE_SIZE
+
+  // Every photo opens at 100%, centred.
+  const showPhoto = (index) => {
+    setPhotoClosing(false)
+    setPhotoPreview(index)
+    setPhotoZoom(1)
+    setPhotoPan({ x: 0, y: 0 })
+  }
+  const stepPhotoPreview = (step) => showPhoto((photoPreview + step + photoPreviewCount) % photoPreviewCount)
+
+  const changePhotoZoom = (next) => {
+    const zoom = Math.min(PHOTO_ZOOM_MAX, Math.max(1, Math.round(next * 100) / 100))
+    setPhotoZoom(zoom)
+    if (zoom === 1) setPhotoPan({ x: 0, y: 0 })
+  }
+
+  const startPhotoDrag = (event) => {
+    if (photoZoom <= 1) return
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    photoDragRef.current = { x: event.clientX - photoPan.x, y: event.clientY - photoPan.y }
+    setPhotoDragging(true)
+  }
+  const movePhotoDrag = (event) => {
+    if (!photoDragRef.current) return
+    setPhotoPan({ x: event.clientX - photoDragRef.current.x, y: event.clientY - photoDragRef.current.y })
+  }
+  const endPhotoDrag = () => {
+    photoDragRef.current = null
+    setPhotoDragging(false)
+  }
+
+  // Closing plays the fade-out first; the preview is removed once it has had time to finish.
+  useEffect(() => {
+    if (!photoClosing) return undefined
+    const timer = setTimeout(() => {
+      setPhotoPreview(null)
+      setSlipPreview(null)
+      setPhotoClosing(false)
+    }, PHOTO_CLOSE_ANIMATION_MS)
+    return () => clearTimeout(timer)
+  }, [photoClosing])
+
+  // Runs in the capture phase so Esc / arrows act on the preview instead of closing the modal behind it.
+  // Esc first returns a zoomed photo to 100%, and closes the preview on the next press.
+  useEffect(() => {
+    if (photoPreview === null) return undefined
+    const handleKeyDown = (event) => {
+      if (!['Escape', 'ArrowLeft', 'ArrowRight', '+', '=', '-'].includes(event.key)) return
+      event.stopImmediatePropagation()
+      if (event.key === 'Escape') {
+        if (photoZoom > 1) {
+          setPhotoZoom(1)
+          setPhotoPan({ x: 0, y: 0 })
+        } else setPhotoClosing(true)
+      } else if (event.key === '+' || event.key === '=') {
+        setPhotoZoom(Math.min(PHOTO_ZOOM_MAX, Math.round((photoZoom + PHOTO_ZOOM_STEP) * 100) / 100))
+      } else if (event.key === '-') {
+        const zoom = Math.max(1, Math.round((photoZoom - PHOTO_ZOOM_STEP) * 100) / 100)
+        setPhotoZoom(zoom)
+        if (zoom === 1) setPhotoPan({ x: 0, y: 0 })
+      } else if (photoPreviewCount > 1) {
+        const step = event.key === 'ArrowRight' ? 1 : -1
+        setPhotoPreview((photoPreview + step + photoPreviewCount) % photoPreviewCount)
+        setPhotoZoom(1)
+        setPhotoPan({ x: 0, y: 0 })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [photoPreview, photoPreviewCount, photoZoom])
+
   const openWaitingListForm = (entry = null) => {
     setWaitingListForm(entry ? {
       full_name: entry.full_name || '',
@@ -656,7 +790,26 @@ function AdminBackupPage() {
       note: entry.note || '',
     } : emptyWaitingListForm)
     setWaitingListFormError('')
+    setWaitingListFieldErrors({})
     setWaitingListModal(entry ? { mode: 'edit', entry } : { mode: 'create' })
+  }
+
+  const updateWaitingListField = (field, value) => {
+    setWaitingListForm((form) => ({ ...form, [field]: value }))
+    setWaitingListFieldErrors((errors) => ({ ...errors, [field]: undefined }))
+  }
+
+  const waitingListPreferences = waitingListForm.room_preference
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const toggleRoomPreference = (chip) => {
+    const next = waitingListPreferences.includes(chip)
+      ? waitingListPreferences.filter((item) => item !== chip)
+      : [...waitingListPreferences, chip]
+    const text = next.join(' | ')
+    if (text.length <= 100) updateWaitingListField('room_preference', text)
   }
 
   const loadWaitingList = () => {
@@ -694,15 +847,19 @@ function AdminBackupPage() {
     if (upcoming.length === 0) return undefined
     const timer = setTimeout(loadAnnouncements, Math.min(Math.min(...upcoming) + 1000, 2147483647))
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [announcements])
 
   const submitWaitingListForm = async (event, requestClose) => {
     event.preventDefault()
     const fullName = waitingListForm.full_name.trim()
     const phone = waitingListForm.phone.trim()
-    if (!fullName || !phone) {
-      setWaitingListFormError('กรุณาระบุชื่อและเบอร์โทรศัพท์')
+    const fieldErrors = {}
+    if (!fullName) fieldErrors.full_name = 'กรุณาระบุชื่อผู้สนใจ'
+    if (!phone) fieldErrors.phone = 'กรุณาระบุเบอร์โทรศัพท์'
+    else if (!WAITING_PHONE_PATTERN.test(phone)) fieldErrors.phone = 'เบอร์โทรศัพท์ไม่ถูกต้อง (ตัวเลข 9-20 หลัก)'
+    setWaitingListFieldErrors(fieldErrors)
+    if (Object.keys(fieldErrors).length > 0) {
+      setWaitingListFormError('')
       return
     }
     const payload = {
@@ -711,6 +868,7 @@ function AdminBackupPage() {
       room_preference: waitingListForm.room_preference.trim(),
       note: waitingListForm.note.trim(),
     }
+    setWaitingListSubmitting(true)
     try {
       const { data } =
         waitingListModal.mode === 'create'
@@ -723,6 +881,8 @@ function AdminBackupPage() {
     } catch (err) {
       if (handleUnauthorized(err)) return
       setWaitingListFormError(err.response?.data?.message || 'บันทึกรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setWaitingListSubmitting(false)
     }
   }
 
@@ -779,6 +939,18 @@ function AdminBackupPage() {
     } catch (err) {
       if (handleUnauthorized(err)) return
       setPageError(err.response?.data?.message || 'ลบผลตรวจไม่สำเร็จ')
+    }
+  }
+
+  const removeExpense = async (expense) => {
+    if (!window.confirm(`ลบรายจ่าย "${expense.category}" ฿${Number(expense.amount).toLocaleString('th-TH')} หรือไม่?`)) return
+    try {
+      const { data } = await axios.delete(`/api/admin/expenses/${expense.id}`, { headers: authHeaders() })
+      setSuccessMessage(data.message || 'ลบรายจ่ายสำเร็จ')
+      loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setExpensesError(err.response?.data?.message || 'ลบรายจ่ายไม่สำเร็จ')
     }
   }
 
@@ -1001,10 +1173,8 @@ function AdminBackupPage() {
   const [expandedRoomRows, toggleRoomRow, resetRoomRows] = useExpandedRows()
   useEffect(() => {
     resetRoomRows()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRoomsPage, activeTab])
 
-  /* -------------------------------- Staff --------------------------------- */
   const [staffList, setStaffList] = useState([])
   const [staffLoading, setStaffLoading] = useState(true)
   const [staffError, setStaffError] = useState('')
@@ -1146,7 +1316,6 @@ function AdminBackupPage() {
   const [expandedStaffRows, toggleStaffRow, resetStaffRows] = useExpandedRows()
   useEffect(() => {
     resetStaffRows()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStaffPage, activeTab])
 
   const [customers, setCustomers] = useState([])
@@ -1198,7 +1367,6 @@ function AdminBackupPage() {
     }
     const timeout = setTimeout(() => loadCustomers(customerSearch), 400)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSearch])
 
   const openEditCustomer = (customer) => {
@@ -1288,7 +1456,6 @@ function AdminBackupPage() {
   const [expandedCustomerRows, toggleCustomerRow, resetCustomerRows] = useExpandedRows()
   useEffect(() => {
     resetCustomerRows()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCustomersPage, activeTab])
 
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
@@ -1414,7 +1581,6 @@ function AdminBackupPage() {
       loadStaff()
     }, 60000)
     return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1422,7 +1588,6 @@ function AdminBackupPage() {
     if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
     if (activeTab === 'moveouts') loadMoveoutLogs(1, moveoutSearch)
     if (activeTab === 'expenses') loadExpenses(1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
   const isRequestSearchMount = useRef(true)
@@ -1434,7 +1599,6 @@ function AdminBackupPage() {
     if (activeTab !== 'requests') return
     const timeout = setTimeout(() => loadRequestLogs(1, requestStatusFilter, requestSearch), 400)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestSearch])
 
   const isMaintenanceSearchMount = useRef(true)
@@ -1446,7 +1610,6 @@ function AdminBackupPage() {
     if (activeTab !== 'maintenance') return
     const timeout = setTimeout(() => loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch), 400)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maintenanceSearch])
 
   const isMoveoutSearchMount = useRef(true)
@@ -1458,7 +1621,6 @@ function AdminBackupPage() {
     if (activeTab !== 'moveouts') return
     const timeout = setTimeout(() => loadMoveoutLogs(1, moveoutSearch), 400)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moveoutSearch])
 
   const handleLogout = () => {
@@ -1506,19 +1668,16 @@ function AdminBackupPage() {
   const [expandedRequestRows, toggleRequestRow, resetRequestRows] = useExpandedRows()
   useEffect(() => {
     resetRequestRows()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestLogs.page, activeTab])
 
   const [expandedMaintenanceRows, toggleMaintenanceRow, resetMaintenanceRows] = useExpandedRows()
   useEffect(() => {
     resetMaintenanceRows()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maintenanceLogs.page, activeTab])
 
   const [expandedMoveoutRows, toggleMoveoutRow, resetMoveoutRows] = useExpandedRows()
   useEffect(() => {
     resetMoveoutRows()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moveoutLogs.page, activeTab])
 
   return (
@@ -2612,6 +2771,9 @@ function AdminBackupPage() {
                             <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditExpense(expense)}>
                               แก้ไข
                             </button>
+                            <button type="button" className="admin-action-btn is-danger" onClick={() => removeExpense(expense)}>
+                              ลบ
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -2720,31 +2882,49 @@ function AdminBackupPage() {
       </div>
 
       {inspectionDetail && (
-        <Modal title={`ผลตรวจห้อง ${inspectionDetail.room_number}`} onClose={() => setInspectionDetail(null)} variant="wide">
+        <Modal title={`ผลตรวจห้อง ${inspectionDetail.room_number}`} onClose={() => { setPhotoPreview(null); setPhotoGalleryPage(null); setInspectionDetail(null) }} variant="wide">
           <div className="moveout-inspection-admin-detail">
+            <div className="moveout-inspection-admin-hero">
+              <span className="moveout-inspection-admin-avatar" aria-hidden="true">{inspectionDetail.tenant_name?.[0] || '?'}</span>
+              <div className="moveout-inspection-admin-hero-main">
+                <strong>{inspectionDetail.tenant_name}</strong>
+                <span>ห้อง {inspectionDetail.room_number}</span>
+              </div>
+              <span className={`moveout-inspection-status is-${inspectionDetail.status || 'pending'}`}>
+                {MOVE_OUT_INSPECTION_STATUS[inspectionDetail.status || 'pending']}
+              </span>
+            </div>
             <div className="moveout-inspection-admin-meta">
-              <div><span>ผู้เช่า</span><strong>{inspectionDetail.tenant_name}</strong></div>
               <div><span>เบอร์โทร</span><strong>{inspectionDetail.tenant_phone || '-'}</strong></div>
-              <div><span>ตรวจเมื่อ</span><strong>{formatDateTime(inspectionDetail.created_at)}</strong></div>
               <div><span>ตรวจโดย</span><strong>{inspectionDetail.inspected_by || '-'}</strong></div>
+              <div><span>ตรวจเมื่อ</span><strong>{formatDateTime(inspectionDetail.created_at)}</strong></div>
             </div>
             <h4>Checklist</h4>
             <div className="moveout-inspection-admin-checklist">
               {MOVE_OUT_CHECKLIST.map((item) => {
                 const result = inspectionDetail.checklist?.[item.key]
                 const label = result === 'good' ? 'ปกติ' : result === 'damaged' ? 'ชำรุด' : result === 'not_applicable' ? 'ไม่มี/ไม่เกี่ยวข้อง' : 'ไม่ได้ระบุ'
-                return <div key={item.key}><span>{item.label}</span><strong className={result === 'damaged' ? 'is-damaged' : ''}>{label}</strong></div>
+                return <div key={item.key}><span>{item.label}</span><strong className={`is-${result || 'none'}`}>{label}</strong></div>
               })}
             </div>
             <h4>รายละเอียดความเสียหาย</h4>
-            <p className="moveout-inspection-damage-note">{inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
-            <h4>รูปภาพประกอบ ({inspectionDetail.photos?.length || 0})</h4>
+            <p className={`moveout-inspection-damage-note${inspectionDetail.damage_note ? '' : ' is-empty'}`}>
+              {inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}
+            </p>
+            <div className="moveout-inspection-section-head">
+              <h4>รูปภาพประกอบ ({inspectionDetail.photos?.length || 0})</h4>
+              {inspectionDetail.photos?.length > 0 && (
+                <button type="button" className="admin-action-btn is-ghost" onClick={() => setPhotoGalleryPage(1)}>
+                  ดูเพิ่มเติม
+                </button>
+              )}
+            </div>
             {inspectionDetail.photos?.length ? (
               <div className="moveout-inspection-photo-grid">
-                {inspectionDetail.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`} /><span>{photo.name}</span></a>)}
+                {inspectionDetail.photos.slice(0, INSPECTION_PHOTO_PREVIEW_COUNT).map(renderInspectionPhoto)}
               </div>
             ) : <p className="text-muted">ไม่มีรูปภาพแนบ</p>}
-            <div className="admin-form-actions">
+            <div className="admin-form-actions moveout-inspection-status-bar">
               <label className="form-label" htmlFor="inspection-detail-status">สถานะตรวจ</label>
               <select id="inspection-detail-status" className="form-select waiting-list-status-select" value={inspectionDetail.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspectionDetail, event.target.value)}>
                 {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -2754,31 +2934,208 @@ function AdminBackupPage() {
         </Modal>
       )}
 
+      {inspectionDetail && photoGalleryPage !== null && (
+        <Modal title={`รูปภาพประกอบทั้งหมด (${photoPreviewCount})`} onClose={() => setPhotoGalleryPage(null)} variant="gallery">
+          <div className="moveout-inspection-admin-detail moveout-gallery">
+            <div className="moveout-inspection-photo-grid moveout-gallery-grid">
+              {inspectionDetail.photos
+                .slice(galleryStart, galleryStart + INSPECTION_GALLERY_PAGE_SIZE)
+                .map((photo, offset) => renderInspectionPhoto(photo, galleryStart + offset))}
+            </div>
+            <Pagination page={galleryPage} totalPages={galleryTotalPages} onChange={setPhotoGalleryPage} />
+          </div>
+        </Modal>
+      )}
+
+      {previewSource && photoPreview !== null && previewPhotos[photoPreview] && (
+        <div className={`moveout-photo-preview${photoClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label={previewSource.title} onClick={() => setPhotoClosing(true)}>
+          <header className="moveout-photo-preview-bar" onClick={(event) => event.stopPropagation()}>
+            <div className="moveout-photo-preview-heading">
+              <strong>{previewSource.title}</strong>
+              <span>{previewSource.subtitle}</span>
+            </div>
+            {photoPreviewCount > 1 && <span className="moveout-photo-preview-counter">{photoPreview + 1} / {photoPreviewCount}</span>}
+            <div className="moveout-photo-preview-zoom" role="group" aria-label="ซูมภาพ">
+              <button type="button" onClick={() => changePhotoZoom(photoZoom - PHOTO_ZOOM_STEP)} disabled={photoZoom <= 1} aria-label="ซูมออก">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+              <button type="button" className="is-level" onClick={() => changePhotoZoom(1)} disabled={photoZoom === 1} aria-label="รีเซ็ตขนาดภาพ">
+                {Math.round(photoZoom * 100)}%
+              </button>
+              <button type="button" onClick={() => changePhotoZoom(photoZoom + PHOTO_ZOOM_STEP)} disabled={photoZoom >= PHOTO_ZOOM_MAX} aria-label="ซูมเข้า">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+            </div>
+            <button type="button" className="moveout-photo-preview-close" onClick={() => setPhotoClosing(true)} aria-label="ปิด">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </header>
+
+          <div className="moveout-photo-preview-stage" onWheel={(event) => changePhotoZoom(photoZoom - event.deltaY * 0.0015)}>
+            {photoPreviewCount > 1 && (
+              <button type="button" className="moveout-photo-preview-nav is-prev" onClick={(event) => { event.stopPropagation(); stepPhotoPreview(-1) }} aria-label="ภาพก่อนหน้า">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+            )}
+            <figure className="moveout-photo-preview-figure" onClick={(event) => event.stopPropagation()}>
+              <img
+                key={photoPreview}
+                className={`moveout-photo-preview-image${photoZoom > 1 ? (photoDragging ? ' is-dragging' : ' is-zoomed') : ''}`}
+                src={previewPhotos[photoPreview].url}
+                alt={`${previewSource.label} ${photoPreview + 1}`}
+                style={{ transform: `translate(${photoPan.x}px, ${photoPan.y}px) scale(${photoZoom})` }}
+                draggable={false}
+                onDoubleClick={() => (photoZoom > 1 ? changePhotoZoom(1) : changePhotoZoom(2.5))}
+                onPointerDown={startPhotoDrag}
+                onPointerMove={movePhotoDrag}
+                onPointerUp={endPhotoDrag}
+                onPointerCancel={endPhotoDrag}
+              />
+              <figcaption>{previewPhotos[photoPreview].name}</figcaption>
+            </figure>
+            {photoPreviewCount > 1 && (
+              <button type="button" className="moveout-photo-preview-nav is-next" onClick={(event) => { event.stopPropagation(); stepPhotoPreview(1) }} aria-label="ภาพถัดไป">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {photoPreviewCount > 1 && (
+            <div className="moveout-photo-preview-thumbs" role="tablist" aria-label="รูปภาพทั้งหมด" onClick={(event) => event.stopPropagation()}>
+              {previewPhotos.map((photo, index) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={index === photoPreview}
+                  aria-label={`ภาพที่ ${index + 1}`}
+                  key={`${photo.name}-${index}`}
+                  ref={index === photoPreview ? (node) => node?.scrollIntoView?.({ block: 'nearest', inline: 'center' }) : null}
+                  className={`moveout-photo-preview-thumb${index === photoPreview ? ' is-active' : ''}`}
+                  onClick={() => showPhoto(index)}
+                >
+                  <img src={photo.url} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {waitingListModal && (
-        <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มรายชื่อผู้สนใจ' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)}>
+        <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มผู้สนใจเช่าห้อง' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)} variant="form">
           {(requestClose) => (
-            <form onSubmit={(event) => submitWaitingListForm(event, requestClose)} noValidate>
-              {waitingListFormError && <div className="alert alert-danger py-2 px-3">{waitingListFormError}</div>}
-              <div className="row g-3">
-                <div className="col-12">
-                  <label className="form-label" htmlFor="admin-waiting-name">ชื่อผู้สนใจ</label>
-                  <input id="admin-waiting-name" className="form-control" maxLength={255} value={waitingListForm.full_name} onChange={(event) => setWaitingListForm((form) => ({ ...form, full_name: event.target.value }))} required />
-                </div>
-                <div className="col-12 col-md-6">
-                  <label className="form-label" htmlFor="admin-waiting-phone">เบอร์โทรศัพท์</label>
-                  <input id="admin-waiting-phone" className="form-control" type="tel" maxLength={20} value={waitingListForm.phone} onChange={(event) => setWaitingListForm((form) => ({ ...form, phone: event.target.value }))} required />
-                </div>
-                <div className="col-12 col-md-6">
-                  <label className="form-label" htmlFor="admin-waiting-room">ประเภทห้องที่สนใจ</label>
-                  <input id="admin-waiting-room" className="form-control" maxLength={100} value={waitingListForm.room_preference} onChange={(event) => setWaitingListForm((form) => ({ ...form, room_preference: event.target.value }))} />
-                </div>
-                <div className="col-12">
-                  <label className="form-label" htmlFor="admin-waiting-note">หมายเหตุ</label>
-                  <textarea id="admin-waiting-note" className="form-control" rows={3} maxLength={500} value={waitingListForm.note} onChange={(event) => setWaitingListForm((form) => ({ ...form, note: event.target.value }))} />
-                </div>
+            <form className="admin-waiting-form" onSubmit={(event) => submitWaitingListForm(event, requestClose)} noValidate>
+              <div className="admin-waiting-intro">
+                <span className="admin-waiting-intro-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M19 8v6M22 11h-6" />
+                  </svg>
+                </span>
+                <p>บันทึกคนที่สนใจเช่าห้อง เพื่อติดต่อกลับเมื่อมีห้องว่าง</p>
               </div>
+
+              {waitingListFormError && <p className="admin-waiting-error" role="alert">{waitingListFormError}</p>}
+
+              <div className="admin-waiting-field">
+                <label className="admin-waiting-label" htmlFor="admin-waiting-name">
+                  ชื่อผู้สนใจ <span className="admin-waiting-required">*</span>
+                </label>
+                <input
+                  id="admin-waiting-name"
+                  className={`form-control${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
+                  maxLength={255}
+                  autoFocus
+                  autoComplete="off"
+                  placeholder="ชื่อ-นามสกุล"
+                  value={waitingListForm.full_name}
+                  onChange={(event) => updateWaitingListField('full_name', event.target.value)}
+                />
+                {waitingListFieldErrors.full_name && <span className="admin-waiting-field-error">{waitingListFieldErrors.full_name}</span>}
+              </div>
+
+              <div className="admin-waiting-field">
+                <label className="admin-waiting-label" htmlFor="admin-waiting-phone">
+                  เบอร์โทรศัพท์ <span className="admin-waiting-required">*</span>
+                </label>
+                <input
+                  id="admin-waiting-phone"
+                  className={`form-control${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={20}
+                  autoComplete="off"
+                  placeholder="เช่น 0812345678"
+                  value={waitingListForm.phone}
+                  onChange={(event) => updateWaitingListField('phone', event.target.value)}
+                />
+                {waitingListFieldErrors.phone && <span className="admin-waiting-field-error">{waitingListFieldErrors.phone}</span>}
+              </div>
+
+              <div className="admin-waiting-field">
+                <label className="admin-waiting-label" htmlFor="admin-waiting-room">
+                  ประเภทห้องที่สนใจ <span className="admin-waiting-optional">(ไม่บังคับ)</span>
+                </label>
+                <div className="admin-waiting-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
+                  {ROOM_PREFERENCE_CHIPS.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      className={`admin-waiting-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
+                      aria-pressed={waitingListPreferences.includes(chip)}
+                      onClick={() => toggleRoomPreference(chip)}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  id="admin-waiting-room"
+                  className="form-control"
+                  maxLength={100}
+                  autoComplete="off"
+                  placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
+                  value={waitingListForm.room_preference}
+                  onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
+                />
+              </div>
+
+              <div className="admin-waiting-field">
+                <div className="admin-waiting-label-row">
+                  <label className="admin-waiting-label" htmlFor="admin-waiting-note">
+                    หมายเหตุ <span className="admin-waiting-optional">(ไม่บังคับ)</span>
+                  </label>
+                  <span className="admin-waiting-counter">{waitingListForm.note.length}/500</span>
+                </div>
+                <textarea
+                  id="admin-waiting-note"
+                  className="form-control"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="เช่น ต้องการเข้าอยู่ต้นเดือนหน้า"
+                  value={waitingListForm.note}
+                  onChange={(event) => updateWaitingListField('note', event.target.value)}
+                />
+              </div>
+
               <div className="admin-form-actions">
-                <button type="submit" className="admin-action-btn is-primary">บันทึก</button>
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
+                <button type="submit" className="admin-action-btn is-primary" disabled={waitingListSubmitting}>
+                  {waitingListSubmitting ? 'กำลังบันทึก...' : 'บันทึกรายชื่อ'}
+                </button>
               </div>
             </form>
           )}
@@ -2807,16 +3164,21 @@ function AdminBackupPage() {
                   <label className="form-label">รายละเอียด (ไม่บังคับ)</label>
                   <input type="text" name="description" className="form-control" value={expenseForm.description} onChange={handleExpenseFormChange} />
                 </div>
-                <div className="col-6">
+                <div className="col-12">
                   <label className="form-label">จำนวนเงิน (บาท)</label>
                   <div className="admin-input-group">
                     <span className="admin-input-affix">฿</span>
                     <input type="number" step="0.01" min="0" name="amount" className="form-control" value={expenseForm.amount} onChange={handleExpenseFormChange} required />
                   </div>
                 </div>
-                <div className="col-6">
-                  <label className="form-label">วันที่</label>
-                  <input type="date" name="expense_date" className="form-control" value={expenseForm.expense_date} onChange={handleExpenseFormChange} required />
+                <div className="col-12">
+                  <label className="form-label" htmlFor="admin-expense-date">วันที่</label>
+                  <DateDropdowns
+                    id="admin-expense-date"
+                    selectClassName="form-select"
+                    value={expenseForm.expense_date}
+                    onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
+                  />
                 </div>
               </div>
               <div className="admin-form-actions">
@@ -3188,7 +3550,11 @@ function AdminBackupPage() {
       {customerDetail && (
         <Modal
           title={`ประวัติการเช่า - ${customerDetail.customer.first_name} ${customerDetail.customer.last_name}`}
-          onClose={() => setCustomerDetail(null)}
+          onClose={() => {
+            setSlipPreview(null)
+            setPhotoPreview(null)
+            setCustomerDetail(null)
+          }}
         >
           {customerDetailLoading ? (
             <p className="text-muted">กำลังโหลดข้อมูล...</p>
@@ -3226,6 +3592,7 @@ function AdminBackupPage() {
                                   <th>จำนวนเงิน</th>
                                   <th>ประเภท</th>
                                   <th>สถานะ</th>
+                                  <th>สลิป</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -3240,6 +3607,19 @@ function AdminBackupPage() {
                                       <span className={`admin-badge status-${payment.status === 'paid' ? 'approved' : 'pending'}`}>
                                         {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
                                       </span>
+                                    </td>
+                                    <td>
+                                      {payment.slip_path ? (
+                                        <button
+                                          type="button"
+                                          className="admin-action-btn is-ghost"
+                                          onClick={() => openSlipPreview(customerDetail.customer, payment)}
+                                        >
+                                          ดูสลิป
+                                        </button>
+                                      ) : (
+                                        <span className="text-muted">-</span>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
