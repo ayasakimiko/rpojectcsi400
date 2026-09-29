@@ -4,6 +4,24 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
+import { createWaitingListEntry, readWaitingList, subscribeWaitingList } from '../utils/waitingList.js'
+import { printMonthlyInvoices } from '../utils/printMonthlyInvoices.js'
+import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import StaffPaymentReview from '../components/StaffPaymentReview.jsx'
+import {
+  compressImageFile,
+  createMoveOutInspection,
+  MOVE_OUT_CHECKLIST,
+  readMoveOutInspections,
+  subscribeMoveOutInspections,
+} from '../utils/moveOutInspections.js'
+import {
+  getCurrentMeterMonth,
+  getPreviousMeterMonth,
+  readUtilityMeterReadings,
+  saveUtilityMeterReadings,
+} from '../utils/utilityMeterReadings.js'
+import { readMaintenanceAttachments, subscribeMaintenanceAttachments } from '../utils/maintenanceAttachments.js'
 
 function Modal({ title, onClose, children, variant }) {
   const [isClosing, setIsClosing] = useState(false)
@@ -384,6 +402,18 @@ function StaffMain() {
       return null
     }
   })
+  const [waitingList, setWaitingList] = useState(readWaitingList)
+  const [waitingListModalOpen, setWaitingListModalOpen] = useState(false)
+  const [waitingListForm, setWaitingListForm] = useState({ full_name: '', phone: '', room_preference: '', note: '' })
+  const [waitingListError, setWaitingListError] = useState('')
+  const [moveOutInspections, setMoveOutInspections] = useState(readMoveOutInspections)
+  const [maintenanceAttachments, setMaintenanceAttachments] = useState(readMaintenanceAttachments)
+  const [inspectionModal, setInspectionModal] = useState(false)
+  const [inspectionForm, setInspectionForm] = useState({ room_number: '', checklist: {}, damage_note: '', photos: [] })
+  const [inspectionError, setInspectionError] = useState('')
+  const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
+  const [invoicePrintError, setInvoicePrintError] = useState('')
+  const [invoiceGenerating, setInvoiceGenerating] = useState(false)
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -443,6 +473,11 @@ function StaffMain() {
   })
   const [utilitySubmitting, setUtilitySubmitting] = useState(false)
   const [utilityError, setUtilityError] = useState('')
+  const [meterModal, setMeterModal] = useState(false)
+  const [meterMonth, setMeterMonth] = useState(getCurrentMeterMonth)
+  const [meterHistory, setMeterHistory] = useState(readUtilityMeterReadings)
+  const [meterDrafts, setMeterDrafts] = useState(() => readUtilityMeterReadings()[getCurrentMeterMonth()] || {})
+  const [meterError, setMeterError] = useState('')
 
   const [tenantRequests, setTenantRequests] = useState([])
   const [maintenanceRequests, setMaintenanceRequests] = useState([])
@@ -482,6 +517,106 @@ function StaffMain() {
   const [maintenanceHistoryStatusFilter, setMaintenanceHistoryStatusFilter] = useState('all')
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+
+  const submitWaitingListEntry = (event, requestClose) => {
+    event.preventDefault()
+    const fullName = waitingListForm.full_name.trim()
+    const phone = waitingListForm.phone.trim()
+    if (!fullName || !phone) {
+      setWaitingListError('กรุณาระบุชื่อและเบอร์โทรศัพท์')
+      return
+    }
+    try {
+      createWaitingListEntry({
+        ...waitingListForm,
+        full_name: fullName,
+        phone,
+        room_preference: waitingListForm.room_preference.trim(),
+        note: waitingListForm.note.trim(),
+        submitted_by_name: staffUser ? `${staffUser.first_name || ''} ${staffUser.last_name || ''}`.trim() : 'เจ้าหน้าที่',
+      })
+      setWaitingListForm({ full_name: '', phone: '', room_preference: '', note: '' })
+      setWaitingListError('')
+      requestClose()
+    } catch {
+      setWaitingListError('บันทึกไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+    }
+  }
+
+  const openMoveOutInspection = () => {
+    const occupiedRoom = rooms.find((room) => room.is_booked && room.tenant)
+    setInspectionForm({ room_number: occupiedRoom ? String(occupiedRoom.room_number) : '', checklist: {}, damage_note: '', photos: [] })
+    setInspectionError('')
+    setInspectionModal(true)
+  }
+
+  const submitMoveOutInspection = async (event, requestClose) => {
+    event.preventDefault()
+    const room = rooms.find((item) => String(item.room_number) === inspectionForm.room_number && item.is_booked && item.tenant)
+    if (!room) {
+      setInspectionError('กรุณาเลือกห้องที่มีผู้เช่า')
+      return
+    }
+    if (MOVE_OUT_CHECKLIST.some((item) => !inspectionForm.checklist[item.key])) {
+      setInspectionError('กรุณาตรวจและเลือกผลให้ครบทุกหัวข้อ')
+      return
+    }
+    if (Object.values(inspectionForm.checklist).includes('damaged') && !inspectionForm.damage_note.trim()) {
+      setInspectionError('กรุณาระบุรายละเอียดความเสียหาย')
+      return
+    }
+
+    setInspectionSubmitting(true)
+    setInspectionError('')
+    try {
+      const photos = await Promise.all(inspectionForm.photos.map(compressImageFile))
+      createMoveOutInspection({
+        room_number: room.room_number,
+        tenant_name: `${room.tenant.first_name} ${room.tenant.last_name}`,
+        tenant_phone: room.tenant.phone || '',
+        checklist: inspectionForm.checklist,
+        damage_note: inspectionForm.damage_note.trim(),
+        photos,
+        inspected_by: staffUser ? `${staffUser.first_name || ''} ${staffUser.last_name || ''}`.trim() || 'เจ้าหน้าที่' : 'เจ้าหน้าที่',
+      })
+      setActionSuccess('ส่งผลตรวจห้องให้ Admin แล้ว')
+      requestClose()
+    } catch (error) {
+      setInspectionError(error.message || 'บันทึกไม่สำเร็จ พื้นที่จัดเก็บเบราว์เซอร์อาจเต็ม')
+    } finally {
+      setInspectionSubmitting(false)
+    }
+  }
+
+  const handlePrintMonthlyInvoices = async () => {
+    setInvoicePrintError('')
+    const printWindow = window.open('', '_blank', 'width=900,height=720')
+    if (!printWindow) {
+      setInvoicePrintError('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัปแล้วลองอีกครั้ง')
+      return
+    }
+    setInvoiceGenerating(true)
+    try {
+      const { data } = await axios.get('/api/staff/rooms', { headers: authHeaders() })
+      const count = printMonthlyInvoices(data.rooms, printWindow)
+      if (count === 0) {
+        setInvoicePrintError('ไม่มีห้องที่มีผู้เช่าให้ออกใบแจ้งหนี้')
+        return
+      }
+      setActionSuccess(`เตรียมใบแจ้งหนี้ ${count} ห้องแล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`)
+    } catch (error) {
+      printWindow.close()
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('user')
+        navigate('/login', { replace: true })
+        return
+      }
+      setInvoicePrintError(error.message || 'เปิดหน้าต่างพิมพ์ไม่สำเร็จ')
+    } finally {
+      setInvoiceGenerating(false)
+    }
+  }
 
   const [expenses, setExpenses] = useState([])
   const [expensesLoading, setExpensesLoading] = useState(true)
@@ -667,6 +802,10 @@ function StaffMain() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => subscribeWaitingList(setWaitingList), [])
+  useEffect(() => subscribeMoveOutInspections(setMoveOutInspections), [])
+  useEffect(() => subscribeMaintenanceAttachments(setMaintenanceAttachments), [])
 
   const handleLogout = () => {
     sessionStorage.removeItem('token')
@@ -875,6 +1014,11 @@ function StaffMain() {
             {request.contact_phone && <span>โทร {request.contact_phone}</span>}
           </div>
           <p className="staff-request-note">{request.description}</p>
+          {(maintenanceAttachments[request.id] || []).length > 0 && (
+            <div className="staff-maintenance-photos">
+              {maintenanceAttachments[request.id].map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${request.room_number} ${index + 1}`} /></a>)}
+            </div>
+          )}
           <p className="staff-request-date is-reported">
             <span className="staff-request-date-label">แจ้งซ่อม</span>
             <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
@@ -1004,6 +1148,88 @@ function StaffMain() {
       setUtilityError(err.response?.data?.message || 'ส่งบิลค่าน้ำ-ค่าไฟไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setUtilitySubmitting(false)
+    }
+  }
+
+  const openMeterGrid = () => {
+    const history = readUtilityMeterReadings()
+    const month = getCurrentMeterMonth()
+    setMeterHistory(history)
+    setMeterMonth(month)
+    setMeterDrafts(history[month] || {})
+    setMeterError('')
+    setMeterModal(true)
+  }
+
+  const handleMeterDraftChange = (roomNumber, field, value) => {
+    setMeterDrafts((drafts) => ({
+      ...drafts,
+      [roomNumber]: { ...drafts[roomNumber], [field]: value },
+    }))
+  }
+
+  const meterRows = useMemo(() => {
+    const previousMonth = getPreviousMeterMonth(meterMonth)
+    const previousReadings = meterHistory[previousMonth] || {}
+    return rooms.filter((room) => room.is_booked && room.tenant).map((room) => {
+      const previous = previousReadings[room.room_number] || {}
+      const current = meterDrafts[room.room_number] || {}
+      const previousElectricity = previous.electricity_reading === '' || previous.electricity_reading == null ? null : Number(previous.electricity_reading)
+      const previousWater = previous.water_reading === '' || previous.water_reading == null ? null : Number(previous.water_reading)
+      const currentElectricity = current.electricity_reading === '' || current.electricity_reading == null ? null : Number(current.electricity_reading)
+      const currentWater = current.water_reading === '' || current.water_reading == null ? null : Number(current.water_reading)
+      const electricityUnits = previousElectricity === null || currentElectricity === null ? null : currentElectricity - previousElectricity
+      const waterUnits = previousWater === null || currentWater === null ? null : currentWater - previousWater
+      return {
+        ...room,
+        previousElectricity,
+        previousWater,
+        currentElectricity,
+        currentWater,
+        electricityUnits,
+        waterUnits,
+        electricityAmount: electricityUnits !== null && electricityUnits >= 0 ? electricityUnits * Number(room.electricity_unit_price || 0) : null,
+      }
+    })
+  }, [rooms, meterHistory, meterDrafts, meterMonth])
+
+  const saveMeterGrid = () => {
+    if (meterRows.length === 0) {
+      setMeterError('ไม่มีห้องที่มีผู้เช่าให้บันทึกเลขมิเตอร์')
+      return
+    }
+    for (const row of meterRows) {
+      const draft = meterDrafts[row.room_number] || {}
+      if (draft.electricity_reading === '' || draft.electricity_reading == null || draft.water_reading === '' || draft.water_reading == null) {
+        setMeterError(`กรุณากรอกเลขมิเตอร์น้ำและไฟ ห้อง ${row.room_number}`)
+        return
+      }
+      if (!Number.isFinite(Number(draft.electricity_reading)) || !Number.isFinite(Number(draft.water_reading))) {
+        setMeterError(`เลขมิเตอร์ห้อง ${row.room_number} ไม่ถูกต้อง`)
+        return
+      }
+      if (Number(draft.electricity_reading) < 0 || Number(draft.water_reading) < 0) {
+        setMeterError(`เลขมิเตอร์ห้อง ${row.room_number} ต้องไม่ติดลบ`)
+        return
+      }
+      if ((row.previousElectricity !== null && row.currentElectricity < row.previousElectricity) || (row.previousWater !== null && row.currentWater < row.previousWater)) {
+        setMeterError(`เลขมิเตอร์ห้อง ${row.room_number} ต้องไม่น้อยกว่ารอบก่อน`)
+        return
+      }
+    }
+
+    try {
+      const snapshot = Object.fromEntries(meterRows.map((row) => [row.room_number, {
+        electricity_reading: Number(meterDrafts[row.room_number].electricity_reading),
+        water_reading: Number(meterDrafts[row.room_number].water_reading),
+      }]))
+      saveUtilityMeterReadings(meterMonth, snapshot)
+      setMeterHistory(readUtilityMeterReadings())
+      setActionSuccess(`บันทึกเลขมิเตอร์ ${meterRows.length} ห้องในเบราว์เซอร์นี้แล้ว (ยังไม่ได้ส่งบิล)`)
+      setMeterError('')
+      setMeterModal(false)
+    } catch {
+      setMeterError('บันทึกไม่ได้ พื้นที่จัดเก็บในเบราว์เซอร์อาจเต็ม')
     }
   }
 
@@ -1404,6 +1630,133 @@ function StaffMain() {
           </Modal>
         )}
 
+        {waitingListModalOpen && (
+          <Modal title="เพิ่มผู้สนใจเช่าห้อง" onClose={() => setWaitingListModalOpen(false)}>
+            {(requestClose) => (
+              <form onSubmit={(event) => submitWaitingListEntry(event, requestClose)} noValidate>
+                {waitingListError && <div className="alert alert-danger py-2 px-3">{waitingListError}</div>}
+                <div className="row g-3">
+                  <div className="col-12">
+                    <label className="form-label" htmlFor="waiting-full-name">ชื่อผู้สนใจ</label>
+                    <input id="waiting-full-name" className="form-control" maxLength={255} value={waitingListForm.full_name} onChange={(event) => setWaitingListForm((form) => ({ ...form, full_name: event.target.value }))} required />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="waiting-phone">เบอร์โทรศัพท์</label>
+                    <input id="waiting-phone" className="form-control" type="tel" maxLength={20} value={waitingListForm.phone} onChange={(event) => setWaitingListForm((form) => ({ ...form, phone: event.target.value }))} required />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="waiting-room-preference">ประเภทห้องที่สนใจ</label>
+                    <input id="waiting-room-preference" className="form-control" maxLength={100} placeholder="เช่น ห้องแอร์, งบไม่เกิน 4,000 บาท" value={waitingListForm.room_preference} onChange={(event) => setWaitingListForm((form) => ({ ...form, room_preference: event.target.value }))} />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label" htmlFor="waiting-note">หมายเหตุ</label>
+                    <textarea id="waiting-note" className="form-control" rows={3} maxLength={500} value={waitingListForm.note} onChange={(event) => setWaitingListForm((form) => ({ ...form, note: event.target.value }))} />
+                  </div>
+                </div>
+                <div className="staff-form-actions">
+                  <button type="submit" className="staff-action-btn is-primary">บันทึกรายชื่อ</button>
+                </div>
+              </form>
+            )}
+          </Modal>
+        )}
+
+        {inspectionModal && (
+          <Modal title="Checklist ตรวจห้องย้ายออก" onClose={() => setInspectionModal(false)} variant="wide">
+            {(requestClose) => (
+              <form onSubmit={(event) => submitMoveOutInspection(event, requestClose)} noValidate>
+                {inspectionError && <div className="alert alert-danger py-2 px-3">{inspectionError}</div>}
+                <div className="row g-3 mb-3">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="inspection-room">ห้อง / ผู้เช่า</label>
+                    <select id="inspection-room" className="form-select" value={inspectionForm.room_number} onChange={(event) => setInspectionForm((form) => ({ ...form, room_number: event.target.value }))} required>
+                      <option value="">เลือกห้อง</option>
+                      {rooms.filter((room) => room.is_booked && room.tenant).map((room) => <option key={room.room_number} value={room.room_number}>{room.room_number} - {room.tenant.first_name} {room.tenant.last_name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">ผู้เช่า</label>
+                    <div className="form-control-plaintext">{rooms.find((room) => String(room.room_number) === inspectionForm.room_number)?.tenant ? `${rooms.find((room) => String(room.room_number) === inspectionForm.room_number).tenant.first_name} ${rooms.find((room) => String(room.room_number) === inspectionForm.room_number).tenant.last_name}` : '-'}</div>
+                  </div>
+                </div>
+                <div className="moveout-inspection-checklist">
+                  <div className="moveout-inspection-checklist-heading"><strong>รายการตรวจ</strong><span>เลือกผลการตรวจทุกข้อ</span></div>
+                  {MOVE_OUT_CHECKLIST.map((item) => (
+                    <label className="moveout-inspection-checklist-row" key={item.key}>
+                      <span>{item.label}</span>
+                      <select className="form-select" value={inspectionForm.checklist[item.key] || ''} onChange={(event) => setInspectionForm((form) => ({ ...form, checklist: { ...form.checklist, [item.key]: event.target.value } }))}>
+                        <option value="">เลือกผล</option><option value="good">ปกติ</option><option value="damaged">ชำรุด</option><option value="not_applicable">ไม่มี/ไม่เกี่ยวข้อง</option>
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <div className="row g-3 mt-1">
+                  <div className="col-12">
+                    <label className="form-label" htmlFor="inspection-damage-note">รายละเอียดความเสียหาย / หมายเหตุ</label>
+                    <textarea id="inspection-damage-note" className="form-control" rows={3} maxLength={1000} value={inspectionForm.damage_note} onChange={(event) => setInspectionForm((form) => ({ ...form, damage_note: event.target.value }))} placeholder="ระบุตำแหน่งและรายละเอียดความเสียหาย" />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label" htmlFor="inspection-photos">แนบรูปภาพ (สูงสุด 3 รูป)</label>
+                    <input id="inspection-photos" className="form-control" type="file" accept="image/*" multiple onChange={(event) => {
+                      const files = Array.from(event.target.files || [])
+                      if (files.length > 3) setInspectionError('แนบรูปได้ไม่เกิน 3 รูป')
+                      else {
+                        setInspectionError('')
+                        setInspectionForm((form) => ({ ...form, photos: files }))
+                      }
+                    }} />
+                    {inspectionForm.photos.length > 0 && <small className="text-muted">เลือกแล้ว {inspectionForm.photos.length} รูป ระบบจะย่อขนาดก่อนบันทึก</small>}
+                  </div>
+                </div>
+                <p className="waiting-list-storage-note mt-3">ข้อมูลและรูปเก็บในเบราว์เซอร์นี้ Admin จะเห็นเมื่อเปิดระบบบนเบราว์เซอร์เดียวกัน</p>
+                <div className="staff-form-actions">
+                  <button type="submit" className="staff-action-btn is-primary" disabled={inspectionSubmitting}>{inspectionSubmitting ? 'กำลังบันทึก...' : 'ส่งผลตรวจให้ Admin'}</button>
+                </div>
+              </form>
+            )}
+          </Modal>
+        )}
+
+        {meterModal && (
+          <Modal title="จดมิเตอร์ทุกห้อง" onClose={() => setMeterModal(false)} variant="wide">
+            <div className="meter-entry-toolbar">
+              <label className="form-label" htmlFor="meter-month">รอบบิล</label>
+              <input id="meter-month" type="month" className="form-control" value={meterMonth} onChange={(event) => {
+                const month = event.target.value
+                const history = readUtilityMeterReadings()
+                setMeterMonth(month)
+                setMeterHistory(history)
+                setMeterDrafts(history[month] || {})
+                setMeterError('')
+              }} />
+              <span>เลขรอบก่อนเทียบกับ {getPreviousMeterMonth(meterMonth)}</span>
+            </div>
+            {meterError && <div className="alert alert-danger py-2 px-3">{meterError}</div>}
+            <div className="table-responsive meter-entry-table-wrap">
+              <table className="staff-table meter-entry-table">
+                <thead><tr><th>ห้อง / ผู้เช่า</th><th>ไฟรอบก่อน</th><th>เลขไฟครั้งนี้</th><th>หน่วยไฟที่ใช้</th><th>ค่าไฟโดยประมาณ</th><th>น้ำรอบก่อน</th><th>เลขน้ำครั้งนี้</th><th>หน่วยน้ำที่ใช้</th><th>ค่าน้ำ/เดือน</th></tr></thead>
+                <tbody>
+                  {meterRows.length === 0 ? <tr><td colSpan={9} className="staff-empty">ไม่มีห้องที่มีผู้เช่า</td></tr> : meterRows.map((row) => (
+                    <tr key={row.room_number}>
+                      <td><strong>{row.room_number}</strong><small>{row.tenant.first_name} {row.tenant.last_name}</small></td>
+                      <td>{row.previousElectricity ?? 'ไม่มีข้อมูล'}</td>
+                      <td><input aria-label={`เลขมิเตอร์ไฟห้อง ${row.room_number}`} type="number" min="0" step="0.01" className="form-control meter-reading-input" value={meterDrafts[row.room_number]?.electricity_reading ?? ''} onChange={(event) => handleMeterDraftChange(row.room_number, 'electricity_reading', event.target.value)} /></td>
+                      <td>{row.electricityUnits === null ? '-' : row.electricityUnits < 0 ? 'เลขลดลง' : row.electricityUnits.toLocaleString('th-TH')}</td>
+                      <td>{row.electricityAmount === null ? '-' : `฿${formatCurrency(row.electricityAmount)}`}</td>
+                      <td>{row.previousWater ?? 'ไม่มีข้อมูล'}</td>
+                      <td><input aria-label={`เลขมิเตอร์น้ำห้อง ${row.room_number}`} type="number" min="0" step="0.01" className="form-control meter-reading-input" value={meterDrafts[row.room_number]?.water_reading ?? ''} onChange={(event) => handleMeterDraftChange(row.room_number, 'water_reading', event.target.value)} /></td>
+                      <td>{row.waterUnits === null ? '-' : row.waterUnits < 0 ? 'เลขลดลง' : row.waterUnits.toLocaleString('th-TH')}</td>
+                      <td>฿{formatCurrency(row.water_price)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="waiting-list-storage-note mt-3">เลขมิเตอร์เก็บในเบราว์เซอร์นี้เท่านั้น รอบแรกจะแสดงเป็นข้อมูลตั้งต้น; ค่าไฟคำนวณจากหน่วยใช้จริง ส่วนค่าน้ำยังเป็นราคาเหมาจ่ายตาม DB และการบันทึกนี้ยังไม่ส่งบิล</p>
+            <div className="staff-form-actions"><button type="button" className="staff-action-btn is-primary" onClick={saveMeterGrid}>บันทึกเลขมิเตอร์ทั้งหมด</button></div>
+          </Modal>
+        )}
+
         <div className="staff-summary-grid">
           <div className="staff-summary-card">
             <span className="staff-summary-icon">
@@ -1443,10 +1796,78 @@ function StaffMain() {
           </div>
         </div>
 
+        <AnnouncementBoard canManage author={staffUser ? `${staffUser.first_name || ''} ${staffUser.last_name || ''}`.trim() || 'เจ้าหน้าที่' : 'เจ้าหน้าที่'} />
+
+        <div className="staff-card meter-entry-card">
+          <div className="staff-card-header">
+            <div><h2>จดมิเตอร์ทุกห้อง</h2><p className="waiting-list-storage-note">กรอกเลขน้ำและไฟรวมในตารางเดียว แล้วเทียบกับรอบก่อน</p></div>
+            <button type="button" className="staff-action-btn is-primary" onClick={openMeterGrid}>เปิดตารางมิเตอร์</button>
+          </div>
+        </div>
+
+        <div className="staff-card">
+          <div className="staff-card-header">
+            <div>
+              <h2>รายชื่อคนรอห้องว่าง <span className="staff-count-pill">{waitingList.length}</span></h2>
+              <p className="waiting-list-storage-note">บันทึกไว้ในเบราว์เซอร์นี้เท่านั้น</p>
+            </div>
+            <button type="button" className="staff-action-btn is-primary" onClick={() => { setWaitingListError(''); setWaitingListModalOpen(true) }}>
+              + เพิ่มผู้สนใจ
+            </button>
+          </div>
+          <div className="table-responsive">
+            <table className="staff-table">
+              <thead>
+                <tr><th>ชื่อผู้สนใจ</th><th>เบอร์โทร</th><th>ประเภทห้อง</th><th>วันที่แจ้ง</th><th>บันทึกโดย</th></tr>
+              </thead>
+              <tbody>
+                {waitingList.length === 0 ? (
+                  <tr><td colSpan={5} className="staff-empty">ยังไม่มีรายชื่อผู้รอห้องว่าง</td></tr>
+                ) : waitingList.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.full_name}</td><td>{item.phone}</td><td>{item.room_preference || '-'}</td>
+                    <td>{formatDate(item.created_at)}</td><td>{item.submitted_by_name || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="staff-card">
+          <div className="staff-card-header">
+            <div>
+              <h2>ตรวจห้องตอนย้ายออก <span className="staff-count-pill">{moveOutInspections.length}</span></h2>
+              <p className="waiting-list-storage-note">Checklist, รูป และความเสียหายที่ส่งให้ Admin</p>
+            </div>
+            <button type="button" className="staff-action-btn is-primary" onClick={openMoveOutInspection} disabled={!rooms.some((room) => room.is_booked && room.tenant)}>+ เริ่มตรวจห้อง</button>
+          </div>
+          <div className="table-responsive">
+            <table className="staff-table">
+              <thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>วันที่ตรวจ</th><th>ผลตรวจ</th><th>Admin</th></tr></thead>
+              <tbody>
+                {moveOutInspections.length === 0 ? (
+                  <tr><td colSpan={5} className="staff-empty">ยังไม่มีผลตรวจห้องย้ายออก</td></tr>
+                ) : moveOutInspections.map((inspection) => (
+                  <tr key={inspection.id}>
+                    <td>{inspection.room_number}</td><td>{inspection.tenant_name}</td><td>{formatDateTime(inspection.created_at)}</td>
+                    <td>{inspection.checklist && Object.values(inspection.checklist).includes('damaged') ? 'พบความเสียหาย' : 'บันทึกแล้ว'}</td>
+                    <td>{inspection.status === 'pending' ? 'รอตรวจ' : inspection.status === 'reviewed' ? 'ตรวจแล้ว' : 'ต้องติดตาม'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div className="staff-card">
           <div className="staff-card-header">
             <h2>รายการห้องพัก</h2>
-            <div className="staff-filters">
+            <div className="staff-card-header-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={handlePrintMonthlyInvoices} disabled={invoiceGenerating}>
+                {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้รวม / PDF'}
+              </button>
+              <div className="staff-filters">
               <input
                 type="text"
                 className="staff-search-input"
@@ -1471,8 +1892,11 @@ function StaffMain() {
                 <option value="due">รอเก็บเงิน</option>
                 <option value="expiring">ใกล้หมดสัญญา</option>
               </select>
+              </div>
             </div>
           </div>
+
+          {invoicePrintError && <div className="staff-inline-error" role="alert">{invoicePrintError}</div>}
 
           <div className="table-responsive">
             <table className="staff-table staff-rooms-table">
@@ -1742,6 +2166,8 @@ function StaffMain() {
             </div>
           )}
         </div>
+
+        <StaffPaymentReview />
 
         <div className="staff-requests-grid">
           <div className="staff-card">

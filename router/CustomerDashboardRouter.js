@@ -1,9 +1,36 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
+import fs from "node:fs";
+import path from "node:path";
+import multer from "multer";
+import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
-import { isPositiveId, parseMaintenanceInput, parseTenantRequestInput } from "../middleware/validation.js";
+import { isPositiveId, isValidPassword, parseMaintenanceInput, parseTenantRequestInput, validatePersonUpdateInput } from "../middleware/validation.js";
 
 const router = Router();
+const UPLOAD_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads"));
+const PAYMENT_SLIP_DIR = path.join(UPLOAD_DIR, "payment-slips");
+fs.mkdirSync(PAYMENT_SLIP_DIR, { recursive: true });
+
+const slipUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => callback(null, PAYMENT_SLIP_DIR),
+    filename: (_req, file, callback) => callback(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    if (["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) return callback(null, true);
+    return callback(new Error("แนบได้เฉพาะไฟล์ JPG, PNG หรือ WebP"));
+  },
+});
+
+function parsePaymentSlip(req, res, next) {
+  slipUpload.single("slip")(req, res, (error) => {
+    if (!error) return next();
+    return res.status(400).json({ message: error.message || "อัปโหลดสลิปไม่สำเร็จ" });
+  });
+}
 
 router.use(authenticate, requireCustomerRole);
 
@@ -17,6 +44,58 @@ router.use(async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Check customer suspension error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.patch("/profile", async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const updateFields = Object.fromEntries(
+      ["first_name", "last_name", "phone"].filter((field) => Object.hasOwn(body, field)).map((field) => [field, body[field]]),
+    );
+    const hasProfileFields = ["first_name", "last_name", "phone"].some((field) => Object.hasOwn(body, field));
+    const hasPasswordChange = body.new_password !== undefined;
+    if (!hasProfileFields && !hasPasswordChange) {
+      return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
+    }
+    if (hasProfileFields) {
+      const validationError = validatePersonUpdateInput(updateFields);
+      if (validationError) return res.status(400).json({ message: validationError });
+    }
+    if (hasPasswordChange && (!isValidPassword(body.new_password) || typeof body.current_password !== "string")) {
+      return res.status(400).json({ message: "รหัสผ่านใหม่ต้องมีความยาว 6-128 ตัวอักษร และกรุณาระบุรหัสผ่านปัจจุบัน" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query(`SELECT password FROM Customer WHERE id = ?`, [req.user.id]);
+    if (!rows[0]) return res.status(404).json({ message: "ไม่พบข้อมูลผู้เช่า" });
+    if (hasPasswordChange && !(await bcrypt.compare(body.current_password, rows[0].password))) {
+      return res.status(400).json({ message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+    }
+
+    const columns = [];
+    const values = [];
+    for (const field of ["first_name", "last_name", "phone"]) {
+      if (Object.hasOwn(body, field)) {
+        columns.push(`${field} = ?`);
+        values.push(body[field].trim());
+      }
+    }
+    if (hasPasswordChange) {
+      columns.push("password = ?");
+      values.push(await bcrypt.hash(body.new_password, 10));
+    }
+    await pool.query(`UPDATE Customer SET ${columns.join(", ")} WHERE id = ?`, [...values, req.user.id]);
+
+    const [customerRows] = await pool.query(
+      `SELECT id, first_name, last_name, phone, room_number FROM Customer WHERE id = ?`,
+      [req.user.id],
+    );
+    return res.json({ message: "บันทึกข้อมูลโปรไฟล์สำเร็จ", customer: customerRows[0] });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้แล้ว" });
+    console.error("Update customer profile error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
@@ -255,8 +334,10 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.post("/payments/confirm", async (req, res) => {
+router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
+  let connection;
   try {
+    if (!req.file) return res.status(400).json({ message: "กรุณาแนบสลิปการโอนเงิน" });
     const pool = getPool();
 
     const [customerRows] = await pool.query(
@@ -265,6 +346,7 @@ router.post("/payments/confirm", async (req, res) => {
     );
     const customer = customerRows[0];
     if (!customer) {
+      fs.unlinkSync(req.file.path);
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
 
@@ -280,51 +362,58 @@ router.post("/payments/confirm", async (req, res) => {
     );
     const booking = bookingRows[0];
     if (!booking) {
+      fs.unlinkSync(req.file.path);
       return res.status(404).json({ message: "ไม่พบสัญญาเช่าของคุณ" });
     }
 
     const [paymentsForBooking] = await pool.query(
-      `SELECT id, amount, status, type, note, payment_date FROM Payment WHERE booking_id = ?`,
+      `SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ?`,
       [booking.id],
     );
 
     const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount);
     if (!currentDue) {
+      fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องชำระในขณะนี้" });
     }
 
+    if (paymentsForBooking.some((payment) => payment.status === "pending" && payment.slip_path)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(409).json({ message: "มีสลิปที่รอตรวจสอบอยู่แล้ว" });
+    }
+
+    const slipPath = path.join("payment-slips", path.basename(req.file.filename));
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
     if (currentDue.rentAmount > 0) {
       const note = currentDue.lumpSumMonths
-        ? `ชำระผ่าน PromptPay (จำลอง) - จ่ายทบ ${currentDue.lumpSumMonths} เดือน`
-        : "ชำระผ่าน PromptPay (จำลอง)";
+        ? `รอตรวจสอบสลิป - ค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน`
+        : "รอตรวจสอบสลิปค่าเช่า";
 
-      await pool.query(
-        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?)`,
-        [booking.id, currentDue.rentAmount, note],
+      await connection.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'pending', 'rent', ?, ?)`,
+        [booking.id, currentDue.rentAmount, note, slipPath],
       );
-
-      if (currentDue.lumpSumMonths) {
-        await pool.query(
-          `UPDATE Room
-           SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
-           WHERE room_number = ?`,
-          [currentDue.periodEnd, currentDue.lumpSumMonths - 1, customer.room_number],
-        );
-      }
     }
 
     const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
     if (utilityPaymentIds.length > 0) {
-      await pool.query(
-        `UPDATE Payment SET status = 'paid', payment_date = CURDATE() WHERE id IN (?)`,
-        [utilityPaymentIds],
+      await connection.query(
+        `UPDATE Payment SET slip_path = ?, note = CONCAT(COALESCE(note, ''), ' (รอตรวจสอบสลิป)') WHERE id IN (?) AND status = 'pending'`,
+        [slipPath, utilityPaymentIds],
       );
     }
 
-    return res.status(201).json({ message: "ชำระเงินสำเร็จ" });
+    await connection.commit();
+    return res.status(201).json({ message: "ส่งสลิปสำเร็จ กรุณารอเจ้าหน้าที่ตรวจสอบ" });
   } catch (error) {
+    if (connection) await connection.rollback();
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     console.error("Confirm payment error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
   }
 });
 
@@ -344,13 +433,13 @@ router.post("/maintenance", async (req, res) => {
     }
     const { description, category, preferredTime, contactPhone } = value;
 
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO MaintenanceRequest (customer_id, room_number, description, category, contact_phone, preferred_time)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [customer.id, customer.room_number, description, category, contactPhone, preferredTime],
     );
 
-    return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด" });
+    return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด", maintenanceId: result.insertId });
   } catch (error) {
     console.error("Create maintenance request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });

@@ -528,6 +528,137 @@
   margin-bottom: 16px;
 }
 
+.waiting-list-storage-note {
+  margin: 5px 0 0;
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.staff-maintenance-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.staff-maintenance-photos img {
+  display: block;
+  width: 88px;
+  aspect-ratio: 4 / 3;
+  border: 1px solid #dce9fb;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.meter-entry-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.meter-entry-toolbar .form-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.meter-entry-toolbar input {
+  max-width: 190px;
+}
+
+.meter-entry-toolbar span {
+  padding-bottom: 8px;
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.meter-entry-table-wrap {
+  max-height: 56vh;
+  border: 1px solid #e6f0fd;
+  border-radius: 10px;
+}
+
+.meter-entry-table {
+  min-width: 1120px;
+}
+
+.meter-entry-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #6b859e;
+}
+
+.meter-reading-input {
+  min-width: 110px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 575px) {
+  .meter-entry-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .meter-entry-toolbar input {
+    max-width: none;
+  }
+}
+
+.moveout-inspection-checklist {
+  border: 1px solid #e6f0fd;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.moveout-inspection-checklist-heading,
+.moveout-inspection-checklist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.moveout-inspection-checklist-heading {
+  background: #f8fbff;
+  color: #33506f;
+  font-size: 12px;
+}
+
+.moveout-inspection-checklist-heading span {
+  color: #6b859e;
+  font-weight: 400;
+}
+
+.moveout-inspection-checklist-row:last-child {
+  border-bottom: 0;
+}
+
+.moveout-inspection-checklist-row > span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.moveout-inspection-checklist-row .form-select {
+  flex: 0 0 190px;
+  width: 190px;
+  font-size: 12px;
+}
+
+@media (max-width: 575px) {
+  .moveout-inspection-checklist-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .moveout-inspection-checklist-row .form-select {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
 .staff-filters {
   display: flex;
   flex-wrap: wrap;

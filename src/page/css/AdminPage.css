@@ -596,6 +596,119 @@
   margin: 0;
 }
 
+.waiting-list-storage-note {
+  margin: 5px 0 0;
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.waiting-list-date {
+  display: block;
+  margin-top: 3px;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.waiting-list-status-select {
+  min-width: 132px;
+  font-size: 12px;
+}
+
+.moveout-inspection-admin-detail h4 {
+  margin: 22px 0 10px;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.moveout-inspection-admin-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.moveout-inspection-admin-meta div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moveout-inspection-admin-meta span {
+  color: #6b859e;
+  font-size: 11px;
+}
+
+.moveout-inspection-admin-meta strong {
+  color: #0f2b52;
+  font-size: 13px;
+}
+
+.moveout-inspection-admin-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e6f0fd;
+  border-radius: 10px;
+  background: #e6f0fd;
+}
+
+.moveout-inspection-admin-checklist div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.moveout-inspection-admin-checklist strong.is-damaged {
+  color: #b42318;
+}
+
+.moveout-inspection-damage-note {
+  margin: 0;
+  padding: 12px;
+  border-left: 3px solid #eab308;
+  background: #fffbeb;
+  white-space: pre-wrap;
+}
+
+.moveout-inspection-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.moveout-inspection-photo-grid a {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  color: #33506f;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.moveout-inspection-photo-grid img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f4f8fd;
+}
+
+@media (max-width: 575px) {
+  .moveout-inspection-admin-meta,
+  .moveout-inspection-admin-checklist {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-filters {
   display: flex;
   align-items: center;

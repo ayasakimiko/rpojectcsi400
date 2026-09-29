@@ -6,6 +6,14 @@ import html2canvas from 'html2canvas'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/CustomerDashbord.css'
+import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import { readAnnouncements, subscribeAnnouncements } from '../utils/announcements.js'
+import { compressImageFile } from '../utils/moveOutInspections.js'
+import {
+  readMaintenanceAttachments,
+  saveMaintenanceRequestPhotos,
+  subscribeMaintenanceAttachments,
+} from '../utils/maintenanceAttachments.js'
 
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
@@ -181,11 +189,15 @@ function ReceiptTemplate({ receiptRequest, customer }) {
   return (
     <div
       style={{
-        width: 700,
+        width: 780,
+        minHeight: 1103,
+        boxSizing: 'border-box',
         padding: 40,
         background: '#ffffff',
         color: '#0f2b52',
         fontFamily: '"Tahoma", "Segoe UI", "Leelawadee UI", sans-serif',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
@@ -283,7 +295,7 @@ function ReceiptTemplate({ receiptRequest, customer }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 48, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+      <div style={{ marginTop: 'auto', paddingTop: 48, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
         <div style={{ color: '#6b859e' }}>เอกสารนี้สร้างโดยระบบอัตโนมัติ</div>
         <div style={{ textAlign: 'center' }}>
           <div style={{ borderBottom: '1px solid #6b859e', width: 160, marginBottom: 4 }}>&nbsp;</div>
@@ -360,6 +372,7 @@ const STATUS_LABEL = {
   paid: 'ชำระแล้ว',
   pending: 'รอชำระ',
   overdue: 'ค้างชำระ',
+  rejected: 'สลิปไม่ผ่าน',
 }
 
 const DUE_STATUS_LABEL = {
@@ -547,7 +560,7 @@ const MAINTENANCE_FINAL_LOG_LABEL = {
 const REQUEST_TIMELINE_PENDING_FINAL_LABEL = 'รอผลดำเนินการ'
 
 function getRequestTimeline(kind, request) {
-  if (!request) return []
+  if (!request || kind === 'announcement') return []
   const isSelfCancelledMaintenance =
     kind === 'maintenance' && request.status === 'cancelled' && !request.completed_by_name
   const finalLabel = isSelfCancelledMaintenance
@@ -779,10 +792,15 @@ function CustomerDashbord() {
   }, [notifOpen])
 
   const [successPopup, setSuccessPopup] = useState(null)
+  const [showProfileForm, setShowProfileForm] = useState(false)
+  const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', current_password: '', new_password: '', confirm_password: '' })
+  const [profileSubmitting, setProfileSubmitting] = useState(false)
+  const [profileError, setProfileError] = useState('')
 
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [paymentSlip, setPaymentSlip] = useState(null)
   const [showDueBreakdown, setShowDueBreakdown] = useState(true)
 
   const [activeRequestType, setActiveRequestType] = useState(null)
@@ -799,6 +817,9 @@ function CustomerDashbord() {
   const [maintenanceCategory, setMaintenanceCategory] = useState(MAINTENANCE_CATEGORY_OPTIONS[0].value)
   const [maintenancePreferredTime, setMaintenancePreferredTime] = useState(MAINTENANCE_TIME_OPTIONS[0].value)
   const [maintenanceContactPhone, setMaintenanceContactPhone] = useState('')
+  const [maintenancePhotos, setMaintenancePhotos] = useState([])
+  const [maintenanceAttachments, setMaintenanceAttachments] = useState(readMaintenanceAttachments)
+  const [announcementItems, setAnnouncementItems] = useState(readAnnouncements)
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false)
   const [maintenanceError, setMaintenanceError] = useState('')
   const [cancelingMaintenanceId, setCancelingMaintenanceId] = useState(null)
@@ -818,6 +839,7 @@ function CustomerDashbord() {
   useEffect(() => {
     const isAnyOverlayOpen =
       showPaymentForm ||
+      showProfileForm ||
       Boolean(activeRequestType) ||
       Boolean(statusPopup) ||
       Boolean(successPopup) ||
@@ -835,6 +857,7 @@ function CustomerDashbord() {
     }
   }, [
     showPaymentForm,
+    showProfileForm,
     activeRequestType,
     statusPopup,
     successPopup,
@@ -843,6 +866,11 @@ function CustomerDashbord() {
     notifOpen,
     notifDetail,
   ])
+
+  useEffect(() => subscribeMaintenanceAttachments(setMaintenanceAttachments), [])
+  useEffect(() => subscribeAnnouncements(setAnnouncementItems), [])
+
+  useEffect(() => subscribeMaintenanceAttachments(setMaintenanceAttachments), [])
 
   const maybeShowStatusPopups = (dashboardData) => {
     const tryShowStatusPopup = (kind, status, id, request) => {
@@ -958,27 +986,80 @@ function CustomerDashbord() {
 
   const openPaymentForm = () => {
     setPaymentError('')
+    setPaymentSlip(null)
     setShowPaymentForm(true)
   }
 
   const handleConfirmPayment = async (event) => {
     event.preventDefault()
     const token = sessionStorage.getItem('token')
+    if (!paymentSlip) {
+      setPaymentError('กรุณาแนบสลิปโอนเงิน')
+      return
+    }
     setPaymentSubmitting(true)
     setPaymentError('')
     try {
+      const formData = new FormData()
+      formData.append('slip', paymentSlip)
       const { data: result } = await axios.post(
         '/api/customer/payments/confirm',
-        {},
-        { headers: { Authorization: `Bearer ${token}` } },
+        formData,
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
       )
       setShowPaymentForm(false)
+      setPaymentSlip(null)
       setSuccessPopup(result.message || 'ชำระเงินสำเร็จ')
       await loadDashboard()
     } catch (err) {
       setPaymentError(err.response?.data?.message || 'ชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setPaymentSubmitting(false)
+    }
+  }
+
+  const openProfileForm = () => {
+    setProfileForm({
+      first_name: data?.customer?.first_name || '',
+      last_name: data?.customer?.last_name || '',
+      phone: data?.customer?.phone || '',
+      current_password: '',
+      new_password: '',
+      confirm_password: '',
+    })
+    setProfileError('')
+    setShowProfileForm(true)
+  }
+
+  const handleProfileSubmit = async (event, requestClose) => {
+    event.preventDefault()
+    if (profileForm.new_password && profileForm.new_password !== profileForm.confirm_password) {
+      setProfileError('รหัสผ่านใหม่และการยืนยันไม่ตรงกัน')
+      return
+    }
+    setProfileSubmitting(true)
+    setProfileError('')
+    try {
+      const token = sessionStorage.getItem('token')
+      const payload = {
+        first_name: profileForm.first_name.trim(),
+        last_name: profileForm.last_name.trim(),
+        phone: profileForm.phone.trim(),
+      }
+      if (profileForm.new_password) {
+        payload.current_password = profileForm.current_password
+        payload.new_password = profileForm.new_password
+      }
+      const { data: result } = await axios.patch('/api/customer/profile', payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setSuccessPopup(result.message || 'บันทึกข้อมูลสำเร็จ')
+      requestClose()
+      await loadDashboard()
+    } catch (err) {
+      setProfileError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setProfileSubmitting(false)
     }
   }
 
@@ -1019,6 +1100,7 @@ function CustomerDashbord() {
     setMaintenanceCategory(MAINTENANCE_CATEGORY_OPTIONS[0].value)
     setMaintenancePreferredTime(MAINTENANCE_TIME_OPTIONS[0].value)
     setMaintenanceContactPhone(data?.customer?.phone || '')
+    setMaintenancePhotos([])
     setMaintenanceError('')
     setShowMaintenanceForm(true)
   }
@@ -1034,6 +1116,7 @@ function CustomerDashbord() {
     setMaintenanceSubmitting(true)
     setMaintenanceError('')
     try {
+      const compressedPhotos = await Promise.all(maintenancePhotos.map(compressImageFile))
       const { data: result } = await axios.post(
         '/api/customer/maintenance',
         {
@@ -1044,9 +1127,18 @@ function CustomerDashbord() {
         },
         { headers: { Authorization: `Bearer ${token}` } },
       )
+      let message = result.message || 'แจ้งซ่อมสำเร็จ'
+      if (compressedPhotos.length && result.maintenanceId) {
+        try {
+          saveMaintenanceRequestPhotos(result.maintenanceId, compressedPhotos)
+        } catch {
+          message = 'แจ้งซ่อมสำเร็จ แต่เก็บรูปในเบราว์เซอร์ไม่สำเร็จ'
+        }
+      }
       setMaintenanceText('')
+      setMaintenancePhotos([])
       setShowMaintenanceForm(false)
-      setSuccessPopup(result.message || 'แจ้งซ่อมสำเร็จ')
+      setSuccessPopup(message)
       await loadDashboard()
     } catch (err) {
       setMaintenanceError(err.response?.data?.message || 'แจ้งซ่อมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -1168,6 +1260,8 @@ function CustomerDashbord() {
   }
 
   const { customer, room, rentalHistory, currentDue, maintenanceRequests = [], tenantRequests = [] } = data
+  const currentBooking = rentalHistory?.[0]
+  const paymentUnderReview = currentBooking?.payments?.some((payment) => payment.status === 'pending' && payment.slip_path)
   const prepaidUntilDate = room?.prepaid_until ? new Date(room.prepaid_until) : null
   const isPrepaid = prepaidUntilDate && !currentDue && prepaidUntilDate > new Date()
   const msUntilStart = room?.is_booked ? msUntil(room.rental_start_date) : null
@@ -1242,7 +1336,9 @@ function CustomerDashbord() {
   }
 
   const buildUtilityBillNotifs = (payment) => {
-    const info = UTILITY_BILL_NOTIF_INFO[payment.type]
+    const info = payment.slip_path
+      ? { label: 'ส่งสลิปแล้ว รอเจ้าหน้าที่ตรวจสอบ', tone: 'pending' }
+      : UTILITY_BILL_NOTIF_INFO[payment.type]
     if (!info || payment.status !== 'pending') return []
     const description = formatCustomerNote(payment.note)
     return [
@@ -1269,6 +1365,15 @@ function CustomerDashbord() {
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
+    ...announcementItems.map((item) => ({
+      key: `announcement-${item.id}`,
+      title: item.title,
+      label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
+      tone: item.tone === 'warning' ? 'pending' : 'info',
+      date: item.created_at,
+      detail: item.message,
+      kind: 'announcement',
+    })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
@@ -1401,6 +1506,9 @@ function CustomerDashbord() {
             </div>
           </div>
           <div className="dashboard-header-actions">
+            <button type="button" className="dashboard-profile-btn" onClick={openProfileForm}>
+              โปรไฟล์
+            </button>
             <div className="dashboard-notif-wrap" ref={notifRef}>
               <button
                 type="button"
@@ -1578,6 +1686,8 @@ function CustomerDashbord() {
             </button>
           </div>
         </div>
+
+        <AnnouncementBoard />
 
         {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
           <Modal
@@ -1795,12 +1905,14 @@ function CustomerDashbord() {
                       )}
 
                       <div className="dashboard-due-pay-actions">
-                        <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                          ชำระเงิน
-                        </button>
+                        {paymentUnderReview ? (
+                          <span className="dashboard-badge status-pending">ส่งสลิปแล้ว · รอเจ้าหน้าที่ตรวจสอบ</span>
+                        ) : (
+                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>แนบสลิปโอนเงิน</button>
+                        )}
                       </div>
                       {showPaymentForm && (
-                        <Modal title="สแกนเพื่อชำระเงิน" onClose={() => setShowPaymentForm(false)} variant="confirm">
+                        <Modal title="ชำระเงินและแนบสลิป" onClose={() => setShowPaymentForm(false)} variant="confirm">
                           {(requestClose) => (
                             <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
                               <div className="dashboard-qr-box">
@@ -1813,10 +1925,13 @@ function CustomerDashbord() {
                                     : 'สแกนผ่านแอปธนาคารเพื่อชำระเงิน'}
                                 </p>
                               </div>
+                              <label htmlFor="payment-slip-file">แนบสลิป (JPG, PNG หรือ WebP ไม่เกิน 5 MB)</label>
+                              <input id="payment-slip-file" className="dashboard-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPaymentSlip(event.target.files?.[0] || null)} />
+                              {paymentSlip && <p className="dashboard-file-name">ไฟล์ที่เลือก: {paymentSlip.name}</p>}
                               {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
                               <div className="dashboard-form-actions">
                                 <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
-                                  {paymentSubmitting ? 'กำลังตรวจสอบ...' : 'ฉันชำระเงินแล้ว'}
+                                  {paymentSubmitting ? 'กำลังส่งสลิป...' : 'ส่งสลิปรอตรวจสอบ'}
                                 </button>
                                 <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                                   ยกเลิก
@@ -1934,7 +2049,7 @@ function CustomerDashbord() {
                                     <td>฿{formatCurrency(payment.amount)}</td>
                                     <td>
                                       <span className={`dashboard-badge status-${payment.status}`}>
-                                        {STATUS_LABEL[payment.status] || payment.status}
+                                        {payment.status === 'pending' && payment.slip_path ? 'รอตรวจสอบสลิป' : STATUS_LABEL[payment.status] || payment.status}
                                       </span>
                                     </td>
                                     <td>{formatCustomerNote(payment.note)}</td>
@@ -1971,17 +2086,6 @@ function CustomerDashbord() {
                                     </td>
                                   </tr>
                                 ))}
-                                {Array.from({ length: RENTAL_HISTORY_PAGE_SIZE - paginatedPayments.length }).map(
-                                  (_, index) => (
-                                    <tr
-                                      key={`filler-${entry.booking_id}-${index}`}
-                                      className="dashboard-table-filler-row"
-                                      aria-hidden="true"
-                                    >
-                                      <td colSpan={6}>&nbsp;</td>
-                                    </tr>
-                                  ),
-                                )}
                               </tbody>
                             </table>
                           </div>
@@ -2215,6 +2319,17 @@ function CustomerDashbord() {
                         placeholder="เบอร์โทรที่ติดต่อได้"
                       />
 
+                      <label htmlFor="maintenance-photos">แนบรูปปัญหา (สูงสุด 3 รูป)</label>
+                      <input id="maintenance-photos" className="dashboard-file-input" type="file" accept="image/*" multiple onChange={(event) => {
+                        const files = Array.from(event.target.files || [])
+                        if (files.length > 3) setMaintenanceError('แนบรูปได้ไม่เกิน 3 รูป')
+                        else {
+                          setMaintenanceError('')
+                          setMaintenancePhotos(files)
+                        }
+                      }} />
+                      {maintenancePhotos.length > 0 && <p className="dashboard-file-name">เลือกแล้ว {maintenancePhotos.length} รูป (รูปจะเก็บในเบราว์เซอร์นี้)</p>}
+
                       {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
                       <div className="dashboard-form-actions">
                         <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
@@ -2247,6 +2362,11 @@ function CustomerDashbord() {
                           {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
                           {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
                         </p>
+                        {(maintenanceAttachments[item.id] || []).length > 0 && (
+                          <div className="dashboard-maintenance-photos">
+                            {maintenanceAttachments[item.id].map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} /></a>)}
+                          </div>
+                        )}
                         <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
                       </div>
                       <div className="dashboard-maintenance-badges">
@@ -2349,6 +2469,34 @@ function CustomerDashbord() {
             <ReceiptTemplate receiptRequest={receiptRequest} customer={customer} />
           </div>
         </div>
+      )}
+
+      {showProfileForm && (
+        <Modal title="โปรไฟล์และรหัสผ่าน" onClose={() => setShowProfileForm(false)}>
+          {(requestClose) => (
+            <form className="dashboard-inline-form" onSubmit={(event) => handleProfileSubmit(event, requestClose)}>
+              <label htmlFor="profile-first-name">ชื่อ</label>
+              <input id="profile-first-name" maxLength={100} value={profileForm.first_name} onChange={(event) => setProfileForm((form) => ({ ...form, first_name: event.target.value }))} required />
+              <label htmlFor="profile-last-name">นามสกุล</label>
+              <input id="profile-last-name" maxLength={100} value={profileForm.last_name} onChange={(event) => setProfileForm((form) => ({ ...form, last_name: event.target.value }))} required />
+              <label htmlFor="profile-phone">เบอร์โทรศัพท์</label>
+              <input id="profile-phone" type="tel" maxLength={10} value={profileForm.phone} onChange={(event) => setProfileForm((form) => ({ ...form, phone: event.target.value }))} required />
+              <div className="dashboard-profile-divider" />
+              <p className="dashboard-profile-hint">หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นช่องด้านล่างว่างไว้</p>
+              <label htmlFor="profile-current-password">รหัสผ่านปัจจุบัน</label>
+              <input id="profile-current-password" type="password" autoComplete="current-password" value={profileForm.current_password} onChange={(event) => setProfileForm((form) => ({ ...form, current_password: event.target.value }))} />
+              <label htmlFor="profile-new-password">รหัสผ่านใหม่</label>
+              <input id="profile-new-password" type="password" autoComplete="new-password" minLength={6} value={profileForm.new_password} onChange={(event) => setProfileForm((form) => ({ ...form, new_password: event.target.value }))} />
+              <label htmlFor="profile-confirm-password">ยืนยันรหัสผ่านใหม่</label>
+              <input id="profile-confirm-password" type="password" autoComplete="new-password" minLength={6} value={profileForm.confirm_password} onChange={(event) => setProfileForm((form) => ({ ...form, confirm_password: event.target.value }))} />
+              {profileError && <p className="dashboard-form-error">{profileError}</p>}
+              <div className="dashboard-form-actions">
+                <button type="submit" className="dashboard-action-btn is-primary" disabled={profileSubmitting}>{profileSubmitting ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}</button>
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
+              </div>
+            </form>
+          )}
+        </Modal>
       )}
     </div>
   )

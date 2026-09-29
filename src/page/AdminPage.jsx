@@ -3,6 +3,24 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
+import {
+  createWaitingListEntry,
+  deleteWaitingListEntry,
+  readWaitingList,
+  subscribeWaitingList,
+  updateWaitingListEntry,
+  WAITING_LIST_STATUS_LABEL,
+} from '../utils/waitingList.js'
+import { printMonthlyInvoices } from '../utils/printMonthlyInvoices.js'
+import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import {
+  deleteMoveOutInspection,
+  MOVE_OUT_CHECKLIST,
+  MOVE_OUT_INSPECTION_STATUS,
+  readMoveOutInspections,
+  subscribeMoveOutInspections,
+  updateMoveOutInspection,
+} from '../utils/moveOutInspections.js'
 
 let openModalCount = 0
 
@@ -91,6 +109,8 @@ const TABS = [
   { key: 'moveouts', label: 'ผู้ย้ายออก' },
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
+  { key: 'waiting-list', label: 'รายชื่อรอห้องว่าง' },
+  { key: 'move-out-inspections', label: 'ตรวจห้องย้ายออก' },
   { key: 'expenses', label: 'รายจ่าย' },
 ]
 
@@ -434,6 +454,7 @@ const emptyStaffForm = { idcard: '', password: '', phone: '', first_name: '', la
 const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '' }
 
 const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
+const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '' }
 
 function AdminBackupPage() {
   const navigate = useNavigate()
@@ -441,6 +462,14 @@ function AdminBackupPage() {
   const [activeTab, setActiveTab] = useState('rooms')
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [waitingList, setWaitingList] = useState(readWaitingList)
+  const [moveOutInspections, setMoveOutInspections] = useState(readMoveOutInspections)
+  const [inspectionDetail, setInspectionDetail] = useState(null)
+  const [waitingListSearch, setWaitingListSearch] = useState('')
+  const [waitingListStatus, setWaitingListStatus] = useState('all')
+  const [waitingListModal, setWaitingListModal] = useState(null)
+  const [waitingListForm, setWaitingListForm] = useState(emptyWaitingListForm)
+  const [waitingListFormError, setWaitingListFormError] = useState('')
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
@@ -466,6 +495,9 @@ function AdminBackupPage() {
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
+  useEffect(() => subscribeWaitingList(setWaitingList), [])
+  useEffect(() => subscribeMoveOutInspections(setMoveOutInspections), [])
+
   const handleUnauthorized = (err) => {
     if (err.response?.status === 401 || err.response?.status === 403) {
       sessionStorage.removeItem('token')
@@ -486,6 +518,8 @@ function AdminBackupPage() {
   const [roomSubmitting, setRoomSubmitting] = useState(false)
   const [roomFormError, setRoomFormError] = useState('')
   const [roomDeleteConfirm, setRoomDeleteConfirm] = useState(null)
+  const [invoiceGenerating, setInvoiceGenerating] = useState(false)
+  const [invoicePrintError, setInvoicePrintError] = useState('')
 
   /* ------------------------------- Expenses -------------------------------- */
   const [expenses, setExpenses] = useState([])
@@ -530,6 +564,90 @@ function AdminBackupPage() {
     })
     setExpenseFormError('')
     setExpenseModal({ mode: 'edit', expense })
+  }
+
+  const openWaitingListForm = (entry = null) => {
+    setWaitingListForm(entry ? {
+      full_name: entry.full_name || '',
+      phone: entry.phone || '',
+      room_preference: entry.room_preference || '',
+      note: entry.note || '',
+    } : emptyWaitingListForm)
+    setWaitingListFormError('')
+    setWaitingListModal(entry ? { mode: 'edit', entry } : { mode: 'create' })
+  }
+
+  const submitWaitingListForm = (event, requestClose) => {
+    event.preventDefault()
+    const fullName = waitingListForm.full_name.trim()
+    const phone = waitingListForm.phone.trim()
+    if (!fullName || !phone) {
+      setWaitingListFormError('กรุณาระบุชื่อและเบอร์โทรศัพท์')
+      return
+    }
+    try {
+      if (waitingListModal.mode === 'create') {
+        createWaitingListEntry({
+          ...waitingListForm,
+          full_name: fullName,
+          phone,
+          room_preference: waitingListForm.room_preference.trim(),
+          note: waitingListForm.note.trim(),
+          submitted_by_name: adminUser ? `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || 'ผู้ดูแลระบบ' : 'ผู้ดูแลระบบ',
+        })
+      } else {
+        updateWaitingListEntry(waitingListModal.entry.id, {
+          ...waitingListForm,
+          full_name: fullName,
+          phone,
+          room_preference: waitingListForm.room_preference.trim(),
+          note: waitingListForm.note.trim(),
+        })
+      }
+      setWaitingListFormError('')
+      setSuccessMessage(waitingListModal.mode === 'create' ? 'เพิ่มรายชื่อผู้สนใจสำเร็จ' : 'แก้ไขรายชื่อผู้สนใจสำเร็จ')
+      requestClose()
+    } catch {
+      setWaitingListFormError('บันทึกไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+    }
+  }
+
+  const setWaitingListEntryStatus = (entry, status) => {
+    try {
+      updateWaitingListEntry(entry.id, { status })
+    } catch {
+      setPageError('เปลี่ยนสถานะไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+    }
+  }
+
+  const removeWaitingListEntry = (entry) => {
+    if (!window.confirm(`ลบรายชื่อ ${entry.full_name} หรือไม่?`)) return
+    try {
+      deleteWaitingListEntry(entry.id)
+      setSuccessMessage('ลบรายชื่อผู้สนใจสำเร็จ')
+    } catch {
+      setPageError('ลบรายการไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+    }
+  }
+
+  const setMoveOutInspectionStatus = (inspection, status) => {
+    try {
+      updateMoveOutInspection(inspection.id, { status, reviewed_at: new Date().toISOString() })
+      setInspectionDetail((current) => current?.id === inspection.id ? { ...current, status } : current)
+    } catch {
+      setPageError('เปลี่ยนสถานะไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+    }
+  }
+
+  const removeMoveOutInspection = (inspection) => {
+    if (!window.confirm(`ลบผลตรวจห้อง ${inspection.room_number} หรือไม่?`)) return
+    try {
+      deleteMoveOutInspection(inspection.id)
+      setSuccessMessage('ลบผลตรวจห้องสำเร็จ')
+      setInspectionDetail(null)
+    } catch {
+      setPageError('ลบผลตรวจไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+    }
   }
 
   const handleExpenseFormChange = (event) => {
@@ -593,6 +711,32 @@ function AdminBackupPage() {
         setRoomsError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลห้องพักได้')
       })
       .finally(() => setRoomsLoading(false))
+  }
+
+  const handlePrintMonthlyInvoices = async () => {
+    setInvoiceGenerating(true)
+    setInvoicePrintError('')
+    const printWindow = window.open('', '_blank', 'width=900,height=720')
+    if (!printWindow) {
+      setInvoiceGenerating(false)
+      setInvoicePrintError('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัปแล้วลองอีกครั้ง')
+      return
+    }
+    try {
+      const { data } = await axios.get('/api/staff/rooms', { headers: authHeaders() })
+      const count = printMonthlyInvoices(data.rooms, printWindow)
+      if (count === 0) {
+        setInvoicePrintError('ไม่มีห้องที่มีผู้เช่าให้ออกใบแจ้งหนี้')
+        return
+      }
+      setSuccessMessage(`เตรียมใบแจ้งหนี้ ${count} ห้องแล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`)
+    } catch (err) {
+      printWindow.close()
+      if (handleUnauthorized(err)) return
+      setInvoicePrintError(err.message || 'สร้างใบแจ้งหนี้ไม่สำเร็จ')
+    } finally {
+      setInvoiceGenerating(false)
+    }
   }
 
   const openCreateRoom = () => {
@@ -1196,6 +1340,14 @@ function AdminBackupPage() {
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
 
+  const filteredWaitingList = waitingList.filter((entry) => {
+    const matchesStatus = waitingListStatus === 'all' || entry.status === waitingListStatus
+    const search = waitingListSearch.trim().toLocaleLowerCase('th-TH')
+    const matchesSearch = !search || [entry.full_name, entry.phone, entry.room_preference, entry.note, entry.submitted_by_name]
+      .some((value) => String(value || '').toLocaleLowerCase('th-TH').includes(search))
+    return matchesStatus && matchesSearch
+  })
+
   const notifications = useMemo(() => {
     return [
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
@@ -1465,6 +1617,8 @@ function AdminBackupPage() {
           </div>
         </div>
 
+        <AnnouncementBoard canManage author={adminUser ? `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || 'ผู้ดูแลระบบ' : 'ผู้ดูแลระบบ'} />
+
         <ul className="nav nav-tabs admin-tabs">
           {TABS.map((tab) => (
             <li className="nav-item" key={tab.key}>
@@ -1503,12 +1657,16 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="admin-filters">
+                <button type="button" className="admin-action-btn is-ghost" onClick={handlePrintMonthlyInvoices} disabled={invoiceGenerating}>
+                  {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้รวม / PDF'}
+                </button>
                 <button type="button" className="admin-action-btn is-primary" onClick={openCreateRoom}>
                   + เพิ่มห้องพัก
                 </button>
               </div>
             </div>
 
+            {invoicePrintError && <div className="alert alert-danger">{invoicePrintError}</div>}
             {roomsError && <div className="alert alert-danger">{roomsError}</div>}
 
             <div className="table-responsive">
@@ -2326,7 +2484,167 @@ function AdminBackupPage() {
             <Pagination page={expensesPage} totalPages={expensesTotalPages} onChange={(page) => loadExpenses(page)} />
           </div>
         )}
+
+        {activeTab === 'waiting-list' && (
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div>
+                <h2>รายชื่อคนรอห้องว่าง ({waitingList.length})</h2>
+                <p className="waiting-list-storage-note">ข้อมูลชุดนี้จัดเก็บในเบราว์เซอร์นี้เท่านั้น</p>
+              </div>
+              <button type="button" className="admin-action-btn is-primary" onClick={() => openWaitingListForm()}>
+                + เพิ่มรายชื่อ
+              </button>
+            </div>
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="waiting-list-search">ค้นหา</label>
+                <input id="waiting-list-search" type="search" className="form-control admin-search-input" placeholder="ชื่อ, เบอร์โทร, ประเภทห้อง..." value={waitingListSearch} onChange={(event) => setWaitingListSearch(event.target.value)} />
+              </div>
+              <div className="admin-filter-group">
+                <label className="admin-toolbar-label" htmlFor="waiting-list-status">สถานะ</label>
+                <select id="waiting-list-status" className="form-select admin-filter-select" value={waitingListStatus} onChange={(event) => setWaitingListStatus(event.target.value)}>
+                  <option value="all">ทุกสถานะ</option>
+                  {Object.entries(WAITING_LIST_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="table-responsive">
+              <table className="table admin-table">
+                <thead><tr><th>ชื่อผู้สนใจ</th><th>เบอร์โทร</th><th>ประเภทห้อง</th><th>สถานะ</th><th className="admin-col-optional">หมายเหตุ</th><th className="admin-col-optional">บันทึกโดย</th><th>จัดการ</th></tr></thead>
+                <tbody>
+                  {filteredWaitingList.length === 0 ? (
+                    <tr><td colSpan={7} className="admin-empty">{waitingList.length ? 'ไม่พบรายชื่อตามเงื่อนไข' : 'ยังไม่มีรายชื่อผู้รอห้องว่าง'}</td></tr>
+                  ) : filteredWaitingList.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="admin-strong-cell">{entry.full_name}<small className="waiting-list-date">{formatDate(entry.created_at)}</small></td>
+                      <td>{entry.phone}</td>
+                      <td>{entry.room_preference || '-'}</td>
+                      <td>
+                        <select aria-label={`สถานะของ ${entry.full_name}`} className="form-select waiting-list-status-select" value={entry.status || 'waiting'} onChange={(event) => setWaitingListEntryStatus(entry, event.target.value)}>
+                          {Object.entries(WAITING_LIST_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </td>
+                      <td className="admin-col-optional">{entry.note || '-'}</td>
+                      <td className="admin-col-optional">{entry.submitted_by_name || '-'}</td>
+                      <td>
+                        <div className="admin-row-actions">
+                          <button type="button" className="admin-action-btn is-ghost" onClick={() => openWaitingListForm(entry)}>แก้ไข</button>
+                          <button type="button" className="admin-action-btn is-danger" onClick={() => removeWaitingListEntry(entry)}>ลบ</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'move-out-inspections' && (
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div>
+                <h2>Checklist ตรวจห้องย้ายออก ({moveOutInspections.length})</h2>
+                <p className="waiting-list-storage-note">รายงานจาก Staff; จัดเก็บในเบราว์เซอร์นี้เท่านั้น</p>
+              </div>
+            </div>
+            <div className="table-responsive">
+              <table className="table admin-table">
+                <thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>วันที่ตรวจ</th><th>ความเสียหาย</th><th>รูป</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+                <tbody>
+                  {moveOutInspections.length === 0 ? (
+                    <tr><td colSpan={7} className="admin-empty">ยังไม่มีรายงานตรวจห้องจาก Staff</td></tr>
+                  ) : moveOutInspections.map((inspection) => (
+                    <tr key={inspection.id}>
+                      <td className="admin-strong-cell">{inspection.room_number}</td>
+                      <td>{inspection.tenant_name}<small className="waiting-list-date">{inspection.tenant_phone || '-'}</small></td>
+                      <td>{formatDateTime(inspection.created_at)}</td>
+                      <td>{inspection.damage_note ? 'มีบันทึก' : inspection.checklist && Object.values(inspection.checklist).includes('damaged') ? 'พบความเสียหาย' : 'ไม่พบ'}</td>
+                      <td>{inspection.photos?.length || 0} รูป</td>
+                      <td>
+                        <select aria-label={`สถานะตรวจห้อง ${inspection.room_number}`} className="form-select waiting-list-status-select" value={inspection.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}>
+                          {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </td>
+                      <td><div className="admin-row-actions">
+                        <button type="button" className="admin-action-btn is-ghost" onClick={() => setInspectionDetail(inspection)}>ดูรายละเอียด</button>
+                        <button type="button" className="admin-action-btn is-danger" onClick={() => removeMoveOutInspection(inspection)}>ลบ</button>
+                      </div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
+
+      {inspectionDetail && (
+        <Modal title={`ผลตรวจห้อง ${inspectionDetail.room_number}`} onClose={() => setInspectionDetail(null)} variant="wide">
+          <div className="moveout-inspection-admin-detail">
+            <div className="moveout-inspection-admin-meta">
+              <div><span>ผู้เช่า</span><strong>{inspectionDetail.tenant_name}</strong></div>
+              <div><span>เบอร์โทร</span><strong>{inspectionDetail.tenant_phone || '-'}</strong></div>
+              <div><span>ตรวจเมื่อ</span><strong>{formatDateTime(inspectionDetail.created_at)}</strong></div>
+              <div><span>ตรวจโดย</span><strong>{inspectionDetail.inspected_by || '-'}</strong></div>
+            </div>
+            <h4>Checklist</h4>
+            <div className="moveout-inspection-admin-checklist">
+              {MOVE_OUT_CHECKLIST.map((item) => {
+                const result = inspectionDetail.checklist?.[item.key]
+                const label = result === 'good' ? 'ปกติ' : result === 'damaged' ? 'ชำรุด' : result === 'not_applicable' ? 'ไม่มี/ไม่เกี่ยวข้อง' : 'ไม่ได้ระบุ'
+                return <div key={item.key}><span>{item.label}</span><strong className={result === 'damaged' ? 'is-damaged' : ''}>{label}</strong></div>
+              })}
+            </div>
+            <h4>รายละเอียดความเสียหาย</h4>
+            <p className="moveout-inspection-damage-note">{inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
+            <h4>รูปภาพประกอบ ({inspectionDetail.photos?.length || 0})</h4>
+            {inspectionDetail.photos?.length ? (
+              <div className="moveout-inspection-photo-grid">
+                {inspectionDetail.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`} /><span>{photo.name}</span></a>)}
+              </div>
+            ) : <p className="text-muted">ไม่มีรูปภาพแนบ</p>}
+            <div className="admin-form-actions">
+              <label className="form-label" htmlFor="inspection-detail-status">สถานะตรวจ</label>
+              <select id="inspection-detail-status" className="form-select waiting-list-status-select" value={inspectionDetail.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspectionDetail, event.target.value)}>
+                {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {waitingListModal && (
+        <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มรายชื่อผู้สนใจ' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)}>
+          {(requestClose) => (
+            <form onSubmit={(event) => submitWaitingListForm(event, requestClose)} noValidate>
+              {waitingListFormError && <div className="alert alert-danger py-2 px-3">{waitingListFormError}</div>}
+              <div className="row g-3">
+                <div className="col-12">
+                  <label className="form-label" htmlFor="admin-waiting-name">ชื่อผู้สนใจ</label>
+                  <input id="admin-waiting-name" className="form-control" maxLength={255} value={waitingListForm.full_name} onChange={(event) => setWaitingListForm((form) => ({ ...form, full_name: event.target.value }))} required />
+                </div>
+                <div className="col-12 col-md-6">
+                  <label className="form-label" htmlFor="admin-waiting-phone">เบอร์โทรศัพท์</label>
+                  <input id="admin-waiting-phone" className="form-control" type="tel" maxLength={20} value={waitingListForm.phone} onChange={(event) => setWaitingListForm((form) => ({ ...form, phone: event.target.value }))} required />
+                </div>
+                <div className="col-12 col-md-6">
+                  <label className="form-label" htmlFor="admin-waiting-room">ประเภทห้องที่สนใจ</label>
+                  <input id="admin-waiting-room" className="form-control" maxLength={100} value={waitingListForm.room_preference} onChange={(event) => setWaitingListForm((form) => ({ ...form, room_preference: event.target.value }))} />
+                </div>
+                <div className="col-12">
+                  <label className="form-label" htmlFor="admin-waiting-note">หมายเหตุ</label>
+                  <textarea id="admin-waiting-note" className="form-control" rows={3} maxLength={500} value={waitingListForm.note} onChange={(event) => setWaitingListForm((form) => ({ ...form, note: event.target.value }))} />
+                </div>
+              </div>
+              <div className="admin-form-actions">
+                <button type="submit" className="admin-action-btn is-primary">บันทึก</button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
 
       {expenseModal && (
         <Modal title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'} onClose={() => setExpenseModal(null)}>

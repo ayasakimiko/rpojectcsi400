@@ -121,6 +121,8 @@ services:
       CUSTOMER_PORT: 4003
     ports:
       - "${CUSTOMER_PORT:-4003}:4003"
+    volumes:
+      - payment_slips:/app/uploads
 
   staff-service:
     <<: *service-defaults
@@ -131,6 +133,8 @@ services:
       STAFF_PORT: 4004
     ports:
       - "${STAFF_PORT:-4004}:4004"
+    volumes:
+      - payment_slips:/app/uploads
 
   admin-service:
     <<: *service-defaults
@@ -154,3 +158,4 @@ services:
 
 volumes:
   db_data:
+  payment_slips:

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import fs from "node:fs";
+import path from "node:path";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 import { isPositiveId, lookup, parsePage, parseSearch, parseUtilityBillInput } from "../middleware/validation.js";
@@ -6,6 +8,7 @@ import { computeCurrentDue } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
+const PAYMENT_SLIP_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads"), "payment-slips");
 
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
@@ -52,6 +55,127 @@ router.get("/me", async (req, res) => {
   } catch (error) {
     console.error("Fetch staff profile error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/payment-verifications", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [payments] = await pool.query(
+      `SELECT MIN(p.id) AS id, p.booking_id, p.slip_path, SUM(p.amount) AS amount,
+              MAX(p.payment_date) AS payment_date, c.first_name, c.last_name, c.phone,
+              r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types
+       FROM Payment p
+       JOIN Booking b ON b.id = p.booking_id
+       JOIN Customer c ON c.id = b.customer_id
+       JOIN Room r ON r.id = b.room_id
+       WHERE p.status = 'pending' AND p.slip_path IS NOT NULL
+       GROUP BY p.booking_id, p.slip_path, c.first_name, c.last_name, c.phone, r.room_number
+       ORDER BY MAX(p.created_at) ASC`,
+    );
+    return res.json({ payments });
+  } catch (error) {
+    console.error("Fetch payment verifications error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/payment-verifications/:id/slip", async (req, res) => {
+  try {
+    if (!isPositiveId(req.params.id)) return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT slip_path FROM Payment WHERE id = ? AND status = 'pending' AND slip_path IS NOT NULL`,
+      [req.params.id],
+    );
+    if (!rows[0]) return res.status(404).json({ message: "ไม่พบสลิปรอตรวจสอบ" });
+    const fileName = path.basename(rows[0].slip_path);
+    const filePath = path.join(PAYMENT_SLIP_DIR, fileName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "ไม่พบไฟล์สลิป" });
+    return res.sendFile(filePath);
+  } catch (error) {
+    console.error("Read payment slip error:", error);
+    return res.status(500).json({ message: "ไม่สามารถเปิดไฟล์สลิปได้" });
+  }
+});
+
+router.patch("/payment-verifications/:id", async (req, res) => {
+  const { decision } = req.body ?? {};
+  if (!isPositiveId(req.params.id)) return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+  if (!["approved", "rejected"].includes(decision)) return res.status(400).json({ message: "ผลการตรวจไม่ถูกต้อง" });
+
+  const pool = getPool();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [paymentRows] = await connection.query(
+      `SELECT id, booking_id, slip_path FROM Payment WHERE id = ? AND status = 'pending' AND slip_path IS NOT NULL FOR UPDATE`,
+      [req.params.id],
+    );
+    const payment = paymentRows[0];
+    if (!payment) {
+      await connection.rollback();
+      return res.status(404).json({ message: "ไม่พบรายการที่รอตรวจสอบ" });
+    }
+
+    const [relatedPayments] = await connection.query(
+      `SELECT id, amount, payment_date, status, type, note FROM Payment
+       WHERE booking_id = ? AND slip_path = ? AND status = 'pending' FOR UPDATE`,
+      [payment.booking_id, payment.slip_path],
+    );
+    if (decision === "rejected") {
+      await connection.query(
+        `UPDATE Payment SET status = 'rejected', note = CONCAT(COALESCE(note, ''), ' (สลิปไม่ผ่านการตรวจสอบ)')
+         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type = 'rent'`,
+        [payment.booking_id, payment.slip_path],
+      );
+      await connection.query(
+        `UPDATE Payment SET slip_path = NULL, note = CONCAT(COALESCE(note, ''), ' (สลิปไม่ผ่านการตรวจสอบ กรุณาส่งใหม่)')
+         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type IN ('water', 'electricity')`,
+        [payment.booking_id, payment.slip_path],
+      );
+      await connection.commit();
+      return res.json({ message: "ปฏิเสธสลิปแล้ว ผู้เช่าสามารถส่งใหม่ได้" });
+    }
+
+    const [bookingRows] = await connection.query(
+      `SELECT c.id AS customer_id, c.room_number, c.deposit_amount,
+              r.price, r.is_booked, r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months
+       FROM Booking b JOIN Customer c ON c.id = b.customer_id JOIN Room r ON r.id = b.room_id
+       WHERE b.id = ?`,
+      [payment.booking_id],
+    );
+    const booking = bookingRows[0];
+    if (!booking) {
+      await connection.rollback();
+      return res.status(404).json({ message: "ไม่พบสัญญาเช่าของรายการนี้" });
+    }
+    const [allPayments] = await connection.query(
+      `SELECT id, amount, payment_date, status, type, note FROM Payment WHERE booking_id = ?`,
+      [payment.booking_id],
+    );
+    const currentDue = computeCurrentDue(booking, allPayments, booking.deposit_amount);
+
+    await connection.query(
+      `UPDATE Payment SET status = 'paid', payment_date = CURDATE()
+       WHERE booking_id = ? AND slip_path = ? AND status = 'pending'`,
+      [payment.booking_id, payment.slip_path],
+    );
+    if (currentDue?.lumpSumMonths) {
+      await connection.query(
+        `UPDATE Room SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
+         WHERE room_number = ?`,
+        [currentDue.periodEnd, currentDue.lumpSumMonths - 1, booking.room_number],
+      );
+    }
+    await connection.commit();
+    return res.json({ message: `อนุมัติสลิปแล้ว (${relatedPayments.length} รายการ)` });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Review payment slip error:", error);
+    return res.status(500).json({ message: "ตรวจสอบสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection.release();
   }
 });
 
