@@ -487,6 +487,7 @@ function printMonthlyInvoices(rooms, targetWindow = window.open('', '_blank', 'w
 function buildAnnouncementNotif(item) {
   return {
     key: `announcement-${item.id}`,
+    announcementId: item.id,
     title: item.title,
     label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
     tone: item.tone === 'warning' ? 'pending' : 'info',
@@ -1429,6 +1430,7 @@ function StaffMain() {
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
   const [invoicePrintError, setInvoicePrintError] = useState('')
+  const [invoiceModal, setInvoiceModal] = useState(null)
   const [invoiceGenerating, setInvoiceGenerating] = useState(false)
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1482,6 +1484,7 @@ function StaffMain() {
   const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
+  const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
 
   const [utilityRoom, setUtilityRoom] = useState(null)
@@ -1808,7 +1811,8 @@ function StaffMain() {
     }
   }
 
-  const handlePrintMonthlyInvoices = async () => {
+  // roomNumber: print only that room's invoice; omitted = one combined document with every occupied room
+  const handlePrintMonthlyInvoices = async (roomNumber = null) => {
     setInvoicePrintError('')
     const printWindow = window.open('', '_blank', 'width=900,height=720')
     if (!printWindow) {
@@ -1818,12 +1822,19 @@ function StaffMain() {
     setInvoiceGenerating(true)
     try {
       const { data } = await axios.get('/api/staff/rooms', { headers: authHeaders() })
-      const count = printMonthlyInvoices(data.rooms, printWindow)
+      const targetRooms = roomNumber
+        ? data.rooms.filter((room) => String(room.room_number) === String(roomNumber))
+        : data.rooms
+      const count = printMonthlyInvoices(targetRooms, printWindow)
       if (count === 0) {
-        setInvoicePrintError('ไม่มีห้องที่มีผู้เช่าให้ออกใบแจ้งหนี้')
+        setInvoicePrintError(roomNumber ? 'ห้องนี้ไม่มีผู้เช่าให้ออกใบแจ้งหนี้' : 'ไม่มีห้องที่มีผู้เช่าให้ออกใบแจ้งหนี้')
         return
       }
-      setActionSuccess(`เตรียมใบแจ้งหนี้ ${count} ห้องแล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`)
+      setActionSuccess(
+        roomNumber
+          ? `เตรียมใบแจ้งหนี้ห้อง ${roomNumber} แล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`
+          : `เตรียมใบแจ้งหนี้ ${count} ห้องแล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`,
+      )
     } catch (error) {
       printWindow.close()
       if (error.response?.status === 401 || error.response?.status === 403) {
@@ -2728,6 +2739,14 @@ function StaffMain() {
                             className={`staff-notif-item is-${notif.tone}`}
                             onClick={() => {
                               closeNotifPanel()
+                              if (notif.kind === 'announcement') {
+                                setStaffTab('announcements')
+                                setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
+                                return
+                              }
+                              // Requests and maintenance are listed on the home tab
+                              setStaffTab('home')
+                              setAnnouncementFocus(null)
                               if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
                               else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
                               else setNotifDetail(notif)
@@ -3376,7 +3395,10 @@ function StaffMain() {
               <button
                 type="button"
                 className={`nav-link staff-tab-link${staffTab === tab.key ? ' active' : ''}`}
-                onClick={() => setStaffTab(tab.key)}
+                onClick={() => {
+                  setStaffTab(tab.key)
+                  setAnnouncementFocus(null)
+                }}
               >
                 {tab.label}
                 {tab.key === 'payment-review' && pendingSlipCount > 0 && (
@@ -3393,8 +3415,10 @@ function StaffMain() {
 
         {staffTab === 'announcements' && (
           <AnnouncementBoard
+            key={announcementFocus?.nonce ?? 'board'}
             variant="staff"
             announcements={announcements}
+            openId={announcementFocus?.id}
             canManage
             apiBase="/api/staff/announcements"
             onChange={loadAnnouncements}
@@ -3581,10 +3605,13 @@ function StaffMain() {
                   <button
                     type="button"
                     className="staff-action-btn is-ghost"
-                    onClick={handlePrintMonthlyInvoices}
+                    onClick={() => {
+                      setInvoicePrintError('')
+                      setInvoiceModal({ mode: 'all', roomNumber: '' })
+                    }}
                     disabled={invoiceGenerating}
                   >
-                    {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้รวม / PDF'}
+                    {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้ / PDF'}
                   </button>
                   <div className="staff-filters">
                     <input
@@ -5306,6 +5333,81 @@ function StaffMain() {
                     onClick={handleSendUtilityBill}
                   >
                     {utilitySubmitting ? 'กำลังส่ง...' : 'ส่งบิล'}
+                  </button>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {invoiceModal && (
+        <Modal title="ออกใบแจ้งหนี้ประจำเดือน" onClose={() => setInvoiceModal(null)} variant="confirm">
+          {(requestClose) => {
+            const occupiedRooms = rooms
+              .filter((room) => room.is_booked && room.tenant)
+              .sort((a, b) => Number(a.room_number) - Number(b.room_number))
+            const isSingle = invoiceModal.mode === 'single'
+            const canPrint = !isSingle || Boolean(invoiceModal.roomNumber)
+            return (
+              <div className="staff-confirm-body">
+                <p className="staff-confirm-message">เลือกรูปแบบการออกใบแจ้งหนี้</p>
+                <div className="staff-choice-group" role="radiogroup" aria-label="รูปแบบการออกใบแจ้งหนี้">
+                  <label className={`staff-choice${!isSingle ? ' is-selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="invoice-mode"
+                      checked={!isSingle}
+                      onChange={() => setInvoiceModal({ mode: 'all', roomNumber: '' })}
+                    />
+                    <span className="staff-choice-text">
+                      <strong>รวมทุกห้อง</strong>
+                      <small>ออกเป็นไฟล์เดียว ครบทุกห้องที่มีผู้เช่า ({occupiedRooms.length} ห้อง)</small>
+                    </span>
+                  </label>
+                  <label className={`staff-choice${isSingle ? ' is-selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="invoice-mode"
+                      checked={isSingle}
+                      onChange={() => setInvoiceModal((current) => ({ ...current, mode: 'single' }))}
+                    />
+                    <span className="staff-choice-text">
+                      <strong>ทีละห้อง</strong>
+                      <small>เลือกห้องที่ต้องการออกใบแจ้งหนี้</small>
+                    </span>
+                  </label>
+                </div>
+                {isSingle && (
+                  <select
+                    className="staff-filter-select staff-choice-select"
+                    value={invoiceModal.roomNumber}
+                    onChange={(event) => setInvoiceModal((current) => ({ ...current, roomNumber: event.target.value }))}
+                    aria-label="เลือกห้อง"
+                  >
+                    <option value="">เลือกห้อง</option>
+                    {occupiedRooms.map((room) => (
+                      <option key={room.room_number} value={room.room_number}>
+                        ห้อง {room.room_number} — {room.tenant.first_name} {room.tenant.last_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    disabled={!canPrint || occupiedRooms.length === 0}
+                    onClick={() => {
+                      const roomNumber = isSingle ? invoiceModal.roomNumber : null
+                      requestClose()
+                      handlePrintMonthlyInvoices(roomNumber)
+                    }}
+                  >
+                    พิมพ์ / บันทึก PDF
                   </button>
                 </div>
               </div>

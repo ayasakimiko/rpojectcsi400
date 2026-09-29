@@ -1215,6 +1215,7 @@ function CustomerDashbord() {
   }, [])
 
   const [customerTab, setCustomerTab] = useState('home')
+  const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
   const [notifSeen, setNotifSeen] = useState(false)
@@ -1485,6 +1486,7 @@ function CustomerDashbord() {
 
   const selectCustomerTab = (key) => {
     if (key === 'profile') resetProfileForm()
+    setAnnouncementFocus(null)
     setCustomerTab(key)
   }
 
@@ -1829,6 +1831,7 @@ function CustomerDashbord() {
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
     ...announcements.map((item) => ({
       key: `announcement-${item.id}`,
+      announcementId: item.id,
       title: item.title,
       label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
       tone: item.tone === 'warning' ? 'pending' : 'info',
@@ -2087,6 +2090,14 @@ function CustomerDashbord() {
                             key={notif.key}
                             className={`dashboard-notif-item is-${notif.tone}`}
                             onClick={() => {
+                              closeNotifPanel()
+                              if (notif.kind === 'announcement') {
+                                selectCustomerTab('announcements')
+                                setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
+                                return
+                              }
+                              // Requests, maintenance and bills all live on the home tab
+                              selectCustomerTab('home')
                               if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
                               else if (notif.kind === 'tenant') setTenantDetail(notif.request)
                               else setNotifDetail(notif)
@@ -2393,7 +2404,14 @@ function CustomerDashbord() {
           ))}
         </ul>
 
-        {customerTab === 'announcements' && <AnnouncementBoard variant="dashboard" announcements={announcements} />}
+        {customerTab === 'announcements' && (
+          <AnnouncementBoard
+            key={announcementFocus?.nonce ?? 'board'}
+            variant="dashboard"
+            announcements={announcements}
+            openId={announcementFocus?.id}
+          />
+        )}
 
         {customerTab === 'profile' && (
           <div className="dashboard-card dashboard-profile-card">

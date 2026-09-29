@@ -93,6 +93,7 @@ function printMonthlyInvoices(rooms, targetWindow = window.open('', '_blank', 'w
 function buildAnnouncementNotif(item) {
   return {
     key: `announcement-${item.id}`,
+    announcementId: item.id,
     title: item.title,
     label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
     tone: item.tone === 'warning' ? 'pending' : 'info',
@@ -553,6 +554,7 @@ function AdminBackupPage() {
   const navigate = useNavigate()
   const [adminUser, setAdminUser] = useState(null)
   const [activeTab, setActiveTab] = useState('rooms')
+  const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [waitingList, setWaitingList] = useState([])
@@ -1606,8 +1608,10 @@ function AdminBackupPage() {
     closeNotifPanel()
     if (notif.kind === 'announcement') {
       setActiveTab('announcements')
+      setAnnouncementFocus((focus) => ({ id: notif.announcementId, nonce: (focus?.nonce ?? 0) + 1 }))
       return
     }
+    setAnnouncementFocus(null)
     if (notif.kind === 'staff') {
       setStaffSearch('')
       setStaffPage(1)
@@ -1836,7 +1840,10 @@ function AdminBackupPage() {
               <button
                 type="button"
                 className={`nav-link admin-tab-link${activeTab === tab.key ? ' active' : ''}`}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key)
+                  setAnnouncementFocus(null)
+                }}
               >
                 {tab.label}
               </button>
@@ -1846,8 +1853,10 @@ function AdminBackupPage() {
 
         {activeTab === 'announcements' && (
           <AnnouncementBoard
+            key={announcementFocus?.nonce ?? 'board'}
             variant="admin"
             announcements={announcements}
+            openId={announcementFocus?.id}
             canManage
             apiBase="/api/admin/announcements"
             onChange={loadAnnouncements}

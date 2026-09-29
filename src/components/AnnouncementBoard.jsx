@@ -142,7 +142,8 @@ function describeExpiry(expiry) {
   return 'ไม่กำหนด'
 }
 
-function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onChange, variant = 'staff' }) {
+// openId: an announcement whose detail dialog should already be open when the board mounts (used by notifications).
+function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onChange, variant = 'staff', openId = null }) {
   const classes = VARIANT_CLASSES[variant] || VARIANT_CLASSES.staff
   const [isCreating, setIsCreating] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -151,6 +152,8 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [result, setResult] = useState(null) 
+  const [detail, setDetail] = useState(() => announcements.find((item) => item.id === openId) || null)
+  const [detailClosing, setDetailClosing] = useState(false)
   const [formClosing, setFormClosing] = useState(false)
   const [confirmClosing, setConfirmClosing] = useState(false)
   const [resultClosing, setResultClosing] = useState(false)
@@ -178,6 +181,15 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   }, [formClosing])
 
   useEffect(() => {
+    if (!detailClosing) return undefined
+    const timer = setTimeout(() => {
+      setDetail(null)
+      setDetailClosing(false)
+    }, CLOSE_ANIMATION_MS)
+    return () => clearTimeout(timer)
+  }, [detailClosing])
+
+  useEffect(() => {
     if (!confirmClosing) return undefined
     const timer = setTimeout(() => {
       setConfirm(null)
@@ -198,6 +210,11 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const closeForm = () => setFormClosing(true)
   const closeConfirm = () => setConfirmClosing(true)
   const closeResult = () => setResultClosing(true)
+  const closeDetail = () => setDetailClosing(true)
+  const openDetail = (item) => {
+    setDetailClosing(false)
+    setDetail(item)
+  }
   const showResult = (next) => {
     setResultClosing(false)
     setResult(next)
@@ -208,16 +225,17 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   }
 
   useEffect(() => {
-    if (!isCreating && !confirm && !result) return undefined
+    if (!isCreating && !confirm && !result && !detail) return undefined
     const handleKeyDown = (event) => {
       if (event.key !== 'Escape' || submitting) return
       if (result) setResultClosing(true)
       else if (confirm) setConfirmClosing(true)
-      else setFormClosing(true)
+      else if (isCreating) setFormClosing(true)
+      else setDetailClosing(true)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isCreating, confirm, result, submitting])
+  }, [isCreating, confirm, result, detail, submitting])
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -380,11 +398,11 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               <tr>
                 <th>หัวข้อ</th>
                 <th>ประเภท</th>
-                <th>รายละเอียด</th>
                 <th>ประกาศโดย</th>
                 <th>วันที่ประกาศ</th>
                 {canManage && <th>ลบอัตโนมัติ</th>}
                 {canManage && <th>จัดการ</th>}
+                <th className="announcement-cell-more" aria-label="ดูรายละเอียด" />
               </tr>
             </thead>
             <tbody>
@@ -396,17 +414,24 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 </tr>
               ) : (
                 pageItems.map((item) => (
-                  <tr key={item.id}>
+                  <tr
+                    key={item.id}
+                    className="announcement-row"
+                    tabIndex={0}
+                    title="คลิกเพื่อดูรายละเอียดประกาศ"
+                    onClick={() => openDetail(item)}
+                    onKeyDown={(event) => {
+                      if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                        event.preventDefault()
+                        openDetail(item)
+                      }
+                    }}
+                  >
                     <td className="announcement-cell-title">{item.title}</td>
                     <td>
                       <span className={`announcement-tone is-${item.tone || 'info'}`}>
                         {TONE_LABEL[item.tone] || TONE_LABEL.info}
                       </span>
-                    </td>
-                    <td className="announcement-cell-message">
-                      <div className="announcement-message" title={item.message}>
-                        {item.message}
-                      </div>
                     </td>
                     <td>{item.author || 'เจ้าหน้าที่'}</td>
                     <td className="announcement-cell-date">{formatAnnouncementDate(item.created_at)}</td>
@@ -427,7 +452,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                       </td>
                     )}
                     {canManage && (
-                      <td>
+                      <td onClick={(event) => event.stopPropagation()}>
                         <div className="announcement-row-actions">
                           <button type="button" className={`${classes.button} is-ghost`} onClick={() => openEditForm(item)}>
                             แก้ไข
@@ -442,6 +467,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                         </div>
                       </td>
                     )}
+                    <td className="announcement-cell-more">ดูรายละเอียด</td>
                   </tr>
                 ))
               )}
@@ -473,6 +499,72 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               ถัดไป
             </button>
           </div>
+        </div>
+      )}
+
+      {detail && (
+        <div
+          className={`announcement-overlay${detailClosing ? ' is-closing' : ''}`}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeDetail()
+          }}
+        >
+          <section
+            className="announcement-dialog announcement-detail"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="announcement-detail-title"
+          >
+            <header className="announcement-dialog-header">
+              <h3 id="announcement-detail-title">รายละเอียดประกาศ</h3>
+              <button type="button" className="announcement-dialog-close" aria-label="ปิด" onClick={closeDetail}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </header>
+            <div className="announcement-detail-body">
+              <div className="announcement-detail-heading">
+                <h4>{detail.title}</h4>
+                <span className={`announcement-tone is-${detail.tone || 'info'}`}>
+                  {TONE_LABEL[detail.tone] || TONE_LABEL.info}
+                </span>
+              </div>
+              <p className="announcement-detail-message">{detail.message}</p>
+              <dl className="announcement-detail-meta">
+                <div>
+                  <dt>ประกาศโดย</dt>
+                  <dd>{detail.author || 'เจ้าหน้าที่'}</dd>
+                </div>
+                <div>
+                  <dt>วันเวลาที่ประกาศ</dt>
+                  <dd>{formatAnnouncementDate(detail.created_at)} น.</dd>
+                </div>
+                {canManage && (
+                  <div>
+                    <dt>ลบอัตโนมัติ</dt>
+                    <dd>{detail.expires_at ? formatExpiryDate(detail.expires_at) : 'ไม่กำหนด'}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+            <div className="announcement-form-actions">
+              <button type="button" className="announcement-board-cancel" onClick={closeDetail}>
+                ปิด
+              </button>
+            </div>
+          </section>
         </div>
       )}
 
