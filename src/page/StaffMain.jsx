@@ -159,7 +159,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -259,6 +259,9 @@ const STAFF_TABS = [
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจห้องตอนย้ายออก' },
 ]
+
+const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
+const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
@@ -696,6 +699,11 @@ function StaffMain() {
   const [waitingListModalOpen, setWaitingListModalOpen] = useState(false)
   const [waitingListForm, setWaitingListForm] = useState({ full_name: '', phone: '', room_preference: '', note: '' })
   const [waitingListError, setWaitingListError] = useState('')
+  const [waitingListFieldErrors, setWaitingListFieldErrors] = useState({})
+  const [waitingListSubmitting, setWaitingListSubmitting] = useState(false)
+  const [waitingListDelete, setWaitingListDelete] = useState(null)
+  const [waitingListDeleting, setWaitingListDeleting] = useState(false)
+  const [waitingListDeleteError, setWaitingListDeleteError] = useState('')
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionModal, setInspectionModal] = useState(false)
@@ -836,14 +844,62 @@ function StaffMain() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [announcements])
 
+  const confirmDeleteWaitingListEntry = async (requestClose) => {
+    setWaitingListDeleting(true)
+    setWaitingListDeleteError('')
+    try {
+      const { data } = await axios.delete(`/api/staff/waiting-list/${waitingListDelete.id}`, { headers: authHeaders() })
+      setActionSuccess(data.message || 'ลบรายชื่อผู้สนใจสำเร็จ')
+      requestClose()
+      await loadWaitingList()
+    } catch (err) {
+      setWaitingListDeleteError(err.response?.data?.message || 'ลบรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      // Someone (e.g. an admin) may already have removed it: refresh so the row disappears.
+      if (err.response?.status === 404) await loadWaitingList()
+    } finally {
+      setWaitingListDeleting(false)
+    }
+  }
+
+  const openWaitingListModal = () => {
+    setWaitingListForm({ full_name: '', phone: '', room_preference: '', note: '' })
+    setWaitingListError('')
+    setWaitingListFieldErrors({})
+    setWaitingListModalOpen(true)
+  }
+
+  const updateWaitingListField = (field, value) => {
+    setWaitingListForm((form) => ({ ...form, [field]: value }))
+    setWaitingListFieldErrors((errors) => ({ ...errors, [field]: undefined }))
+  }
+
+  const waitingListPreferences = waitingListForm.room_preference
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const toggleRoomPreference = (chip) => {
+    const next = waitingListPreferences.includes(chip)
+      ? waitingListPreferences.filter((item) => item !== chip)
+      : [...waitingListPreferences, chip]
+    const text = next.join(', ')
+    if (text.length <= 100) updateWaitingListField('room_preference', text)
+  }
+
   const submitWaitingListEntry = async (event, requestClose) => {
     event.preventDefault()
     const fullName = waitingListForm.full_name.trim()
     const phone = waitingListForm.phone.trim()
-    if (!fullName || !phone) {
-      setWaitingListError('กรุณาระบุชื่อและเบอร์โทรศัพท์')
+    const fieldErrors = {}
+    if (!fullName) fieldErrors.full_name = 'กรุณาระบุชื่อผู้สนใจ'
+    if (!phone) fieldErrors.phone = 'กรุณาระบุเบอร์โทรศัพท์'
+    else if (!WAITING_PHONE_PATTERN.test(phone)) fieldErrors.phone = 'เบอร์โทรศัพท์ไม่ถูกต้อง (ตัวเลข 9-20 หลัก)'
+    setWaitingListFieldErrors(fieldErrors)
+    if (Object.keys(fieldErrors).length > 0) {
+      setWaitingListError('')
       return
     }
+    setWaitingListSubmitting(true)
     try {
       await axios.post(
         '/api/staff/waiting-list',
@@ -861,6 +917,8 @@ function StaffMain() {
       await loadWaitingList()
     } catch (err) {
       setWaitingListError(err.response?.data?.message || 'บันทึกรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setWaitingListSubmitting(false)
     }
   }
 
@@ -1887,71 +1945,194 @@ function StaffMain() {
           </Modal>
         )}
 
-        {waitingListModalOpen && (
-          <Modal title="เพิ่มผู้สนใจเช่าห้อง" onClose={() => setWaitingListModalOpen(false)}>
+        {waitingListDelete && (
+          <Modal title="ยืนยันการลบรายชื่อ" onClose={() => setWaitingListDelete(null)} variant="confirm">
             {(requestClose) => (
-              <form onSubmit={(event) => submitWaitingListEntry(event, requestClose)} noValidate>
-                {waitingListError && <div className="alert alert-danger py-2 px-3">{waitingListError}</div>}
-                <div className="row g-3">
-                  <div className="col-12">
-                    <label className="form-label" htmlFor="waiting-full-name">
-                      ชื่อผู้สนใจ
-                    </label>
-                    <input
-                      id="waiting-full-name"
-                      className="form-control"
-                      maxLength={255}
-                      value={waitingListForm.full_name}
-                      onChange={(event) => setWaitingListForm((form) => ({ ...form, full_name: event.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label" htmlFor="waiting-phone">
-                      เบอร์โทรศัพท์
-                    </label>
-                    <input
-                      id="waiting-phone"
-                      className="form-control"
-                      type="tel"
-                      maxLength={20}
-                      value={waitingListForm.phone}
-                      onChange={(event) => setWaitingListForm((form) => ({ ...form, phone: event.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label" htmlFor="waiting-room-preference">
-                      ประเภทห้องที่สนใจ
-                    </label>
-                    <input
-                      id="waiting-room-preference"
-                      className="form-control"
-                      maxLength={100}
-                      placeholder="เช่น ห้องแอร์, งบไม่เกิน 4,000 บาท"
-                      value={waitingListForm.room_preference}
-                      onChange={(event) =>
-                        setWaitingListForm((form) => ({ ...form, room_preference: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="col-12">
-                    <label className="form-label" htmlFor="waiting-note">
-                      หมายเหตุ
-                    </label>
-                    <textarea
-                      id="waiting-note"
-                      className="form-control"
-                      rows={3}
-                      maxLength={500}
-                      value={waitingListForm.note}
-                      onChange={(event) => setWaitingListForm((form) => ({ ...form, note: event.target.value }))}
-                    />
-                  </div>
+              <div className="staff-confirm-body">
+                <div className="staff-confirm-icon is-warning">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 9v4M12 17h.01" />
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                  </svg>
                 </div>
+                <p className="staff-confirm-message">ลบรายชื่อผู้สนใจนี้ออกจากระบบ?</p>
+                <div className="staff-confirm-details">
+                  <div className="staff-confirm-detail-row">
+                    <span>ชื่อ</span>
+                    <strong>{waitingListDelete.full_name}</strong>
+                  </div>
+                  <div className="staff-confirm-detail-row">
+                    <span>เบอร์โทร</span>
+                    <strong>{waitingListDelete.phone}</strong>
+                  </div>
+                  {waitingListDelete.room_preference && (
+                    <div className="staff-confirm-detail-row">
+                      <span>ประเภทห้อง</span>
+                      <strong>{waitingListDelete.room_preference}</strong>
+                    </div>
+                  )}
+                </div>
+                {waitingListDeleteError && (
+                  <p className="staff-form-error" role="alert">
+                    {waitingListDeleteError}
+                  </p>
+                )}
                 <div className="staff-form-actions">
-                  <button type="submit" className="staff-action-btn is-primary">
-                    บันทึกรายชื่อ
+                  <button
+                    type="button"
+                    className="staff-action-btn is-danger"
+                    disabled={waitingListDeleting}
+                    onClick={() => confirmDeleteWaitingListEntry(requestClose)}
+                  >
+                    {waitingListDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    disabled={waitingListDeleting}
+                    onClick={requestClose}
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
+        {waitingListModalOpen && (
+          <Modal title="เพิ่มผู้สนใจเช่าห้อง" onClose={() => setWaitingListModalOpen(false)} variant="form">
+            {(requestClose) => (
+              <form
+                className="waiting-form"
+                onSubmit={(event) => submitWaitingListEntry(event, requestClose)}
+                noValidate
+              >
+                <div className="waiting-form-intro">
+                  <span className="waiting-form-intro-icon" aria-hidden="true">
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M19 8v6M22 11h-6" />
+                    </svg>
+                  </span>
+                  <p>บันทึกคนที่สนใจเช่าห้อง เพื่อติดต่อกลับเมื่อมีห้องว่าง</p>
+                </div>
+
+                {waitingListError && (
+                  <p className="staff-form-error staff-form-error-block" role="alert">
+                    {waitingListError}
+                  </p>
+                )}
+
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="waiting-full-name">
+                    ชื่อผู้สนใจ <span className="staff-form-required">*</span>
+                  </label>
+                  <input
+                    id="waiting-full-name"
+                    className={`staff-form-input${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
+                    maxLength={255}
+                    autoFocus
+                    autoComplete="off"
+                    placeholder="ชื่อ-นามสกุล"
+                    value={waitingListForm.full_name}
+                    onChange={(event) => updateWaitingListField('full_name', event.target.value)}
+                  />
+                  {waitingListFieldErrors.full_name && (
+                    <span className="staff-form-field-error">{waitingListFieldErrors.full_name}</span>
+                  )}
+                </div>
+
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="waiting-phone">
+                    เบอร์โทรศัพท์ <span className="staff-form-required">*</span>
+                  </label>
+                  <input
+                    id="waiting-phone"
+                    className={`staff-form-input${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
+                    type="tel"
+                    inputMode="tel"
+                    maxLength={20}
+                    autoComplete="off"
+                    placeholder="เช่น 0812345678"
+                    value={waitingListForm.phone}
+                    onChange={(event) => updateWaitingListField('phone', event.target.value)}
+                  />
+                  {waitingListFieldErrors.phone && (
+                    <span className="staff-form-field-error">{waitingListFieldErrors.phone}</span>
+                  )}
+                </div>
+
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="waiting-room-preference">
+                    ประเภทห้องที่สนใจ <span className="staff-form-optional">(ไม่บังคับ)</span>
+                  </label>
+                  <div className="waiting-form-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
+                    {ROOM_PREFERENCE_CHIPS.map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        className={`waiting-form-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
+                        aria-pressed={waitingListPreferences.includes(chip)}
+                        onClick={() => toggleRoomPreference(chip)}
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    id="waiting-room-preference"
+                    className="staff-form-input"
+                    maxLength={100}
+                    autoComplete="off"
+                    placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
+                    value={waitingListForm.room_preference}
+                    onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
+                  />
+                </div>
+
+                <div className="staff-form-field">
+                  <div className="staff-form-label-row">
+                    <label className="staff-form-label" htmlFor="waiting-note">
+                      หมายเหตุ <span className="staff-form-optional">(ไม่บังคับ)</span>
+                    </label>
+                    <span className="staff-form-counter">{waitingListForm.note.length}/500</span>
+                  </div>
+                  <textarea
+                    id="waiting-note"
+                    className="staff-form-input staff-form-textarea"
+                    rows={3}
+                    maxLength={500}
+                    placeholder="เช่น ต้องการเข้าอยู่ต้นเดือนหน้า"
+                    value={waitingListForm.note}
+                    onChange={(event) => updateWaitingListField('note', event.target.value)}
+                  />
+                </div>
+
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ยกเลิก
+                  </button>
+                  <button type="submit" className="staff-action-btn is-primary" disabled={waitingListSubmitting}>
+                    {waitingListSubmitting ? 'กำลังบันทึก...' : 'บันทึกรายชื่อ'}
                   </button>
                 </div>
               </form>
@@ -2148,10 +2329,7 @@ function StaffMain() {
               <button
                 type="button"
                 className="staff-action-btn is-primary"
-                onClick={() => {
-                  setWaitingListError('')
-                  setWaitingListModalOpen(true)
-                }}
+                onClick={openWaitingListModal}
               >
                 + เพิ่มผู้สนใจ
               </button>
@@ -2165,12 +2343,13 @@ function StaffMain() {
                     <th>ประเภทห้อง</th>
                     <th>วันที่แจ้ง</th>
                     <th>บันทึกโดย</th>
+                    <th>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {waitingList.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="staff-empty">
+                      <td colSpan={6} className="staff-empty">
                         ยังไม่มีรายชื่อผู้รอห้องว่าง
                       </td>
                     </tr>
@@ -2182,6 +2361,18 @@ function StaffMain() {
                         <td>{item.room_preference || '-'}</td>
                         <td>{formatDate(item.created_at)}</td>
                         <td>{item.submitted_by_name || '-'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="staff-action-btn is-danger"
+                            onClick={() => {
+                              setWaitingListDeleteError('')
+                              setWaitingListDelete(item)
+                            }}
+                          >
+                            ลบ
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}

@@ -3,6 +3,7 @@ import axios from 'axios'
 import './AnnouncementBoard.css'
 
 const ANNOUNCEMENTS_PER_PAGE = 5
+const CLOSE_ANIMATION_MS = 160 // keep in step with the closing animation in AnnouncementBoard.css
 const EMPTY_FORM = {
   title: '',
   message: '',
@@ -150,6 +151,8 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [formClosing, setFormClosing] = useState(false)
+  const [confirmClosing, setConfirmClosing] = useState(false)
   const [page, setPage] = useState(1)
   const [now, setNow] = useState(() => Date.now())
 
@@ -164,12 +167,39 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     return () => clearInterval(interval)
   }, [hasCountdown])
 
+  // A dialog is only removed once its closing animation has had time to play. A timer (not animationend) is used
+  // so it also closes when animations are switched off (prefers-reduced-motion).
+  useEffect(() => {
+    if (!formClosing) return undefined
+    const timer = setTimeout(() => {
+      setIsCreating(false)
+      setFormClosing(false)
+    }, CLOSE_ANIMATION_MS)
+    return () => clearTimeout(timer)
+  }, [formClosing])
+
+  useEffect(() => {
+    if (!confirmClosing) return undefined
+    const timer = setTimeout(() => {
+      setConfirm(null)
+      setConfirmClosing(false)
+    }, CLOSE_ANIMATION_MS)
+    return () => clearTimeout(timer)
+  }, [confirmClosing])
+
+  const closeForm = () => setFormClosing(true)
+  const closeConfirm = () => setConfirmClosing(true)
+  const openConfirm = (next) => {
+    setConfirmClosing(false)
+    setConfirm(next)
+  }
+
   useEffect(() => {
     if (!isCreating && !confirm) return undefined
     const handleKeyDown = (event) => {
       if (event.key !== 'Escape' || submitting) return
-      if (confirm) setConfirm(null)
-      else setIsCreating(false)
+      if (confirm) setConfirmClosing(true)
+      else setFormClosing(true)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -178,6 +208,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
   const openCreateForm = () => {
+    setFormClosing(false)
     setEditingId(null)
     setForm(EMPTY_FORM)
     setError('')
@@ -190,6 +221,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     const [year = '', month = '', day = ''] = datePart.split('-')
     // split() on an empty string still yields [''], so a default in the destructuring would never apply.
     const [hour, minute] = timePart ? timePart.split(':') : ['23', '59']
+    setFormClosing(false)
     setEditingId(item.id)
     setForm({
       ...EMPTY_FORM,
@@ -251,7 +283,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       return
     }
     setError('')
-    setConfirm({ kind: editingId ? 'edit' : 'publish', title: form.title.trim(), expiry })
+    openConfirm({ kind: editingId ? 'edit' : 'publish', title: form.title.trim(), expiry })
   }
 
   const publishAnnouncement = async () => {
@@ -267,11 +299,11 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
         await axios.post(apiBase, payload, { headers: authHeaders() })
         setPage(1)
       }
-      setConfirm(null)
-      setIsCreating(false)
+      closeConfirm()
+      closeForm()
       await onChange?.()
     } catch (err) {
-      setConfirm(null)
+      closeConfirm()
       setError(
         err.response?.data?.message ||
           (editingId ? 'แก้ไขประกาศไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' : 'เผยแพร่ประกาศไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'),
@@ -286,10 +318,10 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     try {
       await axios.delete(`${apiBase}/${confirm.id}`, { headers: authHeaders() })
       setError('')
-      setConfirm(null)
+      closeConfirm()
       await onChange?.()
     } catch (err) {
-      setConfirm(null)
+      closeConfirm()
       setError(err.response?.data?.message || 'ลบประกาศไม่สำเร็จ')
     } finally {
       setSubmitting(false)
@@ -379,7 +411,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                         <button
                           type="button"
                           className={`${classes.button} is-danger`}
-                          onClick={() => setConfirm({ kind: 'delete', id: item.id, title: item.title })}
+                          onClick={() => openConfirm({ kind: 'delete', id: item.id, title: item.title })}
                         >
                           ลบ
                         </button>
@@ -421,9 +453,9 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
 
       {isCreating && canManage && (
         <div
-          className="announcement-overlay"
+          className={`announcement-overlay${formClosing ? ' is-closing' : ''}`}
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setIsCreating(false)
+            if (event.target === event.currentTarget) closeForm()
           }}
         >
           <section
@@ -438,7 +470,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 type="button"
                 className="announcement-dialog-close"
                 aria-label="ปิด"
-                onClick={() => setIsCreating(false)}
+                onClick={closeForm}
               >
                 ×
               </button>
@@ -585,7 +617,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 <button
                   type="button"
                   className="announcement-board-cancel"
-                  onClick={() => setIsCreating(false)}
+                  onClick={closeForm}
                 >
                   ยกเลิก
                 </button>
@@ -600,9 +632,9 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
 
       {confirm && (
         <div
-          className="announcement-overlay is-confirm"
+          className={`announcement-overlay is-confirm${confirmClosing ? ' is-closing' : ''}`}
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !submitting) setConfirm(null)
+            if (event.target === event.currentTarget && !submitting) closeConfirm()
           }}
         >
           <section
@@ -661,7 +693,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               <button
                 type="button"
                 className="announcement-board-cancel"
-                onClick={() => setConfirm(null)}
+                onClick={closeConfirm}
                 disabled={submitting}
               >
                 ยกเลิก

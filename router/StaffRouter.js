@@ -202,6 +202,25 @@ router.post("/waiting-list", async (req, res) => {
   }
 });
 
+router.delete("/waiting-list/:id", async (req, res) => {
+  try {
+    const entryId = Number(req.params.id);
+    if (!isPositiveId(entryId)) {
+      return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [result] = await pool.query(`DELETE FROM WaitingList WHERE id = ?`, [entryId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "ไม่พบรายชื่อผู้สนใจ" });
+    }
+    return res.json({ message: "ลบรายชื่อผู้สนใจสำเร็จ" });
+  } catch (error) {
+    console.error("Delete waiting list entry error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.get("/move-out-inspections", async (_req, res) => {
   try {
     const pool = getPool();

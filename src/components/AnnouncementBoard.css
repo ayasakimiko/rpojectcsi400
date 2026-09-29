@@ -47,6 +47,7 @@
 .announcement-tone {
   display: inline-block;
   white-space: nowrap;
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 2px 9px;
   font-size: 11px;
@@ -54,11 +55,13 @@
 }
 
 .announcement-tone.is-info {
+  border-color: #bfdbfe;
   background: #eaf2ff;
   color: #2563eb;
 }
 
 .announcement-tone.is-warning {
+  border-color: #fcd34d;
   background: #fff4dc;
   color: #b45309;
 }
@@ -259,6 +262,26 @@
 @keyframes announcement-rise-in {
   from { opacity: 0; transform: translateY(8px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes announcement-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes announcement-rise-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+/* Closing: play the reverse of the opening, and stop taking clicks while it fades. */
+.announcement-overlay.is-closing {
+  pointer-events: none;
+  animation: announcement-fade-out 0.16s ease-in forwards;
+}
+
+.announcement-overlay.is-closing .announcement-dialog {
+  animation: announcement-rise-out 0.16s ease-in forwards;
 }
 
 .announcement-overlay.is-confirm {
@@ -534,7 +557,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .announcement-overlay,
-  .announcement-dialog {
+  .announcement-dialog,
+  .announcement-overlay.is-closing,
+  .announcement-overlay.is-closing .announcement-dialog {
     animation: none;
   }
 
