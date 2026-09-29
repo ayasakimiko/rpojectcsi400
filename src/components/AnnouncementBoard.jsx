@@ -130,7 +130,6 @@ function formatDuration(totalMinutes) {
   return [days && `${days} วัน`, hours && `${hours} ชั่วโมง`, minutes && `${minutes} นาที`].filter(Boolean).join(' ')
 }
 
-// Time left until an announcement is deleted, shown in the table.
 function formatRemaining(milliseconds) {
   const minutes = Math.ceil(milliseconds / 60000)
   if (minutes < 1) return 'เหลือไม่ถึง 1 นาที'
@@ -151,7 +150,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState(null)
-  const [result, setResult] = useState(null) // { message, title } shown after a successful publish / edit / delete
+  const [result, setResult] = useState(null) 
   const [formClosing, setFormClosing] = useState(false)
   const [confirmClosing, setConfirmClosing] = useState(false)
   const [resultClosing, setResultClosing] = useState(false)
@@ -169,8 +168,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     return () => clearInterval(interval)
   }, [hasCountdown])
 
-  // A dialog is only removed once its closing animation has had time to play. A timer (not animationend) is used
-  // so it also closes when animations are switched off (prefers-reduced-motion).
   useEffect(() => {
     if (!formClosing) return undefined
     const timer = setTimeout(() => {
@@ -232,7 +229,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     setIsCreating(true)
   }
 
-  // Loads an existing announcement into the form; its "YYYY-MM-DDTHH:mm" expiry is split back into the dropdowns.
   const openEditForm = (item) => {
     const [datePart = '', timePart = ''] = (item.expires_at || '').split('T')
     const [year = '', month = '', day = ''] = datePart.split('-')
@@ -259,7 +255,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const currentYear = new Date().getFullYear()
   const expiryYears = [...new Set([currentYear, currentYear + 1, currentYear + 2, Number(form.expYear) || currentYear])].sort()
 
-  // Changing month or year can leave the chosen day past the end of that month (e.g. 31 -> February): clamp it.
   const updateExpiry = (field, value) => {
     setForm((current) => {
       const next = { ...current, [field]: value }
@@ -274,7 +269,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     setForm((current) => ({ ...current, expMode: mode }))
   }
 
-  // A live summary under the choices, so it is obvious whether an auto-delete is actually set.
   const expiryPreview = (() => {
     if (form.expMode === 'none') return { tone: 'is-none', text: 'ประกาศนี้จะแสดงจนกว่าจะลบเอง' }
     if (form.expMode === 'at' && !form.expDay && !form.expMonth && !form.expYear) {
