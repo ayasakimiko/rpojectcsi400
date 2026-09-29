@@ -1488,6 +1488,10 @@
   border: 1.5px solid #dce9fb;
 }
 
+.dashboard-required {
+  color: #dc2626;
+}
+
 .dashboard-inline-form label {
   font-size: 12px;
   font-weight: 700;

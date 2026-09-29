@@ -1323,6 +1323,10 @@ function CustomerDashbord() {
 
   const handleRequestSubmit = async (event) => {
     event.preventDefault()
+    if (activeRequestType === 'moveout' && !requestNote.trim()) {
+      setRequestError('กรุณาระบุเหตุผลที่ต้องการย้ายออก')
+      return
+    }
     const token = sessionStorage.getItem('token')
     setRequestSubmitting(true)
     setRequestError('')
@@ -2192,11 +2196,11 @@ function CustomerDashbord() {
               </div>
               {profileError && <p className="dashboard-form-error">{profileError}</p>}
               <div className="dashboard-form-actions">
-                <button type="submit" className="dashboard-action-btn is-primary" disabled={profileSubmitting}>
-                  {profileSubmitting ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}
-                </button>
                 <button type="button" className="dashboard-action-btn is-ghost" onClick={resetProfileForm}>
                   คืนค่าเดิม
+                </button>
+                <button type="submit" className="dashboard-action-btn is-primary" disabled={profileSubmitting}>
+                  {profileSubmitting ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}
                 </button>
               </div>
             </form>
@@ -2372,11 +2376,11 @@ function CustomerDashbord() {
                                   />
                                   {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
                                   <div className="dashboard-form-actions">
-                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
-                                      {paymentSubmitting ? 'กำลังส่งสลิป...' : 'ส่งสลิปรอตรวจสอบ'}
-                                    </button>
                                     <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                                       ยกเลิก
+                                    </button>
+                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
+                                      {paymentSubmitting ? 'กำลังส่งสลิป...' : 'ส่งสลิปรอตรวจสอบ'}
                                     </button>
                                   </div>
                                 </form>
@@ -2660,20 +2664,41 @@ function CustomerDashbord() {
                                 </select>
                               </>
                             )}
-                            <label>หมายเหตุ (ถ้ามี)</label>
+                            <label>
+                              {activeRequestType === 'moveout' ? (
+                                <>
+                                  เหตุผลที่ต้องการย้ายออก <span className="dashboard-required">*</span>
+                                </>
+                              ) : (
+                                'หมายเหตุ (ถ้ามี)'
+                              )}
+                            </label>
                             <textarea
-                              rows={2}
+                              rows={activeRequestType === 'moveout' ? 3 : 2}
+                              maxLength={500}
                               value={requestNote}
-                              onChange={(event) => setRequestNote(event.target.value)}
-                              placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                              onChange={(event) => {
+                                setRequestNote(event.target.value)
+                                if (requestError) setRequestError('')
+                              }}
+                              placeholder={
+                                activeRequestType === 'moveout'
+                                  ? 'เช่น เหตุผลที่ย้ายออก และวันที่ต้องการย้ายออก'
+                                  : 'ระบุรายละเอียดเพิ่มเติม...'
+                              }
+                              required={activeRequestType === 'moveout'}
                             />
                             {requestError && <p className="dashboard-form-error">{requestError}</p>}
                             <div className="dashboard-form-actions">
-                              <button type="submit" className="dashboard-action-btn is-primary" disabled={requestSubmitting}>
-                                {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
-                              </button>
                               <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                                 ยกเลิก
+                              </button>
+                              <button
+                                type="submit"
+                                className="dashboard-action-btn is-primary"
+                                disabled={requestSubmitting || (activeRequestType === 'moveout' && !requestNote.trim())}
+                              >
+                                {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
                               </button>
                             </div>
                           </form>
@@ -2774,11 +2799,11 @@ function CustomerDashbord() {
 
                           {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
                           <div className="dashboard-form-actions">
-                            <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
-                              {maintenanceSubmitting ? 'กำลังส่ง...' : 'ยืนยันแจ้งซ่อม'}
-                            </button>
                             <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                               ยกเลิก
+                            </button>
+                            <button type="submit" className="dashboard-action-btn is-primary" disabled={maintenanceSubmitting}>
+                              {maintenanceSubmitting ? 'กำลังส่ง...' : 'ยืนยันแจ้งซ่อม'}
                             </button>
                           </div>
                         </form>
@@ -2881,6 +2906,9 @@ function CustomerDashbord() {
                           </p>
                           {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
                           <div className="dashboard-form-actions">
+                            <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                              ไม่ยกเลิก
+                            </button>
                             <button
                               type="button"
                               className="dashboard-action-btn is-danger"
@@ -2891,9 +2919,6 @@ function CustomerDashbord() {
                               }}
                             >
                               {cancelingMaintenanceId === confirmCancelId ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
-                            </button>
-                            <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                              ไม่ยกเลิก
                             </button>
                           </div>
                         </div>

@@ -548,6 +548,8 @@ const INSPECTION_PHOTO_PREVIEW_COUNT = 4
 const INSPECTION_GALLERY_PAGE_SIZE = 8
 const PHOTO_CLOSE_ANIMATION_MS = 160 // keep in step with .moveout-photo-preview.is-closing in AdminPage.css
 const PHOTO_ZOOM_STEP = 0.5
+const PHOTO_CLICK_ZOOM = 2.5
+const PHOTO_DRAG_THRESHOLD = 4
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 
@@ -569,6 +571,7 @@ function AdminBackupPage() {
   const [photoClosing, setPhotoClosing] = useState(false)
   const [slipPreview, setSlipPreview] = useState(null)
   const photoDragRef = useRef(null)
+  const photoDragMovedRef = useRef(false)
   const [waitingListSearch, setWaitingListSearch] = useState('')
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListModal, setWaitingListModal] = useState(null)
@@ -625,7 +628,6 @@ function AdminBackupPage() {
   const [invoiceGenerating, setInvoiceGenerating] = useState(false)
   const [invoicePrintError, setInvoicePrintError] = useState('')
 
-  /* ------------------------------- Expenses -------------------------------- */
   const [expenses, setExpenses] = useState([])
   const [expensesLoading, setExpensesLoading] = useState(true)
   const [expensesError, setExpensesError] = useState('')
@@ -670,7 +672,6 @@ function AdminBackupPage() {
     setExpenseModal({ mode: 'edit', expense })
   }
 
-  // The full-screen preview is shared: it shows either a payment slip or the photos of an inspection.
   const previewSource = slipPreview
     ? {
         title: 'สลิปโอนเงิน',
@@ -712,7 +713,6 @@ function AdminBackupPage() {
   const galleryPage = Math.min(photoGalleryPage || 1, galleryTotalPages)
   const galleryStart = (galleryPage - 1) * INSPECTION_GALLERY_PAGE_SIZE
 
-  // Every photo opens at 100%, centred.
   const showPhoto = (index) => {
     setPhotoClosing(false)
     setPhotoPreview(index)
@@ -728,18 +728,35 @@ function AdminBackupPage() {
   }
 
   const startPhotoDrag = (event) => {
+    photoDragMovedRef.current = false
     if (photoZoom <= 1) return
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    photoDragRef.current = { x: event.clientX - photoPan.x, y: event.clientY - photoPan.y }
+    photoDragRef.current = {
+      x: event.clientX - photoPan.x,
+      y: event.clientY - photoPan.y,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
     setPhotoDragging(true)
   }
   const movePhotoDrag = (event) => {
-    if (!photoDragRef.current) return
-    setPhotoPan({ x: event.clientX - photoDragRef.current.x, y: event.clientY - photoDragRef.current.y })
+    const drag = photoDragRef.current
+    if (!drag) return
+    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > PHOTO_DRAG_THRESHOLD) {
+      photoDragMovedRef.current = true
+    }
+    setPhotoPan({ x: event.clientX - drag.x, y: event.clientY - drag.y })
   }
   const endPhotoDrag = () => {
     photoDragRef.current = null
     setPhotoDragging(false)
+  }
+  const togglePhotoZoom = () => {
+    if (photoDragMovedRef.current) {
+      photoDragMovedRef.current = false
+      return
+    }
+    changePhotoZoom(photoZoom > 1 ? 1 : PHOTO_CLICK_ZOOM)
   }
 
   // Closing plays the fade-out first; the preview is removed once it has had time to finish.
@@ -2995,7 +3012,7 @@ function AdminBackupPage() {
                 alt={`${previewSource.label} ${photoPreview + 1}`}
                 style={{ transform: `translate(${photoPan.x}px, ${photoPan.y}px) scale(${photoZoom})` }}
                 draggable={false}
-                onDoubleClick={() => (photoZoom > 1 ? changePhotoZoom(1) : changePhotoZoom(2.5))}
+                onClick={togglePhotoZoom}
                 onPointerDown={startPhotoDrag}
                 onPointerMove={movePhotoDrag}
                 onPointerUp={endPhotoDrag}

@@ -397,20 +397,23 @@
   height: 36px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #dce9fb;
+  border: 1.5px solid #fecaca;
   border-radius: 8px;
   padding: 0;
-  background: #f7faff;
-  color: #33506f;
-  font-size: 22px;
-  line-height: 1;
+  background: #fef2f2;
+  color: #b42318;
+  line-height: 0;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+.announcement-dialog-close svg {
+  display: block;
+}
+
 .announcement-dialog-close:hover {
-  border-color: #b8d2fb;
-  background: #eaf2ff;
+  border-color: #fca5a5;
+  background: #fee2e2;
 }
 
 .announcement-board-form {

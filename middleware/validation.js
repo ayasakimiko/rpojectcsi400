@@ -273,6 +273,9 @@ export function parseTenantRequestInput(body = {}) {
     return { error: "ประเภทคำขอไม่ถูกต้อง" };
   }
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
+  if (type === "moveout" && !note) {
+    return { error: "กรุณาระบุเหตุผลที่ต้องการย้ายออก" };
+  }
   if (type !== "renew") {
     return { value: { type, note, renewDurationMonths: null, renewPaymentType: null } };
   }

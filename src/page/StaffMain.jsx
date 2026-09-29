@@ -1199,6 +1199,14 @@ function StaffPaymentReview({ onCountChange }) {
               <div className="staff-form-actions">
                 <button
                   type="button"
+                  className="staff-action-btn is-ghost"
+                  disabled={busyId === confirmReview.payment.id}
+                  onClick={requestClose}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
                   className={`staff-action-btn ${confirmReview.decision === 'approved' ? 'is-primary' : 'is-danger'}`}
                   disabled={busyId === confirmReview.payment.id}
                   onClick={() => submitReview(requestClose)}
@@ -1208,14 +1216,6 @@ function StaffPaymentReview({ onCountChange }) {
                     : confirmReview.decision === 'approved'
                       ? 'ยืนยันอนุมัติ'
                       : 'ยืนยันปฏิเสธ'}
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-ghost"
-                  disabled={busyId === confirmReview.payment.id}
-                  onClick={requestClose}
-                >
-                  ยกเลิก
                 </button>
               </div>
             </div>
@@ -1350,13 +1350,8 @@ function StaffPaymentReview({ onCountChange }) {
             </div>
 
             <footer className="payment-slip-footer">
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                disabled={busyId === preview.payment.id || previewClosing}
-                onClick={() => requestReview(preview.payment, 'approved')}
-              >
-                อนุมัติ
+              <button type="button" className="staff-action-btn is-ghost" onClick={closeSlip}>
+                ปิด
               </button>
               <button
                 type="button"
@@ -1366,8 +1361,13 @@ function StaffPaymentReview({ onCountChange }) {
               >
                 ปฏิเสธ
               </button>
-              <button type="button" className="staff-action-btn is-ghost" onClick={closeSlip}>
-                ปิด
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                disabled={busyId === preview.payment.id || previewClosing}
+                onClick={() => requestReview(preview.payment, 'approved')}
+              >
+                อนุมัติ
               </button>
             </footer>
           </section>
@@ -2872,19 +2872,19 @@ function StaffMain() {
                 <div className="staff-form-actions">
                   <button
                     type="button"
-                    className="staff-action-btn is-danger"
-                    disabled={waitingListDeleting}
-                    onClick={() => confirmDeleteWaitingListEntry(requestClose)}
-                  >
-                    {waitingListDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                  </button>
-                  <button
-                    type="button"
                     className="staff-action-btn is-ghost"
                     disabled={waitingListDeleting}
                     onClick={requestClose}
                   >
                     ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-danger"
+                    disabled={waitingListDeleting}
+                    onClick={() => confirmDeleteWaitingListEntry(requestClose)}
+                  >
+                    {waitingListDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
                   </button>
                 </div>
               </div>
@@ -3076,19 +3076,19 @@ function StaffMain() {
                 <div className="staff-form-actions">
                   <button
                     type="button"
-                    className="staff-action-btn is-danger"
-                    disabled={inspectionDeleting}
-                    onClick={() => confirmDeleteInspection(requestClose)}
-                  >
-                    {inspectionDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                  </button>
-                  <button
-                    type="button"
                     className="staff-action-btn is-ghost"
                     disabled={inspectionDeleting}
                     onClick={requestClose}
                   >
                     ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-danger"
+                    disabled={inspectionDeleting}
+                    onClick={() => confirmDeleteInspection(requestClose)}
+                  >
+                    {inspectionDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
                   </button>
                 </div>
               </div>
@@ -4183,19 +4183,19 @@ function StaffMain() {
               <div className="staff-form-actions">
                 <button
                   type="button"
-                  className="staff-action-btn is-danger"
-                  disabled={expenseDeleting}
-                  onClick={() => confirmDeleteExpense(requestClose)}
-                >
-                  {expenseDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                </button>
-                <button
-                  type="button"
                   className="staff-action-btn is-ghost"
                   disabled={expenseDeleting}
                   onClick={requestClose}
                 >
                   ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className="staff-action-btn is-danger"
+                  disabled={expenseDeleting}
+                  onClick={() => confirmDeleteExpense(requestClose)}
+                >
+                  {expenseDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
                 </button>
               </div>
             </div>
@@ -4272,11 +4272,11 @@ function StaffMain() {
 
               {expenseFormError && <p className="staff-form-error">{expenseFormError}</p>}
               <div className="staff-form-actions">
-                <button type="submit" className="staff-action-btn is-primary" disabled={expenseSubmitting}>
-                  {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
-                </button>
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
+                </button>
+                <button type="submit" className="staff-action-btn is-primary" disabled={expenseSubmitting}>
+                  {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
                 </button>
               </div>
             </form>
@@ -5045,6 +5045,9 @@ function StaffMain() {
               )}
               {collectError && <p className="staff-form-error">{collectError}</p>}
               <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
@@ -5052,9 +5055,6 @@ function StaffMain() {
                   onClick={handleCollectPayment}
                 >
                   {collectSubmitting ? 'กำลังบันทึก...' : 'ยืนยันเก็บเงิน'}
-                </button>
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
                 </button>
               </div>
             </div>
@@ -5120,6 +5120,9 @@ function StaffMain() {
                 </button>
 
                 <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
                   <button
                     type="button"
                     className="staff-action-btn is-primary"
@@ -5130,9 +5133,6 @@ function StaffMain() {
                     }}
                   >
                     เก็บเงิน
-                  </button>
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
                   </button>
                 </div>
               </div>
@@ -5261,6 +5261,9 @@ function StaffMain() {
 
                 {utilityError && <p className="staff-form-error">{utilityError}</p>}
                 <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ยกเลิก
+                  </button>
                   <button
                     type="button"
                     className="staff-action-btn is-primary"
@@ -5268,9 +5271,6 @@ function StaffMain() {
                     onClick={handleSendUtilityBill}
                   >
                     {utilitySubmitting ? 'กำลังส่ง...' : 'ส่งบิล'}
-                  </button>
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ยกเลิก
                   </button>
                 </div>
               </div>
@@ -5311,6 +5311,9 @@ function StaffMain() {
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
@@ -5320,9 +5323,6 @@ function StaffMain() {
                   {processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}`
                     ? 'กำลังดำเนินการ...'
                     : 'ยืนยันเสร็จสิ้น'}
-                </button>
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
                 </button>
               </div>
             </div>
@@ -5380,6 +5380,9 @@ function StaffMain() {
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
@@ -5389,9 +5392,6 @@ function StaffMain() {
                   {processingRequestKey === `tenant-${moveoutConfirmRequest.id}`
                     ? 'กำลังดำเนินการ...'
                     : 'ยืนยันอนุมัติ'}
-                </button>
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
                 </button>
               </div>
             </div>
@@ -5438,6 +5438,9 @@ function StaffMain() {
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
@@ -5445,9 +5448,6 @@ function StaffMain() {
                   onClick={handleConfirmRenewApproval}
                 >
                   {processingRequestKey === `tenant-${renewApproveConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
-                </button>
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
                 </button>
               </div>
             </div>
@@ -5487,6 +5487,9 @@ function StaffMain() {
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
@@ -5496,9 +5499,6 @@ function StaffMain() {
                   {processingRequestKey === `tenant-${moveoutAcknowledgeConfirm.id}`
                     ? 'กำลังดำเนินการ...'
                     : 'ยืนยันรับเรื่อง'}
-                </button>
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
                 </button>
               </div>
             </div>
@@ -5541,6 +5541,9 @@ function StaffMain() {
               </div>
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
@@ -5548,9 +5551,6 @@ function StaffMain() {
                   onClick={handleConfirmTenantReject}
                 >
                   {processingRequestKey === `tenant-${tenantRejectConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันปฏิเสธ'}
-                </button>
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
                 </button>
               </div>
             </div>

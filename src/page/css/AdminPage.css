@@ -2364,7 +2364,7 @@
 }
 
 .moveout-photo-preview-image.is-zoomed {
-  cursor: grab;
+  cursor: zoom-out;
 }
 
 .moveout-photo-preview-image.is-dragging {

@@ -3,7 +3,7 @@ import axios from 'axios'
 import './AnnouncementBoard.css'
 
 const ANNOUNCEMENTS_PER_PAGE = 10
-const CLOSE_ANIMATION_MS = 160 // keep in step with the closing animation in AnnouncementBoard.css
+const CLOSE_ANIMATION_MS = 160
 const EMPTY_FORM = {
   title: '',
   message: '',
@@ -497,7 +497,20 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 aria-label="ปิด"
                 onClick={closeForm}
               >
-                ×
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             </header>
             <form className="announcement-board-form" onSubmit={submitAnnouncement} noValidate>
