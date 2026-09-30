@@ -35,7 +35,7 @@ export function printMonthlyInvoices(rooms, targetWindow = window.open('', '_bla
     const status = due?.status === 'overdue' ? 'ค้างชำระ' : due?.status === 'pending' ? 'รอตรวจสอบ' : due?.amount > 0 ? 'รอชำระ' : 'ชำระครบ / ไม่มียอดค้าง'
 
     return `<article class="invoice">
-      <header class="invoice-header"><div><p class="eyebrow">CSI400 RESIDENCE</p><h1>ใบแจ้งหนี้ประจำเดือน</h1><p class="period">${escapeHtml(monthLabel)}</p></div><div class="invoice-number"><span>เลขที่เอกสาร</span><strong>${escapeHtml(invoiceNumber)}</strong><span>วันที่ออก ${escapeHtml(issueDate)}</span></div></header>
+      <header class="invoice-header"><div><p class="eyebrow">หอพักใจ</p><h1>ใบแจ้งหนี้ประจำเดือน</h1><p class="period">${escapeHtml(monthLabel)}</p></div><div class="invoice-number"><span>เลขที่เอกสาร</span><strong>${escapeHtml(invoiceNumber)}</strong><span>วันที่ออก ${escapeHtml(issueDate)}</span></div></header>
       <section class="tenant"><div><span>ห้อง</span><strong>${escapeHtml(room.room_number)}</strong></div><div><span>ผู้เช่า</span><strong>${escapeHtml(tenantName || '-')}</strong></div><div><span>เบอร์โทร</span><strong>${escapeHtml(room.tenant.phone || '-')}</strong></div></section>
       <table><thead><tr><th>รายการ</th><th class="amount">จำนวนเงิน (บาท)</th></tr></thead><tbody>${items.map((item) => `<tr><td>${escapeHtml(item.label)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ''}</td><td class="amount">${formatMoney(item.amount)}</td></tr>`).join('')}</tbody></table>
       <div class="total"><span>ยอดรวม</span><strong>฿${formatMoney(due?.amount || 0)}</strong></div>

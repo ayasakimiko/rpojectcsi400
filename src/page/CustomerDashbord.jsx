@@ -14,6 +14,8 @@ import {
   saveMaintenanceRequestPhotos,
   subscribeMaintenanceAttachments,
 } from '../utils/maintenanceAttachments.js'
+import generatePayload from 'promptpay-qr'
+import { QRCodeSVG } from 'qrcode.react'
 
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
@@ -1916,15 +1918,23 @@ function CustomerDashbord() {
                           {(requestClose) => (
                             <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
                               <div className="dashboard-qr-box">
-                                <span className="dashboard-qr-badge">PromptPay</span>
-                                <FakeQrCode />
+                                <span className="dashboard-qr-badge">PromptPay สแกนจ่าย</span>
+                                {/* QR Code */}
+                                <div style={{ background: '#ffffff', padding: '12px', borderRadius: '14px', border: '1.5px solid #dce9fb', display: 'inline-block', margin: '8px auto' }}>
+                                  <QRCodeSVG 
+                                    value={generatePayload(data?.dormConfig?.promptpay_id || '0812345678', { amount: Number(currentDue.amount) })} 
+                                    size={180} 
+                                  />
+                                </div>
+
                                 <p className="dashboard-qr-amount">฿{formatCurrency(currentDue.amount)}</p>
                                 <p className="dashboard-qr-hint">
-                                  {currentDue.lumpSumMonths
-                                    ? `ยอดรวมค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน — สแกนผ่านแอปธนาคารเพื่อชำระเงิน`
-                                    : 'สแกนผ่านแอปธนาคารเพื่อชำระเงิน'}
+                                  ชำระให้: <strong>{data?.dormConfig?.dorm_name || 'หอพักใจ'}</strong> (PromptPay: {data?.dormConfig?.promptpay_id || '0812345678'})
+                                  <br />
+                                  สแกนผ่านแอปธนาคารเพื่อชำระเงินตามยอดได้ทันที
                                 </p>
                               </div>
+
                               <label htmlFor="payment-slip-file">แนบสลิป (JPG, PNG หรือ WebP ไม่เกิน 5 MB)</label>
                               <input id="payment-slip-file" className="dashboard-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPaymentSlip(event.target.files?.[0] || null)} />
                               {paymentSlip && <p className="dashboard-file-name">ไฟล์ที่เลือก: {paymentSlip.name}</p>}

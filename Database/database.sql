@@ -157,3 +157,26 @@ CREATE TABLE IF NOT EXISTS RoomOccupancySnapshot (
     recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS DormConfig (
+    id INT PRIMARY KEY DEFAULT 1,
+    dorm_name VARCHAR(255) NOT NULL DEFAULT 'หอพักใจ',
+    promptpay_id VARCHAR(50) NOT NULL DEFAULT '0812345678',
+    bank_account_no VARCHAR(50) DEFAULT '123-4-56789-0',
+    bank_name VARCHAR(100) DEFAULT 'ธนาคารกสิกรไทย',
+    bank_account_name VARCHAR(255) DEFAULT 'หอพักใจ',
+    billing_due_day INT DEFAULT 5,
+    grace_period_days INT DEFAULT 3,
+    late_fee_per_day DECIMAL(10,2) DEFAULT 50.00,
+    dorm_rules TEXT,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO DormConfig (id, dorm_name, promptpay_id, bank_account_name, dorm_rules)
+VALUES (
+    1, 
+    'หอพักใจ', 
+    '0812345678',
+    'หอพักใจ',
+    '1. ห้ามส่งเสียงดังรบกวนผู้อื่นหลังเวลา 22:00 น.\n2. ห้ามสูบบุหรี่ภายในห้องพักและบริเวณทางเดิน\n3. ห้ามเลี้ยงสัตว์เลี้ยงทุกชนิด\n4. ชำระค่าเช่าภายในวันที่ 5 ของทุกเดือน'
+)
+ON DUPLICATE KEY UPDATE id=1;

@@ -35,6 +35,7 @@ router.get("/", async (req, res) => {
     if (dateError) return res.status(400).json({ message: dateError });
 
     const pool = getPool();
+    const exportAll = req.query.all === "true";
     const page = parsePage(req.query.page);
     const offset = (page - 1) * EXPENSE_LOG_PAGE_SIZE;
 
@@ -56,8 +57,8 @@ router.get("/", async (req, res) => {
       `SELECT id, category, description, amount, expense_date, recorded_by_name, created_at
        FROM Expense ${whereClause}
        ORDER BY expense_date DESC, created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, EXPENSE_LOG_PAGE_SIZE, offset],
+       ${exportAll ? "" : "LIMIT ? OFFSET ?"}`,
+      exportAll ? params : [...params, EXPENSE_LOG_PAGE_SIZE, offset],
     );
 
     const [byCategory] = await pool.query(

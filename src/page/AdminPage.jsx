@@ -21,6 +21,7 @@ import {
   subscribeMoveOutInspections,
   updateMoveOutInspection,
 } from '../utils/moveOutInspections.js'
+import { exportToCSV, exportToExcel } from '../utils/exportCsv.js'
 
 let openModalCount = 0
 
@@ -38,7 +39,14 @@ function unlockBodyScroll() {
   }
 }
 
-function Modal({ title, onClose, children, variant }) {
+function Modal({
+  title,
+  onClose,
+  children,
+  variant,
+  className = '',
+  showCloseButton = true,
+}) {
   const [isClosing, setIsClosing] = useState(false)
   const requestClose = () => setIsClosing(true)
 
@@ -64,19 +72,38 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${className ? ` ${className}` : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
           <h3>{title}</h3>
-          <button type="button" className="admin-modal-close" onClick={requestClose} aria-label="ปิด">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          {showCloseButton && (
+            <button
+              type="button"
+              className="admin-modal-close"
+              onClick={requestClose}
+              aria-label="ปิด"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
         </div>
-        <div className="admin-modal-body">{typeof children === 'function' ? children(requestClose) : children}</div>
+        <div className="admin-modal-body">
+          {typeof children === 'function' ? children(requestClose) : children}
+        </div>
       </div>
     </div>
   )
@@ -86,13 +113,23 @@ function Pagination({ page, totalPages, onChange }) {
   if (totalPages <= 1) return null
   return (
     <div className="admin-pagination">
-      <button type="button" className="admin-page-btn" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+      <button
+        type="button"
+        className="admin-page-btn"
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+      >
         ก่อนหน้า
       </button>
       <span className="admin-page-info">
         หน้า {page} / {totalPages}
       </span>
-      <button type="button" className="admin-page-btn" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
+      <button
+        type="button"
+        className="admin-page-btn"
+        disabled={page >= totalPages}
+        onClick={() => onChange(page + 1)}
+      >
         ถัดไป
       </button>
     </div>
@@ -112,6 +149,7 @@ const TABS = [
   { key: 'waiting-list', label: 'รายชื่อรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจห้องย้ายออก' },
   { key: 'expenses', label: 'รายจ่าย' },
+  { key: 'settings', label: 'ตั้งค่าหอพัก' },
 ]
 
 const REQUEST_TYPE_LABEL = { renew: 'ต่อสัญญา', moveout: 'แจ้งย้ายออก' }
@@ -156,7 +194,17 @@ function MaintenanceCategoryBadge({ category }) {
   const key = MAINTENANCE_CATEGORY_LABEL[category] ? category : 'other'
   return (
     <span className={`admin-badge category-${key}`}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
         {MAINTENANCE_CATEGORY_ICON[key]}
       </svg>
       {MAINTENANCE_CATEGORY_LABEL[key]}
@@ -167,17 +215,30 @@ function MaintenanceCategoryBadge({ category }) {
 function formatCurrency(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '-'
-  return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return num.toLocaleString('th-TH', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
 }
 
 function formatDate(value) {
   if (!value) return '-'
-  return new Date(value).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
+  return new Date(value).toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 function formatDateTime(value) {
   if (!value) return '-'
-  return new Date(value).toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(value).toLocaleString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function getTodayInputDate() {
@@ -229,10 +290,16 @@ function buildAdminTenantNotifs(request) {
       key: `tenant-${request.id}-${request.status}`,
       title: REQUEST_TYPE_LABEL[request.type] || request.type,
       ...info,
-      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      date:
+        request.status === 'in_progress'
+          ? request.accepted_at || request.created_at
+          : request.created_at,
       details: [
         { label: 'ห้อง', value: request.room_number },
-        { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
+        {
+          label: 'ผู้เช่า',
+          value: `${request.first_name} ${request.last_name}`,
+        },
         ...(request.note ? [{ label: 'หมายเหตุ', value: request.note }] : []),
       ],
       kind: 'tenant',
@@ -249,11 +316,20 @@ function buildAdminMaintenanceNotifs(request) {
       key: `maintenance-${request.id}-${request.status}`,
       title: 'แจ้งซ่อม',
       ...info,
-      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      date:
+        request.status === 'in_progress'
+          ? request.accepted_at || request.created_at
+          : request.created_at,
       details: [
         { label: 'ห้อง', value: request.room_number },
-        { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
-        { label: 'ประเภท', value: MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ' },
+        {
+          label: 'ผู้เช่า',
+          value: `${request.first_name} ${request.last_name}`,
+        },
+        {
+          label: 'ประเภท',
+          value: MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ',
+        },
       ],
       kind: 'maintenance',
       request,
@@ -266,7 +342,11 @@ function buildAdminMaintenanceNotifs(request) {
 function buildAdminStaffNotifs(member) {
   if (!member.created_at) return []
   const createdMs = new Date(member.created_at).getTime()
-  if (!Number.isFinite(createdMs) || Date.now() - createdMs > ADMIN_STAFF_NOTIF_WINDOW_MS) return []
+  if (
+    !Number.isFinite(createdMs) ||
+    Date.now() - createdMs > ADMIN_STAFF_NOTIF_WINDOW_MS
+  )
+    return []
   return [
     {
       key: `staff-${member.id}-new`,
@@ -275,7 +355,10 @@ function buildAdminStaffNotifs(member) {
       tone: 'info',
       date: member.created_at,
       details: [
-        { label: 'ชื่อ-นามสกุล', value: `${member.first_name} ${member.last_name}` },
+        {
+          label: 'ชื่อ-นามสกุล',
+          value: `${member.first_name} ${member.last_name}`,
+        },
         { label: 'เบอร์โทร', value: member.phone },
       ],
       kind: 'staff',
@@ -286,12 +369,27 @@ function buildAdminStaffNotifs(member) {
 
 function getAdminRequestTimeline(kind, request) {
   if (!request || kind === 'staff') return []
-  const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
+  const steps = [
+    {
+      label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ',
+      date: request.created_at,
+    },
+  ]
   if (request.accepted_at) {
-    steps.push({ label: request.accepted_by_name ? `รับเรื่องโดย ${request.accepted_by_name}` : 'รับเรื่อง', date: request.accepted_at })
+    steps.push({
+      label: request.accepted_by_name
+        ? `รับเรื่องโดย ${request.accepted_by_name}`
+        : 'รับเรื่อง',
+      date: request.accepted_at,
+    })
   }
   if (request.completed_at) {
-    steps.push({ label: request.completed_by_name ? `เสร็จสิ้นโดย ${request.completed_by_name}` : 'เสร็จสิ้น', date: request.completed_at })
+    steps.push({
+      label: request.completed_by_name
+        ? `เสร็จสิ้นโดย ${request.completed_by_name}`
+        : 'เสร็จสิ้น',
+      date: request.completed_at,
+    })
   }
   return steps
 }
@@ -305,14 +403,22 @@ function AdminRequestTimeline({ kind, request }) {
       <div className="admin-request-log-items">
         {timeline.map((step, index) => {
           const prevStep = timeline[index - 1]
-          const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+          const stepMs = prevStep
+            ? new Date(step.date).getTime() - new Date(prevStep.date).getTime()
+            : null
           return (
             <div key={step.label} className="admin-request-log-item">
               <span className="admin-request-log-dot" />
               <div className="admin-request-log-content">
                 <p className="admin-request-log-label">{step.label}</p>
-                <p className="admin-request-log-date">{formatDateTime(step.date)}</p>
-                {stepMs !== null && stepMs >= 0 && <p className="admin-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+                <p className="admin-request-log-date">
+                  {formatDateTime(step.date)}
+                </p>
+                {stepMs !== null && stepMs >= 0 && (
+                  <p className="admin-request-log-duration">
+                    ใช้เวลา {formatRemaining(stepMs)}
+                  </p>
+                )}
               </div>
             </div>
           )
@@ -356,7 +462,12 @@ function DetailRow({ open, colSpan, fields }) {
 
 function ExpandToggleButton({ open, onClick }) {
   return (
-    <button type="button" className="admin-expand-btn" onClick={onClick} aria-expanded={open}>
+    <button
+      type="button"
+      className="admin-expand-btn"
+      onClick={onClick}
+      aria-expanded={open}
+    >
       {open ? 'ย่อ' : 'ดูเพิ่มเติม'}
       <svg
         width="12"
@@ -414,7 +525,9 @@ function AmenitiesList({ room }) {
     <div className="admin-amenities-list">
       {amenities.map((amenity, index) => (
         <span key={amenity} className="admin-amenity-item">
-          {index > 0 && <span className="admin-amenity-divider" aria-hidden="true" />}
+          {index > 0 && (
+            <span className="admin-amenity-divider" aria-hidden="true" />
+          )}
           {amenity}
         </span>
       ))}
@@ -427,7 +540,18 @@ function RentalPeriodCell({ start, end }) {
   return (
     <div className="admin-rental-period">
       <span className="admin-rental-date">{formatDate(start)}</span>
-      <svg className="admin-rental-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg
+        className="admin-rental-arrow"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
         <line x1="4" y1="12" x2="20" y2="12" />
         <polyline points="14 6 20 12 14 18" />
       </svg>
@@ -449,12 +573,35 @@ const emptyRoomForm = {
   cctv: false,
 }
 
-const emptyStaffForm = { idcard: '', password: '', phone: '', first_name: '', last_name: '', age: '' }
+const emptyStaffForm = {
+  idcard: '',
+  password: '',
+  phone: '',
+  first_name: '',
+  last_name: '',
+  age: '',
+}
 
-const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '' }
+const emptyCustomerForm = {
+  first_name: '',
+  last_name: '',
+  phone: '',
+  age: '',
+  deposit_amount: '',
+}
 
-const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
-const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '' }
+const emptyExpenseForm = {
+  category: '',
+  description: '',
+  amount: '',
+  expense_date: '',
+}
+const emptyWaitingListForm = {
+  full_name: '',
+  phone: '',
+  room_preference: '',
+  note: '',
+}
 
 function AdminBackupPage() {
   const navigate = useNavigate()
@@ -463,7 +610,9 @@ function AdminBackupPage() {
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [waitingList, setWaitingList] = useState(readWaitingList)
-  const [moveOutInspections, setMoveOutInspections] = useState(readMoveOutInspections)
+  const [moveOutInspections, setMoveOutInspections] = useState(
+    readMoveOutInspections,
+  )
   const [inspectionDetail, setInspectionDetail] = useState(null)
   const [waitingListSearch, setWaitingListSearch] = useState('')
   const [waitingListStatus, setWaitingListStatus] = useState('all')
@@ -493,7 +642,9 @@ function AdminBackupPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [notifOpen])
 
-  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+  const authHeaders = () => ({
+    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+  })
 
   useEffect(() => subscribeWaitingList(setWaitingList), [])
   useEffect(() => subscribeMoveOutInspections(setMoveOutInspections), [])
@@ -539,12 +690,16 @@ function AdminBackupPage() {
       .then(({ data }) => {
         setExpenses(data.expenses)
         setExpensesPage(data.page)
-        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20))))
+        setExpensesTotalPages(
+          Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20))),
+        )
         setExpensesError('')
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setExpensesError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลรายจ่ายได้')
+        setExpensesError(
+          err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลรายจ่ายได้',
+        )
       })
       .finally(() => setExpensesLoading(false))
   }
@@ -567,12 +722,16 @@ function AdminBackupPage() {
   }
 
   const openWaitingListForm = (entry = null) => {
-    setWaitingListForm(entry ? {
-      full_name: entry.full_name || '',
-      phone: entry.phone || '',
-      room_preference: entry.room_preference || '',
-      note: entry.note || '',
-    } : emptyWaitingListForm)
+    setWaitingListForm(
+      entry
+        ? {
+            full_name: entry.full_name || '',
+            phone: entry.phone || '',
+            room_preference: entry.room_preference || '',
+            note: entry.note || '',
+          }
+        : emptyWaitingListForm,
+    )
     setWaitingListFormError('')
     setWaitingListModal(entry ? { mode: 'edit', entry } : { mode: 'create' })
   }
@@ -593,7 +752,10 @@ function AdminBackupPage() {
           phone,
           room_preference: waitingListForm.room_preference.trim(),
           note: waitingListForm.note.trim(),
-          submitted_by_name: adminUser ? `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || 'ผู้ดูแลระบบ' : 'ผู้ดูแลระบบ',
+          submitted_by_name: adminUser
+            ? `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() ||
+              'ผู้ดูแลระบบ'
+            : 'ผู้ดูแลระบบ',
         })
       } else {
         updateWaitingListEntry(waitingListModal.entry.id, {
@@ -605,10 +767,16 @@ function AdminBackupPage() {
         })
       }
       setWaitingListFormError('')
-      setSuccessMessage(waitingListModal.mode === 'create' ? 'เพิ่มรายชื่อผู้สนใจสำเร็จ' : 'แก้ไขรายชื่อผู้สนใจสำเร็จ')
+      setSuccessMessage(
+        waitingListModal.mode === 'create'
+          ? 'เพิ่มรายชื่อผู้สนใจสำเร็จ'
+          : 'แก้ไขรายชื่อผู้สนใจสำเร็จ',
+      )
       requestClose()
     } catch {
-      setWaitingListFormError('บันทึกไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+      setWaitingListFormError(
+        'บันทึกไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์',
+      )
     }
   }
 
@@ -616,7 +784,9 @@ function AdminBackupPage() {
     try {
       updateWaitingListEntry(entry.id, { status })
     } catch {
-      setPageError('เปลี่ยนสถานะไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+      setPageError(
+        'เปลี่ยนสถานะไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์',
+      )
     }
   }
 
@@ -632,15 +802,23 @@ function AdminBackupPage() {
 
   const setMoveOutInspectionStatus = (inspection, status) => {
     try {
-      updateMoveOutInspection(inspection.id, { status, reviewed_at: new Date().toISOString() })
-      setInspectionDetail((current) => current?.id === inspection.id ? { ...current, status } : current)
+      updateMoveOutInspection(inspection.id, {
+        status,
+        reviewed_at: new Date().toISOString(),
+      })
+      setInspectionDetail((current) =>
+        current?.id === inspection.id ? { ...current, status } : current,
+      )
     } catch {
-      setPageError('เปลี่ยนสถานะไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์')
+      setPageError(
+        'เปลี่ยนสถานะไม่ได้ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์',
+      )
     }
   }
 
   const removeMoveOutInspection = (inspection) => {
-    if (!window.confirm(`ลบผลตรวจห้อง ${inspection.room_number} หรือไม่?`)) return
+    if (!window.confirm(`ลบผลตรวจห้อง ${inspection.room_number} หรือไม่?`))
+      return
     try {
       deleteMoveOutInspection(inspection.id)
       setSuccessMessage('ลบผลตรวจห้องสำเร็จ')
@@ -682,21 +860,28 @@ function AdminBackupPage() {
     const request =
       expenseModal.mode === 'create'
         ? axios.post('/api/admin/expenses', payload, { headers: authHeaders() })
-        : axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+        : axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload, {
+            headers: authHeaders(),
+          })
 
     request
       .then(() => {
-        setSuccessMessage(expenseModal.mode === 'create' ? 'บันทึกรายจ่ายสำเร็จ' : 'แก้ไขรายจ่ายสำเร็จ')
+        setSuccessMessage(
+          expenseModal.mode === 'create'
+            ? 'บันทึกรายจ่ายสำเร็จ'
+            : 'แก้ไขรายจ่ายสำเร็จ',
+        )
         requestClose()
         loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setExpenseFormError(err.response?.data?.message || 'ไม่สามารถบันทึกรายจ่ายได้')
+        setExpenseFormError(
+          err.response?.data?.message || 'ไม่สามารถบันทึกรายจ่ายได้',
+        )
       })
       .finally(() => setExpenseSubmitting(false))
   }
-
 
   const loadRooms = () => {
     setRoomsLoading(true)
@@ -708,7 +893,9 @@ function AdminBackupPage() {
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setRoomsError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลห้องพักได้')
+        setRoomsError(
+          err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลห้องพักได้',
+        )
       })
       .finally(() => setRoomsLoading(false))
   }
@@ -719,17 +906,23 @@ function AdminBackupPage() {
     const printWindow = window.open('', '_blank', 'width=900,height=720')
     if (!printWindow) {
       setInvoiceGenerating(false)
-      setInvoicePrintError('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัปแล้วลองอีกครั้ง')
+      setInvoicePrintError(
+        'เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัปแล้วลองอีกครั้ง',
+      )
       return
     }
     try {
-      const { data } = await axios.get('/api/staff/rooms', { headers: authHeaders() })
+      const { data } = await axios.get('/api/staff/rooms', {
+        headers: authHeaders(),
+      })
       const count = printMonthlyInvoices(data.rooms, printWindow)
       if (count === 0) {
         setInvoicePrintError('ไม่มีห้องที่มีผู้เช่าให้ออกใบแจ้งหนี้')
         return
       }
-      setSuccessMessage(`เตรียมใบแจ้งหนี้ ${count} ห้องแล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`)
+      setSuccessMessage(
+        `เตรียมใบแจ้งหนี้ ${count} ห้องแล้ว เลือกพิมพ์หรือบันทึกเป็น PDF ได้จากหน้าต่างที่เปิดขึ้น`,
+      )
     } catch (err) {
       printWindow.close()
       if (handleUnauthorized(err)) return
@@ -765,11 +958,17 @@ function AdminBackupPage() {
   const handleRoomFormChange = (event) => {
     const { name, type, value, checked } = event.target
     if (name === 'room_number') {
-      setRoomForm((prev) => ({ ...prev, room_number: value.replace(/\D/g, '').slice(0, 3) }))
+      setRoomForm((prev) => ({
+        ...prev,
+        room_number: value.replace(/\D/g, '').slice(0, 3),
+      }))
       return
     }
     if (name === 'bed') {
-      setRoomForm((prev) => ({ ...prev, bed: value.replace(/\D/g, '').slice(0, 2) }))
+      setRoomForm((prev) => ({
+        ...prev,
+        bed: value.replace(/\D/g, '').slice(0, 2),
+      }))
       return
     }
     if (name === 'electricity_unit_price' || name === 'water_price') {
@@ -778,12 +977,18 @@ function AdminBackupPage() {
       setRoomForm((prev) => ({ ...prev, [name]: value }))
       return
     }
-    setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+    setRoomForm((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }))
   }
 
   const submitRoomForm = async (event, requestClose) => {
     event.preventDefault()
-    if (roomModal.mode === 'create' && !/^[1-9][0-9]{2}$/.test(roomForm.room_number)) {
+    if (
+      roomModal.mode === 'create' &&
+      !/^[1-9][0-9]{2}$/.test(roomForm.room_number)
+    ) {
       setRoomFormError('เลขห้องต้องเป็นตัวเลข 3 หลัก')
       return
     }
@@ -793,7 +998,11 @@ function AdminBackupPage() {
       return
     }
     const electricityValue = Number(roomForm.electricity_unit_price)
-    if (!Number.isFinite(electricityValue) || electricityValue < 0 || electricityValue > 99.99) {
+    if (
+      !Number.isFinite(electricityValue) ||
+      electricityValue < 0 ||
+      electricityValue > 99.99
+    ) {
       setRoomFormError('ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)')
       return
     }
@@ -818,18 +1027,27 @@ function AdminBackupPage() {
     }
     try {
       if (roomModal.mode === 'create') {
-        const { data } = await axios.post('/api/admin/rooms', payload, { headers: authHeaders() })
+        const { data } = await axios.post('/api/admin/rooms', payload, {
+          headers: authHeaders(),
+        })
         setSuccessMessage(data.message || 'สร้างห้องพักสำเร็จ')
       } else {
         const { room_number, ...editable } = payload
         void room_number
-        const { data } = await axios.put(`/api/admin/rooms/${roomModal.room.room_number}`, editable, { headers: authHeaders() })
+        const { data } = await axios.put(
+          `/api/admin/rooms/${roomModal.room.room_number}`,
+          editable,
+          { headers: authHeaders() },
+        )
         setSuccessMessage(data.message || 'แก้ไขข้อมูลห้องพักสำเร็จ')
       }
       requestClose()
       await loadRooms()
     } catch (err) {
-      setRoomFormError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      setRoomFormError(
+        err.response?.data?.message ||
+          'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+      )
     } finally {
       setRoomSubmitting(false)
     }
@@ -838,7 +1056,10 @@ function AdminBackupPage() {
   const confirmDeleteRoom = async (requestClose) => {
     if (!roomDeleteConfirm) return
     try {
-      const { data } = await axios.delete(`/api/admin/rooms/${roomDeleteConfirm.room_number}`, { headers: authHeaders() })
+      const { data } = await axios.delete(
+        `/api/admin/rooms/${roomDeleteConfirm.room_number}`,
+        { headers: authHeaders() },
+      )
       setSuccessMessage(data.message || 'ลบห้องพักสำเร็จ')
       requestClose()
       await loadRooms()
@@ -853,13 +1074,26 @@ function AdminBackupPage() {
     const matched = !keyword
       ? rooms
       : rooms.filter((room) => {
-          const tenantName = room.customer_id ? `${room.first_name} ${room.last_name}`.toLowerCase() : ''
-          return String(room.room_number).includes(keyword) || tenantName.includes(keyword) || (room.phone || '').includes(keyword)
+          const tenantName = room.customer_id
+            ? `${room.first_name} ${room.last_name}`.toLowerCase()
+            : ''
+          return (
+            String(room.room_number).includes(keyword) ||
+            tenantName.includes(keyword) ||
+            (room.phone || '').includes(keyword)
+          )
         })
-    return [...matched].sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
+    return [...matched].sort(
+      (a, b) =>
+        Number(a.is_booked) - Number(b.is_booked) ||
+        a.room_number - b.room_number,
+    )
   }, [rooms, roomSearch])
 
-  const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROWS_PER_PAGE))
+  const roomsTotalPages = Math.max(
+    1,
+    Math.ceil(filteredRooms.length / ROWS_PER_PAGE),
+  )
   const currentRoomsPage = Math.min(roomsPage, roomsTotalPages)
   const paginatedRooms = useMemo(() => {
     const start = (currentRoomsPage - 1) * ROWS_PER_PAGE
@@ -884,7 +1118,9 @@ function AdminBackupPage() {
   const [staffFormError, setStaffFormError] = useState('')
   const [staffDeleteConfirm, setStaffDeleteConfirm] = useState(null)
   const [staffSuspendConfirm, setStaffSuspendConfirm] = useState(null)
-  const [revealedStaffIdCards, setRevealedStaffIdCards] = useState(() => new Set())
+  const [revealedStaffIdCards, setRevealedStaffIdCards] = useState(
+    () => new Set(),
+  )
 
   const toggleStaffIdCardReveal = (id) => {
     setRevealedStaffIdCards((prev) => {
@@ -905,7 +1141,9 @@ function AdminBackupPage() {
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setStaffError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลพนักงานได้')
+        setStaffError(
+          err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลพนักงานได้',
+        )
       })
       .finally(() => setStaffLoading(false))
   }
@@ -940,7 +1178,9 @@ function AdminBackupPage() {
     setStaffFormError('')
     try {
       if (staffModal.mode === 'create') {
-        const { data } = await axios.post('/api/admin/staff', staffForm, { headers: authHeaders() })
+        const { data } = await axios.post('/api/admin/staff', staffForm, {
+          headers: authHeaders(),
+        })
         setSuccessMessage(data.message || 'เพิ่มพนักงานสำเร็จ')
       } else {
         const payload = {
@@ -950,13 +1190,20 @@ function AdminBackupPage() {
           age: Number(staffForm.age),
         }
         if (staffForm.password) payload.password = staffForm.password
-        const { data } = await axios.put(`/api/admin/staff/${staffModal.staff.id}`, payload, { headers: authHeaders() })
+        const { data } = await axios.put(
+          `/api/admin/staff/${staffModal.staff.id}`,
+          payload,
+          { headers: authHeaders() },
+        )
         setSuccessMessage(data.message || 'แก้ไขข้อมูลพนักงานสำเร็จ')
       }
       requestClose()
       await loadStaff()
     } catch (err) {
-      setStaffFormError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      setStaffFormError(
+        err.response?.data?.message ||
+          'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+      )
     } finally {
       setStaffSubmitting(false)
     }
@@ -981,7 +1228,10 @@ function AdminBackupPage() {
   const confirmDeleteStaff = async (requestClose) => {
     if (!staffDeleteConfirm) return
     try {
-      const { data } = await axios.delete(`/api/admin/staff/${staffDeleteConfirm.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(
+        `/api/admin/staff/${staffDeleteConfirm.id}`,
+        { headers: authHeaders() },
+      )
       setSuccessMessage(data.message || 'ลบพนักงานสำเร็จ')
       requestClose()
       await loadStaff()
@@ -996,11 +1246,18 @@ function AdminBackupPage() {
     if (!keyword) return staffList
     return staffList.filter((member) => {
       const name = `${member.first_name} ${member.last_name}`.toLowerCase()
-      return name.includes(keyword) || member.phone.includes(keyword) || member.idcard.includes(keyword)
+      return (
+        name.includes(keyword) ||
+        member.phone.includes(keyword) ||
+        member.idcard.includes(keyword)
+      )
     })
   }, [staffList, staffSearch])
 
-  const staffTotalPages = Math.max(1, Math.ceil(filteredStaff.length / ROWS_PER_PAGE))
+  const staffTotalPages = Math.max(
+    1,
+    Math.ceil(filteredStaff.length / ROWS_PER_PAGE),
+  )
   const currentStaffPage = Math.min(staffPage, staffTotalPages)
   const paginatedStaff = useMemo(() => {
     const start = (currentStaffPage - 1) * ROWS_PER_PAGE
@@ -1031,7 +1288,9 @@ function AdminBackupPage() {
   const [customerSuspendConfirm, setCustomerSuspendConfirm] = useState(null)
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false)
   const [customerDetailError, setCustomerDetailError] = useState('')
-  const [revealedCustomerIdCards, setRevealedCustomerIdCards] = useState(() => new Set())
+  const [revealedCustomerIdCards, setRevealedCustomerIdCards] = useState(
+    () => new Set(),
+  )
 
   const toggleCustomerIdCardReveal = (id) => {
     setRevealedCustomerIdCards((prev) => {
@@ -1046,14 +1305,19 @@ function AdminBackupPage() {
   const loadCustomers = (search = customerSearch) => {
     setCustomersLoading(true)
     return axios
-      .get('/api/admin/customers', { headers: authHeaders(), params: { search: search || undefined } })
+      .get('/api/admin/customers', {
+        headers: authHeaders(),
+        params: { search: search || undefined },
+      })
       .then(({ data }) => {
         setCustomers(data.customers)
         setCustomersError('')
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setCustomersError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลลูกค้าได้')
+        setCustomersError(
+          err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลลูกค้าได้',
+        )
       })
       .finally(() => setCustomersLoading(false))
   }
@@ -1075,7 +1339,8 @@ function AdminBackupPage() {
       last_name: customer.last_name,
       phone: customer.phone,
       age: String(customer.age),
-      deposit_amount: customer.deposit_amount != null ? String(customer.deposit_amount) : '',
+      deposit_amount:
+        customer.deposit_amount != null ? String(customer.deposit_amount) : '',
     })
     setCustomerFormError('')
     setCustomerModal(customer)
@@ -1096,14 +1361,24 @@ function AdminBackupPage() {
         last_name: customerForm.last_name,
         phone: customerForm.phone,
         age: Number(customerForm.age),
-        deposit_amount: customerForm.deposit_amount === '' ? null : Number(customerForm.deposit_amount),
+        deposit_amount:
+          customerForm.deposit_amount === ''
+            ? null
+            : Number(customerForm.deposit_amount),
       }
-      const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload, { headers: authHeaders() })
+      const { data } = await axios.put(
+        `/api/admin/customers/${customerModal.id}`,
+        payload,
+        { headers: authHeaders() },
+      )
       setSuccessMessage(data.message || 'แก้ไขข้อมูลลูกค้าสำเร็จ')
       requestClose()
       await loadCustomers()
     } catch (err) {
-      setCustomerFormError(err.response?.data?.message || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      setCustomerFormError(
+        err.response?.data?.message ||
+          'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+      )
     } finally {
       setCustomerSubmitting(false)
     }
@@ -1131,10 +1406,17 @@ function AdminBackupPage() {
     setCustomerDetailLoading(true)
     setRentalPaymentsPage({})
     try {
-      const { data } = await axios.get(`/api/admin/customers/${customer.id}`, { headers: authHeaders() })
-      setCustomerDetail({ customer: data.customer, rentalHistory: data.rentalHistory })
+      const { data } = await axios.get(`/api/admin/customers/${customer.id}`, {
+        headers: authHeaders(),
+      })
+      setCustomerDetail({
+        customer: data.customer,
+        rentalHistory: data.rentalHistory,
+      })
     } catch (err) {
-      setCustomerDetailError(err.response?.data?.message || 'ไม่สามารถโหลดรายละเอียดลูกค้าได้')
+      setCustomerDetailError(
+        err.response?.data?.message || 'ไม่สามารถโหลดรายละเอียดลูกค้าได้',
+      )
     } finally {
       setCustomerDetailLoading(false)
     }
@@ -1143,75 +1425,128 @@ function AdminBackupPage() {
   const filteredCustomers = useMemo(() => {
     if (customerStatusFilter === 'all') return customers
     const wantSuspended = customerStatusFilter === 'suspended'
-    return customers.filter((customer) => Boolean(customer.is_suspended) === wantSuspended)
+    return customers.filter(
+      (customer) => Boolean(customer.is_suspended) === wantSuspended,
+    )
   }, [customers, customerStatusFilter])
 
-  const customersTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / ROWS_PER_PAGE))
+  const customersTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCustomers.length / ROWS_PER_PAGE),
+  )
   const currentCustomersPage = Math.min(customersPage, customersTotalPages)
   const paginatedCustomers = useMemo(() => {
     const start = (currentCustomersPage - 1) * ROWS_PER_PAGE
     return filteredCustomers.slice(start, start + ROWS_PER_PAGE)
   }, [filteredCustomers, currentCustomersPage])
 
-  const [expandedCustomerRows, toggleCustomerRow, resetCustomerRows] = useExpandedRows()
+  const [expandedCustomerRows, toggleCustomerRow, resetCustomerRows] =
+    useExpandedRows()
   useEffect(() => {
     resetCustomerRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCustomersPage, activeTab])
 
-  const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
+  const [requestLogs, setRequestLogs] = useState({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+  })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
   const [requestLogsError, setRequestLogsError] = useState('')
   const [requestStatusFilter, setRequestStatusFilter] = useState('all')
   const [requestSearch, setRequestSearch] = useState('')
 
-  const loadRequestLogs = (page = 1, status = requestStatusFilter, search = requestSearch) => {
+  const loadRequestLogs = (
+    page = 1,
+    status = requestStatusFilter,
+    search = requestSearch,
+  ) => {
     setRequestLogsLoading(true)
     return axios
       .get('/api/admin/logs/requests', {
         headers: authHeaders(),
-        params: { page, status: status !== 'all' ? status : undefined, search: search || undefined },
+        params: {
+          page,
+          status: status !== 'all' ? status : undefined,
+          search: search || undefined,
+        },
       })
       .then(({ data }) => {
-        setRequestLogs({ items: data.requests, total: data.total, page: data.page, pageSize: data.pageSize })
+        setRequestLogs({
+          items: data.requests,
+          total: data.total,
+          page: data.page,
+          pageSize: data.pageSize,
+        })
         setRequestLogsError('')
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setRequestLogsError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติคำขอได้')
+        setRequestLogsError(
+          err.response?.data?.message || 'ไม่สามารถโหลดประวัติคำขอได้',
+        )
       })
       .finally(() => setRequestLogsLoading(false))
   }
 
-  const [maintenanceLogs, setMaintenanceLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
+  const [maintenanceLogs, setMaintenanceLogs] = useState({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+  })
   const [maintenanceLogsLoading, setMaintenanceLogsLoading] = useState(false)
   const [maintenanceLogsError, setMaintenanceLogsError] = useState('')
   const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState('all')
   const [maintenanceSearch, setMaintenanceSearch] = useState('')
 
-  const loadMaintenanceLogs = (page = 1, status = maintenanceStatusFilter, search = maintenanceSearch) => {
+  const loadMaintenanceLogs = (
+    page = 1,
+    status = maintenanceStatusFilter,
+    search = maintenanceSearch,
+  ) => {
     setMaintenanceLogsLoading(true)
     return axios
       .get('/api/admin/logs/maintenance', {
         headers: authHeaders(),
-        params: { page, status: status !== 'all' ? status : undefined, search: search || undefined },
+        params: {
+          page,
+          status: status !== 'all' ? status : undefined,
+          search: search || undefined,
+        },
       })
       .then(({ data }) => {
-        setMaintenanceLogs({ items: data.requests, total: data.total, page: data.page, pageSize: data.pageSize })
+        setMaintenanceLogs({
+          items: data.requests,
+          total: data.total,
+          page: data.page,
+          pageSize: data.pageSize,
+        })
         setMaintenanceLogsError('')
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setMaintenanceLogsError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติแจ้งซ่อมได้')
+        setMaintenanceLogsError(
+          err.response?.data?.message || 'ไม่สามารถโหลดประวัติแจ้งซ่อมได้',
+        )
       })
       .finally(() => setMaintenanceLogsLoading(false))
   }
 
-  const [moveoutLogs, setMoveoutLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
+  const [moveoutLogs, setMoveoutLogs] = useState({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+  })
   const [moveoutLogsLoading, setMoveoutLogsLoading] = useState(false)
   const [moveoutLogsError, setMoveoutLogsError] = useState('')
   const [moveoutSearch, setMoveoutSearch] = useState('')
-  const [revealedMoveoutIdCards, setRevealedMoveoutIdCards] = useState(() => new Set())
+  const [revealedMoveoutIdCards, setRevealedMoveoutIdCards] = useState(
+    () => new Set(),
+  )
 
   const toggleMoveoutIdCardReveal = (id) => {
     setRevealedMoveoutIdCards((prev) => {
@@ -1230,23 +1565,36 @@ function AdminBackupPage() {
         params: { page, search: search || undefined },
       })
       .then(({ data }) => {
-        setMoveoutLogs({ items: data.moveouts, total: data.total, page: data.page, pageSize: data.pageSize })
+        setMoveoutLogs({
+          items: data.moveouts,
+          total: data.total,
+          page: data.page,
+          pageSize: data.pageSize,
+        })
         setMoveoutLogsError('')
       })
       .catch((err) => {
         if (handleUnauthorized(err)) return
-        setMoveoutLogsError(err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อผู้ย้ายออกได้')
+        setMoveoutLogsError(
+          err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อผู้ย้ายออกได้',
+        )
       })
       .finally(() => setMoveoutLogsLoading(false))
   }
 
   const loadNotifSources = () => {
     axios
-      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { page: 1 } })
+      .get('/api/admin/logs/requests', {
+        headers: authHeaders(),
+        params: { page: 1 },
+      })
       .then(({ data }) => setNotifTenantItems(data.requests))
       .catch((err) => handleUnauthorized(err))
     axios
-      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { page: 1 } })
+      .get('/api/admin/logs/maintenance', {
+        headers: authHeaders(),
+        params: { page: 1 },
+      })
       .then(({ data }) => setNotifMaintenanceItems(data.requests))
       .catch((err) => handleUnauthorized(err))
   }
@@ -1283,8 +1631,10 @@ function AdminBackupPage() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
-    if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
+    if (activeTab === 'requests')
+      loadRequestLogs(1, requestStatusFilter, requestSearch)
+    if (activeTab === 'maintenance')
+      loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
     if (activeTab === 'moveouts') loadMoveoutLogs(1, moveoutSearch)
     if (activeTab === 'expenses') loadExpenses(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1297,7 +1647,10 @@ function AdminBackupPage() {
       return
     }
     if (activeTab !== 'requests') return
-    const timeout = setTimeout(() => loadRequestLogs(1, requestStatusFilter, requestSearch), 400)
+    const timeout = setTimeout(
+      () => loadRequestLogs(1, requestStatusFilter, requestSearch),
+      400,
+    )
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestSearch])
@@ -1309,7 +1662,10 @@ function AdminBackupPage() {
       return
     }
     if (activeTab !== 'maintenance') return
-    const timeout = setTimeout(() => loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch), 400)
+    const timeout = setTimeout(
+      () => loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch),
+      400,
+    )
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maintenanceSearch])
@@ -1335,16 +1691,32 @@ function AdminBackupPage() {
   const summary = useMemo(() => {
     const totalRooms = rooms.length
     const vacantRooms = rooms.filter((room) => !room.is_booked).length
-    const activeStaff = staffList.filter((member) => !member.is_suspended).length
-    const activeCustomers = customers.filter((customer) => !customer.is_suspended).length
+    const activeStaff = staffList.filter(
+      (member) => !member.is_suspended,
+    ).length
+    const activeCustomers = customers.filter(
+      (customer) => !customer.is_suspended,
+    ).length
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
 
   const filteredWaitingList = waitingList.filter((entry) => {
-    const matchesStatus = waitingListStatus === 'all' || entry.status === waitingListStatus
+    const matchesStatus =
+      waitingListStatus === 'all' || entry.status === waitingListStatus
     const search = waitingListSearch.trim().toLocaleLowerCase('th-TH')
-    const matchesSearch = !search || [entry.full_name, entry.phone, entry.room_preference, entry.note, entry.submitted_by_name]
-      .some((value) => String(value || '').toLocaleLowerCase('th-TH').includes(search))
+    const matchesSearch =
+      !search ||
+      [
+        entry.full_name,
+        entry.phone,
+        entry.room_preference,
+        entry.note,
+        entry.submitted_by_name,
+      ].some((value) =>
+        String(value || '')
+          .toLocaleLowerCase('th-TH')
+          .includes(search),
+      )
     return matchesStatus && matchesSearch
   })
 
@@ -1356,34 +1728,167 @@ function AdminBackupPage() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [notifTenantItems, notifMaintenanceItems, staffList])
 
-  const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
+  const notifTotalPages = Math.max(
+    1,
+    Math.ceil(notifications.length / NOTIF_PAGE_SIZE),
+  )
   const notifCurrentPage = Math.min(notifPage, notifTotalPages)
   const paginatedNotifications = notifications.slice(
     (notifCurrentPage - 1) * NOTIF_PAGE_SIZE,
     notifCurrentPage * NOTIF_PAGE_SIZE,
   )
 
-  const requestLogsTotalPages = Math.max(1, Math.ceil(requestLogs.total / requestLogs.pageSize))
-  const maintenanceLogsTotalPages = Math.max(1, Math.ceil(maintenanceLogs.total / maintenanceLogs.pageSize))
-  const moveoutLogsTotalPages = Math.max(1, Math.ceil(moveoutLogs.total / moveoutLogs.pageSize))
+  const requestLogsTotalPages = Math.max(
+    1,
+    Math.ceil(requestLogs.total / requestLogs.pageSize),
+  )
+  const maintenanceLogsTotalPages = Math.max(
+    1,
+    Math.ceil(maintenanceLogs.total / maintenanceLogs.pageSize),
+  )
+  const moveoutLogsTotalPages = Math.max(
+    1,
+    Math.ceil(moveoutLogs.total / moveoutLogs.pageSize),
+  )
 
-  const [expandedRequestRows, toggleRequestRow, resetRequestRows] = useExpandedRows()
+  const [expandedRequestRows, toggleRequestRow, resetRequestRows] =
+    useExpandedRows()
   useEffect(() => {
     resetRequestRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestLogs.page, activeTab])
 
-  const [expandedMaintenanceRows, toggleMaintenanceRow, resetMaintenanceRows] = useExpandedRows()
+  const [expandedMaintenanceRows, toggleMaintenanceRow, resetMaintenanceRows] =
+    useExpandedRows()
   useEffect(() => {
     resetMaintenanceRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maintenanceLogs.page, activeTab])
 
-  const [expandedMoveoutRows, toggleMoveoutRow, resetMoveoutRows] = useExpandedRows()
+  const [expandedMoveoutRows, toggleMoveoutRow, resetMoveoutRows] =
+    useExpandedRows()
   useEffect(() => {
     resetMoveoutRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moveoutLogs.page, activeTab])
+
+  /* ------------------------------- Dorm Settings & Export -------------------------------- */
+  const [dormConfig, setDormConfig] = useState({
+    dorm_name: 'หอพักใจ',
+    promptpay_id: '',
+    bank_account_no: '',
+    bank_name: '',
+    bank_account_name: 'หอพักใจ',
+    billing_due_day: 5,
+    grace_period_days: 3,
+    late_fee_per_day: 50,
+    dorm_rules: '',
+  })
+  const [configLoading, setConfigLoading] = useState(false)
+  const [configSubmitting, setConfigSubmitting] = useState(false)
+
+  const loadDormConfig = () => {
+    setConfigLoading(true)
+    axios
+      .get('/api/admin/config', { headers: authHeaders() })
+      .then(({ data }) => {
+        if (data.config) setDormConfig(data.config)
+      })
+      .catch((err) => handleUnauthorized(err))
+      .finally(() => setConfigLoading(false))
+  }
+
+  useEffect(() => {
+    if (activeTab === 'settings') loadDormConfig()
+  }, [activeTab])
+
+  const handleSaveConfig = async (e) => {
+    e.preventDefault()
+    setConfigSubmitting(true)
+    try {
+      const { data } = await axios.put('/api/admin/config', dormConfig, {
+        headers: authHeaders(),
+      })
+      setSuccessMessage(data.message || 'บันทึกการตั้งค่าหอพักใจเรียบร้อยแล้ว')
+    } catch (err) {
+      setPageError(err.response?.data?.message || 'บันทึกการตั้งค่าไม่สำเร็จ')
+    } finally {
+      setConfigSubmitting(false)
+    }
+  }
+
+  const handleExportCustomers = () => {
+    const headers = [
+      { key: 'room_number', label: 'เลขห้อง' },
+      { key: 'first_name', label: 'ชื่อ' },
+      { key: 'last_name', label: 'นามสกุล' },
+      { key: 'idcard', label: 'เลขบัตรประชาชน' },
+      { key: 'phone', label: 'เบอร์โทรศัพท์' },
+      { key: 'age', label: 'อายุ' },
+      { key: 'deposit_amount', label: 'เงินมัดจำ (บาท)' },
+      { key: 'rental_start_date', label: 'วันเริ่มสัญญา' },
+      { key: 'rental_end_date', label: 'วันสิ้นสุดสัญญา' },
+      { key: 'status_label', label: 'สถานะ' },
+    ]
+    const rows = filteredCustomers.map((c) => ({
+      ...c,
+      status_label: c.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ',
+    }))
+    exportToExcel('รายชื่อผู้เช่า_หอพักใจ', headers, rows, {
+      textKeys: ['idcard', 'phone'],
+    })
+  }
+
+  const handleExportExpenses = async () => {
+    const headers = [
+      { key: 'expense_date', label: 'วันที่' },
+      { key: 'category', label: 'หมวดหมู่' },
+      { key: 'description', label: 'รายละเอียด' },
+      { key: 'amount', label: 'จำนวนเงิน (บาท)' },
+      { key: 'recorded_by_name', label: 'บันทึกโดย' },
+    ]
+    try {
+      const { data } = await axios.get('/api/admin/expenses', {
+        headers: authHeaders(),
+        params: { all: 'true' },
+      })
+      const expensesForExport = data.expenses.map((expense) => ({
+        ...expense,
+        expense_date: String(expense.expense_date || '').slice(0, 10),
+      }))
+      exportToCSV('รายจ่าย_หอพักใจ', headers, expensesForExport, {
+        textKeys: ['expense_date'],
+      })
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setExpensesError(err.response?.data?.message || 'ไม่สามารถ Export รายจ่ายได้')
+    }
+  }
+
+  const handleExportMoveouts = async () => {
+    const headers = [
+      { key: 'room_number', label: 'เลขห้อง' },
+      { key: 'first_name', label: 'ชื่อ' },
+      { key: 'last_name', label: 'นามสกุล' },
+      { key: 'phone', label: 'เบอร์โทรศัพท์' },
+      { key: 'move_in_date', label: 'วันที่เข้าพัก' },
+      { key: 'completed_at', label: 'วันที่ย้ายออก' },
+      { key: 'completed_by_name', label: 'ดำเนินการโดย' },
+      { key: 'note', label: 'หมายเหตุ' },
+    ]
+    try {
+      const { data } = await axios.get('/api/admin/logs/moveouts', {
+        headers: authHeaders(),
+        params: { all: 'true', search: moveoutSearch || undefined },
+      })
+      exportToCSV('ประวัติผู้ย้ายออก_หอพักใจ', headers, data.moveouts, {
+        textKeys: ['phone'],
+      })
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setMoveoutLogsError(err.response?.data?.message || 'ไม่สามารถ Export ประวัติย้ายออกได้')
+    }
+  }
 
   return (
     <div className="admin-page">
@@ -1391,13 +1896,31 @@ function AdminBackupPage() {
         <div className="admin-header">
           <div className="admin-title-group">
             <div className="admin-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4Z" />
               </svg>
             </div>
             <div>
-              <h1>สวัสดี, {adminUser ? `${adminUser.first_name} ${adminUser.last_name}` : 'ผู้ดูแลระบบ'}</h1>
-              <p>แดชบอร์ดผู้ดูแลระบบ - จัดการห้องพัก พนักงาน ลูกค้า และตรวจสอบกิจกรรม</p>
+              <h1>
+                สวัสดี,{' '}
+                {adminUser
+                  ? `${adminUser.first_name} ${adminUser.last_name}`
+                  : 'ผู้ดูแลระบบ'}
+              </h1>
+              <p>
+                แดชบอร์ดผู้ดูแลระบบ - จัดการห้องพัก พนักงาน ลูกค้า
+                และตรวจสอบกิจกรรม
+              </p>
             </div>
           </div>
           <div className="admin-header-actions">
@@ -1416,11 +1939,23 @@ function AdminBackupPage() {
                   }
                 }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {!notifSeen && notifications.length > 0 && <span className="admin-notif-dot" />}
+                {!notifSeen && notifications.length > 0 && (
+                  <span className="admin-notif-dot" />
+                )}
               </button>
               {notifOpen && (
                 <div
@@ -1434,8 +1969,23 @@ function AdminBackupPage() {
                 >
                   <div className="admin-notif-panel-header">
                     <span>การแจ้งเตือน</span>
-                    <button type="button" className="admin-notif-panel-close" onClick={closeNotifPanel} aria-label="ปิด">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <button
+                      type="button"
+                      className="admin-notif-panel-close"
+                      onClick={closeNotifPanel}
+                      aria-label="ปิด"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
@@ -1453,9 +2003,15 @@ function AdminBackupPage() {
                             className={`admin-notif-item is-${notif.tone}`}
                             onClick={() => setNotifDetail(notif)}
                           >
-                            <p className="admin-notif-item-title">{notif.title}</p>
-                            <p className="admin-notif-item-status">{notif.label}</p>
-                            <p className="admin-notif-item-date">{formatDateTime(notif.date)}</p>
+                            <p className="admin-notif-item-title">
+                              {notif.title}
+                            </p>
+                            <p className="admin-notif-item-status">
+                              {notif.label}
+                            </p>
+                            <p className="admin-notif-item-date">
+                              {formatDateTime(notif.date)}
+                            </p>
                           </button>
                         ))}
                       </div>
@@ -1465,7 +2021,9 @@ function AdminBackupPage() {
                             type="button"
                             className="admin-notif-page-btn"
                             disabled={notifCurrentPage <= 1}
-                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
+                            onClick={() =>
+                              setNotifPage(Math.max(1, notifCurrentPage - 1))
+                            }
                           >
                             ก่อนหน้า
                           </button>
@@ -1476,7 +2034,11 @@ function AdminBackupPage() {
                             type="button"
                             className="admin-notif-page-btn"
                             disabled={notifCurrentPage >= notifTotalPages}
-                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
+                            onClick={() =>
+                              setNotifPage(
+                                Math.min(notifTotalPages, notifCurrentPage + 1),
+                              )
+                            }
                           >
                             ถัดไป
                           </button>
@@ -1487,18 +2049,36 @@ function AdminBackupPage() {
                 </div>
               )}
             </div>
-            <button type="button" className="admin-logout-btn" onClick={handleLogout}>
+            <button
+              type="button"
+              className="admin-logout-btn"
+              onClick={handleLogout}
+            >
               ออกจากระบบ
             </button>
           </div>
         </div>
 
         {notifDetail && (
-          <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
+          <Modal
+            title={notifDetail.title}
+            onClose={() => setNotifDetail(null)}
+            variant="confirm"
+          >
             {(requestClose) => (
               <div className="admin-confirm-body">
                 <div className={`admin-confirm-icon is-${notifDetail.tone}`}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
                     {notifDetail.tone === 'info' ? (
                       <>
                         <circle cx="12" cy="12" r="10" />
@@ -1514,21 +2094,35 @@ function AdminBackupPage() {
                   </svg>
                 </div>
                 <p className="admin-confirm-message">
-                  <span className={`admin-confirm-message-status is-${notifDetail.tone}`}>{notifDetail.label}</span>
+                  <span
+                    className={`admin-confirm-message-status is-${notifDetail.tone}`}
+                  >
+                    {notifDetail.label}
+                  </span>
                 </p>
                 {notifDetail.details && notifDetail.details.length > 0 && (
                   <div className="admin-confirm-details">
                     {notifDetail.details.map((item) => (
-                      <div className="admin-confirm-detail-row" key={item.label}>
+                      <div
+                        className="admin-confirm-detail-row"
+                        key={item.label}
+                      >
                         <span>{item.label}</span>
                         <strong>{item.value}</strong>
                       </div>
                     ))}
                   </div>
                 )}
-                <AdminRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
+                <AdminRequestTimeline
+                  kind={notifDetail.kind}
+                  request={notifDetail.request}
+                />
                 <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-primary" onClick={requestClose}>
+                  <button
+                    type="button"
+                    className="admin-action-btn is-primary"
+                    onClick={requestClose}
+                  >
                     ปิด
                   </button>
                 </div>
@@ -1540,22 +2134,45 @@ function AdminBackupPage() {
         {pageError && (
           <div className="alert alert-danger admin-alert" role="alert">
             {pageError}
-            <button type="button" className="btn-close float-end" onClick={() => setPageError('')} aria-label="ปิด" />
+            <button
+              type="button"
+              className="btn-close float-end"
+              onClick={() => setPageError('')}
+              aria-label="ปิด"
+            />
           </div>
         )}
 
         {successMessage && (
-          <Modal title="สำเร็จ" onClose={() => setSuccessMessage('')} variant="confirm">
+          <Modal
+            title="สำเร็จ"
+            onClose={() => setSuccessMessage('')}
+            variant="confirm"
+            className="admin-modal-success"
+            showCloseButton={false}
+          >
             {(requestClose) => (
               <div className="admin-confirm-body">
                 <div className="admin-confirm-icon is-success">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
                 <p className="admin-confirm-message">{successMessage}</p>
                 <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-primary" onClick={requestClose}>
+                  <button
+                    type="button"
+                    className="admin-action-btn is-primary"
+                    onClick={requestClose}
+                  >
                     ปิด
                   </button>
                 </div>
@@ -1567,7 +2184,17 @@ function AdminBackupPage() {
         <div className="admin-summary-grid">
           <div className="admin-summary-card">
             <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M3 10.5 12 3l9 7.5" />
                 <path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9" />
               </svg>
@@ -1579,7 +2206,17 @@ function AdminBackupPage() {
           </div>
           <div className="admin-summary-card is-vacant">
             <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <circle cx="12" cy="12" r="9" />
                 <polyline points="8 12.5 11 15.5 16 9.5" />
               </svg>
@@ -1591,7 +2228,17 @@ function AdminBackupPage() {
           </div>
           <div className="admin-summary-card is-staff">
             <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <circle cx="12" cy="8" r="3.3" />
                 <path d="M5.5 20c0-3.9 2.9-7 6.5-7s6.5 3.1 6.5 7" />
               </svg>
@@ -1603,7 +2250,17 @@ function AdminBackupPage() {
           </div>
           <div className="admin-summary-card is-customer">
             <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <circle cx="9" cy="8.5" r="3" />
                 <path d="M3.5 20c0-3.3 2.5-6 5.5-6s5.5 2.7 5.5 6" />
                 <path d="M15 4.3a3 3 0 0 1 0 5.7" />
@@ -1612,12 +2269,22 @@ function AdminBackupPage() {
             </div>
             <div className="admin-summary-text">
               <span className="admin-summary-label">ลูกค้าที่ใช้งานอยู่</span>
-              <span className="admin-summary-value">{summary.activeCustomers}</span>
+              <span className="admin-summary-value">
+                {summary.activeCustomers}
+              </span>
             </div>
           </div>
         </div>
 
-        <AnnouncementBoard canManage author={adminUser ? `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() || 'ผู้ดูแลระบบ' : 'ผู้ดูแลระบบ'} />
+        <AnnouncementBoard
+          canManage
+          author={
+            adminUser
+              ? `${adminUser.first_name || ''} ${adminUser.last_name || ''}`.trim() ||
+                'ผู้ดูแลระบบ'
+              : 'ผู้ดูแลระบบ'
+          }
+        />
 
         <ul className="nav nav-tabs admin-tabs">
           {TABS.map((tab) => (
@@ -1657,17 +2324,30 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="admin-filters">
-                <button type="button" className="admin-action-btn is-ghost" onClick={handlePrintMonthlyInvoices} disabled={invoiceGenerating}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={handlePrintMonthlyInvoices}
+                  disabled={invoiceGenerating}
+                >
                   {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้รวม / PDF'}
                 </button>
-                <button type="button" className="admin-action-btn is-primary" onClick={openCreateRoom}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-primary"
+                  onClick={openCreateRoom}
+                >
                   + เพิ่มห้องพัก
                 </button>
               </div>
             </div>
 
-            {invoicePrintError && <div className="alert alert-danger">{invoicePrintError}</div>}
-            {roomsError && <div className="alert alert-danger">{roomsError}</div>}
+            {invoicePrintError && (
+              <div className="alert alert-danger">{invoicePrintError}</div>
+            )}
+            {roomsError && (
+              <div className="alert alert-danger">{roomsError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -1698,23 +2378,41 @@ function AdminBackupPage() {
                     paginatedRooms.map((room) => (
                       <Fragment key={room.id}>
                         <tr>
-                          <td className="admin-strong-cell">{room.room_number}</td>
+                          <td className="admin-strong-cell">
+                            {room.room_number}
+                          </td>
                           <td>
-                            <span className={`admin-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
+                            <span
+                              className={`admin-badge status-${room.is_booked ? 'booked' : 'vacant'}`}
+                            >
                               {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
                             </span>
                           </td>
-                          <td className="admin-price-cell">฿{formatCurrency(room.price)}</td>
+                          <td className="admin-price-cell">
+                            ฿{formatCurrency(room.price)}
+                          </td>
                           <td className="admin-col-optional admin-amenities-cell">
                             <AmenitiesList room={room} />
                           </td>
-                          <td>{room.customer_id ? `${room.first_name} ${room.last_name}` : '-'}</td>
+                          <td>
+                            {room.customer_id
+                              ? `${room.first_name} ${room.last_name}`
+                              : '-'}
+                          </td>
                           <td className="admin-col-optional">
                             <div className="admin-row-actions">
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
+                              <button
+                                type="button"
+                                className="admin-action-btn is-ghost"
+                                onClick={() => openEditRoom(room)}
+                              >
                                 แก้ไข
                               </button>
-                              <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
+                              <button
+                                type="button"
+                                className="admin-action-btn is-danger"
+                                onClick={() => setRoomDeleteConfirm(room)}
+                              >
                                 ลบ
                               </button>
                             </div>
@@ -1729,15 +2427,26 @@ function AdminBackupPage() {
                           open={expandedRoomRows.has(room.room_number)}
                           colSpan={6}
                           fields={[
-                            { label: 'สิ่งอำนวยความสะดวก', value: <AmenitiesList room={room} /> },
+                            {
+                              label: 'สิ่งอำนวยความสะดวก',
+                              value: <AmenitiesList room={room} />,
+                            },
                             {
                               label: 'การดำเนินการ',
                               value: (
                                 <div className="admin-row-actions">
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn is-ghost"
+                                    onClick={() => openEditRoom(room)}
+                                  >
                                     แก้ไข
                                   </button>
-                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn is-danger"
+                                    onClick={() => setRoomDeleteConfirm(room)}
+                                  >
                                     ลบ
                                   </button>
                                 </div>
@@ -1751,7 +2460,11 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={currentRoomsPage} totalPages={roomsTotalPages} onChange={setRoomsPage} />
+            <Pagination
+              page={currentRoomsPage}
+              totalPages={roomsTotalPages}
+              onChange={setRoomsPage}
+            />
           </div>
         )}
 
@@ -1779,13 +2492,19 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="admin-filters">
-                <button type="button" className="admin-action-btn is-primary" onClick={openCreateStaff}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-primary"
+                  onClick={openCreateStaff}
+                >
                   + เพิ่มพนักงาน
                 </button>
               </div>
             </div>
 
-            {staffError && <div className="alert alert-danger">{staffError}</div>}
+            {staffError && (
+              <div className="alert alert-danger">{staffError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -1825,19 +2544,31 @@ function AdminBackupPage() {
                               className="admin-idcard-toggle"
                               onClick={() => toggleStaffIdCardReveal(member.id)}
                             >
-                              {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                              {revealedStaffIdCards.has(member.id)
+                                ? member.idcard
+                                : '•'.repeat(
+                                    String(member.idcard || '').length || 13,
+                                  )}
                             </button>
                           </td>
                           <td>{member.phone}</td>
                           <td className="admin-col-optional">{member.age}</td>
                           <td>
-                            <span className={`admin-badge status-${member.is_suspended ? 'suspended' : 'active'}`}>
-                              {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                            <span
+                              className={`admin-badge status-${member.is_suspended ? 'suspended' : 'active'}`}
+                            >
+                              {member.is_suspended
+                                ? 'ระงับการใช้งาน'
+                                : 'ใช้งานปกติ'}
                             </span>
                           </td>
                           <td className="admin-col-optional">
                             <div className="admin-row-actions">
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
+                              <button
+                                type="button"
+                                className="admin-action-btn is-ghost"
+                                onClick={() => openEditStaff(member)}
+                              >
                                 แก้ไข
                               </button>
                               <button
@@ -1847,13 +2578,21 @@ function AdminBackupPage() {
                               >
                                 {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
                               </button>
-                              <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
+                              <button
+                                type="button"
+                                className="admin-action-btn is-danger"
+                                onClick={() => setStaffDeleteConfirm(member)}
+                              >
                                 ลบ
                               </button>
                             </div>
                           </td>
                         </tr>
-                        <ExpandToggleRow open={expandedStaffRows.has(member.id)} colSpan={6} onClick={() => toggleStaffRow(member.id)} />
+                        <ExpandToggleRow
+                          open={expandedStaffRows.has(member.id)}
+                          colSpan={6}
+                          onClick={() => toggleStaffRow(member.id)}
+                        />
                         <DetailRow
                           open={expandedStaffRows.has(member.id)}
                           colSpan={6}
@@ -1861,8 +2600,19 @@ function AdminBackupPage() {
                             {
                               label: 'บัตรประชาชน',
                               value: (
-                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleStaffIdCardReveal(member.id)}>
-                                  {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                                <button
+                                  type="button"
+                                  className="admin-idcard-toggle"
+                                  onClick={() =>
+                                    toggleStaffIdCardReveal(member.id)
+                                  }
+                                >
+                                  {revealedStaffIdCards.has(member.id)
+                                    ? member.idcard
+                                    : '•'.repeat(
+                                        String(member.idcard || '').length ||
+                                          13,
+                                      )}
                                 </button>
                               ),
                             },
@@ -1871,17 +2621,31 @@ function AdminBackupPage() {
                               label: 'การดำเนินการ',
                               value: (
                                 <div className="admin-row-actions">
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn is-ghost"
+                                    onClick={() => openEditStaff(member)}
+                                  >
                                     แก้ไข
                                   </button>
                                   <button
                                     type="button"
                                     className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
-                                    onClick={() => setStaffSuspendConfirm(member)}
+                                    onClick={() =>
+                                      setStaffSuspendConfirm(member)
+                                    }
                                   >
-                                    {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                                    {member.is_suspended
+                                      ? 'เปิดใช้งาน'
+                                      : 'ระงับ'}
                                   </button>
-                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn is-danger"
+                                    onClick={() =>
+                                      setStaffDeleteConfirm(member)
+                                    }
+                                  >
                                     ลบ
                                   </button>
                                 </div>
@@ -1895,7 +2659,11 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={currentStaffPage} totalPages={staffTotalPages} onChange={setStaffPage} />
+            <Pagination
+              page={currentStaffPage}
+              totalPages={staffTotalPages}
+              onChange={setStaffPage}
+            />
           </div>
         )}
 
@@ -1907,7 +2675,10 @@ function AdminBackupPage() {
 
             <div className="admin-toolbar">
               <div className="admin-search-group">
-                <label className="admin-toolbar-label" htmlFor="customer-search">
+                <label
+                  className="admin-toolbar-label"
+                  htmlFor="customer-search"
+                >
                   ค้นหา
                 </label>
                 <input
@@ -1922,27 +2693,42 @@ function AdminBackupPage() {
                   }}
                 />
               </div>
-              <div className="admin-filter-group">
-                <label className="admin-toolbar-label" htmlFor="customer-status-filter">
-                  สถานะ
-                </label>
-                <select
-                  id="customer-status-filter"
-                  className="form-select admin-filter-select"
-                  value={customerStatusFilter}
-                  onChange={(event) => {
-                    setCustomerStatusFilter(event.target.value)
-                    setCustomersPage(1)
-                  }}
+
+              <div className="admin-filters ms-auto align-items-end">
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={handleExportCustomers}
                 >
-                  <option value="all">ทุกสถานะ</option>
-                  <option value="active">ใช้งานปกติ</option>
-                  <option value="suspended">ระงับการใช้งาน</option>
-                </select>
+                  Export รายชื่อลูกค้า
+                </button>
+                <div className="admin-filter-group">
+                  <label
+                    className="admin-toolbar-label"
+                    htmlFor="customer-status-filter"
+                  >
+                    สถานะ
+                  </label>
+                  <select
+                    id="customer-status-filter"
+                    className="form-select admin-filter-select"
+                    value={customerStatusFilter}
+                    onChange={(event) => {
+                      setCustomerStatusFilter(event.target.value)
+                      setCustomersPage(1)
+                    }}
+                  >
+                    <option value="all">ทุกสถานะ</option>
+                    <option value="active">ใช้งานปกติ</option>
+                    <option value="suspended">ระงับการใช้งาน</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            {customersError && <div className="alert alert-danger">{customersError}</div>}
+            {customersError && (
+              <div className="alert alert-danger">{customersError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -1981,36 +2767,65 @@ function AdminBackupPage() {
                             <button
                               type="button"
                               className="admin-idcard-toggle"
-                              onClick={() => toggleCustomerIdCardReveal(customer.id)}
+                              onClick={() =>
+                                toggleCustomerIdCardReveal(customer.id)
+                              }
                             >
-                              {revealedCustomerIdCards.has(customer.id) ? customer.idcard : '•'.repeat(String(customer.idcard || '').length || 13)}
+                              {revealedCustomerIdCards.has(customer.id)
+                                ? customer.idcard
+                                : '•'.repeat(
+                                    String(customer.idcard || '').length || 13,
+                                  )}
                             </button>
                           </td>
                           <td>{customer.room_number ?? '-'}</td>
-                          <td className="admin-col-optional">{customer.phone}</td>
                           <td className="admin-col-optional">
-                            <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />
+                            {customer.phone}
+                          </td>
+                          <td className="admin-col-optional">
+                            <RentalPeriodCell
+                              start={customer.rental_start_date}
+                              end={customer.rental_end_date}
+                            />
                           </td>
                           <td>
-                            <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
-                              {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                            <span
+                              className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}
+                            >
+                              {customer.is_suspended
+                                ? 'ระงับการใช้งาน'
+                                : 'ใช้งานปกติ'}
                             </span>
-                            {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
-                              <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
-                            )}
+                            {Boolean(customer.is_suspended) &&
+                              !customer.rental_start_date &&
+                              !customer.rental_end_date && (
+                                <p className="admin-status-hint">
+                                  ย้ายออกจากหอพักแล้ว
+                                </p>
+                              )}
                           </td>
                           <td className="admin-col-optional">
                             <div className="admin-row-actions">
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerDetail(customer)}>
+                              <button
+                                type="button"
+                                className="admin-action-btn is-ghost"
+                                onClick={() => openCustomerDetail(customer)}
+                              >
                                 ดูรายละเอียด
                               </button>
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
+                              <button
+                                type="button"
+                                className="admin-action-btn is-ghost"
+                                onClick={() => openEditCustomer(customer)}
+                              >
                                 แก้ไข
                               </button>
                               <button
                                 type="button"
                                 className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`}
-                                onClick={() => setCustomerSuspendConfirm(customer)}
+                                onClick={() =>
+                                  setCustomerSuspendConfirm(customer)
+                                }
                               >
                                 {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
                               </button>
@@ -2029,32 +2844,60 @@ function AdminBackupPage() {
                             {
                               label: 'บัตรประชาชน',
                               value: (
-                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleCustomerIdCardReveal(customer.id)}>
-                                  {revealedCustomerIdCards.has(customer.id) ? customer.idcard : '•'.repeat(String(customer.idcard || '').length || 13)}
+                                <button
+                                  type="button"
+                                  className="admin-idcard-toggle"
+                                  onClick={() =>
+                                    toggleCustomerIdCardReveal(customer.id)
+                                  }
+                                >
+                                  {revealedCustomerIdCards.has(customer.id)
+                                    ? customer.idcard
+                                    : '•'.repeat(
+                                        String(customer.idcard || '').length ||
+                                          13,
+                                      )}
                                 </button>
                               ),
                             },
                             { label: 'เบอร์โทร', value: customer.phone },
                             {
                               label: 'ระยะเวลาสัญญา',
-                              value: <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />,
+                              value: (
+                                <RentalPeriodCell
+                                  start={customer.rental_start_date}
+                                  end={customer.rental_end_date}
+                                />
+                              ),
                             },
                             {
                               label: 'การดำเนินการ',
                               value: (
                                 <div className="admin-row-actions">
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerDetail(customer)}>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn is-ghost"
+                                    onClick={() => openCustomerDetail(customer)}
+                                  >
                                     ดูรายละเอียด
                                   </button>
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn is-ghost"
+                                    onClick={() => openEditCustomer(customer)}
+                                  >
                                     แก้ไข
                                   </button>
                                   <button
                                     type="button"
                                     className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`}
-                                    onClick={() => setCustomerSuspendConfirm(customer)}
+                                    onClick={() =>
+                                      setCustomerSuspendConfirm(customer)
+                                    }
                                   >
-                                    {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                                    {customer.is_suspended
+                                      ? 'เปิดใช้งาน'
+                                      : 'ระงับ'}
                                   </button>
                                 </div>
                               ),
@@ -2067,7 +2910,11 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={currentCustomersPage} totalPages={customersTotalPages} onChange={setCustomersPage} />
+            <Pagination
+              page={currentCustomersPage}
+              totalPages={customersTotalPages}
+              onChange={setCustomersPage}
+            />
           </div>
         )}
 
@@ -2092,7 +2939,10 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="admin-filter-group">
-                <label className="admin-toolbar-label" htmlFor="request-status-filter">
+                <label
+                  className="admin-toolbar-label"
+                  htmlFor="request-status-filter"
+                >
                   สถานะ
                 </label>
                 <select
@@ -2113,7 +2963,9 @@ function AdminBackupPage() {
               </div>
             </div>
 
-            {requestLogsError && <div className="alert alert-danger">{requestLogsError}</div>}
+            {requestLogsError && (
+              <div className="alert alert-danger">{requestLogsError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -2146,29 +2998,58 @@ function AdminBackupPage() {
                       <Fragment key={request.id}>
                         <tr>
                           <td>
-                            <span className={`admin-badge type-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
+                            <span
+                              className={`admin-badge type-${request.type}`}
+                            >
+                              {REQUEST_TYPE_LABEL[request.type] || request.type}
+                            </span>
                           </td>
                           <td>{request.room_number}</td>
                           <td>
                             {request.first_name} {request.last_name}
                           </td>
                           <td>
-                            <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
+                            <span
+                              className={`admin-badge status-${request.status}`}
+                            >
+                              {REQUEST_STATUS_LABEL[request.status] ||
+                                request.status}
+                            </span>
                           </td>
                           <td className="admin-col-optional">
-                            <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
+                            <StaffActionCell
+                              name={request.accepted_by_name}
+                              date={request.accepted_at}
+                            />
                           </td>
                           <td className="admin-col-optional">
-                            <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
+                            <StaffActionCell
+                              name={request.completed_by_name}
+                              date={request.completed_at}
+                            />
                           </td>
-                          <td className="admin-col-optional">{formatDateTime(request.created_at)}</td>
+                          <td className="admin-col-optional">
+                            {formatDateTime(request.created_at)}
+                          </td>
                         </tr>
-                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={7} onClick={() => toggleRequestRow(request.id)} />
+                        <ExpandToggleRow
+                          open={expandedRequestRows.has(request.id)}
+                          colSpan={7}
+                          onClick={() => toggleRequestRow(request.id)}
+                        />
                         <DetailRow
                           open={expandedRequestRows.has(request.id)}
                           colSpan={7}
                           fields={[
-                            { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="tenant" request={request} /> },
+                            {
+                              label: 'ขั้นตอนการดำเนินการ',
+                              value: (
+                                <AdminRequestTimeline
+                                  kind="tenant"
+                                  request={request}
+                                />
+                              ),
+                            },
                           ]}
                         />
                       </Fragment>
@@ -2177,7 +3058,13 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={requestLogs.page} totalPages={requestLogsTotalPages} onChange={(page) => loadRequestLogs(page, requestStatusFilter, requestSearch)} />
+            <Pagination
+              page={requestLogs.page}
+              totalPages={requestLogsTotalPages}
+              onChange={(page) =>
+                loadRequestLogs(page, requestStatusFilter, requestSearch)
+              }
+            />
           </div>
         )}
 
@@ -2189,7 +3076,10 @@ function AdminBackupPage() {
 
             <div className="admin-toolbar">
               <div className="admin-search-group">
-                <label className="admin-toolbar-label" htmlFor="maintenance-search">
+                <label
+                  className="admin-toolbar-label"
+                  htmlFor="maintenance-search"
+                >
                   ค้นหา
                 </label>
                 <input
@@ -2202,7 +3092,10 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="admin-filter-group">
-                <label className="admin-toolbar-label" htmlFor="maintenance-status-filter">
+                <label
+                  className="admin-toolbar-label"
+                  htmlFor="maintenance-status-filter"
+                >
                   สถานะ
                 </label>
                 <select
@@ -2211,7 +3104,11 @@ function AdminBackupPage() {
                   value={maintenanceStatusFilter}
                   onChange={(event) => {
                     setMaintenanceStatusFilter(event.target.value)
-                    loadMaintenanceLogs(1, event.target.value, maintenanceSearch)
+                    loadMaintenanceLogs(
+                      1,
+                      event.target.value,
+                      maintenanceSearch,
+                    )
                   }}
                 >
                   <option value="all">ทุกสถานะ</option>
@@ -2223,7 +3120,9 @@ function AdminBackupPage() {
               </div>
             </div>
 
-            {maintenanceLogsError && <div className="alert alert-danger">{maintenanceLogsError}</div>}
+            {maintenanceLogsError && (
+              <div className="alert alert-danger">{maintenanceLogsError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -2257,22 +3156,33 @@ function AdminBackupPage() {
                         <tr>
                           <td>{request.description}</td>
                           <td className="admin-col-optional">
-                            <MaintenanceCategoryBadge category={request.category} />
+                            <MaintenanceCategoryBadge
+                              category={request.category}
+                            />
                           </td>
                           <td>{request.room_number}</td>
                           <td>
                             {request.first_name} {request.last_name}
                           </td>
                           <td>
-                            <span className={`admin-badge status-${request.status}`}>
-                              {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
+                            <span
+                              className={`admin-badge status-${request.status}`}
+                            >
+                              {MAINTENANCE_STATUS_LABEL[request.status] ||
+                                request.status}
                             </span>
                           </td>
                           <td className="admin-col-optional">
-                            <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
+                            <StaffActionCell
+                              name={request.accepted_by_name}
+                              date={request.accepted_at}
+                            />
                           </td>
                           <td className="admin-col-optional">
-                            <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
+                            <StaffActionCell
+                              name={request.completed_by_name}
+                              date={request.completed_at}
+                            />
                           </td>
                         </tr>
                         <ExpandToggleRow
@@ -2284,8 +3194,23 @@ function AdminBackupPage() {
                           open={expandedMaintenanceRows.has(request.id)}
                           colSpan={7}
                           fields={[
-                            { label: 'หมวดหมู่', value: <MaintenanceCategoryBadge category={request.category} /> },
-                            { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="maintenance" request={request} /> },
+                            {
+                              label: 'หมวดหมู่',
+                              value: (
+                                <MaintenanceCategoryBadge
+                                  category={request.category}
+                                />
+                              ),
+                            },
+                            {
+                              label: 'ขั้นตอนการดำเนินการ',
+                              value: (
+                                <AdminRequestTimeline
+                                  kind="maintenance"
+                                  request={request}
+                                />
+                              ),
+                            },
                           ]}
                         />
                       </Fragment>
@@ -2297,7 +3222,13 @@ function AdminBackupPage() {
             <Pagination
               page={maintenanceLogs.page}
               totalPages={maintenanceLogsTotalPages}
-              onChange={(page) => loadMaintenanceLogs(page, maintenanceStatusFilter, maintenanceSearch)}
+              onChange={(page) =>
+                loadMaintenanceLogs(
+                  page,
+                  maintenanceStatusFilter,
+                  maintenanceSearch,
+                )
+              }
             />
           </div>
         )}
@@ -2322,9 +3253,21 @@ function AdminBackupPage() {
                   onChange={(event) => setMoveoutSearch(event.target.value)}
                 />
               </div>
+
+              <div className="admin-filters">
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={handleExportMoveouts}
+                >
+                  Export ประวัติย้ายออก
+                </button>
+              </div>
             </div>
 
-            {moveoutLogsError && <div className="alert alert-danger">{moveoutLogsError}</div>}
+            {moveoutLogsError && (
+              <div className="alert alert-danger">{moveoutLogsError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -2355,56 +3298,96 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     moveoutLogs.items.map((moveout) => {
-                      const stayDays = calcStayDays(moveout.move_in_date, moveout.completed_at)
+                      const stayDays = calcStayDays(
+                        moveout.move_in_date,
+                        moveout.completed_at,
+                      )
                       return (
-                      <Fragment key={moveout.id}>
-                        <tr>
-                          <td className="admin-strong-cell">
-                            {moveout.first_name} {moveout.last_name}
-                          </td>
-                          <td className="admin-col-optional">
-                            <button
-                              type="button"
-                              className="admin-idcard-toggle"
-                              onClick={() => toggleMoveoutIdCardReveal(moveout.id)}
-                            >
-                              {revealedMoveoutIdCards.has(moveout.id) ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
-                            </button>
-                          </td>
-                          <td>{moveout.room_number}</td>
-                          <td className="admin-col-optional">{moveout.phone}</td>
-                          <td className="admin-col-optional">{formatDate(moveout.move_in_date)}</td>
-                          <td>{formatDateTime(moveout.completed_at)}</td>
-                          <td>{stayDays !== null ? `${stayDays} วัน` : '-'}</td>
-                          <td className="admin-col-optional">
-                            <ActorName name={moveout.completed_by_name} />
-                          </td>
-                        </tr>
-                        <ExpandToggleRow
-                          open={expandedMoveoutRows.has(moveout.id)}
-                          colSpan={8}
-                          onClick={() => toggleMoveoutRow(moveout.id)}
-                        />
-                        <DetailRow
-                          open={expandedMoveoutRows.has(moveout.id)}
-                          colSpan={8}
-                          fields={[
-                            {
-                              label: 'บัตรประชาชน',
-                              value: (
-                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleMoveoutIdCardReveal(moveout.id)}>
-                                  {revealedMoveoutIdCards.has(moveout.id) ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
-                                </button>
-                              ),
-                            },
-                            { label: 'เบอร์โทร', value: moveout.phone },
-                            { label: 'วันที่เข้าพัก', value: formatDate(moveout.move_in_date) },
-                            { label: 'รวมวันที่พัก', value: stayDays !== null ? `${stayDays} วัน` : '-' },
-                            { label: 'ดำเนินการโดย', value: <ActorName name={moveout.completed_by_name} /> },
-                            ...(moveout.note ? [{ label: 'หมายเหตุ', value: moveout.note }] : []),
-                          ]}
-                        />
-                      </Fragment>
+                        <Fragment key={moveout.id}>
+                          <tr>
+                            <td className="admin-strong-cell">
+                              {moveout.first_name} {moveout.last_name}
+                            </td>
+                            <td className="admin-col-optional">
+                              <button
+                                type="button"
+                                className="admin-idcard-toggle"
+                                onClick={() =>
+                                  toggleMoveoutIdCardReveal(moveout.id)
+                                }
+                              >
+                                {revealedMoveoutIdCards.has(moveout.id)
+                                  ? moveout.idcard
+                                  : '•'.repeat(
+                                      String(moveout.idcard || '').length || 13,
+                                    )}
+                              </button>
+                            </td>
+                            <td>{moveout.room_number}</td>
+                            <td className="admin-col-optional">
+                              {moveout.phone}
+                            </td>
+                            <td className="admin-col-optional">
+                              {formatDate(moveout.move_in_date)}
+                            </td>
+                            <td>{formatDateTime(moveout.completed_at)}</td>
+                            <td>
+                              {stayDays !== null ? `${stayDays} วัน` : '-'}
+                            </td>
+                            <td className="admin-col-optional">
+                              <ActorName name={moveout.completed_by_name} />
+                            </td>
+                          </tr>
+                          <ExpandToggleRow
+                            open={expandedMoveoutRows.has(moveout.id)}
+                            colSpan={8}
+                            onClick={() => toggleMoveoutRow(moveout.id)}
+                          />
+                          <DetailRow
+                            open={expandedMoveoutRows.has(moveout.id)}
+                            colSpan={8}
+                            fields={[
+                              {
+                                label: 'บัตรประชาชน',
+                                value: (
+                                  <button
+                                    type="button"
+                                    className="admin-idcard-toggle"
+                                    onClick={() =>
+                                      toggleMoveoutIdCardReveal(moveout.id)
+                                    }
+                                  >
+                                    {revealedMoveoutIdCards.has(moveout.id)
+                                      ? moveout.idcard
+                                      : '•'.repeat(
+                                          String(moveout.idcard || '').length ||
+                                            13,
+                                        )}
+                                  </button>
+                                ),
+                              },
+                              { label: 'เบอร์โทร', value: moveout.phone },
+                              {
+                                label: 'วันที่เข้าพัก',
+                                value: formatDate(moveout.move_in_date),
+                              },
+                              {
+                                label: 'รวมวันที่พัก',
+                                value:
+                                  stayDays !== null ? `${stayDays} วัน` : '-',
+                              },
+                              {
+                                label: 'ดำเนินการโดย',
+                                value: (
+                                  <ActorName name={moveout.completed_by_name} />
+                                ),
+                              },
+                              ...(moveout.note
+                                ? [{ label: 'หมายเหตุ', value: moveout.note }]
+                                : []),
+                            ]}
+                          />
+                        </Fragment>
                       )
                     })
                   )}
@@ -2427,13 +3410,26 @@ function AdminBackupPage() {
 
             <div className="admin-toolbar">
               <div className="admin-filters">
-                <button type="button" className="admin-action-btn is-primary" onClick={openCreateExpense}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-primary"
+                  onClick={openCreateExpense}
+                >
                   + บันทึกรายจ่าย
+                </button>
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={handleExportExpenses}
+                >
+                  Export รายจ่าย
                 </button>
               </div>
             </div>
 
-            {expensesError && <div className="alert alert-danger">{expensesError}</div>}
+            {expensesError && (
+              <div className="alert alert-danger">{expensesError}</div>
+            )}
 
             <div className="table-responsive">
               <table className="table admin-table">
@@ -2464,13 +3460,25 @@ function AdminBackupPage() {
                     expenses.map((expense) => (
                       <tr key={expense.id}>
                         <td>{formatDate(expense.expense_date)}</td>
-                        <td className="admin-strong-cell">{expense.category}</td>
-                        <td className="admin-col-optional">{expense.description || '-'}</td>
-                        <td className="admin-col-optional">{expense.recorded_by_name || '-'}</td>
-                        <td>฿{Number(expense.amount).toLocaleString('th-TH')}</td>
+                        <td className="admin-strong-cell">
+                          {expense.category}
+                        </td>
+                        <td className="admin-col-optional">
+                          {expense.description || '-'}
+                        </td>
+                        <td className="admin-col-optional">
+                          {expense.recorded_by_name || '-'}
+                        </td>
+                        <td>
+                          ฿{Number(expense.amount).toLocaleString('th-TH')}
+                        </td>
                         <td>
                           <div className="admin-row-actions">
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditExpense(expense)}>
+                            <button
+                              type="button"
+                              className="admin-action-btn is-ghost"
+                              onClick={() => openEditExpense(expense)}
+                            >
                               แก้ไข
                             </button>
                           </div>
@@ -2481,7 +3489,11 @@ function AdminBackupPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={expensesPage} totalPages={expensesTotalPages} onChange={(page) => loadExpenses(page)} />
+            <Pagination
+              page={expensesPage}
+              totalPages={expensesTotalPages}
+              onChange={(page) => loadExpenses(page)}
+            />
           </div>
         )}
 
@@ -2490,51 +3502,140 @@ function AdminBackupPage() {
             <div className="admin-card-header">
               <div>
                 <h2>รายชื่อคนรอห้องว่าง ({waitingList.length})</h2>
-                <p className="waiting-list-storage-note">ข้อมูลชุดนี้จัดเก็บในเบราว์เซอร์นี้เท่านั้น</p>
+                <p className="waiting-list-storage-note">
+                  ข้อมูลชุดนี้จัดเก็บในเบราว์เซอร์นี้เท่านั้น
+                </p>
               </div>
-              <button type="button" className="admin-action-btn is-primary" onClick={() => openWaitingListForm()}>
+              <button
+                type="button"
+                className="admin-action-btn is-primary"
+                onClick={() => openWaitingListForm()}
+              >
                 + เพิ่มรายชื่อ
               </button>
             </div>
             <div className="admin-toolbar">
               <div className="admin-search-group">
-                <label className="admin-toolbar-label" htmlFor="waiting-list-search">ค้นหา</label>
-                <input id="waiting-list-search" type="search" className="form-control admin-search-input" placeholder="ชื่อ, เบอร์โทร, ประเภทห้อง..." value={waitingListSearch} onChange={(event) => setWaitingListSearch(event.target.value)} />
+                <label
+                  className="admin-toolbar-label"
+                  htmlFor="waiting-list-search"
+                >
+                  ค้นหา
+                </label>
+                <input
+                  id="waiting-list-search"
+                  type="search"
+                  className="form-control admin-search-input"
+                  placeholder="ชื่อ, เบอร์โทร, ประเภทห้อง..."
+                  value={waitingListSearch}
+                  onChange={(event) => setWaitingListSearch(event.target.value)}
+                />
               </div>
               <div className="admin-filter-group">
-                <label className="admin-toolbar-label" htmlFor="waiting-list-status">สถานะ</label>
-                <select id="waiting-list-status" className="form-select admin-filter-select" value={waitingListStatus} onChange={(event) => setWaitingListStatus(event.target.value)}>
+                <label
+                  className="admin-toolbar-label"
+                  htmlFor="waiting-list-status"
+                >
+                  สถานะ
+                </label>
+                <select
+                  id="waiting-list-status"
+                  className="form-select admin-filter-select"
+                  value={waitingListStatus}
+                  onChange={(event) => setWaitingListStatus(event.target.value)}
+                >
                   <option value="all">ทุกสถานะ</option>
-                  {Object.entries(WAITING_LIST_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  {Object.entries(WAITING_LIST_STATUS_LABEL).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
             </div>
             <div className="table-responsive">
               <table className="table admin-table">
-                <thead><tr><th>ชื่อผู้สนใจ</th><th>เบอร์โทร</th><th>ประเภทห้อง</th><th>สถานะ</th><th className="admin-col-optional">หมายเหตุ</th><th className="admin-col-optional">บันทึกโดย</th><th>จัดการ</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>ชื่อผู้สนใจ</th>
+                    <th>เบอร์โทร</th>
+                    <th>ประเภทห้อง</th>
+                    <th>สถานะ</th>
+                    <th className="admin-col-optional">หมายเหตุ</th>
+                    <th className="admin-col-optional">บันทึกโดย</th>
+                    <th>จัดการ</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredWaitingList.length === 0 ? (
-                    <tr><td colSpan={7} className="admin-empty">{waitingList.length ? 'ไม่พบรายชื่อตามเงื่อนไข' : 'ยังไม่มีรายชื่อผู้รอห้องว่าง'}</td></tr>
-                  ) : filteredWaitingList.map((entry) => (
-                    <tr key={entry.id}>
-                      <td className="admin-strong-cell">{entry.full_name}<small className="waiting-list-date">{formatDate(entry.created_at)}</small></td>
-                      <td>{entry.phone}</td>
-                      <td>{entry.room_preference || '-'}</td>
-                      <td>
-                        <select aria-label={`สถานะของ ${entry.full_name}`} className="form-select waiting-list-status-select" value={entry.status || 'waiting'} onChange={(event) => setWaitingListEntryStatus(entry, event.target.value)}>
-                          {Object.entries(WAITING_LIST_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
-                      </td>
-                      <td className="admin-col-optional">{entry.note || '-'}</td>
-                      <td className="admin-col-optional">{entry.submitted_by_name || '-'}</td>
-                      <td>
-                        <div className="admin-row-actions">
-                          <button type="button" className="admin-action-btn is-ghost" onClick={() => openWaitingListForm(entry)}>แก้ไข</button>
-                          <button type="button" className="admin-action-btn is-danger" onClick={() => removeWaitingListEntry(entry)}>ลบ</button>
-                        </div>
+                    <tr>
+                      <td colSpan={7} className="admin-empty">
+                        {waitingList.length
+                          ? 'ไม่พบรายชื่อตามเงื่อนไข'
+                          : 'ยังไม่มีรายชื่อผู้รอห้องว่าง'}
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredWaitingList.map((entry) => (
+                      <tr key={entry.id}>
+                        <td className="admin-strong-cell">
+                          {entry.full_name}
+                          <small className="waiting-list-date">
+                            {formatDate(entry.created_at)}
+                          </small>
+                        </td>
+                        <td>{entry.phone}</td>
+                        <td>{entry.room_preference || '-'}</td>
+                        <td>
+                          <select
+                            aria-label={`สถานะของ ${entry.full_name}`}
+                            className="form-select waiting-list-status-select"
+                            value={entry.status || 'waiting'}
+                            onChange={(event) =>
+                              setWaitingListEntryStatus(
+                                entry,
+                                event.target.value,
+                              )
+                            }
+                          >
+                            {Object.entries(WAITING_LIST_STATUS_LABEL).map(
+                              ([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </td>
+                        <td className="admin-col-optional">
+                          {entry.note || '-'}
+                        </td>
+                        <td className="admin-col-optional">
+                          {entry.submitted_by_name || '-'}
+                        </td>
+                        <td>
+                          <div className="admin-row-actions">
+                            <button
+                              type="button"
+                              className="admin-action-btn is-ghost"
+                              onClick={() => openWaitingListForm(entry)}
+                            >
+                              แก้ไข
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-action-btn is-danger"
+                              onClick={() => removeWaitingListEntry(entry)}
+                            >
+                              ลบ
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2546,69 +3647,415 @@ function AdminBackupPage() {
             <div className="admin-card-header">
               <div>
                 <h2>Checklist ตรวจห้องย้ายออก ({moveOutInspections.length})</h2>
-                <p className="waiting-list-storage-note">รายงานจาก Staff; จัดเก็บในเบราว์เซอร์นี้เท่านั้น</p>
+                <p className="waiting-list-storage-note">
+                  รายงานจาก Staff; จัดเก็บในเบราว์เซอร์นี้เท่านั้น
+                </p>
               </div>
             </div>
             <div className="table-responsive">
               <table className="table admin-table">
-                <thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>วันที่ตรวจ</th><th>ความเสียหาย</th><th>รูป</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>ห้อง</th>
+                    <th>ผู้เช่า</th>
+                    <th>วันที่ตรวจ</th>
+                    <th>ความเสียหาย</th>
+                    <th>รูป</th>
+                    <th>สถานะ</th>
+                    <th>จัดการ</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {moveOutInspections.length === 0 ? (
-                    <tr><td colSpan={7} className="admin-empty">ยังไม่มีรายงานตรวจห้องจาก Staff</td></tr>
-                  ) : moveOutInspections.map((inspection) => (
-                    <tr key={inspection.id}>
-                      <td className="admin-strong-cell">{inspection.room_number}</td>
-                      <td>{inspection.tenant_name}<small className="waiting-list-date">{inspection.tenant_phone || '-'}</small></td>
-                      <td>{formatDateTime(inspection.created_at)}</td>
-                      <td>{inspection.damage_note ? 'มีบันทึก' : inspection.checklist && Object.values(inspection.checklist).includes('damaged') ? 'พบความเสียหาย' : 'ไม่พบ'}</td>
-                      <td>{inspection.photos?.length || 0} รูป</td>
-                      <td>
-                        <select aria-label={`สถานะตรวจห้อง ${inspection.room_number}`} className="form-select waiting-list-status-select" value={inspection.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}>
-                          {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
+                    <tr>
+                      <td colSpan={7} className="admin-empty">
+                        ยังไม่มีรายงานตรวจห้องจาก Staff
                       </td>
-                      <td><div className="admin-row-actions">
-                        <button type="button" className="admin-action-btn is-ghost" onClick={() => setInspectionDetail(inspection)}>ดูรายละเอียด</button>
-                        <button type="button" className="admin-action-btn is-danger" onClick={() => removeMoveOutInspection(inspection)}>ลบ</button>
-                      </div></td>
                     </tr>
-                  ))}
+                  ) : (
+                    moveOutInspections.map((inspection) => (
+                      <tr key={inspection.id}>
+                        <td className="admin-strong-cell">
+                          {inspection.room_number}
+                        </td>
+                        <td>
+                          {inspection.tenant_name}
+                          <small className="waiting-list-date">
+                            {inspection.tenant_phone || '-'}
+                          </small>
+                        </td>
+                        <td>{formatDateTime(inspection.created_at)}</td>
+                        <td>
+                          {inspection.damage_note
+                            ? 'มีบันทึก'
+                            : inspection.checklist &&
+                                Object.values(inspection.checklist).includes(
+                                  'damaged',
+                                )
+                              ? 'พบความเสียหาย'
+                              : 'ไม่พบ'}
+                        </td>
+                        <td>{inspection.photos?.length || 0} รูป</td>
+                        <td>
+                          <select
+                            aria-label={`สถานะตรวจห้อง ${inspection.room_number}`}
+                            className="form-select waiting-list-status-select"
+                            value={inspection.status || 'pending'}
+                            onChange={(event) =>
+                              setMoveOutInspectionStatus(
+                                inspection,
+                                event.target.value,
+                              )
+                            }
+                          >
+                            {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(
+                              ([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </td>
+                        <td>
+                          <div className="admin-row-actions">
+                            <button
+                              type="button"
+                              className="admin-action-btn is-ghost"
+                              onClick={() => setInspectionDetail(inspection)}
+                            >
+                              ดูรายละเอียด
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-action-btn is-danger"
+                              onClick={() =>
+                                removeMoveOutInspection(inspection)
+                              }
+                            >
+                              ลบ
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
+        {activeTab === 'settings' && (
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <h2>ตั้งค่าข้อมูลหอพักใจ</h2>
+            </div>
+            <p className="waiting-list-storage-note mb-4">
+              ข้อมูลที่ตั้งค่าตรงนี้จะมีผลต่อการคำนวณบิล, การแสดง PromptPay
+              สแกนจ่าย และกฎระเบียบของหอพัก
+            </p>
+
+            {configLoading ? (
+              <p className="admin-empty">กำลังโหลดข้อมูลการตั้งค่า...</p>
+            ) : (
+              <div className="admin-modal-body" style={{ padding: 0 }}>
+                <form onSubmit={handleSaveConfig} noValidate>
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">
+                      ข้อมูลพื้นฐานและช่องทางการเงิน
+                    </p>
+                    <div className="row g-3">
+                      <div className="col-12 col-md-6">
+                        <label className="form-label">ชื่อหอพัก</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={dormConfig.dorm_name}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              dorm_name: e.target.value,
+                            })
+                          }
+                          required
+                        />
+                      </div>
+
+                      <div className="col-12 col-md-6">
+                        <label className="form-label">
+                          หมายเลข PromptPay (เบอร์มือถือ หรือ เลขบัตร ปชช.)
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="เช่น 0812345678 หรือ 1100200000000"
+                          value={dormConfig.promptpay_id}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              promptpay_id: e.target.value,
+                            })
+                          }
+                          required
+                        />
+                      </div>
+
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">ชื่อธนาคาร</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="เช่น ธนาคารกสิกรไทย"
+                          value={dormConfig.bank_name || ''}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              bank_name: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">เลขที่บัญชีธนาคาร</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="เช่น 123-4-56789-0"
+                          value={dormConfig.bank_account_no || ''}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              bank_account_no: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">
+                          ชื่อบัญชีผู้รับเงิน
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={dormConfig.bank_account_name || ''}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              bank_account_name: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="admin-form-divider" />
+
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">
+                      รอบบิลและเงื่อนไขค่าปรับ
+                    </p>
+                    <div className="row g-3">
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">
+                          วันครบกำหนดชำระของเดือน (วันที่)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          className="form-control"
+                          value={dormConfig.billing_due_day}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              billing_due_day: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">
+                          ระยะเวลาผ่อนผัน (วัน)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          className="form-control"
+                          value={dormConfig.grace_period_days}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              grace_period_days: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">
+                          อัตราค่าปรับจ่ายช้า (บาท/วัน)
+                        </label>
+                        <div className="admin-input-group">
+                          <span className="admin-input-affix">฿</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="form-control"
+                            value={dormConfig.late_fee_per_day}
+                            onChange={(e) =>
+                              setDormConfig({
+                                ...dormConfig,
+                                late_fee_per_day: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="admin-form-divider" />
+
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">
+                      กฎระเบียบและข้อตกลง
+                    </p>
+                    <div className="row g-3">
+                      <div className="col-12">
+                        <textarea
+                          className="form-control"
+                          rows="5"
+                          placeholder="ระบุกฎระเบียบ เช่น เวลาปิดประตู, การใช้เสียง, ข้อห้ามต่างๆ..."
+                          value={dormConfig.dorm_rules || ''}
+                          onChange={(e) =>
+                            setDormConfig({
+                              ...dormConfig,
+                              dorm_rules: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="d-flex justify-content-end mt-4">
+                    <button
+                      type="submit"
+                      className="admin-action-btn is-primary"
+                      disabled={configSubmitting}
+                    >
+                      {configSubmitting ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {inspectionDetail && (
-        <Modal title={`ผลตรวจห้อง ${inspectionDetail.room_number}`} onClose={() => setInspectionDetail(null)} variant="wide">
+        <Modal
+          title={`ผลตรวจห้อง ${inspectionDetail.room_number}`}
+          onClose={() => setInspectionDetail(null)}
+          variant="wide"
+        >
           <div className="moveout-inspection-admin-detail">
             <div className="moveout-inspection-admin-meta">
-              <div><span>ผู้เช่า</span><strong>{inspectionDetail.tenant_name}</strong></div>
-              <div><span>เบอร์โทร</span><strong>{inspectionDetail.tenant_phone || '-'}</strong></div>
-              <div><span>ตรวจเมื่อ</span><strong>{formatDateTime(inspectionDetail.created_at)}</strong></div>
-              <div><span>ตรวจโดย</span><strong>{inspectionDetail.inspected_by || '-'}</strong></div>
+              <div>
+                <span>ผู้เช่า</span>
+                <strong>{inspectionDetail.tenant_name}</strong>
+              </div>
+              <div>
+                <span>เบอร์โทร</span>
+                <strong>{inspectionDetail.tenant_phone || '-'}</strong>
+              </div>
+              <div>
+                <span>ตรวจเมื่อ</span>
+                <strong>{formatDateTime(inspectionDetail.created_at)}</strong>
+              </div>
+              <div>
+                <span>ตรวจโดย</span>
+                <strong>{inspectionDetail.inspected_by || '-'}</strong>
+              </div>
             </div>
             <h4>Checklist</h4>
             <div className="moveout-inspection-admin-checklist">
               {MOVE_OUT_CHECKLIST.map((item) => {
                 const result = inspectionDetail.checklist?.[item.key]
-                const label = result === 'good' ? 'ปกติ' : result === 'damaged' ? 'ชำรุด' : result === 'not_applicable' ? 'ไม่มี/ไม่เกี่ยวข้อง' : 'ไม่ได้ระบุ'
-                return <div key={item.key}><span>{item.label}</span><strong className={result === 'damaged' ? 'is-damaged' : ''}>{label}</strong></div>
+                const label =
+                  result === 'good'
+                    ? 'ปกติ'
+                    : result === 'damaged'
+                      ? 'ชำรุด'
+                      : result === 'not_applicable'
+                        ? 'ไม่มี/ไม่เกี่ยวข้อง'
+                        : 'ไม่ได้ระบุ'
+                return (
+                  <div key={item.key}>
+                    <span>{item.label}</span>
+                    <strong
+                      className={result === 'damaged' ? 'is-damaged' : ''}
+                    >
+                      {label}
+                    </strong>
+                  </div>
+                )
               })}
             </div>
             <h4>รายละเอียดความเสียหาย</h4>
-            <p className="moveout-inspection-damage-note">{inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
+            <p className="moveout-inspection-damage-note">
+              {inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}
+            </p>
             <h4>รูปภาพประกอบ ({inspectionDetail.photos?.length || 0})</h4>
             {inspectionDetail.photos?.length ? (
               <div className="moveout-inspection-photo-grid">
-                {inspectionDetail.photos.map((photo, index) => <a key={`${photo.name}-${index}`} href={photo.dataUrl} target="_blank" rel="noreferrer"><img src={photo.dataUrl} alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`} /><span>{photo.name}</span></a>)}
+                {inspectionDetail.photos.map((photo, index) => (
+                  <a
+                    key={`${photo.name}-${index}`}
+                    href={photo.dataUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      src={photo.dataUrl}
+                      alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`}
+                    />
+                    <span>{photo.name}</span>
+                  </a>
+                ))}
               </div>
-            ) : <p className="text-muted">ไม่มีรูปภาพแนบ</p>}
+            ) : (
+              <p className="text-muted">ไม่มีรูปภาพแนบ</p>
+            )}
             <div className="admin-form-actions">
-              <label className="form-label" htmlFor="inspection-detail-status">สถานะตรวจ</label>
-              <select id="inspection-detail-status" className="form-select waiting-list-status-select" value={inspectionDetail.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspectionDetail, event.target.value)}>
-                {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              <label className="form-label" htmlFor="inspection-detail-status">
+                สถานะตรวจ
+              </label>
+              <select
+                id="inspection-detail-status"
+                className="form-select waiting-list-status-select"
+                value={inspectionDetail.status || 'pending'}
+                onChange={(event) =>
+                  setMoveOutInspectionStatus(
+                    inspectionDetail,
+                    event.target.value,
+                  )
+                }
+              >
+                {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
               </select>
             </div>
           </div>
@@ -2616,30 +4063,102 @@ function AdminBackupPage() {
       )}
 
       {waitingListModal && (
-        <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มรายชื่อผู้สนใจ' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)}>
+        <Modal
+          title={
+            waitingListModal.mode === 'create'
+              ? 'เพิ่มรายชื่อผู้สนใจ'
+              : 'แก้ไขรายชื่อผู้สนใจ'
+          }
+          onClose={() => setWaitingListModal(null)}
+        >
           {(requestClose) => (
-            <form onSubmit={(event) => submitWaitingListForm(event, requestClose)} noValidate>
-              {waitingListFormError && <div className="alert alert-danger py-2 px-3">{waitingListFormError}</div>}
+            <form
+              onSubmit={(event) => submitWaitingListForm(event, requestClose)}
+              noValidate
+            >
+              {waitingListFormError && (
+                <div className="alert alert-danger py-2 px-3">
+                  {waitingListFormError}
+                </div>
+              )}
               <div className="row g-3">
                 <div className="col-12">
-                  <label className="form-label" htmlFor="admin-waiting-name">ชื่อผู้สนใจ</label>
-                  <input id="admin-waiting-name" className="form-control" maxLength={255} value={waitingListForm.full_name} onChange={(event) => setWaitingListForm((form) => ({ ...form, full_name: event.target.value }))} required />
+                  <label className="form-label" htmlFor="admin-waiting-name">
+                    ชื่อผู้สนใจ
+                  </label>
+                  <input
+                    id="admin-waiting-name"
+                    className="form-control"
+                    maxLength={255}
+                    value={waitingListForm.full_name}
+                    onChange={(event) =>
+                      setWaitingListForm((form) => ({
+                        ...form,
+                        full_name: event.target.value,
+                      }))
+                    }
+                    required
+                  />
                 </div>
                 <div className="col-12 col-md-6">
-                  <label className="form-label" htmlFor="admin-waiting-phone">เบอร์โทรศัพท์</label>
-                  <input id="admin-waiting-phone" className="form-control" type="tel" maxLength={20} value={waitingListForm.phone} onChange={(event) => setWaitingListForm((form) => ({ ...form, phone: event.target.value }))} required />
+                  <label className="form-label" htmlFor="admin-waiting-phone">
+                    เบอร์โทรศัพท์
+                  </label>
+                  <input
+                    id="admin-waiting-phone"
+                    className="form-control"
+                    type="tel"
+                    maxLength={20}
+                    value={waitingListForm.phone}
+                    onChange={(event) =>
+                      setWaitingListForm((form) => ({
+                        ...form,
+                        phone: event.target.value,
+                      }))
+                    }
+                    required
+                  />
                 </div>
                 <div className="col-12 col-md-6">
-                  <label className="form-label" htmlFor="admin-waiting-room">ประเภทห้องที่สนใจ</label>
-                  <input id="admin-waiting-room" className="form-control" maxLength={100} value={waitingListForm.room_preference} onChange={(event) => setWaitingListForm((form) => ({ ...form, room_preference: event.target.value }))} />
+                  <label className="form-label" htmlFor="admin-waiting-room">
+                    ประเภทห้องที่สนใจ
+                  </label>
+                  <input
+                    id="admin-waiting-room"
+                    className="form-control"
+                    maxLength={100}
+                    value={waitingListForm.room_preference}
+                    onChange={(event) =>
+                      setWaitingListForm((form) => ({
+                        ...form,
+                        room_preference: event.target.value,
+                      }))
+                    }
+                  />
                 </div>
                 <div className="col-12">
-                  <label className="form-label" htmlFor="admin-waiting-note">หมายเหตุ</label>
-                  <textarea id="admin-waiting-note" className="form-control" rows={3} maxLength={500} value={waitingListForm.note} onChange={(event) => setWaitingListForm((form) => ({ ...form, note: event.target.value }))} />
+                  <label className="form-label" htmlFor="admin-waiting-note">
+                    หมายเหตุ
+                  </label>
+                  <textarea
+                    id="admin-waiting-note"
+                    className="form-control"
+                    rows={3}
+                    maxLength={500}
+                    value={waitingListForm.note}
+                    onChange={(event) =>
+                      setWaitingListForm((form) => ({
+                        ...form,
+                        note: event.target.value,
+                      }))
+                    }
+                  />
                 </div>
               </div>
               <div className="admin-form-actions">
-                <button type="submit" className="admin-action-btn is-primary">บันทึก</button>
+                <button type="submit" className="admin-action-btn is-primary">
+                  บันทึก
+                </button>
               </div>
             </form>
           )}
@@ -2647,10 +4166,22 @@ function AdminBackupPage() {
       )}
 
       {expenseModal && (
-        <Modal title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'} onClose={() => setExpenseModal(null)}>
+        <Modal
+          title={
+            expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'
+          }
+          onClose={() => setExpenseModal(null)}
+        >
           {(requestClose) => (
-            <form onSubmit={(event) => submitExpenseForm(event, requestClose)} noValidate>
-              {expenseFormError && <div className="alert alert-danger py-2 px-3">{expenseFormError}</div>}
+            <form
+              onSubmit={(event) => submitExpenseForm(event, requestClose)}
+              noValidate
+            >
+              {expenseFormError && (
+                <div className="alert alert-danger py-2 px-3">
+                  {expenseFormError}
+                </div>
+              )}
               <div className="row g-3">
                 <div className="col-12">
                   <label className="form-label">หมวดหมู่</label>
@@ -2666,22 +4197,48 @@ function AdminBackupPage() {
                 </div>
                 <div className="col-12">
                   <label className="form-label">รายละเอียด (ไม่บังคับ)</label>
-                  <input type="text" name="description" className="form-control" value={expenseForm.description} onChange={handleExpenseFormChange} />
+                  <input
+                    type="text"
+                    name="description"
+                    className="form-control"
+                    value={expenseForm.description}
+                    onChange={handleExpenseFormChange}
+                  />
                 </div>
                 <div className="col-6">
                   <label className="form-label">จำนวนเงิน (บาท)</label>
                   <div className="admin-input-group">
                     <span className="admin-input-affix">฿</span>
-                    <input type="number" step="0.01" min="0" name="amount" className="form-control" value={expenseForm.amount} onChange={handleExpenseFormChange} required />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      name="amount"
+                      className="form-control"
+                      value={expenseForm.amount}
+                      onChange={handleExpenseFormChange}
+                      required
+                    />
                   </div>
                 </div>
                 <div className="col-6">
                   <label className="form-label">วันที่</label>
-                  <input type="date" name="expense_date" className="form-control" value={expenseForm.expense_date} onChange={handleExpenseFormChange} required />
+                  <input
+                    type="date"
+                    name="expense_date"
+                    className="form-control"
+                    value={expenseForm.expense_date}
+                    onChange={handleExpenseFormChange}
+                    required
+                  />
                 </div>
               </div>
               <div className="admin-form-actions">
-                <button type="submit" className="admin-action-btn is-primary" disabled={expenseSubmitting}>
+                <button
+                  type="submit"
+                  className="admin-action-btn is-primary"
+                  disabled={expenseSubmitting}
+                >
                   {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
                 </button>
               </div>
@@ -2691,147 +4248,208 @@ function AdminBackupPage() {
       )}
 
       {roomModal && (
-        <Modal title={roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : `แก้ไขห้อง ${roomModal.room.room_number}`} onClose={() => setRoomModal(null)}>
+        <Modal
+          title={
+            roomModal.mode === 'create'
+              ? 'เพิ่มห้องพัก'
+              : `แก้ไขห้อง ${roomModal.room.room_number}`
+          }
+          onClose={() => setRoomModal(null)}
+        >
           {(requestClose) => (
-          <form onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
-            {roomFormError && <div className="alert alert-danger py-2 px-3">{roomFormError}</div>}
-
-            <div className="admin-form-section">
-              <p className="admin-form-section-title">ข้อมูลห้องพัก</p>
-              <div className="row g-3">
-                <div className="col-6">
-                  <label className="form-label">เลขห้อง</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]{3}"
-                    name="room_number"
-                    className="form-control"
-                    value={roomForm.room_number}
-                    onChange={handleRoomFormChange}
-                    disabled={roomModal.mode === 'edit'}
-                    maxLength={3}
-                    placeholder="เช่น 101"
-                    required
-                  />
+            <form
+              onSubmit={(event) => submitRoomForm(event, requestClose)}
+              noValidate
+            >
+              {roomFormError && (
+                <div className="alert alert-danger py-2 px-3">
+                  {roomFormError}
                 </div>
-                <div className="col-6">
-                  <label className="form-label">ราคา/เดือน (บาท)</label>
-                  <div className="admin-input-group">
-                    <span className="admin-input-affix">฿</span>
-                    <input type="number" name="price" className="form-control" value={roomForm.price} onChange={handleRoomFormChange} required />
+              )}
+
+              <div className="admin-form-section">
+                <p className="admin-form-section-title">ข้อมูลห้องพัก</p>
+                <div className="row g-3">
+                  <div className="col-6">
+                    <label className="form-label">เลขห้อง</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{3}"
+                      name="room_number"
+                      className="form-control"
+                      value={roomForm.room_number}
+                      onChange={handleRoomFormChange}
+                      disabled={roomModal.mode === 'edit'}
+                      maxLength={3}
+                      placeholder="เช่น 101"
+                      required
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label">ราคา/เดือน (บาท)</label>
+                    <div className="admin-input-group">
+                      <span className="admin-input-affix">฿</span>
+                      <input
+                        type="number"
+                        name="price"
+                        className="form-control"
+                        value={roomForm.price}
+                        onChange={handleRoomFormChange}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-4">
+                    <label className="form-label">จำนวนเตียง</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="99"
+                      name="bed"
+                      className="form-control"
+                      value={roomForm.bed}
+                      onChange={handleRoomFormChange}
+                    />
+                  </div>
+                  <div className="col-4">
+                    <label className="form-label">ค่าไฟ/หน่วย</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="99.99"
+                      name="electricity_unit_price"
+                      className="form-control"
+                      value={roomForm.electricity_unit_price}
+                      onChange={handleRoomFormChange}
+                    />
+                  </div>
+                  <div className="col-4">
+                    <label className="form-label">ค่าน้ำ/เดือน</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="999.99"
+                      name="water_price"
+                      className="form-control"
+                      value={roomForm.water_price}
+                      onChange={handleRoomFormChange}
+                    />
                   </div>
                 </div>
-                <div className="col-4">
-                  <label className="form-label">จำนวนเตียง</label>
-                  <input type="number" min="0" max="99" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
-                </div>
-                <div className="col-4">
-                  <label className="form-label">ค่าไฟ/หน่วย</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="99.99"
-                    name="electricity_unit_price"
-                    className="form-control"
-                    value={roomForm.electricity_unit_price}
-                    onChange={handleRoomFormChange}
-                  />
-                </div>
-                <div className="col-4">
-                  <label className="form-label">ค่าน้ำ/เดือน</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="999.99"
-                    name="water_price"
-                    className="form-control"
-                    value={roomForm.water_price}
-                    onChange={handleRoomFormChange}
-                  />
+              </div>
+
+              <div className="admin-form-divider" />
+
+              <div className="admin-form-section">
+                <p className="admin-form-section-title">สิ่งอำนวยความสะดวก</p>
+                <div className="admin-toggle-grid">
+                  {[
+                    [
+                      'air_conditioner',
+                      'เครื่องปรับอากาศ',
+                      <path
+                        key="ac"
+                        d="M12 3v18M5.6 6.5 18.4 17.5M18.4 6.5 5.6 17.5"
+                      />,
+                    ],
+                    [
+                      'wifi',
+                      'ไวไฟ',
+                      <g key="wifi">
+                        <path d="M2 8.5a16 16 0 0 1 20 0" />
+                        <path d="M5.5 12.5a11 11 0 0 1 13 0" />
+                        <path d="M9 16.5a5.5 5.5 0 0 1 6 0" />
+                        <circle cx="12" cy="19.5" r="0.5" fill="currentColor" />
+                      </g>,
+                    ],
+                    [
+                      'refrigerator',
+                      'ตู้เย็น',
+                      <g key="fridge">
+                        <rect x="5" y="2.5" width="14" height="19" rx="2" />
+                        <line x1="5" y1="10.5" x2="19" y2="10.5" />
+                        <line x1="8.5" y1="5.5" x2="8.5" y2="8" />
+                        <line x1="8.5" y1="13.5" x2="8.5" y2="16" />
+                      </g>,
+                    ],
+                    [
+                      'bathroom',
+                      'ห้องน้ำในตัว',
+                      <g key="bath">
+                        <path d="M4 12h16v3a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-3Z" />
+                        <path d="M7 12V6a2.5 2.5 0 0 1 4.6-1.4" />
+                        <line x1="3" y1="12" x2="21" y2="12" />
+                      </g>,
+                    ],
+                    [
+                      'cctv',
+                      'กล้องวงจรปิด',
+                      <g key="cctv">
+                        <rect x="2.5" y="8" width="12" height="8" rx="2" />
+                        <path d="M14.5 10.5 21 8v8l-6.5-2.5" />
+                        <line x1="6" y1="16" x2="5" y2="19" />
+                      </g>,
+                    ],
+                  ].map(([field, label, icon]) => (
+                    <label className="admin-toggle-chip" key={field}>
+                      <input
+                        type="checkbox"
+                        name={field}
+                        checked={roomForm[field]}
+                        onChange={handleRoomFormChange}
+                      />
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        {icon}
+                      </svg>
+                      {label}
+                    </label>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            <div className="admin-form-divider" />
-
-            <div className="admin-form-section">
-              <p className="admin-form-section-title">สิ่งอำนวยความสะดวก</p>
-              <div className="admin-toggle-grid">
-                {[
-                  [
-                    'air_conditioner',
-                    'เครื่องปรับอากาศ',
-                    <path key="ac" d="M12 3v18M5.6 6.5 18.4 17.5M18.4 6.5 5.6 17.5" />,
-                  ],
-                  [
-                    'wifi',
-                    'ไวไฟ',
-                    <g key="wifi">
-                      <path d="M2 8.5a16 16 0 0 1 20 0" />
-                      <path d="M5.5 12.5a11 11 0 0 1 13 0" />
-                      <path d="M9 16.5a5.5 5.5 0 0 1 6 0" />
-                      <circle cx="12" cy="19.5" r="0.5" fill="currentColor" />
-                    </g>,
-                  ],
-                  [
-                    'refrigerator',
-                    'ตู้เย็น',
-                    <g key="fridge">
-                      <rect x="5" y="2.5" width="14" height="19" rx="2" />
-                      <line x1="5" y1="10.5" x2="19" y2="10.5" />
-                      <line x1="8.5" y1="5.5" x2="8.5" y2="8" />
-                      <line x1="8.5" y1="13.5" x2="8.5" y2="16" />
-                    </g>,
-                  ],
-                  [
-                    'bathroom',
-                    'ห้องน้ำในตัว',
-                    <g key="bath">
-                      <path d="M4 12h16v3a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-3Z" />
-                      <path d="M7 12V6a2.5 2.5 0 0 1 4.6-1.4" />
-                      <line x1="3" y1="12" x2="21" y2="12" />
-                    </g>,
-                  ],
-                  [
-                    'cctv',
-                    'กล้องวงจรปิด',
-                    <g key="cctv">
-                      <rect x="2.5" y="8" width="12" height="8" rx="2" />
-                      <path d="M14.5 10.5 21 8v8l-6.5-2.5" />
-                      <line x1="6" y1="16" x2="5" y2="19" />
-                    </g>,
-                  ],
-                ].map(([field, label, icon]) => (
-                  <label className="admin-toggle-chip" key={field}>
-                    <input type="checkbox" name={field} checked={roomForm[field]} onChange={handleRoomFormChange} />
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {icon}
-                    </svg>
-                    {label}
-                  </label>
-                ))}
+              <div className="admin-form-actions">
+                <button
+                  type="submit"
+                  className="admin-action-btn is-primary"
+                  disabled={roomSubmitting}
+                >
+                  {roomSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
               </div>
-            </div>
-
-            <div className="admin-form-actions">
-              <button type="submit" className="admin-action-btn is-primary" disabled={roomSubmitting}>
-                {roomSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
-              </button>
-            </div>
-          </form>
+            </form>
           )}
         </Modal>
       )}
 
       {roomDeleteConfirm && (
-        <Modal title="ยืนยันการลบห้องพัก" onClose={() => setRoomDeleteConfirm(null)} variant="confirm">
+        <Modal
+          title="ยืนยันการลบห้องพัก"
+          onClose={() => setRoomDeleteConfirm(null)}
+          variant="confirm"
+        >
           {(requestClose) => (
             <div className="admin-confirm-body">
               <div className="admin-confirm-icon is-danger">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M3 6h18" />
                   <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
@@ -2839,12 +4457,22 @@ function AdminBackupPage() {
                   <line x1="14" y1="11" x2="14" y2="17" />
                 </svg>
               </div>
-              <p className="admin-confirm-message">ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?</p>
+              <p className="admin-confirm-message">
+                ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?
+              </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={requestClose}
+                >
                   ยกเลิก
                 </button>
-                <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteRoom(requestClose)}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-danger"
+                  onClick={() => confirmDeleteRoom(requestClose)}
+                >
                   ลบห้องพัก
                 </button>
               </div>
@@ -2854,68 +4482,128 @@ function AdminBackupPage() {
       )}
 
       {staffModal && (
-        <Modal title={staffModal.mode === 'create' ? 'เพิ่มพนักงาน' : 'แก้ไขข้อมูลพนักงาน'} onClose={() => setStaffModal(null)}>
+        <Modal
+          title={
+            staffModal.mode === 'create' ? 'เพิ่มพนักงาน' : 'แก้ไขข้อมูลพนักงาน'
+          }
+          onClose={() => setStaffModal(null)}
+        >
           {(requestClose) => (
-          <form onSubmit={(event) => submitStaffForm(event, requestClose)} noValidate>
-            {staffFormError && <div className="alert alert-danger py-2 px-3">{staffFormError}</div>}
-            <div className="row g-3">
-              <div className="col-12">
-                <label className="form-label">เลขบัตรประชาชน</label>
-                <input
-                  type="text"
-                  name="idcard"
-                  className="form-control"
-                  value={staffForm.idcard}
-                  onChange={handleStaffFormChange}
-                  disabled={staffModal.mode === 'edit'}
-                  maxLength={13}
-                  required
-                />
+            <form
+              onSubmit={(event) => submitStaffForm(event, requestClose)}
+              noValidate
+            >
+              {staffFormError && (
+                <div className="alert alert-danger py-2 px-3">
+                  {staffFormError}
+                </div>
+              )}
+              <div className="row g-3">
+                <div className="col-12">
+                  <label className="form-label">เลขบัตรประชาชน</label>
+                  <input
+                    type="text"
+                    name="idcard"
+                    className="form-control"
+                    value={staffForm.idcard}
+                    onChange={handleStaffFormChange}
+                    disabled={staffModal.mode === 'edit'}
+                    maxLength={13}
+                    required
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label">
+                    {staffModal.mode === 'create'
+                      ? 'รหัสผ่าน'
+                      : 'รหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)'}
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    className="form-control"
+                    value={staffForm.password}
+                    onChange={handleStaffFormChange}
+                    required={staffModal.mode === 'create'}
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">ชื่อ</label>
+                  <input
+                    type="text"
+                    name="first_name"
+                    className="form-control"
+                    value={staffForm.first_name}
+                    onChange={handleStaffFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">นามสกุล</label>
+                  <input
+                    type="text"
+                    name="last_name"
+                    className="form-control"
+                    value={staffForm.last_name}
+                    onChange={handleStaffFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">เบอร์โทรศัพท์</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    className="form-control"
+                    value={staffForm.phone}
+                    onChange={handleStaffFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">อายุ</label>
+                  <input
+                    type="number"
+                    name="age"
+                    className="form-control"
+                    value={staffForm.age}
+                    onChange={handleStaffFormChange}
+                    required
+                  />
+                </div>
               </div>
-              <div className="col-12">
-                <label className="form-label">{staffModal.mode === 'create' ? 'รหัสผ่าน' : 'รหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)'}</label>
-                <input
-                  type="password"
-                  name="password"
-                  className="form-control"
-                  value={staffForm.password}
-                  onChange={handleStaffFormChange}
-                  required={staffModal.mode === 'create'}
-                />
+              <div className="admin-form-actions">
+                <button
+                  type="submit"
+                  className="admin-action-btn is-primary"
+                  disabled={staffSubmitting}
+                >
+                  {staffSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
               </div>
-              <div className="col-6">
-                <label className="form-label">ชื่อ</label>
-                <input type="text" name="first_name" className="form-control" value={staffForm.first_name} onChange={handleStaffFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">นามสกุล</label>
-                <input type="text" name="last_name" className="form-control" value={staffForm.last_name} onChange={handleStaffFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">เบอร์โทรศัพท์</label>
-                <input type="text" name="phone" className="form-control" value={staffForm.phone} onChange={handleStaffFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">อายุ</label>
-                <input type="number" name="age" className="form-control" value={staffForm.age} onChange={handleStaffFormChange} required />
-              </div>
-            </div>
-            <div className="admin-form-actions">
-              <button type="submit" className="admin-action-btn is-primary" disabled={staffSubmitting}>
-                {staffSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
-              </button>
-            </div>
-          </form>
+            </form>
           )}
         </Modal>
       )}
 
       {staffDeleteConfirm && (
-        <Modal title="ยืนยันการลบพนักงาน" onClose={() => setStaffDeleteConfirm(null)} variant="confirm">
+        <Modal
+          title="ยืนยันการลบพนักงาน"
+          onClose={() => setStaffDeleteConfirm(null)}
+          variant="confirm"
+        >
           {(requestClose) => (
             <div className="admin-confirm-body">
               <div className="admin-confirm-icon is-danger">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M3 6h18" />
                   <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
@@ -2924,13 +4612,22 @@ function AdminBackupPage() {
                 </svg>
               </div>
               <p className="admin-confirm-message">
-                ต้องการลบพนักงาน {staffDeleteConfirm.first_name} {staffDeleteConfirm.last_name} ใช่หรือไม่?
+                ต้องการลบพนักงาน {staffDeleteConfirm.first_name}{' '}
+                {staffDeleteConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={requestClose}
+                >
                   ยกเลิก
                 </button>
-                <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteStaff(requestClose)}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-danger"
+                  onClick={() => confirmDeleteStaff(requestClose)}
+                >
                   ลบพนักงาน
                 </button>
               </div>
@@ -2941,32 +4638,58 @@ function AdminBackupPage() {
 
       {staffSuspendConfirm && (
         <Modal
-          title={staffSuspendConfirm.is_suspended ? 'ยืนยันการเปิดใช้งานพนักงาน' : 'ยืนยันการระงับพนักงาน'}
+          title={
+            staffSuspendConfirm.is_suspended
+              ? 'ยืนยันการเปิดใช้งานพนักงาน'
+              : 'ยืนยันการระงับพนักงาน'
+          }
           onClose={() => setStaffSuspendConfirm(null)}
           variant="confirm"
         >
           {(requestClose) => (
             <div className="admin-confirm-body">
-              <div className={`admin-confirm-icon ${staffSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <div
+                className={`admin-confirm-icon ${staffSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M12 2v6" />
                   <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
                 </svg>
               </div>
               <p className="admin-confirm-message">
-                ต้องการ{staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}พนักงาน {staffSuspendConfirm.first_name}{' '}
+                ต้องการ
+                {staffSuspendConfirm.is_suspended
+                  ? 'เปิดใช้งาน'
+                  : 'ระงับการใช้งาน'}
+                พนักงาน {staffSuspendConfirm.first_name}{' '}
                 {staffSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={requestClose}
+                >
                   ยกเลิก
                 </button>
                 <button
                   type="button"
                   className={`admin-action-btn ${staffSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
-                  onClick={() => toggleStaffSuspend(staffSuspendConfirm, requestClose)}
+                  onClick={() =>
+                    toggleStaffSuspend(staffSuspendConfirm, requestClose)
+                  }
                 >
-                  {staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
+                  {staffSuspendConfirm.is_suspended
+                    ? 'เปิดใช้งาน'
+                    : 'ระงับการใช้งาน'}
                 </button>
               </div>
             </div>
@@ -2975,70 +4698,144 @@ function AdminBackupPage() {
       )}
 
       {customerModal && (
-        <Modal title={`แก้ไขข้อมูลลูกค้า - ${customerModal.first_name} ${customerModal.last_name}`} onClose={() => setCustomerModal(null)}>
+        <Modal
+          title={`แก้ไขข้อมูลลูกค้า - ${customerModal.first_name} ${customerModal.last_name}`}
+          onClose={() => setCustomerModal(null)}
+        >
           {(requestClose) => (
-          <form onSubmit={(event) => submitCustomerForm(event, requestClose)} noValidate>
-            {customerFormError && <div className="alert alert-danger py-2 px-3">{customerFormError}</div>}
-            <div className="row g-3">
-              <div className="col-6">
-                <label className="form-label">ชื่อ</label>
-                <input type="text" name="first_name" className="form-control" value={customerForm.first_name} onChange={handleCustomerFormChange} required />
+            <form
+              onSubmit={(event) => submitCustomerForm(event, requestClose)}
+              noValidate
+            >
+              {customerFormError && (
+                <div className="alert alert-danger py-2 px-3">
+                  {customerFormError}
+                </div>
+              )}
+              <div className="row g-3">
+                <div className="col-6">
+                  <label className="form-label">ชื่อ</label>
+                  <input
+                    type="text"
+                    name="first_name"
+                    className="form-control"
+                    value={customerForm.first_name}
+                    onChange={handleCustomerFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">นามสกุล</label>
+                  <input
+                    type="text"
+                    name="last_name"
+                    className="form-control"
+                    value={customerForm.last_name}
+                    onChange={handleCustomerFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">เบอร์โทรศัพท์</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    className="form-control"
+                    value={customerForm.phone}
+                    onChange={handleCustomerFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">อายุ</label>
+                  <input
+                    type="number"
+                    name="age"
+                    className="form-control"
+                    value={customerForm.age}
+                    onChange={handleCustomerFormChange}
+                    required
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label">เงินมัดจำ (บาท)</label>
+                  <input
+                    type="number"
+                    name="deposit_amount"
+                    className="form-control"
+                    value={customerForm.deposit_amount}
+                    onChange={handleCustomerFormChange}
+                  />
+                </div>
               </div>
-              <div className="col-6">
-                <label className="form-label">นามสกุล</label>
-                <input type="text" name="last_name" className="form-control" value={customerForm.last_name} onChange={handleCustomerFormChange} required />
+              <div className="admin-form-actions">
+                <button
+                  type="submit"
+                  className="admin-action-btn is-primary"
+                  disabled={customerSubmitting}
+                >
+                  {customerSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
               </div>
-              <div className="col-6">
-                <label className="form-label">เบอร์โทรศัพท์</label>
-                <input type="text" name="phone" className="form-control" value={customerForm.phone} onChange={handleCustomerFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">อายุ</label>
-                <input type="number" name="age" className="form-control" value={customerForm.age} onChange={handleCustomerFormChange} required />
-              </div>
-              <div className="col-12">
-                <label className="form-label">เงินมัดจำ (บาท)</label>
-                <input type="number" name="deposit_amount" className="form-control" value={customerForm.deposit_amount} onChange={handleCustomerFormChange} />
-              </div>
-            </div>
-            <div className="admin-form-actions">
-              <button type="submit" className="admin-action-btn is-primary" disabled={customerSubmitting}>
-                {customerSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
-              </button>
-            </div>
-          </form>
+            </form>
           )}
         </Modal>
       )}
 
       {customerSuspendConfirm && (
         <Modal
-          title={customerSuspendConfirm.is_suspended ? 'ยืนยันการเปิดใช้งานลูกค้า' : 'ยืนยันการระงับลูกค้า'}
+          title={
+            customerSuspendConfirm.is_suspended
+              ? 'ยืนยันการเปิดใช้งานลูกค้า'
+              : 'ยืนยันการระงับลูกค้า'
+          }
           onClose={() => setCustomerSuspendConfirm(null)}
           variant="confirm"
         >
           {(requestClose) => (
             <div className="admin-confirm-body">
-              <div className={`admin-confirm-icon ${customerSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <div
+                className={`admin-confirm-icon ${customerSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M12 2v6" />
                   <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
                 </svg>
               </div>
               <p className="admin-confirm-message">
-                ต้องการ{customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}ลูกค้า {customerSuspendConfirm.first_name}{' '}
+                ต้องการ
+                {customerSuspendConfirm.is_suspended
+                  ? 'เปิดใช้งาน'
+                  : 'ระงับการใช้งาน'}
+                ลูกค้า {customerSuspendConfirm.first_name}{' '}
                 {customerSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                <button
+                  type="button"
+                  className="admin-action-btn is-ghost"
+                  onClick={requestClose}
+                >
                   ยกเลิก
                 </button>
                 <button
                   type="button"
                   className={`admin-action-btn ${customerSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
-                  onClick={() => toggleCustomerSuspend(customerSuspendConfirm, requestClose)}
+                  onClick={() =>
+                    toggleCustomerSuspend(customerSuspendConfirm, requestClose)
+                  }
                 >
-                  {customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
+                  {customerSuspendConfirm.is_suspended
+                    ? 'เปิดใช้งาน'
+                    : 'ระงับการใช้งาน'}
                 </button>
               </div>
             </div>
@@ -3057,17 +4854,37 @@ function AdminBackupPage() {
             <div className="alert alert-danger">{customerDetailError}</div>
           ) : (
             <div className="admin-detail-list">
-              {customerDetail.rentalHistory && customerDetail.rentalHistory.length > 0 ? (
+              {customerDetail.rentalHistory &&
+              customerDetail.rentalHistory.length > 0 ? (
                 customerDetail.rentalHistory.map((booking) => {
                   const page = rentalPaymentsPage[booking.booking_id] || 1
-                  const totalPages = Math.max(1, Math.ceil(booking.payments.length / DETAIL_ROWS_PER_PAGE))
+                  const totalPages = Math.max(
+                    1,
+                    Math.ceil(booking.payments.length / DETAIL_ROWS_PER_PAGE),
+                  )
                   const currentPage = Math.min(page, totalPages)
                   const start = (currentPage - 1) * DETAIL_ROWS_PER_PAGE
-                  const pagePayments = booking.payments.slice(start, start + DETAIL_ROWS_PER_PAGE)
+                  const pagePayments = booking.payments.slice(
+                    start,
+                    start + DETAIL_ROWS_PER_PAGE,
+                  )
                   return (
-                    <div className="admin-detail-block" key={booking.booking_id}>
+                    <div
+                      className="admin-detail-block"
+                      key={booking.booking_id}
+                    >
                       <p className="admin-detail-block-title">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
                           <path d="M14 2v6h6" />
                           <line x1="8" y1="13" x2="16" y2="13" />
@@ -3076,7 +4893,9 @@ function AdminBackupPage() {
                         สัญญาเช่าเมื่อ {formatDateTime(booking.created_at)}
                       </p>
                       {booking.payments.length === 0 ? (
-                        <p className="admin-empty">ยังไม่มีประวัติการชำระเงิน</p>
+                        <p className="admin-empty">
+                          ยังไม่มีประวัติการชำระเงิน
+                        </p>
                       ) : (
                         <>
                           <div className="admin-detail-table-wrap">
@@ -3093,13 +4912,23 @@ function AdminBackupPage() {
                                 {pagePayments.map((payment) => (
                                   <tr key={payment.id}>
                                     <td>{formatDate(payment.payment_date)}</td>
-                                    <td className="admin-strong-cell">฿{formatCurrency(payment.amount)}</td>
-                                    <td>
-                                      <span className={`admin-badge type-${payment.type}`}>{PAYMENT_TYPE_LABEL[payment.type] || payment.type}</span>
+                                    <td className="admin-strong-cell">
+                                      ฿{formatCurrency(payment.amount)}
                                     </td>
                                     <td>
-                                      <span className={`admin-badge status-${payment.status === 'paid' ? 'approved' : 'pending'}`}>
-                                        {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
+                                      <span
+                                        className={`admin-badge type-${payment.type}`}
+                                      >
+                                        {PAYMENT_TYPE_LABEL[payment.type] ||
+                                          payment.type}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span
+                                        className={`admin-badge status-${payment.status === 'paid' ? 'approved' : 'pending'}`}
+                                      >
+                                        {PAYMENT_STATUS_LABEL[payment.status] ||
+                                          payment.status}
                                       </span>
                                     </td>
                                   </tr>
@@ -3110,7 +4939,12 @@ function AdminBackupPage() {
                           <Pagination
                             page={currentPage}
                             totalPages={totalPages}
-                            onChange={(nextPage) => setRentalPaymentsPage((prev) => ({ ...prev, [booking.booking_id]: nextPage }))}
+                            onChange={(nextPage) =>
+                              setRentalPaymentsPage((prev) => ({
+                                ...prev,
+                                [booking.booking_id]: nextPage,
+                              }))
+                            }
                           />
                         </>
                       )}

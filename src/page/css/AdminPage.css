@@ -69,7 +69,9 @@
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .admin-logout-btn:hover {
@@ -94,7 +96,9 @@
   background: #f8fbff;
   color: #33506f;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .admin-notif-btn:hover {
@@ -180,7 +184,9 @@
   background: #fff5f5;
   color: #b42318;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .admin-notif-panel-close:hover {
@@ -445,7 +451,9 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .admin-summary-card:hover {
@@ -576,7 +584,9 @@
   background: #fff;
   border-radius: 18px;
   border: 1px solid #e6f0fd;
-  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.08), 0 2px 8px rgba(37, 99, 235, 0.05);
+  box-shadow:
+    0 5px 15px rgba(37, 99, 235, 0.08),
+    0 2px 8px rgba(37, 99, 235, 0.05);
   padding: 20px;
 }
 
@@ -898,7 +908,9 @@
   color: #33506f;
   cursor: pointer;
   border-bottom: 1px dashed #bcd2f0;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .admin-idcard-toggle:hover {
@@ -1126,7 +1138,10 @@
   font-weight: 600;
   cursor: pointer;
   border: 1.5px solid transparent;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
   white-space: nowrap;
 }
 
@@ -1298,12 +1313,35 @@
   max-width: 400px;
 }
 
+.admin-modal-success {
+  overflow: hidden;
+  border-color: #e5e7eb;
+  box-shadow: 0 20px 48px rgba(15, 43, 82, 0.24);
+}
+
 .admin-modal-confirm .admin-modal-header {
   padding: 16px 20px;
 }
 
 .admin-modal-confirm .admin-modal-body {
   padding: 20px 24px 24px;
+}
+
+.admin-modal-success .admin-modal-header {
+  background: #f3f4f6;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.admin-modal-success .admin-modal-header::after {
+  display: none;
+}
+
+.admin-modal-success .admin-form-actions {
+  border-top: 1px solid #d1d5db;
+}
+
+.admin-modal-success .admin-form-actions::before {
+  display: none;
 }
 
 .admin-modal-header {
@@ -1324,7 +1362,11 @@
   right: 0;
   bottom: -1.5px;
   height: 2px;
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.35), rgba(96, 165, 250, 0.35));
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 235, 0.35),
+    rgba(96, 165, 250, 0.35)
+  );
 }
 
 .admin-modal-header h3 {
@@ -1346,7 +1388,10 @@
   background: #fef2f2;
   color: #b42318;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
 }
 
 .admin-modal-close:hover {
@@ -1412,7 +1457,11 @@
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.35), rgba(96, 165, 250, 0.35));
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 235, 0.35),
+    rgba(96, 165, 250, 0.35)
+  );
 }
 
 .admin-modal-confirm .admin-form-actions {
@@ -1479,7 +1528,10 @@
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .admin-toggle-chip input {

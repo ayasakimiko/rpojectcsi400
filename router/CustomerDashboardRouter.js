@@ -319,6 +319,8 @@ router.get("/me", async (req, res) => {
     const latestBookingId = bookings[0]?.booking_id;
     const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
     const currentDue = computeCurrentDue(roomRows[0], paymentsForCurrentBooking, customer.deposit_amount);
+    const [configRows] = await pool.query("SELECT * FROM DormConfig WHERE id = 1");
+    const dormConfig = configRows[0] || { dorm_name: "หอพักใจ", promptpay_id: "0812345678" };
 
     return res.json({
       customer,
@@ -327,6 +329,7 @@ router.get("/me", async (req, res) => {
       maintenanceRequests,
       tenantRequests,
       currentDue,
+      dormConfig,
     });
   } catch (error) {
     console.error("Customer dashboard error:", error);
