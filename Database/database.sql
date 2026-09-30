@@ -201,3 +201,45 @@ CREATE TABLE IF NOT EXISTS MaintenancePhoto (
 
     FOREIGN KEY (maintenance_request_id) REFERENCES MaintenanceRequest(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS ResidentVisitRequest (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    customer_id INT UNSIGNED NOT NULL,
+    room_number INT UNSIGNED NOT NULL,
+    request_type ENUM('vehicle', 'overnight_guest') NOT NULL,
+    vehicle_plate VARCHAR(20) NULL,
+    vehicle_model VARCHAR(100) NULL,
+    guest_name VARCHAR(255) NULL,
+    guest_phone VARCHAR(20) NULL,
+    start_at DATETIME NOT NULL,
+    end_at DATETIME NOT NULL,
+    note VARCHAR(500) NULL,
+    is_special BOOLEAN NOT NULL DEFAULT FALSE,
+    special_reason VARCHAR(500) NULL,
+    status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+    reviewed_by_name VARCHAR(255) NULL,
+    reviewed_at DATETIME NULL,
+    admin_reviewed_by_name VARCHAR(255) NULL,
+    admin_reviewed_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_resident_visit_customer FOREIGN KEY (customer_id) REFERENCES Customer(id),
+    INDEX idx_resident_visit_status (status, created_at),
+    INDEX idx_resident_visit_customer (customer_id, created_at)
+);
+
+CREATE TABLE IF NOT EXISTS SafetyIncident (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    reporter_role VARCHAR(20) NOT NULL,
+    reporter_id INT UNSIGNED NULL,
+    reporter_name VARCHAR(255) NOT NULL,
+    room_number INT UNSIGNED NULL,
+    incident_type VARCHAR(80) NOT NULL,
+    severity ENUM('urgent', 'normal') NOT NULL DEFAULT 'normal',
+    description VARCHAR(1000) NOT NULL,
+    status ENUM('pending', 'reviewed') NOT NULL DEFAULT 'pending',
+    reviewed_by_name VARCHAR(255) NULL,
+    reviewed_at DATETIME NULL,
+    review_note VARCHAR(500) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_safety_incident_status (status, created_at)
+);

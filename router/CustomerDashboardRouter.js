@@ -8,6 +8,7 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
 import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
 import { listAnnouncements } from "./AnnouncementRouter.js";
+import safetyIncidentRouter from "./SafetyIncidentRouter.js";
 import {
   isPositiveId,
   isValidPassword,
@@ -59,6 +60,7 @@ export async function attachMaintenancePhotos(pool, requests) {
 }
 
 router.use(authenticate, requireCustomerRole);
+router.use("/safety-incidents", safetyIncidentRouter);
 
 router.use(async (req, res, next) => {
   try {
@@ -568,6 +570,46 @@ router.post("/requests", async (req, res) => {
   } catch (error) {
     console.error("Create tenant request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/resident-visit-requests", async (req, res) => {
+  try {
+    const [requests] = await getPool().query("SELECT * FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC", [req.user.id]);
+    return res.json({ requests });
+  } catch (error) {
+    console.error("Fetch resident visit requests error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอได้" });
+  }
+});
+
+router.post("/resident-visit-requests", async (req, res) => {
+  try {
+    const { requestType, vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, isSpecial, specialReason } = req.body ?? {};
+    if (!["vehicle", "overnight_guest"].includes(requestType) || !startAt || !endAt || new Date(endAt) <= new Date(startAt)) {
+      return res.status(400).json({ message: "กรุณากรอกประเภทคำขอและช่วงเวลาให้ถูกต้อง" });
+    }
+    if (requestType === "vehicle" && !String(vehiclePlate ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุทะเบียนรถ" });
+    }
+    if (requestType === "overnight_guest" && !String(guestName ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุชื่อแขก" });
+    }
+    if (isSpecial && !String(specialReason ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุเหตุผลที่ขออนุมัติพิเศษ" });
+    }
+    const pool = getPool();
+    const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
+    if (!customers[0]?.room_number) return res.status(400).json({ message: "ไม่พบห้องพักที่ผูกกับบัญชีนี้" });
+    const [result] = await pool.query(
+      `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, vehicle_plate, vehicle_model, guest_name, guest_phone, start_at, end_at, note, is_special, special_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, customers[0].room_number, requestType, vehiclePlate?.trim() || null, vehicleModel?.trim() || null, guestName?.trim() || null, guestPhone?.trim() || null, startAt, endAt, note?.trim() || null, Boolean(isSpecial), isSpecial ? specialReason.trim() : null],
+    );
+    return res.status(201).json({ id: result.insertId, message: "ส่งคำขอให้เจ้าหน้าที่แล้ว" });
+  } catch (error) {
+    console.error("Create resident visit request error:", error);
+    return res.status(500).json({ message: "ไม่สามารถส่งคำขอได้" });
   }
 });
 

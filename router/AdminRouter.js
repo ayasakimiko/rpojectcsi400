@@ -18,12 +18,14 @@ import {
 import { deletePublicImages } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import safetyIncidentRouter from "./SafetyIncidentRouter.js";
 
 const router = Router();
 
 router.use(authenticate, requireAdminRole);
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
+router.use("/safety-incidents", safetyIncidentRouter);
 
 function buildUpdate(allowedColumns, body) {
   const columns = [];
@@ -46,6 +48,39 @@ async function getActingAdminName(pool, user) {
   const row = rows[0];
   return row ? `${row.first_name} ${row.last_name}` : null;
 }
+
+router.get("/resident-visit-requests/special", async (_req, res) => {
+  try {
+    const [requests] = await getPool().query(
+      `SELECT r.*, c.first_name, c.last_name, c.phone AS customer_phone
+       FROM ResidentVisitRequest r JOIN Customer c ON c.id = r.customer_id
+       WHERE r.is_special = TRUE AND r.status = 'pending' ORDER BY r.created_at ASC`,
+    );
+    return res.json({ requests });
+  } catch (error) {
+    console.error("Fetch special resident requests error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอพิเศษได้" });
+  }
+});
+
+router.post("/resident-visit-requests/:id/special-review", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const status = req.body?.decision === "approve" ? "approved" : req.body?.decision === "reject" ? "rejected" : null;
+    if (!isPositiveId(id) || !status) return res.status(400).json({ message: "ข้อมูลคำขอไม่ถูกต้อง" });
+    const pool = getPool();
+    const adminName = await getActingAdminName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE ResidentVisitRequest SET status = ?, admin_reviewed_by_name = ?, admin_reviewed_at = NOW() WHERE id = ? AND is_special = TRUE AND status = 'pending'`,
+      [status, adminName, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการแล้ว" });
+    return res.json({ message: status === "approved" ? "อนุมัติกรณีพิเศษแล้ว" : "ปฏิเสธกรณีพิเศษแล้ว" });
+  } catch (error) {
+    console.error("Review special resident request error:", error);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกผลได้" });
+  }
+});
 
 router.get("/waiting-list", async (_req, res) => {
   try {

@@ -90,6 +90,7 @@ services:
       DB_USER: ${DB_USER:-root}
       DB_PASSWORD: ${DB_PASSWORD:-rootpass}
       DB_NAME: ${DB_NAME:-projectcsi400}
+      PARKING_CAPACITY: ${PARKING_CAPACITY:-}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
       TZ: Asia/Bangkok

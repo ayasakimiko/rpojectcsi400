@@ -7,6 +7,8 @@ import './css/StaffPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import DateDropdowns from '../components/DateDropdowns.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
+import SafetyIncidents from '../components/SafetyIncidents.jsx'
 
 const MOVE_OUT_CHECKLIST = [
   { key: 'walls', label: 'ผนังและสี' },
@@ -3409,6 +3411,8 @@ function StaffMain() {
               </button>
             </li>
           ))}
+          <ResidentVisitRequests staff nav />
+          <SafetyIncidents base="staff" nav />
         </ul>
 
         {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}

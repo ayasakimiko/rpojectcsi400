@@ -6,6 +6,8 @@ import './css/AdminPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import DateDropdowns from '../components/DateDropdowns.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
+import SafetyIncidents from '../components/SafetyIncidents.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
   waiting: 'รอห้องว่าง',
@@ -1849,6 +1851,8 @@ function AdminBackupPage() {
               </button>
             </li>
           ))}
+          <ResidentVisitRequests admin nav />
+          <SafetyIncidents reviewer base="admin" nav />
         </ul>
 
         {activeTab === 'announcements' && (

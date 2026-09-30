@@ -102,17 +102,6 @@ async function seedDefaults(connection) {
   }
 }
 
-async function ensureColumn(connection, table, column, definition) {
-  const [rows] = await connection.query(
-    `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
-    [DB_NAME, table, column],
-  );
-  if (rows.length === 0) {
-    await connection.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
-    console.log(`Added column ${table}.${column}`);
-  }
-}
-
 async function main() {
   const connection = await mysql.createConnection({
     host: DB_HOST,
@@ -129,7 +118,6 @@ async function main() {
 
   const sql = fs.readFileSync(path.join(__dirname, "database.sql"), "utf8");
   await connection.query(sql);
-  await ensureColumn(connection, "Announcement", "expires_at", "DATETIME NULL AFTER author_name");
 
   await seedDefaults(connection);
 

@@ -48,6 +48,7 @@ function RequireOwnerAuth({ children }) {
   if (!token) {
     return <Navigate to="/login" replace />
   }
+
   const storedUser = sessionStorage.getItem('user')
   const role = storedUser ? JSON.parse(storedUser)?.role : null
   if (role !== 'Owner') {

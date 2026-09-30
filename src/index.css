@@ -97,3 +97,312 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+
+/* Safety incident and owner parking components */
+.safety-entry{display:inline-flex;align-items:center}.safety-trigger,.safety-submit,.safety-review{border:0;border-radius:10px;padding:10px 14px;background:#b93838;color:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 16px rgb(185 56 56 / 17%)}.safety-trigger.is-reviewer{background:#315f9e;box-shadow:0 6px 16px rgb(49 95 158 / 15%)}.safety-backdrop{position:fixed;inset:0;z-index:3100;display:grid;place-items:center;overflow:auto;padding:22px;background:rgb(20 35 62 / 55%);backdrop-filter:blur(5px)}.safety-modal{position:relative;width:min(680px,100%);max-height:88vh;overflow:auto;border:1px solid #e1e9f5;border-radius:22px;padding:30px;background:#fff;color:#26364f;box-shadow:0 24px 70px rgb(20 35 62 / 26%);font-family:inherit;line-height:1.5;color-scheme:light}.safety-close{position:absolute;top:16px;right:16px;width:36px;height:36px;border:1px solid #e4eaf3;border-radius:50%;background:#f5f8fd;color:#52627b;font-size:22px;cursor:pointer}.safety-eyebrow{color:#b93838;font-size:11px;font-weight:800;letter-spacing:.15em}.safety-modal h2{margin:7px 42px 5px 0;color:#18345f;font-size:23px;font-weight:750}.safety-intro{margin:0 0 20px;color:#71809a;font-size:14px}.safety-form{display:grid;gap:14px}.safety-form label{display:grid;gap:6px;color:#40516d;font-size:13px;font-weight:700}.safety-form input,.safety-form select,.safety-form textarea,.safety-card textarea{box-sizing:border-box;width:100%;min-height:42px;border:1px solid #d8e1ef;border-radius:10px;padding:10px 12px;background:#fff;color:#283851;color-scheme:light;font:inherit;font-size:14px;outline:none}.safety-form input:focus,.safety-form select:focus,.safety-form textarea:focus,.safety-card textarea:focus{border-color:#7099df;box-shadow:0 0 0 3px rgb(49 95 158 / 12%)}.safety-submit{min-height:44px;margin-top:2px}.safety-list{display:grid;gap:11px}.safety-card{border:1px solid #e5ebf4;border-radius:14px;padding:15px;background:#fbfcff}.safety-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.safety-card-heading strong{color:#263d61}.safety-status{border-radius:999px;padding:4px 10px;background:#e7edf5;color:#5b6e8b;font-size:11px;font-weight:700}.safety-status.pending.urgent{background:#fde9e7;color:#a43e38}.safety-status.reviewed{background:#e3f4e9;color:#28724a}.safety-card>p{margin:10px 0;color:#52627b;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.safety-card>small{display:block;margin:7px 0 11px;color:#71809a;font-size:12px}.safety-card textarea{min-height:72px;resize:vertical}.safety-review{margin-top:9px;background:#315f9e;box-shadow:none}.safety-note{padding:9px 11px;border-radius:9px;background:#f0f5fd}.safety-empty{margin:0;padding:24px;color:#71809a;text-align:center}.safety-message{margin:14px 0 0;padding:10px 12px;border:1px solid #dce8fb;border-radius:10px;background:#f1f6ff;color:#315b9e;font-size:13px}@media(max-width:560px){.safety-modal{padding:25px 18px 20px;border-radius:18px}.safety-card-heading{align-items:flex-start;flex-direction:column}}
+
+.owner-parking-summary{display:flex;align-items:center;gap:14px;margin:18px 0;padding:16px 20px;border:1px solid #dce8fb;border-radius:16px;background:linear-gradient(110deg,#f5f9ff,#fff);box-shadow:0 5px 16px rgb(34 83 151 / 6%)}.owner-parking-icon{display:grid;flex:0 0 42px;height:42px;place-items:center;border-radius:13px;background:#e7f0ff;color:#2868cb;font-size:19px;font-weight:800}.owner-parking-copy{display:grid;gap:3px;flex:1}.owner-parking-copy strong{color:#1c3760;font-size:14px}.owner-parking-copy span,.owner-parking-count span{color:#71809a;font-size:12px}.owner-parking-count{display:grid;text-align:right;gap:2px}.owner-parking-count strong{color:#2563eb;font-size:22px;line-height:1.1}@media(max-width:540px){.owner-parking-summary{padding:13px;gap:10px}.owner-parking-copy span{max-width:190px}.owner-parking-count strong{font-size:18px}}
+
+
+
+/* Resident vehicle and overnight guest requests */
+.rv-panel {
+  display: inline-flex;
+  align-items: center;
+}
+
+.rv-trigger,
+.rv-submit,
+.rv-actions button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #2563eb, #4385f5);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgb(37 99 235 / 18%);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.rv-trigger:hover,
+.rv-submit:hover:not(:disabled),
+.rv-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgb(37 99 235 / 24%);
+}
+
+.rv-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 24px;
+  background: rgb(20 35 62 / 52%);
+  backdrop-filter: blur(5px);
+}
+
+.rv-modal {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+  padding: 32px;
+  border: 1px solid #e1e9f5;
+  border-radius: 22px;
+  background: #fff;
+  color: #26364f;
+  box-shadow: 0 24px 70px rgb(20 35 62 / 26%);
+  font-family: inherit;
+  line-height: 1.5;
+  color-scheme: light;
+}
+
+.rv-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #e4eaf3;
+  border-radius: 50%;
+  background: #f5f8fd;
+  color: #52627b;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rv-kicker {
+  display: block;
+  margin-bottom: 7px;
+  color: #3974d7;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+.rv-modal h2 {
+  margin: 0 42px 6px 0;
+  color: #18345f;
+  font-size: 25px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+}
+
+.rv-subtitle {
+  margin: 0 0 22px;
+  color: #71809a;
+  font-size: 14px;
+}
+
+.rv-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border: 1px solid #e7edf6;
+  border-radius: 12px;
+  background: #f4f7fc;
+}
+
+.rv-switch button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #61718b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.rv-switch button.selected {
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 2px 8px rgb(30 58 100 / 10%);
+}
+
+.rv-form {
+  display: grid;
+  gap: 15px;
+}
+
+.rv-form label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #40516d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rv-form input,
+.rv-form textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #d8e1ef;
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  background: #fff;
+  color: #283851;
+  color-scheme: light;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.rv-form input:focus,
+.rv-form textarea:focus {
+  border-color: #6c9cf0;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 12%);
+}
+
+.rv-form textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.rv-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rv-submit {
+  min-height: 46px;
+  margin-top: 2px;
+}
+
+.rv-submit:disabled,
+.rv-actions button:disabled {
+  cursor: wait;
+  opacity: .58;
+}
+
+.rv-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.rv-history,
+.rv-card {
+  min-width: 0;
+  border: 1px solid #e5ebf4;
+  border-radius: 13px;
+  padding: 14px 16px;
+  background: #fbfcff;
+}
+
+.rv-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.rv-history small {
+  width: 100%;
+  color: #71809a;
+}
+
+.rv-status,
+.rv-card-head span {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fff3d8;
+  color: #906410;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rv-status.approved {
+  background: #e2f5e9;
+  color: #28734a;
+}
+
+.rv-status.rejected {
+  background: #fde9e7;
+  color: #a23c38;
+}
+
+.rv-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #263d61;
+}
+
+.rv-card p {
+  margin: 10px 0 0;
+  color: #52627b;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.rv-card small {
+  display: block;
+  margin-top: 9px;
+  color: #71809a;
+}
+
+.rv-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.rv-actions button {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.rv-actions button.rv-deny {
+  background: #fff0ee;
+  color: #a23c38;
+  box-shadow: none;
+}
+
+.rv-empty {
+  margin: 0;
+  padding: 20px;
+  color: #71809a;
+  text-align: center;
+}
+
+.rv-message {
+  margin: 16px 0 0;
+  border: 1px solid #dce9ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f1f6ff;
+  color: #315b9e;
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .rv-backdrop { padding: 12px; }
+  .rv-modal { padding: 26px 18px 20px; border-radius: 18px; }
+  .rv-modal h2 { font-size: 21px; }
+  .rv-dates { grid-template-columns: 1fr; }
+}
+
+.rv-special-toggle{display:flex!important;grid-template-columns:none!important;align-items:center;gap:10px!important;padding:11px 12px;border:1px solid #dce7f5;border-radius:10px;background:#f6f9ff}.rv-form .rv-special-toggle input[type=checkbox]{width:17px;height:17px;min-height:17px;margin:0;accent-color:#2563eb}.rv-special-toggle span{color:#40516d;font-size:13px;font-weight:650}.rv-special-reason{padding:10px 12px;border-left:3px solid #f0b64d;border-radius:5px;background:#fff9e9}
+

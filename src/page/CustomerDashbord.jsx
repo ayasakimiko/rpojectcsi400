@@ -8,6 +8,8 @@ import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
+import SafetyIncidents from '../components/SafetyIncidents.jsx'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -2402,6 +2404,8 @@ function CustomerDashbord() {
               </button>
             </li>
           ))}
+          <ResidentVisitRequests nav />
+          <SafetyIncidents nav />
         </ul>
 
         {customerTab === 'announcements' && (
