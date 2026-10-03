@@ -394,7 +394,7 @@ router.get("/trends", async (req, res) => {
     return res.json({ trends, granularity: "month" });
   } catch (error) {
     console.error("Owner fetch trends error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุ ณาลองใหม่อีกครั้ง" });
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
 
