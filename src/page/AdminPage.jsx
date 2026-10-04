@@ -3454,7 +3454,10 @@ function AdminBackupPage() {
                                 {pagePayments.map((payment) => (
                                   <tr key={payment.id}>
                                     <td>{formatDate(payment.payment_date)}</td>
-                                    <td className="admin-strong-cell">฿{formatCurrency(payment.amount)}</td>
+                                    <td className="admin-strong-cell">
+                                      ฿{formatCurrency(payment.amount)}
+                                      {payment.note && <small className="d-block text-muted">{payment.note}</small>}
+                                    </td>
                                     <td>
                                       <span className={`admin-badge type-${payment.type}`}>{PAYMENT_TYPE_LABEL[payment.type] || payment.type}</span>
                                     </td>

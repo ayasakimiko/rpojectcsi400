@@ -707,7 +707,7 @@ router.get("/requests", async (req, res) => {
 
     const [tenantRequests] = await pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
-              tr.room_number, c.first_name, c.last_name, c.phone
+              tr.room_number, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
        WHERE tr.status IN ('pending', 'in_progress')
@@ -907,6 +907,53 @@ router.post("/requests/:id/approve", async (req, res) => {
     }
 
     if (tenantRequest.type === "moveout") {
+      const refundAmount = Number(req.body?.depositRefundAmount ?? 0);
+      const deductionNote = typeof req.body?.depositDeductionNote === "string"
+        ? req.body.depositDeductionNote.trim()
+        : "";
+      if (
+        !Number.isFinite(refundAmount) ||
+        refundAmount < 0 ||
+        refundAmount > 99999999.99 ||
+        !Number.isInteger(refundAmount * 100) ||
+        deductionNote.length > 150
+      ) {
+        await connection.rollback();
+        return res.status(400).json({ message: "ยอดคืนเงินประกันหรือหมายเหตุไม่ถูกต้อง" });
+      }
+
+      const [customerRows] = await connection.query(
+        `SELECT deposit_amount FROM Customer WHERE id = ? FOR UPDATE`,
+        [tenantRequest.customer_id],
+      );
+      const depositAmount = Number(customerRows[0]?.deposit_amount) || 0;
+      const [bookingRows] = await connection.query(
+        `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [tenantRequest.customer_id],
+      );
+      const booking = bookingRows[0];
+      if (!booking && refundAmount > 0) {
+        await connection.rollback();
+        return res.status(409).json({ message: "ไม่พบสัญญาเช่าสำหรับบันทึกการคืนเงินประกัน" });
+      }
+
+      if (refundAmount > depositAmount) {
+        await connection.rollback();
+        return res.status(400).json({ message: "ยอดคืนเงินประกันต้องไม่เกินยอดเงินประกันที่ลงทะเบียนไว้" });
+      }
+
+      const retainedAmount = Math.max(0, depositAmount - refundAmount);
+      const paymentNote = deductionNote
+        ? `สรุปเงินประกัน: คืน ฿${refundAmount.toFixed(2)}, หัก/คงไว้ ฿${retainedAmount.toFixed(2)}; ${deductionNote}`
+        : `สรุปเงินประกัน: คืน ฿${refundAmount.toFixed(2)}, หัก/คงไว้ ฿${retainedAmount.toFixed(2)}`;
+      if (booking && (depositAmount > 0 || refundAmount > 0 || deductionNote)) {
+        await connection.query(
+          `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note)
+           VALUES (?, ?, CURDATE(), 'paid', 'deposit', ?)`,
+          [booking.id, -refundAmount, paymentNote],
+        );
+      }
+
       const [roomBeforeReset] = await connection.query(
         `SELECT rental_start_date FROM Room WHERE room_number = ?`,
         [tenantRequest.room_number],

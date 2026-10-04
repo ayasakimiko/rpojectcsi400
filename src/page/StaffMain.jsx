@@ -1514,6 +1514,8 @@ function StaffMain() {
   const [maintenanceDetail, setMaintenanceDetail] = useState(null)
   const [maintenancePhotoPreview, setMaintenancePhotoPreview] = useState(null)
   const [moveoutConfirmRequest, setMoveoutConfirmRequest] = useState(null)
+  const [depositRefundAmount, setDepositRefundAmount] = useState('')
+  const [depositDeductionNote, setDepositDeductionNote] = useState('')
   const [renewApproveConfirm, setRenewApproveConfirm] = useState(null)
   const [moveoutAcknowledgeConfirm, setMoveoutAcknowledgeConfirm] = useState(null)
   const [tenantRejectConfirm, setTenantRejectConfirm] = useState(null)
@@ -2067,12 +2069,12 @@ function StaffMain() {
     navigate('/login', { replace: true })
   }
 
-  const handleApproveTenantRequest = async (request) => {
+  const handleApproveTenantRequest = async (request, approvalDetails = {}) => {
     const key = `tenant-${request.id}`
     setProcessingRequestKey(key)
     setRequestsError('')
     try {
-      const { data } = await axios.post(`/api/staff/requests/${request.id}/approve`, {}, { headers: authHeaders() })
+      const { data } = await axios.post(`/api/staff/requests/${request.id}/approve`, approvalDetails, { headers: authHeaders() })
       setActionSuccess(data.message || 'อนุมัติคำขอสำเร็จ')
       await Promise.all([loadRequests(), loadRooms()])
       return true
@@ -2103,8 +2105,21 @@ function StaffMain() {
 
   const handleConfirmMoveoutApproval = async () => {
     if (!moveoutConfirmRequest) return
-    const success = await handleApproveTenantRequest(moveoutConfirmRequest)
-    if (success) setMoveoutConfirmRequest(null)
+    const refundAmount = Number(depositRefundAmount || 0)
+    const depositAmount = Number(moveoutConfirmRequest.deposit_amount) || 0
+    if (!Number.isFinite(refundAmount) || refundAmount < 0 || refundAmount > depositAmount) {
+      setRequestsError('ยอดคืนเงินประกันต้องอยู่ระหว่าง 0 ถึงยอดเงินประกันที่ลงทะเบียนไว้')
+      return
+    }
+    const success = await handleApproveTenantRequest(moveoutConfirmRequest, {
+      depositRefundAmount: refundAmount,
+      depositDeductionNote,
+    })
+    if (success) {
+      setMoveoutConfirmRequest(null)
+      setDepositRefundAmount('')
+      setDepositDeductionNote('')
+    }
   }
 
   const handleConfirmRenewApproval = async () => {
@@ -2222,7 +2237,12 @@ function StaffMain() {
                 type="button"
                 className="staff-action-btn is-primary"
                 disabled={isProcessing}
-                onClick={() => setMoveoutConfirmRequest(request)}
+                onClick={() => {
+                  setRequestsError('')
+                  setDepositRefundAmount(String(Number(request.deposit_amount) || 0))
+                  setDepositDeductionNote('')
+                  setMoveoutConfirmRequest(request)
+                }}
               >
                 {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติการย้ายออก'}
               </button>
@@ -5808,6 +5828,36 @@ function StaffMain() {
                     {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}
                   </strong>
                 </div>
+                <div className="staff-confirm-detail-row">
+                  <span>เงินประกันที่ลงทะเบียน</span>
+                  <strong>฿{formatCurrency(moveoutConfirmRequest.deposit_amount || 0)}</strong>
+                </div>
+              </div>
+              <div className="staff-form-group">
+                <label className="staff-form-label" htmlFor="moveout-deposit-refund">ยอดคืนเงินประกัน</label>
+                <input
+                  id="moveout-deposit-refund"
+                  className="staff-form-input"
+                  type="number"
+                  min="0"
+                  max={Number(moveoutConfirmRequest.deposit_amount) || 0}
+                  step="0.01"
+                  value={depositRefundAmount}
+                  onChange={(event) => setDepositRefundAmount(event.target.value)}
+                />
+                <small className="staff-form-hint">ใส่ 0 หากไม่คืนเงิน ระบบจะบันทึกรายการคืนในประวัติการเช่า</small>
+              </div>
+              <div className="staff-form-group">
+                <label className="staff-form-label" htmlFor="moveout-deposit-note">หมายเหตุการหักเงินประกัน (ถ้ามี)</label>
+                <input
+                  id="moveout-deposit-note"
+                  className="staff-form-input"
+                  type="text"
+                  maxLength={150}
+                  value={depositDeductionNote}
+                  onChange={(event) => setDepositDeductionNote(event.target.value)}
+                  placeholder="เช่น หักค่าซ่อมแซมห้อง"
+                />
               </div>
               <div className="staff-confirm-warning">
                 <svg
