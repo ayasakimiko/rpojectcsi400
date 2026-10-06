@@ -1,0 +1,124 @@
+.parcel-photo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  color: #0f2b52;
+  font: inherit;
+}
+
+.parcel-photo-field-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.parcel-photo-field-heading small,
+.parcel-photo-optional {
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.parcel-photo-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.parcel-photo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.parcel-photo-item,
+.parcel-photo-add {
+  position: relative;
+  display: flex;
+  width: 104px;
+  height: 104px;
+  flex: 0 0 104px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin: 0;
+  border: 1.5px solid #dce9fb;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.parcel-photo-item img {
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+}
+
+.parcel-photo-item figcaption {
+  width: 100%;
+  padding: 4px 6px;
+  overflow: hidden;
+  color: #385a80;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parcel-photo-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(15, 43, 82, 0.78);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.parcel-photo-add {
+  gap: 2px;
+  border-style: dashed;
+  color: #2563eb;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.parcel-photo-add:hover {
+  border-color: #60a5fa;
+  background: #eef5ff;
+}
+
+.parcel-photo-add span {
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.parcel-photo-add small {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.parcel-photo-input:focus-visible + .parcel-photo-list .parcel-photo-add {
+  outline: 3px solid rgba(96, 165, 250, 0.35);
+  outline-offset: 2px;
+}
+
+.parcel-photo-error {
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}

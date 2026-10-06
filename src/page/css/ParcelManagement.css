@@ -1,0 +1,294 @@
+.parcel-management-card {
+  display: flex;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  flex-direction: column;
+  overflow: visible;
+  border: 1px solid #e6f0fd;
+  border-radius: 18px;
+  background: #fff;
+  padding: 20px;
+  color: #0f2b52;
+  font-family: inherit;
+  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.08), 0 2px 8px rgba(37, 99, 235, 0.05);
+}
+
+.parcel-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.parcel-card-header h2 {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.parcel-card-header p {
+  margin: 5px 0 0;
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.parcel-card-header .parcel-card-note {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.parcel-count-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.parcel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding: 16px;
+  border: 1px solid #e6f0fd;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.parcel-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.parcel-form-field,
+.parcel-search-field,
+.parcel-filter-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.parcel-label {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.parcel-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1.5px solid #dce9fb;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #f8fbff;
+  color: #0f2b52;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.parcel-control:focus {
+  outline: none;
+  border-color: #60a5fa;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15);
+}
+
+.parcel-control::placeholder {
+  color: #9db4cc;
+}
+
+.parcel-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.parcel-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.parcel-action-btn.is-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.parcel-action-btn.is-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.parcel-action-btn.is-ghost {
+  border-color: #dce9fb;
+  background: #f8fbff;
+  color: #33506f;
+}
+
+.parcel-action-btn.is-ghost:hover:not(:disabled) {
+  background: #eef2f7;
+}
+
+.parcel-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.parcel-form-error {
+  margin: 0;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fef3f2;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.parcel-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.parcel-search-field {
+  flex: 1 1 260px;
+  max-width: 460px;
+}
+
+.parcel-filter-field {
+  flex: 0 1 220px;
+}
+
+.parcel-management-card > .table-responsive {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
+  border: 0;
+  border-radius: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #93c5fd #eaf4ff;
+}
+
+.parcel-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  color: #0f2b52;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.parcel-table th {
+  padding: 8px 10px;
+  border-bottom: 1.5px solid #e6f0fd;
+  color: #6b859e;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.parcel-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #f0f5fb;
+  color: #0f2b52;
+  vertical-align: middle;
+}
+
+.parcel-table tbody tr:nth-child(even) {
+  background: #f8fbff;
+}
+
+.parcel-table tbody tr:hover {
+  background: #eef5ff;
+}
+
+.parcel-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.parcel-secondary {
+  display: block;
+  margin-top: 3px;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.parcel-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.parcel-status.is-pending {
+  background: #fff7e6;
+  color: #b54708;
+}
+
+.parcel-status.is-received {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.parcel-table td.parcel-empty {
+  padding: 3rem 12px;
+  color: #6b859e;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .parcel-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .parcel-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .parcel-search-field,
+  .parcel-filter-field {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .parcel-management-card {
+    padding: 14px;
+  }
+
+  .parcel-form {
+    padding: 12px;
+  }
+}

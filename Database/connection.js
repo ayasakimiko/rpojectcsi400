@@ -130,6 +130,21 @@ async function main() {
   const sql = fs.readFileSync(path.join(__dirname, "database.sql"), "utf8");
   await connection.query(sql);
   await ensureColumn(connection, "Announcement", "expires_at", "DATETIME NULL AFTER author_name");
+  await ensureColumn(connection, "Parcel", "customer_id", "INT UNSIGNED NULL AFTER room_number");
+  await connection.query(
+    `UPDATE Parcel p
+     SET p.customer_id = (
+       SELECT c.id FROM Customer c
+       WHERE c.room_number = p.room_number AND c.is_suspended = FALSE
+       ORDER BY c.id DESC
+       LIMIT 1
+     )
+     WHERE p.customer_id IS NULL
+       AND EXISTS (
+         SELECT 1 FROM Customer c
+         WHERE c.room_number = p.room_number AND c.is_suspended = FALSE
+       )`,
+  );
 
   await seedDefaults(connection);
 

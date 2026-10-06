@@ -16,6 +16,7 @@ import {
   parseTenantRequestInput,
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
+import { attachParcelPhotos } from "./ParcelRouter.js";
 
 const router = Router();
 const PAYMENT_SLIP_FOLDER = "payment-slips";
@@ -347,6 +348,11 @@ router.get("/me", async (req, res) => {
     const latestBookingId = bookings[0]?.booking_id;
     const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
     const currentDue = computeCurrentDue(roomRows[0], paymentsForCurrentBooking, customer.deposit_amount);
+    const [parcels] = await pool.query(
+      `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
+       FROM Parcel WHERE customer_id = ? AND room_number = ? ORDER BY created_at DESC`,
+      [customer.id, customer.room_number],
+    );
 
     return res.json({
       customer,
@@ -356,6 +362,7 @@ router.get("/me", async (req, res) => {
       tenantRequests,
       announcements,
       currentDue,
+      parcels: await attachParcelPhotos(pool, parcels),
     });
   } catch (error) {
     console.error("Customer dashboard error:", error);
@@ -567,6 +574,38 @@ router.post("/requests", async (req, res) => {
     return res.status(201).json({ message: "ส่งคำขอสำเร็จ ทางผู้ดูแลจะติดต่อกลับโดยเร็วที่สุด" });
   } catch (error) {
     console.error("Create tenant request error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/parcels/:id/receive", async (req, res) => {
+  try {
+    const parcelId = Number(req.params.id);
+    if (!isPositiveId(parcelId)) return res.status(400).json({ message: "รหัสพัสดุไม่ถูกต้อง" });
+    const pool = getPool();
+    const [customerRows] = await pool.query(`SELECT id, room_number FROM Customer WHERE id = ?`, [req.user.id]);
+    const customer = customerRows[0];
+    if (!customer) return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+
+    const [result] = await pool.query(
+      `UPDATE Parcel SET status = 'received', received_at = NOW()
+       WHERE id = ? AND customer_id = ? AND room_number = ? AND status = 'pending'`,
+      [parcelId, customer.id, customer.room_number]
+    );
+    if (result.affectedRows === 0) {
+      const [parcels] = await pool.query(
+        `SELECT status FROM Parcel WHERE id = ? AND customer_id = ? AND room_number = ?`,
+        [parcelId, customer.id, customer.room_number],
+      );
+      if (parcels[0]?.status === "received") {
+        return res.status(409).json({ message: "พัสดุรายการนี้ได้รับการยืนยันแล้ว" });
+      }
+      return res.status(404).json({ message: "ไม่พบพัสดุในห้องนี้" });
+    }
+
+    return res.json({ message: "ยืนยันรับพัสดุสำเร็จ" });
+  } catch (error) {
+    console.error("Receive parcel error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
