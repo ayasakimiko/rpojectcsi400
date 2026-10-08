@@ -16,7 +16,8 @@
     "server:staff": "node services/staffService.js",
     "server:admin": "node services/adminService.js",
     "server:owner": "node services/ownerService.js",
-    "server:all": "concurrently -n gateway,auth,room,customer,staff,admin,owner -c white,blue,green,yellow,magenta,cyan,red \"npm:server\" \"npm:server:auth\" \"npm:server:room\" \"npm:server:customer\" \"npm:server:staff\" \"npm:server:admin\" \"npm:server:owner\""
+    "server:parcel": "node services/parcelService.js",
+    "server:all": "concurrently -n gateway,auth,room,customer,staff,admin,owner,parcel -c white,blue,green,yellow,magenta,cyan,red,gray \"npm:server\" \"npm:server:auth\" \"npm:server:room\" \"npm:server:customer\" \"npm:server:staff\" \"npm:server:admin\" \"npm:server:owner\" \"npm:server:parcel\""
   },
   "dependencies": {
     "axios": "^1.20.0",

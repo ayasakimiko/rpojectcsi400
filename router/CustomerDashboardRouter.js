@@ -59,9 +59,7 @@ export async function attachMaintenancePhotos(pool, requests) {
   return requests.map((request) => ({ ...request, photos: photosByRequestId.get(request.id) || [] }));
 }
 
-router.use(authenticate, requireCustomerRole);
-
-router.use(async (req, res, next) => {
+export async function requireActiveCustomer(req, res, next) {
   try {
     const pool = getPool();
     const [rows] = await pool.query(`SELECT is_suspended FROM Customer WHERE id = ?`, [req.user.id]);
@@ -73,7 +71,9 @@ router.use(async (req, res, next) => {
     console.error("Check customer suspension error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
-});
+}
+
+router.use(authenticate, requireCustomerRole, requireActiveCustomer);
 
 router.patch("/profile", async (req, res) => {
   try {
@@ -574,38 +574,6 @@ router.post("/requests", async (req, res) => {
     return res.status(201).json({ message: "ส่งคำขอสำเร็จ ทางผู้ดูแลจะติดต่อกลับโดยเร็วที่สุด" });
   } catch (error) {
     console.error("Create tenant request error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
-  }
-});
-
-router.post("/parcels/:id/receive", async (req, res) => {
-  try {
-    const parcelId = Number(req.params.id);
-    if (!isPositiveId(parcelId)) return res.status(400).json({ message: "รหัสพัสดุไม่ถูกต้อง" });
-    const pool = getPool();
-    const [customerRows] = await pool.query(`SELECT id, room_number FROM Customer WHERE id = ?`, [req.user.id]);
-    const customer = customerRows[0];
-    if (!customer) return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
-
-    const [result] = await pool.query(
-      `UPDATE Parcel SET status = 'received', received_at = NOW()
-       WHERE id = ? AND customer_id = ? AND room_number = ? AND status = 'pending'`,
-      [parcelId, customer.id, customer.room_number]
-    );
-    if (result.affectedRows === 0) {
-      const [parcels] = await pool.query(
-        `SELECT status FROM Parcel WHERE id = ? AND customer_id = ? AND room_number = ?`,
-        [parcelId, customer.id, customer.room_number],
-      );
-      if (parcels[0]?.status === "received") {
-        return res.status(409).json({ message: "พัสดุรายการนี้ได้รับการยืนยันแล้ว" });
-      }
-      return res.status(404).json({ message: "ไม่พบพัสดุในห้องนี้" });
-    }
-
-    return res.json({ message: "ยืนยันรับพัสดุสำเร็จ" });
-  } catch (error) {
-    console.error("Receive parcel error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

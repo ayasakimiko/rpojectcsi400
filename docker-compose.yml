@@ -66,6 +66,7 @@ services:
       STAFF_SERVICE_URL: http://staff-service:4004
       ADMIN_SERVICE_URL: http://admin-service:4005
       OWNER_SERVICE_URL: http://owner-service:4006
+      PARCEL_SERVICE_URL: http://parcel-service:4007
       TZ: Asia/Bangkok
     ports:
       - "${PORT:-4000}:4000"
@@ -76,6 +77,7 @@ services:
       - staff-service
       - admin-service
       - owner-service
+      - parcel-service
 
   auth-service: &service-defaults
     build:
@@ -157,6 +159,18 @@ services:
       OWNER_PORT: 4006
     ports:
       - "${OWNER_PORT:-4006}:4006"
+
+  parcel-service:
+    <<: *service-defaults
+    container_name: projectcsi400-parcel
+    command: ["node", "services/parcelService.js"]
+    environment:
+      <<: *service-env
+      PARCEL_PORT: 4007
+    ports:
+      - "${PARCEL_PORT:-4007}:4007"
+    volumes:
+      - ./public/uploads:/app/public/uploads
 
 volumes:
   db_data:

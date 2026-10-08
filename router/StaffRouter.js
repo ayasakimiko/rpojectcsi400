@@ -15,13 +15,12 @@ import { deletePublicImages, savePublicImages } from "../middleware/publicUpload
 import announcementRouter from "./AnnouncementRouter.js";
 import { attachMaintenancePhotos, computeCurrentDue } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
-import { createParcelRouter } from "./ParcelRouter.js";
 
 const router = Router();
 
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
-async function getActingStaffName(pool, user) {
+export async function getActingStaffName(pool, user) {
   const table = STAFF_ROLE_TABLE[user?.role];
   if (!table) return null;
   const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
@@ -29,9 +28,7 @@ async function getActingStaffName(pool, user) {
   return row ? `${row.first_name} ${row.last_name}` : null;
 }
 
-router.use(authenticate, requireStaffRole);
-
-router.use(async (req, res, next) => {
+export async function requireActiveStaff(req, res, next) {
   try {
     const pool = getPool();
     const table = STAFF_ROLE_TABLE[req.user.role];
@@ -44,11 +41,12 @@ router.use(async (req, res, next) => {
     console.error("Check staff suspension error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
-});
+}
+
+router.use(authenticate, requireStaffRole, requireActiveStaff);
 
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
-router.use("/parcels", createParcelRouter(getActingStaffName));
 
 router.get("/me", async (req, res) => {
   try {
