@@ -7,6 +7,7 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import DateDropdowns from '../components/DateDropdowns.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
+import { CheckIcon, DoorIcon, HashIcon, InfoIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
@@ -574,9 +575,12 @@ function AdminBackupPage() {
   const [parcelPhotoError, setParcelPhotoError] = useState('')
   const [parcelFormError, setParcelFormError] = useState('')
   const [parcelSubmitting, setParcelSubmitting] = useState(false)
+  const [parcelSaveConfirm, setParcelSaveConfirm] = useState(false)
+  const [parcelFormOpen, setParcelFormOpen] = useState(false)
   const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
   const [parcelSearch, setParcelSearch] = useState('')
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
+  const [parcelPage, setParcelPage] = useState(1)
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionDetail, setInspectionDetail] = useState(null)
@@ -792,8 +796,13 @@ function AdminBackupPage() {
       .finally(() => setParcelsLoading(false))
   }, [navigate])
 
-  const handleCreateParcel = async (event) => {
+  const requestParcelSave = (event) => {
     event.preventDefault()
+    setParcelFormError('')
+    setParcelSaveConfirm(true)
+  }
+
+  const handleCreateParcel = async (requestClose) => {
     setParcelSubmitting(true)
     setParcelFormError('')
     try {
@@ -801,6 +810,8 @@ function AdminBackupPage() {
       Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
       parcelPhotos.forEach((photo) => payload.append('photos', photo))
       const { data } = await axios.post('/api/admin/parcels', payload, { headers: authHeaders() })
+      requestClose()
+      setParcelFormOpen(false)
       setSuccessMessage(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
       setParcelForm({ room_number: '', sender_name: '', tracking_number: '', description: '' })
       setParcelPhotos([])
@@ -808,6 +819,7 @@ function AdminBackupPage() {
       await loadParcels()
     } catch (err) {
       if (handleUnauthorized(err)) return
+      requestClose()
       setParcelFormError(err.response?.data?.message || 'บันทึกพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setParcelSubmitting(false)
@@ -1652,6 +1664,9 @@ function AdminBackupPage() {
       parcel.description,
     ].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
   })
+  const parcelTotalPages = Math.max(1, Math.ceil(filteredParcels.length / ROWS_PER_PAGE))
+  const currentParcelPage = Math.min(parcelPage, parcelTotalPages)
+  const pagedParcels = filteredParcels.slice((currentParcelPage - 1) * ROWS_PER_PAGE, currentParcelPage * ROWS_PER_PAGE)
 
   const notifications = useMemo(() => {
     return [
@@ -1951,84 +1966,39 @@ function AdminBackupPage() {
         {activeTab === 'parcels' && (
           <div className="parcel-management-card">
             <div className="parcel-card-header">
-              <div>
-                <h2>จัดการพัสดุ</h2>
-                <p className="parcel-card-note">หมายเหตุ: พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น</p>
+              <div className="parcel-hero-text">
+                <span className="parcel-hero-icon"><PackageIcon size={20} /></span>
+                <div>
+                  <h2 className="parcel-hero-title">จัดการพัสดุ</h2>
+                  <p className="parcel-hero-sub">บันทึกพัสดุที่มาส่งและติดตามการรับของผู้เช่า</p>
+                </div>
               </div>
-              <span className="parcel-count-pill">{parcels.filter((parcel) => parcel.status === 'pending').length} รายการรอรับ</span>
+              <dl className="parcel-stats">
+                <div className="parcel-stat is-alert">
+                  <dt>รอผู้เช่ารับ</dt>
+                  <dd>{parcels.filter((parcel) => parcel.status === 'pending').length}</dd>
+                </div>
+                <div className="parcel-stat is-success">
+                  <dt>รับแล้ว</dt>
+                  <dd>{parcels.filter((parcel) => parcel.status === 'received').length}</dd>
+                </div>
+                <div className="parcel-stat">
+                  <dt>ทั้งหมด</dt>
+                  <dd>{parcels.length}</dd>
+                </div>
+              </dl>
+              <p className="parcel-card-note">
+                <InfoIcon size={14} />
+                พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น
+              </p>
             </div>
-            <form className="parcel-form" onSubmit={handleCreateParcel}>
-              <div className="parcel-fields">
-                <div className="parcel-form-field">
-                  <label className="parcel-label" htmlFor="admin-parcel-room">ห้อง / ผู้เช่า</label>
-                  <select
-                    id="admin-parcel-room"
-                    className="parcel-control"
-                    required
-                    value={parcelForm.room_number}
-                    onChange={(event) => setParcelForm((form) => ({ ...form, room_number: event.target.value }))}
-                  >
-                    <option value="">เลือกห้องที่มีผู้เช่า</option>
-                    {rooms
-                      .filter((room) => room.is_booked && room.customer_id)
-                      .map((room) => (
-                        <option key={room.room_number} value={room.room_number}>
-                          ห้อง {room.room_number} · {room.first_name} {room.last_name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div className="parcel-form-field">
-                  <label className="parcel-label" htmlFor="admin-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
-                  <input
-                    id="admin-parcel-sender"
-                    className="parcel-control"
-                    type="text"
-                    maxLength={100}
-                    placeholder="เช่น ไปรษณีย์ไทย, Kerry"
-                    value={parcelForm.sender_name}
-                    onChange={(event) => setParcelForm((form) => ({ ...form, sender_name: event.target.value }))}
-                  />
-                </div>
-                <div className="parcel-form-field">
-                  <label className="parcel-label" htmlFor="admin-parcel-tracking">เลขพัสดุ (ไม่บังคับ)</label>
-                  <input
-                    id="admin-parcel-tracking"
-                    className="parcel-control"
-                    type="text"
-                    maxLength={100}
-                    value={parcelForm.tracking_number}
-                    onChange={(event) => setParcelForm((form) => ({ ...form, tracking_number: event.target.value }))}
-                  />
-                </div>
-                <div className="parcel-form-field">
-                  <label className="parcel-label" htmlFor="admin-parcel-description">รายละเอียด (ไม่บังคับ)</label>
-                  <input
-                    id="admin-parcel-description"
-                    className="parcel-control"
-                    type="text"
-                    maxLength={255}
-                    placeholder="เช่น กล่องขนาดใหญ่"
-                    value={parcelForm.description}
-                    onChange={(event) => setParcelForm((form) => ({ ...form, description: event.target.value }))}
-                  />
-                </div>
-              </div>
-              <ParcelPhotoPicker
-                id="admin-parcel-photos"
-                files={parcelPhotos}
-                onChange={setParcelPhotos}
-                error={parcelPhotoError}
-                onError={setParcelPhotoError}
-              />
-              {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
-              <div className="parcel-form-actions">
-                <button type="submit" className="parcel-action-btn is-primary" disabled={parcelSubmitting}>
-                  {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
-                </button>
-              </div>
-            </form>
-
+            <div className="parcel-list-head">
+              <h3 className="parcel-section-title">รายการพัสดุ</h3>
+              <button type="button" className="parcel-action-btn is-primary" onClick={() => setParcelFormOpen(true)}>
+                <PlusIcon />
+                บันทึกพัสดุใหม่
+              </button>
+            </div>
             <div className="parcel-toolbar">
               <div className="parcel-search-field">
                 <label className="parcel-label" htmlFor="admin-parcel-search">ค้นหา</label>
@@ -2038,7 +2008,10 @@ function AdminBackupPage() {
                   type="search"
                   placeholder="เลขห้อง, ชื่อผู้เช่า, เลขพัสดุ..."
                   value={parcelSearch}
-                  onChange={(event) => setParcelSearch(event.target.value)}
+                  onChange={(event) => {
+                    setParcelSearch(event.target.value)
+                    setParcelPage(1)
+                  }}
                 />
               </div>
               <div className="parcel-filter-field">
@@ -2047,7 +2020,10 @@ function AdminBackupPage() {
                   id="admin-parcel-status"
                   className="parcel-control"
                   value={parcelStatusFilter}
-                  onChange={(event) => setParcelStatusFilter(event.target.value)}
+                  onChange={(event) => {
+                    setParcelStatusFilter(event.target.value)
+                    setParcelPage(1)
+                  }}
                 >
                   <option value="all">ทุกสถานะ</option>
                   <option value="pending">รอผู้เช่ารับ</option>
@@ -2055,10 +2031,18 @@ function AdminBackupPage() {
                 </select>
               </div>
             </div>
-            <div className="table-responsive">
+            <div className="table-responsive parcel-table-wrap">
               <table className="parcel-table">
                 <thead>
-                  <tr><th>ห้อง / ผู้เช่า</th><th>ผู้ส่ง / รายละเอียด</th><th>เลขพัสดุ</th><th>รูป</th><th>สถานะ</th><th>วันที่รับเข้า / รับแล้ว</th><th>บันทึกโดย</th></tr>
+                  <tr>
+                    <th>ห้อง / ผู้เช่า</th>
+                    <th>ผู้ส่ง / รายละเอียด</th>
+                    <th>เลขพัสดุ</th>
+                    <th>รูป</th>
+                    <th>สถานะ</th>
+                    <th>วันที่บันทึก / รับ</th>
+                    <th>บันทึกโดย</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {parcelsLoading ? (
@@ -2073,39 +2057,54 @@ function AdminBackupPage() {
                   ) : filteredParcels.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="parcel-empty">
+                        <span className="parcel-empty-icon"><PackageIcon size={28} strokeWidth={1.8} /></span>
                         {parcels.length ? 'ไม่พบรายการพัสดุตามเงื่อนไข' : 'ยังไม่มีรายการพัสดุ'}
                       </td>
                     </tr>
-                  ) : filteredParcels.map((parcel) => (
+                  ) : pagedParcels.map((parcel) => (
                     <tr key={parcel.id}>
                       <td>
-                        ห้อง {parcel.room_number}
-                        <small className="parcel-secondary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</small>
+                        <div className="parcel-room-cell">
+                          <span className="parcel-room-badge">{parcel.room_number}</span>
+                          <div>
+                            <span className="parcel-primary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</span>
+                            <small className="parcel-secondary">{parcel.phone || '-'}</small>
+                          </div>
+                        </div>
                       </td>
-                      <td>{parcel.sender_name}<small className="parcel-secondary">{parcel.description || '-'}</small></td>
-                      <td>{parcel.tracking_number || '-'}</td>
+                      <td>
+                        <span className="parcel-primary">{parcel.sender_name}</span>
+                        <small className="parcel-secondary">{parcel.description || '-'}</small>
+                      </td>
+                      <td>{parcel.tracking_number ? <span className="parcel-tracking">{parcel.tracking_number}</span> : <span className="parcel-muted">-</span>}</td>
                       <td>
                         {parcel.photos?.length ? (
                           <button
                             type="button"
-                            className="parcel-action-btn is-ghost"
+                            className="parcel-thumb"
+                            aria-label={`ดูรูปพัสดุห้อง ${parcel.room_number}`}
                             onClick={() => {
                               setParcelPhotoPreview(parcel)
                               setPhotoPreview(0)
                             }}
                           >
-                            ดู
+                            <img src={parcel.photos[0].url} alt="" />
+                            {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                           </button>
-                        ) : '-'}
+                        ) : <span className="parcel-muted">-</span>}
                       </td>
                       <td><span className={`parcel-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>{parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span></td>
-                      <td>{formatDateTime(parcel.received_at || parcel.created_at)}</td>
+                      <td>
+                        <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
+                        <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
+                      </td>
                       <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <Pagination page={currentParcelPage} totalPages={parcelTotalPages} onChange={setParcelPage} />
           </div>
         )}
 
@@ -3452,6 +3451,158 @@ function AdminBackupPage() {
               </div>
             </div>
           )}
+        </Modal>
+      )}
+
+      {parcelFormOpen && (
+        <Modal title="บันทึกพัสดุใหม่" onClose={() => setParcelFormOpen(false)}>
+          {(requestClose) => (
+          <form className="parcel-form is-modal" onSubmit={requestParcelSave}>
+            <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
+            <div className="row g-3">
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="admin-parcel-room">
+                  ห้อง / ผู้เช่า <span className="text-danger">*</span>
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text"><DoorIcon /></span>
+                  <select
+                    id="admin-parcel-room"
+                    className="form-select"
+                    required
+                    value={parcelForm.room_number}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, room_number: event.target.value }))}
+                  >
+                    <option value="">เลือกห้องที่มีผู้เช่า</option>
+                    {rooms
+                      .filter((room) => room.is_booked && room.customer_id)
+                      .map((room) => (
+                        <option key={room.room_number} value={room.room_number}>
+                          ห้อง {room.room_number} · {room.first_name} {room.last_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="admin-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
+                <div className="input-group">
+                  <span className="input-group-text"><TruckIcon /></span>
+                  <input
+                    id="admin-parcel-sender"
+                    className="form-control"
+                    type="text"
+                    maxLength={100}
+                    placeholder="เช่น ไปรษณีย์ไทย, Kerry"
+                    value={parcelForm.sender_name}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, sender_name: event.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="admin-parcel-tracking">
+                  เลขพัสดุ <small>(ไม่บังคับ)</small>
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text"><HashIcon /></span>
+                  <input
+                    id="admin-parcel-tracking"
+                    className="form-control"
+                    type="text"
+                    maxLength={100}
+                    placeholder="เช่น TH1234567890"
+                    value={parcelForm.tracking_number}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, tracking_number: event.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="admin-parcel-description">
+                  รายละเอียด <small>(ไม่บังคับ)</small>
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text"><NoteIcon /></span>
+                  <input
+                    id="admin-parcel-description"
+                    className="form-control"
+                    type="text"
+                    maxLength={255}
+                    placeholder="เช่น กล่องขนาดใหญ่"
+                    value={parcelForm.description}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, description: event.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="col-12">
+                <div className="parcel-photo-section">
+                  <ParcelPhotoPicker
+                    id="admin-parcel-photos"
+                    files={parcelPhotos}
+                    onChange={setParcelPhotos}
+                    error={parcelPhotoError}
+                    onError={setParcelPhotoError}
+                  />
+                </div>
+              </div>
+            </div>
+            {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
+            <div className="parcel-form-actions">
+              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                ยกเลิก
+              </button>
+              <button type="submit" className="parcel-action-btn is-primary" disabled={parcelSubmitting}>
+                <CheckIcon />
+                {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
+              </button>
+            </div>
+          </form>
+          )}
+        </Modal>
+      )}
+
+      {parcelSaveConfirm && (
+        <Modal title="ยืนยันการบันทึกพัสดุ" onClose={() => setParcelSaveConfirm(false)} variant="confirm">
+          {(requestClose) => {
+            const room = rooms.find((item) => String(item.room_number) === String(parcelForm.room_number))
+            return (
+              <div className="admin-confirm-body">
+                <div className="admin-confirm-icon is-info">
+                  <PackageIcon size={28} strokeWidth={2.2} />
+                </div>
+                <p className="admin-confirm-message">บันทึกพัสดุนี้และแจ้งผู้เช่าใช่หรือไม่?</p>
+                <div className="admin-confirm-details">
+                  <div className="admin-confirm-detail-row">
+                    <span>ห้อง</span>
+                    <strong>{parcelForm.room_number}</strong>
+                  </div>
+                  <div className="admin-confirm-detail-row">
+                    <span>ผู้เช่า</span>
+                    <strong>{room ? `${room.first_name} ${room.last_name}` : '-'}</strong>
+                  </div>
+                  <div className="admin-confirm-detail-row">
+                    <span>ผู้ส่ง</span>
+                    <strong>{parcelForm.sender_name.trim() || 'พัสดุทั่วไป'}</strong>
+                  </div>
+                  <div className="admin-confirm-detail-row">
+                    <span>เลขพัสดุ</span>
+                    <strong>{parcelForm.tracking_number.trim() || '-'}</strong>
+                  </div>
+                  <div className="admin-confirm-detail-row">
+                    <span>รูปที่แนบ</span>
+                    <strong>{parcelPhotos.length} รูป</strong>
+                  </div>
+                </div>
+                <div className="admin-form-actions">
+                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>
+                    ยกเลิก
+                  </button>
+                  <button type="button" className="admin-action-btn is-primary" onClick={() => handleCreateParcel(requestClose)} disabled={parcelSubmitting}>
+                    {parcelSubmitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
+                  </button>
+                </div>
+              </div>
+            )
+          }}
         </Modal>
       )}
 

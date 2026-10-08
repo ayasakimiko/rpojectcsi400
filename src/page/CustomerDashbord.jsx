@@ -8,6 +8,7 @@ import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import { PackageIcon } from '../components/ParcelIcons.jsx'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -1223,6 +1224,7 @@ function CustomerDashbord() {
   const [notifPage, setNotifPage] = useState(1)
   const [notifDetail, setNotifDetail] = useState(null)
   const [parcelReceiveId, setParcelReceiveId] = useState(null)
+  const [parcelReceiveConfirm, setParcelReceiveConfirm] = useState(null)
   const [parcelReceiveError, setParcelReceiveError] = useState('')
   const [parcelReceiveErrorId, setParcelReceiveErrorId] = useState(null)
   const [parcelReceiveSuccess, setParcelReceiveSuccess] = useState('')
@@ -2311,7 +2313,7 @@ function CustomerDashbord() {
                             type="button"
                             className="dashboard-action-btn is-primary"
                             disabled={parcelReceiveId === notifDetail.parcel.id}
-                            onClick={() => handleReceiveParcel(notifDetail.parcel)}
+                            onClick={() => setParcelReceiveConfirm(notifDetail.parcel)}
                           >
                             {parcelReceiveId === notifDetail.parcel.id ? 'กำลังยืนยัน...' : 'ยืนยันว่าได้รับพัสดุแล้ว'}
                           </button>
@@ -2496,6 +2498,45 @@ function CustomerDashbord() {
           </Modal>
         )}
 
+        {parcelReceiveConfirm && (
+          <Modal title="ยืนยันรับพัสดุ" onClose={() => setParcelReceiveConfirm(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="dashboard-confirm-body">
+                <div className="dashboard-confirm-icon is-info">
+                  <PackageIcon size={24} strokeWidth={2.2} />
+                </div>
+                <p className="dashboard-confirm-message">ยืนยันว่าคุณได้รับพัสดุชิ้นนี้แล้วใช่หรือไม่?</p>
+                <p className="dashboard-confirm-message-detail">
+                  ผู้ส่ง: {parcelReceiveConfirm.sender_name || 'พัสดุทั่วไป'}
+                  {parcelReceiveConfirm.tracking_number && <><br />เลขพัสดุ: {parcelReceiveConfirm.tracking_number}</>}
+                  {parcelReceiveConfirm.description && <><br />รายละเอียด: {parcelReceiveConfirm.description}</>}
+                </p>
+                <div className="dashboard-form-actions">
+                  <button
+                    type="button"
+                    className="dashboard-action-btn is-ghost"
+                    disabled={parcelReceiveId !== null}
+                    onClick={requestClose}
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    className="dashboard-action-btn is-primary"
+                    disabled={parcelReceiveId !== null}
+                    onClick={async () => {
+                      await handleReceiveParcel(parcelReceiveConfirm)
+                      requestClose()
+                    }}
+                  >
+                    {parcelReceiveId === parcelReceiveConfirm.id ? 'กำลังยืนยัน...' : 'ยืนยันรับพัสดุ'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
         {successPopup && (
           <Modal title="สำเร็จ" onClose={() => setSuccessPopup(null)} variant="confirm">
             {(requestClose) => (
@@ -2628,84 +2669,67 @@ function CustomerDashbord() {
               <div className="dashboard-parcel-list">
                 {filteredParcels.map((parcel) => {
                   const isPending = parcel.status === 'pending'
+                  const loggedAt = new Date(parcel.created_at)
                   return (
                     <article className={`dashboard-parcel-item${isPending ? ' is-pending' : ' is-received'}`} key={parcel.id}>
-                      <div className="dashboard-parcel-item-top">
-                        <div className="dashboard-parcel-sender">
-                          <span className={`dashboard-parcel-box-icon${isPending ? ' is-pending' : ' is-received'}`} aria-hidden="true">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="m3 7 9-4 9 4-9 4-9-4Z" />
-                              <path d="M3 7v10l9 4 9-4V7" />
-                              <path d="M12 11v10" />
-                            </svg>
+                      <div className="dashboard-parcel-date">
+                        <strong>{loggedAt.getDate()}</strong>
+                        <small>{loggedAt.toLocaleDateString('th-TH', { month: 'short' })}</small>
+                      </div>
+
+                      <div className="dashboard-parcel-entry">
+                        <div className="dashboard-parcel-entry-head">
+                          <div className="dashboard-parcel-entry-title">
+                            <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
+                            <span className="dashboard-parcel-tags">
+                              {parcel.tracking_number && <span className="dashboard-parcel-tag is-code">{parcel.tracking_number}</span>}
+                              {parcel.photos?.length > 0 && <span className="dashboard-parcel-tag">{parcel.photos.length} รูป</span>}
+                            </span>
+                          </div>
+                          <span className={`dashboard-parcel-status${isPending ? ' is-pending' : ' is-received'}`}>
+                            {isPending ? 'รอรับพัสดุ' : 'รับแล้ว'}
                           </span>
-                          <div>
-                            <h3>{parcel.sender_name || 'พัสดุทั่วไป'}</h3>
-                            <span>บันทึกเมื่อ {formatDateTime(parcel.created_at)}</span>
-                          </div>
                         </div>
-                        <span className={`dashboard-parcel-status${isPending ? ' is-pending' : ' is-received'}`}>
-                          <span aria-hidden="true">{isPending ? '●' : '✓'}</span>
-                          {isPending ? 'รอรับพัสดุ' : 'รับแล้ว'}
-                        </span>
-                      </div>
 
-                      <div className="dashboard-parcel-details">
-                        {parcel.tracking_number && (
-                          <div className="dashboard-parcel-detail">
-                            <span>เลขพัสดุ</span>
-                            <strong>{parcel.tracking_number}</strong>
-                          </div>
-                        )}
-                        <div className="dashboard-parcel-detail">
-                          <span>รายละเอียด</span>
-                          <strong>{parcel.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</strong>
-                        </div>
-                        <div className="dashboard-parcel-detail">
-                          <span>บันทึกโดย</span>
-                          <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
-                        </div>
-                        {!isPending && parcel.received_at && (
-                          <div className="dashboard-parcel-detail">
-                            <span>วันที่รับ</span>
-                            <strong>{formatDateTime(parcel.received_at)}</strong>
-                          </div>
-                        )}
-                      </div>
+                        {parcel.description && <p className="dashboard-parcel-desc">{parcel.description}</p>}
 
-                      {parcel.photos?.length > 0 && (
-                        <div className="dashboard-parcel-card-photos">
-                          <span className="dashboard-parcel-card-photos-label">รูปพัสดุ</span>
-                          <div>
-                            {parcel.photos.map((photo, index) => (
+                        <div className="dashboard-parcel-meta">
+                          <span>บันทึก {formatDateTime(parcel.created_at)}</span>
+                          <span>โดย {parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                          {!isPending && parcel.received_at && <span>รับเมื่อ {formatDateTime(parcel.received_at)}</span>}
+                        </div>
+
+                        {parcelReceiveErrorId === parcel.id && (
+                          <p className="dashboard-parcel-error" role="alert">{parcelReceiveError}</p>
+                        )}
+
+                        {(parcel.photos?.length > 0 || isPending) && (
+                          <div className="dashboard-parcel-entry-foot">
+                            <div className="dashboard-parcel-thumbs">
+                              {parcel.photos?.map((photo, index) => (
+                                <button
+                                  type="button"
+                                  key={`${photo.url}-${index}`}
+                                  onClick={() => setParcelPhotoPreview({ parcel, index })}
+                                  aria-label={`ดูรูปพัสดุ ${index + 1}`}
+                                >
+                                  <img src={photo.url} alt={photo.name || `รูปพัสดุ ${index + 1}`} loading="lazy" />
+                                </button>
+                              ))}
+                            </div>
+                            {isPending && (
                               <button
                                 type="button"
-                                key={`${photo.url}-${index}`}
-                                onClick={() => setParcelPhotoPreview({ parcel, index })}
-                                aria-label={`ดูรูปพัสดุ ${index + 1}`}
+                                className="dashboard-action-btn is-primary"
+                                disabled={parcelReceiveId !== null}
+                                onClick={() => setParcelReceiveConfirm(parcel)}
                               >
-                                <img src={photo.url} alt={photo.name || `รูปพัสดุ ${index + 1}`} loading="lazy" />
+                                {parcelReceiveId === parcel.id ? 'กำลังยืนยัน...' : 'ยืนยันว่าได้รับพัสดุแล้ว'}
                               </button>
-                            ))}
+                            )}
                           </div>
-                        </div>
-                      )}
-
-                      {isPending && (
-                        <div className="dashboard-parcel-item-footer">
-                          {parcelReceiveErrorId === parcel.id && (
-                            <p className="dashboard-parcel-error" role="alert">{parcelReceiveError}</p>
-                          )}
-                          <button
-                            type="button"
-                            className="dashboard-action-btn is-primary"
-                            disabled={parcelReceiveId !== null}
-                            onClick={() => handleReceiveParcel(parcel)}
-                          >
-                            {parcelReceiveId === parcel.id ? 'กำลังยืนยัน...' : 'ยืนยันว่าได้รับพัสดุแล้ว'}
-                          </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </article>
                   )
                 })}
@@ -2924,7 +2948,7 @@ function CustomerDashbord() {
                         </div>
                         <div className="dashboard-utility-rate is-water">
                           <span>ค่าน้ำ</span>
-                          <strong>{formatCurrency(room.water_price)} บาท/หน่วย</strong>
+                          <strong>{formatCurrency(room.water_price)} บาท/เดือน</strong>
                         </div>
                       </div>
 

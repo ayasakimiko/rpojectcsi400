@@ -6,7 +6,12 @@ import { createCorsMiddleware } from "./middleware/cors.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+const PARCEL_SERVICE_URL = process.env.PARCEL_SERVICE_URL || "http://localhost:4007";
+
 const ROUTES = {
+  "/api/admin/parcels": PARCEL_SERVICE_URL,
+  "/api/staff/parcels": PARCEL_SERVICE_URL,
+  "/api/customer/parcels": PARCEL_SERVICE_URL,
   "/api/auth": process.env.AUTH_SERVICE_URL || "http://localhost:4001",
   "/api/rooms": process.env.ROOM_SERVICE_URL || "http://localhost:4002",
   "/api/customer": process.env.CUSTOMER_SERVICE_URL || "http://localhost:4003",

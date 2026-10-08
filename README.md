@@ -21,6 +21,9 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 | `/api/staff` | `services/staffService.js` | 4004 |
 | `/api/admin` | `services/adminService.js` | 4005 |
 | `/api/owner` | `services/ownerService.js` | 4006 |
+| `/api/admin/parcels`, `/api/staff/parcels`, `/api/customer/parcels` | `services/parcelService.js` | 4007 |
+
+path ของพัสดุถูกจับก่อน prefix `/api/admin`, `/api/staff`, `/api/customer` ใน gateway จึงไปที่ parcel service แทน
 
 Frontend (และ Vite dev proxy) คุยกับ Gateway ที่ port 4000 เท่านั้น ไม่รู้จัก service ย่อยโดยตรง
 
@@ -32,7 +35,7 @@ Frontend (และ Vite dev proxy) คุยกับ Gateway ที่ port 40
 docker compose up -d --build
 ```
 
-รวม 10 container:
+รวม 11 container:
 | Service | Container | Port |
 |---|---|---|
 | MySQL | `projectcsi400-mysql` | 3306 |
@@ -45,6 +48,7 @@ docker compose up -d --build
 | Staff service | `projectcsi400-staff` | 4004 |
 | Admin service | `projectcsi400-admin` | 4005 |
 | Owner service | `projectcsi400-owner` | 4006 |
+| Parcel service | `projectcsi400-parcel` | 4007 |
 
 Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
 
@@ -53,9 +57,9 @@ Gateway คุยกับ service ย่อยผ่าน Docker network โ�
 ### รัน backend แบบ dev (ไม่ผ่าน Docker)
 
 ```bash
-npm run server:all   # รัน gateway + ทั้ง 6 service พร้อมกัน (ต้องมี MySQL รันอยู่ก่อน เช่น npm run db:setup)
+npm run server:all   # รัน gateway + ทั้ง 7 service พร้อมกัน (ต้องมี MySQL รันอยู่ก่อน เช่น npm run db:setup)
 ```
-หรือรันทีละตัวด้วย `npm run server`, `server:auth`, `server:room`, `server:customer`, `server:staff`, `server:admin`, `server:owner`
+หรือรันทีละตัวด้วย `npm run server`, `server:auth`, `server:room`, `server:customer`, `server:staff`, `server:admin`, `server:owner`, `server:parcel`
 
 ### ตั้งค่าฐานข้อมูลครั้งแรก
 

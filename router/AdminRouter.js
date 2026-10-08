@@ -18,7 +18,6 @@ import {
 import { deletePublicImages } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
-import { createParcelRouter } from "./ParcelRouter.js";
 
 const router = Router();
 
@@ -40,15 +39,13 @@ function buildUpdate(allowedColumns, body) {
 
 const ADMIN_ROLE_TABLE = { Admin: "Admin", Owner: "Owner" };
 
-async function getActingAdminName(pool, user) {
+export async function getActingAdminName(pool, user) {
   const table = ADMIN_ROLE_TABLE[user?.role];
   if (!table) return null;
   const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
   const row = rows[0];
   return row ? `${row.first_name} ${row.last_name}` : null;
 }
-
-router.use("/parcels", createParcelRouter(getActingAdminName));
 
 router.get("/waiting-list", async (_req, res) => {
   try {
