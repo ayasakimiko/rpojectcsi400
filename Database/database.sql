@@ -201,3 +201,30 @@ CREATE TABLE IF NOT EXISTS MaintenancePhoto (
 
     FOREIGN KEY (maintenance_request_id) REFERENCES MaintenanceRequest(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS Parcel (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    room_number INT UNSIGNED NOT NULL,
+    customer_id INT UNSIGNED NULL,
+    tracking_number VARCHAR(100),
+    sender_name VARCHAR(100) NOT NULL DEFAULT 'พัสดุทั่วไป',
+    description VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    staff_name VARCHAR(255),
+    received_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_parcel_customer_room (customer_id, room_number),
+    FOREIGN KEY (room_number) REFERENCES Room(room_number) ON UPDATE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES Customer(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS ParcelPhoto (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    parcel_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    url VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (parcel_id) REFERENCES Parcel(id) ON DELETE CASCADE
+);

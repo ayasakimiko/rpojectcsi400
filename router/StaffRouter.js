@@ -15,6 +15,7 @@ import { deletePublicImages, savePublicImages } from "../middleware/publicUpload
 import announcementRouter from "./AnnouncementRouter.js";
 import { attachMaintenancePhotos, computeCurrentDue } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import { createParcelRouter } from "./ParcelRouter.js";
 
 const router = Router();
 
@@ -47,6 +48,7 @@ router.use(async (req, res, next) => {
 
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
+router.use("/parcels", createParcelRouter(getActingStaffName));
 
 router.get("/me", async (req, res) => {
   try {

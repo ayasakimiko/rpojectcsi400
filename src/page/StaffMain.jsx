@@ -1,11 +1,13 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
+import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const MOVE_OUT_CHECKLIST = [
@@ -636,6 +638,7 @@ const MAINTENANCE_STATUS_LABEL = {
 const STAFF_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'payment-review', label: 'สลิปรอตรวจสอบ' },
+  { key: 'parcels', label: 'พัสดุ' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจห้องตอนย้ายออก' },
@@ -1399,6 +1402,35 @@ function StaffMain() {
     }
   })
   const [waitingList, setWaitingList] = useState([])
+  const [parcels, setParcels] = useState([])
+  const [parcelsLoading, setParcelsLoading] = useState(true)
+  const [parcelsError, setParcelsError] = useState('')
+  const [parcelSearch, setParcelSearch] = useState('')
+  const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
+  const [parcelForm, setParcelForm] = useState({
+    room_number: '',
+    sender_name: '',
+    tracking_number: '',
+    description: '',
+  })
+  const [parcelSubmitting, setParcelSubmitting] = useState(false)
+  const [parcelFormError, setParcelFormError] = useState('')
+  const [parcelPhotos, setParcelPhotos] = useState([])
+  const [parcelPhotoError, setParcelPhotoError] = useState('')
+  const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
+  const filteredParcels = parcels.filter((parcel) => {
+    if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
+    const keyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
+    return !keyword || [
+      parcel.room_number,
+      parcel.first_name,
+      parcel.last_name,
+      parcel.phone,
+      parcel.tracking_number,
+      parcel.sender_name,
+      parcel.description,
+    ].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
+  })
   const [waitingListModalOpen, setWaitingListModalOpen] = useState(false)
   const [waitingListEditing, setWaitingListEditing] = useState(null)
   const [waitingListForm, setWaitingListForm] = useState({ full_name: '', phone: '', room_preference: '', note: '' })
@@ -1546,6 +1578,42 @@ function StaffMain() {
       .get('/api/staff/waiting-list', { headers: authHeaders() })
       .then(({ data }) => setWaitingList(data.waitingList))
       .catch(() => {})
+  }
+
+  const loadParcels = useCallback(() => {
+    return axios
+      .get('/api/staff/parcels', {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      })
+      .then(({ data }) => {
+        setParcels(data.parcels || [])
+        setParcelsError('')
+      })
+      .catch((err) => {
+        setParcelsError(err.response?.data?.message || 'ไม่สามารถโหลดรายการพัสดุได้')
+      })
+      .finally(() => setParcelsLoading(false))
+  }, [])
+
+  const handleCreateParcel = async (event) => {
+    event.preventDefault()
+    setParcelSubmitting(true)
+    setParcelFormError('')
+    try {
+      const payload = new FormData()
+      Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
+      parcelPhotos.forEach((photo) => payload.append('photos', photo))
+      const { data } = await axios.post('/api/staff/parcels', payload, { headers: authHeaders() })
+      setActionSuccess(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
+      setParcelForm({ room_number: '', sender_name: '', tracking_number: '', description: '' })
+      setParcelPhotos([])
+      setParcelPhotoError('')
+      await loadParcels()
+    } catch (err) {
+      setParcelFormError(err.response?.data?.message || 'บันทึกพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setParcelSubmitting(false)
+    }
   }
 
   const loadMoveOutInspections = () => {
@@ -2043,6 +2111,7 @@ function StaffMain() {
     loadRooms().finally(() => {
       if (isMounted) setLoading(false)
     })
+    loadParcels()
     loadRequests().finally(() => {
       if (isMounted) setRequestsLoading(false)
     })
@@ -2053,12 +2122,14 @@ function StaffMain() {
     loadPendingSlipCount()
     const announcementsInterval = setInterval(loadAnnouncements, 30000)
     const slipCountInterval = setInterval(loadPendingSlipCount, 30000)
+    const parcelsInterval = setInterval(loadParcels, 30000)
     return () => {
       isMounted = false
       clearInterval(announcementsInterval)
       clearInterval(slipCountInterval)
+      clearInterval(parcelsInterval)
     }
-  }, [])
+  }, [loadParcels])
 
   const handleLogout = () => {
     sessionStorage.removeItem('token')
@@ -3423,6 +3494,172 @@ function StaffMain() {
             apiBase="/api/staff/announcements"
             onChange={loadAnnouncements}
           />
+        )}
+
+        {staffTab === 'parcels' && (
+          <div className="parcel-management-card">
+            <div className="parcel-card-header">
+              <div>
+                <h2>จัดการพัสดุ</h2>
+                <p className="parcel-card-note">หมายเหตุ: พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น</p>
+              </div>
+              <span className="parcel-count-pill">{parcels.filter((parcel) => parcel.status === 'pending').length} รายการรอรับ</span>
+            </div>
+            <form className="parcel-form" onSubmit={handleCreateParcel}>
+              <div className="parcel-fields">
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="staff-parcel-room">ห้อง / ผู้เช่า</label>
+                  <select
+                    id="staff-parcel-room"
+                    className="parcel-control"
+                    required
+                    value={parcelForm.room_number}
+                    onChange={(event) => setParcelForm((prev) => ({ ...prev, room_number: event.target.value }))}
+                  >
+                    <option value="">เลือกห้องที่มีผู้เช่า</option>
+                    {rooms
+                      .filter((room) => room.is_booked && room.tenant)
+                      .map((room) => (
+                        <option key={room.room_number} value={room.room_number}>
+                          ห้อง {room.room_number} · {room.tenant.first_name} {room.tenant.last_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="staff-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
+                  <input
+                    id="staff-parcel-sender"
+                    className="parcel-control"
+                    type="text"
+                    maxLength={100}
+                    placeholder="เช่น ไปรษณีย์ไทย, Kerry"
+                    value={parcelForm.sender_name}
+                    onChange={(event) => setParcelForm((prev) => ({ ...prev, sender_name: event.target.value }))}
+                  />
+                </div>
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="staff-parcel-tracking">เลขพัสดุ (ไม่บังคับ)</label>
+                  <input
+                    id="staff-parcel-tracking"
+                    className="parcel-control"
+                    type="text"
+                    maxLength={100}
+                    value={parcelForm.tracking_number}
+                    onChange={(event) => setParcelForm((prev) => ({ ...prev, tracking_number: event.target.value }))}
+                  />
+                </div>
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="staff-parcel-description">รายละเอียด (ไม่บังคับ)</label>
+                  <input
+                    id="staff-parcel-description"
+                    className="parcel-control"
+                    type="text"
+                    maxLength={255}
+                    placeholder="เช่น กล่องขนาดใหญ่"
+                    value={parcelForm.description}
+                    onChange={(event) => setParcelForm((prev) => ({ ...prev, description: event.target.value }))}
+                  />
+                </div>
+              </div>
+              <ParcelPhotoPicker
+                id="staff-parcel-photos"
+                files={parcelPhotos}
+                onChange={setParcelPhotos}
+                error={parcelPhotoError}
+                onError={setParcelPhotoError}
+              />
+              {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
+              <div className="parcel-form-actions">
+                <button type="submit" className="parcel-action-btn is-primary" disabled={parcelSubmitting}>
+                  {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
+                </button>
+              </div>
+            </form>
+            <div className="parcel-toolbar">
+              <div className="parcel-search-field">
+                <label className="parcel-label" htmlFor="staff-parcel-search">ค้นหา</label>
+                <input
+                  id="staff-parcel-search"
+                  className="parcel-control"
+                  type="search"
+                  placeholder="เลขห้อง, ชื่อผู้เช่า, เลขพัสดุ..."
+                  value={parcelSearch}
+                  onChange={(event) => setParcelSearch(event.target.value)}
+                />
+              </div>
+              <div className="parcel-filter-field">
+                <label className="parcel-label" htmlFor="staff-parcel-status">สถานะ</label>
+                <select
+                  id="staff-parcel-status"
+                  className="parcel-control"
+                  value={parcelStatusFilter}
+                  onChange={(event) => setParcelStatusFilter(event.target.value)}
+                >
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="pending">รอผู้เช่ารับ</option>
+                  <option value="received">รับแล้ว</option>
+                </select>
+              </div>
+            </div>
+            <div className="table-responsive">
+              <table className="parcel-table">
+                <thead>
+                  <tr>
+                    <th>ห้อง / ผู้เช่า</th>
+                    <th>ผู้ส่ง / รายละเอียด</th>
+                    <th>เลขพัสดุ</th>
+                    <th>รูป</th>
+                    <th>สถานะ</th>
+                    <th>วันที่รับเข้า / รับแล้ว</th>
+                    <th>บันทึกโดย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parcelsLoading ? (
+                    <tr><td className="parcel-empty" colSpan={7}>กำลังโหลดรายการพัสดุ...</td></tr>
+                  ) : parcelsError ? (
+                    <tr>
+                      <td className="parcel-empty" colSpan={7}>
+                        {parcelsError}{' '}
+                        <button type="button" className="parcel-action-btn is-ghost" onClick={loadParcels}>ลองใหม่</button>
+                      </td>
+                    </tr>
+                  ) : filteredParcels.length === 0 ? (
+                    <tr><td className="parcel-empty" colSpan={7}>{parcels.length ? 'ไม่พบรายการพัสดุตามเงื่อนไข' : 'ยังไม่มีรายการพัสดุ'}</td></tr>
+                  ) : (
+                    filteredParcels.map((parcel) => (
+                      <tr key={parcel.id}>
+                        <td>
+                          ห้อง {parcel.room_number}
+                          <small className="parcel-secondary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</small>
+                        </td>
+                        <td>
+                          {parcel.sender_name}
+                          <small className="parcel-secondary">{parcel.description || '-'}</small>
+                        </td>
+                        <td>{parcel.tracking_number || '-'}</td>
+                        <td>
+                          {parcel.photos?.length ? (
+                            <button
+                              type="button"
+                              className="parcel-action-btn is-ghost"
+                              onClick={() => setParcelPhotoPreview(parcel)}
+                            >
+                              ดู
+                            </button>
+                          ) : '-'}
+                        </td>
+                        <td><span className={`parcel-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>{parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span></td>
+                        <td>{formatDateTime(parcel.received_at || parcel.created_at)}</td>
+                        <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {staffTab === 'waiting-list' && (
@@ -5775,6 +6012,20 @@ function StaffMain() {
           subtitle={`${maintenanceDetail.first_name} ${maintenanceDetail.last_name}`}
           label="รูปแจ้งซ่อม"
           onClose={() => setMaintenancePhotoPreview(null)}
+        />
+      )}
+
+      {parcelPhotoPreview && (
+        <PhotoLightbox
+          photos={(parcelPhotoPreview.photos || []).map((photo, index) => ({
+            name: photo.name || `รูปที่ ${index + 1}`,
+            url: photo.url,
+          }))}
+          initialIndex={0}
+          title={`พัสดุห้อง ${parcelPhotoPreview.room_number}`}
+          subtitle={`${parcelPhotoPreview.first_name || ''} ${parcelPhotoPreview.last_name || ''}`.trim()}
+          label="รูปพัสดุ"
+          onClose={() => setParcelPhotoPreview(null)}
         />
       )}
 

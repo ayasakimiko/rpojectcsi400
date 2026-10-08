@@ -1,10 +1,12 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
+import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
@@ -202,6 +204,7 @@ const TABS = [
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
   { key: 'waiting-list', label: 'รายชื่อรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจห้องย้ายออก' },
+  { key: 'parcels', label: 'พัสดุ' },
   { key: 'expenses', label: 'รายจ่าย' },
   { key: 'announcements', label: 'ประกาศ' },
 ]
@@ -558,6 +561,22 @@ function AdminBackupPage() {
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [waitingList, setWaitingList] = useState([])
+  const [parcels, setParcels] = useState([])
+  const [parcelsLoading, setParcelsLoading] = useState(true)
+  const [parcelsError, setParcelsError] = useState('')
+  const [parcelForm, setParcelForm] = useState({
+    room_number: '',
+    sender_name: '',
+    tracking_number: '',
+    description: '',
+  })
+  const [parcelPhotos, setParcelPhotos] = useState([])
+  const [parcelPhotoError, setParcelPhotoError] = useState('')
+  const [parcelFormError, setParcelFormError] = useState('')
+  const [parcelSubmitting, setParcelSubmitting] = useState(false)
+  const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
+  const [parcelSearch, setParcelSearch] = useState('')
+  const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionDetail, setInspectionDetail] = useState(null)
@@ -679,7 +698,14 @@ function AdminBackupPage() {
           label: `ภาพตรวจห้อง ${inspectionDetail.room_number}`,
           photos: inspectionDetail.photos || [],
         }
-      : null
+      : parcelPhotoPreview
+        ? {
+            title: `พัสดุห้อง ${parcelPhotoPreview.room_number}`,
+            subtitle: `${parcelPhotoPreview.first_name || ''} ${parcelPhotoPreview.last_name || ''}`.trim(),
+            label: 'รูปพัสดุ',
+            photos: parcelPhotoPreview.photos || [],
+          }
+    : null
   const previewPhotos = previewSource?.photos || []
   const photoPreviewCount = previewPhotos.length
 
@@ -743,6 +769,49 @@ function AdminBackupPage() {
         if (handleUnauthorized(err)) return
         setPageError(err.response?.data?.message || 'โหลดรายชื่อคนรอห้องว่างไม่สำเร็จ')
       })
+  }
+
+  const loadParcels = useCallback(() => {
+    return axios
+      .get('/api/admin/parcels', {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      })
+      .then(({ data }) => {
+        setParcels(data.parcels || [])
+        setParcelsError('')
+      })
+      .catch((err) => {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          sessionStorage.removeItem('token')
+          sessionStorage.removeItem('user')
+          navigate('/login', { replace: true })
+          return
+        }
+        setParcelsError(err.response?.data?.message || 'โหลดรายการพัสดุไม่สำเร็จ')
+      })
+      .finally(() => setParcelsLoading(false))
+  }, [navigate])
+
+  const handleCreateParcel = async (event) => {
+    event.preventDefault()
+    setParcelSubmitting(true)
+    setParcelFormError('')
+    try {
+      const payload = new FormData()
+      Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
+      parcelPhotos.forEach((photo) => payload.append('photos', photo))
+      const { data } = await axios.post('/api/admin/parcels', payload, { headers: authHeaders() })
+      setSuccessMessage(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
+      setParcelForm({ room_number: '', sender_name: '', tracking_number: '', description: '' })
+      setParcelPhotos([])
+      setParcelPhotoError('')
+      await loadParcels()
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setParcelFormError(err.response?.data?.message || 'บันทึกพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setParcelSubmitting(false)
+    }
   }
 
   const loadMoveOutInspections = () => {
@@ -1498,13 +1567,15 @@ function AdminBackupPage() {
     loadCustomers('')
     loadWaitingList()
     loadMoveOutInspections()
+    loadParcels()
     loadNotifSources()
     const interval = setInterval(() => {
       loadNotifSources()
       loadStaff()
+      loadParcels()
     }, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [loadParcels])
 
   useEffect(() => {
     if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
@@ -1566,6 +1637,20 @@ function AdminBackupPage() {
     const matchesSearch = !search || [entry.full_name, entry.phone, entry.room_preference, entry.note, entry.submitted_by_name]
       .some((value) => String(value || '').toLocaleLowerCase('th-TH').includes(search))
     return matchesStatus && matchesSearch
+  })
+
+  const filteredParcels = parcels.filter((parcel) => {
+    if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
+    const keyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
+    return !keyword || [
+      parcel.room_number,
+      parcel.first_name,
+      parcel.last_name,
+      parcel.phone,
+      parcel.tracking_number,
+      parcel.sender_name,
+      parcel.description,
+    ].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
   })
 
   const notifications = useMemo(() => {
@@ -1861,6 +1946,167 @@ function AdminBackupPage() {
             apiBase="/api/admin/announcements"
             onChange={loadAnnouncements}
           />
+        )}
+
+        {activeTab === 'parcels' && (
+          <div className="parcel-management-card">
+            <div className="parcel-card-header">
+              <div>
+                <h2>จัดการพัสดุ</h2>
+                <p className="parcel-card-note">หมายเหตุ: พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น</p>
+              </div>
+              <span className="parcel-count-pill">{parcels.filter((parcel) => parcel.status === 'pending').length} รายการรอรับ</span>
+            </div>
+            <form className="parcel-form" onSubmit={handleCreateParcel}>
+              <div className="parcel-fields">
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="admin-parcel-room">ห้อง / ผู้เช่า</label>
+                  <select
+                    id="admin-parcel-room"
+                    className="parcel-control"
+                    required
+                    value={parcelForm.room_number}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, room_number: event.target.value }))}
+                  >
+                    <option value="">เลือกห้องที่มีผู้เช่า</option>
+                    {rooms
+                      .filter((room) => room.is_booked && room.customer_id)
+                      .map((room) => (
+                        <option key={room.room_number} value={room.room_number}>
+                          ห้อง {room.room_number} · {room.first_name} {room.last_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="admin-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
+                  <input
+                    id="admin-parcel-sender"
+                    className="parcel-control"
+                    type="text"
+                    maxLength={100}
+                    placeholder="เช่น ไปรษณีย์ไทย, Kerry"
+                    value={parcelForm.sender_name}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, sender_name: event.target.value }))}
+                  />
+                </div>
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="admin-parcel-tracking">เลขพัสดุ (ไม่บังคับ)</label>
+                  <input
+                    id="admin-parcel-tracking"
+                    className="parcel-control"
+                    type="text"
+                    maxLength={100}
+                    value={parcelForm.tracking_number}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, tracking_number: event.target.value }))}
+                  />
+                </div>
+                <div className="parcel-form-field">
+                  <label className="parcel-label" htmlFor="admin-parcel-description">รายละเอียด (ไม่บังคับ)</label>
+                  <input
+                    id="admin-parcel-description"
+                    className="parcel-control"
+                    type="text"
+                    maxLength={255}
+                    placeholder="เช่น กล่องขนาดใหญ่"
+                    value={parcelForm.description}
+                    onChange={(event) => setParcelForm((form) => ({ ...form, description: event.target.value }))}
+                  />
+                </div>
+              </div>
+              <ParcelPhotoPicker
+                id="admin-parcel-photos"
+                files={parcelPhotos}
+                onChange={setParcelPhotos}
+                error={parcelPhotoError}
+                onError={setParcelPhotoError}
+              />
+              {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
+              <div className="parcel-form-actions">
+                <button type="submit" className="parcel-action-btn is-primary" disabled={parcelSubmitting}>
+                  {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
+                </button>
+              </div>
+            </form>
+
+            <div className="parcel-toolbar">
+              <div className="parcel-search-field">
+                <label className="parcel-label" htmlFor="admin-parcel-search">ค้นหา</label>
+                <input
+                  id="admin-parcel-search"
+                  className="parcel-control"
+                  type="search"
+                  placeholder="เลขห้อง, ชื่อผู้เช่า, เลขพัสดุ..."
+                  value={parcelSearch}
+                  onChange={(event) => setParcelSearch(event.target.value)}
+                />
+              </div>
+              <div className="parcel-filter-field">
+                <label className="parcel-label" htmlFor="admin-parcel-status">สถานะ</label>
+                <select
+                  id="admin-parcel-status"
+                  className="parcel-control"
+                  value={parcelStatusFilter}
+                  onChange={(event) => setParcelStatusFilter(event.target.value)}
+                >
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="pending">รอผู้เช่ารับ</option>
+                  <option value="received">รับแล้ว</option>
+                </select>
+              </div>
+            </div>
+            <div className="table-responsive">
+              <table className="parcel-table">
+                <thead>
+                  <tr><th>ห้อง / ผู้เช่า</th><th>ผู้ส่ง / รายละเอียด</th><th>เลขพัสดุ</th><th>รูป</th><th>สถานะ</th><th>วันที่รับเข้า / รับแล้ว</th><th>บันทึกโดย</th></tr>
+                </thead>
+                <tbody>
+                  {parcelsLoading ? (
+                    <tr><td colSpan={7} className="parcel-empty">กำลังโหลดรายการพัสดุ...</td></tr>
+                  ) : parcelsError ? (
+                    <tr>
+                      <td colSpan={7} className="parcel-empty">
+                        {parcelsError}{' '}
+                        <button type="button" className="parcel-action-btn is-ghost" onClick={loadParcels}>ลองใหม่</button>
+                      </td>
+                    </tr>
+                  ) : filteredParcels.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="parcel-empty">
+                        {parcels.length ? 'ไม่พบรายการพัสดุตามเงื่อนไข' : 'ยังไม่มีรายการพัสดุ'}
+                      </td>
+                    </tr>
+                  ) : filteredParcels.map((parcel) => (
+                    <tr key={parcel.id}>
+                      <td>
+                        ห้อง {parcel.room_number}
+                        <small className="parcel-secondary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</small>
+                      </td>
+                      <td>{parcel.sender_name}<small className="parcel-secondary">{parcel.description || '-'}</small></td>
+                      <td>{parcel.tracking_number || '-'}</td>
+                      <td>
+                        {parcel.photos?.length ? (
+                          <button
+                            type="button"
+                            className="parcel-action-btn is-ghost"
+                            onClick={() => {
+                              setParcelPhotoPreview(parcel)
+                              setPhotoPreview(0)
+                            }}
+                          >
+                            ดู
+                          </button>
+                        ) : '-'}
+                      </td>
+                      <td><span className={`parcel-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>{parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span></td>
+                      <td>{formatDateTime(parcel.received_at || parcel.created_at)}</td>
+                      <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {activeTab === 'rooms' && (
