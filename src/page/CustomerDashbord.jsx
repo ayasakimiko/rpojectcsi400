@@ -7,6 +7,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
+import DormInfoPanel from '../components/DormInfoPanel.jsx'
 import { readAnnouncements, subscribeAnnouncements } from '../utils/announcements.js'
 import { compressImageFile } from '../utils/moveOutInspections.js'
 import {
@@ -766,6 +767,8 @@ function CustomerDashbord() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [dormInfoError, setDormInfoError] = useState('')
+  const [dormInfoRefreshing, setDormInfoRefreshing] = useState(false)
 
   const [, tickCountdown] = useState(0)
   useEffect(() => {
@@ -932,6 +935,32 @@ function CustomerDashbord() {
       .finally(() => {
         setLoading(false)
       })
+  }
+
+  const refreshDormInfo = async () => {
+    const token = sessionStorage.getItem('token')
+    if (!token) {
+      navigate('/login', { replace: true })
+      return
+    }
+    setDormInfoRefreshing(true)
+    try {
+      const { data } = await axios.get('/api/customer/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setData(data)
+      setDormInfoError('')
+    } catch (err) {
+      if (err.response?.status === 401) {
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('user')
+        navigate('/login', { replace: true })
+        return
+      }
+      setDormInfoError(err.response?.data?.message || 'ไม่สามารถอัปเดตกฎระเบียบและเบอร์ติดต่อได้')
+    } finally {
+      setDormInfoRefreshing(false)
+    }
   }
 
   useEffect(() => {
@@ -1690,6 +1719,13 @@ function CustomerDashbord() {
         </div>
 
         <AnnouncementBoard />
+
+        <DormInfoPanel
+          config={data?.dormConfig}
+          onRefresh={refreshDormInfo}
+          refreshing={dormInfoRefreshing}
+          error={dormInfoError}
+        />
 
         {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
           <Modal

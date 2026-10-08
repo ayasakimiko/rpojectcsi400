@@ -1,0 +1,143 @@
+.dorm-info-panel {
+  margin: 20px 0 24px;
+  padding: 22px;
+  border: 1px solid #dbeafe;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.08);
+}
+
+.dorm-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dorm-info-eyebrow {
+  margin: 0 0 4px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dorm-info-header h2 {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.dorm-info-status {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dorm-info-status.is-preview-draft {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.dorm-info-status.is-preview-saved {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.dorm-info-refresh {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  background: #f8fbff;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dorm-info-refresh:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.dorm-info-note,
+.dorm-info-error {
+  margin: -6px 0 14px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.dorm-info-error {
+  color: #b42318;
+}
+
+.dorm-info-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.dorm-info-item {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e6f0fd;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.dorm-info-item h3 {
+  margin: 0 0 10px;
+  color: #33506f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dorm-info-item p {
+  margin: 0;
+  color: #526b85;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.dorm-info-item .dorm-info-value {
+  color: #0f2b52;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.dorm-info-contact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dorm-info-contact-list p {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.dorm-info-contact-list a {
+  color: #2563eb;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dorm-info-contact-list a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .dorm-info-grid {
+    grid-template-columns: 1fr;
+  }
+}

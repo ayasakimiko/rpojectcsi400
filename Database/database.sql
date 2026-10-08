@@ -168,6 +168,9 @@ CREATE TABLE IF NOT EXISTS DormConfig (
     grace_period_days INT DEFAULT 3,
     late_fee_per_day DECIMAL(10,2) DEFAULT 50.00,
     dorm_rules TEXT,
+    gate_close_time VARCHAR(5),
+    caretaker_phone VARCHAR(20),
+    technician_phone VARCHAR(20),
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 

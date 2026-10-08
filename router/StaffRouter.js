@@ -58,6 +58,28 @@ router.get("/me", async (req, res) => {
   }
 });
 
+router.get("/dorm-info", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT dorm_name, dorm_rules, gate_close_time, caretaker_phone, technician_phone
+       FROM DormConfig WHERE id = 1`,
+    );
+    return res.json({
+      config: rows[0] || {
+        dorm_name: "หอพักใจ",
+        dorm_rules: "",
+        gate_close_time: "22:00",
+        caretaker_phone: "02-000-0002",
+        technician_phone: "02-000-0001",
+      },
+    });
+  } catch (error) {
+    console.error("Fetch dorm info error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดกฎระเบียบและเบอร์ติดต่อได้" });
+  }
+});
+
 router.get("/payment-verifications", async (_req, res) => {
   try {
     const pool = getPool();

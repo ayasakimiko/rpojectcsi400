@@ -320,7 +320,14 @@ router.get("/me", async (req, res) => {
     const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
     const currentDue = computeCurrentDue(roomRows[0], paymentsForCurrentBooking, customer.deposit_amount);
     const [configRows] = await pool.query("SELECT * FROM DormConfig WHERE id = 1");
-    const dormConfig = configRows[0] || { dorm_name: "หอพักใจ", promptpay_id: "0812345678" };
+    const dormConfig = configRows[0] || {
+      dorm_name: "หอพักใจ",
+      promptpay_id: "0812345678",
+      dorm_rules: "1. ห้ามส่งเสียงดังรบกวนผู้อื่นหลังเวลา 22:00 น.\n2. ห้ามสูบบุหรี่ในห้องพัก\n3. ห้ามเลี้ยงสัตว์",
+      gate_close_time: "22:00",
+      caretaker_phone: "02-000-0002",
+      technician_phone: "02-000-0001",
+    };
 
     return res.json({
       customer,

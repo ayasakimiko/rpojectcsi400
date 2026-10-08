@@ -729,7 +729,12 @@ router.get('/logs/moveouts', async (req, res) => {
 router.get('/config', async (req, res) => {
   try {
     const pool = getPool()
-    const [rows] = await pool.query('SELECT * FROM DormConfig WHERE id = 1')
+    const [rows] = await pool.query(
+      `SELECT id, dorm_name, promptpay_id, bank_account_no, bank_name, bank_account_name,
+              billing_due_day, grace_period_days, late_fee_per_day, dorm_rules, gate_close_time,
+              caretaker_phone, technician_phone, updated_at
+       FROM DormConfig WHERE id = 1`,
+    )
     if (!rows[0]) {
       return res.json({
         config: {
@@ -743,6 +748,9 @@ router.get('/config', async (req, res) => {
           late_fee_per_day: 50.0,
           dorm_rules:
             '1. ห้ามส่งเสียงดังหลังเวลา 22:00 น.\n2. ห้ามสูบบุหรี่ในห้องพัก\n3. ห้ามเลี้ยงสัตว์',
+          gate_close_time: '22:00',
+          caretaker_phone: '02-000-0002',
+          technician_phone: '02-000-0001',
         },
       })
     }
@@ -767,6 +775,9 @@ router.put('/config', async (req, res) => {
       grace_period_days,
       late_fee_per_day,
       dorm_rules,
+      gate_close_time,
+      caretaker_phone,
+      technician_phone,
     } = req.body ?? {}
 
     if (!dorm_name || !promptpay_id) {
@@ -774,11 +785,19 @@ router.put('/config', async (req, res) => {
         .status(400)
         .json({ message: 'กรุณาระบุชื่อหอพักและหมายเลข PromptPay' })
     }
+    if (
+      (gate_close_time && (typeof gate_close_time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(gate_close_time))) ||
+      [caretaker_phone, technician_phone].some(
+        (phone) => phone != null && (typeof phone !== 'string' || phone.length > 20 || !/^[0-9+()\-\s]*$/.test(phone)),
+      )
+    ) {
+      return res.status(400).json({ message: 'กรุณาตรวจสอบเวลาปิดประตูและเบอร์ติดต่อ' })
+    }
 
     const pool = getPool()
     await pool.query(
-      `INSERT INTO DormConfig (id, dorm_name, promptpay_id, bank_account_no, bank_name, bank_account_name, billing_due_day, grace_period_days, late_fee_per_day, dorm_rules)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO DormConfig (id, dorm_name, promptpay_id, bank_account_no, bank_name, bank_account_name, billing_due_day, grace_period_days, late_fee_per_day, dorm_rules, gate_close_time, caretaker_phone, technician_phone)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          dorm_name = VALUES(dorm_name),
          promptpay_id = VALUES(promptpay_id),
@@ -788,7 +807,10 @@ router.put('/config', async (req, res) => {
          billing_due_day = VALUES(billing_due_day),
          grace_period_days = VALUES(grace_period_days),
          late_fee_per_day = VALUES(late_fee_per_day),
-         dorm_rules = VALUES(dorm_rules)`,
+         dorm_rules = VALUES(dorm_rules),
+         gate_close_time = VALUES(gate_close_time),
+         caretaker_phone = VALUES(caretaker_phone),
+         technician_phone = VALUES(technician_phone)`,
       [
         dorm_name.trim(),
         promptpay_id.trim(),
@@ -799,10 +821,18 @@ router.put('/config', async (req, res) => {
         Number(grace_period_days) || 3,
         Number(late_fee_per_day) || 0,
         dorm_rules ? dorm_rules.trim() : null,
+        gate_close_time || null,
+        caretaker_phone ? caretaker_phone.trim() : null,
+        technician_phone ? technician_phone.trim() : null,
       ],
     )
-
-    return res.json({ message: 'บันทึกการตั้งค่าหอพักเรียบร้อยแล้ว' })
+    const [configRows] = await pool.query(
+      `SELECT id, dorm_name, promptpay_id, bank_account_no, bank_name, bank_account_name,
+              billing_due_day, grace_period_days, late_fee_per_day, dorm_rules, gate_close_time,
+              caretaker_phone, technician_phone, updated_at
+       FROM DormConfig WHERE id = 1`,
+    )
+    return res.json({ message: 'บันทึกการตั้งค่าหอพักเรียบร้อยแล้ว', config: configRows[0] })
   } catch (error) {
     console.error('Update dorm config error:', error)
     return res

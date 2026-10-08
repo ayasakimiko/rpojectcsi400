@@ -102,6 +102,33 @@ async function seedDefaults(connection) {
   }
 }
 
+async function ensureDormConfigColumns(connection) {
+  const columns = [
+    ["gate_close_time", "VARCHAR(5) NULL"],
+    ["caretaker_phone", "VARCHAR(20) NULL"],
+    ["technician_phone", "VARCHAR(20) NULL"],
+  ];
+
+  for (const [column, definition] of columns) {
+    const [rows] = await connection.query(
+      "SHOW COLUMNS FROM DormConfig LIKE ?",
+      [column]
+    );
+    if (rows.length === 0) {
+      await connection.query(
+        `ALTER TABLE DormConfig ADD COLUMN ${column} ${definition}`
+      );
+    }
+  }
+  await connection.query(
+    `UPDATE DormConfig
+     SET gate_close_time = COALESCE(gate_close_time, '22:00'),
+         caretaker_phone = COALESCE(caretaker_phone, '02-000-0002'),
+         technician_phone = COALESCE(technician_phone, '02-000-0001')
+     WHERE id = 1`
+  );
+}
+
 async function main() {
   const connection = await mysql.createConnection({
     host: DB_HOST,
@@ -118,6 +145,7 @@ async function main() {
 
   const sql = fs.readFileSync(path.join(__dirname, "database.sql"), "utf8");
   await connection.query(sql);
+  await ensureDormConfigColumns(connection);
 
   await seedDefaults(connection);
 

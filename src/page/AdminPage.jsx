@@ -3,6 +3,8 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
+import DormInfoPanel from '../components/DormInfoPanel.jsx'
+import { hasDormInfoChanges, mergeDormConfig } from '../utils/dormInfo.js'
 import {
   createWaitingListEntry,
   deleteWaitingListEntry,
@@ -1783,7 +1785,11 @@ function AdminBackupPage() {
     grace_period_days: 3,
     late_fee_per_day: 50,
     dorm_rules: '',
+    gate_close_time: '22:00',
+    caretaker_phone: '02-000-0002',
+    technician_phone: '02-000-0001',
   })
+  const [savedDormConfig, setSavedDormConfig] = useState(null)
   const [configLoading, setConfigLoading] = useState(false)
   const [configSubmitting, setConfigSubmitting] = useState(false)
 
@@ -1792,7 +1798,8 @@ function AdminBackupPage() {
     axios
       .get('/api/admin/config', { headers: authHeaders() })
       .then(({ data }) => {
-        if (data.config) setDormConfig(data.config)
+        setDormConfig((current) => mergeDormConfig(current, data.config))
+        setSavedDormConfig((current) => mergeDormConfig(current, data.config))
       })
       .catch((err) => handleUnauthorized(err))
       .finally(() => setConfigLoading(false))
@@ -1809,6 +1816,12 @@ function AdminBackupPage() {
       const { data } = await axios.put('/api/admin/config', dormConfig, {
         headers: authHeaders(),
       })
+      if (data.config) {
+        setDormConfig((current) => mergeDormConfig(current, data.config))
+        setSavedDormConfig((current) => mergeDormConfig(current, data.config))
+      } else {
+        loadDormConfig()
+      }
       setSuccessMessage(data.message || 'บันทึกการตั้งค่าหอพักใจเรียบร้อยแล้ว')
     } catch (err) {
       setPageError(err.response?.data?.message || 'บันทึกการตั้งค่าไม่สำเร็จ')
@@ -3770,7 +3783,7 @@ function AdminBackupPage() {
                         <input
                           type="text"
                           className="form-control"
-                          value={dormConfig.dorm_name}
+                          value={dormConfig?.dorm_name || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3789,7 +3802,7 @@ function AdminBackupPage() {
                           type="text"
                           className="form-control"
                           placeholder="เช่น 0812345678 หรือ 1100200000000"
-                          value={dormConfig.promptpay_id}
+                          value={dormConfig?.promptpay_id || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3806,7 +3819,7 @@ function AdminBackupPage() {
                           type="text"
                           className="form-control"
                           placeholder="เช่น ธนาคารกสิกรไทย"
-                          value={dormConfig.bank_name || ''}
+                          value={dormConfig?.bank_name || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3822,7 +3835,7 @@ function AdminBackupPage() {
                           type="text"
                           className="form-control"
                           placeholder="เช่น 123-4-56789-0"
-                          value={dormConfig.bank_account_no || ''}
+                          value={dormConfig?.bank_account_no || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3839,7 +3852,7 @@ function AdminBackupPage() {
                         <input
                           type="text"
                           className="form-control"
-                          value={dormConfig.bank_account_name || ''}
+                          value={dormConfig?.bank_account_name || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3867,7 +3880,7 @@ function AdminBackupPage() {
                           min="1"
                           max="31"
                           className="form-control"
-                          value={dormConfig.billing_due_day}
+                          value={dormConfig?.billing_due_day || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3886,7 +3899,7 @@ function AdminBackupPage() {
                           min="0"
                           max="30"
                           className="form-control"
-                          value={dormConfig.grace_period_days}
+                          value={dormConfig?.grace_period_days || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3907,7 +3920,7 @@ function AdminBackupPage() {
                             step="0.01"
                             min="0"
                             className="form-control"
-                            value={dormConfig.late_fee_per_day}
+                            value={dormConfig?.late_fee_per_day || ''}
                             onChange={(e) =>
                               setDormConfig({
                                 ...dormConfig,
@@ -3932,7 +3945,7 @@ function AdminBackupPage() {
                           className="form-control"
                           rows="5"
                           placeholder="ระบุกฎระเบียบ เช่น เวลาปิดประตู, การใช้เสียง, ข้อห้ามต่างๆ..."
-                          value={dormConfig.dorm_rules || ''}
+                          value={dormConfig?.dorm_rules || ''}
                           onChange={(e) =>
                             setDormConfig({
                               ...dormConfig,
@@ -3943,6 +3956,48 @@ function AdminBackupPage() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="admin-form-divider" />
+
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">เวลาปิดประตูและเบอร์ติดต่อ</p>
+                    <div className="row g-3">
+                      <div className="col-md-4">
+                        <label className="form-label">เวลาปิดประตู</label>
+                        <input
+                          type="time"
+                          className="form-control"
+                          value={dormConfig?.gate_close_time || ''}
+                          onChange={(e) => setDormConfig({ ...dormConfig, gate_close_time: e.target.value })}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label">เบอร์ผู้ดูแลหอพัก</label>
+                        <input
+                          type="tel"
+                          maxLength="20"
+                          className="form-control"
+                          value={dormConfig?.caretaker_phone || ''}
+                          onChange={(e) => setDormConfig({ ...dormConfig, caretaker_phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label">เบอร์ช่าง</label>
+                        <input
+                          type="tel"
+                          maxLength="20"
+                          className="form-control"
+                          value={dormConfig?.technician_phone || ''}
+                          onChange={(e) => setDormConfig({ ...dormConfig, technician_phone: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <DormInfoPanel
+                    config={dormConfig}
+                    mode={hasDormInfoChanges(dormConfig, savedDormConfig) ? 'preview-draft' : 'preview-saved'}
+                  />
 
                   <div className="d-flex justify-content-end mt-4">
                     <button
