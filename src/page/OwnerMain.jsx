@@ -2,14 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
-import DatePicker, { registerLocale } from 'react-datepicker'
-import { th } from 'date-fns/locale/th'
-import 'react-datepicker/dist/react-datepicker.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
-import DateDropdowns from '../components/DateDropdowns.jsx'
-
-registerLocale('th', th)
+import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
 
@@ -267,20 +262,6 @@ function toInputDate(value) {
   const month = String(value.getMonth() + 1).padStart(2, '0')
   const day = String(value.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function ThaiDatePicker({ value, onChange, placeholder = 'วว/ดด/ปปปป' }) {
-  return (
-    <DatePicker
-      selected={parseInputDate(value)}
-      onChange={(date) => onChange(date ? toInputDate(date) : '')}
-      dateFormat="dd/MM/yyyy"
-      locale="th"
-      placeholderText={placeholder}
-      isClearable
-      showPopperArrow={false}
-    />
-  )
 }
 
 function getAuthHeaders() {
@@ -1966,11 +1947,21 @@ function OwnerMain() {
                 <div className="owner-filter-row">
                   <label className="owner-date-field">
                     จาก
-                    <ThaiDatePicker value={paymentLogFilter.from} onChange={(value) => handlePaymentLogFilterChange('from', value)} />
+                    <ThaiDatePicker
+                      value={paymentLogFilter.from}
+                      onChange={(value) => handlePaymentLogFilterChange('from', value)}
+                      maxDate={parseInputDate(paymentLogFilter.to)}
+                      isClearable
+                    />
                   </label>
                   <label className="owner-date-field">
                     ถึง
-                    <ThaiDatePicker value={paymentLogFilter.to} onChange={(value) => handlePaymentLogFilterChange('to', value)} />
+                    <ThaiDatePicker
+                      value={paymentLogFilter.to}
+                      onChange={(value) => handlePaymentLogFilterChange('to', value)}
+                      minDate={parseInputDate(paymentLogFilter.from)}
+                      isClearable
+                    />
                   </label>
                   <label className="owner-search-box">
                     สถานะการชำระ
@@ -2162,7 +2153,7 @@ function OwnerMain() {
                   </label>
                   <label>
                     วันที่
-                    <DateDropdowns
+                    <ThaiDatePicker
                       value={expenseEditForm.expense_date}
                       onChange={(date) => setExpenseEditForm((prev) => ({ ...prev, expense_date: date }))}
                     />

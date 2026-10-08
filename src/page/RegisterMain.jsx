@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { useLocation, useNavigate } from 'react-router-dom'
-import DatePicker from 'react-datepicker'
-import 'react-datepicker/dist/react-datepicker.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/RegisterPage.css'
-
-const RENTAL_DATE_FORMAT = "dd/MM/yyyy 'เวลา' HH:mm"
+import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 
 const formatDateTimeLocal = (date) => {
   const pad = (n) => String(n).padStart(2, '0')
@@ -353,22 +350,15 @@ function RegisterMain() {
                     <label className="form-label" htmlFor="register-rental-start">
                       วันเวลาที่เริ่มเช่า
                     </label>
-                    <DatePicker
+                    <ThaiDatePicker
                       id="register-rental-start"
                       name="rental_start_date"
-                      className="form-control"
-                      wrapperClassName="w-100"
-                      selected={registerForm.rental_start_date}
+                      valueType="date"
+                      placeholder="เลือกวันเวลา"
+                      value={registerForm.rental_start_date}
                       onChange={(date) => handleRentalDateChange('rental_start_date', date)}
                       showTimeSelect
                       timeIntervals={15}
-                      timeFormat="HH:mm"
-                      timeCaption="เวลา"
-                      dateFormat={RENTAL_DATE_FORMAT}
-                      autoComplete="off"
-                      onChangeRaw={(e) => e.preventDefault()}
-                      showIcon
-                      toggleCalendarOnIconClick
                       withPortal={isMobile}
                       portalId="rental-date-portal"
                     />
@@ -377,25 +367,18 @@ function RegisterMain() {
                     <label className="form-label" htmlFor="register-rental-end">
                       วันเวลาที่สิ้นสุดสัญญา
                     </label>
-                    <DatePicker
+                    <ThaiDatePicker
                       id="register-rental-end"
                       name="rental_end_date"
-                      className="form-control"
-                      wrapperClassName="w-100"
-                      selected={registerForm.rental_end_date}
+                      valueType="date"
+                      placeholder="เลือกวันเวลา"
+                      value={registerForm.rental_end_date}
                       onChange={(date) => handleRentalDateChange('rental_end_date', date)}
                       minDate={registerForm.rental_start_date || getNow()}
                       openToDate={getNow()}
                       filterTime={filterEndTime}
                       showTimeSelect
                       timeIntervals={15}
-                      timeFormat="HH:mm"
-                      timeCaption="เวลา"
-                      dateFormat={RENTAL_DATE_FORMAT}
-                      autoComplete="off"
-                      onChangeRaw={(e) => e.preventDefault()}
-                      showIcon
-                      toggleCalendarOnIconClick
                       withPortal={isMobile}
                       portalId="rental-date-portal"
                     />

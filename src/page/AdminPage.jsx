@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
-import DateDropdowns from '../components/DateDropdowns.jsx'
+import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
@@ -3028,9 +3028,8 @@ function AdminBackupPage() {
                 </div>
                 <div className="col-12">
                   <label className="form-label" htmlFor="admin-expense-date">วันที่</label>
-                  <DateDropdowns
+                  <ThaiDatePicker
                     id="admin-expense-date"
-                    selectClassName="form-select"
                     value={expenseForm.expense_date}
                     onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
                   />

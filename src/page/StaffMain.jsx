@@ -5,7 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
-import DateDropdowns from '../components/DateDropdowns.jsx'
+import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const MOVE_OUT_CHECKLIST = [
@@ -4042,9 +4042,9 @@ function StaffMain() {
                       <option value="pending">รอดำเนินการ</option>
                       <option value="in_progress">กำลังดำเนินการ</option>
                     </select>
-                    <DateDropdowns
-                      inline
-                      selectClassName="staff-filter-select"
+                    <ThaiDatePicker
+                      compact
+                      className="staff-filter-select"
                       value={maintenanceFilterDate}
                       onChange={(date) => {
                         setMaintenanceFilterDate(date)
@@ -4318,9 +4318,9 @@ function StaffMain() {
                 <label className="staff-form-label" htmlFor="expense-date">
                   วันที่
                 </label>
-                <DateDropdowns
+                <ThaiDatePicker
                   id="expense-date"
-                  selectClassName="staff-form-input"
+                  className="staff-form-input"
                   value={expenseForm.expense_date}
                   onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
                 />
@@ -4449,9 +4449,9 @@ function StaffMain() {
               <option value="pending">รอดำเนินการ</option>
               <option value="in_progress">กำลังดำเนินการ</option>
             </select>
-            <DateDropdowns
-              inline
-              selectClassName="staff-filter-select"
+            <ThaiDatePicker
+              compact
+              className="staff-filter-select"
               value={maintenanceFilterDate}
               onChange={(date) => {
                 setMaintenanceFilterDate(date)
