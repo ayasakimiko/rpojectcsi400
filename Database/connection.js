@@ -113,6 +113,17 @@ async function ensureColumn(connection, table, column, definition) {
   }
 }
 
+async function ensureIndex(connection, table, index, definition) {
+  const [rows] = await connection.query(
+    `SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [DB_NAME, table, index],
+  );
+  if (rows.length === 0) {
+    await connection.query(`ALTER TABLE \`${table}\` ADD ${definition}`);
+    console.log(`Added index ${table}.${index}`);
+  }
+}
+
 async function main() {
   const connection = await mysql.createConnection({
     host: DB_HOST,
@@ -131,6 +142,22 @@ async function main() {
   await connection.query(sql);
   await ensureColumn(connection, "Announcement", "expires_at", "DATETIME NULL AFTER author_name");
   await ensureColumn(connection, "Parcel", "customer_id", "INT UNSIGNED NULL AFTER room_number");
+  await ensureColumn(connection, "TenantRequest", "target_room_number", "INT UNSIGNED NULL AFTER room_number");
+  await ensureColumn(connection, "Booking", "rental_start_date", "DATETIME NULL AFTER room_id");
+  await ensureColumn(connection, "Booking", "rental_end_date", "DATETIME NULL AFTER rental_start_date");
+  await ensureColumn(connection, "MoveOutInspection", "tenant_request_id", "INT NULL AFTER room_number");
+  await ensureColumn(connection, "MoveOutInspection", "updated_at", "DATETIME NULL AFTER reviewed_at");
+  await ensureIndex(connection, "MoveOutInspection", "uq_move_out_inspection_tenant_request", "UNIQUE INDEX `uq_move_out_inspection_tenant_request` (`tenant_request_id`)");
+  await connection.query(
+    `UPDATE TenantRequest tr
+     JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+     SET tr.status = CASE WHEN tr.status = 'pending' THEN 'in_progress' ELSE tr.status END,
+         tr.accepted_at = COALESCE(tr.accepted_at, moi.created_at),
+         tr.accepted_by_name = COALESCE(tr.accepted_by_name, moi.inspected_by_name)
+     WHERE tr.type = 'move_room'
+       AND tr.status IN ('pending', 'in_progress')
+       AND (tr.status = 'pending' OR tr.accepted_at IS NULL OR tr.accepted_by_name IS NULL)`,
+  );
   await connection.query(
     `UPDATE Parcel p
      SET p.customer_id = (

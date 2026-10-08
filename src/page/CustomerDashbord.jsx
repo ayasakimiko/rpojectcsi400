@@ -521,7 +521,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`dashboard-modal${variant === 'confirm' ? ' dashboard-modal-confirm' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dashboard-modal-header">
@@ -766,6 +766,7 @@ function dueBadgeClass(status) {
 const TENANT_REQUEST_TYPE_LABEL = {
   renew: 'ต่อสัญญา',
   moveout: 'แจ้งย้ายออก',
+  move_room: 'ย้ายห้อง',
 }
 
 const TENANT_REQUEST_STATUS_LABEL = {
@@ -817,6 +818,29 @@ const MOVEOUT_STATUS_POPUP_CONTENT = {
   in_progress: { title: 'เจ้าหน้าที่รับเรื่องแล้ว', message: MOVEOUT_IN_PROGRESS_CONTACT_MESSAGE, icon: 'info' },
   approved: { title: 'แจ้งย้ายออกได้รับการอนุมัติ', message: MOVEOUT_APPROVED_CONTACT_MESSAGE, icon: 'success' },
   rejected: { title: 'คำขอแจ้งย้ายออกไม่ได้รับการอนุมัติ', message: MOVEOUT_REJECTED_CONTACT_MESSAGE, icon: 'danger' },
+}
+
+const MOVE_ROOM_STATUS_POPUP_CONTENT = {
+  pending: {
+    title: 'รอดำเนินการ',
+    message: 'ส่งคำขอย้ายห้องแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบห้องปลายทาง',
+    icon: 'info',
+  },
+  in_progress: {
+    title: 'เจ้าหน้าที่รับเรื่องแล้ว',
+    message: 'เจ้าหน้าที่รับเรื่องคำขอย้ายห้องแล้ว กรุณารอผลการตรวจสอบ',
+    icon: 'info',
+  },
+  approved: {
+    title: 'ย้ายห้องสำเร็จ',
+    message: 'คำขอย้ายห้องได้รับการอนุมัติแล้ว ห้องพักของคุณได้รับการเปลี่ยนเรียบร้อย',
+    icon: 'success',
+  },
+  rejected: {
+    title: 'คำขอย้ายห้องไม่ได้รับการอนุมัติ',
+    message: 'คำขอย้ายห้องไม่ได้รับการอนุมัติ กรุณาติดต่อเจ้าหน้าที่หากต้องการสอบถามเพิ่มเติม',
+    icon: 'danger',
+  },
 }
 
 const RENEW_RESUBMIT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000
@@ -877,6 +901,7 @@ const CONTRACT_STATUS_POPUP_CONTENT = {
 
 const STATUS_POPUP_CONTENT_BY_KIND = {
   moveout: MOVEOUT_STATUS_POPUP_CONTENT,
+  move_room: MOVE_ROOM_STATUS_POPUP_CONTENT,
   renew: RENEW_STATUS_POPUP_CONTENT,
   maintenance: MAINTENANCE_STATUS_POPUP_CONTENT,
   contract: CONTRACT_STATUS_POPUP_CONTENT,
@@ -970,7 +995,13 @@ function TenantRequestDetailCard({ request, roomNumber }) {
       {roomNumber && (
         <div className="dashboard-maintenance-detail-row">
           <span>ห้อง</span>
-          <strong>{roomNumber}</strong>
+          <strong>{request.room_number || roomNumber}</strong>
+        </div>
+      )}
+      {request.type === 'move_room' && (
+        <div className="dashboard-maintenance-detail-row">
+          <span>ห้องปลายทาง</span>
+          <strong>{request.target_room_number || '-'}</strong>
         </div>
       )}
       {request.type === 'renew' && (
@@ -1206,6 +1237,7 @@ function formatRemaining(ms) {
 
 function CustomerDashbord() {
   const navigate = useNavigate()
+  const dashboardLoadRef = useRef(null)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1261,6 +1293,7 @@ function CustomerDashbord() {
   const [requestNote, setRequestNote] = useState('')
   const [renewDurationMonths, setRenewDurationMonths] = useState(RENEW_DURATION_OPTIONS[2].value)
   const [renewPaymentType, setRenewPaymentType] = useState(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
+  const [targetRoomNumber, setTargetRoomNumber] = useState('')
   const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
 
@@ -1364,7 +1397,9 @@ function CustomerDashbord() {
       return Promise.resolve()
     }
 
-    return axios
+    if (dashboardLoadRef.current) return dashboardLoadRef.current
+
+    dashboardLoadRef.current = axios
       .get('/api/customer/me', { headers: { Authorization: `Bearer ${token}` } })
       .then(({ data }) => {
         setData(data)
@@ -1381,7 +1416,10 @@ function CustomerDashbord() {
       })
       .finally(() => {
         setLoading(false)
+        dashboardLoadRef.current = null
       })
+
+    return dashboardLoadRef.current
   }
 
   const handleReceiveParcel = async (parcel) => {
@@ -1463,10 +1501,19 @@ function CustomerDashbord() {
   }, [])
 
   useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadDashboard()
+    }
     const interval = setInterval(() => {
-      loadDashboard()
+      if (document.visibilityState === 'visible') loadDashboard()
     }, 20000)
-    return () => clearInterval(interval)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1579,6 +1626,7 @@ function CustomerDashbord() {
   const openRequestForm = (type) => {
     setActiveRequestType(type)
     setRequestNote('')
+    setTargetRoomNumber(String(data?.availableRooms?.[0]?.room_number || ''))
     setRenewDurationMonths(RENEW_DURATION_OPTIONS[2].value)
     setRenewPaymentType(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
     setRequestError('')
@@ -1590,6 +1638,10 @@ function CustomerDashbord() {
       setRequestError('กรุณากรอกรายละเอียดการย้ายออก')
       return
     }
+    if (activeRequestType === 'move_room' && !targetRoomNumber) {
+      setRequestError('กรุณาเลือกห้องที่ต้องการย้าย')
+      return
+    }
     const token = sessionStorage.getItem('token')
     setRequestSubmitting(true)
     setRequestError('')
@@ -1598,6 +1650,9 @@ function CustomerDashbord() {
       if (activeRequestType === 'renew') {
         payload.renew_duration_months = Number(renewDurationMonths)
         payload.renew_payment_type = renewPaymentType
+      }
+      if (activeRequestType === 'move_room') {
+        payload.target_room_number = Number(targetRoomNumber)
       }
       const { data: result } = await axios.post('/api/customer/requests', payload, {
         headers: { Authorization: `Bearer ${token}` },
@@ -1778,6 +1833,7 @@ function CustomerDashbord() {
     room,
     rentalHistory,
     currentDue,
+    availableRooms = [],
     maintenanceRequests = [],
     tenantRequests = [],
     announcements = [],
@@ -1814,6 +1870,7 @@ function CustomerDashbord() {
   const latestRequestByType = (type) => tenantRequests.find((request) => request.type === type)
   const renewRequest = latestRequestByType('renew')
   const moveoutRequest = latestRequestByType('moveout')
+  const moveRoomRequest = latestRequestByType('move_room')
 
   const canResubmitRenew =
     !renewRequest
@@ -1841,6 +1898,10 @@ function CustomerDashbord() {
         date: request.completed_at || request.created_at,
         detail:
           (request.type === 'moveout' && MOVEOUT_STATUS_POPUP_CONTENT[request.status]?.message)
+          || (request.type === 'move_room' && MOVE_ROOM_STATUS_POPUP_CONTENT[request.status]?.message)
+          || (request.type === 'move_room' && request.target_room_number
+            ? `ห้องปลายทางที่ขอ: ${request.target_room_number}`
+            : null)
           || (request.note ? `หมายเหตุของคุณ: ${request.note}` : null),
         kind: 'tenant',
         request,
@@ -2480,7 +2541,7 @@ function CustomerDashbord() {
                     </svg>
                   </div>
                   <p className="dashboard-confirm-message">{content.message}</p>
-                  {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout') && (
+                  {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
                     <TenantRequestDetailCard
                       request={{ ...statusPopup.request, type: statusPopup.kind }}
                       roomNumber={room?.room_number}
@@ -2538,7 +2599,7 @@ function CustomerDashbord() {
         )}
 
         {successPopup && (
-          <Modal title="สำเร็จ" onClose={() => setSuccessPopup(null)} variant="confirm">
+          <Modal title="สำเร็จ" onClose={() => setSuccessPopup(null)} variant="success">
             {(requestClose) => (
               <div className="dashboard-confirm-body">
                 <div className="dashboard-confirm-icon is-success">
@@ -3317,6 +3378,42 @@ function CustomerDashbord() {
                           </button>
                         )}
                       </div>
+                      <div className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
+                        <div className="dashboard-request-info">
+                          <p className="dashboard-request-title">ย้ายห้อง</p>
+                          <p className="dashboard-request-desc">
+                            {moveRoomRequest && ['pending', 'in_progress'].includes(moveRoomRequest.status)
+                              ? `กำลังขอย้ายไปห้อง ${moveRoomRequest.target_room_number}`
+                              : availableRooms.length > 0
+                                ? 'ส่งคำขอย้ายไปยังห้องพักที่ว่าง'
+                                : 'ขณะนี้ไม่มีห้องว่างให้เลือก'}
+                          </p>
+                        </div>
+                        {moveRoomRequest && ['pending', 'in_progress'].includes(moveRoomRequest.status) ? (
+                          <button
+                            type="button"
+                            className={`dashboard-badge status-${tenantRequestBadgeClass(moveRoomRequest.status)} dashboard-badge-btn`}
+                            onClick={() => setStatusPopup({ kind: 'move_room', status: moveRoomRequest.status, request: moveRoomRequest })}
+                          >
+                            {TENANT_REQUEST_STATUS_LABEL[moveRoomRequest.status]}
+                          </button>
+                        ) : (
+                          room?.is_booked && availableRooms.length > 0 && (
+                            <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('move_room')}>
+                              ย้ายห้อง
+                            </button>
+                          )
+                        )}
+                        {moveRoomRequest && (
+                          <button
+                            type="button"
+                            className="dashboard-maintenance-more"
+                            onClick={() => setStatusPopup({ kind: 'move_room', status: moveRoomRequest.status, request: moveRoomRequest })}
+                          >
+                            ดูรายละเอียด
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {activeRequestType && (
@@ -3357,6 +3454,30 @@ function CustomerDashbord() {
                                 </select>
                               </>
                             )}
+                            {activeRequestType === 'move_room' && (
+                              <>
+                                <label htmlFor="target-room-number">ห้องที่ต้องการย้ายไป</label>
+                                <select
+                                  id="target-room-number"
+                                  value={targetRoomNumber}
+                                  onChange={(event) => {
+                                    setTargetRoomNumber(event.target.value)
+                                    if (requestError) setRequestError('')
+                                  }}
+                                  required
+                                >
+                                  <option value="" disabled>เลือกห้องว่าง</option>
+                                  {availableRooms.map((availableRoom) => (
+                                    <option key={availableRoom.room_number} value={availableRoom.room_number}>
+                                      ห้อง {availableRoom.room_number} · {Number(availableRoom.price).toLocaleString('th-TH')} บาท/เดือน
+                                    </option>
+                                  ))}
+                                </select>
+                                {availableRooms.length === 0 && (
+                                  <p className="dashboard-form-error">ขณะนี้ไม่มีห้องว่างให้เลือก</p>
+                                )}
+                              </>
+                            )}
                             <label>
                               {activeRequestType === 'moveout' ? (
                                 <>
@@ -3389,7 +3510,11 @@ function CustomerDashbord() {
                               <button
                                 type="submit"
                                 className="dashboard-action-btn is-primary"
-                                disabled={requestSubmitting || (activeRequestType === 'moveout' && !requestNote.trim())}
+                                disabled={
+                                  requestSubmitting
+                                  || (activeRequestType === 'moveout' && !requestNote.trim())
+                                  || (activeRequestType === 'move_room' && (!targetRoomNumber || availableRooms.length === 0))
+                                }
                               >
                                 {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
                               </button>

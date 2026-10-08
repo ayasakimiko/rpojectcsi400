@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS Booking (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     customer_id INT UNSIGNED NOT NULL,
     room_id INT NOT NULL,
+    rental_start_date DATETIME NULL,
+    rental_end_date DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES Customer(id),
@@ -124,6 +126,7 @@ CREATE TABLE IF NOT EXISTS TenantRequest (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     customer_id INT UNSIGNED NOT NULL,
     room_number INT UNSIGNED NOT NULL,
+    target_room_number INT UNSIGNED NULL,
     type VARCHAR(20) NOT NULL,
     note VARCHAR(500),
     renew_duration_months INT UNSIGNED,
@@ -181,6 +184,7 @@ CREATE TABLE IF NOT EXISTS WaitingList (
 CREATE TABLE IF NOT EXISTS MoveOutInspection (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     room_number INT UNSIGNED NOT NULL,
+    tenant_request_id INT NULL UNIQUE,
     tenant_name VARCHAR(255) NOT NULL,
     tenant_phone VARCHAR(20),
     checklist TEXT NOT NULL,
@@ -189,6 +193,7 @@ CREATE TABLE IF NOT EXISTS MoveOutInspection (
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     inspected_by_name VARCHAR(255),
     reviewed_at DATETIME NULL,
+    updated_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -12,20 +12,22 @@ import { CheckIcon, DoorIcon, HashIcon, InfoIcon, NoteIcon, PackageIcon, PlusIco
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const MOVE_OUT_CHECKLIST = [
-  { key: 'walls', label: 'ผนังและสี' },
-  { key: 'floor', label: 'พื้น' },
-  { key: 'ceiling', label: 'เพดานและไฟ' },
-  { key: 'doors', label: 'ประตูและกุญแจ' },
-  { key: 'windows', label: 'หน้าต่าง' },
-  { key: 'electrical', label: 'ปลั๊กและสวิตช์ไฟ' },
-  { key: 'bathroom', label: 'ห้องน้ำและสุขภัณฑ์' },
-  { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์' },
+  { key: 'walls', label: 'ผนังและสี (รอยแตก คราบ สีลอก)' },
+  { key: 'floor', label: 'พื้น (รอยแตก คราบ ความเสียหาย)' },
+  { key: 'ceiling', label: 'เพดานและไฟ (คราบรั่วซึม หลอดไฟ)' },
+  { key: 'doors', label: 'ประตูและกุญแจ (บาน ลูกบิด กลอน กุญแจ)' },
+  { key: 'windows', label: 'หน้าต่าง (กระจก วงกบ ตัวล็อก)' },
+  { key: 'electrical', label: 'ระบบไฟฟ้า (ปลั๊ก สวิตช์ ไฟส่องสว่าง)' },
+  { key: 'bathroom', label: 'ห้องน้ำและสุขภัณฑ์ (ก๊อก ฝักบัว โถ ท่อระบาย)' },
+  { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์ของห้อง' },
 ]
 
 const CHECKLIST_RESULT_OPTIONS = [
-  { key: 'good', label: 'ปกติ', title: 'ปกติ' },
-  { key: 'damaged', label: 'ชำรุด', title: 'ชำรุด' },
-  { key: 'not_applicable', label: 'ไม่เกี่ยวข้อง', title: 'ไม่มี / ไม่เกี่ยวข้อง' },
+  { key: 'good', label: 'ปกติ', title: 'สภาพดี ใช้งานได้' },
+  { key: 'wear', label: 'สึกหรอ', title: 'สึกหรอตามการใช้งานปกติ แต่ยังใช้งานได้' },
+  { key: 'damaged', label: 'ชำรุด', title: 'เสียหายหรือใช้งานไม่ได้' },
+  { key: 'missing', label: 'สูญหาย', title: 'อุปกรณ์หรือทรัพย์สินที่ควรมีสูญหาย' },
+  { key: 'not_applicable', label: 'ไม่มี', title: 'ไม่มีหรือติดตั้งรายการนี้ในห้อง' },
 ]
 const INSPECTION_MAX_PHOTOS = 15
 const INSPECTION_MAX_PHOTO_BYTES = 5 * 1024 * 1024
@@ -593,6 +595,7 @@ function ContractArrowIcon() {
 const TENANT_REQUEST_TYPE_LABEL = {
   renew: 'ต่อสัญญา',
   moveout: 'แจ้งย้ายออก',
+  move_room: 'ย้ายห้อง',
 }
 
 const TENANT_REQUEST_STATUS_LABEL = {
@@ -642,7 +645,7 @@ const STAFF_TABS = [
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
-  { key: 'move-out-inspections', label: 'ตรวจห้องตอนย้ายออก' },
+  { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
 ]
 
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
@@ -663,6 +666,16 @@ const STAFF_TENANT_NOTIF_INFO = {
 const STAFF_MAINTENANCE_NOTIF_INFO = {
   pending: { label: 'แจ้งซ่อมใหม่ รอดำเนินการ', tone: 'pending' },
   in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'info' },
+}
+
+function getNotificationStorageKey(role) {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+    const userId = user.id ?? user.idcard ?? user.username ?? 'current'
+    return `${role}-notifications-seen-${userId}`
+  } catch {
+    return `${role}-notifications-seen-current`
+  }
 }
 
 const DUE_STATUS_LABEL = {
@@ -773,14 +786,25 @@ function getRoomExpiryStatus(room) {
 function buildStaffTenantNotifs(request) {
   const info = STAFF_TENANT_NOTIF_INFO[request.status]
   if (!info) return []
+  const inspectionInfo = request.type === 'move_room' && request.status === 'in_progress'
+    ? {
+        pending: { key: `inspection-${request.inspection_id}-pending-${request.inspection_updated_at || request.created_at}`, label: 'ส่งผลตรวจแล้ว รอ Admin ตรวจ', tone: 'info' },
+        reviewed: { key: `inspection-${request.inspection_id}-reviewed-${request.inspection_reviewed_at || ''}`, label: 'Admin ตรวจแล้ว ดำเนินการย้ายห้องต่อได้', tone: 'info' },
+        follow_up: { key: `inspection-${request.inspection_id}-follow_up-${request.inspection_reviewed_at || ''}`, label: 'Admin ขอแก้ไขผลตรวจและส่งตรวจใหม่', tone: 'pending' },
+      }[request.inspection_status]
+    : null
+  const notificationInfo = inspectionInfo || info
   return [
     {
-      key: `tenant-${request.id}-${request.status}`,
+      key: inspectionInfo?.key || `tenant-${request.id}-${request.status}`,
       title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
-      ...info,
-      date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      ...notificationInfo,
+      date: inspectionInfo && request.inspection_status !== 'pending'
+        ? request.inspection_reviewed_at || request.accepted_at || request.created_at
+        : request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
       details: [
         { label: 'ห้อง', value: request.room_number },
+        ...(request.type === 'move_room' ? [{ label: 'ห้องปลายทาง', value: request.target_room_number }] : []),
         { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
         ...(request.note ? [{ label: 'หมายเหตุ', value: request.note }] : []),
       ],
@@ -1458,6 +1482,7 @@ function StaffMain() {
     photos: [],
     existingPhotos: [],
   })
+  const [inspectionTenantRequest, setInspectionTenantRequest] = useState(null)
   const [inspectionEditing, setInspectionEditing] = useState(null)
   const [inspectionLoadingId, setInspectionLoadingId] = useState(null)
   const [inspectionListError, setInspectionListError] = useState('')
@@ -1482,7 +1507,14 @@ function StaffMain() {
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [notifSeen, setNotifSeen] = useState(false)
+  const [seenNotificationKeys, setSeenNotificationKeys] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(getNotificationStorageKey('staff')) || '[]')
+      return Array.isArray(stored) ? stored : []
+    } catch {
+      return []
+    }
+  })
   const [notifPage, setNotifPage] = useState(1)
   const [notifDetail, setNotifDetail] = useState(null)
   const notifRef = useRef(null)
@@ -1633,8 +1665,13 @@ function StaffMain() {
   const loadMoveOutInspections = () => {
     return axios
       .get('/api/staff/move-out-inspections', { headers: authHeaders() })
-      .then(({ data }) => setMoveOutInspections(data.inspections))
-      .catch(() => {})
+      .then(({ data }) => {
+        setMoveOutInspections(data.inspections)
+        setInspectionListError('')
+      })
+      .catch((err) => {
+        setInspectionListError(err.response?.data?.message || 'โหลดผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      })
   }
 
   const loadPendingSlipCount = () => {
@@ -1761,6 +1798,22 @@ function StaffMain() {
       existingPhotos: [],
     })
     setInspectionEditing(null)
+    setInspectionTenantRequest(null)
+    setInspectionError('')
+    setInspectionFieldErrors({})
+    setInspectionModal(true)
+  }
+
+  const openMoveRoomInspection = (request) => {
+    setInspectionForm({
+      room_number: String(request.room_number),
+      checklist: {},
+      damage_note: '',
+      photos: [],
+      existingPhotos: [],
+    })
+    setInspectionEditing(null)
+    setInspectionTenantRequest(request)
     setInspectionError('')
     setInspectionFieldErrors({})
     setInspectionModal(true)
@@ -1784,7 +1837,9 @@ function StaffMain() {
         room_number: detail.room_number,
         tenant_name: detail.tenant_name,
         tenant_phone: detail.tenant_phone,
+        tenant_request_id: detail.tenant_request_id,
       })
+      setInspectionTenantRequest(null)
       setInspectionError('')
       setInspectionFieldErrors({})
       setInspectionModal(true)
@@ -1805,10 +1860,12 @@ function StaffMain() {
       })
       setActionSuccess(data.message || 'ลบผลตรวจห้องสำเร็จ')
       requestClose()
-      await loadMoveOutInspections()
+      await Promise.all([loadMoveOutInspections(), loadRequests()])
     } catch (error) {
       setInspectionDeleteError(error.response?.data?.message || 'ลบผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
-      if (error.response?.status === 404) await loadMoveOutInspections()
+      if (error.response?.status === 404) {
+        await Promise.all([loadMoveOutInspections(), loadRequests()])
+      }
     } finally {
       setInspectionDeleting(false)
     }
@@ -1828,17 +1885,6 @@ function StaffMain() {
     setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
   }
 
-  const markRemainingGood = () => {
-    setInspectionForm((form) => ({
-      ...form,
-      checklist: {
-        ...Object.fromEntries(MOVE_OUT_CHECKLIST.map((item) => [item.key, 'good'])),
-        ...form.checklist,
-      },
-    }))
-    setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
-  }
-
   const submitMoveOutInspection = async (event, requestClose) => {
     event.preventDefault()
     const room = rooms.find(
@@ -1848,15 +1894,21 @@ function StaffMain() {
     if (!inspectionEditing && !room) fieldErrors.room = 'กรุณาเลือกห้องที่มีผู้เช่า'
     const missing = MOVE_OUT_CHECKLIST.filter((item) => !inspectionForm.checklist[item.key]).map((item) => item.key)
     if (missing.length > 0) fieldErrors.checklist = missing
-    if (Object.values(inspectionForm.checklist).includes('damaged') && !inspectionForm.damage_note.trim()) {
-      fieldErrors.damage_note = 'กรุณาระบุรายละเอียดความเสียหายที่พบ'
+    const hasIssue = Object.values(inspectionForm.checklist).some((result) => ['damaged', 'missing'].includes(result))
+    if (hasIssue && !inspectionForm.damage_note.trim()) {
+      fieldErrors.damage_note = 'กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย'
+    }
+    if (hasIssue && inspectionForm.photos.length + inspectionForm.existingPhotos.length === 0) {
+      fieldErrors.photos = 'กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย'
     }
     setInspectionFieldErrors(fieldErrors)
     if (Object.keys(fieldErrors).length > 0) {
       setInspectionError(
         missing.length > 0
           ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
-          : 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
+          : hasIssue && inspectionForm.photos.length + inspectionForm.existingPhotos.length === 0
+            ? 'กรุณาแนบภาพประกอบรายการชำรุดหรือสูญหาย'
+            : 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
       )
       return
     }
@@ -1878,13 +1930,18 @@ function StaffMain() {
           )
         : await axios.post(
             '/api/staff/move-out-inspections',
-            { room_number: room.room_number, ...details },
+            {
+              room_number: room.room_number,
+              ...(inspectionTenantRequest ? { tenant_request_id: inspectionTenantRequest.id } : {}),
+              ...details,
+            },
             { headers: authHeaders() },
           )
       setActionSuccess(data.message || (inspectionEditing ? 'แก้ไขผลตรวจห้องสำเร็จ' : 'ส่งผลตรวจห้องให้ Admin แล้ว'))
       if (!inspectionEditing) setInspectionsPage(1)
       requestClose()
       await loadMoveOutInspections()
+      await loadRequests()
     } catch (error) {
       setInspectionError(error.response?.data?.message || error.message || 'บันทึกผลตรวจไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
       if (error.response?.status === 404) loadMoveOutInspections()
@@ -2134,14 +2191,19 @@ function StaffMain() {
     loadMoveOutInspections()
     loadAnnouncements()
     loadPendingSlipCount()
+    const requestsInterval = setInterval(loadRequests, 20000)
     const announcementsInterval = setInterval(loadAnnouncements, 30000)
     const slipCountInterval = setInterval(loadPendingSlipCount, 30000)
     const parcelsInterval = setInterval(loadParcels, 30000)
+    const refreshRequestsOnFocus = () => loadRequests()
+    window.addEventListener('focus', refreshRequestsOnFocus)
     return () => {
       isMounted = false
+      clearInterval(requestsInterval)
       clearInterval(announcementsInterval)
       clearInterval(slipCountInterval)
       clearInterval(parcelsInterval)
+      window.removeEventListener('focus', refreshRequestsOnFocus)
     }
   }, [loadParcels])
 
@@ -2276,7 +2338,11 @@ function StaffMain() {
             <span className={`staff-badge type-${request.type}`}>
               {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
             </span>
-            <span className="staff-request-room">ห้อง {request.room_number}</span>
+            <span className="staff-request-room">
+              {request.type === 'move_room'
+                ? `ห้อง ${request.room_number} → ${request.target_room_number}`
+                : `ห้อง ${request.room_number}`}
+            </span>
             <span className="staff-request-tenant">
               {request.first_name} {request.last_name}
             </span>
@@ -2290,6 +2356,17 @@ function StaffMain() {
                 </span>
                 <span>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</span>
               </>
+            )}
+            {request.type === 'move_room' && (
+              <span>
+                {request.inspection_status === 'reviewed'
+                  ? 'ตรวจห้องแล้ว'
+                  : request.inspection_status === 'follow_up'
+                    ? 'ผลตรวจต้องติดตาม'
+                    : request.inspection_id
+                      ? 'รอ Admin ตรวจผล'
+                      : 'รอตรวจสภาพห้อง'}
+              </span>
             )}
             {request.phone && <span>โทร {request.phone}</span>}
           </div>
@@ -2321,6 +2398,38 @@ function StaffMain() {
                 {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
               </button>
             )
+          ) : request.type === 'move_room' ? (
+            request.inspection_status === 'reviewed' ? (
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                disabled={isProcessing}
+                onClick={() => setRenewApproveConfirm(request)}
+              >
+                {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติย้ายห้อง'}
+              </button>
+            ) : request.inspection_status === 'follow_up' ? (
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                disabled={inspectionLoadingId === request.inspection_id}
+                onClick={() => openEditInspection({ id: request.inspection_id })}
+              >
+                {inspectionLoadingId === request.inspection_id ? 'กำลังโหลด...' : 'แก้ผลตรวจ'}
+              </button>
+            ) : request.inspection_id ? (
+              <button type="button" className="staff-action-btn is-ghost" onClick={loadRequests}>
+                รอ Admin ตรวจ · อัปเดต
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                onClick={() => openMoveRoomInspection(request)}
+              >
+                ตรวจห้องก่อนย้าย
+              </button>
+            )
           ) : (
             <button
               type="button"
@@ -2340,7 +2449,7 @@ function StaffMain() {
             ปฏิเสธ
           </button>
         </div>
-        {request.type === 'moveout' && (
+        {request.type !== 'renew' && (
           <span className={`staff-badge status-${request.status}`}>
             {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
           </span>
@@ -2541,10 +2650,20 @@ function StaffMain() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [tenantRequests, maintenanceRequests, announcements])
 
+  const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
+
+  const markNotificationsRead = () => {
+    const keys = notifications.map((notification) => notification.key)
+    setSeenNotificationKeys(keys)
+    localStorage.setItem(getNotificationStorageKey('staff'), JSON.stringify(keys))
+  }
+
   const inspectionResults = MOVE_OUT_CHECKLIST.map((item) => inspectionForm.checklist[item.key]).filter(Boolean)
   const inspectionCounts = {
     good: inspectionResults.filter((result) => result === 'good').length,
+    wear: inspectionResults.filter((result) => result === 'wear').length,
     damaged: inspectionResults.filter((result) => result === 'damaged').length,
+    missing: inspectionResults.filter((result) => result === 'missing').length,
     not_applicable: inspectionResults.filter((result) => result === 'not_applicable').length,
   }
   
@@ -2616,7 +2735,9 @@ function StaffMain() {
       if (tenantFilterSearch.trim()) {
         const keyword = tenantFilterSearch.trim().toLowerCase()
         const tenantName = `${request.first_name} ${request.last_name}`.toLowerCase()
-        const matchesRoom = String(request.room_number).includes(keyword)
+        const matchesRoom =
+          String(request.room_number).includes(keyword)
+          || String(request.target_room_number || '').includes(keyword)
         const matchesTenant = tenantName.includes(keyword)
         const matchesPhone = request.phone?.includes(keyword)
         if (!matchesRoom && !matchesTenant && !matchesPhone) return false
@@ -2756,8 +2877,8 @@ function StaffMain() {
                   if (notifOpen) {
                     closeNotifPanel()
                   } else {
+                    markNotificationsRead()
                     setNotifOpen(true)
-                    setNotifSeen(true)
                     setNotifPage(1)
                   }
                 }}
@@ -2776,7 +2897,7 @@ function StaffMain() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {!notifSeen && notifications.length > 0 && <span className="staff-notif-dot" />}
+                {hasUnreadNotifications && <span className="staff-notif-dot" />}
               </button>
               {notifOpen && (
                 <div
@@ -3231,10 +3352,17 @@ function StaffMain() {
 
         {inspectionModal && (
           <Modal
-            title={inspectionEditing ? `แก้ไขผลตรวจห้อง ${inspectionEditing.room_number}` : 'Checklist ตรวจห้องย้ายออก'}
+            title={
+              inspectionEditing
+                ? `แก้ไขผลตรวจห้อง ${inspectionEditing.room_number}`
+                : inspectionTenantRequest
+                  ? `ตรวจห้อง ${inspectionTenantRequest.room_number} ก่อนย้ายไปห้อง ${inspectionTenantRequest.target_room_number}`
+                  : 'Checklist ตรวจสภาพห้อง'
+            }
             onClose={() => {
               setInspectionModal(false)
               setInspectionEditing(null)
+              setInspectionTenantRequest(null)
             }}
             variant="inspection"
           >
@@ -3246,22 +3374,29 @@ function StaffMain() {
               >
                 <section className="inspection-section">
                   <h4 className="inspection-section-title">
-                    <span className="inspection-step">1</span> {inspectionEditing ? 'ห้องที่ตรวจ' : 'เลือกห้องที่ตรวจ'}
+                    <span className="inspection-step">1</span>
+                    {' '}
+                    {inspectionEditing || inspectionTenantRequest ? 'ห้องที่ตรวจ' : 'เลือกห้องที่ตรวจ'}
                   </h4>
                   <div className="staff-form-field">
                     <label className="staff-form-label" htmlFor="inspection-room">
                       ห้อง / ผู้เช่า <span className="staff-form-required">*</span>
                     </label>
-                    {inspectionEditing ? (
+                    {inspectionEditing || inspectionTenantRequest ? (
                       <div className="room-picker-trigger inspection-room-fixed" id="inspection-room">
                         <span className="room-picker-avatar" aria-hidden="true">
-                          {inspectionEditing.tenant_name?.[0] || '?'}
+                          {(inspectionEditing?.tenant_name || `${inspectionTenantRequest?.first_name || ''} ${inspectionTenantRequest?.last_name || ''}`)?.[0] || '?'}
                         </span>
                         <span className="room-picker-main">
-                          <strong>{inspectionEditing.tenant_name}</strong>
+                          <strong>
+                            {inspectionEditing?.tenant_name
+                              || `${inspectionTenantRequest?.first_name || ''} ${inspectionTenantRequest?.last_name || ''}`}
+                          </strong>
                           <small>
-                            ห้อง {inspectionEditing.room_number}
-                            {inspectionEditing.tenant_phone ? ` · โทร ${inspectionEditing.tenant_phone}` : ''}
+                            ห้อง {inspectionEditing?.room_number || inspectionTenantRequest?.room_number}
+                            {inspectionEditing?.tenant_phone || inspectionTenantRequest?.phone
+                              ? ` · โทร ${inspectionEditing?.tenant_phone || inspectionTenantRequest.phone}`
+                              : ''}
                           </small>
                         </span>
                       </div>
@@ -3289,9 +3424,6 @@ function StaffMain() {
                       <span className="inspection-step">2</span> ตรวจสภาพห้อง
                     </h4>
                     <div className="inspection-head-actions">
-                      <button type="button" className="inspection-link-btn" onClick={markRemainingGood}>
-                        ตั้งที่เหลือเป็น “ปกติ” ทั้งหมด
-                      </button>
                       <button
                         type="button"
                         className="inspection-link-btn is-reset"
@@ -3309,10 +3441,15 @@ function StaffMain() {
                       </span>
                       <span className="inspection-counts">
                         <span className="is-good">ปกติ {inspectionCounts.good}</span>
+                        <span className="is-wear">สึกหรอ {inspectionCounts.wear}</span>
                         <span className="is-damaged">ชำรุด {inspectionCounts.damaged}</span>
-                        <span className="is-not_applicable">ไม่เกี่ยวข้อง {inspectionCounts.not_applicable}</span>
+                        <span className="is-missing">สูญหาย {inspectionCounts.missing}</span>
+                        <span className="is-not_applicable">ไม่มี {inspectionCounts.not_applicable}</span>
                       </span>
                     </div>
+                    <p className="inspection-guidance">
+                      ตรวจแต่ละรายการจริง แยกการสึกหรอตามปกติออกจากความเสียหาย และเลือก “ไม่มี” เฉพาะรายการที่ไม่ได้ติดตั้ง
+                    </p>
                     <span className="inspection-progress-bar">
                       <span style={{ width: `${(inspectionResults.length / MOVE_OUT_CHECKLIST.length) * 100}%` }} />
                     </span>
@@ -3358,8 +3495,8 @@ function StaffMain() {
                   <div className="staff-form-field">
                     <div className="staff-form-label-row">
                       <label className="staff-form-label" htmlFor="inspection-damage-note">
-                        รายละเอียดความเสียหาย / หมายเหตุ{' '}
-                        {inspectionCounts.damaged > 0 ? (
+                        รายละเอียดและตำแหน่งที่พบ{' '}
+                        {inspectionCounts.damaged + inspectionCounts.missing > 0 ? (
                           <span className="staff-form-required">*</span>
                         ) : (
                           <span className="staff-form-optional">(ไม่บังคับ)</span>
@@ -3377,11 +3514,7 @@ function StaffMain() {
                         setInspectionForm((form) => ({ ...form, damage_note: event.target.value }))
                         setInspectionFieldErrors((errors) => ({ ...errors, damage_note: undefined }))
                       }}
-                      placeholder={
-                        inspectionCounts.damaged > 0
-                          ? 'ระบุตำแหน่งและรายละเอียดของสิ่งที่ชำรุด'
-                          : 'หมายเหตุเพิ่มเติม (ถ้ามี)'
-                      }
+                      placeholder="ระบุรายการ ตำแหน่ง และลักษณะการชำรุดหรือสูญหาย"
                     />
                     {inspectionFieldErrors.damage_note && (
                       <span className="staff-form-field-error">{inspectionFieldErrors.damage_note}</span>
@@ -3389,20 +3522,34 @@ function StaffMain() {
                   </div>
                   <div className="staff-form-field">
                     <span className="staff-form-label">
-                      รูปภาพประกอบ <span className="staff-form-optional">(ไม่บังคับ · สูงสุด {INSPECTION_MAX_PHOTOS} รูป)</span>
+                      รูปภาพประกอบ{' '}
+                      {inspectionCounts.damaged + inspectionCounts.missing > 0 ? (
+                        <span className="staff-form-required">(จำเป็นเมื่อชำรุด/สูญหาย · สูงสุด {INSPECTION_MAX_PHOTOS} รูป)</span>
+                      ) : (
+                        <span className="staff-form-optional">(ไม่บังคับ · สูงสุด {INSPECTION_MAX_PHOTOS} รูป)</span>
+                      )}
                     </span>
                     <InspectionPhotoPicker
                       files={inspectionForm.photos}
                       existing={inspectionForm.existingPhotos}
                       onRemoveExisting={(url) =>
-                        setInspectionForm((form) => ({
-                          ...form,
-                          existingPhotos: form.existingPhotos.filter((photo) => photo.url !== url),
-                        }))
+                        {
+                          setInspectionForm((form) => ({
+                            ...form,
+                            existingPhotos: form.existingPhotos.filter((photo) => photo.url !== url),
+                          }))
+                          setInspectionFieldErrors((errors) => ({ ...errors, photos: undefined }))
+                        }
                       }
-                      onChange={(photos) => setInspectionForm((form) => ({ ...form, photos }))}
+                      onChange={(photos) => {
+                        setInspectionForm((form) => ({ ...form, photos }))
+                        setInspectionFieldErrors((errors) => ({ ...errors, photos: undefined }))
+                      }}
                       onError={setInspectionError}
                     />
+                    {inspectionFieldErrors.photos && (
+                      <span className="staff-form-field-error">{inspectionFieldErrors.photos}</span>
+                    )}
                   </div>
                 </section>
 
@@ -3414,8 +3561,8 @@ function StaffMain() {
                   )}
                   <p className="inspection-footer-note">
                     {inspectionEditing
-                      ? 'เมื่อแก้ไข สถานะจะกลับเป็น "รอตรวจ" เพื่อให้ Admin ตรวจสอบอีกครั้ง'
-                      : 'ผลตรวจและรูปจะถูกบันทึกในระบบ และส่งให้ Admin ตรวจสอบ'}
+                      ? 'เมื่อแก้ไขผลตรวจ ระบบจะส่งผลกลับให้ Admin ตรวจสอบอีกครั้ง'
+                      : 'ผลตรวจและรูปจะถูกบันทึกในระบบและส่งให้ Admin ตรวจสอบก่อนอนุมัติย้ายห้อง'}
                   </p>
                   <div className="inspection-footer-actions">
                     <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
@@ -3778,9 +3925,11 @@ function StaffMain() {
                         <td>{inspection.tenant_name}</td>
                         <td>{formatDateTime(inspection.created_at)}</td>
                         <td>
-                          {inspection.checklist && Object.values(inspection.checklist).includes('damaged')
-                            ? 'พบความเสียหาย'
-                            : 'บันทึกแล้ว'}
+                          {inspection.checklist && Object.values(inspection.checklist).some((result) => ['damaged', 'missing'].includes(result))
+                            ? 'พบชำรุด/สูญหาย'
+                            : inspection.checklist && Object.values(inspection.checklist).includes('wear')
+                              ? 'พบสึกหรอ'
+                              : 'บันทึกแล้ว'}
                         </td>
                         <td>
                           {inspection.status === 'pending'
@@ -5862,7 +6011,11 @@ function StaffMain() {
                 </div>
                 <div className="staff-confirm-detail-row">
                   <span>ห้อง</span>
-                  <strong>{tenantRequestDetail.room_number}</strong>
+                  <strong>
+                    {tenantRequestDetail.type === 'move_room'
+                      ? `${tenantRequestDetail.room_number} → ${tenantRequestDetail.target_room_number}`
+                      : tenantRequestDetail.room_number}
+                  </strong>
                 </div>
                 <div className="staff-confirm-detail-row">
                   <span>ผู้เช่า</span>
@@ -5893,6 +6046,12 @@ function StaffMain() {
                       </strong>
                     </div>
                   </>
+                )}
+                {tenantRequestDetail.type === 'move_room' && (
+                  <div className="staff-confirm-detail-row">
+                    <span>ห้องปลายทาง</span>
+                    <strong>{tenantRequestDetail.target_room_number || '-'}</strong>
+                  </div>
                 )}
                 <div className="staff-confirm-detail-row">
                   <span>สถานะ</span>
@@ -6243,7 +6402,11 @@ function StaffMain() {
       )}
 
       {renewApproveConfirm && (
-        <Modal title="ยืนยันการอนุมัติต่อสัญญา" onClose={() => setRenewApproveConfirm(null)} variant="confirm">
+        <Modal
+          title={renewApproveConfirm.type === 'move_room' ? 'ยืนยันการอนุมัติย้ายห้อง' : 'ยืนยันการอนุมัติต่อสัญญา'}
+          onClose={() => setRenewApproveConfirm(null)}
+          variant="confirm"
+        >
           {(requestClose) => (
             <div className="staff-confirm-body">
               <div className="staff-confirm-icon is-success">
@@ -6259,11 +6422,19 @@ function StaffMain() {
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
-              <p className="staff-confirm-message">ยืนยันอนุมัติคำขอต่อสัญญา</p>
+              <p className="staff-confirm-message">
+                {renewApproveConfirm.type === 'move_room'
+                  ? 'ยืนยันอนุมัติคำขอย้ายห้อง'
+                  : 'ยืนยันอนุมัติคำขอต่อสัญญา'}
+              </p>
               <div className="staff-confirm-details">
                 <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{renewApproveConfirm.room_number}</strong>
+                  <span>{renewApproveConfirm.type === 'move_room' ? 'ย้ายจากห้อง' : 'ห้อง'}</span>
+                  <strong>
+                    {renewApproveConfirm.type === 'move_room'
+                      ? `${renewApproveConfirm.room_number} → ${renewApproveConfirm.target_room_number}`
+                      : renewApproveConfirm.room_number}
+                  </strong>
                 </div>
                 <div className="staff-confirm-detail-row">
                   <span>ผู้เช่า</span>
@@ -6271,20 +6442,24 @@ function StaffMain() {
                     {renewApproveConfirm.first_name} {renewApproveConfirm.last_name}
                   </strong>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ระยะเวลา</span>
-                  <strong>
-                    {RENEW_DURATION_LABEL[renewApproveConfirm.renew_duration_months] ||
-                      `${renewApproveConfirm.renew_duration_months} เดือน`}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>รูปแบบการชำระ</span>
-                  <strong>
-                    {RENEW_PAYMENT_TYPE_LABEL[renewApproveConfirm.renew_payment_type] ||
-                      renewApproveConfirm.renew_payment_type}
-                  </strong>
-                </div>
+                {renewApproveConfirm.type === 'renew' && (
+                  <>
+                    <div className="staff-confirm-detail-row">
+                      <span>ระยะเวลา</span>
+                      <strong>
+                        {RENEW_DURATION_LABEL[renewApproveConfirm.renew_duration_months] ||
+                          `${renewApproveConfirm.renew_duration_months} เดือน`}
+                      </strong>
+                    </div>
+                    <div className="staff-confirm-detail-row">
+                      <span>รูปแบบการชำระ</span>
+                      <strong>
+                        {RENEW_PAYMENT_TYPE_LABEL[renewApproveConfirm.renew_payment_type] ||
+                          renewApproveConfirm.renew_payment_type}
+                      </strong>
+                    </div>
+                  </>
+                )}
                 {renewApproveConfirm.phone && (
                   <div className="staff-confirm-detail-row">
                     <span>เบอร์โทร</span>
