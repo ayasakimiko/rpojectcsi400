@@ -787,6 +787,13 @@ const RENEW_PAYMENT_TYPE_OPTIONS = [
   { value: 'lump_sum', label: 'จ่ายล่วงหน้าทั้งก้อน' },
 ]
 
+const ADVANCE_MONTH_OPTIONS = [1, 3, 6, 12]
+const ADVANCE_PAYMENT_STATUS = {
+  pending: { label: 'รอตรวจสอบ', tone: 'pending' },
+  approved: { label: 'ชำระแล้ว', tone: 'paid' },
+  rejected: { label: 'ไม่ผ่านการตรวจสอบ', tone: 'overdue' },
+}
+
 const RENEW_DURATION_LABEL = Object.fromEntries(RENEW_DURATION_OPTIONS.map((option) => [option.value, option.label]))
 const RENEW_PAYMENT_TYPE_LABEL = Object.fromEntries(
   RENEW_PAYMENT_TYPE_OPTIONS.map((option) => [option.value, option.label]),
@@ -1257,6 +1264,16 @@ function CustomerDashbord() {
   const [paymentSlip, setPaymentSlip] = useState(null)
   const [showDueBreakdown, setShowDueBreakdown] = useState(true)
 
+  const [advancePaymentOpen, setAdvancePaymentOpen] = useState(false)
+  const [advancePaymentMonths, setAdvancePaymentMonths] = useState('1')
+  const [advancePaymentWater, setAdvancePaymentWater] = useState('0')
+  const [advancePaymentElectricity, setAdvancePaymentElectricity] = useState('0')
+  const [advancePaymentMethod, setAdvancePaymentMethod] = useState('promptpay')
+  const [advancePaymentSlip, setAdvancePaymentSlip] = useState(null)
+  const [advancePaymentConfirm, setAdvancePaymentConfirm] = useState(false)
+  const [advancePaymentSubmitting, setAdvancePaymentSubmitting] = useState(false)
+  const [advancePaymentError, setAdvancePaymentError] = useState('')
+
   const [activeRequestType, setActiveRequestType] = useState(null)
   const [requestNote, setRequestNote] = useState('')
   const [renewDurationMonths, setRenewDurationMonths] = useState(RENEW_DURATION_OPTIONS[2].value)
@@ -1294,6 +1311,7 @@ function CustomerDashbord() {
   useEffect(() => {
     const isAnyOverlayOpen =
       showPaymentForm ||
+      advancePaymentOpen ||
       Boolean(activeRequestType) ||
       Boolean(statusPopup) ||
       Boolean(successPopup) ||
@@ -1313,6 +1331,7 @@ function CustomerDashbord() {
     }
   }, [
     showPaymentForm,
+    advancePaymentOpen,
     activeRequestType,
     statusPopup,
     successPopup,
@@ -1518,6 +1537,61 @@ function CustomerDashbord() {
       setPaymentError(err.response?.data?.message || 'ชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setPaymentSubmitting(false)
+    }
+  }
+
+  const openAdvancePayment = () => {
+    const pendingUtility = (data?.currentDue?.items || []).reduce(
+      (amounts, item) => {
+        if (item.type === 'water') amounts.water += Number(item.amount) || 0
+        if (item.type === 'electricity') amounts.electricity += Number(item.amount) || 0
+        return amounts
+      },
+      { water: 0, electricity: 0 },
+    )
+    setAdvancePaymentWater(String(pendingUtility.water))
+    setAdvancePaymentElectricity(String(pendingUtility.electricity))
+    setAdvancePaymentMonths('1')
+    setAdvancePaymentMethod('promptpay')
+    setAdvancePaymentSlip(null)
+    setAdvancePaymentConfirm(false)
+    setAdvancePaymentError('')
+    setAdvancePaymentOpen(true)
+  }
+
+  const handleAdvancePaymentSubmit = (event) => {
+    event.preventDefault()
+    if (advancePaymentMethod === 'promptpay' && !advancePaymentSlip) {
+      setAdvancePaymentError('กรุณาแนบสลิปโอนเงิน')
+      return
+    }
+    setAdvancePaymentError('')
+    setAdvancePaymentConfirm(true)
+  }
+
+  const confirmAdvancePayment = async () => {
+    setAdvancePaymentSubmitting(true)
+    setAdvancePaymentError('')
+    try {
+      const formData = new FormData()
+      formData.append('months', advancePaymentMonths)
+      formData.append('paymentMethod', advancePaymentMethod)
+      if (advancePaymentSlip) formData.append('slip', advancePaymentSlip)
+      const { data: result } = await axios.post('/api/customer/advance-payment-requests', formData, {
+        headers: {
+          Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      setAdvancePaymentOpen(false)
+      setAdvancePaymentConfirm(false)
+      setAdvancePaymentSlip(null)
+      setSuccessPopup(result.message || 'ส่งรายการจ่ายล่วงหน้าแล้ว')
+      await loadDashboard()
+    } catch (err) {
+      setAdvancePaymentError(err.response?.data?.message || 'ส่งรายการจ่ายล่วงหน้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setAdvancePaymentSubmitting(false)
     }
   }
 
@@ -1780,6 +1854,7 @@ function CustomerDashbord() {
     currentDue,
     maintenanceRequests = [],
     tenantRequests = [],
+    advancePaymentRequests = [],
     announcements = [],
     parcels = [],
   } = data
@@ -1814,6 +1889,10 @@ function CustomerDashbord() {
   const latestRequestByType = (type) => tenantRequests.find((request) => request.type === type)
   const renewRequest = latestRequestByType('renew')
   const moveoutRequest = latestRequestByType('moveout')
+  const latestAdvancePayment = advancePaymentRequests[0] || null
+  const pendingAdvancePayment = advancePaymentRequests.find((request) => request.status === 'pending')
+  const advanceRentAmount = (Number(room?.price) || 0) * Number(advancePaymentMonths || 0)
+  const advanceTotalAmount = advanceRentAmount + (Number(advancePaymentWater) || 0) + (Number(advancePaymentElectricity) || 0)
 
   const canResubmitRenew =
     !renewRequest
@@ -3107,8 +3186,31 @@ function CustomerDashbord() {
                       </div>
                     )}
                   </div>
+                  {advancePaymentRequests.length > 0 && (
+                    <div className="dashboard-advance-history">
+                      <h3>รายการจ่ายค่าเช่าล่วงหน้า</h3>
+                      <div className="dashboard-advance-history-list">
+                        {advancePaymentRequests.map((request) => (
+                          <div className="dashboard-advance-history-row" key={`advance-${request.id}`}>
+                            <div className="dashboard-advance-history-main">
+                              <strong>ค่าเช่าล่วงหน้า {request.months} เดือน · ห้อง {request.room_number}</strong>
+                              <span>{formatDateTime(request.created_at)} · {request.payment_method === 'counter' ? 'ชำระที่เคาน์เตอร์' : 'QR จำลอง'}</span>
+                              <span>ค่าเช่า ฿{formatCurrency(request.rent_amount)} · ค่าน้ำ ฿{formatCurrency(request.water_amount)} · ค่าไฟ ฿{formatCurrency(request.electricity_amount)}</span>
+                              {request.reviewed_by_name && <span>ตรวจสอบโดย {request.reviewed_by_name}</span>}
+                            </div>
+                            <div className="dashboard-advance-history-result">
+                              <strong>฿{formatCurrency(request.total_amount)}</strong>
+                              <span className={`dashboard-badge status-${ADVANCE_PAYMENT_STATUS[request.status]?.tone || 'pending'}`}>
+                                {ADVANCE_PAYMENT_STATUS[request.status]?.label || request.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {rentalHistory.length === 0 ? (
-                    <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
+                    advancePaymentRequests.length === 0 && <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
                   ) : (
                     filteredRentalHistory.map((entry) => {
                       const originalEntry =
@@ -3250,6 +3352,40 @@ function CustomerDashbord() {
                     <h2>จัดการสัญญาเช่า</h2>
                     <div className="dashboard-request-list">
                       {room?.is_booked && (
+                        <>
+                          <div className="dashboard-request-row">
+                            <div className="dashboard-request-info">
+                              <p className="dashboard-request-title">จ่ายค่าเช่าล่วงหน้า</p>
+                              <p className="dashboard-request-desc">
+                                {pendingAdvancePayment
+                                  ? `ส่งคำขอ ${pendingAdvancePayment.months} เดือน · รอเจ้าหน้าที่ตรวจสอบ`
+                                  : 'เลือกจำนวนเดือนและชำระค่าเช่าล่วงหน้า'}
+                              </p>
+                            </div>
+                            {pendingAdvancePayment ? (
+                              <span className="dashboard-badge status-pending">รอตรวจสอบ</span>
+                            ) : paymentUnderReview ? (
+                              <span className="dashboard-badge status-pending">รอตรวจสลิป</span>
+                            ) : (
+                              <button type="button" className="dashboard-action-btn is-primary" onClick={openAdvancePayment}>
+                                จ่ายล่วงหน้า
+                              </button>
+                            )}
+                          </div>
+                          {latestAdvancePayment && (
+                            <div className="dashboard-advance-payment-status">
+                              <div>
+                                <strong>จ่ายล่วงหน้า {latestAdvancePayment.months} เดือน</strong>
+                                <span>ยอดรวม ฿{formatCurrency(latestAdvancePayment.total_amount)} · {latestAdvancePayment.payment_method === 'counter' ? 'หน้าเคาน์เตอร์' : 'PromptPay'}</span>
+                              </div>
+                              <span className={`dashboard-badge status-${ADVANCE_PAYMENT_STATUS[latestAdvancePayment.status]?.tone || 'pending'}`}>
+                                {ADVANCE_PAYMENT_STATUS[latestAdvancePayment.status]?.label || latestAdvancePayment.status}
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {room?.is_booked && (
                         <div className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
                           <div className="dashboard-request-info">
                             <p className="dashboard-request-title">ต่อสัญญา</p>
@@ -3318,6 +3454,72 @@ function CustomerDashbord() {
                         )}
                       </div>
                     </div>
+
+                    {advancePaymentOpen && (
+                      <Modal title="จ่ายค่าเช่าล่วงหน้า" onClose={() => { setAdvancePaymentOpen(false); setAdvancePaymentConfirm(false) }} variant="confirm">
+                        {(requestClose) => (
+                          advancePaymentConfirm ? (
+                            <div className="dashboard-confirm-body dashboard-advance-confirm">
+                              <div className="dashboard-confirm-icon is-info">?</div>
+                              <p className="dashboard-confirm-message">ยืนยันส่งรายการจ่ายล่วงหน้าใช่หรือไม่?</p>
+                              <div className="dashboard-advance-confirm-summary">
+                                <div><span>ระยะเวลา</span><strong>{advancePaymentMonths} เดือน</strong></div>
+                                <div><span>ค่าเช่า</span><strong>฿{formatCurrency(advanceRentAmount)}</strong></div>
+                                <div><span>ค่าน้ำ</span><strong>฿{formatCurrency(advancePaymentWater)}</strong></div>
+                                <div><span>ค่าไฟ</span><strong>฿{formatCurrency(advancePaymentElectricity)}</strong></div>
+                                <div><span>วิธีชำระ</span><strong>{advancePaymentMethod === 'counter' ? 'ชำระที่เคาน์เตอร์' : 'QR จำลอง'}</strong></div>
+                                {advancePaymentMethod === 'promptpay' && <div><span>ไฟล์สลิป</span><strong>{advancePaymentSlip?.name || '-'}</strong></div>}
+                                <div className="is-total"><span>ยอดรวม</span><strong>฿{formatCurrency(advanceTotalAmount)}</strong></div>
+                              </div>
+                              {advancePaymentError && <p className="dashboard-form-error">{advancePaymentError}</p>}
+                              <div className="dashboard-form-actions">
+                                <button type="button" className="dashboard-action-btn is-ghost" disabled={advancePaymentSubmitting} onClick={() => setAdvancePaymentConfirm(false)}>กลับไปแก้ไข</button>
+                                <button type="button" className="dashboard-action-btn is-primary" disabled={advancePaymentSubmitting} onClick={confirmAdvancePayment}>
+                                  {advancePaymentSubmitting ? 'กำลังส่งรายการ...' : 'ยืนยันส่งรายการ'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                          <form className="dashboard-inline-form dashboard-advance-form" onSubmit={handleAdvancePaymentSubmit}>
+                            <label htmlFor="advance-months">ต้องการจ่ายล่วงหน้ากี่เดือน</label>
+                            <select id="advance-months" value={advancePaymentMonths} onChange={(event) => setAdvancePaymentMonths(event.target.value)}>
+                              {ADVANCE_MONTH_OPTIONS.map((months) => <option key={months} value={months}>{months} เดือน</option>)}
+                            </select>
+                            <div className="dashboard-advance-breakdown">
+                              <div><span>ค่าเช่า ({advancePaymentMonths} เดือน × ฿{formatCurrency(room?.price)})</span><strong>฿{formatCurrency(advanceRentAmount)}</strong></div>
+                              <label><span>ค่าน้ำ</span><input type="number" min="0" step="0.01" value={advancePaymentWater} readOnly aria-label="ค่าน้ำจากบิลค้างชำระ" /></label>
+                              <label><span>ค่าไฟ</span><input type="number" min="0" step="0.01" value={advancePaymentElectricity} readOnly aria-label="ค่าไฟจากบิลค้างชำระ" /></label>
+                              <div className="is-total"><span>ยอดชำระรวม</span><strong>฿{formatCurrency(advanceTotalAmount)}</strong></div>
+                            </div>
+                            <label htmlFor="advance-payment-method">วิธีชำระเงิน</label>
+                            <select id="advance-payment-method" value={advancePaymentMethod} onChange={(event) => { setAdvancePaymentMethod(event.target.value); if (event.target.value === 'counter') setAdvancePaymentSlip(null); setAdvancePaymentError('') }}>
+                              <option value="promptpay">QR จำลองและแนบสลิป</option>
+                              <option value="counter">ชำระที่เคาน์เตอร์</option>
+                            </select>
+                            {advancePaymentMethod === 'promptpay' ? (
+                              <div className="dashboard-qr-box">
+                                <span className="dashboard-qr-badge">ตัวอย่าง QR</span>
+                                <FakeQrCode />
+                                <p className="dashboard-qr-amount">฿{formatCurrency(advanceTotalAmount)}</p>
+                                <p className="dashboard-qr-hint">QR นี้เป็นภาพจำลอง ใช้จ่ายเงินจริงไม่ได้ ใช้ทดสอบหน้าจอเท่านั้น</p>
+                                <span className="slip-field-label">แนบสลิปสำหรับทดสอบ</span>
+                                <SlipDropZone id="advance-payment-slip" file={advancePaymentSlip} onChange={setAdvancePaymentSlip} onError={setAdvancePaymentError} />
+                              </div>
+                            ) : (
+                              <p className="dashboard-advance-counter-note">นำยอดนี้ไปชำระที่เคาน์เตอร์ แล้วเจ้าหน้าที่จะยืนยันรายการให้</p>
+                            )}
+                            {advancePaymentError && <p className="dashboard-form-error">{advancePaymentError}</p>}
+                            <div className="dashboard-form-actions">
+                              <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
+                              <button type="submit" className="dashboard-action-btn is-primary" disabled={advancePaymentSubmitting}>
+                                ตรวจสอบรายการ
+                              </button>
+                            </div>
+                          </form>
+                          )
+                        )}
+                      </Modal>
+                    )}
 
                     {activeRequestType && (
                       <Modal title={TENANT_REQUEST_TYPE_LABEL[activeRequestType]} onClose={() => setActiveRequestType(null)}>

@@ -894,6 +894,13 @@ function SummaryIcon({ type }) {
 
 const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ' }
 
+function normalizePaymentVerifications(data) {
+  return [
+    ...(data.payments || []).map((payment) => ({ ...payment, verification_type: 'payment' })),
+    ...(data.advancePayments || []).map((payment) => ({ ...payment, verification_type: 'advance' })),
+  ].sort((left, right) => new Date(left.created_at) - new Date(right.created_at))
+}
+
 function StaffPagination({ page, total, onChange }) {
   if (total <= STAFF_LIST_PAGE_SIZE) return null
   const totalPages = Math.ceil(total / STAFF_LIST_PAGE_SIZE)
@@ -952,8 +959,9 @@ function StaffPaymentReview({ onCountChange }) {
     return axios
       .get('/api/staff/payment-verifications', { headers: authHeaders() })
       .then(({ data }) => {
-        setPayments(data.payments || [])
-        onCountChange?.((data.payments || []).length)
+        const nextPayments = normalizePaymentVerifications(data)
+        setPayments(nextPayments)
+        onCountChange?.(nextPayments.length)
         setError('')
       })
       .catch((err) => showError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ'))
@@ -968,8 +976,9 @@ function StaffPaymentReview({ onCountChange }) {
       })
       .then(({ data }) => {
         if (!cancelled) {
-          setPayments(data.payments || [])
-          onCountChange?.((data.payments || []).length)
+          const nextPayments = normalizePaymentVerifications(data)
+          setPayments(nextPayments)
+          onCountChange?.(nextPayments.length)
           setError('')
         }
       })
@@ -1011,6 +1020,7 @@ function StaffPaymentReview({ onCountChange }) {
   const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
   const openSlip = (payment) => {
+    if (!payment.slip_path) return
     setError('')
     setPreviewClosing(false)
     setPreview({ payment, url: payment.slip_path })
@@ -1022,10 +1032,11 @@ function StaffPaymentReview({ onCountChange }) {
 
   const submitReview = async (requestClose) => {
     const { payment, decision } = confirmReview
-    setBusyId(payment.id)
+    const paymentKey = `${payment.verification_type}:${payment.id}`
+    setBusyId(paymentKey)
     try {
       const { data } = await axios.patch(
-        `/api/staff/payment-verifications/${payment.id}`,
+        `/api/staff/${payment.verification_type === 'advance' ? 'advance-payment-verifications' : 'payment-verifications'}/${payment.id}`,
         { decision },
         { headers: authHeaders() },
       )
@@ -1045,7 +1056,7 @@ function StaffPaymentReview({ onCountChange }) {
     <section className="staff-card staff-tab-card payment-review-card">
       <div className="staff-card-header">
         <h2>
-          สลิปรอตรวจสอบ{' '}
+          รายการชำระรอตรวจสอบ{' '}
           <span className="staff-count-pill">{error && payments.length === 0 ? '—' : payments.length}</span>
         </h2>
         <button type="button" className="staff-action-btn is-ghost" onClick={loadPayments} disabled={loading}>
@@ -1058,7 +1069,7 @@ function StaffPaymentReview({ onCountChange }) {
       ) : payments.length === 0 && error ? (
         <p className="staff-empty">โหลดรายการไม่สำเร็จ กดรีเฟรชเพื่อลองใหม่</p>
       ) : payments.length === 0 ? (
-        <p className="staff-empty">ไม่มีสลิปรอตรวจสอบ</p>
+        <p className="staff-empty">ไม่มีรายการชำระรอตรวจสอบ</p>
       ) : (
         <div className="table-responsive">
           <table className="staff-table">
@@ -1074,7 +1085,7 @@ function StaffPaymentReview({ onCountChange }) {
             </thead>
             <tbody>
               {pagePayments.map((payment) => (
-                <tr key={payment.id}>
+                <tr key={`${payment.verification_type}:${payment.id}`}>
                   <td>{payment.room_number}</td>
                   <td>
                     {payment.first_name} {payment.last_name}
@@ -1085,6 +1096,14 @@ function StaffPaymentReview({ onCountChange }) {
                       .split(',')
                       .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
                       .join(', ')}
+                    {payment.verification_type === 'advance' && (
+                      <>
+                        <small>
+                          {payment.prepaid_months} เดือน · {payment.payment_method === 'counter' ? 'ชำระที่เคาน์เตอร์' : 'PromptPay'}
+                        </small>
+                        <small>ค่าเช่า ฿{Number(payment.rent_amount).toLocaleString('th-TH')} · น้ำ ฿{Number(payment.water_amount).toLocaleString('th-TH')} · ไฟ ฿{Number(payment.electricity_amount).toLocaleString('th-TH')}</small>
+                      </>
+                    )}
                   </td>
                   <td>
                     ฿
@@ -1096,13 +1115,17 @@ function StaffPaymentReview({ onCountChange }) {
                   <td>{new Date(payment.payment_date).toLocaleDateString('th-TH')}</td>
                   <td>
                     <div className="payment-review-actions">
-                      <button type="button" className="staff-action-btn is-ghost" onClick={() => openSlip(payment)}>
-                        ดูสลิป
-                      </button>
+                      {payment.slip_path ? (
+                        <button type="button" className="staff-action-btn is-ghost" onClick={() => openSlip(payment)}>
+                          ดูสลิป
+                        </button>
+                      ) : (
+                        <span className="staff-payment-counter-note">ชำระที่เคาน์เตอร์</span>
+                      )}
                       <button
                         type="button"
                         className="staff-action-btn is-primary"
-                        disabled={busyId === payment.id}
+                        disabled={busyId === `${payment.verification_type}:${payment.id}`}
                         onClick={() => requestReview(payment, 'approved')}
                       >
                         อนุมัติ
@@ -1110,7 +1133,7 @@ function StaffPaymentReview({ onCountChange }) {
                       <button
                         type="button"
                         className="staff-action-btn is-danger"
-                        disabled={busyId === payment.id}
+                        disabled={busyId === `${payment.verification_type}:${payment.id}`}
                         onClick={() => requestReview(payment, 'rejected')}
                       >
                         ปฏิเสธ
@@ -1126,7 +1149,9 @@ function StaffPaymentReview({ onCountChange }) {
       <StaffPagination page={currentPage} total={payments.length} onChange={setPage} />
       {confirmReview && (
         <Modal
-          title={confirmReview.decision === 'approved' ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป'}
+          title={confirmReview.payment.verification_type === 'advance'
+            ? (confirmReview.decision === 'approved' ? 'ยืนยันรายการจ่ายล่วงหน้า' : 'ปฏิเสธรายการจ่ายล่วงหน้า')
+            : (confirmReview.decision === 'approved' ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป')}
           onClose={() => setConfirmReview(null)}
           variant="confirm"
         >
@@ -1154,7 +1179,9 @@ function StaffPaymentReview({ onCountChange }) {
                 </svg>
               </div>
               <p className="staff-confirm-message">
-                {confirmReview.decision === 'approved' ? 'ยืนยันอนุมัติสลิปโอนเงินนี้?' : 'ยืนยันปฏิเสธสลิปโอนเงินนี้?'}
+                {confirmReview.decision === 'approved'
+                  ? (confirmReview.payment.verification_type === 'advance' ? 'ยืนยันรับชำระล่วงหน้ารายการนี้?' : 'ยืนยันอนุมัติสลิปโอนเงินนี้?')
+                  : (confirmReview.payment.verification_type === 'advance' ? 'ยืนยันปฏิเสธรายการจ่ายล่วงหน้านี้?' : 'ยืนยันปฏิเสธสลิปโอนเงินนี้?')}
               </p>
               <div className="staff-confirm-details">
                 <div className="staff-confirm-detail-row">
@@ -1170,7 +1197,9 @@ function StaffPaymentReview({ onCountChange }) {
                 <div className="staff-confirm-detail-row">
                   <span>รายการ</span>
                   <strong>
-                    {String(confirmReview.payment.payment_types || '')
+                    {confirmReview.payment.verification_type === 'advance'
+                      ? `ค่าเช่าล่วงหน้า ${confirmReview.payment.prepaid_months} เดือน · ${confirmReview.payment.payment_method === 'counter' ? 'หน้าเคาน์เตอร์' : 'PromptPay'}`
+                      : String(confirmReview.payment.payment_types || '')
                       .split(',')
                       .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
                       .join(', ')}
@@ -1186,10 +1215,20 @@ function StaffPaymentReview({ onCountChange }) {
                     })}
                   </strong>
                 </div>
+                {confirmReview.payment.verification_type === 'advance' && (
+                  <div className="staff-confirm-detail-row">
+                    <span>แยกยอด</span>
+                    <strong>
+                      เช่า ฿{Number(confirmReview.payment.rent_amount).toLocaleString('th-TH')} · น้ำ ฿{Number(confirmReview.payment.water_amount).toLocaleString('th-TH')} · ไฟ ฿{Number(confirmReview.payment.electricity_amount).toLocaleString('th-TH')}
+                    </strong>
+                  </div>
+                )}
               </div>
               {confirmReview.decision === 'approved' ? (
                 <p className="staff-confirm-note">
-                  เมื่ออนุมัติ ระบบจะเปลี่ยนสถานะรายการชำระเป็น “ชำระแล้ว”
+                  {confirmReview.payment.verification_type === 'advance'
+                    ? 'เมื่อยืนยัน ระบบจะเปลี่ยนสถานะเป็น “ชำระแล้ว” และขยายวันสิ้นสุดสัญญาตามจำนวนเดือน'
+                    : 'เมื่ออนุมัติ ระบบจะเปลี่ยนสถานะรายการชำระเป็น “ชำระแล้ว”'}
                 </p>
               ) : (
                 <div className="staff-confirm-warning">
@@ -1207,14 +1246,16 @@ function StaffPaymentReview({ onCountChange }) {
                     <path d="M12 9v4M12 17h.01" />
                     <circle cx="12" cy="12" r="9" />
                   </svg>
-                  <p>สลิปนี้จะไม่ผ่านการตรวจสอบ ผู้เช่าจะต้องส่งสลิปใหม่อีกครั้ง</p>
+                  <p>{confirmReview.payment.verification_type === 'advance'
+                    ? 'รายการนี้จะถูกปฏิเสธ และลูกค้าจะเห็นสถานะผลตรวจในหน้าจัดการสัญญา'
+                    : 'สลิปนี้จะไม่ผ่านการตรวจสอบ ผู้เช่าจะต้องส่งสลิปใหม่อีกครั้ง'}</p>
                 </div>
               )}
               <div className="staff-form-actions">
                 <button
                   type="button"
                   className="staff-action-btn is-ghost"
-                  disabled={busyId === confirmReview.payment.id}
+                  disabled={busyId === `${confirmReview.payment.verification_type}:${confirmReview.payment.id}`}
                   onClick={requestClose}
                 >
                   ยกเลิก
@@ -1222,10 +1263,10 @@ function StaffPaymentReview({ onCountChange }) {
                 <button
                   type="button"
                   className={`staff-action-btn ${confirmReview.decision === 'approved' ? 'is-primary' : 'is-danger'}`}
-                  disabled={busyId === confirmReview.payment.id}
+                  disabled={busyId === `${confirmReview.payment.verification_type}:${confirmReview.payment.id}`}
                   onClick={() => submitReview(requestClose)}
                 >
-                  {busyId === confirmReview.payment.id
+                  {busyId === `${confirmReview.payment.verification_type}:${confirmReview.payment.id}`
                     ? 'กำลังดำเนินการ...'
                     : confirmReview.decision === 'approved'
                       ? 'ยืนยันอนุมัติ'
@@ -1640,7 +1681,7 @@ function StaffMain() {
   const loadPendingSlipCount = () => {
     return axios
       .get('/api/staff/payment-verifications', { headers: authHeaders() })
-      .then(({ data }) => setPendingSlipCount((data.payments || []).length))
+      .then(({ data }) => setPendingSlipCount((data.payments || []).length + (data.advancePayments || []).length))
       .catch(() => {})
   }
 

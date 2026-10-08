@@ -72,7 +72,8 @@ router.get("/payment-verifications", async (_req, res) => {
     const pool = getPool();
     const [payments] = await pool.query(
       `SELECT MIN(p.id) AS id, p.booking_id, p.slip_path, SUM(p.amount) AS amount,
-              MAX(p.payment_date) AS payment_date, c.first_name, c.last_name, c.phone,
+              MAX(p.payment_date) AS payment_date, MAX(p.created_at) AS created_at,
+              c.first_name, c.last_name, c.phone,
               r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types
        FROM Payment p
        JOIN Booking b ON b.id = p.booking_id
@@ -82,7 +83,18 @@ router.get("/payment-verifications", async (_req, res) => {
        GROUP BY p.booking_id, p.slip_path, c.first_name, c.last_name, c.phone, r.room_number
        ORDER BY MAX(p.created_at) ASC`,
     );
-    return res.json({ payments });
+    const [advancePayments] = await pool.query(
+      `SELECT ap.id, ap.booking_id, ap.slip_path, ap.utility_payment_ids, ap.total_amount AS amount,
+              DATE(ap.created_at) AS payment_date, c.first_name, c.last_name, c.phone,
+              ap.room_number, 'จ่ายล่วงหน้า' AS payment_types, ap.months AS prepaid_months,
+              ap.rent_amount, ap.water_amount, ap.electricity_amount,
+              ap.payment_method, ap.status, ap.created_at
+       FROM AdvancePaymentRequest ap
+       JOIN Customer c ON c.id = ap.customer_id
+       WHERE ap.status = 'pending'
+       ORDER BY ap.created_at ASC`,
+    );
+    return res.json({ payments, advancePayments });
   } catch (error) {
     console.error("Fetch payment verifications error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -164,6 +176,65 @@ router.patch("/payment-verifications/:id", async (req, res) => {
     await connection.rollback();
     console.error("Review payment slip error:", error);
     return res.status(500).json({ message: "ตรวจสอบสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection.release();
+  }
+});
+
+router.patch("/advance-payment-verifications/:id", async (req, res) => {
+  const { decision } = req.body ?? {};
+  if (!isPositiveId(req.params.id)) return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+  if (!["approved", "rejected"].includes(decision)) return res.status(400).json({ message: "ผลการตรวจไม่ถูกต้อง" });
+
+  const pool = getPool();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT id, room_number, months, utility_payment_ids, status FROM AdvancePaymentRequest WHERE id = ? FOR UPDATE`,
+      [req.params.id],
+    );
+    const request = rows[0];
+    if (!request || request.status !== "pending") {
+      await connection.rollback();
+      return res.status(409).json({ message: "ไม่พบรายการที่รอตรวจสอบนี้" });
+    }
+
+    const reviewerName = await getActingStaffName(connection, req.user);
+    await connection.query(
+      `UPDATE AdvancePaymentRequest
+       SET status = ?, reviewed_by_name = ?, reviewed_at = NOW() WHERE id = ?`,
+      [decision, reviewerName || "เจ้าหน้าที่", request.id],
+    );
+
+    if (decision === "approved") {
+      const utilityPaymentIds = Array.isArray(request.utility_payment_ids)
+        ? request.utility_payment_ids
+        : JSON.parse(request.utility_payment_ids || "[]");
+      if (utilityPaymentIds.length > 0) {
+        await connection.query(
+          `UPDATE Payment SET status = 'paid', payment_date = CURDATE(),
+             note = CONCAT(COALESCE(note, ''), ' (ชำระพร้อมค่าเช่าล่วงหน้า)')
+           WHERE id IN (?) AND status = 'pending'`,
+          [utilityPaymentIds],
+        );
+      }
+      await connection.query(
+        `UPDATE Room
+         SET rental_end_date = DATE_ADD(COALESCE(rental_end_date, CURDATE()), INTERVAL ? MONTH),
+             rental_duration_months = COALESCE(rental_duration_months, 0) + ?,
+             prepaid_until = DATE_ADD(GREATEST(COALESCE(prepaid_until, rental_end_date, CURDATE()), CURDATE()), INTERVAL ? MONTH)
+         WHERE room_number = ?`,
+        [request.months, request.months, request.months, request.room_number],
+      );
+    }
+
+    await connection.commit();
+    return res.json({ message: decision === "approved" ? "อนุมัติรายการจ่ายล่วงหน้าและขยายสัญญาแล้ว" : "ปฏิเสธรายการจ่ายล่วงหน้าแล้ว" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Review advance payment request error:", error);
+    return res.status(500).json({ message: "ตรวจรายการจ่ายล่วงหน้าไม่สำเร็จ" });
   } finally {
     connection.release();
   }

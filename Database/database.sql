@@ -102,6 +102,28 @@ CREATE TABLE IF NOT EXISTS Payment (
     FOREIGN KEY (booking_id) REFERENCES Booking(id)
 );
 
+CREATE TABLE IF NOT EXISTS AdvancePaymentRequest (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    booking_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    room_number INT UNSIGNED NOT NULL,
+    months INT UNSIGNED NOT NULL,
+    rent_amount DECIMAL(10,2) NOT NULL,
+    water_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    electricity_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    utility_payment_ids JSON,
+    total_amount DECIMAL(10,2) NOT NULL,
+    payment_method ENUM('promptpay', 'counter') NOT NULL,
+    slip_path VARCHAR(255),
+    status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+    reviewed_by_name VARCHAR(255),
+    reviewed_at DATETIME,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_advance_payment_status (status, created_at),
+    FOREIGN KEY (booking_id) REFERENCES Booking(id),
+    FOREIGN KEY (customer_id) REFERENCES Customer(id)
+);
+
 CREATE TABLE IF NOT EXISTS MaintenanceRequest (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     customer_id INT UNSIGNED NOT NULL,

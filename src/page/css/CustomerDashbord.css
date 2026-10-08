@@ -621,6 +621,11 @@
   padding: 20px;
 }
 
+.dashboard-modal-confirm:has(.dashboard-advance-form) {
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+
 .dashboard-modal-confirm .dashboard-modal-header {
   margin-bottom: 10px;
   padding-bottom: 10px;
@@ -1482,6 +1487,171 @@
   flex-shrink: 0;
 }
 
+.dashboard-advance-payment-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2eaf6;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.dashboard-advance-payment-status > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dashboard-advance-payment-status strong {
+  color: #0f2b52;
+  font-size: 12px;
+}
+
+.dashboard-advance-payment-status span:not(.dashboard-badge) {
+  color: #6b859e;
+  font-size: 11px;
+}
+
+.dashboard-advance-history {
+  margin: 4px 0 18px;
+  padding: 14px;
+  border: 1px solid #dce9fb;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.dashboard-advance-history h3 {
+  margin: 0 0 10px;
+  color: #0f2b52;
+  font-size: 14px;
+}
+
+.dashboard-advance-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-advance-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid #e2eaf6;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.dashboard-advance-history-main,
+.dashboard-advance-history-result {
+  display: grid;
+  gap: 4px;
+}
+
+.dashboard-advance-history-main {
+  min-width: 0;
+}
+
+.dashboard-advance-history-main strong,
+.dashboard-advance-history-result strong {
+  color: #0f2b52;
+  font-size: 12px;
+}
+
+.dashboard-advance-history-main span {
+  color: #6b859e;
+  font-size: 11px;
+}
+
+.dashboard-advance-history-result {
+  justify-items: end;
+  flex-shrink: 0;
+}
+
+.dashboard-advance-form {
+  gap: 9px;
+}
+
+.dashboard-advance-form .dashboard-qr-box {
+  gap: 5px;
+  padding: 12px 10px;
+}
+
+.dashboard-advance-form .dashboard-fake-qr {
+  width: 136px;
+  height: 136px;
+}
+
+.dashboard-advance-form .dashboard-form-actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 2;
+  margin: 0 -4px -20px;
+  padding: 10px 4px 12px;
+  background: #fff;
+}
+
+@media (max-width: 600px) {
+  .dashboard-advance-history-row {
+    align-items: flex-start;
+  }
+
+  .dashboard-advance-history-result {
+    text-align: right;
+  }
+}
+
+.dashboard-advance-breakdown {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 13px;
+  border: 1px solid #e2eaf6;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dashboard-advance-breakdown > div,
+.dashboard-advance-breakdown > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #526b87;
+  font-size: 12px;
+}
+
+.dashboard-advance-breakdown > div strong {
+  color: #0f2b52;
+  white-space: nowrap;
+}
+
+.dashboard-advance-breakdown input {
+  width: 120px !important;
+  text-align: right;
+}
+
+.dashboard-advance-breakdown > div.is-total {
+  margin-top: 3px;
+  padding-top: 10px;
+  border-top: 1px solid #e2eaf6;
+  color: #0f2b52;
+  font-weight: 800;
+}
+
+.dashboard-advance-counter-note {
+  margin: 2px 0 0;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: #fff8e6;
+  color: #8b6713;
+  font-size: 12px;
+}
+
+
 .dashboard-inline-form {
   display: flex;
   flex-direction: column;
@@ -1627,6 +1797,42 @@
   color: #0f2b52;
   line-height: 1.6;
   margin: 0;
+}
+
+.dashboard-advance-confirm-summary {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid #e2eaf6;
+  border-radius: 12px;
+  background: #f8fbff;
+  text-align: left;
+}
+
+.dashboard-advance-confirm-summary > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: #526b87;
+  font-size: 12px;
+}
+
+.dashboard-advance-confirm-summary strong {
+  max-width: 65%;
+  color: #0f2b52;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-advance-confirm-summary > div.is-total {
+  margin-top: 3px;
+  padding-top: 10px;
+  border-top: 1px solid #e2eaf6;
+  color: #0f2b52;
+  font-size: 14px;
 }
 
 .dashboard-confirm-message-detail {

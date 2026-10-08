@@ -343,6 +343,13 @@ router.get("/me", async (req, res) => {
       [customer.id],
     );
 
+    const [advancePaymentRequests] = await pool.query(
+      `SELECT id, room_number, months, rent_amount, water_amount, electricity_amount, total_amount,
+              payment_method, slip_path, status, reviewed_by_name, reviewed_at, created_at
+       FROM AdvancePaymentRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+      [customer.id],
+    );
+
     const announcements = await listAnnouncements(pool);
 
     const latestBookingId = bookings[0]?.booking_id;
@@ -360,6 +367,7 @@ router.get("/me", async (req, res) => {
       rentalHistory,
       maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests),
       tenantRequests,
+      advancePaymentRequests,
       announcements,
       currentDue,
       parcels: await attachParcelPhotos(pool, parcels),
@@ -400,6 +408,15 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     if (!booking) {
       fs.unlinkSync(req.file.path);
       return res.status(404).json({ message: "ไม่พบสัญญาเช่าของคุณ" });
+    }
+
+    const [[pendingAdvanceRequest]] = await pool.query(
+      `SELECT id FROM AdvancePaymentRequest WHERE customer_id = ? AND status = 'pending' LIMIT 1`,
+      [customer.id],
+    );
+    if (pendingAdvanceRequest) {
+      fs.unlinkSync(req.file.path);
+      return res.status(409).json({ message: "มีรายการจ่ายล่วงหน้ารอตรวจสอบอยู่แล้ว" });
     }
 
     const [paymentsForBooking] = await pool.query(
@@ -448,6 +465,112 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     console.error("Confirm payment error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
+  }
+});
+
+router.post("/advance-payment-requests", parsePaymentSlip, async (req, res) => {
+  let uploadedSlip = req.file?.path;
+  let connection;
+  try {
+    const months = Number(req.body?.months);
+    const paymentMethod = req.body?.paymentMethod;
+    if (![1, 3, 6, 12].includes(months)) {
+      if (uploadedSlip) fs.unlinkSync(uploadedSlip);
+      return res.status(400).json({ message: "กรุณาเลือกระยะเวลาจ่ายล่วงหน้าให้ถูกต้อง" });
+    }
+    if (!['promptpay', 'counter'].includes(paymentMethod)) {
+      if (uploadedSlip) fs.unlinkSync(uploadedSlip);
+      return res.status(400).json({ message: "กรุณาเลือกวิธีชำระเงิน" });
+    }
+    if (paymentMethod === 'promptpay' && !req.file) {
+      return res.status(400).json({ message: "กรุณาแนบสลิปโอนเงิน" });
+    }
+    if (paymentMethod === 'counter' && req.file) {
+      fs.unlinkSync(uploadedSlip);
+      return res.status(400).json({ message: "การจ่ายหน้าเคาน์เตอร์ไม่ต้องแนบสลิป" });
+    }
+
+    const pool = getPool();
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[booking]] = await connection.query(
+      `SELECT b.id AS booking_id, c.id AS customer_id, c.room_number, r.price, r.is_booked
+       FROM Customer c JOIN Booking b ON b.customer_id = c.id
+       JOIN Room r ON r.id = b.room_id
+       WHERE c.id = ? ORDER BY b.created_at DESC LIMIT 1 FOR UPDATE`,
+      [req.user.id],
+    );
+    if (!booking || !booking.is_booked) {
+      await connection.rollback();
+      if (uploadedSlip) fs.unlinkSync(uploadedSlip);
+      return res.status(404).json({ message: "ไม่พบสัญญาเช่าของคุณ" });
+    }
+
+    const [[pendingRegularSlip]] = await connection.query(
+      `SELECT id FROM Payment WHERE booking_id = ? AND status = 'pending' AND slip_path IS NOT NULL LIMIT 1`,
+      [booking.booking_id],
+    );
+    if (pendingRegularSlip) {
+      await connection.rollback();
+      if (uploadedSlip) fs.unlinkSync(uploadedSlip);
+      return res.status(409).json({ message: "มีสลิปรอตรวจสอบอยู่แล้ว กรุณารอผลก่อนส่งรายการใหม่" });
+    }
+
+    const [utilityPayments] = await connection.query(
+      `SELECT id, type, amount FROM Payment
+       WHERE booking_id = ? AND status = 'pending' AND type IN ('water', 'electricity')`,
+      [booking.booking_id],
+    );
+    const waterAmount = utilityPayments
+      .filter((payment) => payment.type === 'water')
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const electricityAmount = utilityPayments
+      .filter((payment) => payment.type === 'electricity')
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const utilityPaymentIds = utilityPayments.map((payment) => payment.id);
+
+    const [[pendingRequest]] = await connection.query(
+      `SELECT id FROM AdvancePaymentRequest WHERE customer_id = ? AND status = 'pending' LIMIT 1`,
+      [booking.customer_id],
+    );
+    if (pendingRequest) {
+      await connection.rollback();
+      if (uploadedSlip) fs.unlinkSync(uploadedSlip);
+      return res.status(409).json({ message: "มีรายการจ่ายล่วงหน้ารอตรวจสอบอยู่แล้ว" });
+    }
+
+    const [[pendingRenewal]] = await connection.query(
+      `SELECT id FROM TenantRequest WHERE customer_id = ? AND type = 'renew'
+       AND status IN ('pending', 'in_progress') LIMIT 1`,
+      [booking.customer_id],
+    );
+    if (pendingRenewal) {
+      await connection.rollback();
+      if (uploadedSlip) fs.unlinkSync(uploadedSlip);
+      return res.status(409).json({ message: "มีคำขอต่อสัญญารอดำเนินการอยู่ กรุณารอผลก่อนจ่ายล่วงหน้า" });
+    }
+
+    const rentAmount = Number(booking.price) * months;
+    const totalAmount = rentAmount + waterAmount + electricityAmount;
+    const slipPath = req.file ? `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}` : null;
+    await connection.query(
+      `INSERT INTO AdvancePaymentRequest
+       (booking_id, customer_id, room_number, months, rent_amount, water_amount, electricity_amount,
+        utility_payment_ids, total_amount, payment_method, slip_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [booking.booking_id, booking.customer_id, booking.room_number, months, rentAmount, waterAmount,
+        electricityAmount, JSON.stringify(utilityPaymentIds), totalAmount, paymentMethod, slipPath],
+    );
+    await connection.commit();
+    uploadedSlip = null;
+    return res.status(201).json({ message: "ส่งรายการจ่ายล่วงหน้าแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบ" });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    if (uploadedSlip && fs.existsSync(uploadedSlip)) fs.unlinkSync(uploadedSlip);
+    console.error("Create advance payment request error:", error);
+    return res.status(500).json({ message: "ส่งรายการจ่ายล่วงหน้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
   } finally {
     connection?.release();
   }
