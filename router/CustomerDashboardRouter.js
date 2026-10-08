@@ -304,13 +304,18 @@ router.get("/me", async (req, res) => {
        FROM Room WHERE room_number = ?`,
       [customer.room_number],
     );
+    const [availableRooms] = await pool.query(
+      `SELECT room_number, price FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
+    );
 
     const [bookings] = await pool.query(
-      `SELECT b.id AS booking_id, r.room_number, b.created_at, r.rental_start_date, r.rental_end_date
+      `SELECT b.id AS booking_id, r.room_number, b.created_at,
+              COALESCE(b.rental_start_date, r.rental_start_date) AS rental_start_date,
+              COALESCE(b.rental_end_date, r.rental_end_date) AS rental_end_date
        FROM Booking b
        JOIN Room r ON r.id = b.room_id
        WHERE b.customer_id = ?
-       ORDER BY b.created_at DESC`,
+       ORDER BY b.created_at DESC, b.id DESC`,
       [customer.id],
     );
 
@@ -338,8 +343,8 @@ router.get("/me", async (req, res) => {
     );
 
     const [tenantRequests] = await pool.query(
-      `SELECT id, type, note, renew_duration_months, renew_payment_type, status, accepted_at, completed_at, created_at
-       FROM TenantRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+      `SELECT id, type, note, room_number, target_room_number, renew_duration_months, renew_payment_type, status, accepted_at, completed_at, created_at
+       FROM TenantRequest WHERE customer_id = ? ORDER BY created_at DESC, id DESC`,
       [customer.id],
     );
 
@@ -357,6 +362,7 @@ router.get("/me", async (req, res) => {
     return res.json({
       customer,
       room: roomRows[0] || null,
+      availableRooms,
       rentalHistory,
       maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests),
       tenantRequests,
@@ -393,7 +399,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     const room = roomRows[0];
 
     const [bookingRows] = await pool.query(
-      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC LIMIT 1`,
+      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
       [customer.id],
     );
     const booking = bookingRows[0];
@@ -542,39 +548,75 @@ router.post("/maintenance/:id/cancel", async (req, res) => {
 });
 
 router.post("/requests", async (req, res) => {
+  let connection;
   try {
     const pool = getPool();
-
-    const [customerRows] = await pool.query(`SELECT id, room_number FROM Customer WHERE id = ?`, [req.user.id]);
-    const customer = customerRows[0];
-    if (!customer) {
-      return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
-    }
-
     const { error, value } = parseTenantRequestInput(req.body ?? {});
     if (error) {
       return res.status(400).json({ message: error });
     }
-    const { type, note, renewDurationMonths, renewPaymentType } = value;
+    const { type, note, targetRoomNumber, renewDurationMonths, renewPaymentType } = value;
 
-    const [pendingRows] = await pool.query(
-      `SELECT id FROM TenantRequest WHERE customer_id = ? AND type = ? AND status IN ('pending', 'in_progress')`,
-      [customer.id, type],
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [customerRows] = await connection.query(
+      `SELECT id, room_number FROM Customer WHERE id = ? FOR UPDATE`,
+      [req.user.id],
     );
-    if (pendingRows.length > 0) {
-      return res.status(409).json({ message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
+    const customer = customerRows[0];
+    if (!customer) {
+      await connection.rollback();
+      return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
 
-    await pool.query(
-      `INSERT INTO TenantRequest (customer_id, room_number, type, note, renew_duration_months, renew_payment_type)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [customer.id, customer.room_number, type, note, renewDurationMonths, renewPaymentType],
+    const [activeRequests] = await connection.query(
+      `SELECT type FROM TenantRequest WHERE customer_id = ? AND status IN ('pending', 'in_progress')`,
+      [customer.id],
     );
+    if (activeRequests.some((request) => request.type === type)) {
+      await connection.rollback();
+      return res.status(409).json({ message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
+    }
+    if (
+      (type === "move_room" && activeRequests.some((request) => request.type !== "move_room"))
+      || (type !== "move_room" && activeRequests.some((request) => request.type === "move_room"))
+    ) {
+      await connection.rollback();
+      return res.status(409).json({ message: "กรุณารอให้คำขอเกี่ยวกับการเปลี่ยนห้องดำเนินการเสร็จก่อน" });
+    }
+
+    if (type === "move_room") {
+      if (!customer.room_number || customer.room_number === targetRoomNumber) {
+        await connection.rollback();
+        return res.status(400).json({ message: "ไม่สามารถเลือกห้องปัจจุบันเป็นห้องปลายทางได้" });
+      }
+
+      const [targetRooms] = await connection.query(
+        `SELECT room_number, is_booked FROM Room WHERE room_number = ? FOR UPDATE`,
+        [targetRoomNumber],
+      );
+      if (!targetRooms[0] || targetRooms[0].is_booked) {
+        await connection.rollback();
+        return res.status(409).json({ message: "ห้องที่เลือกไม่ว่างแล้ว กรุณาเลือกห้องอื่น" });
+      }
+    }
+
+    await connection.query(
+      `INSERT INTO TenantRequest (customer_id, room_number, target_room_number, type, note, renew_duration_months, renew_payment_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [customer.id, customer.room_number, targetRoomNumber, type, note, renewDurationMonths, renewPaymentType],
+    );
+
+    await connection.commit();
 
     return res.status(201).json({ message: "ส่งคำขอสำเร็จ ทางผู้ดูแลจะติดต่อกลับโดยเร็วที่สุด" });
   } catch (error) {
+    if (connection) await connection.rollback();
     console.error("Create tenant request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
   }
 });
 

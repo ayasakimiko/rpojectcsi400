@@ -131,9 +131,12 @@ router.get("/move-out-inspections", async (_req, res) => {
   try {
     const pool = getPool();
     const [inspections] = await pool.query(
-      `SELECT id, room_number, tenant_name, tenant_phone, checklist, damage_note, JSON_LENGTH(photos) AS photo_count,
-              status, inspected_by_name AS inspected_by, reviewed_at, created_at
-       FROM MoveOutInspection ORDER BY created_at DESC, id DESC`,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number,
+              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, JSON_LENGTH(moi.photos) AS photo_count,
+              moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.updated_at, moi.created_at
+       FROM MoveOutInspection moi
+       LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       ORDER BY moi.created_at DESC, moi.id DESC`,
     );
     return res.json({
       inspections: inspections.map((inspection) => ({ ...inspection, checklist: JSON.parse(inspection.checklist) })),
@@ -153,9 +156,12 @@ router.get("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT id, room_number, tenant_name, tenant_phone, checklist, damage_note, photos,
-              status, inspected_by_name AS inspected_by, reviewed_at, created_at
-       FROM MoveOutInspection WHERE id = ?`,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number,
+              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.photos,
+              moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
+       FROM MoveOutInspection moi
+       LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       WHERE moi.id = ?`,
       [inspectionId],
     );
     const inspection = rows[0];
@@ -680,9 +686,9 @@ router.get("/logs/requests", async (req, res) => {
     const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(
-        `(CAST(tr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR tr.accepted_by_name LIKE ? OR tr.completed_by_name LIKE ?)`,
+        `(CAST(tr.room_number AS CHAR) LIKE ? OR CAST(tr.target_room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR tr.accepted_by_name LIKE ? OR tr.completed_by_name LIKE ?)`,
       );
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -695,7 +701,7 @@ router.get("/logs/requests", async (req, res) => {
     const [requests] = await pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
               tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
-              tr.room_number, c.first_name, c.last_name, c.phone
+              tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
        ${whereClause}

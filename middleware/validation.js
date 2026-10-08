@@ -263,7 +263,7 @@ export function parseMaintenanceInput(body = {}) {
   };
 }
 
-const REQUEST_TYPES = new Set(["renew", "moveout"]);
+const REQUEST_TYPES = new Set(["renew", "moveout", "move_room"]);
 const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
 const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
 
@@ -276,8 +276,15 @@ export function parseTenantRequestInput(body = {}) {
   if (type === "moveout" && !note) {
     return { error: "กรุณากรอกรายละเอียดการย้ายออก" };
   }
+  if (type === "move_room") {
+    const targetRoomNumber = Number(body.target_room_number);
+    if (!Number.isInteger(targetRoomNumber) || targetRoomNumber < 100 || targetRoomNumber > 999) {
+      return { error: "กรุณาเลือกห้องที่ต้องการย้าย" };
+    }
+    return { value: { type, note, targetRoomNumber, renewDurationMonths: null, renewPaymentType: null } };
+  }
   if (type !== "renew") {
-    return { value: { type, note, renewDurationMonths: null, renewPaymentType: null } };
+    return { value: { type, note, targetRoomNumber: null, renewDurationMonths: null, renewPaymentType: null } };
   }
 
   const renewDurationMonths = Number(body.renew_duration_months);
@@ -291,7 +298,7 @@ export function parseTenantRequestInput(body = {}) {
   if (renewPaymentType === "lump_sum" && renewDurationMonths <= 1) {
     return { error: "จ่ายล่วงหน้าทั้งก้อนเลือกได้เฉพาะระยะเวลาต่อสัญญามากกว่า 1 เดือน" };
   }
-  return { value: { type, note, renewDurationMonths, renewPaymentType } };
+  return { value: { type, note, targetRoomNumber: null, renewDurationMonths, renewPaymentType } };
 }
 
 export function parseUtilityBillInput(body = {}) {
@@ -403,7 +410,8 @@ export function parseWaitingListInput(body = {}, { partial = false } = {}) {
 
 const MOVE_OUT_CHECKLIST_KEYS = ["walls", "floor", "ceiling", "doors", "windows", "electrical", "bathroom", "furniture"];
 const MOVE_OUT_MAX_PHOTOS = 15;
-const MOVE_OUT_RESULTS = new Set(["good", "damaged", "not_applicable"]);
+const MOVE_OUT_RESULTS = new Set(["good", "wear", "damaged", "missing", "not_applicable"]);
+const MOVE_OUT_ISSUE_RESULTS = new Set(["damaged", "missing"]);
 export const MOVE_OUT_INSPECTION_STATUSES = new Set(["pending", "reviewed", "follow_up"]);
 
 function parseMoveOutChecklistAndNote(body) {
@@ -416,8 +424,8 @@ function parseMoveOutChecklistAndNote(body) {
   const noteError = validateText(body.damage_note, "รายละเอียดความเสียหาย", { maxLength: 1000, required: false });
   if (noteError) return { error: noteError };
   const damageNote = typeof body.damage_note === "string" ? body.damage_note.trim() : "";
-  if (Object.values(checklist).includes("damaged") && !damageNote) {
-    return { error: "กรุณาระบุรายละเอียดความเสียหาย" };
+  if (Object.values(checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result)) && !damageNote) {
+    return { error: "กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย" };
   }
   return { value: { checklist, damageNote: damageNote || null } };
 }
@@ -431,6 +439,9 @@ export function parseMoveOutInspectionInput(body = {}) {
   if (core.error) return core;
   const photos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
   if (photos.error) return photos;
+  if (Object.values(core.value.checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result)) && photos.value.length === 0) {
+    return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
+  }
   return { value: { roomNumber, ...core.value, photos: photos.value } };
 }
 
@@ -447,6 +458,12 @@ export function parseMoveOutInspectionUpdate(body = {}, existingPhotos = []) {
   if (newPhotos.error) return newPhotos;
   if (keptPhotos.length + newPhotos.value.length > MOVE_OUT_MAX_PHOTOS) {
     return { error: `แนบรูปได้ไม่เกิน ${MOVE_OUT_MAX_PHOTOS} รูป` };
+  }
+  if (
+    Object.values(core.value.checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result))
+    && keptPhotos.length + newPhotos.value.length === 0
+  ) {
+    return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
   }
   return { value: { ...core.value, keptPhotos, newPhotos: newPhotos.value } };
 }

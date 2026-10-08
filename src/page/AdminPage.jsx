@@ -18,14 +18,14 @@ const WAITING_LIST_STATUS_LABEL = {
 }
 
 const MOVE_OUT_CHECKLIST = [
-  { key: 'walls', label: 'ผนังและสี' },
-  { key: 'floor', label: 'พื้น' },
-  { key: 'ceiling', label: 'เพดานและไฟ' },
-  { key: 'doors', label: 'ประตูและกุญแจ' },
-  { key: 'windows', label: 'หน้าต่าง' },
-  { key: 'electrical', label: 'ปลั๊กและสวิตช์ไฟ' },
-  { key: 'bathroom', label: 'ห้องน้ำและสุขภัณฑ์' },
-  { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์' },
+  { key: 'walls', label: 'ผนังและสี (รอยแตก คราบ สีลอก)' },
+  { key: 'floor', label: 'พื้น (รอยแตก คราบ ความเสียหาย)' },
+  { key: 'ceiling', label: 'เพดานและไฟ (คราบรั่วซึม หลอดไฟ)' },
+  { key: 'doors', label: 'ประตูและกุญแจ (บาน ลูกบิด กลอน กุญแจ)' },
+  { key: 'windows', label: 'หน้าต่าง (กระจก วงกบ ตัวล็อก)' },
+  { key: 'electrical', label: 'ระบบไฟฟ้า (ปลั๊ก สวิตช์ ไฟส่องสว่าง)' },
+  { key: 'bathroom', label: 'ห้องน้ำและสุขภัณฑ์ (ก๊อก ฝักบัว โถ ท่อระบาย)' },
+  { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์ของห้อง' },
 ]
 
 const MOVE_OUT_INSPECTION_STATUS = {
@@ -210,7 +210,7 @@ const TABS = [
   { key: 'announcements', label: 'ประกาศ' },
 ]
 
-const REQUEST_TYPE_LABEL = { renew: 'ต่อสัญญา', moveout: 'แจ้งย้ายออก' }
+const REQUEST_TYPE_LABEL = { renew: 'ต่อสัญญา', moveout: 'แจ้งย้ายออก', move_room: 'ย้ายห้อง' }
 const REQUEST_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
   in_progress: 'รับเรื่องแล้ว',
@@ -317,7 +317,18 @@ const ADMIN_MAINTENANCE_NOTIF_INFO = {
   in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'info' },
 }
 
+function getNotificationStorageKey(role) {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+    const userId = user.id ?? user.idcard ?? user.username ?? 'current'
+    return `${role}-notifications-seen-${userId}`
+  } catch {
+    return `${role}-notifications-seen-current`
+  }
+}
+
 function buildAdminTenantNotifs(request) {
+  if (request.type === 'move_room') return []
   const info = ADMIN_TENANT_NOTIF_INFO[request.status]
   if (!info) return []
   return [
@@ -353,6 +364,27 @@ function buildAdminMaintenanceNotifs(request) {
       ],
       kind: 'maintenance',
       request,
+    },
+  ]
+}
+
+function buildAdminInspectionNotifs(inspection) {
+  if (!inspection.tenant_request_id || inspection.status !== 'pending') return []
+  return [
+    {
+      key: `inspection-${inspection.id}-pending-${inspection.updated_at || inspection.created_at}`,
+      title: 'ตรวจผลย้ายห้อง',
+      label: 'เจ้าหน้าที่ส่งผลตรวจ รอ Admin ตรวจสอบ',
+      tone: 'pending',
+      date: inspection.created_at,
+      details: [
+        { label: 'ห้อง', value: inspection.room_number },
+        { label: 'ห้องปลายทาง', value: inspection.target_room_number },
+        { label: 'ผู้เช่า', value: inspection.tenant_name },
+        { label: 'ตรวจโดย', value: inspection.inspected_by },
+      ],
+      kind: 'inspection',
+      inspection,
     },
   ]
 }
@@ -597,7 +629,14 @@ function AdminBackupPage() {
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [notifSeen, setNotifSeen] = useState(false)
+  const [seenNotificationKeys, setSeenNotificationKeys] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(getNotificationStorageKey('admin')) || '[]')
+      return Array.isArray(stored) ? stored : []
+    } catch {
+      return []
+    }
+  })
   const [notifPage, setNotifPage] = useState(1)
   const notifTargetRef = useRef(null)
   const [notifTargetReady, setNotifTargetReady] = useState(0)
@@ -1581,12 +1620,18 @@ function AdminBackupPage() {
     loadMoveOutInspections()
     loadParcels()
     loadNotifSources()
-    const interval = setInterval(() => {
+    const refreshNotifications = () => {
       loadNotifSources()
       loadStaff()
       loadParcels()
-    }, 60000)
-    return () => clearInterval(interval)
+      loadMoveOutInspections()
+    }
+    const interval = setInterval(refreshNotifications, 60000)
+    window.addEventListener('focus', refreshNotifications)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', refreshNotifications)
+    }
   }, [loadParcels])
 
   useEffect(() => {
@@ -1672,10 +1717,19 @@ function AdminBackupPage() {
     return [
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
       ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
+      ...moveOutInspections.flatMap(buildAdminInspectionNotifs),
       ...staffList.flatMap(buildAdminStaffNotifs),
       ...announcements.map(buildAnnouncementNotif),
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [notifTenantItems, notifMaintenanceItems, staffList, announcements])
+  }, [notifTenantItems, notifMaintenanceItems, moveOutInspections, staffList, announcements])
+
+  const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
+
+  const markNotificationsRead = () => {
+    const keys = notifications.map((notification) => notification.key)
+    setSeenNotificationKeys(keys)
+    localStorage.setItem(getNotificationStorageKey('admin'), JSON.stringify(keys))
+  }
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
   const notifCurrentPage = Math.min(notifPage, notifTotalPages)
@@ -1712,6 +1766,11 @@ function AdminBackupPage() {
       return
     }
     setAnnouncementFocus(null)
+    if (notif.kind === 'inspection') {
+      setActiveTab('move-out-inspections')
+      openInspectionDetail(notif.inspection)
+      return
+    }
     if (notif.kind === 'staff') {
       setStaffSearch('')
       setStaffPage(1)
@@ -1771,8 +1830,8 @@ function AdminBackupPage() {
                   if (notifOpen) {
                     closeNotifPanel()
                   } else {
+                    markNotificationsRead()
                     setNotifOpen(true)
-                    setNotifSeen(true)
                     setNotifPage(1)
                   }
                 }}
@@ -1781,7 +1840,7 @@ function AdminBackupPage() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {!notifSeen && notifications.length > 0 && <span className="admin-notif-dot" />}
+                {hasUnreadNotifications && <span className="admin-notif-dot" />}
               </button>
               {notifOpen && (
                 <div
@@ -2623,7 +2682,11 @@ function AdminBackupPage() {
                           <td>
                             <span className={`admin-badge type-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
                           </td>
-                          <td>{request.room_number}</td>
+                          <td>
+                            {request.type === 'move_room'
+                              ? `ห้อง ${request.room_number} → ${request.target_room_number || '-'}`
+                              : request.room_number}
+                          </td>
                           <td>
                             {request.first_name} {request.last_name}
                           </td>
@@ -3018,7 +3081,7 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <div>
-                <h2>Checklist ตรวจห้องย้ายออก ({moveOutInspections.length})</h2>
+                <h2>Checklist ตรวจสภาพห้อง ({moveOutInspections.length})</h2>
                 <p className="waiting-list-storage-note">รายงานตรวจห้องที่ Staff ส่งมา</p>
               </div>
             </div>
@@ -3030,10 +3093,23 @@ function AdminBackupPage() {
                     <tr><td colSpan={7} className="admin-empty">ยังไม่มีรายงานตรวจห้องจาก Staff</td></tr>
                   ) : moveOutInspections.map((inspection) => (
                     <tr key={inspection.id}>
-                      <td className="admin-strong-cell">{inspection.room_number}</td>
+                      <td className="admin-strong-cell">
+                        {inspection.tenant_request_id
+                          ? `ห้อง ${inspection.room_number} → ${inspection.target_room_number}`
+                          : inspection.room_number}
+                        {inspection.tenant_request_id && <small className="waiting-list-date">ตรวจห้องก่อนย้าย</small>}
+                      </td>
                       <td>{inspection.tenant_name}<small className="waiting-list-date">{inspection.tenant_phone || '-'}</small></td>
                       <td>{formatDateTime(inspection.created_at)}</td>
-                      <td>{inspection.damage_note ? 'มีบันทึก' : inspection.checklist && Object.values(inspection.checklist).includes('damaged') ? 'พบความเสียหาย' : 'ไม่พบ'}</td>
+                      <td>
+                        {inspection.checklist && Object.values(inspection.checklist).some((result) => ['damaged', 'missing'].includes(result))
+                          ? 'พบชำรุด/สูญหาย'
+                          : inspection.checklist && Object.values(inspection.checklist).includes('wear')
+                            ? 'พบสึกหรอ'
+                            : inspection.damage_note
+                              ? 'มีหมายเหตุ'
+                              : 'ไม่พบ'}
+                      </td>
                       <td>{inspection.photo_count || 0} รูป</td>
                       <td>
                         <select aria-label={`สถานะตรวจห้อง ${inspection.room_number}`} className="form-select waiting-list-status-select" value={inspection.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}>
@@ -3060,7 +3136,11 @@ function AdminBackupPage() {
               <span className="moveout-inspection-admin-avatar" aria-hidden="true">{inspectionDetail.tenant_name?.[0] || '?'}</span>
               <div className="moveout-inspection-admin-hero-main">
                 <strong>{inspectionDetail.tenant_name}</strong>
-                <span>ห้อง {inspectionDetail.room_number}</span>
+                <span>
+                  {inspectionDetail.tenant_request_id
+                    ? `ห้อง ${inspectionDetail.room_number} → ${inspectionDetail.target_room_number} (ตรวจห้องก่อนย้าย)`
+                    : `ห้อง ${inspectionDetail.room_number}`}
+                </span>
               </div>
               <span className={`moveout-inspection-status is-${inspectionDetail.status || 'pending'}`}>
                 {MOVE_OUT_INSPECTION_STATUS[inspectionDetail.status || 'pending']}
@@ -3075,11 +3155,17 @@ function AdminBackupPage() {
             <div className="moveout-inspection-admin-checklist">
               {MOVE_OUT_CHECKLIST.map((item) => {
                 const result = inspectionDetail.checklist?.[item.key]
-                const label = result === 'good' ? 'ปกติ' : result === 'damaged' ? 'ชำรุด' : result === 'not_applicable' ? 'ไม่มี/ไม่เกี่ยวข้อง' : 'ไม่ได้ระบุ'
+                const label = {
+                  good: 'ปกติ',
+                  wear: 'สึกหรอตามปกติ',
+                  damaged: 'ชำรุด',
+                  missing: 'สูญหาย',
+                  not_applicable: 'ไม่มี/ไม่ได้ติดตั้ง',
+                }[result] || 'ไม่ได้ระบุ'
                 return <div key={item.key}><span>{item.label}</span><strong className={`is-${result || 'none'}`}>{label}</strong></div>
               })}
             </div>
-            <h4>รายละเอียดความเสียหาย</h4>
+            <h4>รายละเอียดที่พบ / หมายเหตุ</h4>
             <p className={`moveout-inspection-damage-note${inspectionDetail.damage_note ? '' : ' is-empty'}`}>
               {inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}
             </p>
@@ -3095,7 +3181,7 @@ function AdminBackupPage() {
               <div className="moveout-inspection-photo-grid">
                 {inspectionDetail.photos.slice(0, INSPECTION_PHOTO_PREVIEW_COUNT).map(renderInspectionPhoto)}
               </div>
-            ) : <p className="text-muted">ไม่มีรูปภาพแนบ</p>}
+            ) : <p className="moveout-inspection-empty-photos">ไม่มีรูปภาพแนบ</p>}
             <div className="admin-form-actions moveout-inspection-status-bar">
               <label className="form-label" htmlFor="inspection-detail-status">สถานะตรวจ</label>
               <select id="inspection-detail-status" className="form-select waiting-list-status-select" value={inspectionDetail.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspectionDetail, event.target.value)}>
