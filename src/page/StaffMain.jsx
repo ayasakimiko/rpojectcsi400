@@ -869,6 +869,20 @@ function StaffRequestTimeline({ kind, request }) {
   )
 }
 
+const MOVE_ROOM_REASON_LABEL = {
+  room_problem: 'ห้องเดิมมีปัญหา/ชำรุด',
+  price: 'ต้องการห้องราคาที่เหมาะสมขึ้น',
+  amenities: 'ต้องการสิ่งอำนวยความสะดวกเพิ่ม',
+  location: 'ต้องการชั้นหรือตำแหน่งที่สะดวกขึ้น',
+  noise: 'เสียงดัง/ปัญหาเพื่อนบ้าน',
+  other: 'อื่นๆ',
+}
+
+function formatDateOnly(value) {
+  if (!value) return '-'
+  return new Date(`${value}T00:00:00`).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
 const CHECKLIST_RESULT_LABEL = Object.fromEntries(CHECKLIST_RESULT_OPTIONS.map((option) => [option.key, option.label]))
 
 const TARGET_ROOM_AMENITIES = [
@@ -1067,6 +1081,14 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
                   <div>
                     <dt>ส่งคำขอ</dt>
                     <dd>{formatDateTime(request.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>เหตุผล</dt>
+                    <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>ต้องการย้ายวันที่</dt>
+                    <dd>{formatDateOnly(request.preferred_move_date)}</dd>
                   </div>
                 </dl>
                 {request.note && (
@@ -2674,9 +2696,11 @@ function StaffMain() {
               </>
             )}
             {request.type === 'move_room' && (
-              <span>
-                {request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}
-              </span>
+              <>
+                <span>{request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}</span>
+                {request.move_reason && <span>{MOVE_ROOM_REASON_LABEL[request.move_reason]}</span>}
+                {request.preferred_move_date && <span>ต้องการย้าย {formatDateOnly(request.preferred_move_date)}</span>}
+              </>
             )}
             {request.phone && <span>โทร {request.phone}</span>}
           </div>
@@ -6347,10 +6371,20 @@ function StaffMain() {
                   </>
                 )}
                 {tenantRequestDetail.type === 'move_room' && (
-                  <div className="staff-confirm-detail-row">
-                    <span>ห้องปลายทาง</span>
-                    <strong>{tenantRequestDetail.target_room_number || '-'}</strong>
-                  </div>
+                  <>
+                    <div className="staff-confirm-detail-row">
+                      <span>ห้องปลายทาง</span>
+                      <strong>{tenantRequestDetail.target_room_number || '-'}</strong>
+                    </div>
+                    <div className="staff-confirm-detail-row">
+                      <span>เหตุผลที่ย้าย</span>
+                      <strong>{MOVE_ROOM_REASON_LABEL[tenantRequestDetail.move_reason] || '-'}</strong>
+                    </div>
+                    <div className="staff-confirm-detail-row">
+                      <span>วันที่ต้องการย้าย</span>
+                      <strong>{formatDateOnly(tenantRequestDetail.preferred_move_date)}</strong>
+                    </div>
+                  </>
                 )}
                 <div className="staff-confirm-detail-row">
                   <span>สถานะ</span>

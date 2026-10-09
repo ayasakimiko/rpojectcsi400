@@ -266,6 +266,13 @@ export function parseMaintenanceInput(body = {}) {
 const REQUEST_TYPES = new Set(["renew", "moveout", "move_room"]);
 const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
 const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
+const MOVE_ROOM_REASONS = new Set(["room_problem", "price", "amenities", "location", "noise", "other"]);
+const MOVE_ROOM_MAX_DAYS_AHEAD = 60;
+
+function toLocalDateString(date) {
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 export function parseTenantRequestInput(body = {}) {
   const { type } = body;
@@ -281,10 +288,37 @@ export function parseTenantRequestInput(body = {}) {
     if (!Number.isInteger(targetRoomNumber) || targetRoomNumber < 100 || targetRoomNumber > 999) {
       return { error: "กรุณาเลือกห้องที่ต้องการย้าย" };
     }
-    return { value: { type, note, targetRoomNumber, renewDurationMonths: null, renewPaymentType: null } };
+    const moveReason = body.move_reason;
+    if (!MOVE_ROOM_REASONS.has(moveReason)) {
+      return { error: "กรุณาเลือกเหตุผลที่ต้องการย้ายห้อง" };
+    }
+    if (moveReason === "other" && !note) {
+      return { error: "กรุณาระบุเหตุผลเพิ่มเติมในหมายเหตุ" };
+    }
+    const preferredMoveDate = typeof body.preferred_move_date === "string" ? body.preferred_move_date : "";
+    const today = new Date();
+    const latest = new Date(today.getFullYear(), today.getMonth(), today.getDate() + MOVE_ROOM_MAX_DAYS_AHEAD);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(preferredMoveDate)
+      || Number.isNaN(new Date(`${preferredMoveDate}T00:00:00`).getTime())
+      || preferredMoveDate < toLocalDateString(today)
+      || preferredMoveDate > toLocalDateString(latest)
+    ) {
+      return { error: `กรุณาเลือกวันที่ต้องการย้ายภายใน ${MOVE_ROOM_MAX_DAYS_AHEAD} วันนับจากวันนี้` };
+    }
+    return {
+      value: {
+        type, note, targetRoomNumber, renewDurationMonths: null, renewPaymentType: null, moveReason, preferredMoveDate,
+      },
+    };
   }
   if (type !== "renew") {
-    return { value: { type, note, targetRoomNumber: null, renewDurationMonths: null, renewPaymentType: null } };
+    return {
+      value: {
+        type, note, targetRoomNumber: null, renewDurationMonths: null, renewPaymentType: null,
+        moveReason: null, preferredMoveDate: null,
+      },
+    };
   }
 
   const renewDurationMonths = Number(body.renew_duration_months);
@@ -298,7 +332,11 @@ export function parseTenantRequestInput(body = {}) {
   if (renewPaymentType === "lump_sum" && renewDurationMonths <= 1) {
     return { error: "จ่ายล่วงหน้าทั้งก้อนเลือกได้เฉพาะระยะเวลาต่อสัญญามากกว่า 1 เดือน" };
   }
-  return { value: { type, note, targetRoomNumber: null, renewDurationMonths, renewPaymentType } };
+  return {
+    value: {
+      type, note, targetRoomNumber: null, renewDurationMonths, renewPaymentType, moveReason: null, preferredMoveDate: null,
+    },
+  };
 }
 
 export function parseUtilityBillInput(body = {}) {

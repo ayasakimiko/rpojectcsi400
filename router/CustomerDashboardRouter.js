@@ -305,7 +305,8 @@ router.get("/me", async (req, res) => {
       [customer.room_number],
     );
     const [availableRooms] = await pool.query(
-      `SELECT room_number, price FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
+      `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price
+       FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
     );
 
     const [bookings] = await pool.query(
@@ -343,8 +344,16 @@ router.get("/me", async (req, res) => {
     );
 
     const [tenantRequests] = await pool.query(
-      `SELECT id, type, note, room_number, target_room_number, renew_duration_months, renew_payment_type, status, accepted_at, completed_at, created_at
-       FROM TenantRequest WHERE customer_id = ? ORDER BY created_at DESC, id DESC`,
+      `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
+              tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
+              tr.status, tr.accepted_at, tr.completed_at, tr.created_at,
+              sr.price AS source_room_price, tg.price AS target_room_price,
+              (moi.id IS NOT NULL) AS room_inspected
+       FROM TenantRequest tr
+       LEFT JOIN Room sr ON sr.room_number = tr.room_number
+       LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
+       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+       WHERE tr.customer_id = ? ORDER BY tr.created_at DESC, tr.id DESC`,
       [customer.id],
     );
 
@@ -555,7 +564,7 @@ router.post("/requests", async (req, res) => {
     if (error) {
       return res.status(400).json({ message: error });
     }
-    const { type, note, targetRoomNumber, renewDurationMonths, renewPaymentType } = value;
+    const { type, note, targetRoomNumber, renewDurationMonths, renewPaymentType, moveReason, preferredMoveDate } = value;
 
     connection = await pool.getConnection();
     await connection.beginTransaction();
@@ -603,9 +612,13 @@ router.post("/requests", async (req, res) => {
     }
 
     await connection.query(
-      `INSERT INTO TenantRequest (customer_id, room_number, target_room_number, type, note, renew_duration_months, renew_payment_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [customer.id, customer.room_number, targetRoomNumber, type, note, renewDurationMonths, renewPaymentType],
+      `INSERT INTO TenantRequest (customer_id, room_number, target_room_number, type, note, renew_duration_months, renew_payment_type,
+                                  move_reason, preferred_move_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        customer.id, customer.room_number, targetRoomNumber, type, note, renewDurationMonths, renewPaymentType,
+        moveReason, preferredMoveDate,
+      ],
     );
 
     await connection.commit();
