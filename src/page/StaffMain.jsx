@@ -883,6 +883,264 @@ function formatDateOnly(value) {
   return new Date(`${value}T00:00:00`).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+function RouteArrowIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  )
+}
+
+function getTenantRequestFacts(request) {
+  const facts = []
+  if (request.type === 'renew') {
+    facts.push({
+      label: `ขอต่อ ${RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}`,
+    })
+    facts.push({ label: RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type })
+  }
+  if (request.type === 'move_room') {
+    if (['pending', 'in_progress'].includes(request.status)) {
+      facts.push(
+        request.inspection_id
+          ? { label: 'ตรวจห้องแล้ว', tone: 'success' }
+          : { label: 'รอตรวจสภาพห้อง', tone: 'warning' },
+      )
+    }
+    if (request.move_reason) facts.push({ label: MOVE_ROOM_REASON_LABEL[request.move_reason] || request.move_reason })
+    if (request.preferred_move_date) {
+      facts.push({ label: `ต้องการย้าย ${formatDateOnly(request.preferred_move_date)}`, tone: 'info' })
+    }
+  }
+  return facts
+}
+
+function TenantRequestCard({ request, meta, children }) {
+  const facts = getTenantRequestFacts(request)
+  return (
+    <article className={`staff-req-card type-${request.type}`}>
+      <div className="staff-req-head">
+        <span className={`staff-badge type-${request.type}`}>
+          {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
+        </span>
+        <span className="staff-req-room">
+          ห้อง {request.room_number}
+          {request.type === 'move_room' && request.target_room_number && (
+            <>
+              <RouteArrowIcon />
+              {request.target_room_number}
+            </>
+          )}
+        </span>
+        <span className={`staff-badge status-${request.status} staff-req-status`}>
+          {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+        </span>
+      </div>
+      <div className="staff-req-tenant">
+        <strong>
+          {request.first_name} {request.last_name}
+        </strong>
+        {request.phone && <span>โทร {request.phone}</span>}
+      </div>
+      {facts.length > 0 && (
+        <div className="staff-req-facts">
+          {facts.map((fact) => (
+            <span key={fact.label} className={`staff-req-fact${fact.tone ? ` is-${fact.tone}` : ''}`}>
+              {fact.label}
+            </span>
+          ))}
+        </div>
+      )}
+      {request.note && (
+        <p className="staff-req-note">
+          <span>หมายเหตุ</span> {request.note}
+        </p>
+      )}
+      <div className="staff-req-footer">
+        <div className="staff-req-meta">{meta}</div>
+        <div className="staff-req-actions">{children}</div>
+      </div>
+    </article>
+  )
+}
+
+function TenantRequestDetailModal({ request, onClose }) {
+  const isMove = request.type === 'move_room'
+  const facts = getTenantRequestFacts(request)
+  const steps = [
+    { key: 'created', label: 'ส่งคำขอ', date: request.created_at, done: true },
+    {
+      key: 'accepted',
+      label: request.accepted_by_name ? `รับเรื่องโดย ${request.accepted_by_name}` : 'เจ้าหน้าที่รับเรื่อง',
+      date: request.accepted_at,
+      done: Boolean(request.accepted_at) || request.status !== 'pending',
+    },
+    {
+      key: 'final',
+      label:
+        request.status === 'approved'
+          ? `อนุมัติ${request.completed_by_name ? `โดย ${request.completed_by_name}` : ''}`
+          : request.status === 'rejected'
+            ? `ปฏิเสธ${request.completed_by_name ? `โดย ${request.completed_by_name}` : ''}`
+            : 'รอผลดำเนินการ',
+      date: request.completed_at,
+      done: ['approved', 'rejected'].includes(request.status),
+      tone: request.status === 'rejected' ? 'danger' : request.status === 'approved' ? 'success' : '',
+    },
+  ]
+  return (
+    <Modal
+      title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[request.type] || 'คำขอ'}`}
+      onClose={onClose}
+      variant="transfer"
+    >
+      {(requestClose) => (
+        <div className="staff-transfer-body">
+          <div className="staff-transfer-top">
+            <div className="staff-req-detail-head">
+              <span className={`staff-badge type-${request.type}`}>
+                {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
+              </span>
+              <span className={`staff-badge status-${request.status}`}>
+                {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+              </span>
+              <span className="staff-req-detail-date">ส่งคำขอ {formatDateTime(request.created_at)}</span>
+            </div>
+            {isMove ? (
+              <div className="staff-transfer-route">
+                <div className="staff-transfer-room is-source">
+                  <span className="staff-transfer-room-label">ห้องเดิม</span>
+                  <strong className="staff-transfer-room-number">{request.room_number}</strong>
+                  {request.source_room_price != null && (
+                    <span className="staff-transfer-room-price">
+                      ฿{formatCurrency(request.source_room_price)}
+                      <small>/เดือน</small>
+                    </span>
+                  )}
+                </div>
+                <div className="staff-transfer-arrow" aria-hidden="true">
+                  <RouteArrowIcon />
+                </div>
+                <div className="staff-transfer-room is-target">
+                  <span className="staff-transfer-room-label">ห้องใหม่</span>
+                  <strong className="staff-transfer-room-number">{request.target_room_number || '-'}</strong>
+                  {request.target_room_price != null && (
+                    <span className="staff-transfer-room-price">
+                      ฿{formatCurrency(request.target_room_price)}
+                      <small>/เดือน</small>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="staff-req-detail-room">
+                <span>ห้อง</span>
+                <strong>{request.room_number}</strong>
+              </div>
+            )}
+          </div>
+
+          <div className="staff-transfer-scroll">
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ผู้เช่า</h4>
+              <dl className="staff-transfer-list">
+                <div>
+                  <dt>ชื่อ</dt>
+                  <dd>
+                    {request.first_name} {request.last_name}
+                  </dd>
+                </div>
+                <div>
+                  <dt>เบอร์โทร</dt>
+                  <dd>{request.phone || '-'}</dd>
+                </div>
+              </dl>
+            </section>
+
+            {(facts.length > 0 || request.note) && (
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">รายละเอียดคำขอ</h4>
+                {isMove ? (
+                  <dl className="staff-transfer-list is-single">
+                    <div>
+                      <dt>เหตุผล</dt>
+                      <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>ต้องการย้าย</dt>
+                      <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+                    </div>
+                    {['pending', 'in_progress'].includes(request.status) && (
+                      <div>
+                        <dt>ตรวจสภาพห้อง</dt>
+                        <dd className={request.inspection_id ? 'is-success' : 'is-warning'}>
+                          {request.inspection_id ? 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจ'}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                ) : (
+                  facts.length > 0 && (
+                    <div className="staff-req-facts">
+                      {facts.map((fact) => (
+                        <span key={fact.label} className="staff-req-fact">
+                          {fact.label}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                )}
+                {request.note && (
+                  <p className="staff-transfer-note">
+                    <span>{request.type === 'moveout' ? 'เหตุผลการย้ายออก:' : 'หมายเหตุ:'}</span> {request.note}
+                  </p>
+                )}
+              </section>
+            )}
+
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
+              <ol className="staff-req-steps">
+                {steps.map((step) => (
+                  <li
+                    key={step.key}
+                    className={`${step.done ? 'is-done' : ''}${step.tone ? ` is-${step.tone}` : ''}`}
+                  >
+                    <span className="staff-req-step-dot" />
+                    <div>
+                      <p>{step.label}</p>
+                      <small>{step.done && step.date ? formatDateTime(step.date) : step.done ? '' : 'ยังไม่ถึงขั้นตอนนี้'}</small>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
+
+          <div className="staff-transfer-footer">
+            <div className="staff-form-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 const CHECKLIST_RESULT_LABEL = Object.fromEntries(CHECKLIST_RESULT_OPTIONS.map((option) => [option.key, option.label]))
 
 const TARGET_ROOM_AMENITIES = [
@@ -2670,116 +2928,72 @@ function StaffMain() {
     const key = `tenant-${request.id}`
     const isProcessing = processingRequestKey === key
     return (
-      <div key={key} className="staff-request-item has-detail-link">
-        <div className="staff-request-main">
-          <div className="staff-request-headline">
-            <span className={`staff-badge type-${request.type}`}>
-              {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
-            </span>
-            <span className="staff-request-room">
-              {request.type === 'move_room'
-                ? `ห้อง ${request.room_number} → ${request.target_room_number}`
-                : `ห้อง ${request.room_number}`}
-            </span>
-            <span className="staff-request-tenant">
-              {request.first_name} {request.last_name}
-            </span>
-          </div>
-          <div className="staff-request-meta">
-            {request.type === 'renew' && (
-              <>
-                <span>
-                  ขอต่อ{' '}
-                  {RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}
-                </span>
-                <span>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</span>
-              </>
-            )}
-            {request.type === 'move_room' && (
-              <>
-                <span>{request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}</span>
-                {request.move_reason && <span>{MOVE_ROOM_REASON_LABEL[request.move_reason]}</span>}
-                {request.preferred_move_date && <span>ต้องการย้าย {formatDateOnly(request.preferred_move_date)}</span>}
-              </>
-            )}
-            {request.phone && <span>โทร {request.phone}</span>}
-          </div>
-          {request.note && <p className="staff-request-note">หมายเหตุ: {request.note}</p>}
-          <p className="staff-request-date is-submitted">
-            <span className="staff-request-date-label">ส่งคำขอ</span>
-            <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
-          </p>
-        </div>
-        <div className="staff-request-side">
-        <div className="staff-row-actions">
-          {request.type === 'moveout' ? (
-            request.status === 'in_progress' ? (
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                disabled={isProcessing}
-                onClick={() => setMoveoutConfirmRequest(request)}
-              >
-                {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติการย้ายออก'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                disabled={isProcessing}
-                onClick={() => setMoveoutAcknowledgeConfirm(request)}
-              >
-                {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
-              </button>
-            )
-          ) : request.type === 'move_room' ? (
-            request.inspection_id ? (
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                disabled={isProcessing}
-                onClick={() => setRenewApproveConfirm(request)}
-              >
-                {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติย้ายห้อง'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                onClick={() => openMoveRoomInspection(request)}
-              >
-                ตรวจห้องก่อนย้าย
-              </button>
-            )
+      <TenantRequestCard
+        key={key}
+        request={request}
+        meta={<span>ส่งคำขอ {formatDateTime(request.created_at)}</span>}
+      >
+        <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
+          ดูรายละเอียด
+        </button>
+        <button
+          type="button"
+          className="staff-action-btn is-ghost"
+          disabled={isProcessing}
+          onClick={() => setTenantRejectConfirm(request)}
+        >
+          ปฏิเสธ
+        </button>
+        {request.type === 'moveout' ? (
+          request.status === 'in_progress' ? (
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              disabled={isProcessing}
+              onClick={() => setMoveoutConfirmRequest(request)}
+            >
+              {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติการย้ายออก'}
+            </button>
           ) : (
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              disabled={isProcessing}
+              onClick={() => setMoveoutAcknowledgeConfirm(request)}
+            >
+              {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
+            </button>
+          )
+        ) : request.type === 'move_room' ? (
+          request.inspection_id ? (
             <button
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
               onClick={() => setRenewApproveConfirm(request)}
             >
-              {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
+              {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติย้ายห้อง'}
             </button>
-          )}
+          ) : (
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              onClick={() => openMoveRoomInspection(request)}
+            >
+              ตรวจห้องก่อนย้าย
+            </button>
+          )
+        ) : (
           <button
             type="button"
-            className="staff-action-btn is-ghost"
+            className="staff-action-btn is-primary"
             disabled={isProcessing}
-            onClick={() => setTenantRejectConfirm(request)}
+            onClick={() => setRenewApproveConfirm(request)}
           >
-            ปฏิเสธ
+            {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
           </button>
-        </div>
-        {request.type !== 'renew' && (
-          <span className={`staff-badge status-${request.status}`}>
-            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
-          </span>
         )}
-        <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
-          ดูรายละเอียด
-        </button>
-        </div>
-      </div>
+      </TenantRequestCard>
     )
   }
 
@@ -5269,67 +5483,30 @@ function StaffMain() {
             <>
               <div className="staff-requests-list">
                 {tenantHistoryData.map((request) => (
-                  <div key={request.id} className="staff-request-item has-detail-link">
-                    <div className="staff-request-main">
-                      <div className="staff-request-headline">
-                        <span className={`staff-badge type-${request.type}`}>
-                          {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
-                        </span>
-                        <span className="staff-request-room">ห้อง {request.room_number}</span>
-                        <span className="staff-request-tenant">
-                          {request.first_name} {request.last_name}
-                        </span>
-                        <span className="staff-status-break" aria-hidden="true" />
-                        <span className={`staff-badge status-${request.status} staff-status-end`}>
-                          {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
-                        </span>
-                      </div>
-                      <div className="staff-request-meta">
-                        {request.type === 'renew' && (
-                          <>
-                            <span>
-                              ขอต่อ{' '}
-                              {RENEW_DURATION_LABEL[request.renew_duration_months] ||
-                                `${request.renew_duration_months} เดือน`}
-                            </span>
-                            <span>
-                              {RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}
-                            </span>
-                          </>
-                        )}
-                        {request.phone && <span>โทร {request.phone}</span>}
-                      </div>
-                      {request.note && <p className="staff-request-note">หมายเหตุ: {request.note}</p>}
-                      <div className="staff-request-timeline">
-                        <p className="staff-request-date is-submitted">
-                          <span className="staff-request-date-label">ส่งคำขอ</span>
-                          <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
-                        </p>
+                  <TenantRequestCard
+                    key={request.id}
+                    request={request}
+                    meta={
+                      <>
+                        <span>ส่งคำขอ {formatDateTime(request.created_at)}</span>
                         {request.accepted_by_name && (
-                          <p className="staff-request-date is-accepted">
-                            <span className="staff-request-date-label">
-                              รับเรื่องโดย <span className="staff-request-date-staff">{request.accepted_by_name}</span>
-                            </span>
-                            <span className="staff-request-date-value">{formatDateTime(request.accepted_at)}</span>
-                          </p>
+                          <span>
+                            รับเรื่องโดย <strong>{request.accepted_by_name}</strong> {formatDateTime(request.accepted_at)}
+                          </span>
                         )}
                         {request.completed_by_name && (
-                          <p
-                            className={`staff-request-date is-${request.status === 'approved' ? 'approved' : 'rejected'}`}
-                          >
-                            <span className="staff-request-date-label">
-                              {request.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
-                              <span className="staff-request-date-staff">{request.completed_by_name}</span>
-                            </span>
-                            <span className="staff-request-date-value">{formatDateTime(request.completed_at)}</span>
-                          </p>
+                          <span className={request.status === 'approved' ? 'is-success' : 'is-danger'}>
+                            {request.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
+                            <strong>{request.completed_by_name}</strong> {formatDateTime(request.completed_at)}
+                          </span>
                         )}
-                      </div>
-                    </div>
+                      </>
+                    }
+                  >
                     <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
                       ดูรายละเอียด
                     </button>
-                  </div>
+                  </TenantRequestCard>
                 ))}
               </div>
               {tenantHistoryTotal > MODAL_ITEMS_PER_PAGE && (
@@ -6320,93 +6497,7 @@ function StaffMain() {
       )}
 
       {tenantRequestDetail && (
-        <Modal
-          title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[tenantRequestDetail.type] || 'คำขอ'}`}
-          onClose={() => setTenantRequestDetail(null)}
-          variant="confirm"
-        >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ประเภทคำขอ</span>
-                  <strong>{TENANT_REQUEST_TYPE_LABEL[tenantRequestDetail.type] || tenantRequestDetail.type}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>
-                    {tenantRequestDetail.type === 'move_room'
-                      ? `${tenantRequestDetail.room_number} → ${tenantRequestDetail.target_room_number}`
-                      : tenantRequestDetail.room_number}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {tenantRequestDetail.first_name} {tenantRequestDetail.last_name}
-                  </strong>
-                </div>
-                {tenantRequestDetail.phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{tenantRequestDetail.phone}</strong>
-                  </div>
-                )}
-                {tenantRequestDetail.type === 'renew' && (
-                  <>
-                    <div className="staff-confirm-detail-row">
-                      <span>ระยะเวลาที่ขอต่อ</span>
-                      <strong>
-                        {RENEW_DURATION_LABEL[tenantRequestDetail.renew_duration_months] ||
-                          `${tenantRequestDetail.renew_duration_months} เดือน`}
-                      </strong>
-                    </div>
-                    <div className="staff-confirm-detail-row">
-                      <span>รูปแบบการชำระ</span>
-                      <strong>
-                        {RENEW_PAYMENT_TYPE_LABEL[tenantRequestDetail.renew_payment_type] ||
-                          tenantRequestDetail.renew_payment_type}
-                      </strong>
-                    </div>
-                  </>
-                )}
-                {tenantRequestDetail.type === 'move_room' && (
-                  <>
-                    <div className="staff-confirm-detail-row">
-                      <span>ห้องปลายทาง</span>
-                      <strong>{tenantRequestDetail.target_room_number || '-'}</strong>
-                    </div>
-                    <div className="staff-confirm-detail-row">
-                      <span>เหตุผลที่ย้าย</span>
-                      <strong>{MOVE_ROOM_REASON_LABEL[tenantRequestDetail.move_reason] || '-'}</strong>
-                    </div>
-                    <div className="staff-confirm-detail-row">
-                      <span>วันที่ต้องการย้าย</span>
-                      <strong>{formatDateOnly(tenantRequestDetail.preferred_move_date)}</strong>
-                    </div>
-                  </>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>สถานะ</span>
-                  <strong>{TENANT_REQUEST_STATUS_LABEL[tenantRequestDetail.status] || tenantRequestDetail.status}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่ส่งคำขอ</span>
-                  <strong>{formatDateTime(tenantRequestDetail.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>{tenantRequestDetail.type === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
-                  <strong>{tenantRequestDetail.note || '-'}</strong>
-                </div>
-              </div>
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        <TenantRequestDetailModal request={tenantRequestDetail} onClose={() => setTenantRequestDetail(null)} />
       )}
 
       {maintenanceDetail && (
