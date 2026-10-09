@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
@@ -926,7 +927,7 @@ function getTenantRequestFacts(request) {
   return facts
 }
 
-function TenantRequestCard({ request, meta, children }) {
+function TenantRequestCard({ request, steps = [], children }) {
   const facts = getTenantRequestFacts(request)
   return (
     <article className={`staff-req-card type-${request.type}`}>
@@ -968,10 +969,142 @@ function TenantRequestCard({ request, meta, children }) {
         </p>
       )}
       <div className="staff-req-footer">
-        <div className="staff-req-meta">{meta}</div>
+        <ol className="staff-req-meta">
+          {steps.map((step) => (
+            <li key={step.key} className={`staff-req-meta-step${step.tone ? ` is-${step.tone}` : ''}`}>
+              <span className="staff-req-meta-dot" aria-hidden="true" />
+              <span className="staff-req-meta-label">
+                {step.label}
+                {step.by && <strong> {step.by}</strong>}
+              </span>
+              <time dateTime={step.date}>
+                {new Date(step.date).toLocaleString('th-TH', {
+                  year: '2-digit',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </time>
+            </li>
+          ))}
+        </ol>
         <div className="staff-req-actions">{children}</div>
       </div>
     </article>
+  )
+}
+
+function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, onClose }) {
+  const due = room?.currentDue
+  const hasDue = due && due.status !== 'paid' && Number(due.amount) > 0
+  const nextSteps = [
+    { key: 'accept', label: 'รับเรื่องคำขอ', detail: 'ผู้เช่าจะเห็นสถานะ "รับเรื่องแล้ว"', current: true },
+    { key: 'inspect', label: 'นัดตรวจสภาพห้อง', detail: 'บันทึกผลตรวจและสรุปค่าเสียหาย (ถ้ามี)' },
+    { key: 'approve', label: 'อนุมัติการย้ายออก', detail: 'ระงับบัญชีผู้เช่าและเปลี่ยนห้องเป็นว่าง' },
+  ]
+  return (
+    <Modal title="ยืนยันรับเรื่องแจ้งย้ายออก" onClose={onClose} variant="transfer">
+      {(requestClose) => (
+        <div className="staff-transfer-body">
+          <div className="staff-transfer-top">
+            <div className="staff-transfer-hero">
+              <div className="staff-confirm-icon is-info">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8" />
+                  <path d="M16 15l4-3-4-3" />
+                  <path d="M20 12H10" />
+                </svg>
+              </div>
+              <div>
+                <p className="staff-confirm-message">รับเรื่องคำขอแจ้งย้ายออก</p>
+                <p className="staff-confirm-note">ตรวจสอบข้อมูลผู้เช่าก่อนกดรับเรื่อง</p>
+              </div>
+            </div>
+            <div className="staff-req-detail-room is-moveout">
+              <span>ห้อง</span>
+              <strong>{request.room_number}</strong>
+              <em>
+                {request.first_name} {request.last_name}
+              </em>
+            </div>
+          </div>
+
+          <div className="staff-transfer-scroll">
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
+              <dl className="staff-transfer-list">
+                <div>
+                  <dt>เบอร์โทร</dt>
+                  <dd>{request.phone || '-'}</dd>
+                </div>
+                <div>
+                  <dt>ส่งคำขอ</dt>
+                  <dd>{formatDateTime(request.created_at)}</dd>
+                </div>
+                <div>
+                  <dt>เงินประกัน</dt>
+                  <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
+                </div>
+                <div>
+                  <dt>ยอดค้างชำระ</dt>
+                  <dd className={hasDue ? 'is-danger' : 'is-success'}>
+                    {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>สิ้นสุดสัญญา</dt>
+                  <dd>{formatDate(room?.rental_end_date)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">เหตุผล/รายละเอียดการย้ายออก</h4>
+              <p className="staff-transfer-note">{request.note || '-'}</p>
+            </section>
+
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ขั้นตอนหลังรับเรื่อง</h4>
+              <ol className="staff-req-steps">
+                {nextSteps.map((step, index) => (
+                  <li key={step.key} className={step.current ? 'is-done' : ''}>
+                    <span className="staff-req-step-dot" />
+                    <div>
+                      <p>
+                        {index + 1}. {step.label}
+                        {step.current && <span className="staff-req-step-now">ตอนนี้</span>}
+                      </p>
+                      <small>{step.detail}</small>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
+
+          <div className="staff-transfer-footer">
+            {error && <p className="staff-form-error">{error}</p>}
+            <div className="staff-form-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                ยกเลิก
+              </button>
+              <button type="button" className="staff-action-btn is-primary" disabled={processing} onClick={onConfirm}>
+                {processing ? 'กำลังดำเนินการ...' : 'ยืนยันรับเรื่อง'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -1109,6 +1242,14 @@ function TenantRequestDetailModal({ request, onClose }) {
               </section>
             )}
 
+            {isMove && (request.inspection_id || ['pending', 'in_progress'].includes(request.status)) && (
+              <InspectionSummary
+                inspectionId={request.inspection_id}
+                roomNumber={request.room_number}
+                tenantName={`${request.first_name || ''} ${request.last_name || ''}`.trim()}
+              />
+            )}
+
             <section className="staff-transfer-section">
               <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
               <ol className="staff-req-steps">
@@ -1160,33 +1301,125 @@ function getRentDiff(request) {
   return to - from
 }
 
-function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfirm, onClose }) {
+function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
   const [inspection, setInspection] = useState(null)
-  const [inspectionLoading, setInspectionLoading] = useState(Boolean(request.inspection_id))
-  const [inspectionError, setInspectionError] = useState('')
+  const [loading, setLoading] = useState(Boolean(inspectionId))
+  const [loadError, setLoadError] = useState('')
   const [photoIndex, setPhotoIndex] = useState(null)
-  const [openedAt] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!request.inspection_id) return undefined
+    if (!inspectionId) return undefined
     let active = true
     axios
-      .get(`/api/staff/move-out-inspections/${request.inspection_id}`, {
+      .get(`/api/staff/move-out-inspections/${inspectionId}`, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
       })
       .then(({ data }) => {
         if (active) setInspection(data.inspection)
       })
       .catch((err) => {
-        if (active) setInspectionError(err.response?.data?.message || 'โหลดผลตรวจห้องไม่สำเร็จ')
+        if (active) setLoadError(err.response?.data?.message || 'โหลดผลตรวจห้องไม่สำเร็จ')
       })
       .finally(() => {
-        if (active) setInspectionLoading(false)
+        if (active) setLoading(false)
       })
     return () => {
       active = false
     }
-  }, [request.inspection_id])
+  }, [inspectionId])
+
+  const checklist = inspection?.checklist || {}
+  const resultCounts = CHECKLIST_RESULT_OPTIONS.map((option) => ({
+    ...option,
+    count: Object.values(checklist).filter((value) => value === option.key).length,
+  })).filter((option) => option.count > 0)
+  const issueItems = MOVE_OUT_CHECKLIST.filter((item) => ['damaged', 'missing'].includes(checklist[item.key]))
+  const photos = inspection?.photos || []
+
+  return (
+    <section className="staff-transfer-section">
+      <div className="staff-transfer-section-head">
+        <h4 className="staff-transfer-section-title">ผลตรวจห้อง {roomNumber}</h4>
+        {inspection && (
+          <span className={`staff-transfer-chip ${issueItems.length > 0 ? 'is-danger' : 'is-success'}`}>
+            {issueItems.length > 0 ? `พบปัญหา ${issueItems.length} รายการ` : 'สภาพเรียบร้อย'}
+          </span>
+        )}
+      </div>
+      {!inspectionId ? (
+        <p className="staff-transfer-muted">ยังไม่มีผลตรวจห้อง</p>
+      ) : loading ? (
+        <p className="staff-transfer-muted">กำลังโหลดผลตรวจห้อง...</p>
+      ) : loadError ? (
+        <p className="staff-form-error">{loadError}</p>
+      ) : inspection ? (
+        <>
+          {resultCounts.length > 0 && (
+            <div className="staff-transfer-tags">
+              {resultCounts.map((option) => (
+                <span key={option.key} className={`staff-transfer-tag result-${option.key}`}>
+                  {option.label} {option.count}
+                </span>
+              ))}
+            </div>
+          )}
+          {issueItems.length > 0 && (
+            <ul className="staff-transfer-issues">
+              {issueItems.map((item) => (
+                <li key={item.key}>
+                  <span>{item.label}</span>
+                  <strong>{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+          {inspection.damage_note && (
+            <p className="staff-transfer-note">
+              <span>ความเสียหาย:</span> {inspection.damage_note}
+            </p>
+          )}
+          {photos.length > 0 ? (
+            <div className="staff-transfer-photos">
+              {photos.slice(0, 8).map((photo, index) => (
+                <button
+                  type="button"
+                  key={photo.url}
+                  className="staff-transfer-photo"
+                  onClick={() => setPhotoIndex(index)}
+                  aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
+                >
+                  <img src={photo.url} alt="" />
+                  {index === 7 && photos.length > 8 && <span>+{photos.length - 8}</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="staff-transfer-muted">ไม่มีรูปถ่าย</p>
+          )}
+          <p className="staff-transfer-muted">
+            ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
+            {inspection.inspected_by_name ? ` โดย ${inspection.inspected_by_name}` : ''}
+          </p>
+        </>
+      ) : null}
+      {photoIndex !== null &&
+        createPortal(
+          <PhotoLightbox
+            photos={photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+            initialIndex={photoIndex}
+            title={`ผลตรวจห้อง ${roomNumber}`}
+            subtitle={tenantName}
+            label="รูปตรวจห้อง"
+            onClose={() => setPhotoIndex(null)}
+          />,
+          document.body,
+        )}
+    </section>
+  )
+}
+
+function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfirm, onClose }) {
+  const [openedAt] = useState(() => Date.now())
 
   const rentDiff = getRentDiff(request)
   const targetBooked = Boolean(request.target_room_is_booked)
@@ -1196,14 +1429,6 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
   const hasDue = due && due.status !== 'paid' && Number(due.amount) > 0
   const amenities = TARGET_ROOM_AMENITIES.filter((item) => request[`target_room_${item.key}`])
   const bedCount = Number(request.target_room_bed)
-
-  const checklist = inspection?.checklist || {}
-  const resultCounts = CHECKLIST_RESULT_OPTIONS.map((option) => ({
-    ...option,
-    count: Object.values(checklist).filter((value) => value === option.key).length,
-  })).filter((option) => option.count > 0)
-  const issueItems = MOVE_OUT_CHECKLIST.filter((item) => ['damaged', 'missing'].includes(checklist[item.key]))
-  const photos = inspection?.photos || []
 
   return (
     <>
@@ -1356,70 +1581,11 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
                 )}
               </section>
 
-              <section className="staff-transfer-section">
-                <div className="staff-transfer-section-head">
-                  <h4 className="staff-transfer-section-title">ผลตรวจห้อง {request.room_number}</h4>
-                  {inspection && (
-                    <span className={`staff-transfer-chip ${issueItems.length > 0 ? 'is-danger' : 'is-success'}`}>
-                      {issueItems.length > 0 ? `พบปัญหา ${issueItems.length} รายการ` : 'สภาพเรียบร้อย'}
-                    </span>
-                  )}
-                </div>
-                {inspectionLoading ? (
-                  <p className="staff-transfer-muted">กำลังโหลดผลตรวจห้อง...</p>
-                ) : inspectionError ? (
-                  <p className="staff-form-error">{inspectionError}</p>
-                ) : inspection ? (
-                  <>
-                    {resultCounts.length > 0 && (
-                      <div className="staff-transfer-tags">
-                        {resultCounts.map((option) => (
-                          <span key={option.key} className={`staff-transfer-tag result-${option.key}`}>
-                            {option.label} {option.count}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {issueItems.length > 0 && (
-                      <ul className="staff-transfer-issues">
-                        {issueItems.map((item) => (
-                          <li key={item.key}>
-                            <span>{item.label}</span>
-                            <strong>{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {inspection.damage_note && (
-                      <p className="staff-transfer-note">
-                        <span>ความเสียหาย:</span> {inspection.damage_note}
-                      </p>
-                    )}
-                    {photos.length > 0 && (
-                      <div className="staff-transfer-photos">
-                        {photos.slice(0, 6).map((photo, index) => (
-                          <button
-                            type="button"
-                            key={photo.url}
-                            className="staff-transfer-photo"
-                            onClick={() => setPhotoIndex(index)}
-                            aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
-                          >
-                            <img src={photo.url} alt="" />
-                            {index === 5 && photos.length > 6 && <span>+{photos.length - 6}</span>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <p className="staff-transfer-muted">
-                      ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
-                      {inspection.inspected_by_name ? ` โดย ${inspection.inspected_by_name}` : ''}
-                    </p>
-                  </>
-                ) : (
-                  <p className="staff-transfer-muted">ยังไม่มีผลตรวจห้อง</p>
-                )}
-              </section>
+              <InspectionSummary
+                inspectionId={request.inspection_id}
+                roomNumber={request.room_number}
+                tenantName={`${request.first_name || ''} ${request.last_name || ''}`.trim()}
+              />
 
               <p className="staff-transfer-info">
                 ผู้เช่าจะย้ายไปห้อง {request.target_room_number} ทันที โดยใช้สัญญาและยอดชำระล่วงหน้าเดิม ส่วนห้อง{' '}
@@ -1451,16 +1617,6 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
           </div>
         )}
       </Modal>
-      {photoIndex !== null && (
-        <PhotoLightbox
-          photos={photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
-          initialIndex={photoIndex}
-          title={`ผลตรวจห้อง ${request.room_number}`}
-          subtitle={`${request.first_name || ''} ${request.last_name || ''}`.trim()}
-          label="รูปตรวจห้อง"
-          onClose={() => setPhotoIndex(null)}
-        />
-      )}
     </>
   )
 }
@@ -2931,7 +3087,7 @@ function StaffMain() {
       <TenantRequestCard
         key={key}
         request={request}
-        meta={<span>ส่งคำขอ {formatDateTime(request.created_at)}</span>}
+        steps={[{ key: 'created', label: 'ส่งคำขอ', date: request.created_at, tone: 'info' }]}
       >
         <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
           ดูรายละเอียด
@@ -5486,22 +5642,23 @@ function StaffMain() {
                   <TenantRequestCard
                     key={request.id}
                     request={request}
-                    meta={
-                      <>
-                        <span>ส่งคำขอ {formatDateTime(request.created_at)}</span>
-                        {request.accepted_by_name && (
-                          <span>
-                            รับเรื่องโดย <strong>{request.accepted_by_name}</strong> {formatDateTime(request.accepted_at)}
-                          </span>
-                        )}
-                        {request.completed_by_name && (
-                          <span className={request.status === 'approved' ? 'is-success' : 'is-danger'}>
-                            {request.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
-                            <strong>{request.completed_by_name}</strong> {formatDateTime(request.completed_at)}
-                          </span>
-                        )}
-                      </>
-                    }
+                    steps={[
+                      { key: 'created', label: 'ส่งคำขอ', date: request.created_at, tone: 'info' },
+                      ...(request.accepted_at
+                        ? [{ key: 'accepted', label: 'รับเรื่อง', by: request.accepted_by_name, date: request.accepted_at, tone: 'info' }]
+                        : []),
+                      ...(request.completed_at
+                        ? [
+                            {
+                              key: 'completed',
+                              label: request.status === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ',
+                              by: request.completed_by_name,
+                              date: request.completed_at,
+                              tone: request.status === 'approved' ? 'success' : 'danger',
+                            },
+                          ]
+                        : []),
+                    ]}
                   >
                     <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
                       ดูรายละเอียด
@@ -6922,68 +7079,14 @@ function StaffMain() {
       )}
 
       {moveoutAcknowledgeConfirm && (
-        <Modal title="ยืนยันรับเรื่องแจ้งย้ายออก" onClose={() => setMoveoutAcknowledgeConfirm(null)} variant="confirm">
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-info">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันรับเรื่องคำขอแจ้งย้ายออก</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{moveoutAcknowledgeConfirm.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {moveoutAcknowledgeConfirm.first_name} {moveoutAcknowledgeConfirm.last_name}
-                  </strong>
-                </div>
-                {moveoutAcknowledgeConfirm.phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{moveoutAcknowledgeConfirm.phone}</strong>
-                  </div>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่ส่งคำขอ</span>
-                  <strong>{formatDateTime(moveoutAcknowledgeConfirm.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>เหตุผล/รายละเอียดการย้ายออก</span>
-                  <strong>{moveoutAcknowledgeConfirm.note || '-'}</strong>
-                </div>
-              </div>
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `tenant-${moveoutAcknowledgeConfirm.id}`}
-                  onClick={handleConfirmMoveoutAcknowledge}
-                >
-                  {processingRequestKey === `tenant-${moveoutAcknowledgeConfirm.id}`
-                    ? 'กำลังดำเนินการ...'
-                    : 'ยืนยันรับเรื่อง'}
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        <MoveoutAcknowledgeModal
+          request={moveoutAcknowledgeConfirm}
+          room={rooms.find((item) => String(item.room_number) === String(moveoutAcknowledgeConfirm.room_number))}
+          error={requestsError}
+          processing={processingRequestKey === `tenant-${moveoutAcknowledgeConfirm.id}`}
+          onConfirm={handleConfirmMoveoutAcknowledge}
+          onClose={() => setMoveoutAcknowledgeConfirm(null)}
+        />
       )}
 
       {tenantRejectConfirm && (

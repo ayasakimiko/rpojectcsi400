@@ -2796,23 +2796,89 @@
 
 .staff-req-meta {
   display: flex;
+  flex: 1 1 260px;
+  min-width: min(100%, 170px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.staff-req-meta-step {
+  --step-color: #2563eb;
+  position: relative;
+  display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 190px;
+  padding-right: 10px;
   font-size: 11.5px;
+}
+
+.staff-req-meta:has(> .staff-req-meta-step:only-child) {
+  flex: 0 1 auto;
+}
+
+.staff-req-meta-step:only-child {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  max-width: none;
+}
+
+.staff-req-meta-step:only-child .staff-req-meta-dot {
+  margin-bottom: 0;
+}
+
+/* connector from this step's dot to the next one */
+.staff-req-meta-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 15px;
+  right: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: #cbd5e1;
+}
+
+.staff-req-meta-step.is-success {
+  --step-color: #16a34a;
+}
+
+.staff-req-meta-step.is-danger {
+  --step-color: #dc2626;
+}
+
+.staff-req-meta-dot {
+  width: 10px;
+  height: 10px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--step-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-color) 18%, transparent);
+}
+
+.staff-req-meta-label {
+  font-weight: 700;
+  color: #33506f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-req-meta-label strong {
+  color: var(--step-color);
+}
+
+.staff-req-meta-step time {
+  font-size: 11px;
   font-weight: 600;
   color: #6b859e;
-}
-
-.staff-req-meta strong {
-  color: #0f2b52;
-}
-
-.staff-req-meta .is-success {
-  color: #15803d;
-}
-
-.staff-req-meta .is-danger {
-  color: #b42318;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .staff-req-actions {
@@ -2867,6 +2933,33 @@
 
 .staff-transfer-list.is-single {
   grid-template-columns: 1fr;
+}
+
+.staff-req-detail-room em {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.staff-req-detail-room.is-moveout {
+  border-color: #fecaca;
+  background: linear-gradient(160deg, #fff5f5 0%, #ffffff 100%);
+}
+
+.staff-req-detail-room.is-moveout strong {
+  color: #b42318;
+}
+
+.staff-req-step-now {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
 }
 
 .staff-transfer-list dd.is-warning {
@@ -2982,6 +3075,10 @@
   height: 42px;
   margin: 0 0 0 5px;
   box-shadow: 0 0 0 5px #f0fdf4;
+}
+
+.staff-transfer-hero .staff-confirm-icon.is-info {
+  box-shadow: 0 0 0 5px #f5f6ff;
 }
 
 .staff-transfer-hero .staff-confirm-icon svg {
