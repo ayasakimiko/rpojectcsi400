@@ -2706,13 +2706,13 @@ function CustomerDashbord() {
                     <p className="dashboard-confirm-message">{content.message}</p>
                   </div>
                   <div className="dashboard-status-scroll" key={statusPopup.request?.id ?? statusPopup.kind}>
+                    {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
                     {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
                       <TenantRequestDetailCard
                         request={{ ...statusPopup.request, type: statusPopup.kind }}
                         roomNumber={room?.room_number}
                       />
                     )}
-                    {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
                   </div>
                   {statusPopup.previousOf ? (
                     <button
