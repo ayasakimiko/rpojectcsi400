@@ -1117,50 +1117,15 @@ function TenantRequestDetailCard({ request, roomNumber }) {
   )
 }
 
-function PreviousTenantRequest({ request, roomNumber }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="dashboard-previous-request">
-      <button
-        type="button"
-        className="dashboard-previous-request-toggle"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-      >
-        {open ? 'ซ่อนคำขอก่อนหน้า' : `ดูคำขอก่อนหน้า (${formatDate(request.created_at)})`}
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className={open ? 'is-open' : ''}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-      {open && (
-        <div className="dashboard-previous-request-body">
-          <div className="dashboard-previous-request-head">
-            <span>คำขอก่อนหน้า</span>
-            <span className={`dashboard-badge status-${tenantRequestBadgeClass(request.status)}`}>
-              {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
-            </span>
-          </div>
-          <TenantRequestDetailCard request={request} roomNumber={roomNumber} />
-          {request.completed_at && (
-            <p className="dashboard-previous-request-date">
-              {TENANT_REQUEST_FINAL_LOG_LABEL[request.status] || 'ดำเนินการเสร็จ'}เมื่อ {formatDateTime(request.completed_at)}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  )
+// A popup opened from "ดูคำขอก่อนหน้า" carries previousOf; older statuses without their own popup copy get a generic one.
+function getStatusPopupContent(popup) {
+  const content = STATUS_POPUP_CONTENT_BY_KIND[popup.kind]?.[popup.status]
+  if (content || !popup.previousOf) return content
+  return {
+    title: TENANT_REQUEST_STATUS_LABEL[popup.status] || popup.status,
+    message: `คำขอ${TENANT_REQUEST_TYPE_LABEL[popup.kind] || ''}นี้${TENANT_REQUEST_STATUS_LABEL[popup.status] || popup.status}`,
+    icon: popup.status === 'approved' ? 'success' : popup.status === 'rejected' ? 'danger' : 'info',
+  }
 }
 
 function getRequestTimeline(kind, request) {
@@ -2704,14 +2669,22 @@ function CustomerDashbord() {
           </Modal>
         )}
 
-        {statusPopup && STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind]?.[statusPopup.status] && (
+        {statusPopup && getStatusPopupContent(statusPopup) && (
           <Modal
-            title={STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status].title}
+            title={statusPopup.previousOf ? 'คำขอก่อนหน้า' : getStatusPopupContent(statusPopup).title}
             onClose={() => setStatusPopup(null)}
             variant="status"
           >
             {(requestClose) => {
-              const content = STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status]
+              const content = getStatusPopupContent(statusPopup)
+              const sameTypeRequests = TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]
+                ? tenantRequests.filter((request) => request.type === statusPopup.kind)
+                : []
+              const currentIndex = statusPopup.request
+                ? sameTypeRequests.findIndex((request) => request.id === statusPopup.request.id)
+                : -1
+              const previousRequest =
+                !statusPopup.previousOf && currentIndex !== -1 ? sameTypeRequests[currentIndex + 1] : null
               return (
                 <div className="dashboard-confirm-body dashboard-status-body">
                   <div className="dashboard-status-hero">
@@ -2732,7 +2705,7 @@ function CustomerDashbord() {
                     </div>
                     <p className="dashboard-confirm-message">{content.message}</p>
                   </div>
-                  <div className="dashboard-status-scroll">
+                  <div className="dashboard-status-scroll" key={statusPopup.request?.id ?? statusPopup.kind}>
                     {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
                       <TenantRequestDetailCard
                         request={{ ...statusPopup.request, type: statusPopup.kind }}
@@ -2740,16 +2713,33 @@ function CustomerDashbord() {
                       />
                     )}
                     {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
-                    {(() => {
-                      if (!statusPopup.request || !TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]) return null
-                      const sameType = tenantRequests.filter((request) => request.type === statusPopup.kind)
-                      const currentIndex = sameType.findIndex((request) => request.id === statusPopup.request.id)
-                      const previousRequest = currentIndex === -1 ? null : sameType[currentIndex + 1]
-                      return previousRequest ? (
-                        <PreviousTenantRequest key={previousRequest.id} request={previousRequest} roomNumber={room?.room_number} />
-                      ) : null
-                    })()}
                   </div>
+                  {statusPopup.previousOf ? (
+                    <button
+                      type="button"
+                      className="dashboard-status-link"
+                      onClick={() => setStatusPopup(statusPopup.previousOf)}
+                    >
+                      ← กลับไปคำขอล่าสุด
+                    </button>
+                  ) : (
+                    previousRequest && (
+                      <button
+                        type="button"
+                        className="dashboard-status-link"
+                        onClick={() =>
+                          setStatusPopup({
+                            kind: statusPopup.kind,
+                            status: previousRequest.status,
+                            request: previousRequest,
+                            previousOf: statusPopup,
+                          })
+                        }
+                      >
+                        ดูคำขอก่อนหน้า ({formatDate(previousRequest.created_at)}) →
+                      </button>
+                    )
+                  )}
                   <div className="dashboard-form-actions">
                     <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
                       รับทราบ
