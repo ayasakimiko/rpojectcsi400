@@ -859,9 +859,13 @@ router.get("/requests/history", async (req, res) => {
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
               tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
-              tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone
+              tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone,
+              moi.id AS inspection_id, sr.price AS source_room_price, tg.price AS target_room_price
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
+       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+       LEFT JOIN Room sr ON sr.room_number = tr.room_number
+       LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
        WHERE ${whereClause}
        ORDER BY tr.completed_at DESC
        LIMIT ? OFFSET ?`,
