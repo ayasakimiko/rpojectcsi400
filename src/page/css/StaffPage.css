@@ -2654,6 +2654,422 @@
   line-height: 1.5;
 }
 
+/* Move-room approval */
+.staff-transfer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 8px;
+  width: 100%;
+}
+
+.staff-transfer-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.staff-transfer-route {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.staff-transfer-room {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 12px;
+  border-radius: 16px;
+  border: 1.5px solid #e3e9f3;
+  background: #f7f9fc;
+  text-align: center;
+}
+
+.staff-transfer-room.is-target {
+  border-color: #bfdbfe;
+  background: linear-gradient(160deg, #eff6ff 0%, #ffffff 100%);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12);
+}
+
+.staff-transfer-room.is-target.is-unavailable {
+  border-color: #fecaca;
+  background: #fff5f5;
+  box-shadow: none;
+}
+
+.staff-transfer-room-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #6b859e;
+}
+
+.staff-transfer-room-number {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #0f2b52;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-transfer-room.is-source .staff-transfer-room-number {
+  color: #6b859e;
+}
+
+.staff-transfer-room.is-target .staff-transfer-room-number {
+  color: #1d4ed8;
+}
+
+.staff-transfer-room-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f2b52;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-transfer-room-price small {
+  margin-left: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b859e;
+}
+
+.staff-transfer-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  color: #fff;
+  box-shadow: 0 0 0 6px #eff6ff;
+}
+
+.staff-transfer-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.staff-transfer-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.staff-transfer-chip.is-muted {
+  background: #eef2f7;
+  color: #6b859e;
+}
+
+.staff-transfer-chip.is-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.staff-transfer-chip.is-danger {
+  background: #fee2e2;
+  color: #b42318;
+}
+
+.staff-transfer-diff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  border: 1.5px solid #e3e9f3;
+  background: #f7f9fc;
+}
+
+.staff-transfer-diff span {
+  color: #6b859e;
+  font-weight: 600;
+}
+
+.staff-transfer-diff strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-transfer-diff.is-up {
+  background: #fffbeb;
+  border-color: #fcd9a0;
+}
+
+.staff-transfer-diff.is-up strong {
+  color: #b45309;
+}
+
+.staff-transfer-diff.is-down {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.staff-transfer-diff.is-down strong {
+  color: #15803d;
+}
+
+.staff-transfer-diff.is-same strong {
+  color: #0f2b52;
+}
+
+.staff-transfer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1.5px solid #e3e9f3;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.staff-transfer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.staff-transfer-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.staff-transfer-section-title::before {
+  content: '';
+  width: 4px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #60a5fa, #2563eb);
+}
+
+.staff-transfer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.staff-transfer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f7f9fc;
+  min-width: 0;
+}
+
+.staff-transfer-field span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b859e;
+}
+
+.staff-transfer-field strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f2b52;
+  overflow-wrap: anywhere;
+}
+
+.staff-transfer-field strong.is-danger {
+  color: #b42318;
+}
+
+.staff-transfer-field strong.is-success {
+  color: #15803d;
+}
+
+.staff-transfer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.staff-transfer-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+}
+
+.staff-transfer-tag.result-good {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.staff-transfer-tag.result-wear {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.staff-transfer-tag.result-damaged,
+.staff-transfer-tag.result-missing {
+  background: #fff5f5;
+  color: #b42318;
+  border-color: #fecaca;
+}
+
+.staff-transfer-tag.result-not_applicable {
+  background: #f1f5f9;
+  color: #6b859e;
+  border-color: #e2e8f0;
+}
+
+.staff-transfer-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.staff-transfer-issues li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  font-size: 12.5px;
+}
+
+.staff-transfer-issues li span {
+  color: #7f1d1d;
+}
+
+.staff-transfer-issues li strong {
+  color: #b42318;
+  white-space: nowrap;
+}
+
+.staff-transfer-photos {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.staff-transfer-photo {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1.5px solid #e3e9f3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f7f9fc;
+  cursor: zoom-in;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.staff-transfer-photo:hover {
+  transform: translateY(-1px);
+  border-color: #93c5fd;
+}
+
+.staff-transfer-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.staff-transfer-photo span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 43, 82, 0.55);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.staff-transfer-muted {
+  margin: 0;
+  font-size: 12px;
+  color: #6b859e;
+}
+
+.staff-transfer-section .staff-confirm-detail-row.is-note {
+  margin-top: 0;
+  font-size: 13px;
+}
+
+.staff-transfer-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+}
+
+.staff-transfer-info svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #1d4ed8;
+}
+
+.staff-transfer-info p {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #1e3a8a;
+}
+
+.staff-transfer-body .staff-form-error {
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .staff-transfer-route {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-transfer-arrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+
+  .staff-transfer-photos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 340px) {
+  .staff-transfer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .staff-form-actions {
   display: flex;
   gap: 10px;
@@ -2800,6 +3216,20 @@
   max-height: calc(100vh - 32px);
   padding: 22px;
   border-radius: 22px;
+}
+
+.staff-modal.staff-modal-transfer {
+  width: 600px;
+  height: auto;
+  max-height: calc(100vh - 32px);
+  padding: 22px;
+  border-radius: 22px;
+}
+
+.staff-modal-transfer .staff-modal-header {
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+  border-bottom: var(--staff-modal-divider);
 }
 
 .staff-modal.staff-modal-wide {
