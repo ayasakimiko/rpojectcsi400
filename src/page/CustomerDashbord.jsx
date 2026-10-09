@@ -1151,7 +1151,21 @@ function getRequestTimeline(kind, request) {
   ]
 }
 
-function RequestTimeline({ kind, request }) {
+const STEP_COMPACT_LABEL = {
+  เจ้าหน้าที่รับเรื่อง: 'รับเรื่อง',
+  [REQUEST_TIMELINE_PENDING_FINAL_LABEL]: 'รอผล',
+}
+
+function formatStepDate(value) {
+  const date = new Date(value)
+  return {
+    date: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }),
+    time: date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+  }
+}
+
+// Horizontal o---o---o progress; `compact` is the slim version used inside request rows.
+function RequestTimeline({ kind, request, compact = false }) {
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
 
@@ -1159,44 +1173,65 @@ function RequestTimeline({ kind, request }) {
   const statusLabel = kind === 'maintenance' ? MAINTENANCE_STATUS_LABEL[request.status] : TENANT_REQUEST_STATUS_LABEL[request.status]
   const lastStep = timeline[timeline.length - 1]
   const totalMs = lastStep.done ? new Date(lastStep.date).getTime() - new Date(timeline[0].date).getTime() : null
+  const currentIndex = timeline.findIndex((step) => !step.done)
+  const finalTone = ['rejected', 'cancelled'].includes(request.status)
+    ? 'danger'
+    : ['approved', 'done'].includes(request.status)
+      ? 'success'
+      : ''
 
   return (
-    <div className="dashboard-request-log">
-      <div className="dashboard-request-log-header">
-        <span className="dashboard-request-log-title">สถานะปัจจุบัน</span>
-        <span className={`dashboard-badge status-${statusBadgeClass}`}>{statusLabel || request.status}</span>
-      </div>
-      <div className="dashboard-request-log-items">
+    <div className={`dashboard-progress${compact ? ' is-compact' : ''}`}>
+      {!compact && (
+        <div className="dashboard-progress-head">
+          <span>สถานะปัจจุบัน</span>
+          <span className={`dashboard-badge status-${statusBadgeClass}`}>{statusLabel || request.status}</span>
+        </div>
+      )}
+      <ol className="dashboard-stepper">
         {timeline.map((step, index) => {
           const prevStep = timeline[index - 1]
           const stepMs =
             step.done && prevStep?.done ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
+          const isLast = index === timeline.length - 1
+          const classes = [
+            'dashboard-step',
+            step.done ? 'is-done' : '',
+            index === currentIndex ? 'is-current' : '',
+            timeline[index + 1]?.done ? 'is-line-done' : '',
+            isLast && step.done && finalTone ? `is-${finalTone}` : '',
+          ]
+            .filter(Boolean)
+            .join(' ')
           return (
-            <div
-              key={step.label + index}
-              className={`dashboard-request-log-item${step.done ? '' : ' is-pending'}`}
-            >
-              <span className="dashboard-request-log-dot" />
-              <div className="dashboard-request-log-content">
-                <p className="dashboard-request-log-label">{step.label}</p>
+            <li key={step.label + index} className={classes}>
+              <span className="dashboard-step-dot" aria-hidden="true">
+                {step.done && (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                    {isLast && finalTone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
+                  </svg>
+                )}
+              </span>
+              <p className="dashboard-step-label">{compact ? STEP_COMPACT_LABEL[step.label] || step.label : step.label}</p>
+              <p className="dashboard-step-date">
                 {step.done ? (
                   <>
-                    <p className="dashboard-request-log-date">{formatDateTime(step.date)}</p>
-                    {stepMs !== null && <p className="dashboard-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
+                    <span>{formatStepDate(step.date).date}</span>
+                    {!compact && <span>{formatStepDate(step.date).time} น.</span>}
                   </>
+                ) : index === currentIndex ? (
+                  'กำลังรอ'
                 ) : (
-                  <p className="dashboard-request-log-date is-pending">ยังไม่ถึงขั้นตอนนี้</p>
+                  '-'
                 )}
-              </div>
-            </div>
+              </p>
+              {!compact && stepMs !== null && <p className="dashboard-step-duration">+{formatRemaining(stepMs)}</p>}
+            </li>
           )
         })}
-      </div>
-      {totalMs !== null && (
-        <p className="dashboard-request-log-total">
-          รวมใช้เวลาทั้งหมด{' '}
-          {formatRemaining(totalMs)}
-        </p>
+      </ol>
+      {!compact && totalMs !== null && (
+        <p className="dashboard-progress-total">รวมใช้เวลาทั้งหมด {formatRemaining(totalMs)}</p>
       )}
     </div>
   )
@@ -2687,7 +2722,7 @@ function CustomerDashbord() {
                 !statusPopup.previousOf && currentIndex !== -1 ? sameTypeRequests[currentIndex + 1] : null
               return (
                 <div className="dashboard-confirm-body dashboard-status-body">
-                  <div className="dashboard-status-hero">
+                  <div className={`dashboard-status-hero is-${content.icon}`}>
                     <div className={`dashboard-confirm-icon is-${content.icon}`}>
                       <svg
                         width="22"
@@ -3566,6 +3601,9 @@ function CustomerDashbord() {
                             </button>
                           )}
                           {renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] && (
+                            <RequestTimeline kind="renew" request={renewRequest} compact />
+                          )}
+                          {renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] && (
                             <button
                               type="button"
                               className="dashboard-maintenance-more"
@@ -3598,6 +3636,9 @@ function CustomerDashbord() {
                               แจ้งย้ายออก
                             </button>
                           )
+                        )}
+                        {moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] && (
+                          <RequestTimeline kind="moveout" request={moveoutRequest} compact />
                         )}
                         {moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] && (
                           <button
@@ -3635,6 +3676,7 @@ function CustomerDashbord() {
                             </button>
                           )
                         )}
+                        {moveRoomRequest && <RequestTimeline kind="move_room" request={moveRoomRequest} compact />}
                         {moveRoomRequest && (
                           <button
                             type="button"
