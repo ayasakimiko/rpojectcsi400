@@ -2687,7 +2687,7 @@ function CustomerDashbord() {
                 !statusPopup.previousOf && currentIndex !== -1 ? sameTypeRequests[currentIndex + 1] : null
               return (
                 <div className="dashboard-confirm-body dashboard-status-body">
-                  <div className="dashboard-status-hero">
+                  <div className={`dashboard-status-hero is-${content.icon}`}>
                     <div className={`dashboard-confirm-icon is-${content.icon}`}>
                       <svg
                         width="22"
@@ -2700,10 +2700,22 @@ function CustomerDashbord() {
                         strokeLinejoin="round"
                         aria-hidden="true"
                       >
-                        <StatusIconPaths tone={content.icon} />
+                        {statusPopup.status === 'pending' ? (
+                          <>
+                            <circle cx="12" cy="12" r="9" />
+                            <polyline points="12 7 12 12 15 14" />
+                          </>
+                        ) : <StatusIconPaths tone={content.icon} />}
                       </svg>
                     </div>
-                    <p className="dashboard-confirm-message">{content.message}</p>
+                    <div className="dashboard-status-copy">
+                      <p className="dashboard-status-eyebrow">
+                        {TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]
+                          ? `คำขอ${TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]}`
+                          : statusPopup.kind === 'maintenance' ? 'รายการแจ้งซ่อม' : 'สถานะสัญญาเช่า'}
+                      </p>
+                      <p className="dashboard-confirm-message">{content.message}</p>
+                    </div>
                   </div>
                   <div className="dashboard-status-scroll" key={statusPopup.request?.id ?? statusPopup.kind}>
                     {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
