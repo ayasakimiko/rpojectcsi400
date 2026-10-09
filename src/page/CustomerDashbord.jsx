@@ -1457,6 +1457,7 @@ function CustomerDashbord() {
   const [historySearch, setHistorySearch] = useState('')
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
   const [historyPageByBooking, setHistoryPageByBooking] = useState({})
+  const [historyBookingId, setHistoryBookingId] = useState(null)
 
   const [receiptRequest, setReceiptRequest] = useState(null)
   const [receiptGenerating, setReceiptGenerating] = useState(false)
@@ -2246,6 +2247,32 @@ function CustomerDashbord() {
     })
     return { ...entry, payments, hasOriginalPayments: entry.payments.length > 0 }
   })
+
+  // Each booking is a separate room stay; a room transfer closes one booking and opens another.
+  const approvedMoveRequests = tenantRequests.filter(
+    (request) => request.type === 'move_room' && request.status === 'approved',
+  )
+  const getBookingTransfer = (index) => {
+    const entry = rentalHistory[index]
+    const newer = rentalHistory[index - 1]
+    const older = rentalHistory[index + 1]
+    return {
+      movedOut: newer
+        ? approvedMoveRequests.find(
+            (request) => request.room_number === entry.room_number && request.target_room_number === newer.room_number,
+          )
+        : null,
+      movedIn: older
+        ? approvedMoveRequests.find(
+            (request) => request.target_room_number === entry.room_number && request.room_number === older.room_number,
+          )
+        : null,
+    }
+  }
+  const activeHistoryIndex = Math.max(
+    0,
+    filteredRentalHistory.findIndex((entry) => entry.booking_id === historyBookingId),
+  )
 
   const reminders = []
   if (room?.is_booked) {
@@ -3342,7 +3369,35 @@ function CustomerDashbord() {
                   {rentalHistory.length === 0 ? (
                     <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
                   ) : (
-                    filteredRentalHistory.map((entry) => {
+                    <>
+                    {filteredRentalHistory.length > 1 && (
+                      <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
+                        {filteredRentalHistory.map((entry, index) => {
+                          const { movedOut } = getBookingTransfer(index)
+                          return (
+                            <button
+                              key={entry.booking_id}
+                              type="button"
+                              role="tab"
+                              aria-selected={index === activeHistoryIndex}
+                              className={`dashboard-history-tab${index === activeHistoryIndex ? ' is-active' : ''}`}
+                              onClick={() => setHistoryBookingId(entry.booking_id)}
+                            >
+                              <strong>ห้อง {entry.room_number}</strong>
+                              <span>
+                                {index === 0 && room?.is_booked
+                                  ? 'ห้องปัจจุบัน'
+                                  : movedOut
+                                    ? `ห้องเดิม · ย้ายออก ${formatDate(movedOut.completed_at)}`
+                                    : 'ห้องเดิม'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {[filteredRentalHistory[activeHistoryIndex]].map((entry) => {
+                      const { movedIn, movedOut } = getBookingTransfer(activeHistoryIndex)
                       const originalEntry =
                         rentalHistoryWithDue.find((item) => item.booking_id === entry.booking_id) || entry
                       const totalPages = Math.max(1, Math.ceil(entry.payments.length / RENTAL_HISTORY_PAGE_SIZE))
@@ -3355,33 +3410,43 @@ function CustomerDashbord() {
                         setHistoryPageByBooking((prev) => ({ ...prev, [entry.booking_id]: page }))
                       return (
                         <div key={entry.booking_id} className="dashboard-rental-entry">
+                          <div className="dashboard-rental-entry-header">
+                            <p className="dashboard-rental-entry-title">
+                              ห้อง {entry.room_number}
+                              {entry.rental_start_date && (movedOut || entry.rental_end_date) && (
+                                <span className="dashboard-rental-entry-dates">
+                                  {' '}
+                                  ({formatDate(entry.rental_start_date)} -{' '}
+                                  {formatDate(movedOut ? movedOut.completed_at : entry.rental_end_date)})
+                                </span>
+                              )}
+                            </p>
+                            {originalEntry.payments.some((payment) => payment.status === 'paid') && (
+                              <button
+                                type="button"
+                                className="dashboard-action-btn is-ghost dashboard-receipt-all-btn"
+                                disabled={receiptGenerating}
+                                onClick={() => requestCombinedReceipt(originalEntry)}
+                              >
+                                {receiptGenerating && receiptRequest?.mode === 'all' && receiptRequest.entry.booking_id === entry.booking_id
+                                  ? 'กำลังสร้าง...'
+                                  : 'ดาวน์โหลดใบเสร็จรวม (PDF)'}
+                              </button>
+                            )}
+                          </div>
+                          {(movedIn || movedOut) && (
+                            <p className="dashboard-history-transfer-note">
+                              {movedOut
+                                ? `ย้ายไปห้อง ${movedOut.target_room_number} เมื่อ ${formatDate(movedOut.completed_at)} — รายการด้านล่างเป็นของห้อง ${entry.room_number} เท่านั้น`
+                                : `ย้ายมาจากห้อง ${movedIn.room_number} เมื่อ ${formatDate(movedIn.completed_at)} — ดูประวัติห้องเดิมได้จากแท็บด้านบน`}
+                            </p>
+                          )}
                           {entry.payments.length === 0 ? (
                             <p className="dashboard-empty">
                               {entry.hasOriginalPayments ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีประวัติการชำระค่าเช่า'}
                             </p>
                           ) : (
                             <>
-                              <div className="dashboard-rental-entry-header">
-                                <p className="dashboard-rental-entry-title">
-                                  ห้อง {entry.room_number}
-                                  {entry.rental_start_date && entry.rental_end_date && (
-                                    <span className="dashboard-rental-entry-dates">
-                                      {' '}
-                                      ({formatDate(entry.rental_start_date)} - {formatDate(entry.rental_end_date)})
-                                    </span>
-                                  )}
-                                </p>
-                                <button
-                                  type="button"
-                                  className="dashboard-action-btn is-ghost dashboard-receipt-all-btn"
-                                  disabled={receiptGenerating}
-                                  onClick={() => requestCombinedReceipt(originalEntry)}
-                                >
-                                  {receiptGenerating && receiptRequest?.mode === 'all' && receiptRequest.entry.booking_id === entry.booking_id
-                                    ? 'กำลังสร้าง...'
-                                    : 'ดาวน์โหลดใบเสร็จรวม (PDF)'}
-                                </button>
-                              </div>
                               <div className="table-responsive">
                                 <table className="dashboard-table">
                                   <thead>
@@ -3469,7 +3534,8 @@ function CustomerDashbord() {
                           )}
                         </div>
                       )
-                    })
+                    })}
+                    </>
                   )}
                 </div>
               </div>

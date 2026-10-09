@@ -1099,6 +1099,70 @@
   color: #6b859e;
 }
 
+.dashboard-history-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.dashboard-history-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #dce9fb;
+  background: #f8fbff;
+  color: #6b859e;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.dashboard-history-tab strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.dashboard-history-tab span {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.dashboard-history-tab:hover {
+  border-color: #93c5fd;
+}
+
+.dashboard-history-tab.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+}
+
+.dashboard-history-tab.is-active strong,
+.dashboard-history-tab.is-active span {
+  color: #1d4ed8;
+}
+
+.dashboard-history-transfer-note {
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
 .dashboard-receipt-all-btn {
   padding: 6px 12px;
   font-size: 12px;
