@@ -938,298 +938,235 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
       <Modal title="ยืนยันการอนุมัติย้ายห้อง" onClose={onClose} variant="transfer">
         {(requestClose) => (
           <div className="staff-transfer-body">
-            <div className="staff-transfer-hero">
-              <div className="staff-confirm-icon is-success">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M17 3l4 4-4 4" />
-                  <path d="M3 7h18" />
-                  <path d="M7 21l-4-4 4-4" />
-                  <path d="M21 17H3" />
-                </svg>
+            <div className="staff-transfer-top">
+              <div className="staff-transfer-hero">
+                <div className="staff-confirm-icon is-success">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M17 3l4 4-4 4" />
+                    <path d="M3 7h18" />
+                    <path d="M7 21l-4-4 4-4" />
+                    <path d="M21 17H3" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="staff-confirm-message">ยืนยันอนุมัติคำขอย้ายห้อง</p>
+                  <p className="staff-confirm-note">ตรวจสอบรายละเอียดให้ครบถ้วนก่อนกดยืนยัน</p>
+                </div>
               </div>
-              <p className="staff-confirm-message">ยืนยันอนุมัติคำขอย้ายห้อง</p>
-              <p className="staff-confirm-note">ตรวจสอบรายละเอียดด้านล่างให้ครบถ้วนก่อนกดยืนยัน</p>
+              <div className="staff-transfer-route">
+                <div className="staff-transfer-room is-source">
+                  <span className="staff-transfer-room-label">ห้องเดิม</span>
+                  <strong className="staff-transfer-room-number">{request.room_number}</strong>
+                  <span className="staff-transfer-room-price">
+                    {request.source_room_price != null ? `฿${formatCurrency(request.source_room_price)}` : '-'}
+                    <small>/เดือน</small>
+                  </span>
+                  <span className="staff-transfer-chip is-muted">จะเป็นห้องว่าง</span>
+                </div>
+                <div className="staff-transfer-arrow" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M5 12h14" />
+                    <path d="M13 6l6 6-6 6" />
+                  </svg>
+                </div>
+                <div className={`staff-transfer-room is-target${targetBooked ? ' is-unavailable' : ''}`}>
+                  <span className="staff-transfer-room-label">ห้องใหม่</span>
+                  <strong className="staff-transfer-room-number">{request.target_room_number}</strong>
+                  <span className="staff-transfer-room-price">
+                    {request.target_room_price != null ? `฿${formatCurrency(request.target_room_price)}` : '-'}
+                    <small>/เดือน</small>
+                  </span>
+                  <span className={`staff-transfer-chip ${targetBooked ? 'is-danger' : 'is-success'}`}>
+                    {targetBooked ? 'ไม่ว่างแล้ว' : 'ว่าง พร้อมย้ายเข้า'}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="staff-transfer-route">
-              <div className="staff-transfer-room is-source">
-                <span className="staff-transfer-room-label">ห้องเดิม</span>
-                <strong className="staff-transfer-room-number">{request.room_number}</strong>
-                <span className="staff-transfer-room-price">
-                  {request.source_room_price != null ? `฿${formatCurrency(request.source_room_price)}` : '-'}
-                  <small>/เดือน</small>
-                </span>
-                <span className="staff-transfer-chip is-muted">จะเปลี่ยนเป็นห้องว่าง</span>
-              </div>
-              <div className="staff-transfer-arrow" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M5 12h14" />
-                  <path d="M13 6l6 6-6 6" />
-                </svg>
-              </div>
-              <div className={`staff-transfer-room is-target${targetBooked ? ' is-unavailable' : ''}`}>
-                <span className="staff-transfer-room-label">ห้องใหม่</span>
-                <strong className="staff-transfer-room-number">{request.target_room_number}</strong>
-                <span className="staff-transfer-room-price">
-                  {request.target_room_price != null ? `฿${formatCurrency(request.target_room_price)}` : '-'}
-                  <small>/เดือน</small>
-                </span>
-                <span className={`staff-transfer-chip ${targetBooked ? 'is-danger' : 'is-success'}`}>
-                  {targetBooked ? 'ห้องไม่ว่างแล้ว' : 'ห้องว่าง พร้อมย้ายเข้า'}
-                </span>
-              </div>
-            </div>
-
-            {rentDiff !== null && (
-              <div
-                className={`staff-transfer-diff ${rentDiff > 0 ? 'is-up' : rentDiff < 0 ? 'is-down' : 'is-same'}`}
-              >
-                <span>ส่วนต่างค่าเช่า</span>
-                <strong>
-                  {rentDiff === 0
-                    ? 'เท่าเดิม'
-                    : `${rentDiff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(rentDiff))} / เดือน`}
-                </strong>
-              </div>
-            )}
-
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ข้อมูลผู้เช่า</h4>
-              <div className="staff-transfer-grid">
-                <div className="staff-transfer-field">
-                  <span>ชื่อผู้เช่า</span>
-                  <strong>
-                    {request.first_name} {request.last_name}
-                  </strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>เบอร์โทร</span>
-                  <strong>{request.phone || '-'}</strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>เงินประกัน</span>
-                  <strong>
-                    {request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}
-                  </strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>ยอดค้างชำระห้องเดิม</span>
-                  <strong className={hasDue ? 'is-danger' : 'is-success'}>
-                    {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มียอดค้าง'}
-                  </strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">สัญญาเช่าที่จะย้ายไปห้องใหม่</h4>
-              <div className="staff-transfer-grid">
-                <div className="staff-transfer-field">
-                  <span>เริ่มเช่าห้องเดิม</span>
-                  <strong>{formatDate(request.source_rental_start_date)}</strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>สิ้นสุดสัญญา</span>
-                  <strong>{formatDate(contractEnd)}</strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>ระยะเวลาคงเหลือ</span>
-                  <strong className={contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''}>
-                    {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
-                  </strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>ชำระล่วงหน้าถึง</span>
-                  <strong>{request.source_prepaid_until ? formatDate(request.source_prepaid_until) : '-'}</strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">รายละเอียดห้องใหม่ ({request.target_room_number})</h4>
-              <div className="staff-transfer-grid">
-                <div className="staff-transfer-field">
-                  <span>ค่าไฟ</span>
-                  <strong>
-                    {request.target_room_electricity_unit_price != null
-                      ? `฿${formatCurrency(request.target_room_electricity_unit_price)} / หน่วย`
-                      : '-'}
-                  </strong>
-                </div>
-                <div className="staff-transfer-field">
-                  <span>ค่าน้ำ</span>
-                  <strong>
-                    {request.target_room_water_price != null
-                      ? `฿${formatCurrency(request.target_room_water_price)} / เดือน`
-                      : '-'}
-                  </strong>
-                </div>
-              </div>
-              {(amenities.length > 0 || bedCount > 0) && (
-                <div className="staff-transfer-tags">
-                  {bedCount > 0 && <span className="staff-transfer-tag">เตียง {bedCount}</span>}
-                  {amenities.map((item) => (
-                    <span key={item.key} className="staff-transfer-tag">
-                      {item.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="staff-transfer-section">
-              <div className="staff-transfer-section-head">
-                <h4 className="staff-transfer-section-title">ผลตรวจสภาพห้องเดิม</h4>
-                {inspection && (
-                  <span className={`staff-transfer-chip ${issueItems.length > 0 ? 'is-danger' : 'is-success'}`}>
-                    {issueItems.length > 0 ? `พบปัญหา ${issueItems.length} รายการ` : 'สภาพเรียบร้อย'}
+            <div className="staff-transfer-scroll">
+              <div className="staff-transfer-summary">
+                {rentDiff !== null && (
+                  <span
+                    className={`staff-transfer-chip ${rentDiff > 0 ? 'is-warning' : rentDiff < 0 ? 'is-success' : 'is-muted'}`}
+                  >
+                    {rentDiff === 0
+                      ? 'ค่าเช่าเท่าเดิม'
+                      : `ค่าเช่า ${rentDiff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(rentDiff))}/เดือน`}
                   </span>
                 )}
+                {request.target_room_electricity_unit_price != null && (
+                  <span className="staff-transfer-tag">ไฟ ฿{formatCurrency(request.target_room_electricity_unit_price)}/หน่วย</span>
+                )}
+                {request.target_room_water_price != null && (
+                  <span className="staff-transfer-tag">น้ำ ฿{formatCurrency(request.target_room_water_price)}</span>
+                )}
+                {bedCount > 0 && <span className="staff-transfer-tag">เตียง {bedCount}</span>}
+                {amenities.map((item) => (
+                  <span key={item.key} className="staff-transfer-tag">
+                    {item.label}
+                  </span>
+                ))}
               </div>
-              {inspectionLoading ? (
-                <p className="staff-transfer-muted">กำลังโหลดผลตรวจห้อง...</p>
-              ) : inspectionError ? (
-                <p className="staff-form-error">{inspectionError}</p>
-              ) : inspection ? (
-                <>
-                  {resultCounts.length > 0 && (
-                    <div className="staff-transfer-tags">
-                      {resultCounts.map((option) => (
-                        <span key={option.key} className={`staff-transfer-tag result-${option.key}`}>
-                          {option.label} {option.count}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {issueItems.length > 0 && (
-                    <ul className="staff-transfer-issues">
-                      {issueItems.map((item) => (
-                        <li key={item.key}>
-                          <span>{item.label}</span>
-                          <strong>{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {inspection.damage_note && (
-                    <div className="staff-confirm-detail-row is-note">
-                      <span>บันทึกความเสียหาย</span>
-                      <strong>{inspection.damage_note}</strong>
-                    </div>
-                  )}
-                  {photos.length > 0 && (
-                    <div className="staff-transfer-photos">
-                      {photos.slice(0, 6).map((photo, index) => (
-                        <button
-                          type="button"
-                          key={photo.url}
-                          className="staff-transfer-photo"
-                          onClick={() => setPhotoIndex(index)}
-                          aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
-                        >
-                          <img src={photo.url} alt="" />
-                          {index === 5 && photos.length > 6 && <span>+{photos.length - 6}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <p className="staff-transfer-muted">
-                    ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
-                    {inspection.inspected_by_name ? ` โดย ${inspection.inspected_by_name}` : ''}
+
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
+                <dl className="staff-transfer-list">
+                  <div>
+                    <dt>ผู้เช่า</dt>
+                    <dd>
+                      {request.first_name} {request.last_name}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>เบอร์โทร</dt>
+                    <dd>{request.phone || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>เงินประกัน</dt>
+                    <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>ยอดค้างห้องเดิม</dt>
+                    <dd className={hasDue ? 'is-danger' : 'is-success'}>
+                      {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>สิ้นสุดสัญญา</dt>
+                    <dd>{formatDate(contractEnd)}</dd>
+                  </div>
+                  <div>
+                    <dt>คงเหลือ</dt>
+                    <dd
+                      className={
+                        contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''
+                      }
+                    >
+                      {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>ชำระล่วงหน้าถึง</dt>
+                    <dd>{request.source_prepaid_until ? formatDate(request.source_prepaid_until) : '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>ส่งคำขอ</dt>
+                    <dd>{formatDateTime(request.created_at)}</dd>
+                  </div>
+                </dl>
+                {request.note && (
+                  <p className="staff-transfer-note">
+                    <span>หมายเหตุ:</span> {request.note}
                   </p>
-                </>
-              ) : (
-                <p className="staff-transfer-muted">ยังไม่มีผลตรวจห้อง</p>
-              )}
-            </section>
+                )}
+              </section>
 
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ข้อมูลคำขอ</h4>
-              <div className="staff-transfer-grid">
-                <div className="staff-transfer-field">
-                  <span>วันที่ส่งคำขอ</span>
-                  <strong>{formatDateTime(request.created_at)}</strong>
+              <section className="staff-transfer-section">
+                <div className="staff-transfer-section-head">
+                  <h4 className="staff-transfer-section-title">ผลตรวจห้อง {request.room_number}</h4>
+                  {inspection && (
+                    <span className={`staff-transfer-chip ${issueItems.length > 0 ? 'is-danger' : 'is-success'}`}>
+                      {issueItems.length > 0 ? `พบปัญหา ${issueItems.length} รายการ` : 'สภาพเรียบร้อย'}
+                    </span>
+                  )}
                 </div>
-                <div className="staff-transfer-field">
-                  <span>สถานะ</span>
-                  <strong>{TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}</strong>
-                </div>
-              </div>
-              <div className="staff-confirm-detail-row is-note">
-                <span>หมายเหตุจากผู้เช่า</span>
-                <strong>{request.note || '-'}</strong>
-              </div>
-            </section>
+                {inspectionLoading ? (
+                  <p className="staff-transfer-muted">กำลังโหลดผลตรวจห้อง...</p>
+                ) : inspectionError ? (
+                  <p className="staff-form-error">{inspectionError}</p>
+                ) : inspection ? (
+                  <>
+                    {resultCounts.length > 0 && (
+                      <div className="staff-transfer-tags">
+                        {resultCounts.map((option) => (
+                          <span key={option.key} className={`staff-transfer-tag result-${option.key}`}>
+                            {option.label} {option.count}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {issueItems.length > 0 && (
+                      <ul className="staff-transfer-issues">
+                        {issueItems.map((item) => (
+                          <li key={item.key}>
+                            <span>{item.label}</span>
+                            <strong>{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {inspection.damage_note && (
+                      <p className="staff-transfer-note">
+                        <span>ความเสียหาย:</span> {inspection.damage_note}
+                      </p>
+                    )}
+                    {photos.length > 0 && (
+                      <div className="staff-transfer-photos">
+                        {photos.slice(0, 6).map((photo, index) => (
+                          <button
+                            type="button"
+                            key={photo.url}
+                            className="staff-transfer-photo"
+                            onClick={() => setPhotoIndex(index)}
+                            aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
+                          >
+                            <img src={photo.url} alt="" />
+                            {index === 5 && photos.length > 6 && <span>+{photos.length - 6}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <p className="staff-transfer-muted">
+                      ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
+                      {inspection.inspected_by_name ? ` โดย ${inspection.inspected_by_name}` : ''}
+                    </p>
+                  </>
+                ) : (
+                  <p className="staff-transfer-muted">ยังไม่มีผลตรวจห้อง</p>
+                )}
+              </section>
 
-            <div className="staff-transfer-info">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 16v-4M12 8h.01" />
-              </svg>
-              <p>
-                เมื่อยืนยัน ผู้เช่าจะถูกย้ายไปห้อง {request.target_room_number} ทันที โดยใช้วันสิ้นสุดสัญญาและยอดชำระล่วงหน้าเดิม
-                และห้อง {request.room_number} จะเปลี่ยนเป็นห้องว่าง
+              <p className="staff-transfer-info">
+                ผู้เช่าจะย้ายไปห้อง {request.target_room_number} ทันที โดยใช้สัญญาและยอดชำระล่วงหน้าเดิม ส่วนห้อง{' '}
+                {request.room_number} จะเปลี่ยนเป็นห้องว่าง
               </p>
             </div>
 
-            {targetBooked && (
-              <div className="staff-confirm-warning">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+            <div className="staff-transfer-footer">
+              {targetBooked && (
+                <p className="staff-form-error">
+                  ห้อง {request.target_room_number} มีผู้เช่าแล้ว ไม่สามารถอนุมัติได้ กรุณาปฏิเสธคำขอหรือติดต่อผู้เช่า
+                </p>
+              )}
+              {error && <p className="staff-form-error">{error}</p>}
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className="staff-action-btn is-primary"
+                  disabled={processing || targetBooked}
+                  onClick={onConfirm}
                 >
-                  <path d="M12 9v4M12 17h.01" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-                <p>ห้อง {request.target_room_number} มีผู้เช่าแล้ว ไม่สามารถอนุมัติการย้ายได้ กรุณาปฏิเสธคำขอหรือติดต่อผู้เช่า</p>
+                  {processing ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติย้ายห้อง'}
+                </button>
               </div>
-            )}
-
-            {error && <p className="staff-form-error">{error}</p>}
-            <div className="staff-form-actions">
-              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                disabled={processing || targetBooked}
-                onClick={onConfirm}
-              >
-                {processing ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติย้ายห้อง'}
-              </button>
             </div>
           </div>
         )}
