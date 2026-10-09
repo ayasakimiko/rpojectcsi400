@@ -2126,6 +2126,87 @@
   overflow-wrap: anywhere;
 }
 
+/* Request status popup: hero and actions stay put, details scroll */
+.dashboard-modal.dashboard-modal-status {
+  max-width: 440px;
+  max-height: min(620px, calc(100vh - 32px));
+  overflow: hidden;
+}
+
+.dashboard-modal-status .dashboard-modal-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.dashboard-status-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.dashboard-status-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 4px 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #93c5fd #f1f5f9;
+}
+
+.dashboard-status-hero {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding-bottom: 10px;
+  text-align: left;
+}
+
+.dashboard-status-hero .dashboard-confirm-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+}
+
+.dashboard-status-hero .dashboard-confirm-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dashboard-status-body .dashboard-maintenance-detail-card {
+  margin: 0;
+  padding: 8px 14px;
+}
+
+.dashboard-status-body .dashboard-maintenance-detail-row {
+  font-size: 12.5px;
+}
+
+.dashboard-status-body .dashboard-maintenance-detail-row + .dashboard-maintenance-detail-row {
+  padding-top: 6px;
+}
+
+.dashboard-status-body .dashboard-maintenance-detail-row.is-note {
+  margin-top: 6px;
+  padding: 8px 10px;
+}
+
+.dashboard-status-body .dashboard-request-log {
+  margin: 0;
+}
+
+.dashboard-status-body .dashboard-form-actions {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
 /* Previous tenant request (status popup) */
 .dashboard-previous-request {
   width: 100%;
