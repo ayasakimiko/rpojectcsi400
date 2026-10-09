@@ -9,6 +9,7 @@ import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
+import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -793,6 +794,62 @@ const RENEW_PAYMENT_TYPE_LABEL = Object.fromEntries(
   RENEW_PAYMENT_TYPE_OPTIONS.map((option) => [option.value, option.label]),
 )
 
+const MOVE_ROOM_REASON_OPTIONS = [
+  { value: 'room_problem', label: 'ห้องเดิมมีปัญหา/ชำรุด' },
+  { value: 'price', label: 'ต้องการห้องราคาที่เหมาะสมขึ้น' },
+  { value: 'amenities', label: 'ต้องการสิ่งอำนวยความสะดวกเพิ่ม' },
+  { value: 'location', label: 'ต้องการชั้นหรือตำแหน่งที่สะดวกขึ้น' },
+  { value: 'noise', label: 'เสียงดัง/ปัญหาเพื่อนบ้าน' },
+  { value: 'other', label: 'อื่นๆ (ระบุในหมายเหตุ)' },
+]
+const MOVE_ROOM_REASON_LABEL = Object.fromEntries(MOVE_ROOM_REASON_OPTIONS.map((option) => [option.value, option.label]))
+const MOVE_ROOM_MAX_DAYS_AHEAD = 60
+
+function formatDateOnly(value) {
+  if (!value) return '-'
+  return new Date(`${value}T00:00:00`).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function formatRentDiff(from, to) {
+  if (from == null || to == null) return null
+  const diff = Number(to) - Number(from)
+  if (!Number.isFinite(diff)) return null
+  if (diff === 0) return { tone: 'same', label: 'ค่าเช่าเท่าเดิม' }
+  return {
+    tone: diff > 0 ? 'up' : 'down',
+    label: `${diff > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ฿${formatCurrency(Math.abs(diff))}/เดือน`,
+  }
+}
+
+function MoveRoomPreview({ currentRoom, targetRoom }) {
+  if (!targetRoom) return null
+  const rentDiff = formatRentDiff(currentRoom?.price, targetRoom.price)
+  const amenities = AMENITIES.filter((amenity) => targetRoom[amenity.key])
+  return (
+    <div className="dashboard-move-preview">
+      <div className="dashboard-move-preview-head">
+        <div>
+          <span className="dashboard-move-preview-label">ห้องที่เลือก</span>
+          <strong className="dashboard-move-preview-room">ห้อง {targetRoom.room_number}</strong>
+        </div>
+        <div className="dashboard-move-preview-price">
+          <strong>฿{formatCurrency(targetRoom.price)}</strong>
+          <span>/เดือน</span>
+        </div>
+      </div>
+      {rentDiff && <span className={`dashboard-move-diff is-${rentDiff.tone}`}>{rentDiff.label} จากห้องปัจจุบัน</span>}
+      <div className="dashboard-move-preview-tags">
+        <span>ไฟ ฿{formatCurrency(targetRoom.electricity_unit_price)}/หน่วย</span>
+        <span>น้ำ ฿{formatCurrency(targetRoom.water_price)}/เดือน</span>
+        {Number(targetRoom.bed) > 0 && <span>เตียง {targetRoom.bed}</span>}
+        {amenities.map((amenity) => (
+          <span key={amenity.key}>{amenity.label}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function tenantRequestBadgeClass(status) {
   if (status === 'approved') return 'paid'
   if (status === 'rejected') return 'overdue'
@@ -999,10 +1056,42 @@ function TenantRequestDetailCard({ request, roomNumber }) {
         </div>
       )}
       {request.type === 'move_room' && (
-        <div className="dashboard-maintenance-detail-row">
-          <span>ห้องปลายทาง</span>
-          <strong>{request.target_room_number || '-'}</strong>
-        </div>
+        <>
+          <div className="dashboard-maintenance-detail-row">
+            <span>ห้องปลายทาง</span>
+            <strong>{request.target_room_number || '-'}</strong>
+          </div>
+          {request.target_room_price != null && (
+            <div className="dashboard-maintenance-detail-row">
+              <span>ค่าเช่าห้องใหม่</span>
+              <strong>
+                ฿{formatCurrency(request.target_room_price)}/เดือน
+                {(() => {
+                  const rentDiff = formatRentDiff(request.source_room_price, request.target_room_price)
+                  return rentDiff && rentDiff.tone !== 'same' ? (
+                    <small className={`dashboard-move-diff-inline is-${rentDiff.tone}`}>{rentDiff.label}</small>
+                  ) : null
+                })()}
+              </strong>
+            </div>
+          )}
+          <div className="dashboard-maintenance-detail-row">
+            <span>เหตุผลที่ย้าย</span>
+            <strong>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</strong>
+          </div>
+          <div className="dashboard-maintenance-detail-row">
+            <span>วันที่ต้องการย้าย</span>
+            <strong>{formatDateOnly(request.preferred_move_date)}</strong>
+          </div>
+          {['pending', 'in_progress'].includes(request.status) && (
+            <div className="dashboard-maintenance-detail-row">
+              <span>ตรวจสภาพห้องเดิม</span>
+              <strong className={request.room_inspected ? 'is-success' : 'is-pending'}>
+                {request.room_inspected ? 'ตรวจเรียบร้อยแล้ว' : 'รอเจ้าหน้าที่ตรวจห้อง'}
+              </strong>
+            </div>
+          )}
+        </>
       )}
       {request.type === 'renew' && (
         <>
@@ -1294,6 +1383,9 @@ function CustomerDashbord() {
   const [renewDurationMonths, setRenewDurationMonths] = useState(RENEW_DURATION_OPTIONS[2].value)
   const [renewPaymentType, setRenewPaymentType] = useState(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
   const [targetRoomNumber, setTargetRoomNumber] = useState('')
+  const [moveReason, setMoveReason] = useState('')
+  const [preferredMoveDate, setPreferredMoveDate] = useState('')
+  const [moveDateRange, setMoveDateRange] = useState({ min: null, max: null })
   const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
 
@@ -1627,6 +1719,14 @@ function CustomerDashbord() {
     setActiveRequestType(type)
     setRequestNote('')
     setTargetRoomNumber(String(data?.availableRooms?.[0]?.room_number || ''))
+    setMoveReason('')
+    setPreferredMoveDate('')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    setMoveDateRange({
+      min: today,
+      max: new Date(today.getFullYear(), today.getMonth(), today.getDate() + MOVE_ROOM_MAX_DAYS_AHEAD),
+    })
     setRenewDurationMonths(RENEW_DURATION_OPTIONS[2].value)
     setRenewPaymentType(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
     setRequestError('')
@@ -1638,9 +1738,23 @@ function CustomerDashbord() {
       setRequestError('กรุณากรอกรายละเอียดการย้ายออก')
       return
     }
-    if (activeRequestType === 'move_room' && !targetRoomNumber) {
-      setRequestError('กรุณาเลือกห้องที่ต้องการย้าย')
-      return
+    if (activeRequestType === 'move_room') {
+      if (!targetRoomNumber) {
+        setRequestError('กรุณาเลือกห้องที่ต้องการย้าย')
+        return
+      }
+      if (!moveReason) {
+        setRequestError('กรุณาเลือกเหตุผลที่ต้องการย้ายห้อง')
+        return
+      }
+      if (!preferredMoveDate) {
+        setRequestError('กรุณาเลือกวันที่ต้องการย้าย')
+        return
+      }
+      if (moveReason === 'other' && !requestNote.trim()) {
+        setRequestError('กรุณาระบุเหตุผลเพิ่มเติมในหมายเหตุ')
+        return
+      }
     }
     const token = sessionStorage.getItem('token')
     setRequestSubmitting(true)
@@ -1653,6 +1767,8 @@ function CustomerDashbord() {
       }
       if (activeRequestType === 'move_room') {
         payload.target_room_number = Number(targetRoomNumber)
+        payload.move_reason = moveReason
+        payload.preferred_move_date = preferredMoveDate
       }
       const { data: result } = await axios.post('/api/customer/requests', payload, {
         headers: { Authorization: `Bearer ${token}` },
@@ -3476,12 +3592,58 @@ function CustomerDashbord() {
                                 {availableRooms.length === 0 && (
                                   <p className="dashboard-form-error">ขณะนี้ไม่มีห้องว่างให้เลือก</p>
                                 )}
+                                <MoveRoomPreview
+                                  currentRoom={room}
+                                  targetRoom={availableRooms.find(
+                                    (availableRoom) => String(availableRoom.room_number) === targetRoomNumber,
+                                  )}
+                                />
+                                <label htmlFor="move-room-reason">
+                                  เหตุผลที่ต้องการย้าย <span className="dashboard-required">*</span>
+                                </label>
+                                <select
+                                  id="move-room-reason"
+                                  value={moveReason}
+                                  onChange={(event) => {
+                                    setMoveReason(event.target.value)
+                                    if (requestError) setRequestError('')
+                                  }}
+                                  required
+                                >
+                                  <option value="" disabled>เลือกเหตุผล</option>
+                                  {MOVE_ROOM_REASON_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <label>
+                                  วันที่ต้องการย้าย <span className="dashboard-required">*</span>
+                                </label>
+                                <ThaiDatePicker
+                                  className="dashboard-date-input"
+                                  value={preferredMoveDate}
+                                  onChange={(date) => {
+                                    setPreferredMoveDate(date)
+                                    if (requestError) setRequestError('')
+                                  }}
+                                  minDate={moveDateRange.min}
+                                  maxDate={moveDateRange.max}
+                                />
+                                <p className="dashboard-move-hint">
+                                  สัญญาเช่าเดิม{room?.rental_end_date ? ` (สิ้นสุด ${formatDate(room.rental_end_date)})` : ''} จะย้ายไปใช้กับห้องใหม่
+                                  และเจ้าหน้าที่จะตรวจสภาพห้องปัจจุบันก่อนอนุมัติ
+                                </p>
                               </>
                             )}
                             <label>
                               {activeRequestType === 'moveout' ? (
                                 <>
                                   รายละเอียดการย้ายออก <span className="dashboard-required">*</span>
+                                </>
+                              ) : activeRequestType === 'move_room' && moveReason === 'other' ? (
+                                <>
+                                  หมายเหตุ <span className="dashboard-required">*</span>
                                 </>
                               ) : (
                                 'หมายเหตุ (ถ้ามี)'
@@ -3498,7 +3660,9 @@ function CustomerDashbord() {
                               placeholder={
                                 activeRequestType === 'moveout'
                                   ? 'เช่น เหตุผลที่ย้ายออก และวันที่ต้องการย้ายออก'
-                                  : 'ระบุรายละเอียดเพิ่มเติม...'
+                                  : activeRequestType === 'move_room'
+                                    ? 'เช่น ปัญหาของห้องเดิม หรือสิ่งที่ต้องการในห้องใหม่'
+                                    : 'ระบุรายละเอียดเพิ่มเติม...'
                               }
                               required={activeRequestType === 'moveout'}
                             />
@@ -3513,7 +3677,9 @@ function CustomerDashbord() {
                                 disabled={
                                   requestSubmitting
                                   || (activeRequestType === 'moveout' && !requestNote.trim())
-                                  || (activeRequestType === 'move_room' && (!targetRoomNumber || availableRooms.length === 0))
+                                  || (activeRequestType === 'move_room'
+                                    && (!targetRoomNumber || availableRooms.length === 0 || !moveReason || !preferredMoveDate
+                                      || (moveReason === 'other' && !requestNote.trim())))
                                 }
                               >
                                 {requestSubmitting ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอ'}
