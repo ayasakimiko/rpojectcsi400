@@ -368,27 +368,6 @@ function buildAdminMaintenanceNotifs(request) {
   ]
 }
 
-function buildAdminInspectionNotifs(inspection) {
-  if (!inspection.tenant_request_id || inspection.status !== 'pending') return []
-  return [
-    {
-      key: `inspection-${inspection.id}-pending-${inspection.updated_at || inspection.created_at}`,
-      title: 'ตรวจผลย้ายห้อง',
-      label: 'เจ้าหน้าที่ส่งผลตรวจ รอ Admin ตรวจสอบ',
-      tone: 'pending',
-      date: inspection.created_at,
-      details: [
-        { label: 'ห้อง', value: inspection.room_number },
-        { label: 'ห้องปลายทาง', value: inspection.target_room_number },
-        { label: 'ผู้เช่า', value: inspection.tenant_name },
-        { label: 'ตรวจโดย', value: inspection.inspected_by },
-      ],
-      kind: 'inspection',
-      inspection,
-    },
-  ]
-}
-
 function buildAdminStaffNotifs(member) {
   if (!member.created_at) return []
   const createdMs = new Date(member.created_at).getTime()
@@ -1717,11 +1696,10 @@ function AdminBackupPage() {
     return [
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
       ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
-      ...moveOutInspections.flatMap(buildAdminInspectionNotifs),
       ...staffList.flatMap(buildAdminStaffNotifs),
       ...announcements.map(buildAnnouncementNotif),
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [notifTenantItems, notifMaintenanceItems, moveOutInspections, staffList, announcements])
+  }, [notifTenantItems, notifMaintenanceItems, staffList, announcements])
 
   const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
 
@@ -1766,11 +1744,6 @@ function AdminBackupPage() {
       return
     }
     setAnnouncementFocus(null)
-    if (notif.kind === 'inspection') {
-      setActiveTab('move-out-inspections')
-      openInspectionDetail(notif.inspection)
-      return
-    }
     if (notif.kind === 'staff') {
       setStaffSearch('')
       setStaffPage(1)
@@ -3112,9 +3085,11 @@ function AdminBackupPage() {
                       </td>
                       <td>{inspection.photo_count || 0} รูป</td>
                       <td>
-                        <select aria-label={`สถานะตรวจห้อง ${inspection.room_number}`} className="form-select waiting-list-status-select" value={inspection.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}>
-                          {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
+                        {inspection.tenant_request_id ? 'Staff ตรวจแล้ว' : (
+                          <select aria-label={`สถานะตรวจห้อง ${inspection.room_number}`} className="form-select waiting-list-status-select" value={inspection.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}>
+                            {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        )}
                       </td>
                       <td><div className="admin-row-actions">
                         <button type="button" className="admin-action-btn is-ghost" onClick={() => openInspectionDetail(inspection)}>ดูรายละเอียด</button>
@@ -3142,8 +3117,8 @@ function AdminBackupPage() {
                     : `ห้อง ${inspectionDetail.room_number}`}
                 </span>
               </div>
-              <span className={`moveout-inspection-status is-${inspectionDetail.status || 'pending'}`}>
-                {MOVE_OUT_INSPECTION_STATUS[inspectionDetail.status || 'pending']}
+              <span className={`moveout-inspection-status is-${inspectionDetail.tenant_request_id ? 'reviewed' : inspectionDetail.status || 'pending'}`}>
+                {inspectionDetail.tenant_request_id ? 'Staff ตรวจแล้ว' : MOVE_OUT_INSPECTION_STATUS[inspectionDetail.status || 'pending']}
               </span>
             </div>
             <div className="moveout-inspection-admin-meta">
@@ -3182,12 +3157,14 @@ function AdminBackupPage() {
                 {inspectionDetail.photos.slice(0, INSPECTION_PHOTO_PREVIEW_COUNT).map(renderInspectionPhoto)}
               </div>
             ) : <p className="moveout-inspection-empty-photos">ไม่มีรูปภาพแนบ</p>}
-            <div className="admin-form-actions moveout-inspection-status-bar">
-              <label className="form-label" htmlFor="inspection-detail-status">สถานะตรวจ</label>
-              <select id="inspection-detail-status" className="form-select waiting-list-status-select" value={inspectionDetail.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspectionDetail, event.target.value)}>
-                {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </div>
+            {!inspectionDetail.tenant_request_id && (
+              <div className="admin-form-actions moveout-inspection-status-bar">
+                <label className="form-label" htmlFor="inspection-detail-status">สถานะตรวจ</label>
+                <select id="inspection-detail-status" className="form-select waiting-list-status-select" value={inspectionDetail.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspectionDetail, event.target.value)}>
+                  {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         </Modal>
       )}

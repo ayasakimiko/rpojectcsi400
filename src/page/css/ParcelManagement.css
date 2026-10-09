@@ -634,8 +634,12 @@
   color: #027a48;
 }
 
+.parcel-table:has(td.parcel-empty) {
+  height: 100%;
+}
+
 .parcel-table td.parcel-empty {
-  height: calc(64px * 10);
+  height: auto;
   color: #6b859e;
   font-size: 13.5px;
   font-weight: 600;

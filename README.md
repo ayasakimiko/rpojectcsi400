@@ -35,12 +35,11 @@ Frontend (และ Vite dev proxy) คุยกับ Gateway ที่ port 40
 docker compose up -d --build
 ```
 
-รวม 11 container:
+รวม 10 container:
 | Service | Container | Port |
 |---|---|---|
-| MySQL | `projectcsi400-mysql` | 3306 |
+| MySQL | `projectcsi400-mysql` | 3308 |
 | phpMyAdmin | `projectcsi400-phpmyadmin` | 8080 |
-| DB init (migrate + seed, รันครั้งเดียวแล้วจบ) | `projectcsi400-db-init` | - |
 | **API Gateway** | `projectcsi400-gateway` | **4000** |
 | Auth service | `projectcsi400-auth` | 4001 |
 | Room service | `projectcsi400-room` | 4002 |
@@ -52,21 +51,24 @@ docker compose up -d --build
 
 Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
 
+MySQL เชื่อมจากเครื่องผ่าน `localhost:3308` ส่วน container เชื่อมผ่าน `db:3306` หากใช้ MySQL บนพอร์ตอื่น ให้กำหนด `DB_PORT` ในไฟล์ `.env`
+
 > หมายเหตุ: Dockerfile จะ copy source เข้า image ตอน build เท่านั้น (ไม่ใช่ live-reload) — แก้ `server.js` / `services/*` / `router/*` / `Database/*` แล้วต้องรัน `docker compose up -d --build` ใหม่ทุกครั้งถึงจะมีผล
 
 ### รัน backend แบบ dev (ไม่ผ่าน Docker)
 
 ```bash
-npm run server:all   # รัน gateway + ทั้ง 7 service พร้อมกัน (ต้องมี MySQL รันอยู่ก่อน เช่น npm run db:setup)
+npm run server:all   # รัน gateway + ทั้ง 7 service พร้อมกัน (ต้องเปิด MySQL ก่อน)
 ```
 หรือรันทีละตัวด้วย `npm run server`, `server:auth`, `server:room`, `server:customer`, `server:staff`, `server:admin`, `server:owner`, `server:parcel`
 
 ### ตั้งค่าฐานข้อมูลครั้งแรก
 
-```bash
-npm run db:setup
-```
-สร้างฐานข้อมูล + ตารางทั้งหมดตาม [`Database/database.sql`](Database/database.sql)
+เมื่อเริ่ม backend ไฟล์ `Database/connection.js` จะสร้างฐานข้อมูลตามค่า `DB_NAME` ถ้ายังไม่มี และรัน [`Database/database.sql`](Database/database.sql) อัตโนมัติก่อนบริการเริ่มรับคำขอ เพื่อสร้างตารางและเพิ่มคอลัมน์หรือ index ที่ขาด
+
+ไฟล์ SQL ไม่เติมบัญชีหรือห้องตัวอย่างอัตโนมัติ หากเพิ่มตารางใหม่ให้เขียน `CREATE TABLE IF NOT EXISTS` ใน `database.sql` แล้วรีสตาร์ต backend ส่วนการเพิ่มคอลัมน์ในตารางเดิมต้องเพิ่มคำสั่งอัปเดตแบบตรวจว่ามีคอลัมน์แล้วหรือยัง เช่นส่วนท้ายของไฟล์
+
+บริการที่เริ่มพร้อมกันจะรอคิวอัปเดตโครงสร้างผ่าน MySQL lock และเรียกใช้งานฐานข้อมูลผ่าน `getPool()` หลังอัปเดตเสร็จ
 
 ### รัน frontend (dev)
 
@@ -133,7 +135,7 @@ npm run dev
 
 หากเจ้าหน้าที่อนุมัติหรือปฏิเสธคำขอโดยตรงก่อนกดรับเรื่อง ระบบจะบันทึกเจ้าหน้าที่ผู้ดำเนินการเป็นผู้รับเรื่องด้วย เพื่อให้ประวัติแสดงข้อมูล “รับเรื่องโดย” ครบถ้วน
 
-หลังอัปเดตโปรเจกต์เดิม ให้รัน `npm run db:setup` เพื่อเพิ่มคอลัมน์สำหรับคำขอย้ายห้อง, ผลตรวจที่เชื่อมกับคำขอ และเก็บประวัติสัญญา
+หลังอัปเดตโปรเจกต์เดิม ให้รีสตาร์ต backend (หากใช้ Docker ให้ build ใหม่) ระบบจะรัน `Database/database.sql` เพื่อเพิ่มคอลัมน์สำหรับคำขอย้ายห้อง, ผลตรวจที่เชื่อมกับคำขอ และเก็บประวัติสัญญาอัตโนมัติ
 
 ```json
 {

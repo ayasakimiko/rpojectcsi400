@@ -294,7 +294,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
   }
 });
 
-// Editing clears a previous review or follow-up flag because the report has changed.
+// Room-transfer inspections are completed by Staff; other reports retain Admin review.
 router.patch("/move-out-inspections/:id", async (req, res) => {
   try {
     const inspectionId = Number(req.params.id);
@@ -318,7 +318,10 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     try {
       await pool.query(
         `UPDATE MoveOutInspection
-         SET checklist = ?, damage_note = ?, photos = ?, status = 'pending', reviewed_at = NULL, updated_at = NOW()
+         SET checklist = ?, damage_note = ?, photos = ?,
+             status = CASE WHEN tenant_request_id IS NULL THEN 'pending' ELSE 'reviewed' END,
+             reviewed_at = CASE WHEN tenant_request_id IS NULL THEN NULL ELSE NOW() END,
+             updated_at = NOW()
          WHERE id = ?`,
         [
           JSON.stringify(value.checklist),
@@ -436,8 +439,8 @@ router.post("/move-out-inspections", async (req, res) => {
       }
 
       const [result] = await connection.query(
-        `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, photos, inspected_by_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, photos, inspected_by_name, status, reviewed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE NOW() END)`,
         [
           value.roomNumber,
           tenantRequestId,
@@ -447,6 +450,8 @@ router.post("/move-out-inspections", async (req, res) => {
           value.damageNote,
           JSON.stringify(photos),
           staffName,
+          tenantRequestId === null ? "pending" : "reviewed",
+          tenantRequestId,
         ],
       );
       if (tenantRequestId !== null) {
@@ -460,7 +465,10 @@ router.post("/move-out-inspections", async (req, res) => {
         );
       }
       await connection.commit();
-      return res.status(201).json({ message: "ส่งผลตรวจห้องให้ Admin แล้ว", inspectionId: result.insertId });
+      return res.status(201).json({
+        message: tenantRequestId === null ? "ส่งผลตรวจห้องให้ Admin แล้ว" : "บันทึกผลตรวจแล้ว สามารถอนุมัติย้ายห้องได้ทันที",
+        inspectionId: result.insertId,
+      });
     } catch (error) {
       await connection.rollback();
       await deletePublicImages(photos.map((photo) => photo.url));
@@ -996,20 +1004,12 @@ router.post("/requests/:id/approve", async (req, res) => {
       }
 
       const [inspectionRows] = await connection.query(
-        `SELECT id, status FROM MoveOutInspection WHERE tenant_request_id = ? FOR UPDATE`,
+        `SELECT id FROM MoveOutInspection WHERE tenant_request_id = ? FOR UPDATE`,
         [tenantRequest.id],
       );
       if (!inspectionRows[0]) {
         await connection.rollback();
         return res.status(409).json({ message: "กรุณาตรวจห้องก่อนอนุมัติย้ายห้อง" });
-      }
-      if (inspectionRows[0].status !== "reviewed") {
-        await connection.rollback();
-        return res.status(409).json({
-          message: inspectionRows[0].status === "follow_up"
-            ? "ผลตรวจระบุว่าต้องติดตาม กรุณาให้เจ้าหน้าที่แก้ไขผลตรวจก่อนอนุมัติ"
-            : "กรุณารอ Admin ตรวจผลตรวจก่อนอนุมัติย้ายห้อง",
-        });
       }
 
       const [customerRows] = await connection.query(

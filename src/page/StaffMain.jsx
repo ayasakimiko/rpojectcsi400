@@ -786,12 +786,12 @@ function getRoomExpiryStatus(room) {
 function buildStaffTenantNotifs(request) {
   const info = STAFF_TENANT_NOTIF_INFO[request.status]
   if (!info) return []
-  const inspectionInfo = request.type === 'move_room' && request.status === 'in_progress'
+  const inspectionInfo = request.type === 'move_room' && request.inspection_id
     ? {
-        pending: { key: `inspection-${request.inspection_id}-pending-${request.inspection_updated_at || request.created_at}`, label: 'ส่งผลตรวจแล้ว รอ Admin ตรวจ', tone: 'info' },
-        reviewed: { key: `inspection-${request.inspection_id}-reviewed-${request.inspection_reviewed_at || ''}`, label: 'Admin ตรวจแล้ว ดำเนินการย้ายห้องต่อได้', tone: 'info' },
-        follow_up: { key: `inspection-${request.inspection_id}-follow_up-${request.inspection_reviewed_at || ''}`, label: 'Admin ขอแก้ไขผลตรวจและส่งตรวจใหม่', tone: 'pending' },
-      }[request.inspection_status]
+        key: `inspection-${request.inspection_id}-${request.inspection_updated_at || request.inspection_reviewed_at || request.created_at}`,
+        label: 'ตรวจห้องแล้ว สามารถอนุมัติย้ายห้องได้',
+        tone: 'info',
+      }
     : null
   const notificationInfo = inspectionInfo || info
   return [
@@ -799,8 +799,8 @@ function buildStaffTenantNotifs(request) {
       key: inspectionInfo?.key || `tenant-${request.id}-${request.status}`,
       title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
       ...notificationInfo,
-      date: inspectionInfo && request.inspection_status !== 'pending'
-        ? request.inspection_reviewed_at || request.accepted_at || request.created_at
+      date: inspectionInfo
+        ? request.inspection_updated_at || request.inspection_reviewed_at || request.accepted_at || request.created_at
         : request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
       details: [
         { label: 'ห้อง', value: request.room_number },
@@ -1937,7 +1937,7 @@ function StaffMain() {
             },
             { headers: authHeaders() },
           )
-      setActionSuccess(data.message || (inspectionEditing ? 'แก้ไขผลตรวจห้องสำเร็จ' : 'ส่งผลตรวจห้องให้ Admin แล้ว'))
+      setActionSuccess(data.message || (inspectionEditing ? 'แก้ไขผลตรวจห้องสำเร็จ' : 'บันทึกผลตรวจห้องสำเร็จ'))
       if (!inspectionEditing) setInspectionsPage(1)
       requestClose()
       await loadMoveOutInspections()
@@ -2359,13 +2359,7 @@ function StaffMain() {
             )}
             {request.type === 'move_room' && (
               <span>
-                {request.inspection_status === 'reviewed'
-                  ? 'ตรวจห้องแล้ว'
-                  : request.inspection_status === 'follow_up'
-                    ? 'ผลตรวจต้องติดตาม'
-                    : request.inspection_id
-                      ? 'รอ Admin ตรวจผล'
-                      : 'รอตรวจสภาพห้อง'}
+                {request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}
               </span>
             )}
             {request.phone && <span>โทร {request.phone}</span>}
@@ -2399,7 +2393,7 @@ function StaffMain() {
               </button>
             )
           ) : request.type === 'move_room' ? (
-            request.inspection_status === 'reviewed' ? (
+            request.inspection_id ? (
               <button
                 type="button"
                 className="staff-action-btn is-primary"
@@ -2407,19 +2401,6 @@ function StaffMain() {
                 onClick={() => setRenewApproveConfirm(request)}
               >
                 {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติย้ายห้อง'}
-              </button>
-            ) : request.inspection_status === 'follow_up' ? (
-              <button
-                type="button"
-                className="staff-action-btn is-primary"
-                disabled={inspectionLoadingId === request.inspection_id}
-                onClick={() => openEditInspection({ id: request.inspection_id })}
-              >
-                {inspectionLoadingId === request.inspection_id ? 'กำลังโหลด...' : 'แก้ผลตรวจ'}
-              </button>
-            ) : request.inspection_id ? (
-              <button type="button" className="staff-action-btn is-ghost" onClick={loadRequests}>
-                รอ Admin ตรวจ · อัปเดต
               </button>
             ) : (
               <button
@@ -3560,9 +3541,9 @@ function StaffMain() {
                     </p>
                   )}
                   <p className="inspection-footer-note">
-                    {inspectionEditing
-                      ? 'เมื่อแก้ไขผลตรวจ ระบบจะส่งผลกลับให้ Admin ตรวจสอบอีกครั้ง'
-                      : 'ผลตรวจและรูปจะถูกบันทึกในระบบและส่งให้ Admin ตรวจสอบก่อนอนุมัติย้ายห้อง'}
+                    {inspectionTenantRequest || inspectionEditing?.tenant_request_id
+                      ? 'บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติย้ายห้องได้ทันที'
+                      : 'ผลตรวจและรูปจะถูกบันทึกในระบบและส่งให้ Admin ตรวจสอบ'}
                   </p>
                   <div className="inspection-footer-actions">
                     <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
@@ -3573,7 +3554,7 @@ function StaffMain() {
                         ? 'กำลังบันทึก...'
                         : inspectionEditing
                           ? 'บันทึกการแก้ไข'
-                          : 'ส่งผลตรวจให้ Admin'}
+                          : inspectionTenantRequest ? 'บันทึกผลตรวจ' : 'ส่งผลตรวจให้ Admin'}
                     </button>
                   </div>
                 </div>
@@ -3883,7 +3864,7 @@ function StaffMain() {
                 <h2>
                   ตรวจห้องตอนย้ายออก <span className="staff-count-pill">{moveOutInspections.length}</span>
                 </h2>
-                <p className="waiting-list-storage-note">Checklist, รูป และความเสียหายที่ส่งให้ Admin</p>
+                <p className="waiting-list-storage-note">Checklist, รูป และความเสียหายที่บันทึกจากการตรวจห้อง</p>
               </div>
               <button
                 type="button"
@@ -3907,7 +3888,7 @@ function StaffMain() {
                     <th>ผู้เช่า</th>
                     <th>วันที่ตรวจ</th>
                     <th>ผลตรวจ</th>
-                    <th>Admin</th>
+                    <th>สถานะผลตรวจ</th>
                     <th>จัดการ</th>
                   </tr>
                 </thead>
@@ -3932,11 +3913,13 @@ function StaffMain() {
                               : 'บันทึกแล้ว'}
                         </td>
                         <td>
-                          {inspection.status === 'pending'
-                            ? 'รอตรวจ'
-                            : inspection.status === 'reviewed'
-                              ? 'ตรวจแล้ว'
-                              : 'ต้องติดตาม'}
+                          {inspection.tenant_request_id
+                            ? 'ตรวจแล้ว'
+                            : inspection.status === 'pending'
+                              ? 'รอตรวจ'
+                              : inspection.status === 'reviewed'
+                                ? 'ตรวจแล้ว'
+                                : 'ต้องติดตาม'}
                         </td>
                         <td>
                           <div className="staff-row-actions">

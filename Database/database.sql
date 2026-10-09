@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS WaitingList (
 CREATE TABLE IF NOT EXISTS MoveOutInspection (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     room_number INT UNSIGNED NOT NULL,
-    tenant_request_id INT NULL UNIQUE,
+    tenant_request_id INT NULL,
     tenant_name VARCHAR(255) NOT NULL,
     tenant_phone VARCHAR(20),
     checklist TEXT NOT NULL,
@@ -194,7 +194,9 @@ CREATE TABLE IF NOT EXISTS MoveOutInspection (
     inspected_by_name VARCHAR(255),
     reviewed_at DATETIME NULL,
     updated_at DATETIME NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE INDEX uq_move_out_inspection_tenant_request (tenant_request_id)
 );
 
 CREATE TABLE IF NOT EXISTS MaintenancePhoto (
@@ -233,3 +235,114 @@ CREATE TABLE IF NOT EXISTS ParcelPhoto (
 
     FOREIGN KEY (parcel_id) REFERENCES Parcel(id) ON DELETE CASCADE
 );
+-- Upgrade existing tables without replacing existing records.
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND COLUMN_NAME = 'expires_at'),
+    'SELECT 1',
+    'ALTER TABLE `Announcement` ADD COLUMN `expires_at` DATETIME NULL AFTER author_name'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Parcel' AND COLUMN_NAME = 'customer_id'),
+    'SELECT 1',
+    'ALTER TABLE `Parcel` ADD COLUMN `customer_id` INT UNSIGNED NULL AFTER room_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'TenantRequest' AND COLUMN_NAME = 'target_room_number'),
+    'SELECT 1',
+    'ALTER TABLE `TenantRequest` ADD COLUMN `target_room_number` INT UNSIGNED NULL AFTER room_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'rental_start_date'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `rental_start_date` DATETIME NULL AFTER room_id'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'rental_end_date'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `rental_end_date` DATETIME NULL AFTER rental_start_date'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'tenant_request_id'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `tenant_request_id` INT NULL AFTER room_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'updated_at'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `updated_at` DATETIME NULL AFTER reviewed_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection'
+              AND COLUMN_NAME = 'tenant_request_id' AND NON_UNIQUE = 0
+              AND INDEX_NAME IN (
+                  SELECT INDEX_NAME FROM information_schema.STATISTICS
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection'
+                  GROUP BY INDEX_NAME HAVING COUNT(*) = 1
+              )),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD UNIQUE INDEX `uq_move_out_inspection_tenant_request` (`tenant_request_id`)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+-- Backfill existing records for room transfers and parcel ownership.
+
+UPDATE TenantRequest tr
+     JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+     SET tr.status = CASE WHEN tr.status = 'pending' THEN 'in_progress' ELSE tr.status END,
+         tr.accepted_at = COALESCE(tr.accepted_at, moi.created_at),
+         tr.accepted_by_name = COALESCE(tr.accepted_by_name, moi.inspected_by_name)
+     WHERE tr.type = 'move_room'
+       AND tr.status IN ('pending', 'in_progress')
+       AND (tr.status = 'pending' OR tr.accepted_at IS NULL OR tr.accepted_by_name IS NULL);
+
+UPDATE Parcel p
+     SET p.customer_id = (
+       SELECT c.id FROM Customer c
+       WHERE c.room_number = p.room_number AND c.is_suspended = FALSE
+       ORDER BY c.id DESC
+       LIMIT 1
+     )
+     WHERE p.customer_id IS NULL
+       AND EXISTS (
+         SELECT 1 FROM Customer c
+         WHERE c.room_number = p.room_number AND c.is_suspended = FALSE
+       );

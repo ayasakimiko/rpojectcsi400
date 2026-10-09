@@ -189,7 +189,14 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [result] = await pool.query(`UPDATE MoveOutInspection SET status = ?, reviewed_at = NOW() WHERE id = ?`, [
+    const [inspections] = await pool.query(`SELECT tenant_request_id FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    if (!inspections[0]) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    if (inspections[0].tenant_request_id !== null) {
+      return res.status(409).json({ message: "ผลตรวจสำหรับการย้ายห้องดำเนินการโดย Staff ไม่ต้องตรวจอนุมัติโดย Admin" });
+    }
+    const [result] = await pool.query(`UPDATE MoveOutInspection SET status = ?, reviewed_at = NOW() WHERE id = ? AND tenant_request_id IS NULL`, [
       status,
       inspectionId,
     ]);

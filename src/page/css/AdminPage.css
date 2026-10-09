@@ -1169,13 +1169,7 @@
   height: 100%;
 }
 
-.admin-table:has(.admin-empty) tbody,
-.admin-table:has(.admin-empty) tbody tr {
-  height: 100%;
-}
-
 .admin-empty {
-  height: 100%;
   text-align: center;
   vertical-align: middle;
   padding: 32px 12px;

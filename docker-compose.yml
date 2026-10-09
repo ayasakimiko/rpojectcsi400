@@ -9,7 +9,7 @@ services:
       MYSQL_DATABASE: ${DB_NAME:-projectcsi400}
       TZ: Asia/Bangkok
     ports:
-      - "${DB_PORT:-3306}:3306"
+      - "${DB_PORT:-3308}:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -28,24 +28,6 @@ services:
       PMA_PORT: 3306
     ports:
       - "8080:80"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db-init:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: projectcsi400-db-init
-    command: ["node", "Database/connection.js"]
-    restart: "no"
-    environment:
-      DB_HOST: db
-      DB_PORT: 3306
-      DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
-      DB_NAME: ${DB_NAME:-projectcsi400}
-      TZ: Asia/Bangkok
     depends_on:
       db:
         condition: service_healthy
@@ -101,8 +83,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
 
   room-service:
     <<: *service-defaults
