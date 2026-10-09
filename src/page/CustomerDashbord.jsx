@@ -522,7 +522,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dashboard-modal-header">
@@ -2708,44 +2708,48 @@ function CustomerDashbord() {
           <Modal
             title={STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status].title}
             onClose={() => setStatusPopup(null)}
-            variant="confirm"
+            variant="status"
           >
             {(requestClose) => {
               const content = STATUS_POPUP_CONTENT_BY_KIND[statusPopup.kind][statusPopup.status]
               return (
-                <div className="dashboard-confirm-body">
-                  <div className={`dashboard-confirm-icon is-${content.icon}`}>
-                    <svg
-                      width="22"
-                      height="22"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <StatusIconPaths tone={content.icon} />
-                    </svg>
+                <div className="dashboard-confirm-body dashboard-status-body">
+                  <div className="dashboard-status-hero">
+                    <div className={`dashboard-confirm-icon is-${content.icon}`}>
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <StatusIconPaths tone={content.icon} />
+                      </svg>
+                    </div>
+                    <p className="dashboard-confirm-message">{content.message}</p>
                   </div>
-                  <p className="dashboard-confirm-message">{content.message}</p>
-                  {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
-                    <TenantRequestDetailCard
-                      request={{ ...statusPopup.request, type: statusPopup.kind }}
-                      roomNumber={room?.room_number}
-                    />
-                  )}
-                  {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
-                  {(() => {
-                    if (!statusPopup.request || !TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]) return null
-                    const sameType = tenantRequests.filter((request) => request.type === statusPopup.kind)
-                    const currentIndex = sameType.findIndex((request) => request.id === statusPopup.request.id)
-                    const previousRequest = currentIndex === -1 ? null : sameType[currentIndex + 1]
-                    return previousRequest ? (
-                      <PreviousTenantRequest key={previousRequest.id} request={previousRequest} roomNumber={room?.room_number} />
-                    ) : null
-                  })()}
+                  <div className="dashboard-status-scroll">
+                    {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
+                      <TenantRequestDetailCard
+                        request={{ ...statusPopup.request, type: statusPopup.kind }}
+                        roomNumber={room?.room_number}
+                      />
+                    )}
+                    {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
+                    {(() => {
+                      if (!statusPopup.request || !TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]) return null
+                      const sameType = tenantRequests.filter((request) => request.type === statusPopup.kind)
+                      const currentIndex = sameType.findIndex((request) => request.id === statusPopup.request.id)
+                      const previousRequest = currentIndex === -1 ? null : sameType[currentIndex + 1]
+                      return previousRequest ? (
+                        <PreviousTenantRequest key={previousRequest.id} request={previousRequest} roomNumber={room?.room_number} />
+                      ) : null
+                    })()}
+                  </div>
                   <div className="dashboard-form-actions">
                     <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
                       รับทราบ
