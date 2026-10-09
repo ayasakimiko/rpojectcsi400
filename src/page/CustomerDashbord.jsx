@@ -1117,6 +1117,52 @@ function TenantRequestDetailCard({ request, roomNumber }) {
   )
 }
 
+function PreviousTenantRequest({ request, roomNumber }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="dashboard-previous-request">
+      <button
+        type="button"
+        className="dashboard-previous-request-toggle"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        {open ? 'ซ่อนคำขอก่อนหน้า' : `ดูคำขอก่อนหน้า (${formatDate(request.created_at)})`}
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={open ? 'is-open' : ''}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="dashboard-previous-request-body">
+          <div className="dashboard-previous-request-head">
+            <span>คำขอก่อนหน้า</span>
+            <span className={`dashboard-badge status-${tenantRequestBadgeClass(request.status)}`}>
+              {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+            </span>
+          </div>
+          <TenantRequestDetailCard request={request} roomNumber={roomNumber} />
+          {request.completed_at && (
+            <p className="dashboard-previous-request-date">
+              {TENANT_REQUEST_FINAL_LOG_LABEL[request.status] || 'ดำเนินการเสร็จ'}เมื่อ {formatDateTime(request.completed_at)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function getRequestTimeline(kind, request) {
   if (!request || kind === 'announcement') return []
   const isSelfCancelledMaintenance =
@@ -2664,6 +2710,15 @@ function CustomerDashbord() {
                     />
                   )}
                   {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
+                  {(() => {
+                    if (!statusPopup.request || !TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]) return null
+                    const sameType = tenantRequests.filter((request) => request.type === statusPopup.kind)
+                    const currentIndex = sameType.findIndex((request) => request.id === statusPopup.request.id)
+                    const previousRequest = currentIndex === -1 ? null : sameType[currentIndex + 1]
+                    return previousRequest ? (
+                      <PreviousTenantRequest key={previousRequest.id} request={previousRequest} roomNumber={room?.room_number} />
+                    ) : null
+                  })()}
                   <div className="dashboard-form-actions">
                     <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
                       รับทราบ
