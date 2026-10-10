@@ -129,6 +129,7 @@ export function createParcelRouter(getActorName) {
       if (!Number.isSafeInteger(roomNumber) || roomNumber < 100 || roomNumber > 999) {
         throw new HttpError(400, "กรุณาระบุเลขห้องให้ถูกต้อง");
       }
+      if (files.length === 0) throw new HttpError(400, "กรุณาแนบรูปพัสดุอย่างน้อย 1 รูป");
       const trackingNumber = readText(tracking_number, 100);
       const senderName = readText(sender_name, 100) ?? "พัสดุทั่วไป";
       const parcelDescription = readText(description, 255);
