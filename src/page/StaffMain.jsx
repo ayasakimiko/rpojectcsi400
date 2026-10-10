@@ -934,7 +934,71 @@ const TENANT_TYPE_SEGMENTS = [
   { key: 'move_room', label: 'ย้ายห้อง' },
 ]
 
-// Filter panel shared by the pending list, its "view all" modal and the history modal.
+// Filter panel used across the staff page: optional segment buttons, a search box,
+// extra controls passed as children, and a result count with a clear link.
+function StaffFilterPanel({
+  segments,
+  active,
+  onSegment,
+  segmentLabel = 'กรองตามสถานะ',
+  search,
+  onSearch,
+  searchPlaceholder,
+  children,
+  resultText,
+  canClear,
+  onClear,
+  sticky = false,
+}) {
+  return (
+    <div className={`staff-req-filters${sticky ? ' is-sticky' : ''}`}>
+      {segments && (
+        <div className="staff-req-segments" role="tablist" aria-label={segmentLabel}>
+          {segments.map((segment) => (
+            <button
+              type="button"
+              role="tab"
+              key={segment.key}
+              aria-selected={active === segment.key}
+              className={`staff-req-segment${segment.className ? ` ${segment.className}` : ''}${active === segment.key ? ' is-active' : ''}`}
+              onClick={() => onSegment(segment.key)}
+            >
+              {segment.label}
+              {segment.count != null && <span>{segment.count}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="staff-req-filter-row">
+        <label className="staff-req-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4" />
+          </svg>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label="ค้นหา"
+          />
+        </label>
+        {children}
+      </div>
+      {resultText && (
+        <div className="staff-req-result">
+          <span>{resultText}</span>
+          {canClear && (
+            <button type="button" className="staff-req-clear" onClick={onClear}>
+              ล้างตัวกรอง
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // `counts` is optional: the history modal is paginated on the server and has no per-type totals.
 function TenantRequestFilters({
   type,
@@ -953,59 +1017,37 @@ function TenantRequestFilters({
   sticky = false,
 }) {
   return (
-    <div className={`staff-req-filters${sticky ? ' is-sticky' : ''}`}>
-      <div className="staff-req-segments" role="tablist" aria-label="กรองตามประเภทคำขอ">
-        {TENANT_TYPE_SEGMENTS.map((segment) => (
-          <button
-            type="button"
-            role="tab"
-            key={segment.key}
-            aria-selected={type === segment.key}
-            className={`staff-req-segment type-${segment.key}${type === segment.key ? ' is-active' : ''}`}
-            onClick={() => onType(segment.key)}
-          >
-            {segment.label}
-            {counts && <span>{counts[segment.key] ?? 0}</span>}
-          </button>
+    <StaffFilterPanel
+      segments={TENANT_TYPE_SEGMENTS.map((segment) => ({
+        ...segment,
+        className: `type-${segment.key}`,
+        count: counts ? counts[segment.key] ?? 0 : null,
+      }))}
+      segmentLabel="กรองตามประเภทคำขอ"
+      active={type}
+      onSegment={onType}
+      search={search}
+      onSearch={onSearch}
+      searchPlaceholder="ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร"
+      resultText={resultText}
+      canClear={canClear}
+      onClear={onClear}
+      sticky={sticky}
+    >
+      <select className="staff-filter-select" value={status} onChange={(event) => onStatus(event.target.value)} aria-label="สถานะ">
+        {statusOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
-      </div>
-      <div className="staff-req-filter-row">
-        <label className="staff-req-search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-4-4" />
-          </svg>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => onSearch(event.target.value)}
-            placeholder="ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร"
-            aria-label="ค้นหาคำขอ"
-          />
-        </label>
-        <select className="staff-filter-select" value={status} onChange={(event) => onStatus(event.target.value)} aria-label="สถานะ">
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+      </select>
+      {onSort && (
+        <select className="staff-filter-select" value={sort} onChange={(event) => onSort(event.target.value)} aria-label="เรียงลำดับ">
+          <option value="oldest">รอนานสุดก่อน</option>
+          <option value="newest">ล่าสุดก่อน</option>
         </select>
-        {onSort && (
-          <select className="staff-filter-select" value={sort} onChange={(event) => onSort(event.target.value)} aria-label="เรียงลำดับ">
-            <option value="oldest">รอนานสุดก่อน</option>
-            <option value="newest">ล่าสุดก่อน</option>
-          </select>
-        )}
-      </div>
-      <div className="staff-req-result">
-        <span>{resultText}</span>
-        {canClear && (
-          <button type="button" className="staff-req-clear" onClick={onClear}>
-            ล้างตัวกรอง
-          </button>
-        )}
-      </div>
-    </div>
+      )}
+    </StaffFilterPanel>
   )
 }
 
@@ -3916,6 +3958,16 @@ function StaffMain() {
       .sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
   }, [rooms, search, statusFilter])
 
+  const roomStatusCounts = useMemo(
+    () => ({
+      booked: rooms.filter((room) => room.is_booked).length,
+      vacant: rooms.filter((room) => !room.is_booked).length,
+      due: rooms.filter((room) => room.currentDue && room.currentDue.status !== 'paid').length,
+      expiring: rooms.filter((room) => getRoomExpiryStatus(room)).length,
+    }),
+    [rooms],
+  )
+
   const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROOMS_PER_PAGE))
   const currentRoomsPage = Math.min(roomsPage, roomsTotalPages)
 
@@ -4021,6 +4073,59 @@ function StaffMain() {
       return true
     })
   }, [maintenanceRequests, maintenanceFilterStatus, maintenanceFilterDate, maintenanceFilterSearch])
+
+  const resetMaintenanceFilters = () => {
+    setMaintenanceFilterStatus('all')
+    setMaintenanceFilterDate('')
+    setMaintenanceFilterSearch('')
+    setMaintenanceModalPage(1)
+  }
+  const maintenanceFilterPanel = (sticky) => (
+    <StaffFilterPanel
+      sticky={sticky}
+      segments={[
+        { key: 'all', label: 'ทั้งหมด', count: maintenanceRequests.length },
+        {
+          key: 'pending',
+          label: 'รอดำเนินการ',
+          count: maintenanceRequests.filter((request) => request.status === 'pending').length,
+          className: 'tone-warning',
+        },
+        {
+          key: 'in_progress',
+          label: 'กำลังดำเนินการ',
+          count: maintenanceRequests.filter((request) => request.status === 'in_progress').length,
+        },
+      ]}
+      active={maintenanceFilterStatus}
+      onSegment={(value) => {
+        setMaintenanceFilterStatus(value)
+        setMaintenanceModalPage(1)
+      }}
+      search={maintenanceFilterSearch}
+      onSearch={(value) => {
+        setMaintenanceFilterSearch(value)
+        setMaintenanceModalPage(1)
+      }}
+      searchPlaceholder="ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร"
+      resultText={`พบ ${filteredMaintenanceRequests.length} จาก ${maintenanceRequests.length} รายการ`}
+      canClear={maintenanceFilterStatus !== 'all' || Boolean(maintenanceFilterDate) || Boolean(maintenanceFilterSearch.trim())}
+      onClear={resetMaintenanceFilters}
+    >
+      <div className="staff-req-date">
+        <ThaiDatePicker
+          className="staff-filter-select staff-req-date-input"
+          placeholder="วันที่แจ้งซ่อม"
+          value={maintenanceFilterDate}
+          isClearable
+          onChange={(date) => {
+            setMaintenanceFilterDate(date)
+            setMaintenanceModalPage(1)
+          }}
+        />
+      </div>
+    </StaffFilterPanel>
+  )
 
   const maintenanceModalTotalPages = Math.max(1, Math.ceil(filteredMaintenanceRequests.length / MODAL_ITEMS_PER_PAGE))
   const currentMaintenanceModalPage = Math.min(maintenanceModalPage, maintenanceModalTotalPages)
@@ -5255,34 +5360,36 @@ function StaffMain() {
                   >
                     {invoiceGenerating ? 'กำลังเตรียม...' : 'ใบแจ้งหนี้ / PDF'}
                   </button>
-                  <div className="staff-filters">
-                    <input
-                      type="text"
-                      className="staff-search-input"
-                      placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร..."
-                      value={search}
-                      onChange={(event) => {
-                        setSearch(event.target.value)
-                        setRoomsPage(1)
-                      }}
-                    />
-                    <select
-                      className="staff-filter-select"
-                      value={statusFilter}
-                      onChange={(event) => {
-                        setStatusFilter(event.target.value)
-                        setRoomsPage(1)
-                      }}
-                    >
-                      <option value="all">ทุกสถานะ</option>
-                      <option value="booked">ไม่ว่าง</option>
-                      <option value="vacant">ว่าง</option>
-                      <option value="due">รอเก็บเงิน</option>
-                      <option value="expiring">ใกล้หมดสัญญา</option>
-                    </select>
-                  </div>
                 </div>
               </div>
+
+              <StaffFilterPanel
+                segments={[
+                  { key: 'all', label: 'ทั้งหมด', count: rooms.length },
+                  { key: 'booked', label: 'ไม่ว่าง', count: roomStatusCounts.booked },
+                  { key: 'vacant', label: 'ว่าง', count: roomStatusCounts.vacant, className: 'tone-success' },
+                  { key: 'due', label: 'รอเก็บเงิน', count: roomStatusCounts.due, className: 'tone-warning' },
+                  { key: 'expiring', label: 'ใกล้หมดสัญญา', count: roomStatusCounts.expiring, className: 'tone-danger' },
+                ]}
+                active={statusFilter}
+                onSegment={(value) => {
+                  setStatusFilter(value)
+                  setRoomsPage(1)
+                }}
+                search={search}
+                onSearch={(value) => {
+                  setSearch(value)
+                  setRoomsPage(1)
+                }}
+                searchPlaceholder="ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร"
+                resultText={`พบ ${filteredRooms.length} จาก ${rooms.length} ห้อง`}
+                canClear={statusFilter !== 'all' || Boolean(search.trim())}
+                onClear={() => {
+                  setStatusFilter('all')
+                  setSearch('')
+                  setRoomsPage(1)
+                }}
+              />
 
               {invoicePrintError && (
                 <div className="staff-inline-error" role="alert">
@@ -5635,53 +5742,7 @@ function StaffMain() {
                   </div>
                 </div>
 
-                {maintenanceRequests.length > 0 && (
-                  <div className="staff-filters staff-card-filters">
-                    <input
-                      type="text"
-                      className="staff-search-input"
-                      placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
-                      value={maintenanceFilterSearch}
-                      onChange={(event) => {
-                        setMaintenanceFilterSearch(event.target.value)
-                        setMaintenanceModalPage(1)
-                      }}
-                    />
-                    <select
-                      className="staff-filter-select"
-                      value={maintenanceFilterStatus}
-                      onChange={(event) => {
-                        setMaintenanceFilterStatus(event.target.value)
-                        setMaintenanceModalPage(1)
-                      }}
-                    >
-                      <option value="all">ทุกสถานะ</option>
-                      <option value="pending">รอดำเนินการ</option>
-                      <option value="in_progress">กำลังดำเนินการ</option>
-                    </select>
-                    <ThaiDatePicker
-                      compact
-                      className="staff-filter-select"
-                      value={maintenanceFilterDate}
-                      onChange={(date) => {
-                        setMaintenanceFilterDate(date)
-                        setMaintenanceModalPage(1)
-                      }}
-                    />
-                    {maintenanceFilterDate && (
-                      <button
-                        type="button"
-                        className="staff-action-btn is-ghost"
-                        onClick={() => {
-                          setMaintenanceFilterDate('')
-                          setMaintenanceModalPage(1)
-                        }}
-                      >
-                        ล้างวันที่
-                      </button>
-                    )}
-                  </div>
-                )}
+                {maintenanceRequests.length > 0 && maintenanceFilterPanel(false)}
 
                 <div className="staff-card-body">
                   {requestsError ? (
@@ -6012,57 +6073,10 @@ function StaffMain() {
           title="คำขอแจ้งซ่อม (ทั้งหมด)"
           onClose={() => {
             setViewAllRequests(null)
-            setMaintenanceModalPage(1)
-            setMaintenanceFilterStatus('all')
-            setMaintenanceFilterDate('')
-            setMaintenanceFilterSearch('')
+            resetMaintenanceFilters()
           }}
         >
-          <div className="staff-filters staff-modal-filters">
-            <input
-              type="text"
-              className="staff-search-input"
-              placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า..."
-              value={maintenanceFilterSearch}
-              onChange={(event) => {
-                setMaintenanceFilterSearch(event.target.value)
-                setMaintenanceModalPage(1)
-              }}
-            />
-            <select
-              className="staff-filter-select"
-              value={maintenanceFilterStatus}
-              onChange={(event) => {
-                setMaintenanceFilterStatus(event.target.value)
-                setMaintenanceModalPage(1)
-              }}
-            >
-              <option value="all">ทุกสถานะ</option>
-              <option value="pending">รอดำเนินการ</option>
-              <option value="in_progress">กำลังดำเนินการ</option>
-            </select>
-            <ThaiDatePicker
-              compact
-              className="staff-filter-select"
-              value={maintenanceFilterDate}
-              onChange={(date) => {
-                setMaintenanceFilterDate(date)
-                setMaintenanceModalPage(1)
-              }}
-            />
-            {maintenanceFilterDate && (
-              <button
-                type="button"
-                className="staff-action-btn is-ghost"
-                onClick={() => {
-                  setMaintenanceFilterDate('')
-                  setMaintenanceModalPage(1)
-                }}
-              >
-                ล้างวันที่
-              </button>
-            )}
-          </div>
+          {maintenanceFilterPanel(true)}
 
           {filteredMaintenanceRequests.length === 0 ? (
             <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
@@ -6254,34 +6268,35 @@ function StaffMain() {
             setMaintenanceHistoryStatusFilter('all')
           }}
         >
-          <div className="staff-filters staff-modal-filters">
-            <input
-              type="text"
-              className="staff-search-input"
-              placeholder="ค้นหาเลขห้อง, ชื่อผู้เช่า, เบอร์โทร, รายละเอียด..."
-              value={maintenanceHistorySearch}
-              onChange={(event) => {
-                const value = event.target.value
-                setMaintenanceHistorySearch(value)
-                setMaintenanceHistoryPage(1)
-                loadMaintenanceHistory(1, value, maintenanceHistoryStatusFilter)
-              }}
-            />
-            <select
-              className="staff-filter-select"
-              value={maintenanceHistoryStatusFilter}
-              onChange={(event) => {
-                const value = event.target.value
-                setMaintenanceHistoryStatusFilter(value)
-                setMaintenanceHistoryPage(1)
-                loadMaintenanceHistory(1, maintenanceHistorySearch, value)
-              }}
-            >
-              <option value="all">ทุกสถานะ</option>
-              <option value="done">เสร็จสิ้น</option>
-              <option value="cancelled">ยกเลิกแล้ว</option>
-            </select>
-          </div>
+          <StaffFilterPanel
+            sticky
+            segments={[
+              { key: 'all', label: 'ทั้งหมด' },
+              { key: 'done', label: 'เสร็จสิ้น', className: 'tone-success' },
+              { key: 'cancelled', label: 'ยกเลิกแล้ว', className: 'tone-danger' },
+            ]}
+            active={maintenanceHistoryStatusFilter}
+            onSegment={(value) => {
+              setMaintenanceHistoryStatusFilter(value)
+              setMaintenanceHistoryPage(1)
+              loadMaintenanceHistory(1, maintenanceHistorySearch, value)
+            }}
+            search={maintenanceHistorySearch}
+            onSearch={(value) => {
+              setMaintenanceHistorySearch(value)
+              setMaintenanceHistoryPage(1)
+              loadMaintenanceHistory(1, value, maintenanceHistoryStatusFilter)
+            }}
+            searchPlaceholder="ค้นหาเลขห้อง ชื่อผู้เช่า เบอร์โทร หรือรายละเอียด"
+            resultText={`พบ ${maintenanceHistoryTotal} รายการ`}
+            canClear={maintenanceHistoryStatusFilter !== 'all' || Boolean(maintenanceHistorySearch)}
+            onClear={() => {
+              setMaintenanceHistoryStatusFilter('all')
+              setMaintenanceHistorySearch('')
+              setMaintenanceHistoryPage(1)
+              loadMaintenanceHistory(1, '', 'all')
+            }}
+          />
 
           {maintenanceHistoryLoading ? (
             <p className="staff-empty">กำลังโหลดข้อมูล...</p>
@@ -6491,31 +6506,48 @@ function StaffMain() {
             <p className="staff-empty">ยังไม่มีประวัติการจ่ายเงินห้องนี้</p>
           ) : (
             <>
-              <div className="staff-filters staff-modal-filters">
-                <input
-                  type="text"
-                  className="staff-search-input"
-                  placeholder="ค้นหาผู้เช่า, จำนวนเงิน, หมายเหตุ..."
-                  value={historySearch}
-                  onChange={(event) => {
-                    setHistorySearch(event.target.value)
-                    setHistoryPage(1)
-                  }}
-                />
-                <select
-                  className="staff-filter-select"
-                  value={historyStatusFilter}
-                  onChange={(event) => {
-                    setHistoryStatusFilter(event.target.value)
-                    setHistoryPage(1)
-                  }}
-                >
-                  <option value="all">ทุกสถานะ</option>
-                  <option value="paid">ชำระแล้ว</option>
-                  <option value="pending">รอชำระ</option>
-                  <option value="overdue">ค้างชำระ</option>
-                </select>
-              </div>
+              <StaffFilterPanel
+                sticky
+                segments={[
+                  { key: 'all', label: 'ทั้งหมด', count: historyPayments.length },
+                  {
+                    key: 'paid',
+                    label: 'ชำระแล้ว',
+                    count: historyPayments.filter((payment) => payment.status === 'paid').length,
+                    className: 'tone-success',
+                  },
+                  {
+                    key: 'pending',
+                    label: 'รอชำระ',
+                    count: historyPayments.filter((payment) => payment.status === 'pending').length,
+                    className: 'tone-warning',
+                  },
+                  {
+                    key: 'overdue',
+                    label: 'ค้างชำระ',
+                    count: historyPayments.filter((payment) => payment.status === 'overdue').length,
+                    className: 'tone-danger',
+                  },
+                ]}
+                active={historyStatusFilter}
+                onSegment={(value) => {
+                  setHistoryStatusFilter(value)
+                  setHistoryPage(1)
+                }}
+                search={historySearch}
+                onSearch={(value) => {
+                  setHistorySearch(value)
+                  setHistoryPage(1)
+                }}
+                searchPlaceholder="ค้นหาผู้เช่า จำนวนเงิน หรือหมายเหตุ"
+                resultText={`พบ ${filteredHistoryPayments.length} จาก ${historyPayments.length} รายการ`}
+                canClear={historyStatusFilter !== 'all' || Boolean(historySearch.trim())}
+                onClear={() => {
+                  setHistoryStatusFilter('all')
+                  setHistorySearch('')
+                  setHistoryPage(1)
+                }}
+              />
 
               {filteredHistoryPayments.length === 0 ? (
                 <p className="staff-empty">ไม่พบประวัติการชำระเงินที่ตรงกับเงื่อนไข</p>

@@ -4300,3 +4300,24 @@
     flex: 1 1 calc(50% - 6px);
   }
 }
+
+/* Segment tones shared by customer filter panels */
+.dashboard-parcel-segment.tone-success.is-active {
+  border-color: #059669;
+  background: #059669;
+}
+
+.dashboard-parcel-segment.tone-warning.is-active {
+  border-color: #d97706;
+  background: #d97706;
+}
+
+.dashboard-parcel-segment.tone-danger.is-active {
+  border-color: #dc2626;
+  background: #dc2626;
+}
+
+.dashboard-parcel-segment.tone-info.is-active {
+  border-color: #4f46e5;
+  background: #4f46e5;
+}
