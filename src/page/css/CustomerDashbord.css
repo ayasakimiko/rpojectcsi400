@@ -3768,3 +3768,138 @@
     width: 100%;
   }
 }
+
+/* Parcel list: clickable card with cover photo and progress */
+.dashboard-parcel-entry.is-clickable {
+  cursor: pointer;
+}
+
+.dashboard-parcel-entry.is-clickable:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.dashboard-parcel-entry-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.dashboard-parcel-entry-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dashboard-parcel-entry-main .dashboard-progress.is-compact {
+  margin-top: 8px;
+  max-width: 320px;
+}
+
+.dashboard-parcel-cover {
+  position: relative;
+  flex: 0 0 auto;
+  width: 92px;
+  height: 92px;
+  padding: 0;
+  overflow: hidden;
+  border: 1.5px solid #dce9fb;
+  border-radius: 14px;
+  background: #f8fbff;
+  cursor: zoom-in;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.dashboard-parcel-cover:hover {
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.dashboard-parcel-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dashboard-parcel-cover span {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(15, 43, 82, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboard-parcel-cover.is-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #93c5fd;
+  cursor: default;
+}
+
+.dashboard-parcel-cover.is-empty:hover {
+  transform: none;
+  border-color: #dce9fb;
+}
+
+.dashboard-parcel-entry.is-clickable .dashboard-parcel-entry-foot {
+  align-items: center;
+}
+
+.dashboard-parcel-more {
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dashboard-parcel-entry.is-clickable:hover .dashboard-parcel-more {
+  text-decoration: underline;
+}
+
+/* Parcel detail popup gallery */
+.dashboard-parcel-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.dashboard-parcel-gallery-main {
+  width: 100%;
+  height: 200px;
+  padding: 0;
+  overflow: hidden;
+  border: 1.5px solid #e3e9f3;
+  border-radius: 12px;
+  background: #f8fbff;
+  cursor: zoom-in;
+}
+
+.dashboard-parcel-gallery-main img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dashboard-parcel-gallery .dashboard-parcel-thumbs button {
+  width: 52px;
+  height: 52px;
+}
+
+@media (max-width: 480px) {
+  .dashboard-parcel-cover {
+    width: 68px;
+    height: 68px;
+  }
+
+  .dashboard-parcel-gallery-main {
+    height: 150px;
+  }
+}
