@@ -2891,14 +2891,39 @@ function CustomerDashbord() {
                       </div>
                     )}
                     <div className="dashboard-maintenance-detail-card">
-                      <h4 className="dashboard-detail-title">รายละเอียดพัสดุ</h4>
+                      <h4 className="dashboard-detail-title">ข้อมูลพัสดุ</h4>
                       <div className="dashboard-maintenance-detail-row">
-                        <span>ผู้ส่ง</span>
+                        <span>ผู้ส่ง / ขนส่ง</span>
                         <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
                       </div>
                       <div className="dashboard-maintenance-detail-row">
                         <span>เลขพัสดุ</span>
-                        <strong>{parcel.tracking_number || '-'}</strong>
+                        <strong>{parcel.tracking_number || 'ไม่มีเลขพัสดุ'}</strong>
+                      </div>
+                      <div className="dashboard-maintenance-detail-row">
+                        <span>จำนวนรูป</span>
+                        <strong>{photos.length} รูป</strong>
+                      </div>
+                      <div className="dashboard-maintenance-detail-row">
+                        <span>สถานะ</span>
+                        <strong className={isPending ? 'is-pending' : 'is-success'}>
+                          {isPending ? 'รอรับพัสดุ' : 'รับแล้ว'}
+                        </strong>
+                      </div>
+                      {parcel.description && (
+                        <div className="dashboard-maintenance-detail-row is-note">
+                          <span>รายละเอียด</span>
+                          <strong>{parcel.description}</strong>
+                        </div>
+                      )}
+                    </div>
+                    <div className="dashboard-maintenance-detail-card">
+                      <h4 className="dashboard-detail-title">การรับพัสดุ</h4>
+                      <div className="dashboard-maintenance-detail-row">
+                        <span>ผู้รับ</span>
+                        <strong>
+                          {customer.first_name} {customer.last_name}
+                        </strong>
                       </div>
                       <div className="dashboard-maintenance-detail-row">
                         <span>ห้อง</span>
@@ -2909,16 +2934,29 @@ function CustomerDashbord() {
                         <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
                       </div>
                       <div className="dashboard-maintenance-detail-row">
-                        <span>จำนวนรูป</span>
-                        <strong>{photos.length} รูป</strong>
+                        <span>วันที่พัสดุมาถึง</span>
+                        <strong>{formatDateTime(parcel.created_at)}</strong>
                       </div>
-                      {parcel.description && (
-                        <div className="dashboard-maintenance-detail-row is-note">
-                          <span>รายละเอียด</span>
-                          <strong>{parcel.description}</strong>
+                      <div className="dashboard-maintenance-detail-row">
+                        <span>วันที่รับพัสดุ</span>
+                        <strong className={isPending ? 'is-pending' : ''}>
+                          {isPending ? 'ยังไม่ได้รับ' : formatDateTime(parcel.received_at)}
+                        </strong>
+                      </div>
+                      {!isPending && parcel.received_at && (
+                        <div className="dashboard-maintenance-detail-row">
+                          <span>ใช้เวลาก่อนรับ</span>
+                          <strong>
+                            {formatRemaining(new Date(parcel.received_at).getTime() - new Date(parcel.created_at).getTime())}
+                          </strong>
                         </div>
                       )}
                     </div>
+                    {isPending && (
+                      <p className="dashboard-parcel-pickup-hint">
+                        เมื่อรับพัสดุแล้ว กด "ยืนยันรับพัสดุ" ด้านล่างเพื่อแจ้งให้เจ้าหน้าที่ทราบ
+                      </p>
+                    )}
                   </div>
                   <div className="dashboard-form-actions">
                     <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
