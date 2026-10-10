@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS Announcement (
     tone VARCHAR(20) NOT NULL DEFAULT 'info',
     author_name VARCHAR(255),
     expires_at DATETIME NULL,
+    photos LONGTEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -244,6 +245,16 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND COLUMN_NAME = 'expires_at'),
     'SELECT 1',
     'ALTER TABLE `Announcement` ADD COLUMN `expires_at` DATETIME NULL AFTER author_name'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND COLUMN_NAME = 'photos'),
+    'SELECT 1',
+    'ALTER TABLE `Announcement` ADD COLUMN `photos` LONGTEXT NULL AFTER expires_at'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;

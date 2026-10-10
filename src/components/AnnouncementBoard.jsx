@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import PhotoLightbox from './PhotoLightbox.jsx'
+import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
 import './AnnouncementBoard.css'
 
 const ANNOUNCEMENTS_PER_PAGE = 10
@@ -16,7 +18,10 @@ const EMPTY_FORM = {
   expYear: '',
   expHour: '23',
   expMinute: '59',
+  keptPhotos: [],
+  newPhotos: [],
 }
+const MAX_PHOTOS = 6
 const CONFIRM_TEXT = {
   publish: {
     title: 'ยืนยันการเผยแพร่ประกาศ',
@@ -61,28 +66,21 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => pad2(index))
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => pad2(index))
 const TONE_LABEL = { info: 'ทั่วไป', warning: 'แจ้งเตือน' }
 
-// Each page styles its cards and tables with its own class prefix, so the board borrows the host page's classes.
 const VARIANT_CLASSES = {
   staff: {
     card: 'staff-card',
     header: 'staff-card-header',
-    table: 'staff-table',
     button: 'staff-action-btn',
-    empty: 'staff-empty',
   },
   admin: {
     card: 'admin-card',
     header: 'admin-card-header',
-    table: 'table admin-table',
     button: 'admin-action-btn',
-    empty: 'admin-empty',
   },
   dashboard: {
     card: 'dashboard-card',
     header: 'dashboard-card-header',
-    table: 'dashboard-table',
     button: 'dashboard-action-btn',
-    empty: 'dashboard-empty',
   },
 }
 
@@ -96,13 +94,50 @@ function formatAnnouncementDate(value) {
   })
 }
 
+function PostPhotos({ photos, onOpen }) {
+  if (!photos?.length) return null
+  const shown = photos.slice(0, 4)
+  return (
+    <div className={`announcement-post-photos is-count-${shown.length}`}>
+      {shown.map((photo, index) => (
+        <button
+          type="button"
+          key={`${photo.url}-${index}`}
+          onClick={() => onOpen(index)}
+          aria-label={`ดูรูปที่ ${index + 1} จาก ${photos.length}`}
+        >
+          {shown.length === 1 && <img className="announcement-post-photo-backdrop" src={photo.url} alt="" aria-hidden="true" />}
+          <img className="announcement-post-photo" src={photo.url} alt={photo.name || `รูปประกาศ ${index + 1}`} loading="lazy" />
+          {index === shown.length - 1 && photos.length > shown.length && (
+            <span className="announcement-post-photos-more">+{photos.length - shown.length}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function toDayKey(value) {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+function formatRelativeTime(value, now) {
+  const minutes = Math.floor((now - new Date(value).getTime()) / 60000)
+  if (minutes < 1) return 'เมื่อสักครู่'
+  if (minutes < 60) return `${minutes} นาทีที่แล้ว`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} ชั่วโมงที่แล้ว`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days} วันที่แล้ว`
+  return formatAnnouncementDate(value)
+}
+
 function getDaysInMonth(year, month) {
   if (!year || !month) return 31
   return new Date(Number(year), Number(month), 0).getDate()
 }
 
-// Reads the expiry part of the form. kind is 'none', 'at' (a fixed moment, "YYYY-MM-DDTHH:mm") or
-// 'after' (a countdown in minutes, added to the server clock when the announcement is saved).
 function buildExpiry(form) {
   if (form.expMode === 'after') {
     const minutes = Number(form.expAfterHours) * 60 + Number(form.expAfterMinutes)
@@ -142,34 +177,72 @@ function describeExpiry(expiry) {
   return 'ไม่กำหนด'
 }
 
-// openId: an announcement whose detail dialog should already be open when the board mounts (used by notifications).
 function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onChange, variant = 'staff', openId = null }) {
   const classes = VARIANT_CLASSES[variant] || VARIANT_CLASSES.staff
   const [isCreating, setIsCreating] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [lightbox, setLightbox] = useState(null)
+  const newPhotoPreviews = useMemo(
+    () => form.newPhotos.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [form.newPhotos],
+  )
+  useEffect(() => () => newPhotoPreviews.forEach(({ url }) => URL.revokeObjectURL(url)), [newPhotoPreviews])
+  const photoCount = form.keptPhotos.length + form.newPhotos.length
+  const addPhotos = (fileList) => {
+    const files = Array.from(fileList || [])
+    if (files.length === 0) return
+    const invalid = files.map(validateImageFile).find(Boolean)
+    if (invalid) {
+      setError(invalid)
+      return
+    }
+    if (photoCount + files.length > MAX_PHOTOS) {
+      setError(`แนบรูปได้ไม่เกิน ${MAX_PHOTOS} รูป`)
+      return
+    }
+    setError('')
+    setForm((current) => ({ ...current, newPhotos: [...current.newPhotos, ...files] }))
+  }
+  const openLightbox = (item, index) => setLightbox({ item, index })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState(null)
-  const [result, setResult] = useState(null) 
+  const [result, setResult] = useState(null)
   const [detail, setDetail] = useState(() => announcements.find((item) => item.id === openId) || null)
   const [detailClosing, setDetailClosing] = useState(false)
   const [formClosing, setFormClosing] = useState(false)
   const [confirmClosing, setConfirmClosing] = useState(false)
   const [resultClosing, setResultClosing] = useState(false)
-  const [page, setPage] = useState(1)
+  const [visibleCount, setVisibleCount] = useState(ANNOUNCEMENTS_PER_PAGE)
+  const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [now, setNow] = useState(() => Date.now())
 
-  const totalPages = Math.max(1, Math.ceil(announcements.length / ANNOUNCEMENTS_PER_PAGE))
-  const currentPage = Math.min(page, totalPages)
-  const pageItems = announcements.slice((currentPage - 1) * ANNOUNCEMENTS_PER_PAGE, currentPage * ANNOUNCEMENTS_PER_PAGE)
+  const visibleItems = announcements.slice(0, visibleCount)
+  const hiddenCount = announcements.length - visibleItems.length
+  const today = new Date(now)
+  const todayKey = toDayKey(today)
+  const yesterdayKey = toDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1))
+  const announcementDayGroups = visibleItems.reduce((groups, item) => {
+    const key = toDayKey(item.created_at)
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.items.push(item)
+    else groups.push({ key, date: new Date(item.created_at), items: [item] })
+    return groups
+  }, [])
 
-  const hasCountdown = canManage && announcements.some((item) => item.expires_epoch)
+  const toggleExpanded = (id) =>
+    setExpandedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
   useEffect(() => {
-    if (!hasCountdown) return undefined
     const interval = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(interval)
-  }, [hasCountdown])
+  }, [])
 
   useEffect(() => {
     if (!formClosing) return undefined
@@ -211,10 +284,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const closeConfirm = () => setConfirmClosing(true)
   const closeResult = () => setResultClosing(true)
   const closeDetail = () => setDetailClosing(true)
-  const openDetail = (item) => {
-    setDetailClosing(false)
-    setDetail(item)
-  }
   const showResult = (next) => {
     setResultClosing(false)
     setResult(next)
@@ -250,7 +319,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const openEditForm = (item) => {
     const [datePart = '', timePart = ''] = (item.expires_at || '').split('T')
     const [year = '', month = '', day = ''] = datePart.split('-')
-    // split() on an empty string still yields [''], so a default in the destructuring would never apply.
     const [hour, minute] = timePart ? timePart.split(':') : ['23', '59']
     setFormClosing(false)
     setEditingId(item.id)
@@ -265,6 +333,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       expYear: year,
       expHour: hour,
       expMinute: minute,
+      keptPhotos: item.photos || [],
     })
     setError('')
     setIsCreating(true)
@@ -321,13 +390,15 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     const payload = { title: form.title.trim(), message: form.message.trim(), tone: form.tone }
     if (expiry.kind === 'after') payload.expires_in_minutes = expiry.minutes
     else payload.expires_at = expiry.kind === 'at' ? expiry.expiresAt : ''
+    if (editingId) payload.keep_photos = form.keptPhotos.map((photo) => photo.url)
     try {
+      payload.photos = await Promise.all(form.newPhotos.map((file) => compressImageFile(file)))
       let response
       if (editingId) {
         response = await axios.patch(`${apiBase}/${editingId}`, payload, { headers: authHeaders() })
       } else {
         response = await axios.post(apiBase, payload, { headers: authHeaders() })
-        setPage(1)
+        setVisibleCount(ANNOUNCEMENTS_PER_PAGE)
       }
       closeConfirm()
       closeForm()
@@ -389,118 +460,135 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
         </p>
       )}
 
-      <div className={`table-responsive announcement-scroll${announcements.length === 0 && variant === 'dashboard' ? ' is-empty' : ''}`}>
-        {announcements.length === 0 && variant === 'dashboard' ? (
-          <p className="announcement-empty-state">ยังไม่มีประกาศ</p>
+      <div className={`announcement-scroll${announcements.length === 0 ? ' is-empty' : ''}`}>
+        {announcements.length === 0 ? (
+          <div className="announcement-feed-empty">
+            <span className="announcement-feed-empty-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 11v2a1 1 0 0 0 1 1h2l5 4V6L7 10H5a1 1 0 0 0-1 1Z" />
+                <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
+              </svg>
+            </span>
+            <strong>ยังไม่มีประกาศ</strong>
+            <span>{canManage ? 'กด "+ เพิ่มประกาศ" เพื่อโพสต์ประกาศแรก' : 'เมื่อหอพักมีประกาศใหม่ จะแสดงที่นี่'}</span>
+          </div>
         ) : (
-          <table className={`${classes.table} announcement-table`}>
-            <thead>
-              <tr>
-                <th>หัวข้อ</th>
-                <th>ประเภท</th>
-                <th>ประกาศโดย</th>
-                <th>วันที่ประกาศ</th>
-                {canManage && <th>ลบอัตโนมัติ</th>}
-                {canManage && <th>จัดการ</th>}
-                <th className="announcement-cell-more" aria-label="ดูรายละเอียด" />
-              </tr>
-            </thead>
-            <tbody>
-              {announcements.length === 0 ? (
-                <tr>
-                  <td colSpan={canManage ? 7 : 5} className={`${classes.empty} announcement-empty-cell`}>
-                    ยังไม่มีประกาศ
-                  </td>
-                </tr>
-              ) : (
-                pageItems.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="announcement-row"
-                    tabIndex={0}
-                    title="คลิกเพื่อดูรายละเอียดประกาศ"
-                    onClick={() => openDetail(item)}
-                    onKeyDown={(event) => {
-                      if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
-                        event.preventDefault()
-                        openDetail(item)
-                      }
-                    }}
-                  >
-                    <td className="announcement-cell-title">{item.title}</td>
-                    <td>
-                      <span className={`announcement-tone is-${item.tone || 'info'}`}>
-                        {TONE_LABEL[item.tone] || TONE_LABEL.info}
-                      </span>
-                    </td>
-                    <td>{item.author || 'เจ้าหน้าที่'}</td>
-                    <td className="announcement-cell-date">{formatAnnouncementDate(item.created_at)}</td>
-                    {canManage && (
-                      <td className="announcement-cell-date">
-                        {item.expires_at ? (
-                          <>
-                            <div>{formatExpiryDate(item.expires_at)}</div>
-                            {item.expires_epoch && (
-                              <small className="announcement-remaining">
-                                {formatRemaining(item.expires_epoch * 1000 - now)}
-                              </small>
-                            )}
-                          </>
-                        ) : (
-                          <span className="announcement-no-expiry">ไม่กำหนด</span>
-                        )}
-                      </td>
-                    )}
-                    {canManage && (
-                      <td onClick={(event) => event.stopPropagation()}>
-                        <div className="announcement-row-actions">
-                          <button type="button" className={`${classes.button} is-ghost`} onClick={() => openEditForm(item)}>
-                            แก้ไข
-                          </button>
-                          <button
-                            type="button"
-                            className={`${classes.button} is-danger`}
-                            onClick={() => openConfirm({ kind: 'delete', id: item.id, title: item.title })}
-                          >
-                            ลบ
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                    <td className="announcement-cell-more">ดูรายละเอียด</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <>
+            <div className="announcement-feed">
+              {announcementDayGroups.map((group) => {
+                const relativeDay = group.key === todayKey ? 'วันนี้' : group.key === yesterdayKey ? 'เมื่อวาน' : null
+                const weekday = group.date.toLocaleDateString('th-TH', { weekday: 'long' })
+                return (
+                  <section className="announcement-day" key={group.key}>
+                    <header className="announcement-day-head">
+                      <div className="announcement-day-date">
+                        <strong>{group.date.getDate()}</strong>
+                        <small>{group.date.toLocaleDateString('th-TH', { month: 'short' })}</small>
+                      </div>
+                      <div className="announcement-day-text">
+                        <strong>{relativeDay || weekday}</strong>
+                        <span>
+                          {relativeDay ? `${weekday} ` : ''}
+                          {group.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <span className="announcement-day-count">{group.items.length} ประกาศ</span>
+                    </header>
+                    <ol className="announcement-day-posts">
+                      {group.items.map((item) => {
+                        const tone = item.tone === 'warning' ? 'warning' : 'info'
+                        const message = item.message || ''
+                        const isLong = message.length > 220 || message.split('\n').length > 4
+                        const isExpanded = expandedIds.has(item.id)
+                        const isNew = now - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000
+                        return (
+                          <li key={item.id} className={`announcement-day-item is-${tone}`}>
+                            <span className="announcement-day-dot" aria-hidden="true" />
+                            <article className={`announcement-post is-${tone}`}>
+                              <header className="announcement-post-head">
+                                <span className="announcement-post-avatar" aria-hidden="true">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M4 11v2a1 1 0 0 0 1 1h2l5 4V6L7 10H5a1 1 0 0 0-1 1Z" />
+                                    <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
+                                  </svg>
+                                </span>
+                                <div className="announcement-post-byline">
+                                  <strong>{item.author || 'เจ้าหน้าที่'}</strong>
+                                  <span title={`${formatAnnouncementDate(item.created_at)} น.`}>
+                                    {formatRelativeTime(item.created_at, now)}
+                                    <span aria-hidden="true"> · </span>
+                                    ประกาศจากหอพัก
+                                  </span>
+                                </div>
+                                <div className="announcement-post-badges">
+                                  {isNew && <span className="announcement-post-new">ใหม่</span>}
+                                  <span className={`announcement-tone is-${tone}`}>{TONE_LABEL[tone]}</span>
+                                </div>
+                              </header>
+                              <div className="announcement-post-body">
+                                <h3 className="announcement-post-title">{item.title}</h3>
+                                <p className={`announcement-post-message${isLong && !isExpanded ? ' is-clamped' : ''}`}>{message}</p>
+                                {isLong && (
+                                  <button type="button" className="announcement-post-more" onClick={() => toggleExpanded(item.id)}>
+                                    {isExpanded ? 'ย่อข้อความ' : 'ดูเพิ่มเติม'}
+                                  </button>
+                                )}
+                              </div>
+                              <PostPhotos photos={item.photos} onOpen={(index) => openLightbox(item, index)} />
+                              {canManage && (
+                                <footer className="announcement-post-foot">
+                                  <span className={`announcement-post-expiry${item.expires_at ? ' is-set' : ''}`}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <circle cx="12" cy="12" r="9" />
+                                      <path d="M12 7v5l3 2" />
+                                    </svg>
+                                    {item.expires_at ? (
+                                      <>
+                                        ลบอัตโนมัติ {formatExpiryDate(item.expires_at)}
+                                        {item.expires_epoch && (
+                                          <small className="announcement-remaining">{formatRemaining(item.expires_epoch * 1000 - now)}</small>
+                                        )}
+                                      </>
+                                    ) : (
+                                      'ไม่ลบอัตโนมัติ'
+                                    )}
+                                  </span>
+                                  <div className="announcement-post-actions">
+                                    <button type="button" className={`${classes.button} is-ghost`} onClick={() => openEditForm(item)}>
+                                      แก้ไข
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`${classes.button} is-danger`}
+                                      onClick={() => openConfirm({ kind: 'delete', id: item.id, title: item.title })}
+                                    >
+                                      ลบ
+                                    </button>
+                                  </div>
+                                </footer>
+                              )}
+                            </article>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  </section>
+                )
+              })}
+            </div>
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                className="announcement-feed-more"
+                onClick={() => setVisibleCount((count) => count + ANNOUNCEMENTS_PER_PAGE)}
+              >
+                ดูประกาศก่อนหน้า
+                <span>{hiddenCount}</span>
+              </button>
+            )}
+          </>
         )}
       </div>
-
-      {totalPages > 1 && (
-        <div className="announcement-pagination">
-          <span>
-            หน้า {currentPage} / {totalPages}
-          </span>
-          <div className="announcement-pagination-controls">
-            <button
-              type="button"
-              className={`${classes.button} is-ghost`}
-              disabled={currentPage <= 1}
-              onClick={() => setPage(currentPage - 1)}
-            >
-              ก่อนหน้า
-            </button>
-            <button
-              type="button"
-              className={`${classes.button} is-ghost`}
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage(currentPage + 1)}
-            >
-              ถัดไป
-            </button>
-          </div>
-        </div>
-      )}
 
       {detail && (
         <div
@@ -542,6 +630,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 </span>
               </div>
               <p className="announcement-detail-message">{detail.message}</p>
+              <PostPhotos photos={detail.photos} onOpen={(index) => openLightbox(detail, index)} />
               <dl className="announcement-detail-meta">
                 <div>
                   <dt>ประกาศโดย</dt>
@@ -636,6 +725,69 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                   onChange={(event) => setForm((value) => ({ ...value, message: event.target.value }))}
                 />
               </label>
+              <div className="announcement-photo-field">
+                <span>
+                  รูปภาพ (ไม่บังคับ)
+                  <small>
+                    {photoCount} / {MAX_PHOTOS} รูป
+                  </small>
+                </span>
+                <div className="announcement-photo-grid">
+                  {form.keptPhotos.map((photo) => (
+                    <figure key={photo.url}>
+                      <img src={photo.url} alt={photo.name || 'รูปประกาศ'} />
+                      <button
+                        type="button"
+                        aria-label="ลบรูปนี้"
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            keptPhotos: current.keptPhotos.filter((item) => item.url !== photo.url),
+                          }))
+                        }
+                      >
+                        ×
+                      </button>
+                    </figure>
+                  ))}
+                  {newPhotoPreviews.map(({ file, url }) => (
+                    <figure key={url}>
+                      <img src={url} alt={file.name} />
+                      <button
+                        type="button"
+                        aria-label="ลบรูปนี้"
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            newPhotos: current.newPhotos.filter((item) => item !== file),
+                          }))
+                        }
+                      >
+                        ×
+                      </button>
+                    </figure>
+                  ))}
+                  {photoCount < MAX_PHOTOS && (
+                    <label className="announcement-photo-add">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        onChange={(event) => {
+                          addPhotos(event.target.files)
+                          event.target.value = ''
+                        }}
+                      />
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <circle cx="9" cy="10" r="1.5" />
+                        <path d="m21 16-5-5-8 8" />
+                      </svg>
+                      เพิ่มรูป
+                    </label>
+                  )}
+                </div>
+              </div>
               <div className="announcement-expiry" role="group" aria-labelledby="announcement-expiry-label">
                 <span id="announcement-expiry-label">ลบประกาศอัตโนมัติ (ไม่บังคับ)</span>
                 <div className="announcement-expiry-modes" role="radiogroup" aria-labelledby="announcement-expiry-label">
@@ -813,6 +965,12 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               <span>หัวข้อ</span>
               <strong>{confirm.title}</strong>
             </div>
+            {confirm.kind !== 'delete' && photoCount > 0 && (
+              <div className="announcement-confirm-detail">
+                <span>รูปภาพ</span>
+                <strong>{photoCount} รูป</strong>
+              </div>
+            )}
             {confirm.kind !== 'delete' && (
               <div className="announcement-confirm-detail">
                 <span>ลบอัตโนมัติ</span>
@@ -882,6 +1040,19 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
             </div>
           </section>
         </div>
+      )}
+      {lightbox && (
+        <PhotoLightbox
+          photos={(lightbox.item.photos || []).map((photo, index) => ({
+            name: photo.name || `รูปที่ ${index + 1}`,
+            url: photo.url,
+          }))}
+          initialIndex={lightbox.index}
+          title={lightbox.item.title}
+          subtitle={lightbox.item.author || 'เจ้าหน้าที่'}
+          label="รูปประกาศ"
+          onClose={() => setLightbox(null)}
+        />
       )}
     </section>
   )
