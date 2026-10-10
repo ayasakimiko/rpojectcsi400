@@ -1040,37 +1040,47 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
 
           <div className="staff-transfer-scroll">
             <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ผู้เช่า</h4>
-              <dl className="staff-transfer-list">
+              <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
+              <div className="staff-transfer-columns">
                 <div>
-                  <dt>เบอร์โทร</dt>
-                  <dd>{request.phone || '-'}</dd>
+                  <p className="staff-transfer-subtitle">ผู้เช่า</p>
+                  <dl className="staff-transfer-list is-single">
+                    <div>
+                      <dt>ชื่อ</dt>
+                      <dd>
+                        {request.first_name} {request.last_name}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>เบอร์โทร</dt>
+                      <dd>{request.phone || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>ส่งคำขอ</dt>
+                      <dd>{formatDateTime(request.created_at)}</dd>
+                    </div>
+                  </dl>
                 </div>
                 <div>
-                  <dt>ส่งคำขอ</dt>
-                  <dd>{formatDateTime(request.created_at)}</dd>
+                  <p className="staff-transfer-subtitle">การเงินและสัญญา</p>
+                  <dl className="staff-transfer-list is-single">
+                    <div>
+                      <dt>เงินประกัน</dt>
+                      <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>ยอดค้างชำระ</dt>
+                      <dd className={hasDue ? 'is-danger' : 'is-success'}>
+                        {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>สิ้นสุดสัญญา</dt>
+                      <dd>{formatDate(room?.rental_end_date)}</dd>
+                    </div>
+                  </dl>
                 </div>
-              </dl>
-            </section>
-
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">การเงินและสัญญา</h4>
-              <dl className="staff-transfer-list">
-                <div>
-                  <dt>เงินประกัน</dt>
-                  <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
-                </div>
-                <div>
-                  <dt>ยอดค้างชำระ</dt>
-                  <dd className={hasDue ? 'is-danger' : 'is-success'}>
-                    {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>สิ้นสุดสัญญา</dt>
-                  <dd>{formatDate(room?.rental_end_date)}</dd>
-                </div>
-              </dl>
+              </div>
             </section>
 
             <section className="staff-transfer-section">
@@ -1642,77 +1652,75 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
               </div>
 
               <section className="staff-transfer-section">
-                <h4 className="staff-transfer-section-title">ผู้เช่า</h4>
-                <dl className="staff-transfer-list">
+                <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
+                <div className="staff-transfer-columns">
                   <div>
-                    <dt>ชื่อ</dt>
-                    <dd>
-                      {request.first_name} {request.last_name}
-                    </dd>
+                    <p className="staff-transfer-subtitle">ผู้เช่า</p>
+                    <dl className="staff-transfer-list is-single">
+                      <div>
+                        <dt>ชื่อ</dt>
+                        <dd>
+                          {request.first_name} {request.last_name}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>เบอร์โทร</dt>
+                        <dd>{request.phone || '-'}</dd>
+                      </div>
+                    </dl>
+                    <p className="staff-transfer-subtitle">การเงิน</p>
+                    <dl className="staff-transfer-list is-single">
+                      <div>
+                        <dt>เงินประกัน</dt>
+                        <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>ยอดค้างห้องเดิม</dt>
+                        <dd className={hasDue ? 'is-danger' : 'is-success'}>
+                          {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>ชำระล่วงหน้าถึง</dt>
+                        <dd>{request.source_prepaid_until ? formatDate(request.source_prepaid_until) : '-'}</dd>
+                      </div>
+                    </dl>
                   </div>
                   <div>
-                    <dt>เบอร์โทร</dt>
-                    <dd>{request.phone || '-'}</dd>
+                    <p className="staff-transfer-subtitle">สัญญาเช่า (ย้ายไปห้องใหม่)</p>
+                    <dl className="staff-transfer-list is-single">
+                      <div>
+                        <dt>สิ้นสุดสัญญา</dt>
+                        <dd>{formatDate(contractEnd)}</dd>
+                      </div>
+                      <div>
+                        <dt>คงเหลือ</dt>
+                        <dd
+                          className={
+                            contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''
+                          }
+                        >
+                          {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="staff-transfer-subtitle">คำขอย้ายห้อง</p>
+                    <dl className="staff-transfer-list is-single">
+                      <div>
+                        <dt>เหตุผล</dt>
+                        <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>ต้องการย้าย</dt>
+                        <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+                      </div>
+                      <div>
+                        <dt>ส่งคำขอ</dt>
+                        <dd>{formatDateTime(request.created_at)}</dd>
+                      </div>
+                    </dl>
                   </div>
-                </dl>
-              </section>
-
-              <section className="staff-transfer-section">
-                <h4 className="staff-transfer-section-title">การเงิน</h4>
-                <dl className="staff-transfer-list">
-                  <div>
-                    <dt>เงินประกัน</dt>
-                    <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
-                  </div>
-                  <div>
-                    <dt>ยอดค้างห้องเดิม</dt>
-                    <dd className={hasDue ? 'is-danger' : 'is-success'}>
-                      {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>ชำระล่วงหน้าถึง</dt>
-                    <dd>{request.source_prepaid_until ? formatDate(request.source_prepaid_until) : '-'}</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section className="staff-transfer-section">
-                <h4 className="staff-transfer-section-title">สัญญาเช่า (ย้ายไปห้องใหม่)</h4>
-                <dl className="staff-transfer-list">
-                  <div>
-                    <dt>สิ้นสุดสัญญา</dt>
-                    <dd>{formatDate(contractEnd)}</dd>
-                  </div>
-                  <div>
-                    <dt>คงเหลือ</dt>
-                    <dd
-                      className={
-                        contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''
-                      }
-                    >
-                      {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section className="staff-transfer-section">
-                <h4 className="staff-transfer-section-title">คำขอย้ายห้อง</h4>
-                <dl className="staff-transfer-list is-single">
-                  <div>
-                    <dt>เหตุผล</dt>
-                    <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
-                  </div>
-                  <div>
-                    <dt>ต้องการย้ายวันที่</dt>
-                    <dd>{formatDateOnly(request.preferred_move_date)}</dd>
-                  </div>
-                  <div>
-                    <dt>ส่งคำขอ</dt>
-                    <dd>{formatDateTime(request.created_at)}</dd>
-                  </div>
-                </dl>
+                </div>
                 {request.note && (
                   <p className="staff-transfer-note">
                     <span>หมายเหตุ:</span> {request.note}
