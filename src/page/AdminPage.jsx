@@ -28,6 +28,33 @@ const MOVE_OUT_CHECKLIST = [
   { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์ของห้อง' },
 ]
 
+const INSPECTION_RESULT_ORDER = ['good', 'wear', 'damaged', 'missing', 'not_applicable']
+const INSPECTION_TONE_LABEL = { danger: 'พบชำรุด/สูญหาย', warning: 'พบสึกหรอ', success: 'สภาพปกติ' }
+const ADMIN_INSPECTION_KINDS = {
+  moveout: {
+    label: 'ตรวจห้องย้ายออก',
+    title: 'Checklist ตรวจห้องย้ายออก',
+    note: 'รายงานตรวจสภาพห้องตอนผู้เช่าย้ายออกที่ Staff ส่งมา',
+    empty: 'ยังไม่มีรายงานตรวจห้องย้ายออกจาก Staff',
+  },
+  move_room: {
+    label: 'ตรวจก่อนย้ายห้อง',
+    title: 'Checklist ตรวจห้องก่อนย้ายห้อง',
+    note: 'ผลตรวจห้องเดิมจากคำขอย้ายห้อง ซึ่ง Staff ต้องตรวจก่อนอนุมัติ',
+    empty: 'ยังไม่มีผลตรวจห้องก่อนย้ายห้อง',
+  },
+}
+const inspectionKindOf = (inspection) => (inspection.tenant_request_id ? 'move_room' : 'moveout')
+
+function summarizeInspection(checklist) {
+  const counts = Object.fromEntries(INSPECTION_RESULT_ORDER.map((key) => [key, 0]))
+  for (const result of Object.values(checklist || {})) {
+    if (result in counts) counts[result] += 1
+  }
+  const tone = counts.damaged + counts.missing > 0 ? 'danger' : counts.wear > 0 ? 'warning' : 'success'
+  return { counts, tone }
+}
+
 const MOVE_OUT_INSPECTION_STATUS = {
   pending: 'รอ Admin ตรวจ',
   reviewed: 'Admin ตรวจแล้ว',
@@ -593,6 +620,10 @@ function AdminBackupPage() {
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
   const [parcelPage, setParcelPage] = useState(1)
   const [moveOutInspections, setMoveOutInspections] = useState([])
+  const [inspectionKind, setInspectionKind] = useState('moveout')
+  const [inspectionSearch, setInspectionSearch] = useState('')
+  const [inspectionResultFilter, setInspectionResultFilter] = useState('all')
+  const [inspectionStatusFilter, setInspectionStatusFilter] = useState('all')
   const [announcements, setAnnouncements] = useState([])
   const [inspectionDetail, setInspectionDetail] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
@@ -1677,6 +1708,35 @@ function AdminBackupPage() {
     const matchesSearch = !search || [entry.full_name, entry.phone, entry.room_preference, entry.note, entry.submitted_by_name]
       .some((value) => String(value || '').toLocaleLowerCase('th-TH').includes(search))
     return matchesStatus && matchesSearch
+  })
+
+  const inspectionKindCounts = moveOutInspections.reduce((counts, inspection) => {
+    const kind = inspectionKindOf(inspection)
+    counts[kind] = (counts[kind] || 0) + 1
+    return counts
+  }, {})
+  const kindInspections = moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
+  const inspectionToneCounts = kindInspections.reduce((counts, inspection) => {
+    const tone = summarizeInspection(inspection.checklist).tone
+    counts[tone] = (counts[tone] || 0) + 1
+    return counts
+  }, {})
+  const inspectionKeyword = inspectionSearch.trim().toLocaleLowerCase('th-TH')
+  const filteredInspections = kindInspections.filter((inspection) => {
+    if (inspectionResultFilter !== 'all' && summarizeInspection(inspection.checklist).tone !== inspectionResultFilter) return false
+    if (inspectionKind === 'moveout' && inspectionStatusFilter !== 'all' && (inspection.status || 'pending') !== inspectionStatusFilter) {
+      return false
+    }
+    if (!inspectionKeyword) return true
+    return [
+      inspection.room_number,
+      inspection.target_room_number,
+      inspection.tenant_name,
+      inspection.tenant_phone,
+      inspection.inspected_by,
+      inspection.damage_note,
+    ]
+      .some((value) => String(value ?? '').toLocaleLowerCase('th-TH').includes(inspectionKeyword))
   })
 
   const filteredParcels = parcels.filter((parcel) => {
@@ -3058,49 +3118,199 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <div>
-                <h2>Checklist ตรวจสภาพห้อง ({moveOutInspections.length})</h2>
-                <p className="waiting-list-storage-note">รายงานตรวจห้องที่ Staff ส่งมา</p>
+                <h2>
+                  {ADMIN_INSPECTION_KINDS[inspectionKind].title} ({kindInspections.length})
+                </h2>
+                <p className="waiting-list-storage-note">{ADMIN_INSPECTION_KINDS[inspectionKind].note}</p>
+              </div>
+            </div>
+            <div className="inspection-kind-tabs" role="tablist" aria-label="ประเภทการตรวจห้อง">
+              {Object.entries(ADMIN_INSPECTION_KINDS).map(([key, info]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={inspectionKind === key}
+                  className={`inspection-kind-tab${inspectionKind === key ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setInspectionKind(key)
+                    setInspectionResultFilter('all')
+                    setInspectionStatusFilter('all')
+                  }}
+                >
+                  {key === 'moveout' ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <path d="m16 17 5-5-5-5M21 12H9" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M7 7h11l-3-3M17 17H6l3 3" />
+                    </svg>
+                  )}
+                  {info.label}
+                  <span>{inspectionKindCounts[key] || 0}</span>
+                </button>
+              ))}
+            </div>
+            <div className="admin-toolbar">
+              <div className="admin-search-group">
+                <label className="admin-toolbar-label" htmlFor="inspection-search">ค้นหา</label>
+                <input
+                  id="inspection-search"
+                  type="search"
+                  className="form-control admin-search-input"
+                  placeholder="เลขห้อง, ผู้เช่า, ผู้ตรวจ, รายละเอียด..."
+                  value={inspectionSearch}
+                  onChange={(event) => setInspectionSearch(event.target.value)}
+                />
+              </div>
+              <div className="admin-toolbar-filters">
+                <div className="admin-filter-group">
+                  <label className="admin-toolbar-label" htmlFor="inspection-result-filter">ผลตรวจ</label>
+                  <select
+                    id="inspection-result-filter"
+                    className="form-select admin-filter-select"
+                    value={inspectionResultFilter}
+                    onChange={(event) => setInspectionResultFilter(event.target.value)}
+                  >
+                    <option value="all">ทุกผลตรวจ ({kindInspections.length})</option>
+                    {Object.entries(INSPECTION_TONE_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label} ({inspectionToneCounts[value] || 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {inspectionKind === 'moveout' && (
+                  <div className="admin-filter-group">
+                    <label className="admin-toolbar-label" htmlFor="inspection-status-filter">สถานะ</label>
+                    <select
+                      id="inspection-status-filter"
+                      className="form-select admin-filter-select"
+                      value={inspectionStatusFilter}
+                      onChange={(event) => setInspectionStatusFilter(event.target.value)}
+                    >
+                      <option value="all">ทุกสถานะ</option>
+                      {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
             <div className="table-responsive">
-              <table className="table admin-table">
-                <thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>วันที่ตรวจ</th><th>ความเสียหาย</th><th>รูป</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+              <table className="table admin-table admin-inspection-table">
+                <colgroup>
+                  <col className="is-room" />
+                  <col className="is-tenant" />
+                  <col className="is-date" />
+                  <col className="is-result" />
+                  <col className="is-inspector" />
+                  <col className="is-photos" />
+                  <col className="is-status" />
+                  <col className="is-actions" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>ห้อง</th>
+                    <th>ผู้เช่า</th>
+                    <th>วันที่ตรวจ</th>
+                    <th>ผลตรวจ</th>
+                    <th>ผู้ตรวจ</th>
+                    <th>รูป</th>
+                    <th>สถานะ</th>
+                    <th className="admin-inspection-actions">จัดการ</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {moveOutInspections.length === 0 ? (
-                    <tr><td colSpan={7} className="admin-empty">ยังไม่มีรายงานตรวจห้องจาก Staff</td></tr>
-                  ) : moveOutInspections.map((inspection) => (
-                    <tr key={inspection.id}>
-                      <td className="admin-strong-cell">
-                        {inspection.tenant_request_id
-                          ? `ห้อง ${inspection.room_number} → ${inspection.target_room_number}`
-                          : inspection.room_number}
-                        {inspection.tenant_request_id && <small className="waiting-list-date">ตรวจห้องก่อนย้าย</small>}
+                  {filteredInspections.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="admin-empty">
+                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : ADMIN_INSPECTION_KINDS[inspectionKind].empty}
                       </td>
-                      <td>{inspection.tenant_name}<small className="waiting-list-date">{inspection.tenant_phone || '-'}</small></td>
-                      <td>{formatDateTime(inspection.created_at)}</td>
-                      <td>
-                        {inspection.checklist && Object.values(inspection.checklist).some((result) => ['damaged', 'missing'].includes(result))
-                          ? 'พบชำรุด/สูญหาย'
-                          : inspection.checklist && Object.values(inspection.checklist).includes('wear')
-                            ? 'พบสึกหรอ'
-                            : inspection.damage_note
-                              ? 'มีหมายเหตุ'
-                              : 'ไม่พบ'}
-                      </td>
-                      <td>{inspection.photo_count || 0} รูป</td>
-                      <td>
-                        {inspection.tenant_request_id ? 'Staff ตรวจแล้ว' : (
-                          <select aria-label={`สถานะตรวจห้อง ${inspection.room_number}`} className="form-select waiting-list-status-select" value={inspection.status || 'pending'} onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}>
-                            {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                          </select>
-                        )}
-                      </td>
-                      <td><div className="admin-row-actions">
-                        <button type="button" className="admin-action-btn is-ghost" onClick={() => openInspectionDetail(inspection)}>ดูรายละเอียด</button>
-                        <button type="button" className="admin-action-btn is-danger" onClick={() => removeMoveOutInspection(inspection)}>ลบ</button>
-                      </div></td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredInspections.map((inspection) => {
+                      const summary = summarizeInspection(inspection.checklist)
+                      const issueCount = summary.counts.damaged + summary.counts.missing
+                      return (
+                        <tr key={inspection.id}>
+                          <td>
+                            <div className="admin-inspection-room">
+                              {inspection.tenant_request_id ? (
+                                <>
+                                  <strong>
+                                    {inspection.room_number} → {inspection.target_room_number || '-'}
+                                  </strong>
+                                  <small>ห้องเดิม → ห้องใหม่</small>
+                                </>
+                              ) : (
+                                <strong>ห้อง {inspection.room_number}</strong>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="admin-inspection-stack">
+                              <strong>{inspection.tenant_name}</strong>
+                              <small>{inspection.tenant_phone || '-'}</small>
+                            </div>
+                          </td>
+                          <td className="admin-inspection-date">{formatDateTime(inspection.created_at)}</td>
+                          <td>
+                            <div className="admin-inspection-result">
+                              <span className={`inspection-result is-${summary.tone}`}>
+                                {INSPECTION_TONE_LABEL[summary.tone]}
+                                {issueCount > 0 && ` ${issueCount} ข้อ`}
+                              </span>
+                              <div className="inspection-meter" aria-hidden="true">
+                                {INSPECTION_RESULT_ORDER.map((key) =>
+                                  summary.counts[key] > 0 ? (
+                                    <span key={key} className={`is-${key}`} style={{ flexGrow: summary.counts[key] }} />
+                                  ) : null,
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className={inspection.inspected_by ? '' : 'admin-inspection-muted'}>{inspection.inspected_by || '-'}</td>
+                          <td>
+                            <span className="admin-inspection-photos">{inspection.photo_count || 0} รูป</span>
+                          </td>
+                          <td>
+                            {inspection.tenant_request_id ? (
+                              <span className="moveout-inspection-status is-reviewed">Staff ตรวจแล้ว</span>
+                            ) : (
+                              <select
+                                aria-label={`สถานะตรวจห้อง ${inspection.room_number}`}
+                                className={`form-select waiting-list-status-select admin-inspection-status is-${inspection.status || 'pending'}`}
+                                value={inspection.status || 'pending'}
+                                onChange={(event) => setMoveOutInspectionStatus(inspection, event.target.value)}
+                              >
+                                {Object.entries(MOVE_OUT_INSPECTION_STATUS).map(([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </td>
+                          <td className="admin-inspection-actions">
+                            <div className="admin-row-actions">
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openInspectionDetail(inspection)}>
+                                ดูรายละเอียด
+                              </button>
+                              <button type="button" className="admin-action-btn is-danger" onClick={() => removeMoveOutInspection(inspection)}>
+                                ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

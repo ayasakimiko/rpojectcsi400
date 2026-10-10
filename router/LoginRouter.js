@@ -40,10 +40,8 @@ router.post("/login", async (req, res) => {
     } else {
       const [rows] = await pool.query(
         `SELECT c.* FROM Customer c
-         JOIN Booking b ON b.customer_id = c.id
-         JOIN Room r ON r.id = b.room_id
-         WHERE r.room_number = ?
-         ORDER BY b.created_at DESC
+         WHERE c.room_number = ? AND c.is_suspended = FALSE
+         ORDER BY c.id DESC
          LIMIT 1`,
         [normalizedUsername],
       );

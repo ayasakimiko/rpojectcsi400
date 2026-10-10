@@ -173,7 +173,8 @@ router.get("/waiting-list", async (_req, res) => {
   try {
     const pool = getPool();
     const [waitingList] = await pool.query(
-      `SELECT id, full_name, phone, room_preference, note, status, submitted_by_name, created_at
+      `SELECT id, full_name, phone, room_preference, note, DATE_FORMAT(desired_move_in_date, '%Y-%m-%d') AS desired_move_in_date,
+              status, submitted_by_name, created_at
        FROM WaitingList ORDER BY created_at DESC, id DESC`,
     );
     return res.json({ waitingList });
@@ -193,8 +194,8 @@ router.post("/waiting-list", async (req, res) => {
     const pool = getPool();
     const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `INSERT INTO WaitingList (full_name, phone, room_preference, note, submitted_by_name) VALUES (?, ?, ?, ?, ?)`,
-      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, staffName],
+      `INSERT INTO WaitingList (full_name, phone, room_preference, note, desired_move_in_date, submitted_by_name) VALUES (?, ?, ?, ?, ?, ?)`,
+      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, value.desired_move_in_date ?? null, staffName],
     );
     return res.status(201).json({ message: "เพิ่มรายชื่อผู้สนใจสำเร็จ", waitingListId: result.insertId });
   } catch (error) {
@@ -216,8 +217,8 @@ router.patch("/waiting-list/:id", async (req, res) => {
 
     const pool = getPool();
     const [result] = await pool.query(
-      `UPDATE WaitingList SET full_name = ?, phone = ?, room_preference = ?, note = ? WHERE id = ?`,
-      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, entryId],
+      `UPDATE WaitingList SET full_name = ?, phone = ?, room_preference = ?, note = ?, desired_move_in_date = ? WHERE id = ?`,
+      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, value.desired_move_in_date ?? null, entryId],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "ไม่พบรายชื่อผู้สนใจ" });
@@ -253,7 +254,8 @@ router.get("/move-out-inspections", async (_req, res) => {
     const pool = getPool();
     const [inspections] = await pool.query(
       `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number,
-              moi.tenant_name, moi.checklist, moi.status, moi.created_at
+              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.inspected_by_name,
+              JSON_LENGTH(moi.photos) AS photo_count, moi.status, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
        ORDER BY moi.created_at DESC, moi.id DESC`,
