@@ -1517,7 +1517,7 @@ function CustomerDashbord() {
   }, [notifOpen])
 
   const [successPopup, setSuccessPopup] = useState(null)
-  const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', current_password: '', new_password: '', confirm_password: '' })
+  const [profileForm, setProfileForm] = useState({ phone: '', current_password: '', new_password: '', confirm_password: '' })
   const [profileSubmitting, setProfileSubmitting] = useState(false)
   const [profileError, setProfileError] = useState('')
 
@@ -1813,8 +1813,6 @@ function CustomerDashbord() {
   // Fills the profile form with what is currently saved and clears the password boxes.
   const resetProfileForm = () => {
     setProfileForm({
-      first_name: data?.customer?.first_name || '',
-      last_name: data?.customer?.last_name || '',
       phone: data?.customer?.phone || '',
       current_password: '',
       new_password: '',
@@ -1844,8 +1842,6 @@ function CustomerDashbord() {
     try {
       const token = sessionStorage.getItem('token')
       const payload = {
-        first_name: profileForm.first_name.trim(),
-        last_name: profileForm.last_name.trim(),
         phone: profileForm.phone.trim(),
       }
       if (profileForm.new_password) {
@@ -3296,34 +3292,29 @@ function CustomerDashbord() {
             <div className="dashboard-card-header">
               <div>
                 <h2>โปรไฟล์และรหัสผ่าน</h2>
-                <p className="dashboard-profile-subtitle">แก้ไขข้อมูลส่วนตัว และเปลี่ยนรหัสผ่านของคุณ</p>
+                <p className="dashboard-profile-subtitle">แก้ไขเบอร์โทรศัพท์ และเปลี่ยนรหัสผ่านของคุณ</p>
               </div>
             </div>
             <form className="dashboard-inline-form dashboard-profile-form" onSubmit={handleProfileSubmit}>
               <div className="dashboard-profile-grid">
                 <section className="dashboard-profile-section">
                   <h3 className="dashboard-section-title">ข้อมูลส่วนตัว</h3>
+                  <p className="dashboard-profile-hint">ชื่อและนามสกุลอ้างอิงตามข้อมูลที่ลงทะเบียน ไม่สามารถแก้ไขได้</p>
                   <ProfileField
                     id="profile-first-name"
                     label="ชื่อ"
-                    icon="user"
-                    placeholder="ชื่อ"
-                    maxLength={100}
+                    icon="lock"
                     autoComplete="given-name"
-                    required
-                    value={profileForm.first_name}
-                    onChange={(event) => setProfileForm((form) => ({ ...form, first_name: event.target.value }))}
+                    disabled
+                    value={customer.first_name || ''}
                   />
                   <ProfileField
                     id="profile-last-name"
                     label="นามสกุล"
-                    icon="user"
-                    placeholder="นามสกุล"
-                    maxLength={100}
+                    icon="lock"
                     autoComplete="family-name"
-                    required
-                    value={profileForm.last_name}
-                    onChange={(event) => setProfileForm((form) => ({ ...form, last_name: event.target.value }))}
+                    disabled
+                    value={customer.last_name || ''}
                   />
                   <ProfileField
                     id="profile-phone"

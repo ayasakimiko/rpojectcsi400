@@ -78,16 +78,16 @@ router.use(authenticate, requireCustomerRole, requireActiveCustomer);
 router.patch("/profile", async (req, res) => {
   try {
     const body = req.body ?? {};
-    const updateFields = Object.fromEntries(
-      ["first_name", "last_name", "phone"].filter((field) => Object.hasOwn(body, field)).map((field) => [field, body[field]]),
-    );
-    const hasProfileFields = ["first_name", "last_name", "phone"].some((field) => Object.hasOwn(body, field));
+    if (["first_name", "last_name"].some((field) => Object.hasOwn(body, field))) {
+      return res.status(400).json({ message: "ไม่สามารถแก้ไขชื่อและนามสกุลได้ กรุณาใช้ข้อมูลที่ลงทะเบียนไว้" });
+    }
+    const hasProfileFields = Object.hasOwn(body, "phone");
     const hasPasswordChange = body.new_password !== undefined;
     if (!hasProfileFields && !hasPasswordChange) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }
     if (hasProfileFields) {
-      const validationError = validatePersonUpdateInput(updateFields);
+      const validationError = validatePersonUpdateInput({ phone: body.phone });
       if (validationError) return res.status(400).json({ message: validationError });
     }
     if (hasPasswordChange && (!isValidPassword(body.new_password) || typeof body.current_password !== "string")) {
@@ -103,11 +103,9 @@ router.patch("/profile", async (req, res) => {
 
     const columns = [];
     const values = [];
-    for (const field of ["first_name", "last_name", "phone"]) {
-      if (Object.hasOwn(body, field)) {
-        columns.push(`${field} = ?`);
-        values.push(body[field].trim());
-      }
+    if (hasProfileFields) {
+      columns.push("phone = ?");
+      values.push(body.phone.trim());
     }
     if (hasPasswordChange) {
       columns.push("password = ?");
