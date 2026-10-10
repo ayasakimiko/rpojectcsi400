@@ -3057,6 +3057,16 @@
   background: #b91c1c;
 }
 
+.staff-parcel-detail-status {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.staff-parcel-detail-photos .staff-transfer-photo {
+  width: 72px;
+  height: 72px;
+}
+
 .staff-req-step-now {
   margin-left: 6px;
   padding: 1px 7px;
