@@ -51,7 +51,8 @@ router.get("/waiting-list", async (_req, res) => {
   try {
     const pool = getPool();
     const [waitingList] = await pool.query(
-      `SELECT id, full_name, phone, room_preference, note, status, submitted_by_name, created_at
+      `SELECT id, full_name, phone, room_preference, note, DATE_FORMAT(desired_move_in_date, '%Y-%m-%d') AS desired_move_in_date,
+              status, submitted_by_name, created_at
        FROM WaitingList ORDER BY created_at DESC, id DESC`,
     );
     return res.json({ waitingList });
@@ -71,8 +72,8 @@ router.post("/waiting-list", async (req, res) => {
     const pool = getPool();
     const adminName = await getActingAdminName(pool, req.user);
     const [result] = await pool.query(
-      `INSERT INTO WaitingList (full_name, phone, room_preference, note, submitted_by_name) VALUES (?, ?, ?, ?, ?)`,
-      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, adminName],
+      `INSERT INTO WaitingList (full_name, phone, room_preference, note, desired_move_in_date, submitted_by_name) VALUES (?, ?, ?, ?, ?, ?)`,
+      [value.full_name, value.phone, value.room_preference ?? null, value.note ?? null, value.desired_move_in_date ?? null, adminName],
     );
     return res.status(201).json({ message: "เพิ่มรายชื่อผู้สนใจสำเร็จ", waitingListId: result.insertId });
   } catch (error) {
@@ -91,7 +92,7 @@ router.patch("/waiting-list/:id", async (req, res) => {
     if (error) {
       return res.status(400).json({ message: error });
     }
-    const { columns, values } = buildUpdate(["full_name", "phone", "room_preference", "note", "status"], value);
+    const { columns, values } = buildUpdate(["full_name", "phone", "room_preference", "note", "desired_move_in_date", "status"], value);
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }

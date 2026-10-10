@@ -452,6 +452,8 @@ const WAITING_LIST_FIELD_VALIDATORS = {
     (/^[0-9+\-\s]{9,20}$/.test(value.trim()) ? null : "เบอร์โทรศัพท์ไม่ถูกต้อง (ตัวเลข 9-20 หลัก)"),
   room_preference: (value) => validateText(value, "ประเภทห้องที่สนใจ", { maxLength: 100, required: false }),
   note: (value) => validateText(value, "หมายเหตุ", { maxLength: 500, required: false }),
+  desired_move_in_date: (value) =>
+    value === "" || value === null || isValidDateString(value) ? null : "วันที่ต้องการเข้าอยู่ไม่ถูกต้อง",
   status: (value) => (WAITING_LIST_STATUSES.has(value) ? null : "สถานะไม่ถูกต้อง"),
 };
 

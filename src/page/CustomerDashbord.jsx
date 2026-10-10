@@ -4717,7 +4717,13 @@ function CustomerDashbord() {
                           )}
                           <div className="dashboard-maintenance-main">
                             <div className="dashboard-maintenance-top">
-                              <p className="dashboard-maintenance-desc">{item.description}</p>
+                              <div className="dashboard-maintenance-heading">
+                                <span className="dashboard-maintenance-kicker">
+                                  <MaintenanceCategoryIcon category={item.category} size={13} />
+                                  {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
+                                </span>
+                                <p className="dashboard-maintenance-desc">{item.description}</p>
+                              </div>
                               {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (
                                 <button
                                   type="button"
@@ -4733,10 +4739,6 @@ function CustomerDashbord() {
                               )}
                             </div>
                             <div className="dashboard-maintenance-tags">
-                              <span className="is-category">
-                                <MaintenanceCategoryIcon category={item.category} size={13} />
-                                {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
-                              </span>
                               <span>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                   <circle cx="12" cy="12" r="9" />
@@ -4753,29 +4755,36 @@ function CustomerDashbord() {
                                 </span>
                               )}
                             </div>
-                            <div className="dashboard-maintenance-foot">
-                              <span className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</span>
-                              <div className="dashboard-maintenance-actions">
-                                {item.status === 'pending' && (
-                                  <button
-                                    type="button"
-                                    className="dashboard-maintenance-cancel"
-                                    disabled={cancelingMaintenanceId === item.id}
-                                    onClick={() => {
-                                      setMaintenanceError('')
-                                      setConfirmCancelId(item.id)
-                                    }}
-                                  >
-                                    {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
-                                  </button>
-                                )}
-                                <button type="button" className="dashboard-maintenance-more" onClick={() => setMaintenanceDetail(item)}>
-                                  ดูรายละเอียด
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <path d="M9 18l6-6-6-6" />
-                                  </svg>
+                          </div>
+                          {item.status !== 'cancelled' && <RequestTimeline kind="maintenance" request={item} compact />}
+                          <div className="dashboard-maintenance-foot">
+                            <span className="dashboard-maintenance-date">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+                                <path d="M16 3v3M8 3v3M3 10h18" />
+                              </svg>
+                              แจ้งเมื่อ {formatDateTime(item.created_at)}
+                            </span>
+                            <div className="dashboard-maintenance-actions">
+                              {item.status === 'pending' && (
+                                <button
+                                  type="button"
+                                  className="dashboard-maintenance-cancel"
+                                  disabled={cancelingMaintenanceId === item.id}
+                                  onClick={() => {
+                                    setMaintenanceError('')
+                                    setConfirmCancelId(item.id)
+                                  }}
+                                >
+                                  {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
                                 </button>
-                              </div>
+                              )}
+                              <button type="button" className="dashboard-maintenance-more" onClick={() => setMaintenanceDetail(item)}>
+                                ดูรายละเอียด
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M9 18l6-6-6-6" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
                         </div>

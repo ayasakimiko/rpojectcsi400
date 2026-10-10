@@ -2198,3 +2198,302 @@
     flex: 1 1 auto;
   }
 }
+
+.inspection-kind-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid #e8eff8;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.inspection-kind-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #52708f;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.inspection-kind-tab:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.7);
+  color: #2563eb;
+}
+
+.inspection-kind-tab:active {
+  transform: scale(0.98);
+}
+
+.inspection-kind-tab.is-active {
+  border-color: #bfdbfe;
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow:
+    0 1px 2px rgba(15, 43, 82, 0.06),
+    0 6px 16px rgba(37, 99, 235, 0.12);
+}
+
+.inspection-kind-tab.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #2563eb;
+  transform: translateX(-50%);
+}
+
+.inspection-kind-tab span {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #e8f0fb;
+  font-size: 11.5px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.inspection-kind-tab.is-active span {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.inspection-kind-tab:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.admin-toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.inspection-result {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inspection-result.is-danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.inspection-result.is-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.inspection-result.is-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.inspection-meter {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf2f9;
+}
+
+.inspection-meter span {
+  flex-basis: 0;
+  min-width: 6px;
+}
+
+.inspection-meter .is-good {
+  background: #34d399;
+}
+
+.inspection-meter .is-wear {
+  background: #fbbf24;
+}
+
+.inspection-meter .is-damaged {
+  background: #f87171;
+}
+
+.inspection-meter .is-missing {
+  background: #e11d48;
+}
+
+.inspection-meter .is-not_applicable {
+  background: #cbd5e1;
+}
+
+.admin-inspection-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.admin-inspection-table col.is-room {
+  width: 13%;
+}
+
+.admin-inspection-table col.is-tenant {
+  width: 16%;
+}
+
+.admin-inspection-table col.is-date {
+  width: 14%;
+}
+
+.admin-inspection-table col.is-result {
+  width: 16%;
+}
+
+.admin-inspection-table col.is-inspector {
+  width: 10%;
+}
+
+.admin-inspection-table col.is-photos {
+  width: 7%;
+}
+
+.admin-inspection-table col.is-status {
+  width: 12%;
+}
+
+.admin-inspection-table col.is-actions {
+  width: 12%;
+}
+
+.admin-inspection-table tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.admin-inspection-room,
+.admin-inspection-stack,
+.admin-inspection-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-inspection-room strong {
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-inspection-room small,
+.admin-inspection-stack small {
+  color: #8aa0b6;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.admin-inspection-stack strong,
+.admin-inspection-stack small {
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f2b52;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-inspection-stack small {
+  color: #8aa0b6;
+}
+
+.admin-inspection-date {
+  color: #52708f;
+  white-space: nowrap;
+}
+
+.admin-inspection-result .inspection-meter {
+  width: 100%;
+  max-width: 130px;
+}
+
+.admin-inspection-table td.admin-inspection-muted {
+  color: #b6c4d4;
+}
+
+.admin-inspection-photos {
+  display: inline-block;
+  padding: 2px 9px;
+  border: 1px solid #e1ecfb;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #52708f;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-inspection-status {
+  max-width: 150px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.admin-inspection-status.is-pending {
+  border-color: #fde68a;
+  background-color: #fffbeb;
+  color: #b45309;
+}
+
+.admin-inspection-status.is-reviewed {
+  border-color: #bbf7d0;
+  background-color: #f0fdf4;
+  color: #15803d;
+}
+
+.admin-inspection-status.is-follow_up {
+  border-color: #fecaca;
+  background-color: #fef2f2;
+  color: #b42318;
+}
+
+.admin-inspection-table .admin-inspection-actions {
+  text-align: right;
+}
+
+.admin-inspection-table .admin-inspection-actions .admin-row-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 560px) {
+  .inspection-kind-tab {
+    padding: 8px 10px;
+    font-size: 12.5px;
+  }
+}
