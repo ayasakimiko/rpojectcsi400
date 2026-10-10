@@ -545,7 +545,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${variant === 'transfer' ? ' staff-modal-transfer' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${variant === 'transfer' || variant === 'transfer-approval' ? ' staff-modal-transfer' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -1563,7 +1563,7 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
 
   return (
     <>
-      <Modal title="ยืนยันการอนุมัติย้ายห้อง" onClose={onClose} variant="transfer">
+      <Modal title="ยืนยันการอนุมัติย้ายห้อง" onClose={onClose} variant="transfer-approval">
         {(requestClose) => (
           <div className="staff-transfer-body">
             <div className="staff-transfer-top">
