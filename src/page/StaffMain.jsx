@@ -1239,9 +1239,19 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
   )
 }
 
-function TenantRequestDetailModal({ request, onClose }) {
+function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
   const isMove = request.type === 'move_room'
-  const facts = getTenantRequestFacts(request)
+  const isOpen = ['pending', 'in_progress'].includes(request.status)
+  const [openedAt] = useState(() => Date.now())
+  // Contract, balance and room-availability figures describe the rooms now, so only show them while the request is open.
+  const due = isOpen ? sourceRoom?.currentDue : null
+  const hasDue = due && due.status !== 'paid' && Number(due.amount) > 0
+  const contractEnd = isOpen ? request.source_rental_end_date || sourceRoom?.rental_end_date : null
+  const contractMsLeft = contractEnd ? new Date(contractEnd).getTime() - openedAt : null
+  const rentDiff = isMove ? getRentDiff(request) : null
+  const amenities = TARGET_ROOM_AMENITIES.filter((item) => request[`target_room_${item.key}`])
+  const bedCount = Number(request.target_room_bed)
+  const hasTargetDetails = isMove && (request.target_room_electricity_unit_price != null || amenities.length > 0)
   const steps = [
     { key: 'created', label: 'ส่งคำขอ', date: request.created_at, done: true },
     {
@@ -1316,59 +1326,172 @@ function TenantRequestDetailModal({ request, onClose }) {
           </div>
 
           <div className="staff-transfer-scroll">
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ผู้เช่า</h4>
-              <dl className="staff-transfer-list">
-                <div>
-                  <dt>ชื่อ</dt>
-                  <dd>
-                    {request.first_name} {request.last_name}
-                  </dd>
-                </div>
-                <div>
-                  <dt>เบอร์โทร</dt>
-                  <dd>{request.phone || '-'}</dd>
-                </div>
-              </dl>
-            </section>
+            {rentDiff !== null && (
+              <div className="staff-transfer-summary">
+                <span
+                  className={`staff-transfer-chip ${rentDiff > 0 ? 'is-warning' : rentDiff < 0 ? 'is-success' : 'is-muted'}`}
+                >
+                  {rentDiff === 0
+                    ? 'ค่าเช่าเท่าเดิม'
+                    : `ค่าเช่า ${rentDiff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(rentDiff))}/เดือน`}
+                </span>
+                {isOpen && request.target_room_is_booked != null && (
+                  <span className={`staff-transfer-chip ${request.target_room_is_booked ? 'is-danger' : 'is-success'}`}>
+                    {request.target_room_is_booked ? 'ห้องใหม่ไม่ว่างแล้ว' : 'ห้องใหม่ยังว่าง'}
+                  </span>
+                )}
+              </div>
+            )}
 
-            {(facts.length > 0 || request.note) && (
-              <section className="staff-transfer-section">
-                <h4 className="staff-transfer-section-title">รายละเอียดคำขอ</h4>
-                {isMove ? (
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ผู้เช่าและคำขอ</h4>
+              <div className="staff-transfer-columns">
+                <div>
+                  <p className="staff-transfer-subtitle">ผู้เช่า</p>
                   <dl className="staff-transfer-list is-single">
                     <div>
-                      <dt>เหตุผล</dt>
-                      <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+                      <dt>ชื่อ</dt>
+                      <dd>
+                        {request.first_name} {request.last_name}
+                      </dd>
                     </div>
                     <div>
-                      <dt>ต้องการย้าย</dt>
-                      <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+                      <dt>เบอร์โทร</dt>
+                      <dd>{request.phone || '-'}</dd>
                     </div>
-                    {['pending', 'in_progress'].includes(request.status) && (
+                    {request.deposit_amount != null && (
                       <div>
-                        <dt>ตรวจสภาพห้อง</dt>
-                        <dd className={request.inspection_id ? 'is-success' : 'is-warning'}>
-                          {request.inspection_id ? 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจ'}
-                        </dd>
+                        <dt>เงินประกัน</dt>
+                        <dd>฿{formatCurrency(request.deposit_amount)}</dd>
                       </div>
                     )}
                   </dl>
-                ) : (
-                  facts.length > 0 && (
-                    <div className="staff-req-facts">
-                      {facts.map((fact) => (
-                        <span key={fact.label} className="staff-req-fact">
-                          {fact.label}
-                        </span>
-                      ))}
+                  {isOpen && (sourceRoom || contractEnd) && (
+                    <>
+                      <p className="staff-transfer-subtitle">สัญญาและการเงิน</p>
+                      <dl className="staff-transfer-list is-single">
+                        <div>
+                          <dt>{isMove ? 'ยอดค้างห้องเดิม' : 'ยอดค้างชำระ'}</dt>
+                          <dd className={hasDue ? 'is-danger' : 'is-success'}>
+                            {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>สิ้นสุดสัญญา</dt>
+                          <dd>{formatDate(contractEnd)}</dd>
+                        </div>
+                        <div>
+                          <dt>คงเหลือ</dt>
+                          <dd
+                            className={
+                              contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''
+                            }
+                          >
+                            {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
+                          </dd>
+                        </div>
+                        {request.source_prepaid_until && (
+                          <div>
+                            <dt>ชำระล่วงหน้าถึง</dt>
+                            <dd>{formatDate(request.source_prepaid_until)}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <p className="staff-transfer-subtitle">รายละเอียดคำขอ</p>
+                  <dl className="staff-transfer-list is-single">
+                    {isMove && (
+                      <>
+                        <div>
+                          <dt>เหตุผล</dt>
+                          <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>ต้องการย้าย</dt>
+                          <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+                        </div>
+                        {isOpen && (
+                          <div>
+                            <dt>ตรวจสภาพห้อง</dt>
+                            <dd className={request.inspection_id ? 'is-success' : 'is-warning'}>
+                              {request.inspection_id ? 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจ'}
+                            </dd>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {request.type === 'renew' && (
+                      <>
+                        <div>
+                          <dt>ขอต่อ</dt>
+                          <dd>
+                            {RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>การชำระ</dt>
+                          <dd>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</dd>
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <dt>ส่งคำขอ</dt>
+                      <dd>{formatDateTime(request.created_at)}</dd>
                     </div>
-                  )
-                )}
-                {request.note && (
-                  <p className="staff-transfer-note">
-                    <span>{request.type === 'moveout' ? 'เหตุผลการย้ายออก:' : 'หมายเหตุ:'}</span> {request.note}
-                  </p>
+                    <div>
+                      <dt>สถานะ</dt>
+                      <dd>{TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+              {request.note && (
+                <p className="staff-transfer-note">
+                  <span>{request.type === 'moveout' ? 'เหตุผลการย้ายออก:' : 'หมายเหตุ:'}</span> {request.note}
+                </p>
+              )}
+            </section>
+
+            {hasTargetDetails && (
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">ห้องใหม่ ({request.target_room_number})</h4>
+                <dl className="staff-transfer-list">
+                  <div>
+                    <dt>ค่าเช่า</dt>
+                    <dd>{request.target_room_price != null ? `฿${formatCurrency(request.target_room_price)}/เดือน` : '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>ค่าไฟ</dt>
+                    <dd>
+                      {request.target_room_electricity_unit_price != null
+                        ? `฿${formatCurrency(request.target_room_electricity_unit_price)}/หน่วย`
+                        : '-'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>ค่าน้ำ</dt>
+                    <dd>
+                      {request.target_room_water_price != null
+                        ? `฿${formatCurrency(request.target_room_water_price)}/เดือน`
+                        : '-'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>เตียง</dt>
+                    <dd>{bedCount > 0 ? `${bedCount} เตียง` : '-'}</dd>
+                  </div>
+                </dl>
+                {amenities.length > 0 && (
+                  <div className="staff-transfer-tags">
+                    {amenities.map((item) => (
+                      <span key={item.key} className="staff-transfer-tag">
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </section>
             )}
@@ -6801,7 +6924,11 @@ function StaffMain() {
       )}
 
       {tenantRequestDetail && (
-        <TenantRequestDetailModal request={tenantRequestDetail} onClose={() => setTenantRequestDetail(null)} />
+        <TenantRequestDetailModal
+          request={tenantRequestDetail}
+          sourceRoom={rooms.find((room) => String(room.room_number) === String(tenantRequestDetail.room_number))}
+          onClose={() => setTenantRequestDetail(null)}
+        />
       )}
 
       {maintenanceDetail && (
