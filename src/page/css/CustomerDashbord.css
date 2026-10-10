@@ -3792,7 +3792,6 @@
 
 .dashboard-parcel-entry-main .dashboard-progress.is-compact {
   margin-top: 8px;
-  max-width: 320px;
 }
 
 .dashboard-parcel-cover {
@@ -3902,4 +3901,17 @@
   .dashboard-parcel-gallery-main {
     height: 150px;
   }
+}
+
+.dashboard-parcel-pickup-hint {
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  color: #1e3a8a;
 }
