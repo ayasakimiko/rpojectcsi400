@@ -1040,7 +1040,7 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
 
           <div className="staff-transfer-scroll">
             <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
+              <h4 className="staff-transfer-section-title">ผู้เช่า</h4>
               <dl className="staff-transfer-list">
                 <div>
                   <dt>เบอร์โทร</dt>
@@ -1050,6 +1050,12 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
                   <dt>ส่งคำขอ</dt>
                   <dd>{formatDateTime(request.created_at)}</dd>
                 </div>
+              </dl>
+            </section>
+
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">การเงินและสัญญา</h4>
+              <dl className="staff-transfer-list">
                 <div>
                   <dt>เงินประกัน</dt>
                   <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
@@ -1636,10 +1642,10 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
               </div>
 
               <section className="staff-transfer-section">
-                <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
+                <h4 className="staff-transfer-section-title">ผู้เช่า</h4>
                 <dl className="staff-transfer-list">
                   <div>
-                    <dt>ผู้เช่า</dt>
+                    <dt>ชื่อ</dt>
                     <dd>
                       {request.first_name} {request.last_name}
                     </dd>
@@ -1648,6 +1654,12 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
                     <dt>เบอร์โทร</dt>
                     <dd>{request.phone || '-'}</dd>
                   </div>
+                </dl>
+              </section>
+
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">การเงิน</h4>
+                <dl className="staff-transfer-list">
                   <div>
                     <dt>เงินประกัน</dt>
                     <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
@@ -1658,6 +1670,16 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
                       {hasDue ? `฿${formatCurrency(due.amount)}` : 'ไม่มี'}
                     </dd>
                   </div>
+                  <div>
+                    <dt>ชำระล่วงหน้าถึง</dt>
+                    <dd>{request.source_prepaid_until ? formatDate(request.source_prepaid_until) : '-'}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">สัญญาเช่า (ย้ายไปห้องใหม่)</h4>
+                <dl className="staff-transfer-list">
                   <div>
                     <dt>สิ้นสุดสัญญา</dt>
                     <dd>{formatDate(contractEnd)}</dd>
@@ -1672,14 +1694,12 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
                       {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
                     </dd>
                   </div>
-                  <div>
-                    <dt>ชำระล่วงหน้าถึง</dt>
-                    <dd>{request.source_prepaid_until ? formatDate(request.source_prepaid_until) : '-'}</dd>
-                  </div>
-                  <div>
-                    <dt>ส่งคำขอ</dt>
-                    <dd>{formatDateTime(request.created_at)}</dd>
-                  </div>
+                </dl>
+              </section>
+
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">คำขอย้ายห้อง</h4>
+                <dl className="staff-transfer-list is-single">
                   <div>
                     <dt>เหตุผล</dt>
                     <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
@@ -1687,6 +1707,10 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
                   <div>
                     <dt>ต้องการย้ายวันที่</dt>
                     <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+                  </div>
+                  <div>
+                    <dt>ส่งคำขอ</dt>
+                    <dd>{formatDateTime(request.created_at)}</dd>
                   </div>
                 </dl>
                 {request.note && (
