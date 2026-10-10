@@ -1119,6 +1119,12 @@ function TenantRequestDetailCard({ request, roomNumber }) {
 }
 
 // A popup opened from "ดูคำขอก่อนหน้า" carries previousOf; older statuses without their own popup copy get a generic one.
+const STATUS_HERO_LABEL = {
+  success: 'เรียบร้อยแล้ว',
+  info: 'กำลังดำเนินการ',
+  danger: 'ไม่สำเร็จ',
+}
+
 function getStatusPopupContent(popup) {
   const content = STATUS_POPUP_CONTENT_BY_KIND[popup.kind]?.[popup.status]
   if (content || !popup.previousOf) return content
@@ -1349,6 +1355,14 @@ const CUSTOMER_TABS = [
 ]
 const MAINTENANCE_PAGE_SIZE = 5
 const RENTAL_HISTORY_PAGE_SIZE = 5
+const PARCEL_PAGE_SIZE = 5
+
+function parcelDayKey(value) {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+const dayKeyToDate = (key) => (key ? new Date(`${key}T00:00:00`) : undefined)
 
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
@@ -1501,6 +1515,10 @@ function CustomerDashbord() {
   const [parcelDetailId, setParcelDetailId] = useState(null)
   const [parcelSearch, setParcelSearch] = useState('')
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
+  const [parcelDateFrom, setParcelDateFrom] = useState('')
+  const [parcelDateTo, setParcelDateTo] = useState('')
+  const [parcelSort, setParcelSort] = useState('newest')
+  const [parcelPage, setParcelPage] = useState(1)
   const notifRef = useRef(null)
 
   const closeNotifPanel = () => setNotifClosing(true)
@@ -2104,8 +2122,25 @@ function CustomerDashbord() {
   const pendingParcels = parcels.filter((parcel) => parcel.status === 'pending')
   const receivedParcels = parcels.filter((parcel) => parcel.status === 'received')
   const parcelKeyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
+  const parcelFiltersActive =
+    Boolean(parcelKeyword) ||
+    parcelStatusFilter !== 'all' ||
+    Boolean(parcelDateFrom) ||
+    Boolean(parcelDateTo) ||
+    parcelSort !== 'newest'
+  const resetParcelFilters = () => {
+    setParcelSearch('')
+    setParcelStatusFilter('all')
+    setParcelDateFrom('')
+    setParcelDateTo('')
+    setParcelSort('newest')
+    setParcelPage(1)
+  }
   const filteredParcels = parcels.filter((parcel) => {
     if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
+    const arrivedOn = parcelDayKey(parcel.created_at)
+    if (parcelDateFrom && arrivedOn < parcelDateFrom) return false
+    if (parcelDateTo && arrivedOn > parcelDateTo) return false
     if (!parcelKeyword) return true
     return [
       parcel.sender_name,
@@ -2119,6 +2154,13 @@ function CustomerDashbord() {
       .toLocaleLowerCase('th-TH')
       .includes(parcelKeyword)
   })
+  if (parcelSort === 'oldest') filteredParcels.reverse()
+  const parcelTotalPages = Math.max(1, Math.ceil(filteredParcels.length / PARCEL_PAGE_SIZE))
+  const parcelCurrentPage = Math.min(parcelPage, parcelTotalPages)
+  const pagedParcels = filteredParcels.slice(
+    (parcelCurrentPage - 1) * PARCEL_PAGE_SIZE,
+    parcelCurrentPage * PARCEL_PAGE_SIZE,
+  )
   const currentBooking = rentalHistory?.[0]
   const paymentUnderReview = currentBooking?.payments?.some((payment) => payment.status === 'pending' && payment.slip_path)
   const prepaidUntilDate = room?.prepaid_until ? new Date(room.prepaid_until) : null
@@ -2843,12 +2885,8 @@ function CustomerDashbord() {
                         ) : <StatusIconPaths tone={content.icon} />}
                       </svg>
                     </div>
-                    <div className="dashboard-status-copy">
-                      <p className="dashboard-status-eyebrow">
-                        {TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]
-                          ? `คำขอ${TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]}`
-                          : statusPopup.kind === 'maintenance' ? 'รายการแจ้งซ่อม' : 'สถานะสัญญาเช่า'}
-                      </p>
+                    <div className="dashboard-status-hero-text">
+                      <span className="dashboard-status-hero-label">{STATUS_HERO_LABEL[content.icon] || 'อัปเดตสถานะ'}</span>
                       <p className="dashboard-confirm-message">{content.message}</p>
                     </div>
                   </div>
@@ -2911,11 +2949,14 @@ function CustomerDashbord() {
                     <div className={`dashboard-confirm-icon ${isPending ? 'is-info' : 'is-success'}`}>
                       <PackageIcon size={18} strokeWidth={2.2} />
                     </div>
-                    <p className="dashboard-confirm-message">
-                      {isPending
-                        ? `พัสดุจาก ${parcel.sender_name || 'พัสดุทั่วไป'} รอคุณมารับที่จุดรับพัสดุ`
-                        : `คุณรับพัสดุจาก ${parcel.sender_name || 'พัสดุทั่วไป'} แล้ว`}
-                    </p>
+                    <div className="dashboard-status-hero-text">
+                      <span className="dashboard-status-hero-label">{isPending ? 'รอรับพัสดุ' : 'รับพัสดุเรียบร้อย'}</span>
+                      <p className="dashboard-confirm-message">
+                        {isPending
+                          ? `พัสดุจาก ${parcel.sender_name || 'พัสดุทั่วไป'} รอคุณมารับที่จุดรับพัสดุ`
+                          : `คุณรับพัสดุจาก ${parcel.sender_name || 'พัสดุทั่วไป'} แล้ว`}
+                      </p>
+                    </div>
                   </div>
                   <div className="dashboard-status-scroll" key={parcel.id}>
                     <ParcelProgress parcel={parcel} />
@@ -3143,30 +3184,102 @@ function CustomerDashbord() {
               <p>เมื่อได้รับพัสดุแล้ว กรุณากดยืนยันรับเพื่ออัปเดตสถานะให้เจ้าหน้าที่ทราบ</p>
             </div>
 
-            <div className="dashboard-parcel-toolbar">
-              <label className="dashboard-parcel-search">
-                <span>ค้นหาพัสดุ</span>
-                <span className="dashboard-parcel-search-control">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="m20 20-4-4" />
-                  </svg>
-                  <input
-                    type="search"
-                    value={parcelSearch}
-                    onChange={(event) => setParcelSearch(event.target.value)}
-                    placeholder="ค้นหาผู้ส่ง เลขพัสดุ หรือรายละเอียด"
+            <div className="dashboard-parcel-filters">
+              <div className="dashboard-parcel-segments" role="tablist" aria-label="กรองตามสถานะ">
+                {[
+                  { key: 'all', label: 'ทั้งหมด', count: parcels.length },
+                  { key: 'pending', label: 'รอรับ', count: pendingParcels.length },
+                  { key: 'received', label: 'รับแล้ว', count: receivedParcels.length },
+                ].map((option) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    key={option.key}
+                    aria-selected={parcelStatusFilter === option.key}
+                    className={`dashboard-parcel-segment is-${option.key}${parcelStatusFilter === option.key ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setParcelStatusFilter(option.key)
+                      setParcelPage(1)
+                    }}
+                  >
+                    {option.label}
+                    <span>{option.count}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="dashboard-parcel-toolbar">
+                <label className="dashboard-parcel-search">
+                  <span>ค้นหาพัสดุ</span>
+                  <span className="dashboard-parcel-search-control">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m20 20-4-4" />
+                    </svg>
+                    <input
+                      type="search"
+                      value={parcelSearch}
+                      onChange={(event) => {
+                        setParcelSearch(event.target.value)
+                        setParcelPage(1)
+                      }}
+                      placeholder="ค้นหาผู้ส่ง เลขพัสดุ หรือรายละเอียด"
+                    />
+                  </span>
+                </label>
+                <div className="dashboard-parcel-filter is-date">
+                  <span>ตั้งแต่วันที่</span>
+                  <ThaiDatePicker
+                    className="dashboard-parcel-date-input"
+                    placeholder="วันที่เริ่ม"
+                    value={parcelDateFrom}
+                    maxDate={dayKeyToDate(parcelDateTo)}
+                    isClearable
+                    onChange={(date) => {
+                      setParcelDateFrom(date)
+                      setParcelPage(1)
+                    }}
                   />
+                </div>
+                <div className="dashboard-parcel-filter is-date">
+                  <span>ถึงวันที่</span>
+                  <ThaiDatePicker
+                    className="dashboard-parcel-date-input"
+                    placeholder="วันที่สิ้นสุด"
+                    value={parcelDateTo}
+                    minDate={dayKeyToDate(parcelDateFrom)}
+                    isClearable
+                    onChange={(date) => {
+                      setParcelDateTo(date)
+                      setParcelPage(1)
+                    }}
+                  />
+                </div>
+                <label className="dashboard-parcel-filter">
+                  <span>เรียงตาม</span>
+                  <select
+                    value={parcelSort}
+                    onChange={(event) => {
+                      setParcelSort(event.target.value)
+                      setParcelPage(1)
+                    }}
+                  >
+                    <option value="newest">ใหม่สุดก่อน</option>
+                    <option value="oldest">เก่าสุดก่อน</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="dashboard-parcel-result-bar">
+                <span>
+                  พบ <strong>{filteredParcels.length}</strong> จาก {parcels.length} รายการ
                 </span>
-              </label>
-              <label className="dashboard-parcel-filter">
-                <span>สถานะ</span>
-                <select value={parcelStatusFilter} onChange={(event) => setParcelStatusFilter(event.target.value)}>
-                  <option value="all">ทุกสถานะ</option>
-                  <option value="pending">รอรับ</option>
-                  <option value="received">รับแล้ว</option>
-                </select>
-              </label>
+                {parcelFiltersActive && (
+                  <button type="button" className="dashboard-parcel-clear" onClick={resetParcelFilters}>
+                    ล้างตัวกรอง
+                  </button>
+                )}
+              </div>
             </div>
 
             {filteredParcels.length === 0 ? (
@@ -3183,7 +3296,7 @@ function CustomerDashbord() {
               </div>
             ) : (
               <div className="dashboard-parcel-list">
-                {filteredParcels.map((parcel) => {
+                {pagedParcels.map((parcel) => {
                   const isPending = parcel.status === 'pending'
                   const loggedAt = new Date(parcel.created_at)
                   return (
@@ -3273,6 +3386,29 @@ function CustomerDashbord() {
                     </article>
                   )
                 })}
+              </div>
+            )}
+            {parcelTotalPages > 1 && (
+              <div className="dashboard-maintenance-pagination dashboard-parcel-pagination">
+                <button
+                  type="button"
+                  className="dashboard-notif-page-btn"
+                  disabled={parcelCurrentPage <= 1}
+                  onClick={() => setParcelPage(Math.max(1, parcelCurrentPage - 1))}
+                >
+                  ก่อนหน้า
+                </button>
+                <span className="dashboard-notif-page-info">
+                  หน้า {parcelCurrentPage} / {parcelTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className="dashboard-notif-page-btn"
+                  disabled={parcelCurrentPage >= parcelTotalPages}
+                  onClick={() => setParcelPage(Math.min(parcelTotalPages, parcelCurrentPage + 1))}
+                >
+                  ถัดไป
+                </button>
               </div>
             )}
           </section>
