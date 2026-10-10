@@ -1238,6 +1238,53 @@ function RequestTimeline({ kind, request, compact = false }) {
   )
 }
 
+function ParcelGallery({ photos, onOpen }) {
+  const [selected, setSelected] = useState(0)
+  const current = photos[Math.min(selected, photos.length - 1)]
+  return (
+    <div className="dashboard-parcel-gallery">
+      <div className="dashboard-parcel-gallery-head">
+        <h4 className="dashboard-detail-title">รูปพัสดุ</h4>
+        <span>
+          {selected + 1} / {photos.length}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="dashboard-parcel-gallery-main"
+        onClick={() => onOpen(selected)}
+        aria-label="ดูรูปพัสดุขนาดเต็ม"
+      >
+        <img src={current.url} alt={current.name || `รูปพัสดุ ${selected + 1}`} />
+        <span className="dashboard-parcel-gallery-zoom">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3M11 8v6M8 11h6" />
+          </svg>
+          ดูรูปขยาย
+        </span>
+      </button>
+      {photos.length > 1 && (
+        <div className="dashboard-parcel-gallery-strip" role="tablist" aria-label="เลือกรูปพัสดุ">
+          {photos.map((photo, index) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={index === selected}
+              key={`${photo.url}-${index}`}
+              className={index === selected ? 'is-active' : ''}
+              onClick={() => setSelected(index)}
+              aria-label={`รูปที่ ${index + 1}`}
+            >
+              <img src={photo.url} alt="" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ParcelProgress({ parcel, compact = false }) {
   const received = parcel.status === 'received'
   const steps = [
@@ -2877,30 +2924,7 @@ function CustomerDashbord() {
                   <div className="dashboard-status-scroll" key={parcel.id}>
                     <ParcelProgress parcel={parcel} />
                     {photos.length > 0 && (
-                      <div className="dashboard-parcel-gallery">
-                        <button
-                          type="button"
-                          className="dashboard-parcel-gallery-main"
-                          onClick={() => setParcelPhotoPreview({ parcel, index: 0 })}
-                          aria-label="ดูรูปพัสดุขนาดใหญ่"
-                        >
-                          <img src={photos[0].url} alt={photos[0].name || 'รูปพัสดุ'} />
-                        </button>
-                        {photos.length > 1 && (
-                          <div className="dashboard-parcel-thumbs">
-                            {photos.map((photo, index) => (
-                              <button
-                                type="button"
-                                key={`${photo.url}-${index}`}
-                                onClick={() => setParcelPhotoPreview({ parcel, index })}
-                                aria-label={`ดูรูปพัสดุ ${index + 1}`}
-                              >
-                                <img src={photo.url} alt="" />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <ParcelGallery photos={photos} onOpen={(index) => setParcelPhotoPreview({ parcel, index })} />
                     )}
                     <div className="dashboard-maintenance-detail-card">
                       <h4 className="dashboard-detail-title">ข้อมูลพัสดุ</h4>
