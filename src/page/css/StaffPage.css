@@ -2666,17 +2666,14 @@
   flex-direction: column;
   gap: 10px;
   margin-bottom: 14px;
-  padding: 12px;
-  border: 1.5px solid #e3e9f3;
-  border-radius: 14px;
-  background: #ffffff;
 }
 
 .staff-req-filters.is-sticky {
   position: sticky;
   top: 0;
   z-index: 2;
-  box-shadow: 0 6px 12px -10px rgba(15, 43, 82, 0.35);
+  padding-bottom: 2px;
+  background: #ffffff;
 }
 
 .staff-req-segments {
