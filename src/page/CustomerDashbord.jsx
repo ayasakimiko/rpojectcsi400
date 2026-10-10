@@ -1045,6 +1045,7 @@ function StatusAlert({ content }) {
 function TenantRequestDetailCard({ request, roomNumber }) {
   return (
     <div className="dashboard-maintenance-detail-card">
+      <h4 className="dashboard-detail-title">รายละเอียดคำขอ</h4>
       <div className="dashboard-maintenance-detail-row">
         <span>ประเภทคำขอ</span>
         <strong>{TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}</strong>
@@ -1184,7 +1185,7 @@ function RequestTimeline({ kind, request, compact = false }) {
     <div className={`dashboard-progress${compact ? ' is-compact' : ''}`}>
       {!compact && (
         <div className="dashboard-progress-head">
-          <span>สถานะปัจจุบัน</span>
+          <h4 className="dashboard-detail-title">สถานะปัจจุบัน</h4>
           <span className={`dashboard-badge status-${statusBadgeClass}`}>{statusLabel || request.status}</span>
         </div>
       )}
@@ -2612,6 +2613,7 @@ function CustomerDashbord() {
               <div className="dashboard-maintenance-detail">
                 <StatusAlert content={MAINTENANCE_STATUS_POPUP_CONTENT[maintenanceDetail.status]} />
                 <div className="dashboard-maintenance-detail-card">
+                  <h4 className="dashboard-detail-title">รายละเอียดการแจ้งซ่อม</h4>
                   <div className="dashboard-maintenance-detail-row">
                     <span>ประเภท</span>
                     <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceDetail.category] || 'อื่นๆ'}</strong>
