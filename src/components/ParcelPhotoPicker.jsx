@@ -4,7 +4,7 @@ import './ParcelPhotoPicker.css'
 export const PARCEL_MAX_PHOTOS = 6
 export const PARCEL_MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
-export default function ParcelPhotoPicker({ id, files, onChange, error, onError }) {
+export default function ParcelPhotoPicker({ id, files, onChange, error, onError, required = false }) {
   const previews = useMemo(
     () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
     [files],
@@ -41,8 +41,18 @@ export default function ParcelPhotoPicker({ id, files, onChange, error, onError 
   return (
     <div className="parcel-photo-field">
       <div className="parcel-photo-field-heading">
-        <span>รูปพัสดุ <span className="parcel-photo-optional">(ไม่บังคับ)</span></span>
-        <small>แนบได้หลายรูปสำหรับพัสดุชิ้นนี้ · สูงสุด {PARCEL_MAX_PHOTOS} รูป · JPG, PNG หรือ WebP · ไม่เกิน 5 MB ต่อรูป</small>
+        <span>
+          รูปพัสดุ{' '}
+          {required ? (
+            <span className="text-danger">*</span>
+          ) : (
+            <span className="parcel-photo-optional">(ไม่บังคับ)</span>
+          )}
+        </span>
+        <small>
+          {required ? 'ต้องแนบอย่างน้อย 1 รูป' : 'แนบได้หลายรูปสำหรับพัสดุชิ้นนี้'} · สูงสุด {PARCEL_MAX_PHOTOS} รูป · JPG, PNG
+          หรือ WebP · ไม่เกิน 5 MB ต่อรูป
+        </small>
       </div>
       <input
         id={id}

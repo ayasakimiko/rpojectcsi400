@@ -1239,6 +1239,140 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
   )
 }
 
+function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
+  const received = parcel.status === 'received'
+  const photos = parcel.photos || []
+  const tenantName = parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
+  return (
+    <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="transfer">
+      {(requestClose) => (
+        <div className="staff-transfer-body">
+          <div className="staff-transfer-top">
+            <div className="staff-transfer-hero">
+              <div className={`staff-confirm-icon ${received ? 'is-success' : 'is-info'}`}>
+                <PackageIcon size={20} strokeWidth={2.2} />
+              </div>
+              <div>
+                <p className="staff-confirm-message">{parcel.sender_name || 'พัสดุทั่วไป'}</p>
+                <p className="staff-confirm-note">
+                  {parcel.tracking_number ? `เลขพัสดุ ${parcel.tracking_number}` : 'ไม่มีเลขพัสดุ'}
+                </p>
+              </div>
+              <span className={`parcel-status staff-parcel-detail-status${received ? ' is-received' : ' is-pending'}`}>
+                {received ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+              </span>
+            </div>
+            <div className="staff-req-detail-room">
+              <span>ห้อง</span>
+              <strong>{parcel.room_number}</strong>
+              <em>{tenantName}</em>
+            </div>
+          </div>
+
+          <div className="staff-transfer-scroll">
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ข้อมูลพัสดุ</h4>
+              <div className="staff-transfer-columns">
+                <div>
+                  <p className="staff-transfer-subtitle">ผู้รับ</p>
+                  <dl className="staff-transfer-list is-single">
+                    <div>
+                      <dt>ห้อง</dt>
+                      <dd>{parcel.room_number}</dd>
+                    </div>
+                    <div>
+                      <dt>ผู้เช่า</dt>
+                      <dd>{tenantName}</dd>
+                    </div>
+                    <div>
+                      <dt>เบอร์โทร</dt>
+                      <dd>{parcel.phone || '-'}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div>
+                  <p className="staff-transfer-subtitle">พัสดุ</p>
+                  <dl className="staff-transfer-list is-single">
+                    <div>
+                      <dt>ผู้ส่ง</dt>
+                      <dd>{parcel.sender_name || 'พัสดุทั่วไป'}</dd>
+                    </div>
+                    <div>
+                      <dt>เลขพัสดุ</dt>
+                      <dd>{parcel.tracking_number || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>บันทึกโดย</dt>
+                      <dd>{parcel.staff_name || 'เจ้าหน้าที่'}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+              {parcel.description && (
+                <p className="staff-transfer-note">
+                  <span>รายละเอียด:</span> {parcel.description}
+                </p>
+              )}
+            </section>
+
+            <section className="staff-transfer-section">
+              <div className="staff-transfer-section-head">
+                <h4 className="staff-transfer-section-title">รูปพัสดุ</h4>
+                <span className="staff-transfer-muted">{photos.length} รูป</span>
+              </div>
+              {photos.length > 0 ? (
+                <div className="staff-transfer-photos staff-parcel-detail-photos">
+                  {photos.map((photo, index) => (
+                    <button
+                      type="button"
+                      key={photo.url}
+                      className="staff-transfer-photo"
+                      onClick={() => onPreviewPhoto(index)}
+                      aria-label={`ดูรูปพัสดุ ${index + 1}`}
+                    >
+                      <img src={photo.url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="staff-transfer-muted">ไม่มีรูปพัสดุ</p>
+              )}
+            </section>
+
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
+              <ol className="staff-req-steps">
+                <li className="is-done">
+                  <span className="staff-req-step-dot" />
+                  <div>
+                    <p>บันทึกพัสดุเข้าห้อง โดย {parcel.staff_name || 'เจ้าหน้าที่'}</p>
+                    <small>{formatDateTime(parcel.created_at)}</small>
+                  </div>
+                </li>
+                <li className={received ? 'is-done is-success' : ''}>
+                  <span className="staff-req-step-dot" />
+                  <div>
+                    <p>ผู้เช่ารับพัสดุ</p>
+                    <small>{received ? formatDateTime(parcel.received_at) : 'ยังไม่ได้รับ'}</small>
+                  </div>
+                </li>
+              </ol>
+            </section>
+          </div>
+
+          <div className="staff-transfer-footer">
+            <div className="staff-form-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
   const isMove = request.type === 'move_room'
   const isOpen = ['pending', 'in_progress'].includes(request.status)
@@ -2468,6 +2602,7 @@ function StaffMain() {
   const [parcelPhotos, setParcelPhotos] = useState([])
   const [parcelPhotoError, setParcelPhotoError] = useState('')
   const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
+  const [parcelDetail, setParcelDetail] = useState(null)
   const filteredParcels = parcels.filter((parcel) => {
     if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
     const keyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
@@ -2658,6 +2793,10 @@ function StaffMain() {
   const requestParcelSave = (event) => {
     event.preventDefault()
     setParcelFormError('')
+    if (parcelPhotos.length === 0) {
+      setParcelPhotoError('กรุณาแนบรูปพัสดุอย่างน้อย 1 รูปก่อนบันทึก')
+      return
+    }
     setParcelSaveConfirm(true)
   }
 
@@ -4697,28 +4836,37 @@ function StaffMain() {
                     <th>สถานะ</th>
                     <th>วันที่บันทึก / รับ</th>
                     <th>บันทึกโดย</th>
+                    <th aria-label="รายละเอียด" />
                   </tr>
                 </thead>
                 <tbody>
                   {parcelsLoading ? (
-                    <tr><td className="parcel-empty" colSpan={7}>กำลังโหลดรายการพัสดุ...</td></tr>
+                    <tr><td className="parcel-empty" colSpan={8}>กำลังโหลดรายการพัสดุ...</td></tr>
                   ) : parcelsError ? (
                     <tr>
-                      <td className="parcel-empty" colSpan={7}>
+                      <td className="parcel-empty" colSpan={8}>
                         {parcelsError}{' '}
                         <button type="button" className="parcel-action-btn is-ghost" onClick={loadParcels}>ลองใหม่</button>
                       </td>
                     </tr>
                   ) : filteredParcels.length === 0 ? (
                     <tr>
-                      <td className="parcel-empty" colSpan={7}>
+                      <td className="parcel-empty" colSpan={8}>
                         <span className="parcel-empty-icon"><PackageIcon size={28} strokeWidth={1.8} /></span>
                         {parcels.length ? 'ไม่พบรายการพัสดุตามเงื่อนไข' : 'ยังไม่มีรายการพัสดุ'}
                       </td>
                     </tr>
                   ) : (
                     pagedParcels.map((parcel) => (
-                      <tr key={parcel.id}>
+                      <tr
+                        key={parcel.id}
+                        className="parcel-row-clickable"
+                        tabIndex={0}
+                        onClick={() => setParcelDetail(parcel)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') setParcelDetail(parcel)
+                        }}
+                      >
                         <td>
                           <div className="parcel-room-cell">
                             <span className="parcel-room-badge">{parcel.room_number}</span>
@@ -4739,7 +4887,10 @@ function StaffMain() {
                               type="button"
                               className="parcel-thumb"
                               aria-label={`ดูรูปพัสดุห้อง ${parcel.room_number}`}
-                              onClick={() => setParcelPhotoPreview(parcel)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setParcelPhotoPreview(parcel)
+                              }}
                             >
                               <img src={parcel.photos[0].url} alt="" />
                               {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
@@ -4752,6 +4903,9 @@ function StaffMain() {
                           <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
                         </td>
                         <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
+                        <td>
+                          <span className="parcel-detail-link">ดูรายละเอียด</span>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -7104,6 +7258,7 @@ function StaffMain() {
                 <div className="parcel-photo-section">
                   <ParcelPhotoPicker
                     id="staff-parcel-photos"
+                    required
                     files={parcelPhotos}
                     onChange={setParcelPhotos}
                     error={parcelPhotoError}
@@ -7117,7 +7272,12 @@ function StaffMain() {
               <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                 ยกเลิก
               </button>
-              <button type="submit" className="parcel-action-btn is-primary" disabled={parcelSubmitting}>
+              <button
+                type="submit"
+                className="parcel-action-btn is-primary"
+                disabled={parcelSubmitting || parcelPhotos.length === 0}
+                title={parcelPhotos.length === 0 ? 'แนบรูปพัสดุก่อนบันทึก' : undefined}
+              >
                 <CheckIcon />
                 {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
               </button>
@@ -7173,13 +7333,21 @@ function StaffMain() {
         </Modal>
       )}
 
+      {parcelDetail && (
+        <ParcelDetailModal
+          parcel={parcelDetail}
+          onPreviewPhoto={(index) => setParcelPhotoPreview({ ...parcelDetail, startIndex: index })}
+          onClose={() => setParcelDetail(null)}
+        />
+      )}
+
       {parcelPhotoPreview && (
         <PhotoLightbox
           photos={(parcelPhotoPreview.photos || []).map((photo, index) => ({
             name: photo.name || `รูปที่ ${index + 1}`,
             url: photo.url,
           }))}
-          initialIndex={0}
+          initialIndex={parcelPhotoPreview.startIndex || 0}
           title={`พัสดุห้อง ${parcelPhotoPreview.room_number}`}
           subtitle={`${parcelPhotoPreview.first_name || ''} ${parcelPhotoPreview.last_name || ''}`.trim()}
           label="รูปพัสดุ"
