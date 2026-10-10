@@ -1108,6 +1108,121 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
   )
 }
 
+const REJECT_OUTCOME = {
+  renew: 'สัญญาเช่าเดิมจะไม่ถูกขยาย และยังสิ้นสุดตามวันเดิม',
+  moveout: 'บัญชีผู้เช่าและห้องพักยังใช้งานได้ตามปกติ',
+  move_room: 'ผู้เช่ายังอยู่ห้องเดิม และห้องปลายทางยังว่างให้คนอื่นเลือกได้',
+}
+
+function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
+  const typeLabel = TENANT_REQUEST_TYPE_LABEL[request.type] || ''
+  const facts = getTenantRequestFacts(request)
+  const outcomes = [
+    'คำขอนี้จะถูกปิดและเปลี่ยนสถานะเป็น "ปฏิเสธแล้ว"',
+    REJECT_OUTCOME[request.type],
+    'ผู้เช่าจะเห็นผลในหน้าของตัวเอง และส่งคำขอใหม่ได้',
+  ].filter(Boolean)
+  return (
+    <Modal title="ยืนยันการปฏิเสธคำขอ" onClose={onClose} variant="transfer">
+      {(requestClose) => (
+        <div className="staff-transfer-body">
+          <div className="staff-transfer-top">
+            <div className="staff-transfer-hero">
+              <div className="staff-confirm-icon is-warning">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M15 9l-6 6M9 9l6 6" />
+                </svg>
+              </div>
+              <div>
+                <p className="staff-confirm-message">ปฏิเสธคำขอ{typeLabel}</p>
+                <p className="staff-confirm-note">ตรวจสอบข้อมูลให้แน่ใจก่อนกดยืนยัน การปฏิเสธย้อนกลับไม่ได้</p>
+              </div>
+            </div>
+            <div className="staff-req-detail-room is-reject">
+              <span className={`staff-badge type-${request.type}`}>{typeLabel}</span>
+              <strong>
+                {request.room_number}
+                {request.type === 'move_room' && request.target_room_number && (
+                  <>
+                    <RouteArrowIcon />
+                    {request.target_room_number}
+                  </>
+                )}
+              </strong>
+              <em>
+                {request.first_name} {request.last_name}
+              </em>
+            </div>
+          </div>
+
+          <div className="staff-transfer-scroll">
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">รายละเอียดคำขอ</h4>
+              <dl className="staff-transfer-list">
+                <div>
+                  <dt>เบอร์โทร</dt>
+                  <dd>{request.phone || '-'}</dd>
+                </div>
+                <div>
+                  <dt>ส่งคำขอ</dt>
+                  <dd>{formatDateTime(request.created_at)}</dd>
+                </div>
+              </dl>
+              {facts.length > 0 && (
+                <div className="staff-req-facts">
+                  {facts.map((fact) => (
+                    <span key={fact.label} className={`staff-req-fact${fact.tone ? ` is-${fact.tone}` : ''}`}>
+                      {fact.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="staff-transfer-note">
+                <span>{request.type === 'moveout' ? 'เหตุผลการย้ายออก:' : 'หมายเหตุ:'}</span> {request.note || '-'}
+              </p>
+            </section>
+
+            <section className="staff-transfer-section is-danger">
+              <h4 className="staff-transfer-section-title">หลังปฏิเสธ</h4>
+              <ul className="staff-reject-outcomes">
+                {outcomes.map((outcome) => (
+                  <li key={outcome}>{outcome}</li>
+                ))}
+              </ul>
+            </section>
+          </div>
+
+          <div className="staff-transfer-footer">
+            {error && <p className="staff-form-error">{error}</p>}
+            <div className="staff-form-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className="staff-action-btn is-danger-solid"
+                disabled={processing}
+                onClick={onConfirm}
+              >
+                {processing ? 'กำลังดำเนินการ...' : 'ยืนยันปฏิเสธ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 function TenantRequestDetailModal({ request, onClose }) {
   const isMove = request.type === 'move_room'
   const facts = getTenantRequestFacts(request)
@@ -7090,87 +7205,13 @@ function StaffMain() {
       )}
 
       {tenantRejectConfirm && (
-        <Modal title="ยืนยันการปฏิเสธคำขอ" onClose={() => setTenantRejectConfirm(null)} variant="confirm">
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-warning">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 9v4M12 17h.01" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">
-                ยืนยันปฏิเสธคำขอ{TENANT_REQUEST_TYPE_LABEL[tenantRejectConfirm.type] || ''}
-              </p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{tenantRejectConfirm.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {tenantRejectConfirm.first_name} {tenantRejectConfirm.last_name}
-                  </strong>
-                </div>
-                {tenantRejectConfirm.type === 'renew' && (
-                  <>
-                    <div className="staff-confirm-detail-row">
-                      <span>ระยะเวลาที่ขอต่อ</span>
-                      <strong>
-                        {RENEW_DURATION_LABEL[tenantRejectConfirm.renew_duration_months] ||
-                          `${tenantRejectConfirm.renew_duration_months} เดือน`}
-                      </strong>
-                    </div>
-                    <div className="staff-confirm-detail-row">
-                      <span>รูปแบบการชำระ</span>
-                      <strong>
-                        {RENEW_PAYMENT_TYPE_LABEL[tenantRejectConfirm.renew_payment_type] ||
-                          tenantRejectConfirm.renew_payment_type}
-                      </strong>
-                    </div>
-                  </>
-                )}
-                {tenantRejectConfirm.phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{tenantRejectConfirm.phone}</strong>
-                  </div>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่ส่งคำขอ</span>
-                  <strong>{formatDateTime(tenantRejectConfirm.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>{tenantRejectConfirm.type === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
-                  <strong>{tenantRejectConfirm.note || '-'}</strong>
-                </div>
-              </div>
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `tenant-${tenantRejectConfirm.id}`}
-                  onClick={handleConfirmTenantReject}
-                >
-                  {processingRequestKey === `tenant-${tenantRejectConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันปฏิเสธ'}
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        <TenantRejectModal
+          request={tenantRejectConfirm}
+          error={requestsError}
+          processing={processingRequestKey === `tenant-${tenantRejectConfirm.id}`}
+          onConfirm={handleConfirmTenantReject}
+          onClose={() => setTenantRejectConfirm(null)}
+        />
       )}
     </div>
   )

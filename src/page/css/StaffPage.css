@@ -2951,6 +2951,72 @@
   color: #b42318;
 }
 
+.staff-req-detail-room.is-reject {
+  align-items: center;
+  border-color: #fecaca;
+  background: linear-gradient(160deg, #fff5f5 0%, #ffffff 100%);
+}
+
+.staff-req-detail-room.is-reject strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #b42318;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-req-detail-room.is-reject strong svg {
+  width: 16px;
+  height: 16px;
+}
+
+.staff-transfer-section.is-danger {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.staff-transfer-section.is-danger .staff-transfer-section-title::before {
+  background: linear-gradient(180deg, #f87171, #dc2626);
+}
+
+.staff-reject-outcomes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.staff-reject-outcomes li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #7f1d1d;
+}
+
+.staff-reject-outcomes li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+.staff-action-btn.is-danger-solid {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
+}
+
+.staff-action-btn.is-danger-solid:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
 .staff-req-step-now {
   margin-left: 6px;
   padding: 1px 7px;
@@ -3079,6 +3145,10 @@
 
 .staff-transfer-hero .staff-confirm-icon.is-info {
   box-shadow: 0 0 0 5px #f5f6ff;
+}
+
+.staff-transfer-hero .staff-confirm-icon.is-warning {
+  box-shadow: 0 0 0 5px #fef2f2;
 }
 
 .staff-transfer-hero .staff-confirm-icon svg {
