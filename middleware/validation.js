@@ -386,8 +386,9 @@ export function parsePhotoList(photos, maxPhotos = MAX_PHOTOS) {
 
 const ANNOUNCEMENT_TONES = new Set(["info", "warning"]);
 const MAX_EXPIRY_MINUTES = 30 * 24 * 60;
+export const ANNOUNCEMENT_MAX_PHOTOS = 6;
 
-export function parseAnnouncementInput(body = {}) {
+export function parseAnnouncementInput(body = {}, existingPhotos = []) {
   const error =
     validateText(body.title, "หัวข้อประกาศ", { maxLength: 120 }) ||
     validateText(body.message, "รายละเอียดประกาศ", { maxLength: 1000 });
@@ -416,7 +417,30 @@ export function parseAnnouncementInput(body = {}) {
     }
     expiresInMinutes = minutes;
   }
-  return { value: { title: body.title.trim(), message: body.message.trim(), tone, expiresAt, expiresInMinutes } };
+
+  let keptPhotos = existingPhotos;
+  if (body.keep_photos !== undefined) {
+    if (!Array.isArray(body.keep_photos)) return { error: "รายการรูปที่เก็บไว้ไม่ถูกต้อง" };
+    const keepUrls = new Set(body.keep_photos);
+    keptPhotos = existingPhotos.filter((photo) => keepUrls.has(photo.url));
+  }
+  const newPhotos = parsePhotoList(body.photos, ANNOUNCEMENT_MAX_PHOTOS);
+  if (newPhotos.error) return newPhotos;
+  if (keptPhotos.length + newPhotos.value.length > ANNOUNCEMENT_MAX_PHOTOS) {
+    return { error: `แนบรูปได้ไม่เกิน ${ANNOUNCEMENT_MAX_PHOTOS} รูป` };
+  }
+
+  return {
+    value: {
+      title: body.title.trim(),
+      message: body.message.trim(),
+      tone,
+      expiresAt,
+      expiresInMinutes,
+      keptPhotos,
+      newPhotos: newPhotos.value,
+    },
+  };
 }
 
 const WAITING_LIST_STATUSES = new Set(["waiting", "contacted", "reserved", "closed"]);

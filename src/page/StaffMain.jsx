@@ -9,8 +9,9 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
-import { CheckIcon, DoorIcon, HashIcon, InfoIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
+import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const MOVE_OUT_CHECKLIST = [
   { key: 'walls', label: 'ผนังและสี (รอยแตก คราบ สีลอก)' },
@@ -528,13 +529,7 @@ function Modal({ title, onClose, children, variant }) {
     }
   }, [])
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [])
+  useEffect(() => lockBodyScroll(), [])
 
   return (
     <div
@@ -545,7 +540,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -2302,14 +2297,12 @@ function StaffPaymentReview({ onCountChange }) {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape' && !confirmReview) setPreviewClosing(true)
     }
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = previousOverflow
-    }
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [preview, confirmReview])
+
+  const hasPreview = Boolean(preview)
+  useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
 
   const currentPage = Math.min(page, Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
   const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
@@ -5011,33 +5004,6 @@ function StaffMain() {
 
         {staffTab === 'parcels' && (
           <div className="parcel-management-card">
-            <div className="parcel-card-header">
-              <div className="parcel-hero-text">
-                <span className="parcel-hero-icon"><PackageIcon size={20} /></span>
-                <div>
-                  <h2 className="parcel-hero-title">จัดการพัสดุ</h2>
-                  <p className="parcel-hero-sub">บันทึกพัสดุที่มาส่งและติดตามการรับของผู้เช่า</p>
-                </div>
-              </div>
-              <dl className="parcel-stats">
-                <div className="parcel-stat is-alert">
-                  <dt>รอผู้เช่ารับ</dt>
-                  <dd>{parcels.filter((parcel) => parcel.status === 'pending').length}</dd>
-                </div>
-                <div className="parcel-stat is-success">
-                  <dt>รับแล้ว</dt>
-                  <dd>{parcels.filter((parcel) => parcel.status === 'received').length}</dd>
-                </div>
-                <div className="parcel-stat">
-                  <dt>ทั้งหมด</dt>
-                  <dd>{parcels.length}</dd>
-                </div>
-              </dl>
-              <p className="parcel-card-note">
-                <InfoIcon size={14} />
-                พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น
-              </p>
-            </div>
             <div className="parcel-list-head">
               <h3 className="parcel-section-title">รายการพัสดุ</h3>
               <button type="button" className="parcel-action-btn is-primary" onClick={() => setParcelFormOpen(true)}>
@@ -6125,6 +6091,7 @@ function StaffMain() {
       {showTenantHistory && (
         <Modal
           title="ประวัติคำขอต่อสัญญา / แจ้งย้ายออก"
+          variant="history"
           onClose={() => {
             setShowTenantHistory(false)
             setTenantHistoryData([])
@@ -6258,6 +6225,7 @@ function StaffMain() {
       {showMaintenanceHistory && (
         <Modal
           title="ประวัติคำขอแจ้งซ่อม"
+          variant="history"
           onClose={() => {
             setShowMaintenanceHistory(false)
             setMaintenanceHistoryData([])
