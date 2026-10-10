@@ -1357,10 +1357,12 @@ const MAINTENANCE_PAGE_SIZE = 5
 const RENTAL_HISTORY_PAGE_SIZE = 5
 const PARCEL_PAGE_SIZE = 5
 
-function parcelMonthKey(value) {
+function parcelDayKey(value) {
   const date = new Date(value)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
+
+const dayKeyToDate = (key) => (key ? new Date(`${key}T00:00:00`) : undefined)
 
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
@@ -1513,7 +1515,8 @@ function CustomerDashbord() {
   const [parcelDetailId, setParcelDetailId] = useState(null)
   const [parcelSearch, setParcelSearch] = useState('')
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
-  const [parcelMonthFilter, setParcelMonthFilter] = useState('all')
+  const [parcelDateFrom, setParcelDateFrom] = useState('')
+  const [parcelDateTo, setParcelDateTo] = useState('')
   const [parcelSort, setParcelSort] = useState('newest')
   const [parcelPage, setParcelPage] = useState(1)
   const notifRef = useRef(null)
@@ -2123,28 +2126,25 @@ function CustomerDashbord() {
   const pendingParcels = parcels.filter((parcel) => parcel.status === 'pending')
   const receivedParcels = parcels.filter((parcel) => parcel.status === 'received')
   const parcelKeyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
-  const parcelMonthOptions = [...new Set(parcels.map((parcel) => parcelMonthKey(parcel.created_at)))]
-    .sort()
-    .reverse()
-    .map((key) => {
-      const [year, month] = key.split('-').map(Number)
-      return {
-        key,
-        label: new Date(year, month - 1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }),
-      }
-    })
   const parcelFiltersActive =
-    Boolean(parcelKeyword) || parcelStatusFilter !== 'all' || parcelMonthFilter !== 'all' || parcelSort !== 'newest'
+    Boolean(parcelKeyword) ||
+    parcelStatusFilter !== 'all' ||
+    Boolean(parcelDateFrom) ||
+    Boolean(parcelDateTo) ||
+    parcelSort !== 'newest'
   const resetParcelFilters = () => {
     setParcelSearch('')
     setParcelStatusFilter('all')
-    setParcelMonthFilter('all')
+    setParcelDateFrom('')
+    setParcelDateTo('')
     setParcelSort('newest')
     setParcelPage(1)
   }
   const filteredParcels = parcels.filter((parcel) => {
     if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
-    if (parcelMonthFilter !== 'all' && parcelMonthKey(parcel.created_at) !== parcelMonthFilter) return false
+    const arrivedOn = parcelDayKey(parcel.created_at)
+    if (parcelDateFrom && arrivedOn < parcelDateFrom) return false
+    if (parcelDateTo && arrivedOn > parcelDateTo) return false
     if (!parcelKeyword) return true
     return [
       parcel.sender_name,
@@ -3226,23 +3226,34 @@ function CustomerDashbord() {
                     />
                   </span>
                 </label>
-                <label className="dashboard-parcel-filter">
-                  <span>เดือนที่มาถึง</span>
-                  <select
-                    value={parcelMonthFilter}
-                    onChange={(event) => {
-                      setParcelMonthFilter(event.target.value)
+                <div className="dashboard-parcel-filter is-date">
+                  <span>ตั้งแต่วันที่</span>
+                  <ThaiDatePicker
+                    className="dashboard-parcel-date-input"
+                    placeholder="วันที่เริ่ม"
+                    value={parcelDateFrom}
+                    maxDate={dayKeyToDate(parcelDateTo)}
+                    isClearable
+                    onChange={(date) => {
+                      setParcelDateFrom(date)
                       setParcelPage(1)
                     }}
-                  >
-                    <option value="all">ทุกเดือน</option>
-                    {parcelMonthOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </div>
+                <div className="dashboard-parcel-filter is-date">
+                  <span>ถึงวันที่</span>
+                  <ThaiDatePicker
+                    className="dashboard-parcel-date-input"
+                    placeholder="วันที่สิ้นสุด"
+                    value={parcelDateTo}
+                    minDate={dayKeyToDate(parcelDateFrom)}
+                    isClearable
+                    onChange={(date) => {
+                      setParcelDateTo(date)
+                      setParcelPage(1)
+                    }}
+                  />
+                </div>
                 <label className="dashboard-parcel-filter">
                   <span>เรียงตาม</span>
                   <select
