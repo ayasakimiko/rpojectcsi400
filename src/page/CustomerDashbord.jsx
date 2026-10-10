@@ -1225,7 +1225,7 @@ function RequestTimeline({ kind, request, compact = false }) {
                   '-'
                 )}
               </p>
-              {!compact && stepMs !== null && <p className="dashboard-step-duration">+{formatRemaining(stepMs)}</p>}
+              {!compact && stepMs !== null && <p className="dashboard-step-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
             </li>
           )
         })}
