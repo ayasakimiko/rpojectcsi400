@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -1240,6 +1240,50 @@ function RequestTimeline({ kind, request, compact = false }) {
       {!compact && totalMs !== null && (
         <p className="dashboard-progress-total">รวมใช้เวลาทั้งหมด {formatRemaining(totalMs)}</p>
       )}
+    </div>
+  )
+}
+
+// Segment buttons + search + result count, matching the parcel filter panel.
+function DashboardFilterPanel({ segments, active, onSegment, search, onSearch, searchPlaceholder, resultText, canClear, onClear }) {
+  return (
+    <div className="dashboard-parcel-filters dashboard-filter-panel">
+      <div className="dashboard-parcel-segments" role="tablist" aria-label="กรองตามสถานะ">
+        {segments.map((segment) => (
+          <button
+            type="button"
+            role="tab"
+            key={segment.key}
+            aria-selected={active === segment.key}
+            className={`dashboard-parcel-segment${segment.tone ? ` tone-${segment.tone}` : ''}${active === segment.key ? ' is-active' : ''}`}
+            onClick={() => onSegment(segment.key)}
+          >
+            {segment.label}
+            <span>{segment.count}</span>
+          </button>
+        ))}
+      </div>
+      <span className="dashboard-parcel-search-control">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder={searchPlaceholder}
+          aria-label="ค้นหา"
+        />
+      </span>
+      <div className="dashboard-parcel-result-bar">
+        <span>{resultText}</span>
+        {canClear && (
+          <button type="button" className="dashboard-parcel-clear" onClick={onClear}>
+            ล้างตัวกรอง
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -3765,56 +3809,83 @@ function CustomerDashbord() {
                 <div className="dashboard-card">
                   <div className="dashboard-card-header">
                     <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
-                    {rentalHistory.length > 0 && (
-                      <div className="dashboard-filters">
-                        <input
-                          type="text"
-                          className="dashboard-search-input"
-                          placeholder="ค้นหาวันที่, รายการ, จำนวนเงิน, หมายเหตุ..."
-                          value={historySearch}
-                          onChange={(event) => setHistorySearch(event.target.value)}
-                        />
-                        <select
-                          className="dashboard-filter-select"
-                          value={historyStatusFilter}
-                          onChange={(event) => setHistoryStatusFilter(event.target.value)}
-                        >
-                          <option value="all">ทุกสถานะ</option>
-                          <option value="paid">ชำระแล้ว</option>
-                          <option value="pending">รอชำระ</option>
-                          <option value="overdue">ค้างชำระ</option>
-                        </select>
-                      </div>
-                    )}
                   </div>
+                  {rentalHistory.length > 0 &&
+                    (() => {
+                      const activePayments = rentalHistoryWithDue[activeHistoryIndex]?.payments || []
+                      const countOf = (status) => activePayments.filter((payment) => payment.status === status).length
+                      return (
+                        <DashboardFilterPanel
+                          segments={[
+                            { key: 'all', label: 'ทั้งหมด', count: activePayments.length },
+                            { key: 'paid', label: 'ชำระแล้ว', count: countOf('paid'), tone: 'success' },
+                            { key: 'pending', label: 'รอชำระ', count: countOf('pending'), tone: 'warning' },
+                            { key: 'overdue', label: 'ค้างชำระ', count: countOf('overdue'), tone: 'danger' },
+                          ]}
+                          active={historyStatusFilter}
+                          onSegment={setHistoryStatusFilter}
+                          search={historySearch}
+                          onSearch={setHistorySearch}
+                          searchPlaceholder="ค้นหาวันที่ รายการ จำนวนเงิน หรือหมายเหตุ"
+                          resultText={`พบ ${filteredRentalHistory[activeHistoryIndex]?.payments.length ?? 0} จาก ${activePayments.length} รายการ (ห้อง ${filteredRentalHistory[activeHistoryIndex]?.room_number ?? '-'})`}
+                          canClear={historyStatusFilter !== 'all' || Boolean(historySearch.trim())}
+                          onClear={() => {
+                            setHistoryStatusFilter('all')
+                            setHistorySearch('')
+                          }}
+                        />
+                      )
+                    })()}
                   {rentalHistory.length === 0 ? (
                     <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
                   ) : (
                     <>
                     {filteredRentalHistory.length > 1 && (
-                      <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
-                        {filteredRentalHistory.map((entry, index) => {
-                          const { movedOut } = getBookingTransfer(index)
-                          return (
-                            <button
-                              key={entry.booking_id}
-                              type="button"
-                              role="tab"
-                              aria-selected={index === activeHistoryIndex}
-                              className={`dashboard-history-tab${index === activeHistoryIndex ? ' is-active' : ''}`}
-                              onClick={() => setHistoryBookingId(entry.booking_id)}
-                            >
-                              <strong>ห้อง {entry.room_number}</strong>
-                              <span>
-                                {index === 0 && room?.is_booked
-                                  ? 'ห้องปัจจุบัน'
-                                  : movedOut
-                                    ? `ห้องเดิม · ย้ายออก ${formatDate(movedOut.completed_at)}`
-                                    : 'ห้องเดิม'}
-                              </span>
-                            </button>
-                          )
-                        })}
+                      <div className="dashboard-history-rooms">
+                        <p className="dashboard-history-rooms-hint">
+                          คุณเคยพักมากกว่า 1 ห้อง เลือกห้องเพื่อดูประวัติการชำระของห้องนั้น
+                        </p>
+                        <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
+                          {filteredRentalHistory.map((entry, index) => {
+                            const { movedOut } = getBookingTransfer(index)
+                            const isCurrent = index === 0 && Boolean(room?.is_booked)
+                            const isActive = index === activeHistoryIndex
+                            const paymentCount = rentalHistory[index]?.payments?.length || 0
+                            return (
+                              <Fragment key={entry.booking_id}>
+                                {index > 0 && (
+                                  <span className="dashboard-history-tab-link" aria-hidden="true" title="ย้ายห้อง">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M19 12H5" />
+                                      <path d="M11 6l-6 6 6 6" />
+                                    </svg>
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  role="tab"
+                                  aria-selected={isActive}
+                                  className={`dashboard-history-tab${isActive ? ' is-active' : ''}${isCurrent ? ' is-current' : ' is-past'}`}
+                                  onClick={() => setHistoryBookingId(entry.booking_id)}
+                                >
+                                  <span className="dashboard-history-tab-top">
+                                    <strong>ห้อง {entry.room_number}</strong>
+                                    <em>{isCurrent ? 'ห้องปัจจุบัน' : 'ห้องเดิม'}</em>
+                                  </span>
+                                  <span className="dashboard-history-tab-dates">
+                                    {formatDate(entry.rental_start_date)} –{' '}
+                                    {isCurrent
+                                      ? 'ปัจจุบัน'
+                                      : formatDate(movedOut ? movedOut.completed_at : entry.rental_end_date)}
+                                  </span>
+                                  <span className="dashboard-history-tab-meta">
+                                    {movedOut ? `ย้ายไปห้อง ${movedOut.target_room_number}` : `${paymentCount} รายการชำระ`}
+                                  </span>
+                                </button>
+                              </Fragment>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                     {[filteredRentalHistory[activeHistoryIndex]].map((entry) => {
@@ -4251,32 +4322,38 @@ function CustomerDashbord() {
                     </button>
                   </div>
                   {maintenanceRequests.length > 0 && (
-                    <div className="dashboard-filters dashboard-filters-spaced">
-                      <input
-                        type="text"
-                        className="dashboard-search-input"
-                        placeholder="ค้นหารายละเอียด, หมวดหมู่, เบอร์โทร..."
-                        value={maintenanceSearch}
-                        onChange={(event) => {
-                          setMaintenanceSearch(event.target.value)
-                          setMaintenancePage(1)
-                        }}
-                      />
-                      <select
-                        className="dashboard-filter-select"
-                        value={maintenanceStatusFilter}
-                        onChange={(event) => {
-                          setMaintenanceStatusFilter(event.target.value)
-                          setMaintenancePage(1)
-                        }}
-                      >
-                        <option value="all">ทุกสถานะ</option>
-                        <option value="pending">รอดำเนินการ</option>
-                        <option value="in_progress">กำลังดำเนินการ</option>
-                        <option value="done">เสร็จสิ้น</option>
-                        <option value="cancelled">ยกเลิกแล้ว</option>
-                      </select>
-                    </div>
+                    <DashboardFilterPanel
+                      segments={[
+                        { key: 'all', label: 'ทั้งหมด', count: maintenanceRequests.length },
+                        ...[
+                          { key: 'pending', label: 'รอดำเนินการ', tone: 'warning' },
+                          { key: 'in_progress', label: 'กำลังดำเนินการ', tone: 'info' },
+                          { key: 'done', label: 'เสร็จสิ้น', tone: 'success' },
+                          { key: 'cancelled', label: 'ยกเลิกแล้ว', tone: 'danger' },
+                        ].map((segment) => ({
+                          ...segment,
+                          count: maintenanceRequests.filter((item) => item.status === segment.key).length,
+                        })),
+                      ]}
+                      active={maintenanceStatusFilter}
+                      onSegment={(value) => {
+                        setMaintenanceStatusFilter(value)
+                        setMaintenancePage(1)
+                      }}
+                      search={maintenanceSearch}
+                      onSearch={(value) => {
+                        setMaintenanceSearch(value)
+                        setMaintenancePage(1)
+                      }}
+                      searchPlaceholder="ค้นหารายละเอียด หมวดหมู่ หรือเบอร์โทร"
+                      resultText={`พบ ${filteredMaintenanceRequests.length} จาก ${maintenanceRequests.length} รายการ`}
+                      canClear={maintenanceStatusFilter !== 'all' || Boolean(maintenanceSearch.trim())}
+                      onClear={() => {
+                        setMaintenanceStatusFilter('all')
+                        setMaintenanceSearch('')
+                        setMaintenancePage(1)
+                      }}
+                    />
                   )}
                   {showMaintenanceForm && (
                     <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
