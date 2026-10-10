@@ -817,6 +817,10 @@ function AdminBackupPage() {
   const requestParcelSave = (event) => {
     event.preventDefault()
     setParcelFormError('')
+    if (parcelPhotos.length === 0) {
+      setParcelPhotoError('กรุณาแนบรูปพัสดุอย่างน้อย 1 รูปก่อนบันทึก')
+      return
+    }
     setParcelSaveConfirm(true)
   }
 
@@ -3599,6 +3603,7 @@ function AdminBackupPage() {
                 <div className="parcel-photo-section">
                   <ParcelPhotoPicker
                     id="admin-parcel-photos"
+                    required
                     files={parcelPhotos}
                     onChange={setParcelPhotos}
                     error={parcelPhotoError}
@@ -3612,7 +3617,12 @@ function AdminBackupPage() {
               <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
                 ยกเลิก
               </button>
-              <button type="submit" className="parcel-action-btn is-primary" disabled={parcelSubmitting}>
+              <button
+                type="submit"
+                className="parcel-action-btn is-primary"
+                disabled={parcelSubmitting || parcelPhotos.length === 0}
+                title={parcelPhotos.length === 0 ? 'แนบรูปพัสดุก่อนบันทึก' : undefined}
+              >
                 <CheckIcon />
                 {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
               </button>
