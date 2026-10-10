@@ -3731,7 +3731,8 @@
   border-radius: 22px;
 }
 
-.staff-modal.staff-modal-transfer-approval {
+.staff-modal.staff-modal-transfer-approval,
+.staff-modal.staff-modal-transfer-detail {
   width: 760px;
   max-height: min(840px, calc(100vh - 32px));
   max-height: min(840px, calc(100dvh - 32px));

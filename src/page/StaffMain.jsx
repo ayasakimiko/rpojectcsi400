@@ -545,7 +545,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${variant === 'transfer' || variant === 'transfer-approval' ? ' staff-modal-transfer' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -1277,7 +1277,7 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
     <Modal
       title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[request.type] || 'คำขอ'}`}
       onClose={onClose}
-      variant="transfer"
+      variant={isMove ? 'transfer-detail' : 'transfer'}
     >
       {(requestClose) => (
         <div className="staff-transfer-body">
