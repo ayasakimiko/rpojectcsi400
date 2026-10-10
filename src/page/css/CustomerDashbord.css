@@ -3598,7 +3598,15 @@
   color: #9db2c8;
 }
 
-.dashboard-profile-form .profile-field .profile-field-control input:hover {
+.dashboard-profile-form .profile-field .profile-field-control input:disabled {
+  background: #f1f5f9;
+  color: #475569;
+  opacity: 1;
+  -webkit-text-fill-color: #475569;
+  cursor: not-allowed;
+}
+
+.dashboard-profile-form .profile-field .profile-field-control input:hover:not(:disabled) {
   border-color: #b9d3f7;
 }
 
