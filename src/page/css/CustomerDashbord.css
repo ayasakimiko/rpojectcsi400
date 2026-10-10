@@ -2349,14 +2349,51 @@
   text-align: left;
 }
 
+.dashboard-status-hero[class*='is-'] {
+  --hero-accent: #4f46e5;
+  --hero-from: #eef2ff;
+  --hero-border: #c7d2fe;
+  --hero-text: #312e81;
+  --hero-icon-from: #818cf8;
+  --hero-icon-to: #4f46e5;
+  --hero-ring: #e0e7ff;
+  position: relative;
+  overflow: hidden;
+  padding: 12px 14px 12px 18px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--hero-border);
+  background: linear-gradient(120deg, var(--hero-from) 0%, #ffffff 85%);
+}
+
+.dashboard-status-hero[class*='is-']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--hero-accent);
+}
+
 .dashboard-status-hero.is-success {
-  border-color: #a7f3d0;
-  background: #f0fdf7;
+  --hero-accent: #10b981;
+  --hero-from: #ecfdf5;
+  --hero-border: #a7f3d0;
+  --hero-text: #065f46;
+  --hero-icon-from: #34d399;
+  --hero-icon-to: #059669;
+  --hero-ring: #d1fae5;
 }
 
 .dashboard-status-hero.is-danger {
-  border-color: #fecaca;
-  background: #fff5f5;
+  --hero-accent: #ef4444;
+  --hero-from: #fef2f2;
+  --hero-border: #fecaca;
+  --hero-text: #991b1b;
+  --hero-icon-from: #f87171;
+  --hero-icon-to: #dc2626;
+  --hero-ring: #fee2e2;
 }
 
 .dashboard-status-hero .dashboard-confirm-icon {
@@ -2367,11 +2404,13 @@
   margin: 0;
 }
 
-.dashboard-status-hero .dashboard-confirm-icon.is-info {
-  border-color: #bfdbfe;
-  background: #ffffff;
-  color: #2563eb;
-  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.08);
+.dashboard-status-hero[class*='is-'] .dashboard-confirm-icon {
+  border: none;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--hero-icon-from), var(--hero-icon-to));
+  box-shadow:
+    0 0 0 4px var(--hero-ring),
+    0 6px 14px color-mix(in srgb, var(--hero-icon-to) 30%, transparent);
 }
 
 .dashboard-status-hero .dashboard-confirm-icon svg {
@@ -2395,6 +2434,27 @@
   font-weight: 500;
   line-height: 1.75;
   overflow-wrap: anywhere;
+}
+
+.dashboard-status-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dashboard-status-hero-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--hero-accent, #4f46e5);
+}
+
+.dashboard-status-hero[class*='is-'] .dashboard-confirm-message {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--hero-text);
 }
 
 .dashboard-status-body .dashboard-maintenance-detail-card {
@@ -4153,4 +4213,184 @@
   line-height: 1.5;
   text-align: left;
   color: #1e3a8a;
+}
+
+/* Parcel filters */
+.dashboard-parcel-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1.5px solid #e3e9f3;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-search {
+  max-width: none;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-filter {
+  flex: 0 1 180px;
+}
+
+.dashboard-parcel-segments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dashboard-parcel-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #33506f;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.dashboard-parcel-segment span {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e8f0fb;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.dashboard-parcel-segment:hover {
+  border-color: #93c5fd;
+}
+
+.dashboard-parcel-segment.is-active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.dashboard-parcel-segment.is-active span {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.dashboard-parcel-segment.is-pending.is-active {
+  border-color: #d97706;
+  background: #d97706;
+}
+
+.dashboard-parcel-segment.is-received.is-active {
+  border-color: #059669;
+  background: #059669;
+}
+
+.dashboard-parcel-result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed #dce9fb;
+  font-size: 12px;
+  color: #6b859e;
+}
+
+.dashboard-parcel-result-bar strong {
+  color: #0f2b52;
+}
+
+.dashboard-parcel-clear {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-parcel-clear:hover {
+  text-decoration: underline;
+}
+
+.dashboard-parcel-pagination {
+  margin-top: 16px;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-search {
+  flex: 1 1 260px;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-filter.is-date {
+  flex: 0 1 170px;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-filter:not(.is-date) {
+  flex: 0 1 150px;
+}
+
+/* react-datepicker inserts its popper next to the input; keep it from adding a flex gap */
+.dashboard-parcel-filters .dashboard-parcel-filter.is-date {
+  gap: 0;
+}
+
+.dashboard-parcel-filters .dashboard-parcel-filter.is-date > span {
+  margin-bottom: 6px;
+}
+
+.dashboard-parcel-filters input.dashboard-parcel-date-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 10px;
+  padding: 8px 54px 8px 11px;
+  background-color: #f8fbff;
+  color: #0f2b52;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dashboard-parcel-filters input.dashboard-parcel-date-input:focus {
+  outline: none;
+  border-color: #60a5fa;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15);
+}
+
+@media (max-width: 576px) {
+  .dashboard-parcel-filters .dashboard-parcel-toolbar {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .dashboard-parcel-filters .dashboard-parcel-search {
+    flex: 1 1 100%;
+  }
+
+  .dashboard-parcel-filters input.dashboard-parcel-date-input {
+    padding-left: 9px;
+    font-size: 12px;
+  }
+
+  .dashboard-parcel-filters .dashboard-parcel-filter,
+  .dashboard-parcel-filters .dashboard-parcel-filter.is-date,
+  .dashboard-parcel-filters .dashboard-parcel-filter:not(.is-date) {
+    flex: 1 1 calc(50% - 6px);
+  }
 }
