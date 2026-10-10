@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -3787,29 +3787,51 @@ function CustomerDashbord() {
                   ) : (
                     <>
                     {filteredRentalHistory.length > 1 && (
-                      <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
-                        {filteredRentalHistory.map((entry, index) => {
-                          const { movedOut } = getBookingTransfer(index)
-                          return (
-                            <button
-                              key={entry.booking_id}
-                              type="button"
-                              role="tab"
-                              aria-selected={index === activeHistoryIndex}
-                              className={`dashboard-history-tab${index === activeHistoryIndex ? ' is-active' : ''}`}
-                              onClick={() => setHistoryBookingId(entry.booking_id)}
-                            >
-                              <strong>ห้อง {entry.room_number}</strong>
-                              <span>
-                                {index === 0 && room?.is_booked
-                                  ? 'ห้องปัจจุบัน'
-                                  : movedOut
-                                    ? `ห้องเดิม · ย้ายออก ${formatDate(movedOut.completed_at)}`
-                                    : 'ห้องเดิม'}
-                              </span>
-                            </button>
-                          )
-                        })}
+                      <div className="dashboard-history-rooms">
+                        <p className="dashboard-history-rooms-hint">
+                          คุณเคยพักมากกว่า 1 ห้อง เลือกห้องเพื่อดูประวัติการชำระของห้องนั้น
+                        </p>
+                        <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
+                          {filteredRentalHistory.map((entry, index) => {
+                            const { movedOut } = getBookingTransfer(index)
+                            const isCurrent = index === 0 && Boolean(room?.is_booked)
+                            const isActive = index === activeHistoryIndex
+                            const paymentCount = rentalHistory[index]?.payments?.length || 0
+                            return (
+                              <Fragment key={entry.booking_id}>
+                                {index > 0 && (
+                                  <span className="dashboard-history-tab-link" aria-hidden="true" title="ย้ายห้อง">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M19 12H5" />
+                                      <path d="M11 6l-6 6 6 6" />
+                                    </svg>
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  role="tab"
+                                  aria-selected={isActive}
+                                  className={`dashboard-history-tab${isActive ? ' is-active' : ''}${isCurrent ? ' is-current' : ' is-past'}`}
+                                  onClick={() => setHistoryBookingId(entry.booking_id)}
+                                >
+                                  <span className="dashboard-history-tab-top">
+                                    <strong>ห้อง {entry.room_number}</strong>
+                                    <em>{isCurrent ? 'ห้องปัจจุบัน' : 'ห้องเดิม'}</em>
+                                  </span>
+                                  <span className="dashboard-history-tab-dates">
+                                    {formatDate(entry.rental_start_date)} –{' '}
+                                    {isCurrent
+                                      ? 'ปัจจุบัน'
+                                      : formatDate(movedOut ? movedOut.completed_at : entry.rental_end_date)}
+                                  </span>
+                                  <span className="dashboard-history-tab-meta">
+                                    {movedOut ? `ย้ายไปห้อง ${movedOut.target_room_number}` : `${paymentCount} รายการชำระ`}
+                                  </span>
+                                </button>
+                              </Fragment>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                     {[filteredRentalHistory[activeHistoryIndex]].map((entry) => {

@@ -838,6 +838,11 @@ router.get("/requests/history", async (req, res) => {
       params.push(req.query.status);
     }
 
+    if (["renew", "moveout", "move_room"].includes(req.query.type)) {
+      conditions.push(`tr.type = ?`);
+      params.push(req.query.type);
+    }
+
     const search = parseSearch(req.query.search);
     if (search) {
       conditions.push(`(CAST(tr.room_number AS CHAR) LIKE ? OR CAST(tr.target_room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ?)`);
