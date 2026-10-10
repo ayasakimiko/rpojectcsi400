@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -66,8 +66,6 @@ const PROFILE_FIELD_ICONS = {
   ),
 }
 
-// One labelled text box for the profile form: an icon on the left, a show/hide button for passwords,
-// and a small hint underneath that turns red or green as the value is checked.
 function ProfileField({ id, label, icon, hint, hintTone, invalid, type = 'text', ...inputProps }) {
   const [revealed, setRevealed] = useState(false)
   const isPassword = type === 'password'
@@ -137,7 +135,6 @@ function formatFileSize(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-// A framed area for attaching the payment slip: click it to browse, or drag an image onto it.
 const MAINTENANCE_MAX_PHOTOS = 6
 const MAINTENANCE_MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
@@ -500,7 +497,7 @@ function CalendarIcon() {
   )
 }
 
-function Modal({ title, onClose, children, variant }) {
+function Modal({ title, onClose, children, variant, onBack }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -522,15 +519,24 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dashboard-modal-header">
-          <h3>{title}</h3>
+          <div className="dashboard-modal-title">
+            {onBack && (
+              <button type="button" className="dashboard-modal-back" onClick={onBack} aria-label="ย้อนกลับ">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+            )}
+            <h3>{title}</h3>
+          </div>
           <button type="button" className="dashboard-modal-close" onClick={requestClose} aria-label="ปิด">
             <svg
-              width="18"
-              height="18"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -885,7 +891,8 @@ const MOVE_ROOM_STATUS_POPUP_CONTENT = {
   },
   in_progress: {
     title: 'เจ้าหน้าที่รับเรื่องแล้ว',
-    message: 'เจ้าหน้าที่รับเรื่องคำขอย้ายห้องแล้ว กรุณารอผลการตรวจสอบ',
+    message:
+      'เจ้าหน้าที่รับเรื่องคำขอย้ายห้องแล้ว กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อนัดตรวจสภาพห้องปัจจุบันและพูดคุยรายละเอียดค่าเช่าและเงินประกันของห้องใหม่',
     icon: 'info',
   },
   approved: {
@@ -910,13 +917,18 @@ const RENEW_STATUS_POPUP_CONTENT = {
   },
   in_progress: {
     title: 'เจ้าหน้าที่รับเรื่องแล้ว',
-    message: 'เจ้าหน้าที่รับเรื่องคำขอต่อสัญญาของคุณแล้ว กรุณารอการติดต่อกลับจากเจ้าหน้าที่',
+    message: 'เจ้าหน้าที่รับเรื่องคำขอต่อสัญญาของคุณแล้ว กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อพูดคุยรายละเอียดและลงนามต่อสัญญา',
     icon: 'info',
   },
   approved: {
     title: 'ต่อสัญญาสำเร็จ',
     message: 'คำขอต่อสัญญาของคุณได้รับการอนุมัติแล้ว ระบบได้ขยายระยะเวลาสัญญาเช่าให้เรียบร้อยแล้ว',
     icon: 'success',
+  },
+  rejected: {
+    title: 'คำขอต่อสัญญาไม่ได้รับการอนุมัติ',
+    message: 'คำขอต่อสัญญาของคุณไม่ได้รับการอนุมัติ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อสอบถามรายละเอียดเพิ่มเติม',
+    icon: 'danger',
   },
 }
 
@@ -1059,7 +1071,7 @@ function TenantRequestDetailCard({ request, roomNumber }) {
       {request.type === 'move_room' && (
         <>
           <div className="dashboard-maintenance-detail-row">
-            <span>ห้องปลายทาง</span>
+            <span>ห้องที่ย้ายไป</span>
             <strong>{request.target_room_number || '-'}</strong>
           </div>
           {request.target_room_price != null && (
@@ -1118,7 +1130,6 @@ function TenantRequestDetailCard({ request, roomNumber }) {
   )
 }
 
-// A popup opened from "ดูคำขอก่อนหน้า" carries previousOf; older statuses without their own popup copy get a generic one.
 const STATUS_HERO_LABEL = {
   success: 'เรียบร้อยแล้ว',
   info: 'กำลังดำเนินการ',
@@ -1151,11 +1162,18 @@ function getRequestTimeline(kind, request) {
     { label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at, done: Boolean(request.accepted_at) },
     {
       label: finalLabel || REQUEST_TIMELINE_PENDING_FINAL_LABEL,
-      // completed_at may be missing on older records transitioned before this timestamp was tracked
       date: isFinal ? request.completed_at || request.accepted_at || request.created_at : null,
       done: isFinal,
     },
   ]
+}
+
+const REQUEST_PROGRESS_VISIBLE_MS = 10 * 60 * 1000
+
+function isRequestSettled(request) {
+  if (!request || !['approved', 'rejected'].includes(request.status)) return false
+  const finishedAt = new Date(request.completed_at || request.accepted_at || request.created_at).getTime()
+  return Date.now() - finishedAt > REQUEST_PROGRESS_VISIBLE_MS
 }
 
 const STEP_COMPACT_LABEL = {
@@ -1171,7 +1189,6 @@ function formatStepDate(value) {
   }
 }
 
-// Horizontal o---o---o progress; `compact` is the slim version used inside request rows.
 function RequestTimeline({ kind, request, compact = false }) {
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
@@ -1244,7 +1261,6 @@ function RequestTimeline({ kind, request, compact = false }) {
   )
 }
 
-// Segment buttons + search + result count, matching the parcel filter panel.
 function DashboardFilterPanel({ segments, active, onSegment, search, onSearch, searchPlaceholder, resultText, canClear, onClear }) {
   return (
     <div className="dashboard-parcel-filters dashboard-filter-panel">
@@ -1422,6 +1438,32 @@ function maintenanceBadgeClass(status) {
   return 'pending'
 }
 
+const MAINTENANCE_CATEGORY_ICON_PATHS = {
+  electrical: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  plumbing: <path d="M12 2.7s6 6.4 6 11.3a6 6 0 0 1-12 0c0-4.9 6-11.3 6-11.3z" />,
+  aircon: (
+    <>
+      <path d="M12 2v20M4.9 6.9l14.2 10.2M19.1 6.9 4.9 17.1" />
+      <path d="m9 3.5 3 2 3-2M9 20.5l3-2 3 2" />
+    </>
+  ),
+  furniture: (
+    <>
+      <path d="M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3" />
+      <path d="M2 13a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v5H2zM5 18v2M19 18v2" />
+    </>
+  ),
+  other: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" />,
+}
+
+function MaintenanceCategoryIcon({ category, size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {MAINTENANCE_CATEGORY_ICON_PATHS[category] || MAINTENANCE_CATEGORY_ICON_PATHS.other}
+    </svg>
+  )
+}
+
 const MAINTENANCE_CATEGORY_OPTIONS = [
   { value: 'electrical', label: 'ไฟฟ้า' },
   { value: 'plumbing', label: 'ประปา' },
@@ -1554,7 +1596,6 @@ function CustomerDashbord() {
   const [parcelReceiveConfirm, setParcelReceiveConfirm] = useState(null)
   const [parcelReceiveError, setParcelReceiveError] = useState('')
   const [parcelReceiveErrorId, setParcelReceiveErrorId] = useState(null)
-  const [parcelReceiveSuccess, setParcelReceiveSuccess] = useState('')
   const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
   const [parcelDetailId, setParcelDetailId] = useState(null)
   const [parcelSearch, setParcelSearch] = useState('')
@@ -1606,9 +1647,9 @@ function CustomerDashbord() {
   const [requestError, setRequestError] = useState('')
 
   const [statusPopup, setStatusPopup] = useState(null)
+  const [moveRoomReminder, setMoveRoomReminder] = useState(null)
   const [maintenanceDetail, setMaintenanceDetail] = useState(null)
   const [maintenancePhotoPreview, setMaintenancePhotoPreview] = useState(null)
-  const [tenantDetail, setTenantDetail] = useState(null)
 
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
   const [maintenanceText, setMaintenanceText] = useState('')
@@ -1632,19 +1673,20 @@ function CustomerDashbord() {
   const [receiptRequest, setReceiptRequest] = useState(null)
   const [receiptGenerating, setReceiptGenerating] = useState(false)
   const receiptRef = useRef(null)
+  const moveRoomReminderRef = useRef(null)
 
   useEffect(() => {
     const isAnyOverlayOpen =
       showPaymentForm ||
       Boolean(activeRequestType) ||
       Boolean(statusPopup) ||
+      Boolean(moveRoomReminder) ||
       Boolean(successPopup) ||
       showMaintenanceForm ||
       confirmCancelId !== null ||
       notifOpen ||
       Boolean(notifDetail) ||
-      Boolean(maintenanceDetail) ||
-      Boolean(tenantDetail)
+      Boolean(maintenanceDetail)
 
     if (!isAnyOverlayOpen) return
 
@@ -1657,28 +1699,38 @@ function CustomerDashbord() {
     showPaymentForm,
     activeRequestType,
     statusPopup,
+    moveRoomReminder,
     successPopup,
     showMaintenanceForm,
     confirmCancelId,
     notifOpen,
     notifDetail,
     maintenanceDetail,
-    tenantDetail,
   ])
 
+  const remindMoveRoomContact = (dashboardData, onlyOnChange) => {
+    const request = dashboardData?.tenantRequests?.find((item) => item.type === 'move_room')
+    const activeId = request?.status === 'in_progress' ? request.id : null
+    const changed = activeId !== moveRoomReminderRef.current
+    moveRoomReminderRef.current = activeId
+    if (activeId === null || (onlyOnChange && !changed)) return false
+    setMoveRoomReminder((current) => current ?? request)
+    return true
+  }
+
   const maybeShowStatusPopups = (dashboardData) => {
-    const tryShowStatusPopup = (kind, status, id, request) => {
+    const tryShowStatusPopup = (kind, status, id, request, open = () => setStatusPopup({ kind, status, request })) => {
       if (!STATUS_POPUP_CONTENT_BY_KIND[kind]?.[status]) return false
 
       if (status === 'pending') return false
       if (status === 'in_progress') {
-        setStatusPopup({ kind, status, request })
+        open()
         return true
       }
       const seenKey = `${kind}_${status}_notice_seen_${id}`
       if (localStorage.getItem(seenKey)) return false
       localStorage.setItem(seenKey, '1')
-      setStatusPopup({ kind, status, request })
+      open()
       return true
     }
 
@@ -1696,7 +1748,11 @@ function CustomerDashbord() {
     if (renewRequest && tryShowStatusPopup('renew', renewRequest.status, renewRequest.id, renewRequest)) return
 
     const latestMaintenance = dashboardData?.maintenanceRequests?.[0]
-    if (latestMaintenance) tryShowStatusPopup('maintenance', latestMaintenance.status, latestMaintenance.id, latestMaintenance)
+    if (latestMaintenance) {
+      tryShowStatusPopup('maintenance', latestMaintenance.status, latestMaintenance.id, latestMaintenance, () =>
+        setMaintenanceDetail(latestMaintenance),
+      )
+    }
   }
 
   const loadDashboard = () => {
@@ -1713,6 +1769,7 @@ function CustomerDashbord() {
       .then(({ data }) => {
         setData(data)
         setError('')
+        remindMoveRoomContact(data, true)
       })
       .catch((err) => {
         if (err.response?.status === 401) {
@@ -1735,9 +1792,8 @@ function CustomerDashbord() {
     setParcelReceiveId(parcel.id)
     setParcelReceiveError('')
     setParcelReceiveErrorId(null)
-    setParcelReceiveSuccess('')
     try {
-      const { data: result } = await axios.post(
+      await axios.post(
         `/api/customer/parcels/${parcel.id}/receive`,
         {},
         { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } },
@@ -1762,7 +1818,6 @@ function CustomerDashbord() {
             }
           : current,
       )
-      setParcelReceiveSuccess(result.message || 'ยืนยันรับพัสดุสำเร็จ')
     } catch (err) {
       setParcelReceiveError(err.response?.data?.message || 'ยืนยันรับพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
       setParcelReceiveErrorId(parcel.id)
@@ -1787,7 +1842,7 @@ function CustomerDashbord() {
           setData(data)
           const justLoggedIn = sessionStorage.getItem('justLoggedIn') === '1'
           sessionStorage.removeItem('justLoggedIn')
-          if (justLoggedIn) maybeShowStatusPopups(data)
+          if (!remindMoveRoomContact(data, false) && justLoggedIn) maybeShowStatusPopups(data)
         }
       })
       .catch((err) => {
@@ -1877,7 +1932,6 @@ function CustomerDashbord() {
     }
   }
 
-  // Fills the profile form with what is currently saved and clears the password boxes.
   const resetProfileForm = () => {
     setProfileForm({
       phone: data?.customer?.phone || '',
@@ -2083,7 +2137,6 @@ function CustomerDashbord() {
     const generate = async () => {
       setReceiptGenerating(true)
       try {
-        // wait a tick so the hidden receipt template renders before we capture it
         await new Promise((resolve) => setTimeout(resolve, 50))
         const node = receiptRef.current
         if (!node || cancelled) return
@@ -2098,7 +2151,6 @@ function CustomerDashbord() {
         if (imageHeight <= pageHeight) {
           pdf.addImage(imageData, 'PNG', 0, 0, pageWidth, imageHeight)
         } else {
-          // split across multiple pages when the receipt is taller than one A4 page
           let renderedHeightPx = 0
           const pageHeightPx = (pageHeight * canvas.width) / pageWidth
           while (renderedHeightPx < canvas.height) {
@@ -2238,7 +2290,13 @@ function CustomerDashbord() {
         title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
         ...TENANT_REQUEST_NOTIF_INFO.in_progress,
         date: request.accepted_at,
-        detail: request.note ? `หมายเหตุของคุณ: ${request.note}` : null,
+        detail:
+          [
+            STATUS_POPUP_CONTENT_BY_KIND[request.type]?.in_progress?.message,
+            request.note ? `หมายเหตุของคุณ: ${request.note}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || null,
         kind: 'tenant',
         request,
       })
@@ -2438,7 +2496,6 @@ function CustomerDashbord() {
     return { ...entry, payments, hasOriginalPayments: entry.payments.length > 0 }
   })
 
-  // Each booking is a separate room stay; a room transfer closes one booking and opens another.
   const approvedMoveRequests = tenantRequests.filter(
     (request) => request.type === 'move_room' && request.status === 'approved',
   )
@@ -2632,14 +2689,13 @@ function CustomerDashbord() {
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
+                              selectCustomerTab('home')
                               if (notif.kind === 'parcel') {
                                 setParcelReceiveError('')
-                                setParcelReceiveSuccess('')
-                              }
-                              // Requests, maintenance and bills all live on the home tab
-                              selectCustomerTab('home')
-                              if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
-                              else if (notif.kind === 'tenant') setTenantDetail(notif.request)
+                                setParcelDetailId(notif.parcel.id)
+                              } else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
+                              else if (notif.kind === 'tenant')
+                                setStatusPopup({ kind: notif.request.type, status: notif.request.status, request: notif.request })
                               else setNotifDetail(notif)
                             }}
                           >
@@ -2720,23 +2776,6 @@ function CustomerDashbord() {
                     {notifDetail.detail && (
                       <div className="dashboard-confirm-message-detail">{notifDetail.detail}</div>
                     )}
-                    {notifDetail.kind === 'parcel' && notifDetail.parcel?.photos?.length > 0 && (
-                      <div className="dashboard-parcel-photos">
-                        <p>รูปพัสดุ</p>
-                        <div>
-                          {notifDetail.parcel.photos.map((photo, index) => (
-                            <button
-                              type="button"
-                              key={`${photo.url}-${index}`}
-                              onClick={() => setParcelPhotoPreview({ parcel: notifDetail.parcel, index })}
-                              aria-label={`ดูรูปพัสดุ ${index + 1}`}
-                            >
-                              <img src={photo.url} alt={`รูปพัสดุ ${index + 1}`} />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                     {notifDetail.request ? (
                       <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
                     ) : (
@@ -2744,24 +2783,6 @@ function CustomerDashbord() {
                         {notifDetail.byline ? `${notifDetail.byline} · ` : ''}
                         {formatDateTime(notifDetail.date)}
                       </p>
-                    )}
-                    {notifDetail.kind === 'parcel' && notifDetail.parcel?.status === 'pending' && (
-                      <>
-                        {parcelReceiveError && <div className="alert alert-danger mb-0">{parcelReceiveError}</div>}
-                        <div className="dashboard-form-actions">
-                          <button
-                            type="button"
-                            className="dashboard-action-btn is-primary"
-                            disabled={parcelReceiveId === notifDetail.parcel.id}
-                            onClick={() => setParcelReceiveConfirm(notifDetail.parcel)}
-                          >
-                            {parcelReceiveId === notifDetail.parcel.id ? 'กำลังยืนยัน...' : 'ยืนยันว่าได้รับพัสดุแล้ว'}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {notifDetail.kind === 'parcel' && notifDetail.parcel?.status === 'received' && (
-                      <p className="dashboard-confirm-message">{parcelReceiveSuccess || 'ยืนยันรับพัสดุแล้ว'}</p>
                     )}
                     <div className="dashboard-form-actions">
                       <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
@@ -2797,9 +2818,10 @@ function CustomerDashbord() {
         </div>
 
         {maintenanceDetail && (
-          <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)}>
+          <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="pinned">
             {(requestClose) => (
               <div className="dashboard-maintenance-detail">
+                <div className="dashboard-modal-scroll">
                 <StatusAlert content={MAINTENANCE_STATUS_POPUP_CONTENT[maintenanceDetail.status]} />
                 <div className="dashboard-maintenance-detail-card">
                   <h4 className="dashboard-detail-title">รายละเอียดการแจ้งซ่อม</h4>
@@ -2851,6 +2873,7 @@ function CustomerDashbord() {
                     </div>
                   </div>
                 )}
+                </div>
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                     ปิด
@@ -2861,56 +2884,215 @@ function CustomerDashbord() {
           </Modal>
         )}
 
-        {maintenanceDetail && maintenancePhotoPreview && (
+        {maintenancePhotoPreview && (maintenancePhotoPreview.item || maintenanceDetail) && (
           <PhotoLightbox
-            photos={(maintenanceDetail.photos || []).map((photo, index) => ({
+            photos={((maintenancePhotoPreview.item || maintenanceDetail).photos || []).map((photo, index) => ({
               name: photo.name || `รูปที่ ${index + 1}`,
               url: photo.dataUrl,
             }))}
             initialIndex={maintenancePhotoPreview.index}
             title="รูปแจ้งซ่อม"
-            subtitle={maintenanceDetail.description}
+            subtitle={(maintenancePhotoPreview.item || maintenanceDetail).description}
             label="รูปแจ้งซ่อม"
             onClose={() => setMaintenancePhotoPreview(null)}
           />
         )}
 
-        {tenantDetail && (
-          <Modal
-            title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[tenantDetail.type] || 'คำขอ'}`}
-            onClose={() => setTenantDetail(null)}
-          >
-            {(requestClose) => (
-              <div className="dashboard-maintenance-detail">
-                <StatusAlert content={STATUS_POPUP_CONTENT_BY_KIND[tenantDetail.type]?.[tenantDetail.status]} />
-                <TenantRequestDetailCard request={tenantDetail} roomNumber={room?.room_number} />
-                <RequestTimeline kind={tenantDetail.type} request={tenantDetail} />
-                <div className="dashboard-form-actions">
-                  <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
-              </div>
-            )}
-          </Modal>
-        )}
-
         {statusPopup && getStatusPopupContent(statusPopup) && (
           <Modal
-            title={statusPopup.previousOf ? 'คำขอก่อนหน้า' : getStatusPopupContent(statusPopup).title}
+            title={
+              statusPopup.showLog
+                ? `ประวัติคำขอ${TENANT_REQUEST_TYPE_LABEL[statusPopup.kind] || ''}`
+                : statusPopup.previousOf
+                  ? 'คำขอก่อนหน้า'
+                  : getStatusPopupContent(statusPopup).title
+            }
             onClose={() => setStatusPopup(null)}
-            variant="status"
+            variant="request"
+            onBack={statusPopup.showLog ? () => setStatusPopup({ ...statusPopup, showLog: false }) : undefined}
           >
-            {(requestClose) => {
+            {() => {
               const content = getStatusPopupContent(statusPopup)
               const sameTypeRequests = TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]
                 ? tenantRequests.filter((request) => request.type === statusPopup.kind)
                 : []
-              const currentIndex = statusPopup.request
-                ? sameTypeRequests.findIndex((request) => request.id === statusPopup.request.id)
-                : -1
-              const previousRequest =
-                !statusPopup.previousOf && currentIndex !== -1 ? sameTypeRequests[currentIndex + 1] : null
+              const rootPopup = { ...(statusPopup.previousOf || statusPopup), showLog: false }
+              const selectRequest = (request) =>
+                setStatusPopup({
+                  ...(request.id === rootPopup.request?.id
+                    ? rootPopup
+                    : { kind: statusPopup.kind, status: request.status, request, previousOf: rootPopup }),
+                  logFilter: statusPopup.logFilter,
+                  logDateFrom: statusPopup.logDateFrom,
+                  logDateTo: statusPopup.logDateTo,
+                })
+              if (statusPopup.showLog) {
+                const logFilter = statusPopup.logFilter || 'all'
+                const logDateFrom = statusPopup.logDateFrom || ''
+                const logDateTo = statusPopup.logDateTo || ''
+                const updateLog = (changes) => setStatusPopup({ ...statusPopup, ...changes })
+                const todayKey = parcelDayKey(new Date())
+                const logPresets = [
+                  { days: 7, label: '7 วัน' },
+                  { days: 30, label: '30 วัน' },
+                  { days: 90, label: '3 เดือน' },
+                ].map((preset) => {
+                  const start = new Date()
+                  start.setDate(start.getDate() - (preset.days - 1))
+                  return { ...preset, from: parcelDayKey(start) }
+                })
+                const datedRequests = sameTypeRequests
+                  .map((request, index) => ({ request, number: sameTypeRequests.length - index }))
+                  .filter(({ request }) => {
+                    const sentOn = parcelDayKey(request.created_at)
+                    return (!logDateFrom || sentOn >= logDateFrom) && (!logDateTo || sentOn <= logDateTo)
+                  })
+                const visibleRequests = datedRequests.filter(
+                  ({ request }) => logFilter === 'all' || request.status === logFilter,
+                )
+                const logDateActive = Boolean(logDateFrom) || Boolean(logDateTo)
+                const logFiltersActive = logFilter !== 'all' || logDateActive
+                const logSegments = [
+                  { key: 'all', label: 'ทั้งหมด' },
+                  { key: 'pending', label: 'รอดำเนินการ', tone: 'warning' },
+                  { key: 'in_progress', label: 'รับเรื่องแล้ว', tone: 'info' },
+                  { key: 'approved', label: 'อนุมัติแล้ว', tone: 'success' },
+                  { key: 'rejected', label: 'ปฏิเสธ', tone: 'danger' },
+                ]
+                  .map((segment) => ({
+                    ...segment,
+                    count:
+                      segment.key === 'all'
+                        ? datedRequests.length
+                        : datedRequests.filter(({ request }) => request.status === segment.key).length,
+                  }))
+                  .filter((segment) => segment.key === 'all' || segment.key === logFilter || segment.count > 0)
+                return (
+                  <div className="dashboard-confirm-body dashboard-status-body">
+                    <div className="dashboard-request-log-toolbar">
+                      <div className="dashboard-request-log-toolbar-group">
+                        <span className="dashboard-request-log-toolbar-label">สถานะ</span>
+                        <div className="dashboard-parcel-segments" role="tablist" aria-label="กรองตามสถานะ">
+                          {logSegments.map((segment) => (
+                            <button
+                              key={segment.key}
+                              type="button"
+                              role="tab"
+                              aria-selected={logFilter === segment.key}
+                              className={`dashboard-parcel-segment${segment.tone ? ` tone-${segment.tone}` : ''}${logFilter === segment.key ? ' is-active' : ''}`}
+                              onClick={() => updateLog({ logFilter: segment.key })}
+                            >
+                              {segment.label}
+                              <span>{segment.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="dashboard-request-log-toolbar-group">
+                        <span className="dashboard-request-log-toolbar-label">ช่วงวันที่ส่งคำขอ</span>
+                        <div className="dashboard-request-log-dates">
+                          <ThaiDatePicker
+                            className="dashboard-request-log-date-input"
+                            placeholder="ตั้งแต่วันที่"
+                            value={logDateFrom}
+                            maxDate={dayKeyToDate(logDateTo || todayKey)}
+                            isClearable
+                            portalId="dashboard-date-portal"
+                            onChange={(date) => updateLog({ logDateFrom: date })}
+                          />
+                          <span className="dashboard-request-log-dates-sep" aria-hidden="true">
+                            ถึง
+                          </span>
+                          <ThaiDatePicker
+                            className="dashboard-request-log-date-input"
+                            placeholder="ถึงวันที่"
+                            value={logDateTo}
+                            minDate={dayKeyToDate(logDateFrom)}
+                            maxDate={dayKeyToDate(todayKey)}
+                            isClearable
+                            portalId="dashboard-date-portal"
+                            onChange={(date) => updateLog({ logDateTo: date })}
+                          />
+                        </div>
+                        <div className="dashboard-request-log-presets" role="group" aria-label="ช่วงเวลาด่วน">
+                          {logPresets.map((preset) => {
+                            const isActive = logDateFrom === preset.from && logDateTo === todayKey
+                            return (
+                              <button
+                                key={preset.days}
+                                type="button"
+                                aria-pressed={isActive}
+                                className={`dashboard-request-log-preset${isActive ? ' is-active' : ''}`}
+                                onClick={() =>
+                                  updateLog(
+                                    isActive
+                                      ? { logDateFrom: '', logDateTo: '' }
+                                      : { logDateFrom: preset.from, logDateTo: todayKey },
+                                  )
+                                }
+                              >
+                                {preset.label}ล่าสุด
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <div className="dashboard-request-log-result">
+                        <span>
+                          แสดง <strong>{visibleRequests.length}</strong> จาก {sameTypeRequests.length} คำขอ
+                        </span>
+                        {logFiltersActive && (
+                          <button
+                            type="button"
+                            className="dashboard-parcel-clear"
+                            onClick={() => updateLog({ logFilter: 'all', logDateFrom: '', logDateTo: '' })}
+                          >
+                            ล้างตัวกรอง
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="dashboard-status-scroll">
+                      {visibleRequests.length === 0 ? (
+                        <p className="dashboard-request-log-empty">
+                          {logDateActive ? 'ไม่มีคำขอในช่วงวันที่ที่เลือก' : 'ไม่มีคำขอในสถานะนี้'}
+                        </p>
+                      ) : (
+                        <ul className="dashboard-request-log-list">
+                          {visibleRequests.map(({ request, number }) => {
+                            const sentAt = new Date(request.created_at)
+                            const isCurrent = request.id === statusPopup.request?.id
+                            return (
+                              <li key={request.id}>
+                                <button
+                                  type="button"
+                                  className={`dashboard-request-log-entry${isCurrent ? ' is-current' : ''}`}
+                                  onClick={() => selectRequest(request)}
+                                >
+                                  <span className="dashboard-request-log-entry-date" aria-hidden="true">
+                                    <strong>{sentAt.toLocaleDateString('th-TH', { day: 'numeric' })}</strong>
+                                    <small>{sentAt.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' })}</small>
+                                  </span>
+                                  <span className="dashboard-request-log-entry-text">
+                                    <strong>
+                                      คำขอครั้งที่ {number}
+                                      {number === sameTypeRequests.length && <em>ล่าสุด</em>}
+                                    </strong>
+                                    <small>ส่งเมื่อ {formatDateTime(request.created_at)}</small>
+                                  </span>
+                                  <span className={`dashboard-badge status-${tenantRequestBadgeClass(request.status)}`}>
+                                    {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+                                  </span>
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
               return (
                 <div className="dashboard-confirm-body dashboard-status-body">
                   <div className={`dashboard-status-hero is-${content.icon}`}>
@@ -2939,6 +3121,25 @@ function CustomerDashbord() {
                       <p className="dashboard-confirm-message">{content.message}</p>
                     </div>
                   </div>
+                  {sameTypeRequests.length > 0 && (
+                    <button
+                      type="button"
+                      className="dashboard-status-log-btn"
+                      onClick={() => setStatusPopup({ ...statusPopup, showLog: true })}
+                    >
+                      <span className="dashboard-status-log-btn-icon" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                          <path d="M3 3v5h5M12 7v5l3 2" />
+                        </svg>
+                      </span>
+                      <span className="dashboard-status-log-btn-text">ประวัติคำขอทั้งหมด</span>
+                      <span className="dashboard-status-log-btn-count">{sameTypeRequests.length}</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </button>
+                  )}
                   <div className="dashboard-status-scroll" key={statusPopup.request?.id ?? statusPopup.kind}>
                     {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
                     {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
@@ -2947,37 +3148,6 @@ function CustomerDashbord() {
                         roomNumber={room?.room_number}
                       />
                     )}
-                  </div>
-                  {statusPopup.previousOf ? (
-                    <button
-                      type="button"
-                      className="dashboard-status-link"
-                      onClick={() => setStatusPopup(statusPopup.previousOf)}
-                    >
-                      ← กลับไปคำขอล่าสุด
-                    </button>
-                  ) : (
-                    previousRequest && (
-                      <button
-                        type="button"
-                        className="dashboard-status-link"
-                        onClick={() =>
-                          setStatusPopup({
-                            kind: statusPopup.kind,
-                            status: previousRequest.status,
-                            request: previousRequest,
-                            previousOf: statusPopup,
-                          })
-                        }
-                      >
-                        ดูคำขอก่อนหน้า ({formatDate(previousRequest.created_at)}) →
-                      </button>
-                    )
-                  )}
-                  <div className="dashboard-form-actions">
-                    <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                      รับทราบ
-                    </button>
                   </div>
                 </div>
               )
@@ -2991,12 +3161,12 @@ function CustomerDashbord() {
           const isPending = parcel.status === 'pending'
           const photos = parcel.photos || []
           return (
-            <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetailId(null)} variant="status">
+            <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetailId(null)} variant="parcel">
               {(requestClose) => (
-                <div className="dashboard-confirm-body dashboard-status-body">
-                  <div className={`dashboard-status-hero ${isPending ? 'is-info' : 'is-success'}`}>
-                    <div className={`dashboard-confirm-icon ${isPending ? 'is-info' : 'is-success'}`}>
-                      <PackageIcon size={18} strokeWidth={2.2} />
+                <div className="dashboard-confirm-body dashboard-status-body dashboard-parcel-detail">
+                  <div className={`dashboard-status-hero ${isPending ? 'is-pending' : 'is-success'}`}>
+                    <div className="dashboard-confirm-icon">
+                      <PackageIcon size={22} strokeWidth={2.2} />
                     </div>
                     <div className="dashboard-status-hero-text">
                       <span className="dashboard-status-hero-label">{isPending ? 'รอรับพัสดุ' : 'รับพัสดุเรียบร้อย'}</span>
@@ -3008,74 +3178,78 @@ function CustomerDashbord() {
                     </div>
                   </div>
                   <div className="dashboard-status-scroll" key={parcel.id}>
-                    <ParcelProgress parcel={parcel} />
-                    {photos.length > 0 && (
-                      <ParcelGallery photos={photos} onOpen={(index) => setParcelPhotoPreview({ parcel, index })} />
-                    )}
-                    <div className="dashboard-maintenance-detail-card">
-                      <h4 className="dashboard-detail-title">ข้อมูลพัสดุ</h4>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>ผู้ส่ง / ขนส่ง</span>
-                        <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>เลขพัสดุ</span>
-                        <strong>{parcel.tracking_number || 'ไม่มีเลขพัสดุ'}</strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>จำนวนรูป</span>
-                        <strong>{photos.length} รูป</strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>สถานะ</span>
-                        <strong className={isPending ? 'is-pending' : 'is-success'}>
-                          {isPending ? 'รอรับพัสดุ' : 'รับแล้ว'}
-                        </strong>
-                      </div>
-                      {parcel.description && (
-                        <div className="dashboard-maintenance-detail-row is-note">
-                          <span>รายละเอียด</span>
-                          <strong>{parcel.description}</strong>
-                        </div>
+                    <div className={`dashboard-parcel-detail-grid${photos.length > 0 ? ' has-photos' : ''}`}>
+                      {photos.length > 0 && (
+                        <ParcelGallery photos={photos} onOpen={(index) => setParcelPhotoPreview({ parcel, index })} />
                       )}
+                      <div className="dashboard-parcel-detail-side">
+                        <ParcelProgress parcel={parcel} />
+                        <div className="dashboard-maintenance-detail-card">
+                          <h4 className="dashboard-detail-title">ข้อมูลพัสดุ</h4>
+                          <div className="dashboard-maintenance-detail-row">
+                            <span>ผู้ส่ง / ขนส่ง</span>
+                            <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
+                          </div>
+                          <div className="dashboard-maintenance-detail-row">
+                            <span>เลขพัสดุ</span>
+                            {parcel.tracking_number ? (
+                              <strong className="dashboard-parcel-detail-tracking">{parcel.tracking_number}</strong>
+                            ) : (
+                              <strong className="is-muted">ไม่มีเลขพัสดุ</strong>
+                            )}
+                          </div>
+                          <div className="dashboard-maintenance-detail-row">
+                            <span>บันทึกโดย</span>
+                            <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
+                          </div>
+                          {parcel.description && (
+                            <div className="dashboard-maintenance-detail-row is-note">
+                              <span>รายละเอียด</span>
+                              <strong>{parcel.description}</strong>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <div className="dashboard-maintenance-detail-card">
                       <h4 className="dashboard-detail-title">การรับพัสดุ</h4>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>ผู้รับ</span>
-                        <strong>
-                          {customer.first_name} {customer.last_name}
-                        </strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>ห้อง</span>
-                        <strong>{room?.room_number ?? customer.room_number}</strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>บันทึกโดย</span>
-                        <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>วันที่พัสดุมาถึง</span>
-                        <strong>{formatDateTime(parcel.created_at)}</strong>
-                      </div>
-                      <div className="dashboard-maintenance-detail-row">
-                        <span>วันที่รับพัสดุ</span>
-                        <strong className={isPending ? 'is-pending' : ''}>
-                          {isPending ? 'ยังไม่ได้รับ' : formatDateTime(parcel.received_at)}
-                        </strong>
-                      </div>
-                      {!isPending && parcel.received_at && (
-                        <div className="dashboard-maintenance-detail-row">
-                          <span>ใช้เวลาก่อนรับ</span>
+                      <div className="dashboard-parcel-detail-facts">
+                        <div>
+                          <span>ผู้รับ</span>
                           <strong>
-                            {formatRemaining(new Date(parcel.received_at).getTime() - new Date(parcel.created_at).getTime())}
+                            {customer.first_name} {customer.last_name}
                           </strong>
                         </div>
-                      )}
+                        <div>
+                          <span>ห้อง</span>
+                          <strong>{room?.room_number ?? customer.room_number}</strong>
+                        </div>
+                        <div>
+                          <span>พัสดุมาถึง</span>
+                          <strong>{formatDateTime(parcel.created_at)}</strong>
+                        </div>
+                        <div>
+                          <span>รับพัสดุ</span>
+                          <strong className={isPending ? 'is-pending' : 'is-success'}>
+                            {isPending ? 'ยังไม่ได้รับ' : formatDateTime(parcel.received_at)}
+                          </strong>
+                        </div>
+                        {!isPending && parcel.received_at && (
+                          <div>
+                            <span>ใช้เวลาก่อนรับ</span>
+                            <strong>
+                              {formatRemaining(new Date(parcel.received_at).getTime() - new Date(parcel.created_at).getTime())}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {isPending && (
                       <p className="dashboard-parcel-pickup-hint">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 8h.01M11 12h1v4h1" />
+                        </svg>
                         เมื่อรับพัสดุแล้ว กด "ยืนยันรับพัสดุ" ด้านล่างเพื่อแจ้งให้เจ้าหน้าที่ทราบ
                       </p>
                     )}
@@ -3136,6 +3310,54 @@ function CustomerDashbord() {
                     }}
                   >
                     {parcelReceiveId === parcelReceiveConfirm.id ? 'กำลังยืนยัน...' : 'ยืนยันรับพัสดุ'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
+        {moveRoomReminder && (
+          <Modal title="ติดต่อเจ้าหน้าที่เรื่องย้ายห้อง" onClose={() => setMoveRoomReminder(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="dashboard-confirm-body dashboard-contact-reminder">
+                <div className="dashboard-confirm-icon is-info">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 21h18" />
+                    <path d="M5 21V10h14v11" />
+                    <path d="M9 21v-5h6v5" />
+                    <circle cx="12" cy="5" r="2.5" />
+                  </svg>
+                </div>
+                <p className="dashboard-confirm-message">เจ้าหน้าที่รับเรื่องคำขอย้ายห้องของคุณแล้ว</p>
+                <div className="dashboard-contact-reminder-route">
+                  <span>ห้อง {moveRoomReminder.room_number}</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                  <strong>ห้อง {moveRoomReminder.target_room_number}</strong>
+                </div>
+                <div className="dashboard-contact-reminder-box">
+                  <p>กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อ</p>
+                  <ul>
+                    {!moveRoomReminder.room_inspected && <li>นัดตรวจสภาพห้องปัจจุบัน</li>}
+                    <li>พูดคุยรายละเอียดค่าเช่าและเงินประกันของห้องใหม่</li>
+                    <li>ลงนามบันทึกการย้ายห้อง</li>
+                  </ul>
+                </div>
+                <div className="dashboard-form-actions">
+                  <button
+                    type="button"
+                    className="dashboard-action-btn is-ghost"
+                    onClick={() => {
+                      setStatusPopup({ kind: 'move_room', status: moveRoomReminder.status, request: moveRoomReminder })
+                      requestClose()
+                    }}
+                  >
+                    ดูรายละเอียดคำขอ
+                  </button>
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    รับทราบ
                   </button>
                 </div>
               </div>
@@ -3390,7 +3612,30 @@ function CustomerDashbord() {
                               {parcel.description && <p className="dashboard-parcel-desc">{parcel.description}</p>}
 
                               <div className="dashboard-parcel-meta">
-                                <span>บันทึกโดย {parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                                <span>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <circle cx="12" cy="8" r="4" />
+                                    <path d="M4 21a8 8 0 0 1 16 0" />
+                                  </svg>
+                                  บันทึกโดย <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
+                                </span>
+                                <span>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9" />
+                                    <path d="M12 7v5l3 2" />
+                                  </svg>
+                                  มาถึง <strong>{formatStepDate(parcel.created_at).time} น.</strong>
+                                </span>
+                                {parcel.photos?.length > 0 && (
+                                  <span>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                                      <circle cx="9" cy="10" r="1.5" />
+                                      <path d="m21 16-5-5-8 8" />
+                                    </svg>
+                                    <strong>{parcel.photos.length}</strong> รูป
+                                  </span>
+                                )}
                               </div>
 
                               <ParcelProgress parcel={parcel} compact />
@@ -3810,6 +4055,37 @@ function CustomerDashbord() {
                   <div className="dashboard-card-header">
                     <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
                   </div>
+                  {filteredRentalHistory.length > 1 && (
+                    <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
+                      {filteredRentalHistory.map((entry, index) => {
+                        const { movedOut } = getBookingTransfer(index)
+                        const isCurrent = index === 0 && Boolean(room?.is_booked)
+                        const isActive = index === activeHistoryIndex
+                        const paymentCount = rentalHistory[index]?.payments?.length || 0
+                        return (
+                          <button
+                            key={entry.booking_id}
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            title={movedOut ? `ย้ายไปห้อง ${movedOut.target_room_number}` : `${paymentCount} รายการชำระ`}
+                            className={`dashboard-history-tab${isActive ? ' is-active' : ''}`}
+                            onClick={() => setHistoryBookingId(entry.booking_id)}
+                          >
+                            <span className="dashboard-history-tab-top">
+                              ห้อง {entry.room_number}
+                              {isCurrent && <em>ปัจจุบัน</em>}
+                            </span>
+                            <span className="dashboard-history-tab-dates">
+                              {isCurrent
+                                ? `ตั้งแต่ ${formatDate(entry.rental_start_date)}`
+                                : `${formatDate(entry.rental_start_date)} – ${formatDate(movedOut ? movedOut.completed_at : entry.rental_end_date)}`}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                   {rentalHistory.length > 0 &&
                     (() => {
                       const activePayments = rentalHistoryWithDue[activeHistoryIndex]?.payments || []
@@ -3827,7 +4103,7 @@ function CustomerDashbord() {
                           search={historySearch}
                           onSearch={setHistorySearch}
                           searchPlaceholder="ค้นหาวันที่ รายการ จำนวนเงิน หรือหมายเหตุ"
-                          resultText={`พบ ${filteredRentalHistory[activeHistoryIndex]?.payments.length ?? 0} จาก ${activePayments.length} รายการ (ห้อง ${filteredRentalHistory[activeHistoryIndex]?.room_number ?? '-'})`}
+                          resultText={`พบ ${filteredRentalHistory[activeHistoryIndex]?.payments.length ?? 0} จาก ${activePayments.length} รายการ`}
                           canClear={historyStatusFilter !== 'all' || Boolean(historySearch.trim())}
                           onClear={() => {
                             setHistoryStatusFilter('all')
@@ -3840,54 +4116,6 @@ function CustomerDashbord() {
                     <p className="dashboard-empty">ยังไม่มีประวัติการเช่า</p>
                   ) : (
                     <>
-                    {filteredRentalHistory.length > 1 && (
-                      <div className="dashboard-history-rooms">
-                        <p className="dashboard-history-rooms-hint">
-                          คุณเคยพักมากกว่า 1 ห้อง เลือกห้องเพื่อดูประวัติการชำระของห้องนั้น
-                        </p>
-                        <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
-                          {filteredRentalHistory.map((entry, index) => {
-                            const { movedOut } = getBookingTransfer(index)
-                            const isCurrent = index === 0 && Boolean(room?.is_booked)
-                            const isActive = index === activeHistoryIndex
-                            const paymentCount = rentalHistory[index]?.payments?.length || 0
-                            return (
-                              <Fragment key={entry.booking_id}>
-                                {index > 0 && (
-                                  <span className="dashboard-history-tab-link" aria-hidden="true" title="ย้ายห้อง">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M19 12H5" />
-                                      <path d="M11 6l-6 6 6 6" />
-                                    </svg>
-                                  </span>
-                                )}
-                                <button
-                                  type="button"
-                                  role="tab"
-                                  aria-selected={isActive}
-                                  className={`dashboard-history-tab${isActive ? ' is-active' : ''}${isCurrent ? ' is-current' : ' is-past'}`}
-                                  onClick={() => setHistoryBookingId(entry.booking_id)}
-                                >
-                                  <span className="dashboard-history-tab-top">
-                                    <strong>ห้อง {entry.room_number}</strong>
-                                    <em>{isCurrent ? 'ห้องปัจจุบัน' : 'ห้องเดิม'}</em>
-                                  </span>
-                                  <span className="dashboard-history-tab-dates">
-                                    {formatDate(entry.rental_start_date)} –{' '}
-                                    {isCurrent
-                                      ? 'ปัจจุบัน'
-                                      : formatDate(movedOut ? movedOut.completed_at : entry.rental_end_date)}
-                                  </span>
-                                  <span className="dashboard-history-tab-meta">
-                                    {movedOut ? `ย้ายไปห้อง ${movedOut.target_room_number}` : `${paymentCount} รายการชำระ`}
-                                  </span>
-                                </button>
-                              </Fragment>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
                     {[filteredRentalHistory[activeHistoryIndex]].map((entry) => {
                       const { movedIn, movedOut } = getBookingTransfer(activeHistoryIndex)
                       const originalEntry =
@@ -4063,16 +4291,16 @@ function CustomerDashbord() {
                               ต่อสัญญา
                             </button>
                           )}
-                          {renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] && (
+                          {renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] && !isRequestSettled(renewRequest) && (
                             <RequestTimeline kind="renew" request={renewRequest} compact />
                           )}
                           {renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] && (
                             <button
                               type="button"
                               className="dashboard-maintenance-more"
-                              onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest })}
+                              onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest, showLog: isRequestSettled(renewRequest) })}
                             >
-                              ดูรายละเอียด
+                              {isRequestSettled(renewRequest) ? 'ประวัติ' : 'ดูรายละเอียด'}
                             </button>
                           )}
                         </div>
@@ -4100,16 +4328,16 @@ function CustomerDashbord() {
                             </button>
                           )
                         )}
-                        {moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] && (
+                        {moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] && !isRequestSettled(moveoutRequest) && (
                           <RequestTimeline kind="moveout" request={moveoutRequest} compact />
                         )}
                         {moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] && (
                           <button
                             type="button"
                             className="dashboard-maintenance-more"
-                            onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest })}
+                            onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest, showLog: isRequestSettled(moveoutRequest) })}
                           >
-                            ดูรายละเอียด
+                            {isRequestSettled(moveoutRequest) ? 'ประวัติ' : 'ดูรายละเอียด'}
                           </button>
                         )}
                       </div>
@@ -4139,14 +4367,16 @@ function CustomerDashbord() {
                             </button>
                           )
                         )}
-                        {moveRoomRequest && <RequestTimeline kind="move_room" request={moveRoomRequest} compact />}
+                        {moveRoomRequest && !isRequestSettled(moveRoomRequest) && (
+                          <RequestTimeline kind="move_room" request={moveRoomRequest} compact />
+                        )}
                         {moveRoomRequest && (
                           <button
                             type="button"
                             className="dashboard-maintenance-more"
-                            onClick={() => setStatusPopup({ kind: 'move_room', status: moveRoomRequest.status, request: moveRoomRequest })}
+                            onClick={() => setStatusPopup({ kind: 'move_room', status: moveRoomRequest.status, request: moveRoomRequest, showLog: isRequestSettled(moveRoomRequest) })}
                           >
-                            ดูรายละเอียด
+                            {isRequestSettled(moveRoomRequest) ? 'ประวัติ' : 'ดูรายละเอียด'}
                           </button>
                         )}
                       </div>
@@ -4436,47 +4666,87 @@ function CustomerDashbord() {
                     <>
                     <div className="dashboard-maintenance-list">
                       {paginatedMaintenanceRequests.map((item) => (
-                        <div key={item.id} className="dashboard-maintenance-item">
-                          <div>
-                            <p className="dashboard-maintenance-desc">{item.description}</p>
-                            <p className="dashboard-maintenance-meta">
-                              {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
-                              {' · '}
-                              {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
-                              {item.contact_phone ? ` · โทร ${item.contact_phone}` : ''}
-                            </p>
-                            <p className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</p>
-                            <button type="button" className="dashboard-maintenance-more" onClick={() => setMaintenanceDetail(item)}>
-                              ดูเพิ่มเติม
+                        <div
+                          key={item.id}
+                          className={`dashboard-maintenance-item is-${maintenanceBadgeClass(item.status)} cat-${MAINTENANCE_CATEGORY_LABEL[item.category] ? item.category : 'other'}`}
+                        >
+                          {item.photos?.length > 0 ? (
+                            <button
+                              type="button"
+                              className="dashboard-maintenance-thumb"
+                              onClick={() => setMaintenancePhotoPreview({ item, index: 0 })}
+                              aria-label={`ดูรูปแจ้งซ่อม ${item.photos.length} รูป`}
+                            >
+                              <img src={item.photos[0].dataUrl} alt={item.photos[0].name || 'รูปแจ้งซ่อม'} loading="lazy" />
+                              {item.photos.length > 1 && <span>+{item.photos.length - 1}</span>}
                             </button>
-                          </div>
-                          <div className="dashboard-maintenance-badges">
-                            {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (
-                              <button
-                                type="button"
-                                className={`dashboard-badge status-${maintenanceBadgeClass(item.status)} dashboard-badge-btn`}
-                                onClick={() => setStatusPopup({ kind: 'maintenance', status: item.status, request: item })}
-                              >
-                                {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
-                              </button>
-                            ) : (
-                              <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
-                                {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                          ) : (
+                            <span className="dashboard-maintenance-thumb is-empty" aria-hidden="true">
+                              <MaintenanceCategoryIcon category={item.category} size={26} />
+                            </span>
+                          )}
+                          <div className="dashboard-maintenance-main">
+                            <div className="dashboard-maintenance-top">
+                              <p className="dashboard-maintenance-desc">{item.description}</p>
+                              {MAINTENANCE_STATUS_POPUP_CONTENT[item.status] ? (
+                                <button
+                                  type="button"
+                                  className={`dashboard-badge status-${maintenanceBadgeClass(item.status)} dashboard-badge-btn`}
+                                  onClick={() => setMaintenanceDetail(item)}
+                                >
+                                  {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                                </button>
+                              ) : (
+                                <span className={`dashboard-badge status-${maintenanceBadgeClass(item.status)}`}>
+                                  {MAINTENANCE_STATUS_LABEL[item.status] || item.status}
+                                </span>
+                              )}
+                            </div>
+                            <div className="dashboard-maintenance-tags">
+                              <span className="is-category">
+                                <MaintenanceCategoryIcon category={item.category} size={13} />
+                                {MAINTENANCE_CATEGORY_LABEL[item.category] || 'อื่นๆ'}
                               </span>
-                            )}
-                            {item.status === 'pending' && (
-                              <button
-                                type="button"
-                                className="dashboard-maintenance-cancel"
-                                disabled={cancelingMaintenanceId === item.id}
-                                onClick={() => {
-                                  setMaintenanceError('')
-                                  setConfirmCancelId(item.id)
-                                }}
-                              >
-                                {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
-                              </button>
-                            )}
+                              <span>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="M12 7v5l3 2" />
+                                </svg>
+                                {MAINTENANCE_TIME_LABEL[item.preferred_time] || 'เวลาไหนก็ได้'}
+                              </span>
+                              {item.contact_phone && (
+                                <span>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />
+                                  </svg>
+                                  {item.contact_phone}
+                                </span>
+                              )}
+                            </div>
+                            <div className="dashboard-maintenance-foot">
+                              <span className="dashboard-maintenance-date">{formatDateTime(item.created_at)}</span>
+                              <div className="dashboard-maintenance-actions">
+                                {item.status === 'pending' && (
+                                  <button
+                                    type="button"
+                                    className="dashboard-maintenance-cancel"
+                                    disabled={cancelingMaintenanceId === item.id}
+                                    onClick={() => {
+                                      setMaintenanceError('')
+                                      setConfirmCancelId(item.id)
+                                    }}
+                                  >
+                                    {cancelingMaintenanceId === item.id ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+                                  </button>
+                                )}
+                                <button type="button" className="dashboard-maintenance-more" onClick={() => setMaintenanceDetail(item)}>
+                                  ดูรายละเอียด
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M9 18l6-6-6-6" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
