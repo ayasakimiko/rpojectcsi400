@@ -2713,6 +2713,18 @@
   --seg-color: #4f46e5;
 }
 
+.staff-req-segment.tone-success {
+  --seg-color: #059669;
+}
+
+.staff-req-segment.tone-warning {
+  --seg-color: #d97706;
+}
+
+.staff-req-segment.tone-danger {
+  --seg-color: #dc2626;
+}
+
 .staff-req-segment span {
   min-width: 20px;
   padding: 0 6px;
@@ -2781,6 +2793,21 @@
 .staff-req-filter-row .staff-filter-select {
   flex: 1 1 0;
   min-width: 0;
+}
+
+.staff-req-date {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.staff-req-filter-row .staff-req-date .thai-dp-wrapper {
+  width: 100%;
+}
+
+.staff-req-filter-row input.staff-req-date-input {
+  width: 100%;
+  height: 38px;
+  padding-right: 54px;
 }
 
 .staff-req-result {
