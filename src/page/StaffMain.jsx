@@ -9,6 +9,7 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
+import CameraMonitor from '../components/CameraMonitor.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
@@ -678,6 +679,7 @@ const STAFF_TABS = [
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
+  { key: 'cameras', label: 'กล้องวงจรปิด' },
 ]
 
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
@@ -5400,7 +5402,7 @@ function StaffMain() {
         </div>
 
         <ul className="nav nav-tabs staff-tabs">
-          {STAFF_TABS.map((tab) => (
+          {STAFF_TABS.filter((tab) => tab.key !== 'cameras' || staffUser?.role === 'Staff').map((tab) => (
             <li className="nav-item" key={tab.key}>
               <button
                 type="button"
@@ -5420,6 +5422,8 @@ function StaffMain() {
             </li>
           ))}
         </ul>
+
+        {staffTab === 'cameras' && staffUser?.role === 'Staff' && <CameraMonitor />}
 
         {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}
 

@@ -5,6 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import CameraMonitor from '../components/CameraMonitor.jsx'
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
 
@@ -220,10 +221,12 @@ function OccupancyTrendTooltip(props) {
 const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
+  { key: 'cameras', label: 'กล้องวงจรปิด' },
   { key: 'staff', label: 'พนักงาน' },
 ]
 
 const OWNER_PERIOD_BAR_CONTENT = {
+  cameras: { title: 'กล้องวงจรปิด', subtitle: 'ดูภาพจากกล้องภายในหอพัก' },
   rooms: { title: 'สรุปข้อมูลห้องพัก', subtitle: 'ภาพรวมห้องพักและผู้เข้าพักประจำเดือน' },
   finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
   staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
@@ -975,9 +978,11 @@ function OwnerMain() {
             <strong>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</strong>
             <span>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).subtitle}</span>
           </div>
-          <span className="owner-period-badge">
-            {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
-          </span>
+          {activeTab !== 'cameras' && (
+            <span className="owner-period-badge">
+              {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
+            </span>
+          )}
         </section>
 
         {notice.message && (
@@ -997,6 +1002,8 @@ function OwnerMain() {
             </li>
           ))}
         </ul>
+
+        {!isLoading && activeTab === 'cameras' && <CameraMonitor />}
 
         {!isLoading && activeTab === 'rooms' && (
           <div className="owner-filter-presets owner-filter-presets-top">

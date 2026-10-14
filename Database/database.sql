@@ -22,6 +22,16 @@ CREATE TABLE IF NOT EXISTS Room (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Five available demo rooms; safe to run on every backend startup.
+INSERT IGNORE INTO Room
+    (room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv)
+VALUES
+    (101, FALSE, 3000.00, TRUE, TRUE, FALSE, 1, TRUE, FALSE),
+    (102, FALSE, 3500.00, TRUE, TRUE, TRUE, 1, TRUE, TRUE),
+    (103, FALSE, 4000.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE),
+    (104, FALSE, 3200.00, FALSE, TRUE, FALSE, 1, TRUE, FALSE),
+    (105, FALSE, 4500.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE);
+
 CREATE TABLE IF NOT EXISTS Customer (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
     role VARCHAR(20) NOT NULL DEFAULT 'Customer',
@@ -54,7 +64,7 @@ CREATE TABLE IF NOT EXISTS Staff (
 
 CREATE TABLE IF NOT EXISTS Admin (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
-    role VARCHAR(20) NOT NULL DEFAULT 'Staff',
+    role VARCHAR(20) NOT NULL DEFAULT 'Admin',
     idcard VARCHAR(20) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     phone VARCHAR(20) NOT NULL UNIQUE,
@@ -67,7 +77,7 @@ CREATE TABLE IF NOT EXISTS Admin (
 
 CREATE TABLE IF NOT EXISTS Owner (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
-    role VARCHAR(20) NOT NULL DEFAULT 'Staff',
+    role VARCHAR(20) NOT NULL DEFAULT 'Owner',
     idcard VARCHAR(20) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     phone VARCHAR(20) NOT NULL UNIQUE,
@@ -239,6 +249,27 @@ CREATE TABLE IF NOT EXISTS ParcelPhoto (
 
     FOREIGN KEY (parcel_id) REFERENCES Parcel(id) ON DELETE CASCADE
 );
+
+-- Demo login accounts. Login with idcard and use the account phone as password.
+-- INSERT IGNORE keeps this safe to run whenever the backend initializes the schema.
+INSERT INTO Admin
+    (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+VALUES
+    ('Admin', '1100200000201', '$2b$10$.UBzPQJ04BgZ6q2Zg418WezsolXmMkLJ32CZMa/cDoyr3F5XSeAAm', '0866666666', 'Admin', 'Demo', FALSE, 35)
+ON DUPLICATE KEY UPDATE password = VALUES(password);
+
+INSERT INTO Staff
+    (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+VALUES
+    ('Staff', '1100200000101', '$2b$10$.UBzPQJ04BgZ6q2Zg418WezsolXmMkLJ32CZMa/cDoyr3F5XSeAAm', '0844444444', 'Staff', 'Demo', FALSE, 27)
+ON DUPLICATE KEY UPDATE password = VALUES(password);
+
+INSERT INTO Owner
+    (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+VALUES
+    ('Owner', '1100200000301', '$2b$10$.UBzPQJ04BgZ6q2Zg418WezsolXmMkLJ32CZMa/cDoyr3F5XSeAAm', '0877777777', 'Owner', 'Demo', FALSE, 45)
+ON DUPLICATE KEY UPDATE password = VALUES(password);
+
 -- Upgrade existing tables without replacing existing records.
 
 SET @schema_upgrade_sql = IF(
