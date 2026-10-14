@@ -2990,6 +2990,9 @@ function StaffMain() {
   const [historySearch, setHistorySearch] = useState('')
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
   const [historyPage, setHistoryPage] = useState(1)
+  const [historyEdit, setHistoryEdit] = useState(null)
+  const [historyEditError, setHistoryEditError] = useState('')
+  const [historyEditSaving, setHistoryEditSaving] = useState(false)
 
   const [collectRoom, setCollectRoom] = useState(null)
   const [collectSubmitting, setCollectSubmitting] = useState(false)
@@ -3983,6 +3986,8 @@ function StaffMain() {
 
   const openHistory = async (room) => {
     setHistoryRoom(room)
+    setHistoryEdit(null)
+    setHistoryEditError('')
     setHistoryData(null)
     setHistoryError('')
     setHistorySearch('')
@@ -4001,6 +4006,37 @@ function StaffMain() {
 
   const openDueDetail = (room) => {
     setDueDetailRoom(room)
+  }
+
+  const saveUtilityPaymentAmount = async (payment) => {
+    if (!historyEdit || historyEdit.id !== payment.id) return
+    const amount = Number(historyEdit.amount)
+    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+      setHistoryEditError('กรุณากรอกยอดมากกว่า 0 และไม่เกิน 2 ตำแหน่งทศนิยม')
+      return
+    }
+    setHistoryEditSaving(true)
+    setHistoryEditError('')
+    try {
+      const { data } = await axios.patch(
+        `/api/staff/payments/${payment.id}/utility-amount`,
+        { amount },
+        { headers: authHeaders() },
+      )
+      setHistoryData((current) =>
+        current?.map((entry) => ({
+          ...entry,
+          payments: entry.payments.map((item) =>
+            item.id === payment.id ? { ...item, amount: data.amount } : item,
+          ),
+        })),
+      )
+      setHistoryEdit(null)
+    } catch (err) {
+      setHistoryEditError(err.response?.data?.message || 'แก้ไขยอดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setHistoryEditSaving(false)
+    }
   }
 
   const openCollect = (room) => {
@@ -7251,7 +7287,59 @@ function StaffMain() {
                               <td>{formatDateTime(payment.created_at)}</td>
                               <td>{payment.tenantName}</td>
                               <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
-                              <td>฿{formatCurrency(payment.amount)}</td>
+                              <td>
+                                {historyEdit?.id === payment.id ? (
+                                  <div className="staff-utility-amount-edit">
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      aria-label="ยอดค่าน้ำหรือค่าไฟใหม่"
+                                      value={historyEdit.amount}
+                                      onChange={(event) => {
+                                        setHistoryEdit((current) => ({ ...current, amount: event.target.value }))
+                                        setHistoryEditError('')
+                                      }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="staff-action-btn is-primary"
+                                      disabled={historyEditSaving}
+                                      onClick={() => saveUtilityPaymentAmount(payment)}
+                                    >
+                                      {historyEditSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="staff-action-btn is-ghost"
+                                      disabled={historyEditSaving}
+                                      onClick={() => {
+                                        setHistoryEdit(null)
+                                        setHistoryEditError('')
+                                      }}
+                                    >
+                                      ยกเลิก
+                                    </button>
+                                    {historyEditError && <small className="staff-form-error">{historyEditError}</small>}
+                                  </div>
+                                ) : (
+                                  <>
+                                    ฿{formatCurrency(payment.amount)}{' '}
+                                    {['water', 'electricity'].includes(payment.type) && payment.status === 'pending' && (
+                                        <button
+                                          type="button"
+                                          className="staff-action-btn is-ghost"
+                                          onClick={() => {
+                                            setHistoryEdit({ id: payment.id, amount: String(payment.amount) })
+                                            setHistoryEditError('')
+                                          }}
+                                        >
+                                          แก้ไขยอด
+                                        </button>
+                                      )}
+                                  </>
+                                )}
+                              </td>
                               <td>
                                 <span className={`staff-badge status-${payment.status}`}>
                                   {PAYMENT_STATUS_LABEL[payment.status] || payment.status}

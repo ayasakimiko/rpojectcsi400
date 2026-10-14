@@ -5905,3 +5905,26 @@
   background: #2563eb;
   color: #ffffff;
 }
+.staff-utility-amount-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 230px;
+}
+
+.staff-utility-amount-edit input {
+  width: 110px;
+  min-height: 34px;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #172033;
+  color-scheme: light;
+}
+
+.staff-utility-amount-edit .staff-form-error {
+  flex-basis: 100%;
+  margin: 0;
+}

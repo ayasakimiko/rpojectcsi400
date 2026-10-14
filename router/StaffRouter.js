@@ -3,6 +3,7 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 import {
   isPositiveId,
+  isValidMoney,
   lookup,
   parseMoveOutInspectionInput,
   parseMoveOutInspectionUpdate,
@@ -778,6 +779,35 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
   } catch (error) {
     console.error("Send utility bill error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.patch("/payments/:payment_id/utility-amount", async (req, res) => {
+  const paymentId = Number(req.params.payment_id);
+  const amount = req.body?.amount;
+  if (!isPositiveId(paymentId)) {
+    return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+  }
+  if (!isValidMoney(amount, { allowZero: false }) || Math.round(Number(amount) * 100) !== Number(amount) * 100) {
+    return res.status(400).json({ message: "กรุณาระบุยอดเงินที่มากกว่า 0 และไม่เกินสองตำแหน่งทศนิยม" });
+  }
+
+  try {
+    const pool = getPool();
+    const [result] = await pool.query(
+      `UPDATE Payment SET amount = ?
+       WHERE id = ? AND type IN ('water', 'electricity') AND status = 'pending'`,
+      [Number(amount), paymentId],
+    );
+    if (result.affectedRows === 0) {
+      const [rows] = await pool.query(`SELECT id FROM Payment WHERE id = ?`, [paymentId]);
+      if (!rows[0]) return res.status(404).json({ message: "ไม่พบรายการค่าน้ำหรือค่าไฟนี้" });
+      return res.status(409).json({ message: "แก้ไขได้เฉพาะบิลค่าน้ำหรือค่าไฟที่ยังรอชำระ" });
+    }
+    return res.json({ message: "แก้ไขยอดค่าน้ำ/ค่าไฟแล้ว", amount: Number(amount) });
+  } catch (error) {
+    console.error("Update utility payment error:", error);
+    return res.status(500).json({ message: "แก้ไขยอดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
   }
 });
 
