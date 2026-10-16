@@ -8,49 +8,44 @@ import OwnerMain from './page/OwnerMain.jsx'
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
 const ADMIN_ROLES = new Set(['Admin', 'Owner'])
+const USER_ROLES = new Set(['Customer', ...STAFF_ROLES])
+
+function readSessionUser() {
+  if (!sessionStorage.getItem('token')) return null
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || 'null')
+    if (user && USER_ROLES.has(user.role)) return user
+  } catch {
+    // An incomplete saved session should return to login, not crash the page.
+  }
+  for (const key of ['token', 'user', 'justLoggedIn', 'apiBackend']) sessionStorage.removeItem(key)
+  sessionStorage.setItem('apiBackendNotice', 'ข้อมูลการเข้าสู่ระบบไม่สมบูรณ์ กรุณาเข้าสู่ระบบใหม่')
+  return null
+}
 
 function RequireAuth({ children }) {
-  const token = sessionStorage.getItem('token')
-  if (!token) {
+  if (readSessionUser()?.role !== 'Customer') {
     return <Navigate to="/login" replace />
   }
   return children
 }
 
 function RequireStaffAuth({ children }) {
-  const token = sessionStorage.getItem('token')
-  if (!token) {
-    return <Navigate to="/login" replace />
-  }
-  const storedUser = sessionStorage.getItem('user')
-  const role = storedUser ? JSON.parse(storedUser)?.role : null
-  if (!STAFF_ROLES.has(role)) {
+  if (!STAFF_ROLES.has(readSessionUser()?.role)) {
     return <Navigate to="/login" replace />
   }
   return children
 }
 
 function RequireAdminAuth({ children }) {
-  const token = sessionStorage.getItem('token')
-  if (!token) {
-    return <Navigate to="/login" replace />
-  }
-  const storedUser = sessionStorage.getItem('user')
-  const role = storedUser ? JSON.parse(storedUser)?.role : null
-  if (!ADMIN_ROLES.has(role)) {
+  if (!ADMIN_ROLES.has(readSessionUser()?.role)) {
     return <Navigate to="/login" replace />
   }
   return children
 }
 
 function RequireOwnerAuth({ children }) {
-  const token = sessionStorage.getItem('token')
-  if (!token) {
-    return <Navigate to="/login" replace />
-  }
-  const storedUser = sessionStorage.getItem('user')
-  const role = storedUser ? JSON.parse(storedUser)?.role : null
-  if (role !== 'Owner') {
+  if (readSessionUser()?.role !== 'Owner') {
     return <Navigate to="/login" replace />
   }
   return children

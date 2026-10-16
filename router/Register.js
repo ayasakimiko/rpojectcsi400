@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
-import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
+import { authenticate, createRequireActiveAccount, requireStaffRole } from "../middleware/authMiddleware.js";
 import { validateRegisterInput } from "../middleware/validation.js";
 
 const router = Router();
@@ -10,7 +10,7 @@ function toMysqlDateTime(value) {
   return value.replace("T", " ");
 }
 
-router.post("/register", authenticate, requireStaffRole, async (req, res) => {
+router.post("/register", authenticate, requireStaffRole, createRequireActiveAccount(getPool), async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();
   try {
@@ -89,10 +89,13 @@ router.post("/register", authenticate, requireStaffRole, async (req, res) => {
       ],
     );
 
-    const [bookingResult] = await connection.query(`INSERT INTO Booking (customer_id, room_id) VALUES (?, ?)`, [
-      customerResult.insertId,
-      room.id,
-    ]);
+    const mysqlStartDateTime = toMysqlDateTime(rental_start_date);
+    const mysqlEndDateTime = toMysqlDateTime(rental_end_date);
+
+    const [bookingResult] = await connection.query(
+      `INSERT INTO Booking (customer_id, room_id, rental_start_date, rental_end_date) VALUES (?, ?, ?, ?)`,
+      [customerResult.insertId, room.id, mysqlStartDateTime, mysqlEndDateTime],
+    );
 
     if (normalizedDepositAmount && normalizedDepositAmount > 0) {
       await connection.query(
@@ -100,9 +103,6 @@ router.post("/register", authenticate, requireStaffRole, async (req, res) => {
         [bookingResult.insertId, normalizedDepositAmount],
       );
     }
-
-    const mysqlStartDateTime = toMysqlDateTime(rental_start_date);
-    const mysqlEndDateTime = toMysqlDateTime(rental_end_date);
 
     await connection.query(
       `UPDATE Room SET

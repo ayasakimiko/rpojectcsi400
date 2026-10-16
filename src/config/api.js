@@ -99,7 +99,9 @@ export function configureApiClient({
   }
 
   function staleSession(config) {
-    return connectionError('กรุณาเข้าสู่ระบบใหม่', 'ERR_STALE_SESSION', config, 401)
+    const error = new axios.CanceledError('ข้ามคำตอบจากการเข้าสู่ระบบครั้งก่อน', config)
+    error.code = 'ERR_STALE_SESSION'
+    return error
   }
 
   const requestInterceptor = client.interceptors.request.use(async (config) => {
@@ -135,6 +137,18 @@ export function configureApiClient({
     const config = error.config
     if (!config?.backendId || axios.isCancel(error) || error.code?.startsWith('ERR_BACKEND_') || error.code === 'ERR_STALE_SESSION') {
       throw error
+    }
+    const token = bearer(config)
+    if (token && token !== storage.getItem('token')) {
+      // Old responses must not sign out or overwrite a newer login.
+      throw staleSession(config)
+    }
+    if (error.response?.status === 401 && !/^\/api\/auth\/login(?:[/?#]|$)/.test(config.url || '')) {
+      if (token) {
+        for (const key of ['token', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
+        storage.setItem('apiBackendNotice', 'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่')
+        redirectToLogin()
+      }
     }
     const unreachable = !error.response || [502, 503, 504].includes(error.response.status)
     if (!unreachable) throw error

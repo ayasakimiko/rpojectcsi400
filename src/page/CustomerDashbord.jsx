@@ -2210,6 +2210,8 @@ function CustomerDashbord() {
     )
   }
 
+  if (!data) return null
+
   const {
     customer,
     room,
