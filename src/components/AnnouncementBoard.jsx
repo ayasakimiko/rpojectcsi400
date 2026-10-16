@@ -1,3 +1,4 @@
+import { UploadImage } from './UploadMedia.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import PhotoLightbox from './PhotoLightbox.jsx'
@@ -106,8 +107,8 @@ function PostPhotos({ photos, onOpen }) {
           onClick={() => onOpen(index)}
           aria-label={`ดูรูปที่ ${index + 1} จาก ${photos.length}`}
         >
-          {shown.length === 1 && <img className="announcement-post-photo-backdrop" src={photo.url} alt="" aria-hidden="true" />}
-          <img className="announcement-post-photo" src={photo.url} alt={photo.name || `รูปประกาศ ${index + 1}`} loading="lazy" />
+          {shown.length === 1 && <UploadImage className="announcement-post-photo-backdrop" src={photo.url} alt="" aria-hidden="true" />}
+          <UploadImage className="announcement-post-photo" src={photo.url} alt={photo.name || `รูปประกาศ ${index + 1}`} loading="lazy" />
           {index === shown.length - 1 && photos.length > shown.length && (
             <span className="announcement-post-photos-more">+{photos.length - shown.length}</span>
           )}
@@ -735,7 +736,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 <div className="announcement-photo-grid">
                   {form.keptPhotos.map((photo) => (
                     <figure key={photo.url}>
-                      <img src={photo.url} alt={photo.name || 'รูปประกาศ'} />
+                      <UploadImage src={photo.url} alt={photo.name || 'รูปประกาศ'} />
                       <button
                         type="button"
                         aria-label="ลบรูปนี้"
@@ -752,7 +753,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                   ))}
                   {newPhotoPreviews.map(({ file, url }) => (
                     <figure key={url}>
-                      <img src={url} alt={file.name} />
+                      <UploadImage src={url} alt={file.name} />
                       <button
                         type="button"
                         aria-label="ลบรูปนี้"

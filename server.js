@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 4000;
 const PARCEL_SERVICE_URL = process.env.PARCEL_SERVICE_URL || "http://localhost:4007";
 
 const ROUTES = {
+  "/api/files": process.env.CUSTOMER_SERVICE_URL || "http://localhost:4003",
   "/api/admin/parcels": PARCEL_SERVICE_URL,
   "/api/staff/parcels": PARCEL_SERVICE_URL,
   "/api/customer/parcels": PARCEL_SERVICE_URL,

@@ -25,7 +25,7 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 
 path ของพัสดุถูกจับก่อน prefix `/api/admin`, `/api/staff`, `/api/customer` ใน gateway จึงไปที่ parcel service แทน
 
-Frontend (และ Vite dev proxy) คุยกับ Gateway ที่ port 4000 เท่านั้น ไม่รู้จัก service ย่อยโดยตรง
+Frontend คุยผ่าน API Gateway เท่านั้น ไม่รู้จัก service ย่อยโดยตรง โดย VPS เปิดผ่าน HTTPS และ Nginx ส่งต่อเข้า gateway ที่ port 4000
 
 ## การรันโปรเจกต์
 
@@ -70,11 +70,31 @@ npm run server:all   # รัน gateway + ทั้ง 7 service พร้อ�
 
 บริการที่เริ่มพร้อมกันจะรอคิวอัปเดตโครงสร้างผ่าน MySQL lock และเรียกใช้งานฐานข้อมูลผ่าน `getPool()` หลังอัปเดตเสร็จ
 
-### รัน frontend (dev)
+### รัน Frontend โดยเลือก VPS ก่อน และใช้ Backend ในเครื่องเป็นสำรอง
+
+ตั้งค่าใน `src/config/api.js`: VPS คือ `https://backend.ayasakimioweb.com` และ Local คือ `http://127.0.0.1:4000` ซึ่งเป็น gateway จาก `server.js` เดิม
 
 ```bash
 npm run dev
 ```
+
+Frontend ตรวจ `/api/health` ของ VPS ก่อน หากติดต่อไม่ได้หรือไม่พร้อมใช้งาน จะลอง gateway ในเครื่อง และตรวจปลายทางใหม่ทุก 5 วินาทีเมื่อมีคำขอถัดไป ผลตรวจพร้อมกันใช้ร่วมกันและมี timeout ต่อปลายทาง 1.8 วินาที
+
+ถ้าต้องการให้ Local พร้อมรับงานสำรอง ให้เปิดฐานข้อมูลเดิมในเครื่อง แล้วเปิดอีก Terminal รัน:
+
+```bash
+npm run server:all
+```
+
+`npm run server` เปิดเฉพาะ gateway ส่วน API ที่ใช้ฐานข้อมูลยังต้องมี service ย่อยทำงานด้วย
+
+ตอนพัฒนา คำขอผ่าน Vite proxy สองปลายทางเพื่อใช้ localhost ได้โดยไม่ติด Origin ของเบราว์เซอร์ ตอน build เว็บจริงจะเรียกปลายทางโดยตรง และแต่ละ Backend ต้องอนุญาตโดเมน Frontend ใน `CLIENT_URL` การเรียก Local จากเว็บจริงยังขึ้นกับสิทธิ์เข้าถึงเครือข่ายในเครื่องของเบราว์เซอร์
+
+VPS และ Local ใช้ฐานข้อมูลและไฟล์ของตนเอง ไม่ได้ซิงก์กันอัตโนมัติ เมื่อสลับปลายทาง ระบบจะล้างเซสชันเดิมและให้เข้าสู่ระบบใหม่ จึงไม่ส่ง token ของอีกฐานข้อมูลข้ามไปใช้งาน
+
+การล็อกอินผิด ข้อมูลไม่พบ หรือ API ตอบข้อผิดพลาดทั่วไปจะไม่ทำให้สลับ Backend อัตโนมัติ คำขอเพิ่ม แก้ไข ลบ และอัปโหลดจะไม่ถูกส่งซ้ำไปอีกฝั่งเมื่อเครือข่ายขาดกลางคำขอ เพราะฝั่งแรกอาจบันทึกข้อมูลสำเร็จไปแล้ว
+
+ใช้ `npm run build` เพื่อสร้าง `dist` และเริ่ม dev server ใหม่หลังแก้ค่าปลายทาง
 
 ## Database Schema
 
@@ -181,3 +201,14 @@ npm run dev
 **ทดสอบแล้ว** (ผ่าน curl กับข้อมูลจริงแล้วล้างคืนสภาพเดิม): ขอต่อสัญญาจ่ายทบ 6 เดือน → อนุมัติ → ยอดขึ้น 21,000 (ราคาห้อง 3,500 × 6) ถูกต้อง → จ่ายสำเร็จ → ยอดหายไปพร้อม `prepaid_until` ถูกต้อง, เคสจ่ายรายเดือนขยายสัญญาอย่างเดียวไม่คูณ/ไม่ซ่อนยอด, และ guard การอนุมัติซ้ำ/reject คำขอที่อนุมัติแล้ว/staff key ผิด
 
 **ยังไม่ได้ทำ:** ระบบ login/role staff จริง (ตอนนี้ใช้ shared key ชั่วคราว) และหน้า UI ฝั่ง staff สำหรับดู/อนุมัติคำขอ (ต้องเรียกผ่าน API ตรงๆ)
+
+
+## API รูปอัปโหลดและสลิป
+
+- Backend รวมไว้ใน `router/UploadRouter.js` ไฟล์เดียว เปิด `/api/files/<folder>/<fileName>` ผ่าน customer service และ gateway
+- Frontend รวม `UploadImage`, `UploadLink` และ hook ภายในไว้ใน `src/components/UploadMedia.jsx` ไฟล์เดียว แล้วแต่ละ Page นำไปใช้ โดยไม่เปลี่ยนพาธเดิมที่ใช้แก้ไขหรือลบรูป
+- การอ่านรูปใช้ Bearer token และ Blob URL โดยไม่ใส่ token ลง URL ผู้เช่าดูสลิปของตนและพัสดุของตนในห้องปัจจุบันได้ เจ้าหน้าที่ดูตามสิทธิ์บัญชี รูปตรวจห้องจำกัดเฉพาะเจ้าหน้าที่
+- ไฟล์อ่านจาก `public/uploads` ของ Backend ที่เลือก บน Docker ใช้ bind mount ของ customer service เดิม และไม่ต้องเพิ่ม Nginx alias หรือพอร์ต
+- ตอน build Frontend จะไม่คัดลอก `public/uploads` ลง `dist` ส่วนไฟล์สาธารณะอื่น เช่น favicon ยังคงอยู่
+
+หลังอัปเดต Backend ให้ส่ง `server.js`, `services/customerService.js`, `router/UploadRouter.js` และ `router/CustomerDashboardRouter.js` ไปตำแหน่งเดิมบน VPS แล้ว build และเริ่ม gateway กับ customer-service ใหม่ โดยใช้ `.env` และ Compose ที่ตั้งค่าบน VPS ไว้แล้ว

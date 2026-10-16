@@ -1,3 +1,4 @@
+import { UploadImage } from './UploadMedia.jsx'
 import { useEffect, useRef, useState } from 'react'
 import './PhotoLightbox.css'
 
@@ -146,7 +147,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, title, subtitl
           </button>
         )}
         <figure className="photo-viewer-figure" onClick={(event) => event.stopPropagation()}>
-          <img
+          <UploadImage
             key={index}
             className={`photo-viewer-image${zoom > 1 ? (dragging ? ' is-dragging' : ' is-zoomed') : ''}`}
             src={photo.url}
@@ -183,7 +184,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, title, subtitl
               className={`photo-viewer-thumb${thumbIndex === index ? ' is-active' : ''}`}
               onClick={() => showPhoto(thumbIndex)}
             >
-              <img src={item.url} alt="" />
+              <UploadImage src={item.url} alt="" />
             </button>
           ))}
         </div>

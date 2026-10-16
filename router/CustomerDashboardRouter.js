@@ -20,13 +20,14 @@ import { attachParcelPhotos } from "./ParcelRouter.js";
 
 const router = Router();
 const PAYMENT_SLIP_FOLDER = "payment-slips";
+const PAYMENT_SLIP_EXTENSIONS = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
 fs.mkdirSync(PAYMENT_SLIP_DIR, { recursive: true });
 
 const slipUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, callback) => callback(null, PAYMENT_SLIP_DIR),
-    filename: (_req, file, callback) => callback(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+    filename: (_req, file, callback) => callback(null, `${randomUUID()}${PAYMENT_SLIP_EXTENSIONS[file.mimetype]}`),
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, callback) => {
