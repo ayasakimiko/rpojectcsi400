@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
-import { authenticate, requireOwnerRole } from "../middleware/authMiddleware.js";
+import { authenticate, createRequireActiveAccount, requireOwnerRole } from "../middleware/authMiddleware.js";
 import {
   isPositiveId,
   lookup,
@@ -17,7 +17,9 @@ import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
 
-router.use(authenticate, requireOwnerRole);
+const requireActiveOwner = createRequireActiveAccount(getPool);
+
+router.use(authenticate, requireOwnerRole, requireActiveOwner);
 router.use("/expenses", expenseRouter);
 
 function buildUpdate(allowedColumns, body) {
@@ -118,7 +120,7 @@ router.get("/overview", async (req, res) => {
     const [[{ maintenanceCount }]] = await pool.query(
       `SELECT COUNT(DISTINCT mr.room_number) AS maintenanceCount
        FROM MaintenanceRequest mr
-       WHERE mr.status IN ('pending', 'accepted') ${maintenanceDateClause}`,
+       WHERE mr.status IN ('pending', 'in_progress', 'accepted') ${maintenanceDateClause}`,
       rangeParams,
     );
 
@@ -152,7 +154,7 @@ router.get("/rooms/status", async (req, res) => {
                 WHEN r.is_booked = FALSE THEN 'vacant'
                 WHEN EXISTS (
                   SELECT 1 FROM MaintenanceRequest mr
-                  WHERE mr.room_number = r.room_number AND mr.status IN ('pending', 'accepted')
+                  WHERE mr.room_number = r.room_number AND mr.status IN ('pending', 'in_progress', 'accepted')
                 ) THEN 'maintenance'
                 WHEN NOT EXISTS (
                   SELECT 1 FROM Booking b
@@ -270,7 +272,8 @@ router.get("/income", async (req, res) => {
       conditions.push(`payment_date <= ?`);
       params.push(req.query.to);
     }
-    const selectedRange = getSelectedMonthRange(req.query);
+    const hasExplicitDateRange = Boolean(req.query.from || req.query.to);
+    const selectedRange = hasExplicitDateRange ? null : getSelectedMonthRange(req.query);
     if (selectedRange) {
       conditions.push(`payment_date >= ? AND payment_date < ?`);
       params.push(selectedRange.from, selectedRange.toExclusive);
@@ -364,19 +367,22 @@ router.get("/trends", async (req, res) => {
     const rangeStartMonth = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - (monthsSpan - 1), 1);
     const rangeStartKey = `${rangeStartMonth.getFullYear()}-${String(rangeStartMonth.getMonth() + 1).padStart(2, "0")}-01`;
 
+    const requestedFromKey = toDateKey(fromDate);
+    const queryFromKey = requestedFromKey > rangeStartKey ? requestedFromKey : rangeStartKey;
+    const queryToKey = toDateKey(toDate);
     const [incomeRows] = await pool.query(
       `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
        FROM Payment
-       WHERE status = 'paid' AND payment_date >= ?
+       WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
        GROUP BY period`,
-      [rangeStartKey],
+      [queryFromKey, queryToKey],
     );
     const [expenseRows] = await pool.query(
       `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
        FROM Expense
-       WHERE expense_date >= ?
+       WHERE expense_date >= ? AND expense_date <= ?
        GROUP BY period`,
-      [rangeStartKey],
+      [queryFromKey, queryToKey],
     );
 
     const incomeByMonth = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));

@@ -96,10 +96,14 @@ router.patch("/profile", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT password FROM Customer WHERE id = ?`, [req.user.id]);
+    const [rows] = await pool.query(`SELECT password, phone FROM Customer WHERE id = ?`, [req.user.id]);
     if (!rows[0]) return res.status(404).json({ message: "ไม่พบข้อมูลผู้เช่า" });
-    if (hasPasswordChange && !(await bcrypt.compare(body.current_password, rows[0].password))) {
-      return res.status(400).json({ message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+    if (hasPasswordChange) {
+      const isPhoneAsPassword = Boolean(rows[0].phone) && body.current_password === rows[0].phone;
+      const passwordMatches = isPhoneAsPassword || (await bcrypt.compare(body.current_password, rows[0].password));
+      if (!passwordMatches) {
+        return res.status(400).json({ message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+      }
     }
 
     const columns = [];
@@ -544,9 +548,14 @@ router.post("/maintenance/:id/cancel", async (req, res) => {
       return res.status(400).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องแล้ว" });
     }
 
-    await pool.query(`UPDATE MaintenanceRequest SET status = 'cancelled', completed_at = NOW() WHERE id = ?`, [
-      maintenanceRequest.id,
-    ]);
+    const [result] = await pool.query(
+      `UPDATE MaintenanceRequest SET status = 'cancelled', completed_at = NOW()
+       WHERE id = ? AND customer_id = ? AND status = 'pending'`,
+      [maintenanceRequest.id, customer.id],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(409).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องหรือรายการเปลี่ยนแปลงแล้ว" });
+    }
 
     return res.json({ message: "ยกเลิกรายการแจ้งซ่อมสำเร็จ" });
   } catch (error) {
