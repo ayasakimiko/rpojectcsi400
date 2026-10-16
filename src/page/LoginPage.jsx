@@ -10,7 +10,7 @@ function LoginPage() {
   const navigate = useNavigate()
   const [loginForm, setLoginForm] = useState(initialLoginForm)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => sessionStorage.getItem('apiBackendNotice') || '')
   const [success, setSuccess] = useState('')
 
   const handleLoginChange = (e) => {
@@ -20,6 +20,7 @@ function LoginPage() {
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault()
+    sessionStorage.removeItem('apiBackendNotice')
     setError('')
     setSuccess('')
 

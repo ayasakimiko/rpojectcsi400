@@ -1,3 +1,4 @@
+import { UploadImage } from '../components/UploadMedia.jsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
@@ -231,7 +232,7 @@ function MaintenancePhotoPicker({ id, files, onChange, onError }) {
         <div className="maint-photo-grid">
           {files.map((file, index) => (
             <figure className="maint-photo-tile" key={`${file.name}-${index}`}>
-              <img src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
+              <UploadImage src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
               <figcaption title={file.name}>
                 <span>{file.name}</span>
                 <small>{formatPhotoSize(file.size)}</small>
@@ -341,7 +342,7 @@ function SlipDropZone({ id, file, onChange, onError }) {
       />
       {file ? (
         <div className="slip-preview">
-          <img className="slip-preview-image" src={previewUrl} alt="ตัวอย่างสลิปที่แนบ" />
+          <UploadImage className="slip-preview-image" src={previewUrl} alt="ตัวอย่างสลิปที่แนบ" />
           <div className="slip-preview-info">
             <strong title={file.name}>{file.name}</strong>
             <span>{formatFileSize(file.size)}</span>
@@ -1321,7 +1322,7 @@ function ParcelGallery({ photos, onOpen }) {
         onClick={() => onOpen(selected)}
         aria-label="ดูรูปพัสดุขนาดเต็ม"
       >
-        <img src={current.url} alt={current.name || `รูปพัสดุ ${selected + 1}`} />
+        <UploadImage src={current.url} alt={current.name || `รูปพัสดุ ${selected + 1}`} />
         <span className="dashboard-parcel-gallery-zoom">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
@@ -1342,7 +1343,7 @@ function ParcelGallery({ photos, onOpen }) {
               onClick={() => setSelected(index)}
               aria-label={`รูปที่ ${index + 1}`}
             >
-              <img src={photo.url} alt="" />
+              <UploadImage src={photo.url} alt="" />
             </button>
           ))}
         </div>
@@ -2875,7 +2876,7 @@ function CustomerDashbord() {
                             setMaintenancePhotoPreview({ index })
                           }}
                         >
-                          <img src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} />
+                          <UploadImage src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} />
                           <span className="dashboard-maintenance-photo-caption">
                             <span>{photo.name || `รูปที่ ${index + 1}`}</span>
                             <small>รูปที่ {index + 1}</small>
@@ -3678,7 +3679,7 @@ function CustomerDashbord() {
                                     }}
                                     aria-label="ดูรูปพัสดุ"
                                   >
-                                    <img src={parcel.photos[0].url} alt={parcel.photos[0].name || 'รูปพัสดุ'} loading="lazy" />
+                                    <UploadImage src={parcel.photos[0].url} alt={parcel.photos[0].name || 'รูปพัสดุ'} loading="lazy" />
                                     {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                                   </button>
                                 ) : (
@@ -4707,7 +4708,7 @@ function CustomerDashbord() {
                               onClick={() => setMaintenancePhotoPreview({ item, index: 0 })}
                               aria-label={`ดูรูปแจ้งซ่อม ${item.photos.length} รูป`}
                             >
-                              <img src={item.photos[0].dataUrl} alt={item.photos[0].name || 'รูปแจ้งซ่อม'} loading="lazy" />
+                              <UploadImage src={item.photos[0].dataUrl} alt={item.photos[0].name || 'รูปแจ้งซ่อม'} loading="lazy" />
                               {item.photos.length > 1 && <span>+{item.photos.length - 1}</span>}
                             </button>
                           ) : (

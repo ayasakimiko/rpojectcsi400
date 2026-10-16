@@ -1,3 +1,4 @@
+import { UploadImage } from '../components/UploadMedia.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
@@ -773,7 +774,7 @@ function AdminBackupPage() {
 
   const renderInspectionPhoto = (photo, index) => (
     <button type="button" key={`${photo.name}-${index}`} onClick={() => showPhoto(index)} aria-label={`ดูภาพ ${photo.name}`}>
-      <img src={photo.url} alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`} />
+      <UploadImage src={photo.url} alt={`ภาพตรวจห้อง ${inspectionDetail.room_number} ${index + 1}`} />
       <span>{photo.name}</span>
     </button>
   )
@@ -2184,7 +2185,7 @@ function AdminBackupPage() {
                               setPhotoPreview(0)
                             }}
                           >
-                            <img src={parcel.photos[0].url} alt="" />
+                            <UploadImage src={parcel.photos[0].url} alt="" />
                             {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                           </button>
                         ) : <span className="parcel-muted">-</span>}

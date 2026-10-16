@@ -1,3 +1,4 @@
+import { UploadImage, UploadLink } from '../components/UploadMedia.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { createPortal } from 'react-dom'
@@ -361,7 +362,7 @@ function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChang
         <div className="photo-grid">
           {existing.map((photo, index) => (
             <figure className="photo-tile" key={`saved-${photo.url}`}>
-              <img src={photo.url} alt={`รูปที่บันทึกไว้ ${index + 1}`} />
+              <UploadImage src={photo.url} alt={`รูปที่บันทึกไว้ ${index + 1}`} />
               <figcaption title={photo.name}>
                 <span>{photo.name}</span>
                 <small>บันทึกไว้แล้ว</small>
@@ -391,7 +392,7 @@ function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChang
           ))}
           {files.map((file, index) => (
             <figure className="photo-tile" key={`${file.name}-${index}`}>
-              <img src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
+              <UploadImage src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
               <figcaption title={file.name}>
                 <span>{file.name}</span>
                 <small>{formatPhotoSize(file.size)}</small>
@@ -1603,7 +1604,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                       onClick={() => onPreviewPhoto(index)}
                       aria-label={`ดูรูปพัสดุ ${index + 1}`}
                     >
-                      <img src={photo.url} alt="" />
+                      <UploadImage src={photo.url} alt="" />
                     </button>
                   ))}
                 </div>
@@ -2049,7 +2050,7 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
                   onClick={() => setPhotoIndex(index)}
                   aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
                 >
-                  <img src={photo.url} alt="" />
+                  <UploadImage src={photo.url} alt="" />
                   {index === 7 && photos.length > 8 && <span>+{photos.length - 8}</span>}
                 </button>
               ))}
@@ -2765,9 +2766,9 @@ function StaffPaymentReview({ onCountChange }) {
 
             <div className="payment-slip-body">
               <div className="payment-slip-image-frame">
-                <a href={preview.url} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
-                  <img src={preview.url} alt={`สลิปชำระเงินห้อง ${preview.payment.room_number}`} />
-                </a>
+                <UploadLink href={preview.url} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                  <UploadImage src={preview.url} alt={`สลิปชำระเงินห้อง ${preview.payment.room_number}`} />
+                </UploadLink>
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
@@ -5543,7 +5544,7 @@ function StaffMain() {
                                 setParcelPhotoPreview(parcel)
                               }}
                             >
-                              <img src={parcel.photos[0].url} alt="" />
+                              <UploadImage src={parcel.photos[0].url} alt="" />
                               {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                             </button>
                           ) : <span className="parcel-muted">-</span>}
@@ -7124,9 +7125,9 @@ function StaffMain() {
 
             <div className="payment-slip-body">
               <div className="payment-slip-image-frame">
-                <a href={historySlip.slip_path} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
-                  <img src={historySlip.slip_path} alt="สลิปโอนเงิน" />
-                </a>
+                <UploadLink href={historySlip.slip_path} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                  <UploadImage src={historySlip.slip_path} alt="สลิปโอนเงิน" />
+                </UploadLink>
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
@@ -7955,7 +7956,7 @@ function StaffMain() {
                           setMaintenancePhotoPreview({ index })
                         }}
                       >
-                        <img src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
+                        <UploadImage src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
                         <span className="staff-maintenance-photo-caption">
                           <span>{photo.name || `รูปที่ ${index + 1}`}</span>
                           <small>รูปที่ {index + 1}</small>
