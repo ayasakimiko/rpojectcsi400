@@ -12,6 +12,8 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
+import SafetyIncidents from '../components/SafetyIncidents.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const MOVE_OUT_CHECKLIST = [
@@ -5420,6 +5422,8 @@ function StaffMain() {
               </button>
             </li>
           ))}
+          <ResidentVisitRequests staff nav />
+          <SafetyIncidents base="staff" nav />
         </ul>
 
         {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}

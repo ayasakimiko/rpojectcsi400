@@ -16,6 +16,8 @@ import announcementRouter from "./AnnouncementRouter.js";
 import { attachMaintenancePhotos, computeCurrentDue } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
+import safetyIncidentRouter from "./SafetyIncidentRouter.js";
+
 const router = Router();
 
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
@@ -31,6 +33,7 @@ export async function getActingStaffName(pool, user) {
 export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireStaffRole, requireActiveStaff);
+router.use("/safety-incidents", safetyIncidentRouter);
 
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
@@ -1267,6 +1270,39 @@ router.post("/maintenance/:id/:action", async (req, res) => {
   } catch (error) {
     console.error("Update maintenance request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/resident-visit-requests", async (_req, res) => {
+  try {
+    const [requests] = await getPool().query(
+      `SELECT r.*, c.first_name, c.last_name, c.phone AS customer_phone
+       FROM ResidentVisitRequest r JOIN Customer c ON c.id = r.customer_id
+       WHERE r.status = 'pending' AND r.is_special = FALSE ORDER BY r.created_at ASC`,
+    );
+    return res.json({ requests });
+  } catch (error) {
+    console.error("Fetch resident visit requests error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอได้" });
+  }
+});
+
+router.post("/resident-visit-requests/:id/:decision", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const status = req.params.decision === "approve" ? "approved" : req.params.decision === "reject" ? "rejected" : null;
+    if (!isPositiveId(id) || !status) return res.status(400).json({ message: "ข้อมูลคำขอไม่ถูกต้อง" });
+    const pool = getPool();
+    const staffName = await getActingStaffName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE ResidentVisitRequest SET status = ?, reviewed_by_name = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending' AND is_special = FALSE`,
+      [status, staffName, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการแล้ว" });
+    return res.json({ message: status === "approved" ? "อนุมัติคำขอแล้ว" : "ปฏิเสธคำขอแล้ว" });
+  } catch (error) {
+    console.error("Review resident visit request error:", error);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกผลได้" });
   }
 });
 

@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
+import OwnerParkingSummary from '../components/OwnerParkingSummary.jsx'
+import SafetyIncidents from '../components/SafetyIncidents.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
@@ -979,6 +981,11 @@ function OwnerMain() {
             {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
           </span>
         </section>
+
+        <div className="owner-resident-tools">
+          <OwnerParkingSummary />
+          <SafetyIncidents reviewer base="owner" />
+        </div>
 
         {notice.message && (
           <div className={`owner-alert owner-alert-${notice.type}`}>{notice.message}</div>
