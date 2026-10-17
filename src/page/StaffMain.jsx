@@ -528,6 +528,49 @@ function printMonthlyInvoices(rooms, targetWindow = window.open('', '_blank', 'w
   return occupiedRooms.length
 }
 
+function NotifKindIcon({ kind }) {
+  const props = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  if (kind === 'announcement') {
+    return (
+      <svg {...props}>
+        <path d="m3 11 18-5v12L3 14v-3z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    )
+  }
+  if (kind === 'maintenance') {
+    return (
+      <svg {...props}>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />
+      </svg>
+    )
+  }
+  if (kind === 'staff') {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </svg>
+  )
+}
+
 function buildAnnouncementNotif(item) {
   return {
     key: `announcement-${item.id}`,
@@ -545,7 +588,6 @@ function buildAnnouncementNotif(item) {
   }
 }
 
-// Modals can stack (e.g. a detail popup over a history list); Esc closes only the topmost one.
 const openModalStack = []
 
 function Modal({ title, onClose, children, variant }) {
@@ -806,7 +848,7 @@ const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
 const STAFF_LIST_PAGE_SIZE = 10
 const MODAL_ITEMS_PER_PAGE = 10
-const NOTIF_PAGE_SIZE = 6
+const NOTIF_PAGE_SIZE = 30
 const PAYMENT_HISTORY_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
@@ -1092,8 +1134,6 @@ const TENANT_TYPE_SEGMENTS = [
   { key: 'move_room', label: 'ย้ายห้อง' },
 ]
 
-// Filter panel used across the staff page: optional segment buttons, a search box,
-// extra controls passed as children, and a result count with a clear link.
 function StaffFilterPanel({
   segments,
   active,
@@ -1159,7 +1199,6 @@ function StaffFilterPanel({
   )
 }
 
-// `counts` is optional: the history modal is paginated on the server and has no per-type totals.
 function TenantRequestFilters({
   type,
   onType,
@@ -1663,7 +1702,6 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
   const isMove = request.type === 'move_room'
   const isOpen = ['pending', 'in_progress'].includes(request.status)
   const [openedAt] = useState(() => Date.now())
-  // Contract, balance and room-availability figures describe the rooms now, so only show them while the request is open.
   const due = isOpen ? sourceRoom?.currentDue : null
   const hasDue = due && due.status !== 'paid' && Number(due.amount) > 0
   const contractEnd = isOpen ? request.source_rental_end_date || sourceRoom?.rental_end_date : null
@@ -4029,7 +4067,8 @@ const SAFETY_STATUS = {
   pending: { label: 'รอตรวจสอบ', badge: 'pending', tone: 'warning' },
   reviewed: { label: 'ตรวจสอบแล้ว', badge: 'reviewed', tone: 'success' },
 }
-const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '' }
+const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '', photos: [] }
+const STAFF_SAFETY_MAX_PHOTOS = 4
 
 function StaffSafetyTab({ rooms, onCountChange }) {
   const [incidents, setIncidents] = useState([])
@@ -4045,6 +4084,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
   const [notice, setNotice] = useState(null)
   const [reviewTarget, setReviewTarget] = useState(null)
   const [reviewNote, setReviewNote] = useState('')
+  const [lightbox, setLightbox] = useState(null)
 
   const load = useCallback(() => {
     return axios
@@ -4116,9 +4156,15 @@ function StaffSafetyTab({ rooms, onCountChange }) {
     if (!form.description.trim()) return setFormError('กรุณาระบุรายละเอียดเหตุการณ์')
     setBusy(true)
     try {
+      const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
       const { data } = await axios.post(
         '/api/staff/safety-incidents',
-        { ...form, roomNumber: form.roomNumber || undefined },
+        {
+          incidentType: form.incidentType,
+          description: form.description,
+          roomNumber: form.roomNumber || undefined,
+          photos,
+        },
         { headers: staffAuthHeaders() },
       )
       requestClose()
@@ -4238,6 +4284,16 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                     <span className="staff-rv-entry-desc-label">รายละเอียดเหตุการณ์</span>
                     <span className="staff-rv-entry-desc">{item.description}</span>
                   </span>
+                  {item.photos?.length > 0 && (
+                    <span className="staff-safety-photo-chip">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      รูปประกอบ {item.photos.length} รูป
+                    </span>
+                  )}
                 </button>
                 <div className="staff-rv-entry-foot">
                   <span className="staff-rv-entry-extra">
@@ -4307,6 +4363,24 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                     </div>
                   )}
                 </dl>
+                {detail.photos?.length > 0 && (
+                  <section className="staff-rv-photos" aria-label="รูปประกอบการแจ้งเหตุ">
+                    <h4 className="staff-rv-timeline-title">รูปประกอบ ({detail.photos.length} รูป)</h4>
+                    <div className="staff-rv-photo-grid">
+                      {detail.photos.map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-rv-photo"
+                          onClick={() => setLightbox({ photos: detail.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[detail.incident_type] || detail.incident_type })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 <StaffDetailTimeline
                   steps={[
                     { label: 'แจ้งเหตุ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
@@ -4446,6 +4520,19 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                   ระบบจะประเมินระดับความเร่งด่วนให้อัตโนมัติ · {form.description.length}/1000
                 </span>
               </div>
+              <div className="staff-form-field">
+                <span className="staff-form-label">
+                  รูปประกอบ <span className="staff-rv-hint">(ไม่บังคับ สูงสุด {STAFF_SAFETY_MAX_PHOTOS} รูป)</span>
+                </span>
+                <ParcelPhotoPicker
+                  id="staff-safety-photos"
+                  heading={false}
+                  maxPhotos={STAFF_SAFETY_MAX_PHOTOS}
+                  files={form.photos}
+                  onChange={(files) => setForm((current) => ({ ...current, photos: files }))}
+                  onError={setFormError}
+                />
+              </div>
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
@@ -4457,6 +4544,17 @@ function StaffSafetyTab({ rooms, onCountChange }) {
             </form>
           )}
         </Modal>
+      )}
+
+      {lightbox && createPortal(
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={lightbox.title}
+          label="รูปประกอบการแจ้งเหตุ"
+          onClose={() => setLightbox(null)}
+        />,
+        document.body,
       )}
 
       {notice && (
@@ -4600,6 +4698,8 @@ function StaffMain() {
     }
   })
   const [notifPage, setNotifPage] = useState(1)
+  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
+  const notifListRef = useRef(null)
   const [notifDetail, setNotifDetail] = useState(null)
   const notifRef = useRef(null)
 
@@ -5026,7 +5126,6 @@ function StaffMain() {
     }
   }
 
-  // Choosing the answer that is already selected clears it again.
   const setChecklistResult = (key, value) => {
     setInspectionForm((form) => {
       const { [key]: current, ...rest } = form.checklist
@@ -5105,7 +5204,6 @@ function StaffMain() {
     }
   }
 
-  // roomNumber: print only that room's invoice; omitted = one combined document with every occupied room
   const handlePrintMonthlyInvoices = async (roomNumber = null) => {
     setInvoicePrintError('')
     const printWindow = window.open('', '_blank', 'width=900,height=720')
@@ -5644,7 +5742,6 @@ function StaffMain() {
     })
   }
 
-  // The slip viewer in the payment history: Esc closes only the viewer, not the history window behind it.
   useEffect(() => {
     if (!historySlip) return undefined
     const handleKeyDown = (event) => {
@@ -5755,9 +5852,10 @@ function StaffMain() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [tenantRequests, maintenanceRequests, announcements])
 
-  const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
+  const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
 
   const markNotificationsRead = () => {
+    setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
     const keys = notifications.map((notification) => notification.key)
     setSeenNotificationKeys(keys)
     localStorage.setItem(getNotificationStorageKey('staff'), JSON.stringify(keys))
@@ -6207,7 +6305,9 @@ function StaffMain() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {hasUnreadNotifications && <span className="staff-notif-dot" />}
+                {newNotifications.length > 0 && (
+                  <span className="staff-notif-dot">{newNotifications.length > 99 ? '99+' : newNotifications.length}</span>
+                )}
               </button>
               {notifOpen && (
                 <div
@@ -6220,7 +6320,14 @@ function StaffMain() {
                   }}
                 >
                   <div className="staff-notif-panel-header">
-                    <span>การแจ้งเตือน</span>
+                    <span className="staff-notif-panel-title">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      การแจ้งเตือน
+                      {notifications.length > 0 && <span className="staff-notif-count">{notifications.length}</span>}
+                    </span>
                     <button
                       type="button"
                       className="staff-notif-panel-close"
@@ -6244,15 +6351,23 @@ function StaffMain() {
                     </button>
                   </div>
                   {notifications.length === 0 ? (
-                    <p className="staff-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                    <div className="staff-notif-empty">
+                      <span className="staff-notif-empty-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                      </span>
+                      ยังไม่มีการแจ้งเตือน
+                    </div>
                   ) : (
                     <>
-                      <div className="staff-notif-list">
+                      <div className="staff-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
                           <button
                             type="button"
                             key={notif.key}
-                            className={`staff-notif-item is-${notif.tone}`}
+                            className={`staff-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
                               if (notif.kind === 'announcement') {
@@ -6260,7 +6375,6 @@ function StaffMain() {
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
-                              // Requests and maintenance are listed on the home tab
                               setStaffTab('home')
                               setAnnouncementFocus(null)
                               if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
@@ -6268,33 +6382,61 @@ function StaffMain() {
                               else setNotifDetail(notif)
                             }}
                           >
-                            <p className="staff-notif-item-title">{notif.title}</p>
-                            <p className="staff-notif-item-status">{notif.label}</p>
-                            <p className="staff-notif-item-date">{formatDateTime(notif.date)}</p>
+                            <span className="staff-notif-item-icon">
+                              <NotifKindIcon kind={notif.kind} />
+                            </span>
+                            <span className="staff-notif-item-main">
+                              <span className="staff-notif-item-head">
+                                <span className="staff-notif-item-title">
+                                  {freshNotifKeys.has(notif.key) && <span className="staff-notif-item-new">ใหม่</span>}
+                                  {notif.title}
+                                </span>
+                                <time className="staff-notif-item-date">{formatDateTime(notif.date)}</time>
+                              </span>
+                              <span className="staff-notif-item-status">{notif.label}</span>
+                            </span>
                           </button>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (
                         <div className="staff-notif-pagination">
-                          <button
-                            type="button"
-                            className="staff-notif-page-btn"
-                            disabled={notifCurrentPage <= 1}
-                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
-                          >
-                            ก่อนหน้า
-                          </button>
                           <span className="staff-notif-page-info">
-                            หน้า {notifCurrentPage} / {notifTotalPages}
+                            {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
+                            {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
                           </span>
-                          <button
-                            type="button"
-                            className="staff-notif-page-btn"
-                            disabled={notifCurrentPage >= notifTotalPages}
-                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
-                          >
-                            ถัดไป
-                          </button>
+                          <div className="staff-notif-page-nav">
+                            <button
+                              type="button"
+                              className="staff-notif-page-btn"
+                              aria-label="หน้าก่อนหน้า"
+                              disabled={notifCurrentPage <= 1}
+                              onClick={() => {
+                                setNotifPage(Math.max(1, notifCurrentPage - 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M15 18l-6-6 6-6" />
+                              </svg>
+                            </button>
+                            <span className="staff-notif-page-current">
+                              {notifCurrentPage} / {notifTotalPages}
+                            </span>
+                            <button
+                              type="button"
+                              className="staff-notif-page-btn"
+                              aria-label="หน้าถัดไป"
+                              disabled={notifCurrentPage >= notifTotalPages}
+                              onClick={() => {
+                                setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>

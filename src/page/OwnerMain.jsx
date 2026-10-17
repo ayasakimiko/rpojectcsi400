@@ -5,6 +5,8 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import { UploadImage } from '../components/UploadMedia.jsx'
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
 
@@ -340,6 +342,7 @@ const SAFETY_INCIDENT_TYPE_LABEL = {
 
 function OwnerSafetyIncidentReview() {
   const [open, setOpen] = useState(false)
+  const [lightbox, setLightbox] = useState(null)
   const [incidents, setIncidents] = useState([])
   const [notes, setNotes] = useState({})
   const [busy, setBusy] = useState(false)
@@ -415,6 +418,21 @@ function OwnerSafetyIncidentReview() {
                       </span>
                     </div>
                     <p>{item.description}</p>
+                    {item.photos?.length > 0 && (
+                      <div className="owner-safety-photos" aria-label="รูปประกอบการแจ้งเหตุ">
+                        {item.photos.map((photo, index) => (
+                          <button
+                            key={`${photo.url}-${index}`}
+                            type="button"
+                            className="owner-safety-photo"
+                            onClick={() => setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })}
+                            aria-label={`ดูรูปที่ ${index + 1}`}
+                          >
+                            <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <small>
                       {item.reporter_name} ({item.reporter_role})
                       {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
@@ -443,6 +461,17 @@ function OwnerSafetyIncidentReview() {
             </div>
             {message && <p className="owner-safety-message" role="status">{message}</p>}
           </section>
+        </div>
+      )}
+      {lightbox && (
+        <div className="owner-safety-lightbox-host">
+          <PhotoLightbox
+            photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+            initialIndex={lightbox.index}
+            title={lightbox.title}
+            label="รูปประกอบการแจ้งเหตุ"
+            onClose={() => setLightbox(null)}
+          />
         </div>
       )}
     </div>
