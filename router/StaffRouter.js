@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
-import { authenticate, createRequireActiveAccount, requireStaffRole } from "../middleware/authMiddleware.js";
+import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
+import { getActingStaffName, requireActiveStaff } from "../middleware/accounts.js";
 import {
   isPositiveId,
   lookup,
@@ -28,16 +29,6 @@ const router = Router();
 const VEHICLE_MAX_PHOTOS = 6;
 
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
-
-export async function getActingStaffName(pool, user) {
-  const table = STAFF_ROLE_TABLE[user?.role];
-  if (!table) return null;
-  const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
-  const row = rows[0];
-  return row ? `${row.first_name} ${row.last_name}` : null;
-}
-
-export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireStaffRole, requireActiveStaff);
 
@@ -811,7 +802,7 @@ router.get("/requests", async (req, res) => {
   try {
     const pool = getPool();
 
-    const [tenantRequests] = await pool.query(
+    const [[tenantRequests], [maintenanceRequests]] = await Promise.all([pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
@@ -832,16 +823,14 @@ router.get("/requests", async (req, res) => {
        LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
        WHERE tr.status IN ('pending', 'in_progress')
        ORDER BY tr.created_at ASC`,
-    );
-
-    const [maintenanceRequests] = await pool.query(
+    ), pool.query(
       `SELECT mr.id, mr.description, mr.category, mr.contact_phone, mr.preferred_time, mr.status, mr.created_at,
               mr.room_number, c.first_name, c.last_name, c.phone
        FROM MaintenanceRequest mr
        JOIN Customer c ON c.id = mr.customer_id
        WHERE mr.status IN ('pending', 'in_progress')
        ORDER BY mr.created_at ASC`,
-    );
+    )]);
 
     return res.json({ tenantRequests, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
   } catch (error) {

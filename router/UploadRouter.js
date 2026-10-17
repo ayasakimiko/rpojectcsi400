@@ -5,7 +5,7 @@ import { authenticate, STAFF_ROLES } from "../middleware/authMiddleware.js";
 import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
 
 const ROLE_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
-const FOLDERS = new Set(["announcements", "incidents", "move-out-inspections", "parcels", "payment-slips", "vehicles"]);
+const FOLDERS = new Set(["announcements", "incidents", "maintenance", "move-out-inspections", "parcels", "payment-slips", "vehicles"]);
 const IMAGE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp)$/i;
 const NOT_FOUND = "ไม่พบรูปภาพนี้";
 
@@ -58,6 +58,14 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
           [id, `%"${storedUrl}"%`],
         );
         if (vehicles.length === 0) return res.status(404).json({ message: NOT_FOUND });
+      }
+      if (folder === "maintenance" && !STAFF_ROLES.has(role)) {
+        const [photos] = await pool.query(
+          `SELECT mp.id FROM MaintenancePhoto mp JOIN MaintenanceRequest mr ON mr.id = mp.maintenance_request_id
+           WHERE mp.url = ? AND mr.customer_id = ? LIMIT 1`,
+          [storedUrl, id],
+        );
+        if (photos.length === 0) return res.status(404).json({ message: NOT_FOUND });
       }
       if (folder === "incidents" && !STAFF_ROLES.has(role)) {
         const [incidents] = await pool.query(

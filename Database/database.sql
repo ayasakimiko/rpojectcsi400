@@ -217,11 +217,23 @@ CREATE TABLE IF NOT EXISTS MaintenancePhoto (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     maintenance_request_id INT NOT NULL,
     name VARCHAR(255) NOT NULL,
-    data_url MEDIUMTEXT NOT NULL,
+    url VARCHAR(255) NULL,
+    data_url MEDIUMTEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    INDEX idx_maintenance_photo_url (url),
     FOREIGN KEY (maintenance_request_id) REFERENCES MaintenanceRequest(id) ON DELETE CASCADE
 );
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MaintenancePhoto' AND COLUMN_NAME = 'url'),
+    'SELECT 1',
+    'ALTER TABLE `MaintenancePhoto` ADD COLUMN `url` VARCHAR(255) NULL AFTER name, MODIFY `data_url` MEDIUMTEXT NULL, ADD INDEX `idx_maintenance_photo_url` (url)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
 
 CREATE TABLE IF NOT EXISTS Parcel (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
