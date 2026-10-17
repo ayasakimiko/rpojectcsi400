@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
-import { authenticate, requireAdminRole } from "../middleware/authMiddleware.js";
+import { authenticate, createRequireActiveAccount, requireAdminRole } from "../middleware/authMiddleware.js";
 import {
   hasField,
   isPositiveId,
@@ -21,7 +21,7 @@ import expenseRouter from "./ExpenseRouter.js";
 
 const router = Router();
 
-router.use(authenticate, requireAdminRole);
+router.use(authenticate, requireAdminRole, createRequireActiveAccount(getPool));
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
 

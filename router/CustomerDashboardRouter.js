@@ -96,10 +96,14 @@ router.patch("/profile", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT password FROM Customer WHERE id = ?`, [req.user.id]);
+    const [rows] = await pool.query(`SELECT password, phone FROM Customer WHERE id = ?`, [req.user.id]);
     if (!rows[0]) return res.status(404).json({ message: "ไม่พบข้อมูลผู้เช่า" });
-    if (hasPasswordChange && !(await bcrypt.compare(body.current_password, rows[0].password))) {
-      return res.status(400).json({ message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+    if (hasPasswordChange) {
+      const isPhoneAsPassword = Boolean(rows[0].phone) && body.current_password === rows[0].phone;
+      const passwordMatches = isPhoneAsPassword || (await bcrypt.compare(body.current_password, rows[0].password));
+      if (!passwordMatches) {
+        return res.status(400).json({ message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+      }
     }
 
     const columns = [];
@@ -130,102 +134,76 @@ const GRACE_DAYS = 3;
 
 function computeRentDue(room, paymentsForBooking, depositAmount) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
-
   const start = new Date(room.rental_start_date);
   const end = new Date(room.rental_end_date);
   const now = new Date();
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-
+  const priceCents = Math.round(Number(room.price) * 100);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
   if (now < start || now > end) return null;
 
-  const billingDay = start.getDate();
-  let periodStart = new Date(now.getFullYear(), now.getMonth(), billingDay, start.getHours(), start.getMinutes());
-  if (periodStart > now) {
-    periodStart = new Date(periodStart.getFullYear(), periodStart.getMonth() - 1, billingDay, start.getHours(), start.getMinutes());
-  }
-  if (periodStart < start) periodStart = start;
-
-  let earliestPeriodStart = start;
-  if (room.prepaid_until) {
-    const prepaidUntil = new Date(room.prepaid_until);
-    if (!Number.isNaN(prepaidUntil.getTime())) {
-      if (periodStart < prepaidUntil) return null;
-      if (prepaidUntil > earliestPeriodStart) earliestPeriodStart = prepaidUntil;
-    }
-  }
-
-  const isWithinPeriod = (value, periodStartDate, periodEndDate) => {
-    const periodStartDay = new Date(periodStartDate.getFullYear(), periodStartDate.getMonth(), periodStartDate.getDate());
-    const periodEndDay = new Date(periodEndDate.getFullYear(), periodEndDate.getMonth(), periodEndDate.getDate());
-    const d = new Date(value);
-    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    return day >= periodStartDay && day < periodEndDay;
+  // Anchor each anniversary to the original day, including contracts starting on the 29th–31st.
+  const periodAt = (offset) => {
+    const date = new Date(start.getFullYear(), start.getMonth() + offset, 1, start.getHours(), start.getMinutes(), start.getSeconds());
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(start.getDate(), lastDay));
+    return date;
   };
+  const rentPayments = paymentsForBooking.filter((payment) => !["deposit", "water", "electricity"].includes(payment.type));
+  const paidRentCents = Math.max(0, rentPayments.reduce((total, payment) => {
+    const amount = Math.round(Number(payment.amount) * 100);
+    return payment.status === "paid" && Number.isSafeInteger(amount) ? total + amount : total;
+  }, 0));
+  const depositCents = Math.min(priceCents, Math.max(0, Math.round((Number(depositAmount) || 0) * 100)));
+  const periods = [];
+  for (let offset = 0; ; offset += 1) {
+    const periodStart = periodAt(offset);
+    if (periodStart > now || periodStart >= end) break;
+    periods.push({ periodStart, periodEnd: periodAt(offset + 1), index: offset });
+  }
+  if (periods.length === 0) return null;
 
-  const rentPayments = paymentsForBooking.filter(
-    (p) => p.type !== "deposit" && p.type !== "water" && p.type !== "electricity",
-  );
-
+  // Prepaid dates also cover legacy records where advance payments were not itemized.
+  const prepaidUntil = room.prepaid_until ? new Date(room.prepaid_until) : null;
+  const prepaidCents = prepaidUntil && !Number.isNaN(prepaidUntil.getTime())
+    ? periods.filter((period) => period.periodEnd <= prepaidUntil).length * priceCents : 0;
+  // New receipts after a legacy prepaid boundary add credit instead of being absorbed by its floor.
+  let receiptsAfterPrepaidCents = 0;
+  if (prepaidUntil && !Number.isNaN(prepaidUntil.getTime())) {
+    const cutoffDay = new Date(prepaidUntil.getFullYear(), prepaidUntil.getMonth(), prepaidUntil.getDate());
+    receiptsAfterPrepaidCents = rentPayments.reduce((total, payment) => {
+      const date = new Date(payment.payment_date);
+      const amount = Math.round(Number(payment.amount) * 100);
+      const paymentDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      return payment.status === "paid" && Number.isSafeInteger(amount) && paymentDay >= cutoffDay ? total + amount : total;
+    }, 0);
+  }
+  let creditCents = Math.max(0, Math.max(paidRentCents - receiptsAfterPrepaidCents + depositCents, prepaidCents) + receiptsAfterPrepaidCents);
   const unpaidPeriods = [];
-  let cursor = new Date(earliestPeriodStart);
-  while (cursor <= periodStart) {
-    const cursorEnd = new Date(cursor);
-    cursorEnd.setMonth(cursorEnd.getMonth() + 1);
-    const paid = rentPayments.some((p) => p.status === "paid" && isWithinPeriod(p.payment_date, cursor, cursorEnd));
-    if (!paid) {
-      unpaidPeriods.push({
-        periodStart: new Date(cursor),
-        periodEnd: new Date(cursorEnd),
-        isFirstPeriodEver: cursor.getTime() === start.getTime(),
-      });
-    }
-    cursor = cursorEnd;
+  for (const period of periods) {
+    const applied = Math.min(priceCents, creditCents);
+    creditCents -= applied;
+    const outstandingCents = priceCents - applied;
+    if (outstandingCents > 0) unpaidPeriods.push({ ...period, outstandingCents });
   }
-
-  const currentPeriodEnd = new Date(periodStart);
-  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
-
+  const currentPeriod = periods[periods.length - 1];
   if (unpaidPeriods.length === 0) {
-    return {
-      amount: 0,
-      depositApplied: 0,
-      lumpSumMonths: null,
-      overdueMonths: 0,
-      periodStart,
-      periodEnd: currentPeriodEnd,
-      dueDate: null,
-      status: "paid",
-    };
+    return { amount: 0, depositApplied: 0, lumpSumMonths: null, overdueMonths: 0,
+      periodStart: currentPeriod.periodStart, periodEnd: currentPeriod.periodEnd, dueDate: null, status: "paid" };
   }
-
   const earliestUnpaid = unpaidPeriods[0];
   const latestUnpaid = unpaidPeriods[unpaidPeriods.length - 1];
-
-  const notifiedThisPeriod = rentPayments.some(
-    (p) => p.status === "pending" && isWithinPeriod(p.payment_date, periodStart, currentPeriodEnd),
-  );
-
   const dueDate = new Date(earliestUnpaid.periodStart);
   dueDate.setDate(dueDate.getDate() + GRACE_DAYS);
-
-  const status = notifiedThisPeriod ? "pending" : now > dueDate ? "overdue" : "due";
-
-  const basePrice = Number(room.price);
-  const depositApplied = unpaidPeriods.some((p) => p.isFirstPeriodEver)
-    ? Math.min(Number(depositAmount) || 0, basePrice)
-    : 0;
-
-  const overdueMonths = unpaidPeriods.length - 1;
-  const lumpSumMonths =
-    status !== "paid" && Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
-  const currentCycleMonths = lumpSumMonths || 1;
-  const amount = basePrice * (overdueMonths + currentCycleMonths) - depositApplied;
-
+  const pendingSlip = rentPayments.some((payment) => payment.status === "pending" && Number(payment.amount) > 0);
+  const status = pendingSlip ? "pending" : now > dueDate ? "overdue" : "due";
+  const lumpSumMonths = Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
+  const outstandingCents = unpaidPeriods.reduce((total, period) => total + period.outstandingCents, 0)
+    + priceCents * ((lumpSumMonths || 1) - 1);
   return {
-    amount,
-    depositApplied,
+    amount: outstandingCents / 100,
+    depositApplied: earliestUnpaid.index === 0 ? depositCents / 100 : 0,
     lumpSumMonths,
-    overdueMonths,
+    overdueMonths: unpaidPeriods.length - 1,
     periodStart: earliestUnpaid.periodStart,
     periodEnd: latestUnpaid.periodEnd,
     dueDate,
@@ -544,9 +522,14 @@ router.post("/maintenance/:id/cancel", async (req, res) => {
       return res.status(400).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องแล้ว" });
     }
 
-    await pool.query(`UPDATE MaintenanceRequest SET status = 'cancelled', completed_at = NOW() WHERE id = ?`, [
-      maintenanceRequest.id,
-    ]);
+    const [result] = await pool.query(
+      `UPDATE MaintenanceRequest SET status = 'cancelled', completed_at = NOW()
+       WHERE id = ? AND customer_id = ? AND status = 'pending'`,
+      [maintenanceRequest.id, customer.id],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(409).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องหรือรายการเปลี่ยนแปลงแล้ว" });
+    }
 
     return res.json({ message: "ยกเลิกรายการแจ้งซ่อมสำเร็จ" });
   } catch (error) {

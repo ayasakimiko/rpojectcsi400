@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
-import { authenticate, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
+import { authenticate, createRequireActiveAccount, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
 import { isPositiveId, validateRoomFields } from "../middleware/validation.js";
 
 const router = Router();
+const requireActiveAccount = createRequireActiveAccount(getPool);
 
-router.post("/create", authenticate, requireAdminRole, async (req, res) => {
+router.post("/create", authenticate, requireAdminRole, requireActiveAccount, async (req, res) => {
   try {
     const {
       room_number,
@@ -64,7 +65,7 @@ router.post("/create", authenticate, requireAdminRole, async (req, res) => {
   }
 });
 
-router.get("/", authenticate, requireStaffRole, async (req, res) => {
+router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req, res) => {
   try {
     const pool = getPool();
     const [rooms] = await pool.query(

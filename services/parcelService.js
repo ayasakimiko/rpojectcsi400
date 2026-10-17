@@ -22,7 +22,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "parcel" });
 });
 
-app.use("/api/admin/parcels", authenticate, requireAdminRole, createParcelRouter(getActingAdminName));
+app.use("/api/admin/parcels", authenticate, requireAdminRole, requireActiveStaff, createParcelRouter(getActingAdminName));
 app.use("/api/staff/parcels", authenticate, requireStaffRole, requireActiveStaff, createParcelRouter(getActingStaffName));
 app.use("/api/customer/parcels", authenticate, requireCustomerRole, requireActiveCustomer, customerParcelRouter);
 
