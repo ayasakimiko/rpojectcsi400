@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
-import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
+import { authenticate, createRequireActiveAccount, requireStaffRole } from "../middleware/authMiddleware.js";
 import {
   isPositiveId,
   lookup,
@@ -28,20 +28,7 @@ export async function getActingStaffName(pool, user) {
   return row ? `${row.first_name} ${row.last_name}` : null;
 }
 
-export async function requireActiveStaff(req, res, next) {
-  try {
-    const pool = getPool();
-    const table = STAFF_ROLE_TABLE[req.user.role];
-    const [rows] = await pool.query(`SELECT is_suspended FROM ${table} WHERE id = ?`, [req.user.id]);
-    if (!rows[0] || rows[0].is_suspended) {
-      return res.status(401).json({ message: "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" });
-    }
-    next();
-  } catch (error) {
-    console.error("Check staff suspension error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
-  }
-}
+export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireStaffRole, requireActiveStaff);
 
@@ -610,45 +597,50 @@ router.get("/rooms/:room_number/history", async (req, res) => {
 });
 
 router.post("/rooms/:room_number/collect-payment", async (req, res) => {
+  let connection;
   try {
     const roomNumberValue = Number(req.params.room_number);
     if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
-    const pool = getPool();
+    connection = await getPool().getConnection();
+    await connection.beginTransaction();
 
-    const [customerRows] = await pool.query(
-      `SELECT id, deposit_amount FROM Customer WHERE room_number = ? AND is_suspended = FALSE`,
+    const [customerRows] = await connection.query(
+      `SELECT id, deposit_amount FROM Customer WHERE room_number = ? AND is_suspended = FALSE ORDER BY id DESC LIMIT 1 FOR UPDATE`,
       [roomNumberValue],
     );
     const customer = customerRows[0];
     if (!customer) {
+      await connection.rollback();
       return res.status(404).json({ message: "ไม่พบผู้เช่าของห้องนี้" });
     }
 
-    const [roomRows] = await pool.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+    const [roomRows] = await connection.query(
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ? FOR UPDATE`,
       [roomNumberValue],
     );
     const room = roomRows[0];
 
-    const [bookingRows] = await pool.query(
-      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC LIMIT 1`,
+    const [bookingRows] = await connection.query(
+      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
       [customer.id],
     );
     const booking = bookingRows[0];
     if (!booking) {
+      await connection.rollback();
       return res.status(404).json({ message: "ไม่พบสัญญาเช่าของห้องนี้" });
     }
 
-    const [paymentsForBooking] = await pool.query(
-      `SELECT id, amount, status, type, note, payment_date FROM Payment WHERE booking_id = ?`,
+    const [paymentsForBooking] = await connection.query(
+      `SELECT id, amount, status, type, note, payment_date FROM Payment WHERE booking_id = ? FOR UPDATE`,
       [booking.id],
     );
 
     const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount);
     if (!currentDue) {
+      await connection.rollback();
       return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องเก็บในขณะนี้" });
     }
 
@@ -657,13 +649,13 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
         ? `เจ้าหน้าที่เก็บเงินสด (จ่ายทบ ${currentDue.lumpSumMonths} เดือน)`
         : "เจ้าหน้าที่เก็บเงินสด";
 
-      await pool.query(
+      await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?)`,
         [booking.id, currentDue.rentAmount, note],
       );
 
       if (currentDue.lumpSumMonths) {
-        await pool.query(
+        await connection.query(
           `UPDATE Room
            SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
            WHERE room_number = ?`,
@@ -674,57 +666,70 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
 
     const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
     if (utilityPaymentIds.length > 0) {
-      await pool.query(
+      await connection.query(
         `UPDATE Payment SET status = 'paid', payment_date = CURDATE() WHERE id IN (?)`,
         [utilityPaymentIds],
       );
     }
 
+    await connection.commit();
     return res.status(201).json({ message: "บันทึกการเก็บเงินสำเร็จ" });
   } catch (error) {
+    if (connection) await connection.rollback();
+    if (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code)) {
+      return res.status(409).json({ message: "มีรายการอื่นกำลังปรับปรุงข้อมูลห้องนี้ กรุณารีเฟรชและลองใหม่อีกครั้ง" });
+    }
     console.error("Staff collect payment error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
   }
 });
 
 router.post("/rooms/:room_number/utility-bill", async (req, res) => {
+  let connection;
   try {
     const roomNumberValue = Number(req.params.room_number);
     if (!isPositiveId(roomNumberValue)) {
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
 
-    const pool = getPool();
+    connection = await getPool().getConnection();
+    await connection.beginTransaction();
 
-    const [customerRows] = await pool.query(
-      `SELECT id FROM Customer WHERE room_number = ? AND is_suspended = FALSE`,
+    const [customerRows] = await connection.query(
+      `SELECT id FROM Customer WHERE room_number = ? AND is_suspended = FALSE ORDER BY id DESC LIMIT 1 FOR UPDATE`,
       [roomNumberValue],
     );
     const customer = customerRows[0];
     if (!customer) {
+      await connection.rollback();
       return res.status(404).json({ message: "ไม่พบผู้เช่าของห้องนี้" });
     }
 
-    const [roomRows] = await pool.query(
-      `SELECT is_booked, electricity_unit_price, water_price FROM Room WHERE room_number = ?`,
+    const [roomRows] = await connection.query(
+      `SELECT is_booked, electricity_unit_price, water_price FROM Room WHERE room_number = ? FOR UPDATE`,
       [roomNumberValue],
     );
     const room = roomRows[0];
     if (!room || !room.is_booked) {
+      await connection.rollback();
       return res.status(400).json({ message: "ห้องนี้ไม่มีผู้เช่าอยู่ในขณะนี้" });
     }
 
-    const [bookingRows] = await pool.query(
-      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC LIMIT 1`,
+    const [bookingRows] = await connection.query(
+      `SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
       [customer.id],
     );
     const booking = bookingRows[0];
     if (!booking) {
+      await connection.rollback();
       return res.status(404).json({ message: "ไม่พบสัญญาเช่าของห้องนี้" });
     }
 
     const { error, value } = parseUtilityBillInput(req.body ?? {});
     if (error) {
+      await connection.rollback();
       return res.status(400).json({ message: error });
     }
     const { electricityUnits, electricityAmount: electricityAmountInput, waterAmount } = value;
@@ -733,26 +738,28 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
     const wantsElectricity = wantsElectricityByUnits || wantsElectricityByAmount;
     const wantsWater = waterAmount !== null;
 
-    const [existingPending] = await pool.query(
+    const [existingPending] = await connection.query(
       `SELECT type FROM Payment
        WHERE booking_id = ? AND status = 'pending' AND type IN ('water', 'electricity')
-         AND YEAR(payment_date) = YEAR(CURDATE()) AND MONTH(payment_date) = MONTH(CURDATE())`,
+         AND YEAR(payment_date) = YEAR(CURDATE()) AND MONTH(payment_date) = MONTH(CURDATE()) FOR UPDATE`,
       [booking.id],
     );
     const existingTypes = new Set(existingPending.map((row) => row.type));
     if (wantsElectricity && existingTypes.has("electricity")) {
+      await connection.rollback();
       return res.status(409).json({ message: "ส่งบิลค่าไฟของเดือนนี้ไปแล้ว รอลูกค้าชำระก่อน" });
     }
     if (wantsWater && existingTypes.has("water")) {
+      await connection.rollback();
       return res.status(409).json({ message: "ส่งบิลค่าน้ำของเดือนนี้ไปแล้ว รอลูกค้าชำระก่อน" });
     }
 
-    const staffName = await getActingStaffName(pool, req.user);
+    const staffName = await getActingStaffName(connection, req.user);
 
     if (wantsElectricityByUnits) {
       const unitPrice = Number(room.electricity_unit_price) || 0;
       const amount = Math.round(electricityUnits * unitPrice * 100) / 100;
-      await pool.query(
+      await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'electricity', ?)`,
         [
           booking.id,
@@ -761,23 +768,30 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
         ],
       );
     } else if (wantsElectricityByAmount) {
-      await pool.query(
+      await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'electricity', ?)`,
         [booking.id, electricityAmountInput, `ค่าไฟฟ้า (ราคาปกติ) (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`],
       );
     }
 
     if (wantsWater) {
-      await pool.query(
+      await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'water', ?)`,
         [booking.id, waterAmount, `ค่าน้ำประจำเดือน (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`],
       );
     }
 
+    await connection.commit();
     return res.status(201).json({ message: "ส่งบิลค่าน้ำ-ค่าไฟสำเร็จ" });
   } catch (error) {
+    if (connection) await connection.rollback();
+    if (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code)) {
+      return res.status(409).json({ message: "มีรายการอื่นกำลังปรับปรุงข้อมูลห้องนี้ กรุณารีเฟรชและลองใหม่อีกครั้ง" });
+    }
     console.error("Send utility bill error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
   }
 });
 
@@ -1109,10 +1123,20 @@ router.post("/requests/:id/approve", async (req, res) => {
 
     if (tenantRequest.type === "moveout") {
       const [roomBeforeReset] = await connection.query(
-        `SELECT rental_start_date FROM Room WHERE room_number = ?`,
+        `SELECT id, rental_start_date, rental_end_date FROM Room WHERE room_number = ? FOR UPDATE`,
         [tenantRequest.room_number],
       );
       const moveInDate = roomBeforeReset[0]?.rental_start_date ?? null;
+      const [bookingRows] = await connection.query(
+        `SELECT id FROM Booking WHERE customer_id = ? AND room_id = ? ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+        [tenantRequest.customer_id, roomBeforeReset[0]?.id ?? null],
+      );
+      if (bookingRows[0]) {
+        await connection.query(
+          `UPDATE Booking SET rental_start_date = ?, rental_end_date = ? WHERE id = ?`,
+          [moveInDate, roomBeforeReset[0]?.rental_end_date ?? null, bookingRows[0].id],
+        );
+      }
 
       await connection.query(`UPDATE TenantRequest SET move_in_date = ? WHERE id = ?`, [moveInDate, requestId]);
 
