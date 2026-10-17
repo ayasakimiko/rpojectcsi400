@@ -1,9 +1,35 @@
+x-service-env: &service-env
+  DB_HOST: db
+  DB_PORT: 3306
+  DB_USER: ${DB_USER:-root}
+  DB_PASSWORD: ${DB_PASSWORD:-rootpass}
+  DB_NAME: ${DB_NAME:-projectcsi400}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
+  PARKING_CAPACITY: ${PARKING_CAPACITY:-}
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+  CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+  NODE_OPTIONS: --max-old-space-size=96
+  TZ: Asia/Bangkok
+
+x-upload-env: &upload-env
+  <<: *service-env
+  NODE_OPTIONS: --max-old-space-size=192
+
 services:
   db:
     image: mysql:8.0
     container_name: projectcsi400-mysql
     restart: unless-stopped
-    command: --default-time-zone=+07:00 --skip-name-resolve
+    command:
+      - --default-time-zone=+07:00
+      - --skip-name-resolve
+      - --performance-schema=OFF
+      - --max-connections=60
+      - --table-open-cache=400
+      - --table-definition-cache=400
+      - --tmp-table-size=16M
+      - --max-heap-table-size=16M
+      - --thread-cache-size=8
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
       MYSQL_DATABASE: ${DB_NAME:-projectcsi400}
@@ -19,9 +45,26 @@ services:
       retries: 20
       start_period: 10s
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: projectcsi400-migrate
+    command: ["node", "Database/migrate.js"]
+    restart: "no"
+    environment:
+      <<: *service-env
+      NODE_OPTIONS: --max-old-space-size=192
+    volumes:
+      - ./public/uploads:/app/public/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
   phpmyadmin:
     image: phpmyadmin:latest
     container_name: projectcsi400-phpmyadmin
+    profiles: ["tools"]
     restart: unless-stopped
     environment:
       PMA_HOST: db
@@ -49,6 +92,7 @@ services:
       ADMIN_SERVICE_URL: http://admin-service:4005
       OWNER_SERVICE_URL: http://owner-service:4006
       PARCEL_SERVICE_URL: http://parcel-service:4007
+      NODE_OPTIONS: --max-old-space-size=64
       TZ: Asia/Bangkok
     ports:
       - "${PORT:-4000}:4000"
@@ -68,22 +112,14 @@ services:
     container_name: projectcsi400-auth
     command: ["node", "services/authService.js"]
     restart: unless-stopped
-    environment: &service-env
-      DB_HOST: db
-      DB_PORT: 3306
-      DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
-      DB_NAME: ${DB_NAME:-projectcsi400}
-      PARKING_CAPACITY: ${PARKING_CAPACITY:-}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
-      TZ: Asia/Bangkok
+    environment:
+      <<: *service-env
       AUTH_PORT: 4001
     ports:
       - "${AUTH_PORT:-4001}:4001"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   room-service:
     <<: *service-defaults
@@ -100,7 +136,7 @@ services:
     container_name: projectcsi400-customer
     command: ["node", "services/customerService.js"]
     environment:
-      <<: *service-env
+      <<: *upload-env
       CUSTOMER_PORT: 4003
     ports:
       - "${CUSTOMER_PORT:-4003}:4003"
@@ -112,7 +148,7 @@ services:
     container_name: projectcsi400-staff
     command: ["node", "services/staffService.js"]
     environment:
-      <<: *service-env
+      <<: *upload-env
       STAFF_PORT: 4004
     ports:
       - "${STAFF_PORT:-4004}:4004"
@@ -124,7 +160,7 @@ services:
     container_name: projectcsi400-admin
     command: ["node", "services/adminService.js"]
     environment:
-      <<: *service-env
+      <<: *upload-env
       ADMIN_PORT: 4005
     ports:
       - "${ADMIN_PORT:-4005}:4005"
@@ -146,7 +182,7 @@ services:
     container_name: projectcsi400-parcel
     command: ["node", "services/parcelService.js"]
     environment:
-      <<: *service-env
+      <<: *upload-env
       PARCEL_PORT: 4007
     ports:
       - "${PARCEL_PORT:-4007}:4007"

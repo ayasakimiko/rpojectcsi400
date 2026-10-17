@@ -9826,14 +9826,14 @@ function StaffMain() {
                     {maintenanceDetail.photos.map((photo, index) => (
                       <a
                         key={`${photo.name}-${index}`}
-                        href={photo.dataUrl}
+                        href={photo.url}
                         title="คลิกเพื่อดูตัวอย่างรูป"
                         onClick={(event) => {
                           event.preventDefault()
                           setMaintenancePhotoPreview({ index })
                         }}
                       >
-                        <UploadImage src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
+                        <UploadImage src={photo.url} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
                         <span className="staff-maintenance-photo-caption">
                           <span>{photo.name || `รูปที่ ${index + 1}`}</span>
                           <small>รูปที่ {index + 1}</small>
@@ -9857,7 +9857,7 @@ function StaffMain() {
         <PhotoLightbox
           photos={(maintenanceDetail.photos || []).map((photo, index) => ({
             name: photo.name || `รูปที่ ${index + 1}`,
-            url: photo.dataUrl,
+            url: photo.url,
           }))}
           initialIndex={maintenancePhotoPreview.index}
           title={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number}`}

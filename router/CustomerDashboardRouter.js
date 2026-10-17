@@ -6,6 +6,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
+import { requireActiveCustomer } from "../middleware/accounts.js";
 import {
   deletePublicImages,
   parseStoredPhotos,
@@ -84,32 +85,19 @@ function parsePaymentSlip(req, res, next) {
 export async function attachMaintenancePhotos(pool, requests) {
   if (requests.length === 0) return requests;
   const [photos] = await pool.query(
-    `SELECT maintenance_request_id, name, data_url FROM MaintenancePhoto
-     WHERE maintenance_request_id IN (?) ORDER BY id ASC`,
+    `SELECT maintenance_request_id, name, url FROM MaintenancePhoto
+     WHERE maintenance_request_id IN (?) AND url IS NOT NULL ORDER BY id ASC`,
     [requests.map((request) => request.id)],
   );
   const photosByRequestId = new Map();
   for (const photo of photos) {
     const list = photosByRequestId.get(photo.maintenance_request_id) || [];
-    list.push({ name: photo.name, dataUrl: photo.data_url });
+    list.push({ name: photo.name, url: photo.url });
     photosByRequestId.set(photo.maintenance_request_id, list);
   }
   return requests.map((request) => ({ ...request, photos: photosByRequestId.get(request.id) || [] }));
 }
 
-export async function requireActiveCustomer(req, res, next) {
-  try {
-    const pool = getPool();
-    const [rows] = await pool.query(`SELECT is_suspended FROM Customer WHERE id = ?`, [req.user.id]);
-    if (!rows[0] || rows[0].is_suspended) {
-      return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
-    }
-    next();
-  } catch (error) {
-    console.error("Check customer suspension error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
-  }
-}
 
 export async function createSafetyIncident(req, res) {
   let savedPhotos = [];
@@ -348,103 +336,121 @@ router.get("/me", async (req, res) => {
     const pool = getPool();
 
     const [customerRows] = await pool.query(
-      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount
+      `SELECT id, first_name, last_name, phone, room_number, deposit_amount
        FROM Customer WHERE id = ?`,
       [req.user.id],
     );
-    
-    const customer = customerRows[0];
-    if (!customer) {
+
+    const customerRow = customerRows[0];
+    if (!customerRow) {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
+    const { deposit_amount: depositAmount, ...customer } = customerRow;
 
-    const [roomRows] = await pool.query(
-      `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
-       FROM Room WHERE room_number = ?`,
-      [customer.room_number],
-    );
-    const [availableRooms] = await pool.query(
-      `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price
-       FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
-    );
-
-    const [bookings] = await pool.query(
-      `SELECT b.id AS booking_id, r.room_number, b.created_at,
-              COALESCE(b.rental_start_date, r.rental_start_date) AS rental_start_date,
-              COALESCE(b.rental_end_date, r.rental_end_date) AS rental_end_date
-       FROM Booking b
-       JOIN Room r ON r.id = b.room_id
-       WHERE b.customer_id = ?
-       ORDER BY b.created_at DESC, b.id DESC`,
-      [customer.id],
-    );
+    const [
+      [roomRows],
+      [availableRooms],
+      [bookings],
+      [maintenanceRequests],
+      [tenantRequests],
+      [acknowledgedRows],
+      announcementList,
+      [parcels],
+    ] = await Promise.all([
+      pool.query(
+        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+         FROM Room WHERE room_number = ?`,
+        [customer.room_number],
+      ),
+      pool.query(
+        `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price
+         FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
+      ),
+      pool.query(
+        `SELECT b.id AS booking_id, r.room_number, b.created_at,
+                COALESCE(b.rental_start_date, r.rental_start_date) AS rental_start_date,
+                COALESCE(b.rental_end_date, r.rental_end_date) AS rental_end_date
+         FROM Booking b
+         JOIN Room r ON r.id = b.room_id
+         WHERE b.customer_id = ?
+         ORDER BY b.created_at DESC, b.id DESC`,
+        [customer.id],
+      ),
+      pool.query(
+        `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
+         FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+        [customer.id],
+      ),
+      pool.query(
+        `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
+                tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
+                tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
+                sr.price AS source_room_price, tg.price AS target_room_price,
+                (moi.id IS NOT NULL) AS room_inspected
+         FROM TenantRequest tr
+         LEFT JOIN Room sr ON sr.room_number = tr.room_number
+         LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
+         LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+         WHERE tr.customer_id = ? ORDER BY tr.created_at DESC, tr.id DESC`,
+        [customer.id],
+      ),
+      pool.query(`SELECT announcement_id FROM AnnouncementAcknowledgement WHERE customer_id = ?`, [customer.id]),
+      listAnnouncements(pool),
+      pool.query(
+        `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
+         FROM Parcel WHERE customer_id = ? AND room_number = ? ORDER BY created_at DESC`,
+        [customer.id, customer.room_number],
+      ),
+    ]);
 
     const bookingIds = bookings.map((booking) => booking.booking_id);
-    let payments = [];
-    if (bookingIds.length > 0) {
-      [payments] = await pool.query(
-        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
-         FROM Payment
-         WHERE booking_id IN (?)
-         ORDER BY payment_date DESC, created_at DESC`,
-        [bookingIds],
-      );
-    }
+    const [[payments], maintenanceWithPhotos, parcelsWithPhotos] = await Promise.all([
+      bookingIds.length > 0
+        ? pool.query(
+            `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
+             FROM Payment
+             WHERE booking_id IN (?)
+             ORDER BY payment_date DESC, created_at DESC`,
+            [bookingIds],
+          )
+        : [[]],
+      attachMaintenancePhotos(pool, maintenanceRequests),
+      attachParcelPhotos(pool, parcels),
+    ]);
 
+    const paymentsByBooking = new Map();
+    for (const payment of payments) {
+      const list = paymentsByBooking.get(payment.booking_id) || [];
+      list.push(payment);
+      paymentsByBooking.set(payment.booking_id, list);
+    }
     const rentalHistory = bookings.map((booking) => ({
       ...booking,
-      payments: payments.filter((payment) => payment.booking_id === booking.booking_id),
+      payments: paymentsByBooking.get(booking.booking_id) || [],
     }));
 
-    const [maintenanceRequests] = await pool.query(
-      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
-       FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
-      [customer.id],
-    );
-
-    const [tenantRequests] = await pool.query(
-      `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
-              tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
-              tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
-              sr.price AS source_room_price, tg.price AS target_room_price,
-              (moi.id IS NOT NULL) AS room_inspected
-       FROM TenantRequest tr
-       LEFT JOIN Room sr ON sr.room_number = tr.room_number
-       LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
-       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
-       WHERE tr.customer_id = ? ORDER BY tr.created_at DESC, tr.id DESC`,
-      [customer.id],
-    );
-
-    const [acknowledgedRows] = await pool.query(
-      `SELECT announcement_id FROM AnnouncementAcknowledgement WHERE customer_id = ?`,
-      [customer.id],
-    );
     const acknowledgedIds = new Set(acknowledgedRows.map((row) => row.announcement_id));
-    const announcements = (await listAnnouncements(pool)).map((announcement) => ({
+    const announcements = announcementList.map((announcement) => ({
       ...announcement,
       acknowledged: acknowledgedIds.has(announcement.id),
     }));
 
-    const latestBookingId = bookings[0]?.booking_id;
-    const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
-    const currentDue = computeCurrentDue(roomRows[0], paymentsForCurrentBooking, customer.deposit_amount);
-    const [parcels] = await pool.query(
-      `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
-       FROM Parcel WHERE customer_id = ? AND room_number = ? ORDER BY created_at DESC`,
-      [customer.id, customer.room_number],
-    );
+    const currentRoom = roomRows[0] || null;
+    const paymentsForCurrentBooking = paymentsByBooking.get(bookings[0]?.booking_id) || [];
+    const currentDue = computeCurrentDue(currentRoom, paymentsForCurrentBooking, depositAmount);
+    const room = currentRoom ? { ...currentRoom } : null;
+    if (room) delete room.pending_lump_sum_months;
 
     return res.json({
       customer,
-      room: roomRows[0] || null,
+      room,
       availableRooms,
       rentalHistory,
-      maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests),
+      maintenanceRequests: maintenanceWithPhotos,
       tenantRequests,
       announcements,
       currentDue,
-      parcels: await attachParcelPhotos(pool, parcels),
+      parcels: parcelsWithPhotos,
     });
   } catch (error) {
     console.error("Customer dashboard error:", error);
@@ -559,6 +565,7 @@ router.post("/maintenance", async (req, res) => {
       return res.status(400).json({ message: "กรุณาแนบรูปปัญหาอย่างน้อย 1 รูป" });
     }
 
+    const savedPhotos = await savePublicImages("maintenance", photos.value);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -567,15 +574,14 @@ router.post("/maintenance", async (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?)`,
         [customer.id, customer.room_number, description, category, contactPhone, preferredTime],
       );
-      if (photos.value.length > 0) {
-        await connection.query(`INSERT INTO MaintenancePhoto (maintenance_request_id, name, data_url) VALUES ?`, [
-          photos.value.map((photo) => [result.insertId, photo.name, photo.dataUrl]),
-        ]);
-      }
+      await connection.query(`INSERT INTO MaintenancePhoto (maintenance_request_id, name, url) VALUES ?`, [
+        savedPhotos.map((photo) => [result.insertId, photo.name, photo.url]),
+      ]);
       await connection.commit();
       return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด", maintenanceId: result.insertId });
     } catch (error) {
       await connection.rollback();
+      await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
       throw error;
     } finally {
       connection.release();

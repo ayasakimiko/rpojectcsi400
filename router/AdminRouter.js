@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole } from "../middleware/authMiddleware.js";
+import { getActingAdminName } from "../middleware/accounts.js";
 import {
   hasField,
   isPositiveId,
@@ -37,21 +38,15 @@ function buildUpdate(allowedColumns, body) {
   return { columns, values };
 }
 
-const ADMIN_ROLE_TABLE = { Admin: "Admin", Owner: "Owner" };
-
-export async function getActingAdminName(pool, user) {
-  const table = ADMIN_ROLE_TABLE[user?.role];
-  if (!table) return null;
-  const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
-  const row = rows[0];
-  return row ? `${row.first_name} ${row.last_name}` : null;
-}
-
 const SAFETY_REVIEWER_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
 export async function listSafetyIncidents(_req, res) {
   try {
-    const [incidents] = await getPool().query("SELECT * FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC");
+    const [incidents] = await getPool().query(
+      `SELECT id, reporter_role, reporter_name, room_number, incident_type, severity, description, photos,
+              status, reviewed_by_name, reviewed_at, review_note, created_at
+       FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC`,
+    );
     return res.json({ incidents: withIncidentPhotos(incidents) });
   } catch (error) {
     console.error("Fetch safety incidents error:", error);

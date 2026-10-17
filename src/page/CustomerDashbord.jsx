@@ -2674,7 +2674,7 @@ function getRequestDetail(kind, request) {
       ['รายละเอียดปัญหา', request.description],
       ['วันที่แจ้งซ่อม', formatVisitDateTime(request.created_at)],
     )
-    photos = (request.photos || []).map((photo) => ({ ...photo, url: photo.dataUrl }))
+    photos = request.photos || []
   } else {
     fields.push(['ประเภทคำขอ', heading], ['ห้อง', request.room_number])
     if (kind === 'renew') {
@@ -5205,14 +5205,14 @@ function CustomerDashbord() {
                       {maintenanceDetail.photos.map((photo, index) => (
                         <a
                           key={`${photo.name}-${index}`}
-                          href={photo.dataUrl}
+                          href={photo.url}
                           title="คลิกเพื่อดูตัวอย่างรูป"
                           onClick={(event) => {
                             event.preventDefault()
                             setMaintenancePhotoPreview({ index })
                           }}
                         >
-                          <UploadImage src={photo.dataUrl} alt={`รูปแจ้งซ่อม ${index + 1}`} />
+                          <UploadImage src={photo.url} alt={`รูปแจ้งซ่อม ${index + 1}`} />
                           <span className="dashboard-maintenance-photo-caption">
                             <span>{photo.name || `รูปที่ ${index + 1}`}</span>
                             <small>รูปที่ {index + 1}</small>
@@ -5237,7 +5237,7 @@ function CustomerDashbord() {
           <PhotoLightbox
             photos={((maintenancePhotoPreview.item || maintenanceDetail).photos || []).map((photo, index) => ({
               name: photo.name || `รูปที่ ${index + 1}`,
-              url: photo.dataUrl,
+              url: photo.url,
             }))}
             initialIndex={maintenancePhotoPreview.index}
             title="รูปแจ้งซ่อม"
@@ -6944,7 +6944,7 @@ function CustomerDashbord() {
                               onClick={() => setMaintenancePhotoPreview({ item, index: 0 })}
                               aria-label={`ดูรูปแจ้งซ่อม ${item.photos.length} รูป`}
                             >
-                              <UploadImage src={item.photos[0].dataUrl} alt={item.photos[0].name || 'รูปแจ้งซ่อม'} loading="lazy" />
+                              <UploadImage src={item.photos[0].url} alt={item.photos[0].name || 'รูปแจ้งซ่อม'} loading="lazy" />
                               {item.photos.length > 1 && <span>+{item.photos.length - 1}</span>}
                             </button>
                           ) : (

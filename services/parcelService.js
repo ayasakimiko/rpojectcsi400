@@ -7,9 +7,12 @@ import {
   requireCustomerRole,
   requireStaffRole,
 } from "../middleware/authMiddleware.js";
-import { getActingAdminName } from "../router/AdminRouter.js";
-import { getActingStaffName, requireActiveStaff } from "../router/StaffRouter.js";
-import { requireActiveCustomer } from "../router/CustomerDashboardRouter.js";
+import {
+  getActingAdminName,
+  getActingStaffName,
+  requireActiveCustomer,
+  requireActiveStaff,
+} from "../middleware/accounts.js";
 import { createParcelRouter, customerParcelRouter } from "../router/ParcelRouter.js";
 
 const app = express();
