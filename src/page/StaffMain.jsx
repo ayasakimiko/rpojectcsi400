@@ -555,6 +555,31 @@ function NotifKindIcon({ kind }) {
       </svg>
     )
   }
+  if (kind === 'safety') {
+    return (
+      <svg {...props}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+    )
+  }
+  if (kind === 'visit') {
+    return (
+      <svg {...props}>
+        <path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17" />
+        <circle cx="7.5" cy="17.5" r="1.5" />
+        <circle cx="16.5" cy="17.5" r="1.5" />
+      </svg>
+    )
+  }
+  if (kind === 'slip') {
+    return (
+      <svg {...props}>
+        <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+        <path d="M9 7h6M9 11h6M9 15h4" />
+      </svg>
+    )
+  }
   if (kind === 'staff') {
     return (
       <svg {...props}>
@@ -641,7 +666,10 @@ function Modal({ title, onClose, children, variant }) {
             </svg>
           </button>
         </div>
-        <div className="staff-modal-body">{typeof children === 'function' ? children(requestClose) : children}</div>
+        <div className="staff-modal-body">
+          {variant === 'confirm' && <h3 className="staff-modal-alert-title">{title}</h3>}
+          {typeof children === 'function' ? children(requestClose) : children}
+        </div>
       </div>
     </div>
   )
@@ -1025,6 +1053,48 @@ function buildStaffMaintenanceNotifs(request) {
       request,
     },
   ]
+}
+
+function buildStaffSafetyNotif(incident) {
+  const urgent = incident.severity === 'urgent'
+  return {
+    key: `safety-${incident.id}`,
+    targetId: incident.id,
+    title: `แจ้งเหตุ${SAFETY_INCIDENT_TYPE_LABEL[incident.incident_type] || ''}`,
+    label: urgent ? 'เหตุด่วน รอรับเรื่อง' : 'มีการแจ้งเหตุ รอรับเรื่อง',
+    tone: urgent ? 'danger' : 'pending',
+    urgent,
+    date: incident.created_at,
+    preview: incident.description,
+    kind: 'safety',
+  }
+}
+
+function buildStaffVisitNotif(request) {
+  const isVehicle = request.request_type === 'vehicle'
+  return {
+    key: `visit-${request.id}`,
+    targetId: request.id,
+    title: `${isVehicle ? 'คำขอรถ' : 'คำขอผู้มาพัก'}${request.room_number ? ` ห้อง ${request.room_number}` : ''}`,
+    label: request.is_special ? 'คำขอพิเศษ รออนุมัติ' : 'รออนุมัติ',
+    tone: 'pending',
+    date: request.created_at,
+    preview: isVehicle ? request.vehicle_plate : request.guest_name,
+    kind: 'visit',
+  }
+}
+
+function buildStaffSlipNotif(payment) {
+  return {
+    key: `slip-${payment.booking_id}-${payment.slip_path}`,
+    targetId: payment.id,
+    title: `สลิปโอนเงิน ห้อง ${payment.room_number}`,
+    label: 'สลิปรอตรวจสอบ',
+    tone: 'info',
+    date: payment.payment_date,
+    preview: `${payment.first_name} ${payment.last_name} · ฿${Number(payment.amount || 0).toLocaleString('th-TH')}`,
+    kind: 'slip',
+  }
 }
 
 function getStaffRequestTimeline(kind, request) {
@@ -2512,7 +2582,53 @@ function StaffPagination({ page, total, onChange }) {
   )
 }
 
-function StaffPaymentReview({ onCountChange }) {
+function flashHighlight(element, className) {
+  element.classList.remove(className, 'is-fading')
+  void element.offsetWidth
+  element.classList.add(className, 'is-fading')
+  element.addEventListener(
+    'animationend',
+    () => element.classList.remove(className, 'is-fading'),
+    { once: true },
+  )
+}
+
+function useListFocus() {
+  const [page, setPageState] = useState(1)
+  const [focusedId, setFocusedId] = useState(null)
+  const [pinned, setPinned] = useState(false)
+  const scrollPendingRef = useRef(false)
+
+  const setPage = useCallback((value) => {
+    setPinned(false)
+    setPageState(value)
+  }, [])
+
+  const focusItem = useCallback((id) => {
+    setFocusedId(id)
+    setPinned(true)
+    scrollPendingRef.current = true
+  }, [])
+
+  useEffect(() => {
+    if (!scrollPendingRef.current || focusedId == null) return
+    const element = document.querySelector(`[data-staff-focus="${focusedId}"]`)
+    if (!element) return
+    scrollPendingRef.current = false
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    flashHighlight(element, 'staff-focus-row')
+  })
+
+  const resolvePage = (list) => {
+    if (!pinned || focusedId == null) return page
+    const index = list.findIndex((item) => item.id === focusedId)
+    return index < 0 ? page : Math.floor(index / STAFF_LIST_PAGE_SIZE) + 1
+  }
+
+  return { page, setPage, focusedId, focusItem, resolvePage }
+}
+
+function StaffPaymentReview({ onCountChange, focusId }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2521,7 +2637,7 @@ function StaffPaymentReview({ onCountChange }) {
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
   const [previewClosing, setPreviewClosing] = useState(false)
-  const [page, setPage] = useState(1)
+  const { setPage, focusItem, resolvePage } = useListFocus()
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -2554,6 +2670,11 @@ function StaffPaymentReview({ onCountChange }) {
           setPayments(data.payments || [])
           onCountChange?.((data.payments || []).length)
           setError('')
+          const target = focusId ? (data.payments || []).find((payment) => payment.id === focusId) : null
+          if (target) {
+            focusItem(target.id)
+            setPreview({ payment: target, url: target.slip_path })
+          }
         }
       })
       .catch((err) => {
@@ -2588,7 +2709,7 @@ function StaffPaymentReview({ onCountChange }) {
   const hasPreview = Boolean(preview)
   useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
 
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
+  const currentPage = Math.min(resolvePage(payments), Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
   const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
   const openSlip = (payment) => {
@@ -2655,7 +2776,7 @@ function StaffPaymentReview({ onCountChange }) {
             </thead>
             <tbody>
               {pagePayments.map((payment) => (
-                <tr key={payment.id}>
+                <tr key={payment.id} data-staff-focus={payment.id}>
                   <td>{payment.room_number}</td>
                   <td>
                     {payment.first_name} {payment.last_name}
@@ -2846,7 +2967,7 @@ function StaffPaymentReview({ onCountChange }) {
                   )}
                 </svg>
               </div>
-              <p className="staff-confirm-message">{notice.message}</p>
+              <StaffNoticeMessage message={notice.message} type={notice.type} />
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                   ปิด
@@ -3082,6 +3203,26 @@ function StaffCarIcon() {
   )
 }
 
+function StaffNoticeMessage({ message, type = 'success' }) {
+  const [main, ...points] = String(message || '')
+    .split(/\s+·\s+|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return (
+    <div className={`staff-confirm-message-card is-${type}`}>
+      <span className="staff-confirm-message-label">{type === 'success' ? 'ผลการดำเนินการ' : 'สาเหตุ'}</span>
+      <p className="staff-confirm-message">{main || (type === 'success' ? 'ดำเนินการสำเร็จ' : 'เกิดข้อผิดพลาด')}</p>
+      {points.length > 0 && (
+        <ul className="staff-confirm-message-points">
+          {points.map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function StaffShieldIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -3192,13 +3333,14 @@ function getStaffVisitTitle(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || '-' : item.guest_name || '-'
 }
 
-function StaffResidentVisitsTab({ rooms, onCountChange }) {
+function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
+  const pendingFocusRef = useRef(focusId)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('main')
   const [status, setStatus] = useState(RESIDENT_VISIT_VIEWS.main.defaultFilter)
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const { setPage, focusItem, resolvePage } = useListFocus()
   const [detail, setDetail] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -3222,10 +3364,18 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
         const requests = data.requests || []
         setItems(requests)
         onCountChange?.(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+        if (pendingFocusRef.current) {
+          const target = requests.find((item) => item.id === pendingFocusRef.current)
+          pendingFocusRef.current = null
+          if (target) {
+            focusItem(target.id)
+            setDetail(target)
+          }
+        }
       })
       .catch((error) => setNotice({ type: 'error', message: error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ' }))
       .finally(() => setLoading(false))
-  }, [onCountChange])
+  }, [onCountChange, focusItem])
 
   useEffect(() => {
     load()
@@ -3266,7 +3416,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
     setStatus(RESIDENT_VISIT_VIEWS[next].defaultFilter)
     setPage(1)
   }
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
+  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
   const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
   const pendingCount = items.filter((item) => item.status === 'pending' && !item.is_special).length
   const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
@@ -3468,7 +3618,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
             const canReview = item.status === 'pending' && !item.is_special
             const canCancelParking = info.key === 'parked' && item.request_type === 'vehicle'
             return (
-              <li key={item.id} className={`staff-rv-entry is-${info.tone}`}>
+              <li key={item.id} data-staff-focus={item.id} className={`staff-rv-entry is-${info.tone}`}>
                 <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
                   <span className="staff-rv-entry-head">
                     <span className={`staff-rv-icon is-${getStaffVisitKind(item)}`}>
@@ -4039,7 +4189,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
                   {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
                 </svg>
               </div>
-              <p className="staff-confirm-message">{notice.message}</p>
+              <StaffNoticeMessage message={notice.message} type={notice.type} />
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                   ปิด
@@ -4066,16 +4216,18 @@ const SAFETY_REPORTER_ROLE_LABEL = { Customer: 'ผู้เช่า', Staff: '
 const SAFETY_STATUS = {
   pending: { label: 'รอตรวจสอบ', badge: 'pending', tone: 'warning' },
   reviewed: { label: 'ตรวจสอบแล้ว', badge: 'reviewed', tone: 'success' },
+  cancelled: { label: 'ยกเลิกแล้ว', badge: 'cancelled', tone: 'muted' },
 }
 const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '', photos: [] }
 const STAFF_SAFETY_MAX_PHOTOS = 4
 
-function StaffSafetyTab({ rooms, onCountChange }) {
+function StaffSafetyTab({ rooms, onCountChange, focusId }) {
+  const pendingFocusRef = useRef(focusId)
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const { setPage, focusItem, resolvePage } = useListFocus()
   const [detail, setDetail] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_SAFETY_FORM)
@@ -4085,6 +4237,8 @@ function StaffSafetyTab({ rooms, onCountChange }) {
   const [reviewTarget, setReviewTarget] = useState(null)
   const [reviewNote, setReviewNote] = useState('')
   const [lightbox, setLightbox] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
 
   const load = useCallback(() => {
     return axios
@@ -4093,10 +4247,18 @@ function StaffSafetyTab({ rooms, onCountChange }) {
         const list = data.incidents || []
         setIncidents(list)
         onCountChange?.(list.filter((item) => item.status === 'pending').length)
+        if (pendingFocusRef.current) {
+          const target = list.find((item) => item.id === pendingFocusRef.current)
+          pendingFocusRef.current = null
+          if (target) {
+            focusItem(target.id)
+            setDetail(target)
+          }
+        }
       })
       .catch((error) => setNotice({ type: 'error', message: error.response?.data?.message || 'โหลดรายการแจ้งเหตุไม่สำเร็จ' }))
       .finally(() => setLoading(false))
-  }, [onCountChange])
+  }, [onCountChange, focusItem])
 
   useEffect(() => {
     load()
@@ -4121,7 +4283,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
       )
     : incidents
   const filtered = status === 'all' ? searched : searched.filter((item) => item.status === status)
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
+  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
   const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
   const pendingCount = incidents.filter((item) => item.status === 'pending').length
@@ -4146,6 +4308,31 @@ function StaffSafetyTab({ rooms, onCountChange }) {
     } catch (error) {
       requestClose()
       setNotice({ type: 'error', message: error.response?.data?.message || 'บันทึกผลไม่สำเร็จ' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openCancel = (item) => {
+    setCancelReason('')
+    setCancelTarget(item)
+  }
+
+  const submitCancel = async (requestClose) => {
+    setBusy(true)
+    try {
+      const { data } = await axios.patch(
+        `/api/staff/safety-incidents/${cancelTarget.id}/cancel`,
+        { reason: cancelReason },
+        { headers: staffAuthHeaders() },
+      )
+      requestClose()
+      setDetail(null)
+      setNotice({ type: 'success', message: data.message || 'ยกเลิกรายงานเหตุแล้ว' })
+      await load()
+    } catch (error) {
+      requestClose()
+      setNotice({ type: 'error', message: error.response?.data?.message || 'ยกเลิกไม่สำเร็จ' })
     } finally {
       setBusy(false)
     }
@@ -4250,7 +4437,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
           {pageItems.map((item) => {
             const info = SAFETY_STATUS[item.status] || SAFETY_STATUS.pending
             return (
-              <li key={item.id} className={`staff-rv-entry is-${info.tone}`}>
+              <li key={item.id} data-staff-focus={item.id} className={`staff-rv-entry is-${info.tone}`}>
                 <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
                   <span className="staff-rv-entry-head">
                     <span className={`staff-rv-icon is-safety${item.severity === 'urgent' ? ' is-urgent' : ''}`}>
@@ -4279,6 +4466,11 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                         <span className="staff-actor">{item.reviewed_by_name}</span>
                       </StaffInfoCell>
                     )}
+                    {item.status === 'cancelled' && item.cancelled_by_name && (
+                      <StaffInfoCell label="ยกเลิกโดย">
+                        <span className="staff-actor">{item.cancelled_by_name}</span>
+                      </StaffInfoCell>
+                    )}
                   </span>
                   <span className="staff-rv-entry-desc-block">
                     <span className="staff-rv-entry-desc-label">รายละเอียดเหตุการณ์</span>
@@ -4297,13 +4489,20 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                 </button>
                 <div className="staff-rv-entry-foot">
                   <span className="staff-rv-entry-extra">
-                    {item.status === 'reviewed' && item.review_note ? (
+                    {item.status === 'cancelled' ? (
+                      <span className="staff-rv-entry-note">{item.cancel_reason ? `เหตุผลที่ยกเลิก: ${item.cancel_reason}` : 'ยกเลิกโดยไม่ระบุเหตุผล'}</span>
+                    ) : item.status === 'reviewed' && item.review_note ? (
                       <span className="staff-rv-entry-note">ผลตรวจ: {item.review_note}</span>
                     ) : (
                       <span className="staff-rv-entry-note">{item.status === 'pending' ? 'ยังไม่มีผู้รับเรื่อง' : 'ไม่มีบันทึกผล'}</span>
                     )}
                   </span>
                   <span className="staff-rv-entry-actions">
+                    {item.status === 'pending' && (
+                      <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => openCancel(item)}>
+                        ยกเลิก
+                      </button>
+                    )}
                     {item.status === 'pending' && (
                       <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => openReview(item)}>
                         รับเรื่อง
@@ -4323,7 +4522,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
 
       {detail && (
         <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setDetail(null)} variant="detail">
-          {(requestClose) => {
+          {() => {
             const info = SAFETY_STATUS[detail.status] || SAFETY_STATUS.pending
             return (
               <div className="staff-rv-detail">
@@ -4362,6 +4561,12 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                       <dd>{detail.review_note || '-'}</dd>
                     </div>
                   )}
+                  {detail.status === 'cancelled' && (
+                    <div className="is-wide">
+                      <dt>เหตุผลที่ยกเลิก</dt>
+                      <dd>{detail.cancel_reason || '-'}</dd>
+                    </div>
+                  )}
                 </dl>
                 {detail.photos?.length > 0 && (
                   <section className="staff-rv-photos" aria-label="รูปประกอบการแจ้งเหตุ">
@@ -4384,28 +4589,47 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                 <StaffDetailTimeline
                   steps={[
                     { label: 'แจ้งเหตุ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
-                    {
-                      label: detail.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอรับเรื่อง',
-                      meta:
-                        detail.status === 'reviewed'
-                          ? formatStaffDateTime(detail.reviewed_at)
-                          : 'กำลังรอ',
-                      by: detail.status === 'reviewed' ? detail.reviewed_by_name : null,
-                      state: detail.status === 'reviewed' ? 'done' : 'current',
-                      tone: detail.status === 'reviewed' ? 'success' : undefined,
-                    },
+                    detail.status === 'cancelled'
+                      ? {
+                          label: 'ยกเลิกแล้ว',
+                          meta: formatStaffDateTime(detail.cancelled_at),
+                          by: detail.cancelled_by_name,
+                          state: 'done',
+                          tone: 'danger',
+                        }
+                      : {
+                          label: detail.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอรับเรื่อง',
+                          meta:
+                            detail.status === 'reviewed'
+                              ? formatStaffDateTime(detail.reviewed_at)
+                              : 'กำลังรอ',
+                          by: detail.status === 'reviewed' ? detail.reviewed_by_name : null,
+                          state: detail.status === 'reviewed' ? 'done' : 'current',
+                          tone: detail.status === 'reviewed' ? 'success' : undefined,
+                        },
                   ]}
                 />
-                <div className="staff-form-actions">
-                  <button type="button" className={`staff-action-btn ${detail.status === 'pending' ? 'is-ghost' : 'is-primary'}`} onClick={requestClose}>
-                    ปิด
-                  </button>
-                  {detail.status === 'pending' && (
-                    <button type="button" className="staff-action-btn is-primary" onClick={() => openReview(detail)}>
-                      รับเรื่อง / บันทึกผล
+                {detail.status === 'pending' && (
+                  <div className={`staff-form-actions staff-safety-detail-actions${detail.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                    <button type="button" className="staff-safety-cancel-btn" onClick={() => openCancel(detail)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="m15 9-6 6M9 9l6 6" />
+                      </svg>
+                      ยกเลิกรายงาน
                     </button>
-                  )}
-                </div>
+                    <button type="button" className="staff-safety-review-btn" onClick={() => openReview(detail)}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        {detail.severity === 'urgent' ? (
+                          <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
+                        ) : (
+                          <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        )}
+                      </svg>
+                      {detail.severity === 'urgent' ? 'รับเรื่องด่วน' : 'รับเรื่อง / บันทึกผล'}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           }}
@@ -4446,6 +4670,47 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                 </button>
                 <button type="button" className="staff-action-btn is-primary" disabled={busy} onClick={() => submitReview(requestClose)}>
                   {busy ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจสอบแล้ว'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {cancelTarget && (
+        <Modal title="ยกเลิกรายงานเหตุ" onClose={() => setCancelTarget(null)} variant="waiting-form">
+          {(requestClose) => (
+            <div className="staff-rv-form">
+              <div className="staff-rv-review-summary">
+                <span className={`staff-rv-icon is-safety${cancelTarget.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                  <StaffShieldIcon />
+                </span>
+                <div className="staff-rv-text">
+                  <strong>{SAFETY_INCIDENT_TYPE_LABEL[cancelTarget.incident_type] || cancelTarget.incident_type}</strong>
+                  <span className="staff-rv-desc">{cancelTarget.description}</span>
+                </div>
+              </div>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="staff-safety-cancel-reason">
+                  เหตุผลที่ยกเลิก (ถ้ามี)
+                </label>
+                <textarea
+                  id="staff-safety-cancel-reason"
+                  className="staff-form-input"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="เช่น แจ้งซ้ำ, แจ้งผิด, ตรวจแล้วไม่พบเหตุ"
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                />
+                <span className="staff-rv-hint">{cancelReason.length}/500 · ผู้แจ้งจะเห็นว่ารายงานถูกยกเลิกพร้อมเหตุผลนี้</span>
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
+                  กลับ
+                </button>
+                <button type="button" className="staff-action-btn is-danger" disabled={busy} onClick={() => submitCancel(requestClose)}>
+                  {busy ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิกรายงาน'}
                 </button>
               </div>
             </div>
@@ -4566,7 +4831,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                   {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
                 </svg>
               </div>
-              <p className="staff-confirm-message">{notice.message}</p>
+              <StaffNoticeMessage message={notice.message} type={notice.type} />
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                   ปิด
@@ -4738,12 +5003,23 @@ function StaffMain() {
   const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
+  const [tabFocus, setTabFocus] = useState(null)
+  const [seenTabKeys, setSeenTabKeys] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(getNotificationStorageKey('staff-tabs')) || '[]'))
+    } catch {
+      return new Set()
+    }
+  })
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
   const [pendingVisitCount, setPendingVisitCount] = useState(0)
   const [parkedVehicleCount, setParkedVehicleCount] = useState(0)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [urgentSafetyCount, setUrgentSafetyCount] = useState(0)
+  const [pendingSafetyIncidents, setPendingSafetyIncidents] = useState([])
+  const [pendingVisitRequests, setPendingVisitRequests] = useState([])
+  const [pendingSlips, setPendingSlips] = useState([])
 
   useEffect(() => {
     let cancelled = false
@@ -4756,6 +5032,7 @@ function StaffMain() {
           const requests = data.requests || []
           const now = Date.now()
           setPendingVisitCount(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+          setPendingVisitRequests(requests.filter((item) => item.status === 'pending'))
           setParkedVehicleCount(
             requests.filter(
               (item) =>
@@ -4774,6 +5051,7 @@ function StaffMain() {
           const pending = (data.incidents || []).filter((item) => item.status === 'pending')
           setPendingSafetyCount(pending.length)
           setUrgentSafetyCount(pending.filter((item) => item.severity === 'urgent').length)
+          setPendingSafetyIncidents(pending)
         })
         .catch(() => {})
     }
@@ -4913,7 +5191,10 @@ function StaffMain() {
   const loadPendingSlipCount = () => {
     return axios
       .get('/api/staff/payment-verifications', { headers: authHeaders() })
-      .then(({ data }) => setPendingSlipCount((data.payments || []).length))
+      .then(({ data }) => {
+        setPendingSlipCount((data.payments || []).length)
+        setPendingSlips(data.payments || [])
+      })
       .catch(() => {})
   }
 
@@ -5846,13 +6127,41 @@ function StaffMain() {
 
   const notifications = useMemo(() => {
     return [
+      ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
+      ...pendingVisitRequests.map(buildStaffVisitNotif),
+      ...pendingSlips.map(buildStaffSlipNotif),
       ...tenantRequests.flatMap(buildStaffTenantNotifs),
       ...maintenanceRequests.flatMap(buildStaffMaintenanceNotifs),
       ...announcements.map(buildAnnouncementNotif),
-    ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [tenantRequests, maintenanceRequests, announcements])
+    ].sort((a, b) => Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)) || new Date(b.date) - new Date(a.date))
+  }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements])
 
   const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
+
+  const tabItemKeys = {
+    'payment-review': pendingSlips.map(buildStaffSlipNotif).map((item) => item.key),
+    'resident-visits': pendingVisitRequests.map(buildStaffVisitNotif).map((item) => item.key),
+    safety: pendingSafetyIncidents.map(buildStaffSafetyNotif).map((item) => item.key),
+  }
+
+  const newTabItemCount = (tab) =>
+    staffTab === tab ? 0 : (tabItemKeys[tab] || []).filter((key) => !seenTabKeys.has(key)).length
+
+  const goToStaffTab = (tab) => {
+    const visited = [...(tabItemKeys[staffTab] || []), ...(tabItemKeys[tab] || [])]
+    if (visited.some((key) => !seenTabKeys.has(key))) {
+      const current = new Set(Object.values(tabItemKeys).flat())
+      const next = new Set([...[...seenTabKeys].filter((key) => current.has(key)), ...visited])
+      setSeenTabKeys(next)
+      try {
+        localStorage.setItem(getNotificationStorageKey('staff-tabs'), JSON.stringify([...next]))
+      } catch (error) {
+        console.warn('Could not save seen tab items', error)
+      }
+    }
+    setTabFocus(null)
+    setStaffTab(tab)
+  }
 
   const markNotificationsRead = () => {
     setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
@@ -5985,7 +6294,7 @@ function StaffMain() {
   const financeTaskCount = summary.dueCount + pendingSlipCount + maintenanceRequests.length + tenantRequests.length
 
   const openSummaryTarget = (tab, roomFilter) => {
-    setStaffTab(tab)
+    goToStaffTab(tab)
     setAnnouncementFocus(null)
     if (roomFilter) {
       setStatusFilter(roomFilter)
@@ -6371,11 +6680,18 @@ function StaffMain() {
                             onClick={() => {
                               closeNotifPanel()
                               if (notif.kind === 'announcement') {
-                                setStaffTab('announcements')
+                                goToStaffTab('announcements')
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
-                              setStaffTab('home')
+                              const targetTab = { safety: 'safety', visit: 'resident-visits', slip: 'payment-review' }[notif.kind]
+                              if (targetTab) {
+                                goToStaffTab(targetTab)
+                                setTabFocus({ tab: targetTab, id: notif.targetId, nonce: Date.now() })
+                                setAnnouncementFocus(null)
+                                return
+                              }
+                              goToStaffTab('home')
                               setAnnouncementFocus(null)
                               if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
                               else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
@@ -6394,6 +6710,7 @@ function StaffMain() {
                                 <time className="staff-notif-item-date">{formatDateTime(notif.date)}</time>
                               </span>
                               <span className="staff-notif-item-status">{notif.label}</span>
+                              {notif.preview && <span className="staff-notif-item-preview">{notif.preview}</span>}
                             </span>
                           </button>
                         ))}
@@ -6524,7 +6841,7 @@ function StaffMain() {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <p className="staff-confirm-message">{actionSuccess}</p>
+                <StaffNoticeMessage message={actionSuccess} />
                 <div className="staff-form-actions">
                   <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                     ปิด
@@ -7268,24 +7585,14 @@ function StaffMain() {
                 type="button"
                 className={`nav-link staff-tab-link${staffTab === tab.key ? ' active' : ''}`}
                 onClick={() => {
-                  setStaffTab(tab.key)
+                  goToStaffTab(tab.key)
                   setAnnouncementFocus(null)
                 }}
               >
                 {tab.label}
-                {tab.key === 'payment-review' && pendingSlipCount > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${pendingSlipCount} รายการรอตรวจ`}>
-                    {pendingSlipCount}
-                  </span>
-                )}
-                {tab.key === 'resident-visits' && pendingVisitCount > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${pendingVisitCount} คำขอรออนุมัติ`}>
-                    {pendingVisitCount}
-                  </span>
-                )}
-                {tab.key === 'safety' && pendingSafetyCount > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${pendingSafetyCount} รายงานรอรับเรื่อง`}>
-                    {pendingSafetyCount}
+                {newTabItemCount(tab.key) > 0 && (
+                  <span className="staff-tab-badge" aria-label={`${newTabItemCount(tab.key)} รายการใหม่`}>
+                    {newTabItemCount(tab.key)}
                   </span>
                 )}
               </button>
@@ -7293,11 +7600,31 @@ function StaffMain() {
           ))}
         </ul>
 
-        {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}
+        {staffTab === 'payment-review' && (
+          <StaffPaymentReview
+            key={tabFocus?.tab === 'payment-review' ? tabFocus.nonce : 'payment-review'}
+            onCountChange={setPendingSlipCount}
+            focusId={tabFocus?.tab === 'payment-review' ? tabFocus.id : null}
+          />
+        )}
 
-        {staffTab === 'resident-visits' && <StaffResidentVisitsTab rooms={rooms} onCountChange={setPendingVisitCount} />}
+        {staffTab === 'resident-visits' && (
+          <StaffResidentVisitsTab
+            key={tabFocus?.tab === 'resident-visits' ? tabFocus.nonce : 'resident-visits'}
+            rooms={rooms}
+            onCountChange={setPendingVisitCount}
+            focusId={tabFocus?.tab === 'resident-visits' ? tabFocus.id : null}
+          />
+        )}
 
-        {staffTab === 'safety' && <StaffSafetyTab rooms={rooms} onCountChange={setPendingSafetyCount} />}
+        {staffTab === 'safety' && (
+          <StaffSafetyTab
+            key={tabFocus?.tab === 'safety' ? tabFocus.nonce : 'safety'}
+            rooms={rooms}
+            onCountChange={setPendingSafetyCount}
+            focusId={tabFocus?.tab === 'safety' ? tabFocus.id : null}
+          />
+        )}
 
         {staffTab === 'announcements' && (
           <AnnouncementBoard

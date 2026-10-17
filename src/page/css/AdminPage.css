@@ -3158,3 +3158,8 @@
 .admin-safety-lightbox-host .photo-viewer {
   z-index: 3200;
 }
+
+.admin-safety-status.cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+}

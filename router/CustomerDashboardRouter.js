@@ -834,7 +834,8 @@ router.post("/resident-visit-requests", async (req, res) => {
 router.get("/safety-incidents", async (req, res) => {
   try {
     const [incidents] = await getPool().query(
-      `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note, created_at
+      `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note,
+              cancelled_by_name, cancelled_at, cancel_reason, created_at
        FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? ORDER BY created_at DESC`,
       [req.user.id],
     );

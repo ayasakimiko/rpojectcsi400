@@ -555,6 +555,17 @@ function NotifKindIcon({ kind, paymentType }) {
   )
 }
 
+function flashHighlight(element, className) {
+  element.classList.remove(className, 'is-fading')
+  void element.offsetWidth
+  element.classList.add(className, 'is-fading')
+  element.addEventListener(
+    'animationend',
+    () => element.classList.remove(className, 'is-fading'),
+    { once: true },
+  )
+}
+
 function Modal({ title, onClose, children, variant, onBack }) {
   const [isClosing, setIsClosing] = useState(false)
 
@@ -1228,6 +1239,12 @@ function getRequestTimeline(kind, request) {
   }
   if (kind === 'safety') {
     const isReviewed = request.status === 'reviewed'
+    if (request.status === 'cancelled') {
+      return [
+        { label: 'แจ้งเหตุ', date: request.created_at, done: true },
+        { label: 'ยกเลิกแล้ว', date: request.cancelled_at || request.created_at, done: true, by: request.cancelled_by_name },
+      ]
+    }
     return [
       { label: 'แจ้งเหตุ', date: request.created_at, done: true },
       {
@@ -2574,12 +2591,13 @@ const SAFETY_SEVERITY_RESULT = {
   urgent: { label: 'ด่วน', hint: 'เจ้าหน้าที่จะได้รับแจ้งเป็นเรื่องเร่งด่วน' },
   normal: { label: 'ทั่วไป', hint: 'เจ้าหน้าที่จะตรวจสอบตามลำดับ' },
 }
-const SAFETY_STATUS_LABEL = { pending: 'รอตรวจสอบ', reviewed: 'ตรวจสอบแล้ว' }
-const SAFETY_STATUS_BADGE = { pending: 'pending', reviewed: 'paid' }
+const SAFETY_STATUS_LABEL = { pending: 'รอตรวจสอบ', reviewed: 'ตรวจสอบแล้ว', cancelled: 'ยกเลิกแล้ว' }
+const SAFETY_STATUS_BADGE = { pending: 'pending', reviewed: 'paid', cancelled: 'cancelled' }
 const SAFETY_FILTERS = [
   { key: 'all', label: 'ทั้งหมด' },
   { key: 'pending', label: 'รอตรวจสอบ', tone: 'warning' },
   { key: 'reviewed', label: 'ตรวจสอบแล้ว', tone: 'success' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว', tone: 'muted' },
 ]
 const SAFETY_DESCRIPTION_MAX = 1000
 const SAFETY_MAX_PHOTOS = 4
@@ -2614,7 +2632,7 @@ function getRequestDetail(kind, request) {
     iconClass = `is-safety is-${request.severity}`
     statusLabel = SAFETY_STATUS_LABEL[request.status]
     badge = SAFETY_STATUS_BADGE[request.status] || 'pending'
-    heroStatus = request.status === 'reviewed' ? 'approved' : 'pending'
+    heroStatus = request.status === 'reviewed' ? 'approved' : request.status === 'cancelled' ? 'cancelled' : 'pending'
     const severity = SAFETY_SEVERITY_RESULT[request.severity]?.label || request.severity
     meta = (
       <span className={`dashboard-safety-level-chip is-${request.severity}`}>
@@ -2636,6 +2654,9 @@ function getRequestDetail(kind, request) {
     )
     if (request.status === 'reviewed') {
       fields.push(['ตรวจสอบโดย', request.reviewed_by_name], ['ผลการตรวจสอบ', request.review_note])
+    }
+    if (request.status === 'cancelled') {
+      fields.push(['ยกเลิกโดย', request.cancelled_by_name], ['เหตุผลที่ยกเลิก', request.cancel_reason])
     }
     photos = request.photos || []
   } else if (kind === 'resident_visit') {
@@ -2739,7 +2760,7 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
               {detail.fields.map(([label, value]) => (
                 <div key={label}>
                   <dt>{label}</dt>
-                  <dd className={label === 'ตรวจสอบโดย' ? 'dashboard-actor' : undefined}>{value || '-'}</dd>
+                  <dd className={label === 'ตรวจสอบโดย' || label === 'ยกเลิกโดย' ? 'dashboard-actor' : undefined}>{value || '-'}</dd>
                 </div>
               ))}
             </dl>
@@ -2980,11 +3001,30 @@ function SafetyIncidentReportRow() {
               </div>
               <p className="dashboard-confirm-message">ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว</p>
               {SAFETY_SEVERITY_RESULT[sentSeverity] && (
-                <p className={`dashboard-safety-result is-${sentSeverity}`}>
-                  <span>ระบบจัดระดับเป็น</span>
-                  <strong>{SAFETY_SEVERITY_RESULT[sentSeverity].label}</strong>
-                  <small>{SAFETY_SEVERITY_RESULT[sentSeverity].hint}</small>
-                </p>
+                <div className={`dashboard-safety-result is-${sentSeverity}`}>
+                  <div className="dashboard-safety-result-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      {sentSeverity === 'urgent' ? (
+                        <>
+                          <path d="M10.3 4.5 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z" />
+                          <path d="M12 9v4M12 17h.01" />
+                        </>
+                      ) : (
+                        <>
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 11v6M12 7h.01" />
+                        </>
+                      )}
+                    </svg>
+                  </div>
+                  <div className="dashboard-safety-result-content">
+                    <div className="dashboard-safety-result-heading">
+                      <span>ระบบจัดระดับเป็น</span>
+                      <strong>{SAFETY_SEVERITY_RESULT[sentSeverity].label}</strong>
+                    </div>
+                    <small>{SAFETY_SEVERITY_RESULT[sentSeverity].hint}</small>
+                  </div>
+                </div>
               )}
               <div className="dashboard-form-actions">
                 <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
@@ -3641,14 +3681,32 @@ function CustomerDashbord() {
   }, [])
 
   const [customerTab, setCustomerTab] = useState('home')
-  const [activeVehicleCount, setActiveVehicleCount] = useState(0)
+  const [activeVehicleIds, setActiveVehicleIds] = useState([])
+  const [tabSeenVersion, setTabSeenVersion] = useState(0)
+  const tabSeenStorageKey = data?.customer?.id ? `customer_tab_seen_${data.customer.id}` : null
+  const seenTabKeys = useMemo(() => {
+    if (!tabSeenStorageKey || tabSeenVersion < 0) return new Set()
+    try {
+      const stored = JSON.parse(localStorage.getItem(tabSeenStorageKey) || '[]')
+      return new Set(Array.isArray(stored) ? stored : [])
+    } catch {
+      return new Set()
+    }
+  }, [tabSeenStorageKey, tabSeenVersion])
+  const customerTabKeys = {
+    vehicles: activeVehicleIds.map((id) => `vehicle-${id}`),
+    parcels: (data?.parcels || []).filter((parcel) => parcel.status === 'pending').map((parcel) => `parcel-${parcel.id}`),
+  }
+  const newCustomerTabCount = (key) =>
+    customerTab === key ? 0 : (customerTabKeys[key] || []).filter((itemKey) => !seenTabKeys.has(itemKey)).length
 
   useEffect(() => {
     let cancelled = false
     axios
       .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
       .then(({ data }) => {
-        if (!cancelled) setActiveVehicleCount((data.vehicles || []).length)
+        if (cancelled) return
+        setActiveVehicleIds((data.vehicles || []).map((vehicle) => vehicle.id))
       })
       .catch(() => {})
     return () => {
@@ -3671,6 +3729,15 @@ function CustomerDashbord() {
     }
   }, [notifSeenStorageKey, notifSeenVersion])
   const [notifPage, setNotifPage] = useState(1)
+  const scrollFocusRef = useRef(null)
+  useEffect(() => {
+    if (!scrollFocusRef.current) return
+    const element = document.querySelector(`[data-customer-focus="${scrollFocusRef.current}"]`)
+    if (!element) return
+    scrollFocusRef.current = null
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    flashHighlight(element, 'dashboard-focus-highlight')
+  })
   const notifListRef = useRef(null)
   const [notifDetail, setNotifDetail] = useState(null)
   const [parcelReceiveId, setParcelReceiveId] = useState(null)
@@ -4024,6 +4091,17 @@ function CustomerDashbord() {
   }
 
   const selectCustomerTab = (key) => {
+    const visited = [...(customerTabKeys[customerTab] || []), ...(customerTabKeys[key] || [])]
+    if (tabSeenStorageKey && visited.some((itemKey) => !seenTabKeys.has(itemKey))) {
+      const current = new Set(Object.values(customerTabKeys).flat())
+      const next = [...new Set([...[...seenTabKeys].filter((itemKey) => current.has(itemKey)), ...visited])]
+      try {
+        localStorage.setItem(tabSeenStorageKey, JSON.stringify(next))
+        setTabSeenVersion((version) => version + 1)
+      } catch (error) {
+        console.warn('Could not save seen tab items', error)
+      }
+    }
     if (key === 'profile') resetProfileForm()
     setAnnouncementFocus(null)
     setCustomerTab(key)
@@ -5005,14 +5083,37 @@ function CustomerDashbord() {
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
-                              selectCustomerTab('home')
                               if (notif.kind === 'parcel') {
+                                selectCustomerTab('parcels')
+                                let index = filteredParcels.findIndex((parcel) => parcel.id === notif.parcel.id)
+                                if (index < 0) {
+                                  resetParcelFilters()
+                                  index = parcels.findIndex((parcel) => parcel.id === notif.parcel.id)
+                                }
+                                setParcelPage(Math.floor(Math.max(index, 0) / PARCEL_PAGE_SIZE) + 1)
                                 setParcelReceiveError('')
                                 setParcelDetailId(notif.parcel.id)
-                              } else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
-                              else if (notif.kind === 'tenant')
+                                scrollFocusRef.current = `parcel-${notif.parcel.id}`
+                                return
+                              }
+                              selectCustomerTab('home')
+                              if (notif.kind === 'maintenance') {
+                                let index = filteredMaintenanceRequests.findIndex((item) => item.id === notif.request.id)
+                                if (index < 0) {
+                                  setMaintenanceSearch('')
+                                  setMaintenanceStatusFilter('all')
+                                  index = maintenanceRequests.findIndex((item) => item.id === notif.request.id)
+                                }
+                                setMaintenancePage(Math.floor(Math.max(index, 0) / MAINTENANCE_PAGE_SIZE) + 1)
+                                setMaintenanceDetail(notif.request)
+                                scrollFocusRef.current = `maintenance-${notif.request.id}`
+                              } else if (notif.kind === 'tenant') {
                                 setStatusPopup({ kind: notif.request.type, status: notif.request.status, request: notif.request })
-                              else setNotifDetail(notif)
+                                scrollFocusRef.current = `tenant-${notif.request.type}`
+                              } else {
+                                setNotifDetail(notif)
+                                if (notif.kind === 'utility') scrollFocusRef.current = 'due'
+                              }
                             }}
                           >
                             <span className="dashboard-notif-item-icon">
@@ -5763,14 +5864,12 @@ function CustomerDashbord() {
                 onClick={() => selectCustomerTab(tab.key)}
               >
                 {tab.label}
-                {tab.key === 'vehicles' && activeVehicleCount > 0 && (
-                  <span className="dashboard-parcel-tab-count is-info" aria-label={`${activeVehicleCount} คันที่อนุมัติ`}>
-                    {activeVehicleCount}
-                  </span>
-                )}
-                {tab.key === 'parcels' && pendingParcels.length > 0 && (
-                  <span className="dashboard-parcel-tab-count" aria-label={`${pendingParcels.length} รายการรอรับ`}>
-                    {pendingParcels.length}
+                {newCustomerTabCount(tab.key) > 0 && (
+                  <span
+                    className={`dashboard-parcel-tab-count${tab.key === 'vehicles' ? ' is-info' : ''}`}
+                    aria-label={`${newCustomerTabCount(tab.key)} รายการใหม่`}
+                  >
+                    {newCustomerTabCount(tab.key)}
                   </span>
                 )}
               </button>
@@ -5952,6 +6051,7 @@ function CustomerDashbord() {
                             <article className={`dashboard-parcel-item${isPending ? ' is-pending' : ' is-received'}`} key={parcel.id}>
                               <span className="dashboard-parcel-dot" aria-hidden="true" />
                             <div
+                              data-customer-focus={`parcel-${parcel.id}`}
                               className="dashboard-parcel-entry is-clickable"
                               role="button"
                               tabIndex={0}
@@ -5978,7 +6078,12 @@ function CustomerDashbord() {
                                     </span>
                                   </div>
 
-                                  {parcel.description && <p className="dashboard-parcel-desc">{parcel.description}</p>}
+                                  {parcel.description && (
+                                    <p className="dashboard-parcel-desc">
+                                      <span className="dashboard-parcel-desc-label">รายละเอียด</span>
+                                      {parcel.description}
+                                    </p>
+                                  )}
 
                                   <div className="dashboard-parcel-meta">
                                     <span>
@@ -6223,7 +6328,7 @@ function CustomerDashbord() {
           </div>
         )}
 
-        {customerTab === 'vehicles' && <CustomerParkingTab onCountChange={setActiveVehicleCount} />}
+        {customerTab === 'vehicles' && <CustomerParkingTab />}
 
         {customerTab === 'rental-history' && (
           <section className="dashboard-card dashboard-rental-history-card">
@@ -6380,7 +6485,7 @@ function CustomerDashbord() {
                               </span>
                             )}
                           </h3>
-                          <div className="dashboard-due-box">
+                          <div className="dashboard-due-box" data-customer-focus="due">
                             <span className="dashboard-due-amount">฿{formatCurrency(currentDue.amount)}</span>
                             <span className={`dashboard-badge status-${dueBadgeClass(currentDue.status)}`}>
                               {DUE_STATUS_LABEL[currentDue.status] || currentDue.status}
@@ -6533,7 +6638,7 @@ function CustomerDashbord() {
                     <h2>แจ้งปัญหาต่างๆ</h2>
                     <div className="dashboard-request-list">
                       {room?.is_booked && (
-                        <div className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
+                        <div data-customer-focus="tenant-renew" className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
                           <div className="dashboard-request-info">
                             <p className="dashboard-request-title">ต่อสัญญา</p>
                             <p className="dashboard-request-desc">
@@ -6570,7 +6675,7 @@ function CustomerDashbord() {
                           )}
                         </div>
                       )}
-                      <div className={`dashboard-request-row${moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] ? ' has-detail-link' : ''}`}>
+                      <div data-customer-focus="tenant-moveout" className={`dashboard-request-row${moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">แจ้งย้ายออก</p>
                           <p className="dashboard-request-desc">
@@ -6606,7 +6711,7 @@ function CustomerDashbord() {
                           </button>
                         )}
                       </div>
-                      <div className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
+                      <div data-customer-focus="tenant-move_room" className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">ย้ายห้อง</p>
                           <p className="dashboard-request-desc">
@@ -6935,6 +7040,7 @@ function CustomerDashbord() {
                       {paginatedMaintenanceRequests.map((item) => (
                         <div
                           key={item.id}
+                          data-customer-focus={`maintenance-${item.id}`}
                           className={`dashboard-maintenance-item is-${maintenanceBadgeClass(item.status)} cat-${MAINTENANCE_CATEGORY_LABEL[item.category] ? item.category : 'other'}`}
                         >
                           {item.photos?.length > 0 ? (

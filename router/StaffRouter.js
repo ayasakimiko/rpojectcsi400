@@ -37,6 +37,26 @@ router.use("/announcements", announcementRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.post("/safety-incidents", createSafetyIncident);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
+router.patch("/safety-incidents/:id/cancel", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสรายงานไม่ถูกต้อง" });
+    const reason = String(req.body?.reason ?? "").trim();
+    if (reason.length > 500) return res.status(400).json({ message: "เหตุผลการยกเลิกต้องไม่เกิน 500 ตัวอักษร" });
+    const pool = getPool();
+    const staffName = await getActingStaffName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE SafetyIncident SET status = 'cancelled', cancelled_by_name = ?, cancelled_at = NOW(), cancel_reason = ?
+       WHERE id = ? AND status = 'pending'`,
+      [staffName || req.user.role, reason || null, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบหรือยกเลิกไปแล้ว" });
+    return res.json({ message: "ยกเลิกรายงานเหตุแล้ว" });
+  } catch (error) {
+    console.error("Cancel safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถยกเลิกรายงานเหตุได้" });
+  }
+});
 
 router.get("/me", async (req, res) => {
   try {
@@ -287,7 +307,6 @@ router.get("/move-out-inspections/:id", async (req, res) => {
   }
 });
 
-// Room-transfer inspections are completed by Staff; other reports retain Admin review.
 router.patch("/move-out-inspections/:id", async (req, res) => {
   try {
     const inspectionId = Number(req.params.id);
