@@ -9,6 +9,7 @@ const {
   DB_USER = "root",
   DB_PASSWORD = "",
   DB_NAME = "projectcsi400",
+  DB_POOL_SIZE,
 } = process.env;
 
 async function initializeDatabase() {
@@ -64,7 +65,11 @@ export function getPool() {
       password: DB_PASSWORD,
       database: DB_NAME,
       waitForConnections: true,
-      connectionLimit: 10,
+      connectionLimit: Number(DB_POOL_SIZE) || 10,
+      maxIdle: Number(DB_POOL_SIZE) || 10,
+      idleTimeout: 60000,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
     });
   }
   return pool;

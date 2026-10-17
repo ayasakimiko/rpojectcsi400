@@ -47,6 +47,8 @@ export async function getActingAdminName(pool, user) {
   return row ? `${row.first_name} ${row.last_name}` : null;
 }
 
+const SAFETY_REVIEWER_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
+
 export async function listSafetyIncidents(_req, res) {
   try {
     const [incidents] = await getPool().query("SELECT * FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC");
@@ -64,7 +66,11 @@ export async function reviewSafetyIncident(req, res) {
     const note = String(req.body?.reviewNote ?? "").trim();
     if (note.length > 500) return res.status(400).json({ message: "บันทึกผลต้องไม่เกิน 500 ตัวอักษร" });
     const pool = getPool();
-    const reviewerName = (await getActingAdminName(pool, req.user)) || req.user.role;
+    const reviewerTable = SAFETY_REVIEWER_TABLE[req.user?.role];
+    const [reviewers] = reviewerTable
+      ? await pool.query(`SELECT first_name, last_name FROM ${reviewerTable} WHERE id = ?`, [req.user.id])
+      : [[]];
+    const reviewerName = reviewers[0] ? `${reviewers[0].first_name} ${reviewers[0].last_name}` : req.user.role;
     const [result] = await pool.query(
       "UPDATE SafetyIncident SET status = 'reviewed', reviewed_by_name = ?, reviewed_at = NOW(), review_note = ? WHERE id = ? AND status = 'pending'",
       [reviewerName, note || null, id],

@@ -432,7 +432,10 @@ function OwnerSafetyIncidentReview() {
                         </button>
                       </>
                     ) : (
-                      item.review_note && <p className="owner-safety-note">ผลตรวจสอบ: {item.review_note}</p>
+                      <p className="owner-safety-note">
+                        ตรวจโดย <span className="owner-actor">{item.reviewed_by_name || '-'}</span>
+                        {item.review_note ? ` · ${item.review_note}` : ''}
+                      </p>
                     )}
                   </article>
                 ))
@@ -2005,7 +2008,7 @@ function OwnerMain() {
                         </span>
                         <div className="owner-category-info">
                           <span className="owner-category-name">{item.category || 'ไม่ระบุ'}</span>
-                          <span className="owner-category-count">{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</span>
+                          <span className={`owner-category-count${item.recorded_by_name ? ' owner-actor' : ''}`}>{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</span>
                         </div>
                         <div className="owner-category-amount">
                           <strong>฿{formatCurrency(item.amount)}</strong>
@@ -2054,7 +2057,9 @@ function OwnerMain() {
                           <td>{formatDate(item.expense_date)}</td>
                           <td>{item.category || '-'}</td>
                           <td>{item.description || '-'}</td>
-                          <td>{item.recorded_by_name || 'เจ้าของหอพัก'}</td>
+                          <td>
+                          <span className="owner-actor">{item.recorded_by_name || 'เจ้าของหอพัก'}</span>
+                        </td>
                           <td>฿{formatCurrency(item.amount)}</td>
                         </tr>
                       ))
@@ -2223,7 +2228,7 @@ function OwnerMain() {
                             <td>{formatDate(item.expense_date)}</td>
                             <td>{item.category || '-'}</td>
                             <td>{item.description || '-'}</td>
-                            <td>{item.recorded_by_name || '-'}</td>
+                            <td>{item.recorded_by_name ? <span className="owner-actor">{item.recorded_by_name}</span> : '-'}</td>
                             <td>฿{formatCurrency(item.amount)}</td>
                             <td>
                               <div className="owner-inline-actions">

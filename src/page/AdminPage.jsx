@@ -131,7 +131,7 @@ function buildAnnouncementNotif(item) {
     date: item.created_at,
     details: [
       { label: 'รายละเอียด', value: item.message },
-      { label: 'ประกาศโดย', value: item.author || 'เจ้าหน้าที่' },
+      { label: 'ประกาศโดย', value: <span className="admin-actor-inline">{item.author || 'เจ้าหน้าที่'}</span> },
       { label: 'ลบอัตโนมัติ', value: item.expires_at ? `${formatDateTime(item.expires_at)} น.` : 'ไม่กำหนด' },
     ],
     kind: 'announcement',
@@ -421,10 +421,10 @@ function getAdminRequestTimeline(kind, request) {
   if (!request || kind === 'staff') return []
   const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
   if (request.accepted_at) {
-    steps.push({ label: request.accepted_by_name ? `รับเรื่องโดย ${request.accepted_by_name}` : 'รับเรื่อง', date: request.accepted_at })
+    steps.push({ label: request.accepted_by_name ? 'รับเรื่องโดย' : 'รับเรื่อง', by: request.accepted_by_name, date: request.accepted_at })
   }
   if (request.completed_at) {
-    steps.push({ label: request.completed_by_name ? `เสร็จสิ้นโดย ${request.completed_by_name}` : 'เสร็จสิ้น', date: request.completed_at })
+    steps.push({ label: request.completed_by_name ? 'เสร็จสิ้นโดย' : 'เสร็จสิ้น', by: request.completed_by_name, date: request.completed_at })
   }
   return steps
 }
@@ -443,7 +443,10 @@ function AdminRequestTimeline({ kind, request }) {
             <div key={step.label} className="admin-request-log-item">
               <span className="admin-request-log-dot" />
               <div className="admin-request-log-content">
-                <p className="admin-request-log-label">{step.label}</p>
+                <p className="admin-request-log-label">
+                  {step.label}
+                  {step.by && <span className="admin-actor-inline"> {step.by}</span>}
+                </p>
                 <p className="admin-request-log-date">{formatDateTime(step.date)}</p>
                 {stepMs !== null && stepMs >= 0 && <p className="admin-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
               </div>
@@ -796,7 +799,10 @@ function AdminSafetyIncidentReviewNav() {
                         </button>
                       </>
                     ) : (
-                      item.review_note && <p className="admin-safety-note">ผลตรวจสอบ: {item.review_note}</p>
+                      <p className="admin-safety-note">
+                        ตรวจโดย <span className="admin-actor-inline">{item.reviewed_by_name || '-'}</span>
+                        {item.review_note ? ` · ${item.review_note}` : ''}
+                      </p>
                     )}
                   </article>
                 ))
@@ -2414,7 +2420,9 @@ function AdminBackupPage() {
                         <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
                         <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
                       </td>
-                      <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
+                      <td>
+                            <ActorName name={parcel.staff_name || 'เจ้าหน้าที่'} />
+                          </td>
                     </tr>
                   ))}
                 </tbody>
@@ -3256,7 +3264,9 @@ function AdminBackupPage() {
                         <td>{formatDate(expense.expense_date)}</td>
                         <td className="admin-strong-cell">{expense.category}</td>
                         <td className="admin-col-optional">{expense.description || '-'}</td>
-                        <td className="admin-col-optional">{expense.recorded_by_name || '-'}</td>
+                        <td className="admin-col-optional">
+                          <ActorName name={expense.recorded_by_name} />
+                        </td>
                         <td>฿{Number(expense.amount).toLocaleString('th-TH')}</td>
                         <td>
                           <div className="admin-row-actions">
@@ -3319,7 +3329,9 @@ function AdminBackupPage() {
                         </select>
                       </td>
                       <td className="admin-col-optional">{entry.note || '-'}</td>
-                      <td className="admin-col-optional">{entry.submitted_by_name || '-'}</td>
+                      <td className="admin-col-optional">
+                          <ActorName name={entry.submitted_by_name} />
+                        </td>
                       <td>
                         <div className="admin-row-actions">
                           <button type="button" className="admin-action-btn is-ghost" onClick={() => openWaitingListForm(entry)}>แก้ไข</button>

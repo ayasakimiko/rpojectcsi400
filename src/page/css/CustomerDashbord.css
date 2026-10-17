@@ -6518,6 +6518,11 @@
   font-weight: 500;
 }
 
+.dashboard-rv-timeline-by {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
 @media (min-width: 561px) {
   .dashboard-rv-timeline {
     flex-direction: row;
@@ -6772,4 +6777,39 @@
   border-color: #ddd6fe;
   background: #f5f3ff;
   color: #6d28d9;
+}
+
+.dashboard-rv-photos {
+  padding: 12px 14px 14px;
+  border: 1px solid #e6eef9;
+  border-radius: 14px;
+}
+
+.dashboard-rv-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.dashboard-rv-photo {
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  background: #f8fbff;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-rv-photo:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+}
+
+.dashboard-rv-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

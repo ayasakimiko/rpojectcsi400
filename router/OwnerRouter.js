@@ -31,7 +31,7 @@ router.get("/parking/summary", async (_req, res) => {
       `SELECT COUNT(DISTINCT vehicle_plate) AS parkedCount
        FROM ResidentVisitRequest
        WHERE request_type = 'vehicle' AND status = 'approved'
-         AND start_at <= NOW() AND end_at > NOW()`,
+         AND end_at > NOW()`,
     );
     const capacityText = process.env.PARKING_CAPACITY?.trim() || "";
     const parsedCapacity = /^\d+$/.test(capacityText) ? Number(capacityText) : NaN;

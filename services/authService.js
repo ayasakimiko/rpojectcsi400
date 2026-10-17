@@ -17,6 +17,8 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", loginRouter);
 app.use("/api/auth", registerRouter);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Auth service is running on http://localhost:${PORT}`);
 });
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

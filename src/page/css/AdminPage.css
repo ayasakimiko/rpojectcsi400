@@ -1106,8 +1106,8 @@
 }
 
 .admin-staff-action-name {
-  font-weight: 600;
-  color: #0f2b52;
+  font-weight: 700;
+  color: #1d4ed8;
 }
 
 .admin-staff-action-date {
@@ -1118,8 +1118,8 @@
 
 .admin-actor-name {
   display: inline-block;
-  font-weight: 600;
-  color: #0f2b52;
+  font-weight: 700;
+  color: #1d4ed8;
   padding-bottom: 3px;
   border-bottom: 1.5px solid #bcd2f0;
 }
@@ -2876,4 +2876,9 @@
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.admin-actor-inline {
+  color: #1d4ed8;
+  font-weight: 700;
 }
