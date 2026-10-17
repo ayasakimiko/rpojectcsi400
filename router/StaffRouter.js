@@ -13,10 +13,8 @@ import {
 } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
-import { attachMaintenancePhotos, computeCurrentDue } from "./CustomerDashboardRouter.js";
+import { attachMaintenancePhotos, computeCurrentDue, createSafetyIncident } from "./CustomerDashboardRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
-
-import safetyIncidentRouter from "./SafetyIncidentRouter.js";
 
 const router = Router();
 
@@ -33,10 +31,10 @@ export async function getActingStaffName(pool, user) {
 export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireStaffRole, requireActiveStaff);
-router.use("/safety-incidents", safetyIncidentRouter);
 
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
+router.post("/safety-incidents", createSafetyIncident);
 
 router.get("/me", async (req, res) => {
   try {

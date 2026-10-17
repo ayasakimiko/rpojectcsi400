@@ -18,9 +18,21 @@ import {
 } from "../middleware/validation.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
 
-import safetyIncidentRouter from "./SafetyIncidentRouter.js";
-
 const router = Router();
+const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
+const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
+const URGENT_INCIDENT_KEYWORDS = [
+  "ด่วน", "ช่วยด้วย", "ฉุกเฉิน", "ไฟไหม้", "ควัน", "ระเบิด", "แก๊สรั่ว", "ก๊าซรั่ว", "ไฟช็อต", "ไฟดูด",
+  "บาดเจ็บ", "เลือด", "หมดสติ", "ไม่หายใจ", "ชัก", "หัวใจ", "ล้ม", "ตกบันได",
+  "บุกรุก", "ขโมย", "งัด", "ปล้น", "อาวุธ", "มีด", "ปืน", "ทำร้าย", "ทะเลาะ", "ข่มขู่",
+  "น้ำท่วม", "ท่อแตก", "ติดลิฟต์",
+];
+
+export function classifySafetySeverity(incidentType, description) {
+  if (URGENT_INCIDENT_TYPES.has(incidentType)) return "urgent";
+  const text = String(description ?? "").toLowerCase();
+  return URGENT_INCIDENT_KEYWORDS.some((keyword) => text.includes(keyword)) ? "urgent" : "normal";
+}
 const PAYMENT_SLIP_FOLDER = "payment-slips";
 const PAYMENT_SLIP_EXTENSIONS = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
@@ -76,8 +88,41 @@ export async function requireActiveCustomer(req, res, next) {
   }
 }
 
+export async function createSafetyIncident(req, res) {
+  try {
+    const { incidentType, description, roomNumber } = req.body ?? {};
+    if (!String(incidentType ?? "").trim() || !String(description ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุประเภทเหตุและรายละเอียด" });
+    }
+    if (String(description).length > 1000) return res.status(400).json({ message: "รายละเอียดต้องไม่เกิน 1,000 ตัวอักษร" });
+
+    const table = SAFETY_REPORTER_TABLE[req.user?.role];
+    if (!table) return res.status(403).json({ message: "ไม่มีสิทธิ์รายงานเหตุ" });
+    const isCustomer = req.user.role === "Customer";
+    const pool = getPool();
+    const [users] = await pool.query(
+      `SELECT first_name, last_name, ${isCustomer ? "room_number" : "NULL AS room_number"} FROM ${table} WHERE id = ?`,
+      [req.user.id],
+    );
+    const user = users[0];
+    if (!user) return res.status(404).json({ message: "ไม่พบข้อมูลผู้รายงาน" });
+    const name = `${user.first_name} ${user.last_name}`.trim();
+    const requestedRoom = Number(roomNumber);
+    const safeRoom = isCustomer ? user.room_number : Number.isInteger(requestedRoom) && requestedRoom > 0 ? requestedRoom : null;
+    const severity = classifySafetySeverity(String(incidentType).trim(), description);
+    await pool.query(
+      `INSERT INTO SafetyIncident (reporter_role, reporter_id, reporter_name, room_number, incident_type, severity, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.role, req.user.id, name, safeRoom, String(incidentType).trim().slice(0, 80), severity, String(description).trim()],
+    );
+    return res.status(201).json({ message: "ส่งรายงานเหตุให้ Admin และ Owner แล้ว", severity });
+  } catch (error) {
+    console.error("Create safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถส่งรายงานเหตุได้" });
+  }
+}
+
 router.use(authenticate, requireCustomerRole, requireActiveCustomer);
-router.use("/safety-incidents", safetyIncidentRouter);
 
 router.patch("/profile", async (req, res) => {
   try {
@@ -631,8 +676,17 @@ router.get("/resident-visit-requests", async (req, res) => {
 router.post("/resident-visit-requests", async (req, res) => {
   try {
     const { requestType, vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, isSpecial, specialReason } = req.body ?? {};
-    if (!["vehicle", "overnight_guest"].includes(requestType) || !startAt || !endAt || new Date(endAt) <= new Date(startAt)) {
+    const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
+    const endTime = typeof endAt === "string" ? Date.parse(endAt) : NaN;
+    if (!["vehicle", "overnight_guest"].includes(requestType) || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
       return res.status(400).json({ message: "กรุณากรอกประเภทคำขอและช่วงเวลาให้ถูกต้อง" });
+    }
+    const textFields = [[vehiclePlate, 20], [vehicleModel, 100], [guestName, 255], [guestPhone, 20], [note, 500], [specialReason, 500]];
+    if (textFields.some(([value, maxLength]) => value != null && (typeof value !== "string" || value.trim().length > maxLength))) {
+      return res.status(400).json({ message: "ข้อมูลข้อความไม่ถูกต้องหรือยาวเกินที่กำหนด" });
+    }
+    if (isSpecial !== undefined && typeof isSpecial !== "boolean") {
+      return res.status(400).json({ message: "กรุณาระบุประเภทคำขอพิเศษให้ถูกต้อง" });
     }
     if (requestType === "vehicle" && !String(vehiclePlate ?? "").trim()) {
       return res.status(400).json({ message: "กรุณาระบุทะเบียนรถ" });
@@ -646,6 +700,18 @@ router.post("/resident-visit-requests", async (req, res) => {
     const pool = getPool();
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     if (!customers[0]?.room_number) return res.status(400).json({ message: "ไม่พบห้องพักที่ผูกกับบัญชีนี้" });
+    if (requestType === "vehicle") {
+      const [owners] = await pool.query(
+        `SELECT 1 FROM ResidentVisitRequest
+         WHERE request_type = 'vehicle' AND customer_id <> ? AND status IN ('pending', 'approved') AND end_at > NOW()
+           AND REPLACE(UPPER(vehicle_plate), ' ', '') = REPLACE(UPPER(?), ' ', '')
+         LIMIT 1`,
+        [req.user.id, vehiclePlate.trim()],
+      );
+      if (owners.length > 0) {
+        return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
+      }
+    }
     const [result] = await pool.query(
       `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, vehicle_plate, vehicle_model, guest_name, guest_phone, start_at, end_at, note, is_special, special_reason)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -657,5 +723,21 @@ router.post("/resident-visit-requests", async (req, res) => {
     return res.status(500).json({ message: "ไม่สามารถส่งคำขอได้" });
   }
 });
+
+router.get("/safety-incidents", async (req, res) => {
+  try {
+    const [incidents] = await getPool().query(
+      `SELECT id, room_number, incident_type, severity, description, status, reviewed_by_name, reviewed_at, review_note, created_at
+       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? ORDER BY created_at DESC`,
+      [req.user.id],
+    );
+    return res.json({ incidents });
+  } catch (error) {
+    console.error("Fetch own safety incidents error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดประวัติการแจ้งเหตุได้" });
+  }
+});
+
+router.post("/safety-incidents", createSafetyIncident);
 
 export default router;

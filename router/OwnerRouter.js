@@ -13,8 +13,8 @@ import {
   validatePersonInput,
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
+import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
-import safetyIncidentRouter from "./SafetyIncidentRouter.js";
 
 const router = Router();
 
@@ -22,7 +22,8 @@ const requireActiveOwner = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireOwnerRole, requireActiveOwner);
 router.use("/expenses", expenseRouter);
-router.use("/safety-incidents", safetyIncidentRouter);
+router.get("/safety-incidents", listSafetyIncidents);
+router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
 router.get("/parking/summary", async (_req, res) => {
   try {

@@ -12,8 +12,6 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
-import SafetyIncidents from '../components/SafetyIncidents.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const MOVE_OUT_CHECKLIST = [
@@ -2845,6 +2843,193 @@ function StaffPaymentReview({ onCountChange }) {
   )
 }
 
+const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แจ้งแขกค้างคืน' }
+
+function StaffResidentVisitReviewNav() {
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const token = sessionStorage.getItem('token')
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/staff/resident-visit-requests', { headers })
+        .then(({ data }) => setItems(data.requests || []))
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
+    [headers],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const review = async (item, decision) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.post(`/api/staff/resident-visit-requests/${item.id}/${decision}`, {}, { headers })
+      await load()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="nav-item">
+      <button
+        type="button"
+        className="nav-link staff-tab-link"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+          load()
+        }}
+      >
+        คำขอรถ / แขกค้างคืน{items.length ? ` (${items.length})` : ''}
+      </button>
+      {open && (
+        <div
+          className="staff-rv-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <div className="staff-rv-modal" role="dialog" aria-modal="true" aria-labelledby="staff-rv-title">
+            <button type="button" className="staff-rv-close" onClick={() => setOpen(false)} aria-label="ปิด">×</button>
+            <span className="staff-rv-kicker">RESIDENT SERVICES</span>
+            <h2 id="staff-rv-title">คำขอจากผู้พักอาศัย</h2>
+            <p className="staff-rv-subtitle">ตรวจสอบรายละเอียดแล้วอนุมัติหรือปฏิเสธคำขอ</p>
+            <div className="staff-rv-list">
+              {items.length === 0 ? (
+                <p className="staff-rv-empty">ไม่มีคำขอที่รอดำเนินการ</p>
+              ) : (
+                items.map((item) => (
+                  <article className="staff-rv-card" key={item.id}>
+                    <div className="staff-rv-card-head">
+                      <strong>{RESIDENT_VISIT_TYPE_LABEL[item.request_type]} · ห้อง {item.room_number}</strong>
+                      <span>รออนุมัติ</span>
+                    </div>
+                    <p>
+                      {item.request_type === 'vehicle'
+                        ? `ทะเบียน ${item.vehicle_plate}${item.vehicle_model ? ` · ${item.vehicle_model}` : ''}`
+                        : `${item.guest_name}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`}
+                    </p>
+                    <p>
+                      {new Date(item.start_at).toLocaleString('th-TH')} – {new Date(item.end_at).toLocaleString('th-TH')}
+                    </p>
+                    {item.note && <p>{item.note}</p>}
+                    <small>{item.first_name} {item.last_name} · {item.customer_phone}</small>
+                    <div className="staff-rv-actions">
+                      <button type="button" disabled={busy} onClick={() => review(item, 'approve')}>อนุมัติ</button>
+                      <button type="button" className="staff-rv-deny" disabled={busy} onClick={() => review(item, 'reject')}>ปฏิเสธ</button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+            {message && <p className="staff-rv-message" role="status">{message}</p>}
+          </div>
+        </div>
+      )}
+    </li>
+  )
+}
+
+const SAFETY_INCIDENT_TYPES = [
+  ['accident', 'อุบัติเหตุ'],
+  ['security', 'ความปลอดภัย'],
+  ['fire', 'ไฟไหม้ / ควัน'],
+  ['medical', 'เหตุฉุกเฉินทางการแพทย์'],
+  ['other', 'อื่น ๆ'],
+]
+const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '' }
+
+function StaffSafetyIncidentReportNav() {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(EMPTY_SAFETY_FORM)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    setMessage('')
+    try {
+      const token = sessionStorage.getItem('token')
+      const payload = { ...form, roomNumber: form.roomNumber || undefined }
+      const { data } = await axios.post('/api/staff/safety-incidents', payload, { headers: { Authorization: `Bearer ${token}` } })
+      setMessage(data.message || 'ส่งรายงานแล้ว')
+      setForm(EMPTY_SAFETY_FORM)
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'ส่งรายงานไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="nav-item">
+      <button
+        type="button"
+        className="nav-link staff-tab-link"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+        }}
+      >
+        แจ้งเหตุฉุกเฉิน
+      </button>
+      {open && (
+        <div
+          className="staff-safety-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <section className="staff-safety-modal" role="dialog" aria-modal="true" aria-labelledby="staff-safety-title">
+            <button className="staff-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
+            <span className="staff-safety-eyebrow">SAFETY & SECURITY</span>
+            <h2 id="staff-safety-title">รายงานเหตุฉุกเฉิน / ความปลอดภัย</h2>
+            <p className="staff-safety-intro">รายงานเหตุให้ Admin และ Owner ตรวจสอบโดยเร็ว</p>
+            <form className="staff-safety-form" onSubmit={submit}>
+              <label>
+                ประเภทเหตุ
+                <select value={form.incidentType} onChange={(event) => setForm({ ...form, incidentType: event.target.value })}>
+                  {SAFETY_INCIDENT_TYPES.map(([value, label]) => (
+                    <option value={value} key={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                เลขห้อง (ถ้าเกี่ยวข้อง)
+                <input inputMode="numeric" value={form.roomNumber} onChange={(event) => setForm({ ...form, roomNumber: event.target.value })} />
+              </label>
+              <label>
+                รายละเอียดเหตุการณ์
+                <textarea
+                  required
+                  rows="5"
+                  maxLength={1000}
+                  value={form.description}
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
+                  placeholder="ระบุสถานที่ เวลา และสิ่งที่เกิดขึ้น"
+                />
+              </label>
+              <button className="staff-safety-submit" disabled={busy}>{busy ? 'กำลังส่ง…' : 'ส่งรายงานให้ Admin และ Owner'}</button>
+            </form>
+            {message && <p className="staff-safety-message" role="status">{message}</p>}
+          </section>
+        </div>
+      )}
+    </li>
+  )
+}
+
 function StaffMain() {
   const navigate = useNavigate()
   const [staffUser, setStaffUser] = useState(() => {
@@ -5422,8 +5607,8 @@ function StaffMain() {
               </button>
             </li>
           ))}
-          <ResidentVisitRequests staff nav />
-          <SafetyIncidents base="staff" nav />
+          <StaffResidentVisitReviewNav />
+          <StaffSafetyIncidentReportNav />
         </ul>
 
         {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}

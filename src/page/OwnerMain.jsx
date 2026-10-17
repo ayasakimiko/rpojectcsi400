@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
-import OwnerParkingSummary from '../components/OwnerParkingSummary.jsx'
-import SafetyIncidents from '../components/SafetyIncidents.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
@@ -295,6 +293,157 @@ function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
   const display = value || closingValue
   const isClosing = !value && Boolean(closingValue)
   return [display, isClosing]
+}
+
+function OwnerParkingSummary() {
+  const [summary, setSummary] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    axios
+      .get('/api/owner/parking/summary', { headers: getAuthHeaders() })
+      .then(({ data }) => setSummary(data))
+      .catch((requestError) => setError(requestError.response?.data?.message || 'โหลดข้อมูลที่จอดรถไม่สำเร็จ'))
+  }, [])
+
+  let statusText = 'กำลังโหลดข้อมูล…'
+  if (error) statusText = error
+  else if (summary?.capacity === null) statusText = 'ยังไม่ได้กำหนดจำนวนที่จอดทั้งหมด'
+  else if (summary) statusText = summary.isFull ? 'พื้นที่จอดรถเต็มแล้ว' : 'ยังมีพื้นที่จอดรถว่าง'
+  const hasCapacity = summary?.capacity !== null && summary?.capacity !== undefined
+
+  return (
+    <section className="owner-parking-summary">
+      <div className="owner-parking-icon" aria-hidden="true">P</div>
+      <div className="owner-parking-copy">
+        <strong>สถานะที่จอดรถ</strong>
+        <span>{statusText}</span>
+      </div>
+      <div className="owner-parking-count">
+        <strong>
+          {summary?.parkedCount ?? '—'}
+          {hasCapacity ? ` / ${summary.capacity}` : ''}
+        </strong>
+        <span>คันที่กำลังจอด</span>
+      </div>
+    </section>
+  )
+}
+
+const SAFETY_INCIDENT_TYPE_LABEL = {
+  accident: 'อุบัติเหตุ',
+  security: 'ความปลอดภัย',
+  fire: 'ไฟไหม้ / ควัน',
+  medical: 'เหตุฉุกเฉินทางการแพทย์',
+  other: 'อื่น ๆ',
+}
+
+function OwnerSafetyIncidentReview() {
+  const [open, setOpen] = useState(false)
+  const [incidents, setIncidents] = useState([])
+  const [notes, setNotes] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const pendingCount = incidents.filter((item) => item.status === 'pending').length
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/owner/safety-incidents', { headers: getAuthHeaders() })
+        .then(({ data }) => setIncidents(data.incidents || []))
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ')),
+    [],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const markReviewed = async (incident) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.patch(
+        `/api/owner/safety-incidents/${incident.id}/review`,
+        { reviewNote: notes[incident.id] || '' },
+        { headers: getAuthHeaders() },
+      )
+      await load()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="owner-safety-entry">
+      <button
+        className="owner-safety-trigger"
+        type="button"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+          load()
+        }}
+      >
+        ตรวจเหตุฉุกเฉิน{pendingCount ? ` (${pendingCount})` : ''}
+      </button>
+      {open && (
+        <div
+          className="owner-safety-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <section className="owner-safety-modal" role="dialog" aria-modal="true" aria-labelledby="owner-safety-title">
+            <button className="owner-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
+            <span className="owner-safety-eyebrow">SAFETY & SECURITY</span>
+            <h2 id="owner-safety-title">ตรวจสอบเหตุฉุกเฉิน</h2>
+            <p className="owner-safety-intro">รายการรายงานจากผู้พักอาศัยและเจ้าหน้าที่</p>
+            <div className="owner-safety-list">
+              {incidents.length === 0 ? (
+                <p className="owner-safety-empty">ยังไม่มีรายงานเหตุ</p>
+              ) : (
+                incidents.map((item) => (
+                  <article className="owner-safety-card" key={item.id}>
+                    <div className="owner-safety-card-heading">
+                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
+                      <span className={`owner-safety-status ${item.status} ${item.severity}`}>
+                        {item.status === 'pending' ? 'รอตรวจสอบ' : 'ตรวจแล้ว'}
+                        {item.severity === 'urgent' ? ' · ด่วน' : ''}
+                      </span>
+                    </div>
+                    <p>{item.description}</p>
+                    <small>
+                      {item.reporter_name} ({item.reporter_role})
+                      {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
+                    </small>
+                    {item.status === 'pending' ? (
+                      <>
+                        <textarea
+                          aria-label="บันทึกผลตรวจสอบ"
+                          placeholder="บันทึกผลหรือการดำเนินการ (ถ้ามี)"
+                          value={notes[item.id] || ''}
+                          onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })}
+                        />
+                        <button className="owner-safety-review" type="button" disabled={busy} onClick={() => markReviewed(item)}>
+                          บันทึกว่าตรวจสอบแล้ว
+                        </button>
+                      </>
+                    ) : (
+                      item.review_note && <p className="owner-safety-note">ผลตรวจสอบ: {item.review_note}</p>
+                    )}
+                  </article>
+                ))
+              )}
+            </div>
+            {message && <p className="owner-safety-message" role="status">{message}</p>}
+          </section>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function OwnerMain() {
@@ -984,7 +1133,7 @@ function OwnerMain() {
 
         <div className="owner-resident-tools">
           <OwnerParkingSummary />
-          <SafetyIncidents reviewer base="owner" />
+          <OwnerSafetyIncidentReview />
         </div>
 
         {notice.message && (
