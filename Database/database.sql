@@ -173,6 +173,16 @@ CREATE TABLE IF NOT EXISTS Announcement (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS AnnouncementAcknowledgement (
+    announcement_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    acknowledged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (announcement_id, customer_id),
+    INDEX idx_announcement_ack_customer (customer_id),
+    FOREIGN KEY (announcement_id) REFERENCES Announcement(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES Customer(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS WaitingList (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL,
@@ -402,7 +412,7 @@ CREATE TABLE IF NOT EXISTS ResidentVisitRequest (
     guest_name VARCHAR(255) NULL,
     guest_phone VARCHAR(20) NULL,
     start_at DATETIME NOT NULL,
-    end_at DATETIME NOT NULL,
+    end_at DATETIME NULL,
     note VARCHAR(500) NULL,
     is_special BOOLEAN NOT NULL DEFAULT FALSE,
     special_reason VARCHAR(500) NULL,
@@ -436,6 +446,16 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'vehicle_photos'),
     'SELECT 1',
     'ALTER TABLE `ResidentVisitRequest` ADD COLUMN `vehicle_photos` LONGTEXT NULL AFTER vehicle_model'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'end_at' AND IS_NULLABLE = 'NO'),
+    'ALTER TABLE `ResidentVisitRequest` MODIFY COLUMN `end_at` DATETIME NULL',
+    'SELECT 1'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;

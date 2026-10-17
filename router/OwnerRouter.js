@@ -31,7 +31,7 @@ router.get("/parking/summary", async (_req, res) => {
       `SELECT COUNT(DISTINCT vehicle_plate) AS parkedCount
        FROM ResidentVisitRequest
        WHERE request_type = 'vehicle' AND status = 'approved'
-         AND end_at > NOW()`,
+         AND (end_at IS NULL OR end_at > NOW())`,
     );
     const capacityText = process.env.PARKING_CAPACITY?.trim() || "";
     const parsedCapacity = /^\d+$/.test(capacityText) ? Number(capacityText) : NaN;
@@ -122,9 +122,6 @@ router.get("/overview", async (req, res) => {
       rangeParams,
     );
 
-    // Rooms currently booked with no paid payment inside the selected window (or
-    // this month, when no filter is given) — the same rule /rooms/status uses live,
-    // generalized to whatever period the owner has selected.
     const [[{ overdueCount }]] = await pool.query(
       `SELECT COUNT(*) AS overdueCount
        FROM Room r
@@ -137,8 +134,6 @@ router.get("/overview", async (req, res) => {
       rangeParams,
     );
 
-    // Rooms with a maintenance request still open, filed inside the selected
-    // window (or all currently open ones, when no filter is given).
     const [[{ maintenanceCount }]] = await pool.query(
       `SELECT COUNT(DISTINCT mr.room_number) AS maintenanceCount
        FROM MaintenanceRequest mr

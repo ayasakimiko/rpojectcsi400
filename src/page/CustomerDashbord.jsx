@@ -1221,10 +1221,29 @@ function formatStepDate(value) {
   }
 }
 
+function getRequestSubject(kind, request) {
+  const sent = formatStepDate(request.created_at)
+  const meta = `ส่งเมื่อ ${sent.date} ${sent.time} น.`
+  if (kind === 'resident_visit') {
+    return {
+      title: `ลงทะเบียนรถ ${getVisitTitle(request)}`,
+      meta: `${request.guest_name ? RESIDENT_VEHICLE_OWNER_LABEL.family : RESIDENT_VEHICLE_OWNER_LABEL.self} · ${meta}`,
+    }
+  }
+  if (kind === 'safety') {
+    return { title: `แจ้งเหตุ${SAFETY_INCIDENT_TYPE_LABEL[request.incident_type] || ''}`, meta: `แจ้งเมื่อ ${sent.date} ${sent.time} น.` }
+  }
+  if (kind === 'maintenance') return { title: 'แจ้งซ่อม', meta }
+  const target = kind === 'move_room' && request.target_room_number ? ` ไปห้อง ${request.target_room_number}` : ''
+  return { title: `คำขอ${TENANT_REQUEST_TYPE_LABEL[kind] || ''}${target}`, meta }
+}
+
 function RequestTimelineDropdown({ kind, request }) {
   const [open, setOpen] = useState(false)
+  const [showDetail, setShowDetail] = useState(false)
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
+  const subject = getRequestSubject(kind, request)
 
   const doneCount = timeline.filter((step) => step.done).length
   const currentStep = timeline.find((step) => !step.done)
@@ -1238,7 +1257,7 @@ function RequestTimelineDropdown({ kind, request }) {
         onClick={() => setOpen((value) => !value)}
       >
         <span className="dashboard-progress-toggle-label">ความคืบหน้า</span>
-        <span className="dashboard-progress-toggle-step">
+        <span className={`dashboard-progress-toggle-step${!currentStep ? ' is-complete' : ''}`}>
           {!currentStep
             ? 'ครบทุกขั้นตอน'
             : currentStep.label.startsWith('รอ')
@@ -1263,8 +1282,63 @@ function RequestTimelineDropdown({ kind, request }) {
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open && <RequestTimeline kind={kind} request={request} compact />}
+      {open && (
+        <div className="dashboard-progress-panel">
+          <div className="dashboard-progress-panel-head">
+            <span className="dashboard-progress-panel-text">
+              <small>ขั้นตอนของ</small>
+              <strong>{subject.title}</strong>
+              <span>{subject.meta}</span>
+            </span>
+            <button type="button" className="dashboard-progress-panel-link" onClick={() => setShowDetail(true)}>
+              ดูแบบละเอียด
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <RequestTimeline kind={kind} request={request} compact />
+        </div>
+      )}
+      {showDetail && (
+        <Modal title="ความคืบหน้าของคำขอ" onClose={() => setShowDetail(false)}>
+          {(requestClose) => (
+            <div className="dashboard-progress-modal">
+              <div className="dashboard-progress-modal-subject">
+                <small>ขั้นตอนของ</small>
+                <strong>{subject.title}</strong>
+                <span>{subject.meta}</span>
+              </div>
+              <RequestTimeline kind={kind} request={request} />
+              <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
+  )
+}
+
+const STEPPER_MANY_THRESHOLD = 4
+
+function DashboardStepper({ count, currentIndex, children }) {
+  const listRef = useRef(null)
+  const isMany = count > STEPPER_MANY_THRESHOLD
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!isMany || !list || list.scrollWidth <= list.clientWidth) return
+    const item = list.children[currentIndex >= 0 ? currentIndex : count - 1]
+    if (!item) return
+    list.scrollLeft = item.offsetLeft - (list.clientWidth - item.offsetWidth) / 2
+  }, [isMany, count, currentIndex])
+
+  return (
+    <ol ref={listRef} className={`dashboard-stepper${isMany ? ' is-many' : ''}`}>
+      {children}
+    </ol>
   )
 }
 
@@ -1272,8 +1346,20 @@ function RequestTimeline({ kind, request, compact = false }) {
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
 
-  const statusBadgeClass = kind === 'maintenance' ? maintenanceBadgeClass(request.status) : tenantRequestBadgeClass(request.status)
-  const statusLabel = kind === 'maintenance' ? MAINTENANCE_STATUS_LABEL[request.status] : TENANT_REQUEST_STATUS_LABEL[request.status]
+  const statusBadgeClass =
+    kind === 'maintenance'
+      ? maintenanceBadgeClass(request.status)
+      : kind === 'safety'
+        ? SAFETY_STATUS_BADGE[request.status] || 'pending'
+        : tenantRequestBadgeClass(request.status)
+  const statusLabel =
+    kind === 'maintenance'
+      ? MAINTENANCE_STATUS_LABEL[request.status]
+      : kind === 'safety'
+        ? SAFETY_STATUS_LABEL[request.status]
+        : kind === 'resident_visit'
+          ? RESIDENT_VISIT_STATUS_LABEL[request.status]
+          : TENANT_REQUEST_STATUS_LABEL[request.status]
   const lastStep = timeline[timeline.length - 1]
   const totalMs = lastStep.done ? new Date(lastStep.date).getTime() - new Date(timeline[0].date).getTime() : null
   const currentIndex = timeline.findIndex((step) => !step.done)
@@ -1291,7 +1377,7 @@ function RequestTimeline({ kind, request, compact = false }) {
           <span className={`dashboard-badge status-${statusBadgeClass}`}>{statusLabel || request.status}</span>
         </div>
       )}
-      <ol className="dashboard-stepper">
+      <DashboardStepper count={timeline.length} currentIndex={currentIndex}>
         {timeline.map((step, index) => {
           const prevStep = timeline[index - 1]
           const stepMs =
@@ -1337,7 +1423,7 @@ function RequestTimeline({ kind, request, compact = false }) {
             </li>
           )
         })}
-      </ol>
+      </DashboardStepper>
       {!compact && totalMs !== null && (
         <p className="dashboard-progress-total">รวมใช้เวลาทั้งหมด {formatRemaining(totalMs)}</p>
       )}
@@ -1495,6 +1581,7 @@ const CUSTOMER_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'rental-history', label: 'ประวัติการเช่า' },
   { key: 'parcels', label: 'พัสดุ' },
+  { key: 'vehicles', label: 'รถของฉัน' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'profile', label: 'โปรไฟล์และรหัสผ่าน' },
 ]
@@ -1668,7 +1755,24 @@ const EMPTY_RESIDENT_VISIT_FORM = {
   guestPhone: '',
   startAt: null,
   endAt: null,
+  limitTime: true,
   note: '',
+  photos: [],
+}
+
+function defaultVisitWindow() {
+  const start = new Date()
+  start.setSeconds(0, 0)
+  start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { startAt: start, endAt: end }
+}
+
+function startOfToday() {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today
 }
 
 function CarIcon() {
@@ -1759,6 +1863,20 @@ function RoomChip({ room }) {
 
 function VisitRange({ start, end }) {
   const from = formatVisitPoint(start)
+  if (!end) {
+    return (
+      <span className="dashboard-rv-range">
+        <span className="dashboard-rv-range-point">
+          <b>{from.day}</b>
+          {from.time}
+        </span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+        <b>ไม่จำกัดเวลา</b>
+      </span>
+    )
+  }
   const to = formatVisitPoint(end)
   return (
     <span className="dashboard-rv-range">
@@ -1813,7 +1931,7 @@ function formatVisitDateTime(value) {
 
 function formatVisitRange(start, end) {
   const options = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
-  return `${new Date(start).toLocaleString('th-TH', options)} – ${new Date(end).toLocaleString('th-TH', options)}`
+  return `${new Date(start).toLocaleString('th-TH', options)} – ${end ? new Date(end).toLocaleString('th-TH', options) : 'ไม่จำกัดเวลา'}`
 }
 
 function ResidentVisitRequestRow() {
@@ -1855,9 +1973,21 @@ function ResidentVisitRequestRow() {
     if (error) setError('')
   }
 
+  const toggleLimitTime = (enabled) => {
+    const next = { ...form, limitTime: enabled }
+    if (enabled && !next.endAt && next.startAt) {
+      const end = new Date(next.startAt)
+      end.setDate(end.getDate() + 1)
+      next.endAt = end
+    }
+    setForm(next)
+    if (error) setError('')
+  }
+
   const openModal = () => {
     setView('form')
     setError('')
+    setForm((current) => (current.startAt ? current : { ...current, ...defaultVisitWindow() }))
     load()
   }
 
@@ -1868,17 +1998,22 @@ function ResidentVisitRequestRow() {
 
   const submit = async (event) => {
     event.preventDefault()
-    if (!form.startAt || !form.endAt) {
-      setError('กรุณาเลือกวันเวลาเริ่มและสิ้นสุด')
+    if (!form.startAt) {
+      setError('กรุณาเลือกวันเวลาเริ่ม')
       return
     }
-    if (form.endAt <= form.startAt) {
+    if (form.limitTime && !form.endAt) {
+      setError('กรุณาเลือกวันเวลาสิ้นสุด หรือปิด "กำหนดระยะเวลาจอด"')
+      return
+    }
+    if (form.limitTime && form.endAt <= form.startAt) {
       setError('วันสิ้นสุดต้องอยู่หลังวันเริ่ม')
       return
     }
     setBusy(true)
     setError('')
     try {
+      const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
       await axios.post(
         '/api/customer/resident-visit-requests',
         {
@@ -1888,8 +2023,9 @@ function ResidentVisitRequestRow() {
           guestName: form.owner === 'family' ? form.guestName : '',
           guestPhone: form.owner === 'family' ? form.guestPhone : '',
           note: form.note,
+          photos,
           startAt: toLocalDateTime(form.startAt),
-          endAt: toLocalDateTime(form.endAt),
+          endAt: form.limitTime ? toLocalDateTime(form.endAt) : null,
         },
         { headers },
       )
@@ -1899,7 +2035,7 @@ function ResidentVisitRequestRow() {
         ownerLabel: RESIDENT_VEHICLE_OWNER_LABEL[form.owner],
         title: form.vehiclePlate.trim(),
         startAt: form.startAt,
-        endAt: form.endAt,
+        endAt: form.limitTime ? form.endAt : null,
       })
       setForm(EMPTY_RESIDENT_VISIT_FORM)
       setView('success')
@@ -2022,45 +2158,83 @@ function ResidentVisitRequestRow() {
                   </div>
                 )}
 
-                <div className="dashboard-rv-grid">
-                  <div className="dashboard-rv-field">
-                    <label htmlFor="rv-start">
-                      เริ่ม <span className="dashboard-required">*</span>
-                    </label>
-                    <ThaiDatePicker
-                      id="rv-start"
-                      valueType="date"
-                      className="dashboard-rv-date-input"
-                      placeholder="เลือกวันเวลา"
-                      value={form.startAt}
-                      onChange={(date) => updateDate('startAt', date)}
-                      minDate={new Date()}
-                      filterTime={(time) => time >= new Date()}
-                      showTimeSelect
-                      timeIntervals={15}
-                      portalId="dashboard-date-portal"
-                    />
-                  </div>
-                  <div className="dashboard-rv-field">
-                    <label htmlFor="rv-end">
-                      สิ้นสุด <span className="dashboard-required">*</span>
-                    </label>
-                    <ThaiDatePicker
-                      id="rv-end"
-                      valueType="date"
-                      className="dashboard-rv-date-input"
-                      placeholder="เลือกวันเวลา"
-                      value={form.endAt}
-                      onChange={(date) => updateDate('endAt', date)}
-                      minDate={form.startAt || new Date()}
-                      openToDate={form.startAt || undefined}
-                      filterTime={(time) => time > (form.startAt || new Date())}
-                      showTimeSelect
-                      timeIntervals={15}
-                      portalId="dashboard-date-portal"
-                    />
+                <div className="dashboard-rv-time-box">
+                  <label className={`dashboard-rv-switch${form.limitTime ? ' is-on' : ''}`}>
+                    <input type="checkbox" checked={form.limitTime} onChange={(event) => toggleLimitTime(event.target.checked)} />
+                    <span className="dashboard-rv-switch-track" aria-hidden="true" />
+                    <span className="dashboard-rv-switch-text">
+                      <strong>กำหนดระยะเวลาจอด</strong>
+                      <small>{form.limitTime ? 'ระบุวันเวลาเริ่มและสิ้นสุด' : 'จอดได้ไม่จำกัดเวลา หลังเจ้าหน้าที่อนุมัติ'}</small>
+                    </span>
+                  </label>
+                  <div className="dashboard-rv-grid">
+                    <div className="dashboard-rv-field">
+                      <label htmlFor="rv-start">
+                        เริ่ม <span className="dashboard-required">*</span>
+                      </label>
+                      <ThaiDatePicker
+                        id="rv-start"
+                        valueType="date"
+                        className="dashboard-rv-date-input"
+                        placeholder="เลือกวันเวลา"
+                        value={form.startAt}
+                        onChange={(date) => updateDate('startAt', date)}
+                        minDate={startOfToday()}
+                        showTimeSelect
+                        timeIntervals={15}
+                        portalId="dashboard-date-portal"
+                      />
+                    </div>
+                    {form.limitTime ? (
+                      <div className="dashboard-rv-field">
+                        <label htmlFor="rv-end">
+                          สิ้นสุด <span className="dashboard-required">*</span>
+                        </label>
+                        <ThaiDatePicker
+                          id="rv-end"
+                          valueType="date"
+                          className="dashboard-rv-date-input"
+                          placeholder="เลือกวันเวลา"
+                          value={form.endAt}
+                          onChange={(date) => updateDate('endAt', date)}
+                          minDate={form.startAt || startOfToday()}
+                          openToDate={form.endAt || form.startAt || undefined}
+                          filterTime={(time) => !form.startAt || time > form.startAt}
+                          showTimeSelect
+                          timeIntervals={15}
+                          portalId="dashboard-date-portal"
+                        />
+                      </div>
+                    ) : (
+                      <div className="dashboard-rv-field">
+                        <label>สิ้นสุด</label>
+                        <span className="dashboard-rv-open-end">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
+                          </svg>
+                          ไม่จำกัดเวลา
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                <div className="dashboard-rv-photo-head">
+                  <label htmlFor="rv-photos">รูปรถ / ป้ายทะเบียน</label>
+                  <span className="dashboard-rv-photo-tag">ไม่บังคับ</span>
+                  <span className="dashboard-rv-photo-counter">
+                    {form.photos.length}/{MAINTENANCE_MAX_PHOTOS}
+                  </span>
+                </div>
+                <MaintenancePhotoPicker
+                  id="rv-photos"
+                  files={form.photos}
+                  onChange={(files) => {
+                    setForm({ ...form, photos: files })
+                    if (error) setError('')
+                  }}
+                  onError={setError}
+                />
 
                 <label htmlFor="rv-note">หมายเหตุ (ถ้ามี)</label>
                 <textarea id="rv-note" rows={2} maxLength={500} value={form.note} onChange={updateForm('note')} placeholder="ข้อมูลเพิ่มเติมสำหรับเจ้าหน้าที่" />
@@ -2245,8 +2419,8 @@ function ResidentVisitRequestRow() {
                 </div>
 
                 <dl className="dashboard-rv-detail">
-                  {fields.map(([label, value], index) => (
-                    <div key={label} className={fields.length % 2 === 1 && index === fields.length - 1 ? 'is-wide' : undefined}>
+                  {fields.map(([label, value]) => (
+                    <div key={label}>
                       <dt>{label}</dt>
                       <dd>{value || '-'}</dd>
                     </div>
@@ -2257,14 +2431,14 @@ function ResidentVisitRequestRow() {
                   </div>
                   <div>
                     <dt>สิ้นสุด</dt>
-                    <dd>{formatVisitDateTime(detailItem.end_at)}</dd>
+                    <dd>{detailItem.end_at ? formatVisitDateTime(detailItem.end_at) : 'ไม่จำกัดเวลา'}</dd>
                   </div>
-                  <div className="is-wide">
+                  <div>
                     <dt>หมายเหตุ</dt>
                     <dd>{detailItem.note || '-'}</dd>
                   </div>
                   {detailItem.is_special ? (
-                    <div className="is-wide">
+                    <div>
                       <dt>เหตุผลกรณีพิเศษ</dt>
                       <dd>{detailItem.special_reason || '-'}</dd>
                     </div>
@@ -2647,7 +2821,10 @@ function SafetyIncidentReportRow() {
                                 </span>
                               </span>
                             </span>
-                            <span className="dashboard-rv-meta-text">{item.description}</span>
+                            <span className="dashboard-rv-meta-desc">
+                              <span className="dashboard-rv-meta-label">รายละเอียดเหตุการณ์</span>
+                              <span className="dashboard-rv-meta-text">{item.description}</span>
+                            </span>
                           </span>
                           <span className={`dashboard-badge status-${SAFETY_STATUS_BADGE[item.status] || 'pending'}`}>
                             {SAFETY_STATUS_LABEL[item.status] || item.status}
@@ -2696,15 +2873,42 @@ function SafetyIncidentReportRow() {
               </div>
 
               <dl className="dashboard-rv-detail">
-                <div className="is-wide">
+                <div>
+                  <dt>ประเภทเหตุ</dt>
+                  <dd>{SAFETY_INCIDENT_TYPE_LABEL[detailItem.incident_type] || detailItem.incident_type}</dd>
+                </div>
+                <div>
+                  <dt>ระดับความรุนแรง</dt>
+                  <dd>
+                    <span className={`dashboard-safety-level-chip is-compact is-${detailItem.severity}`}>
+                      <span aria-hidden="true" />
+                      {SAFETY_SEVERITY_RESULT[detailItem.severity]?.label || detailItem.severity}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>ห้อง</dt>
+                  <dd>{detailItem.room_number || '-'}</dd>
+                </div>
+                <div>
                   <dt>รายละเอียดเหตุการณ์</dt>
                   <dd>{detailItem.description}</dd>
                 </div>
+                <div>
+                  <dt>วันที่แจ้ง</dt>
+                  <dd>{formatVisitDateTime(detailItem.created_at)}</dd>
+                </div>
                 {detailItem.status === 'reviewed' && (
-                  <div className="is-wide">
-                    <dt>ผลการตรวจสอบ</dt>
-                    <dd>{detailItem.review_note || '-'}</dd>
-                  </div>
+                  <>
+                    <div>
+                      <dt>ตรวจสอบโดย</dt>
+                      <dd className="dashboard-actor">{detailItem.reviewed_by_name || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>ผลการตรวจสอบ</dt>
+                      <dd>{detailItem.review_note || '-'}</dd>
+                    </div>
+                  </>
                 )}
               </dl>
 
@@ -2740,12 +2944,524 @@ function SafetyIncidentReportRow() {
   )
 }
 
+function getParkingPhase(vehicle, now) {
+  const start = new Date(vehicle.start_at).getTime()
+  if (now < start) return { key: 'upcoming', label: 'รอเข้าจอด' }
+  return { key: 'parked', label: 'กำลังจอด' }
+}
+
+function CustomerParkingTab({ onCountChange }) {
+  const [vehicles, setVehicles] = useState([])
+  const [roomNumber, setRoomNumber] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [lightbox, setLightbox] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+      .then(({ data }) => {
+        if (cancelled) return
+        setVehicles(data.vehicles || [])
+        setRoomNumber(data.roomNumber)
+        onCountChange?.((data.vehicles || []).length)
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(requestError.response?.data?.message || 'โหลดข้อมูลรถไม่สำเร็จ')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    const timer = setInterval(() => setNow(Date.now()), 60000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [onCountChange])
+
+  const parkedCount = vehicles.filter((vehicle) => getParkingPhase(vehicle, now).key === 'parked').length
+  const upcomingCount = vehicles.length - parkedCount
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? vehicles.filter((vehicle) =>
+        [
+          vehicle.vehicle_plate,
+          vehicle.vehicle_model,
+          vehicle.guest_name,
+          vehicle.guest_phone,
+          vehicle.note,
+          vehicle.guest_name ? 'รถครอบครัวที่มาเยี่ยม' : 'รถของฉัน',
+          vehicle.admin_reviewed_by_name || vehicle.reviewed_by_name,
+          formatVisitRange(vehicle.start_at, vehicle.end_at),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : vehicles
+  const filtered = filter === 'all' ? searched : searched.filter((vehicle) => getParkingPhase(vehicle, now).key === filter)
+
+  return (
+    <section className="dashboard-card dashboard-park-card" aria-labelledby="customer-parking-title">
+      <div className="dashboard-card-header">
+        <div>
+          <h2 id="customer-parking-title">รถของฉัน</h2>
+          <p className="dashboard-park-subtitle">รถที่ได้รับอนุมัติให้จอดของห้องคุณ</p>
+        </div>
+        {roomNumber && <RoomChip room={roomNumber} />}
+      </div>
+
+      <div className="dashboard-park-summary">
+        <div className="dashboard-park-stat is-parked">
+          <span className="dashboard-park-stat-icon" aria-hidden="true">P</span>
+          <div>
+            <strong>{parkedCount}</strong>
+            <span>กำลังจอด</span>
+          </div>
+        </div>
+        <div className="dashboard-park-stat is-upcoming">
+          <span className="dashboard-park-stat-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="12 7 12 12 15 14" />
+            </svg>
+          </span>
+          <div>
+            <strong>{upcomingCount}</strong>
+            <span>รอเข้าจอด</span>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="dashboard-empty">กำลังโหลดข้อมูลรถ...</p>
+      ) : error ? (
+        <p className="dashboard-empty">{error}</p>
+      ) : vehicles.length === 0 ? (
+        <div className="dashboard-park-empty">
+          <span className="dashboard-rv-history-empty-icon" aria-hidden="true">
+            <CarIcon />
+          </span>
+          <strong>ยังไม่มีรถที่ได้รับอนุมัติให้จอด</strong>
+          <small>ลงทะเบียนรถได้ที่การ์ด "แจ้งปัญหาต่างๆ" ในหน้าแรก เมื่อเจ้าหน้าที่อนุมัติแล้วจะแสดงที่นี่</small>
+        </div>
+      ) : (
+        <>
+          <DashboardFilterPanel
+            segments={[
+              { key: 'all', label: 'ทั้งหมด', count: searched.length },
+              { key: 'parked', label: 'กำลังจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now).key === 'parked').length, tone: 'success' },
+              { key: 'upcoming', label: 'รอเข้าจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now).key === 'upcoming').length, tone: 'warning' },
+            ]}
+            active={filter}
+            onSegment={setFilter}
+            search={search}
+            onSearch={setSearch}
+            searchPlaceholder="ค้นหาทะเบียนรถ รุ่น ชื่อผู้มาเยี่ยม หรือหมายเหตุ"
+            resultText={`พบ ${filtered.length} จาก ${vehicles.length} คัน`}
+            canClear={filter !== 'all' || Boolean(keyword)}
+            onClear={() => {
+              setFilter('all')
+              setSearch('')
+            }}
+          />
+          {filtered.length === 0 ? (
+            <div className="dashboard-park-empty">
+              <span className="dashboard-rv-history-empty-icon" aria-hidden="true">
+                <CarIcon />
+              </span>
+              <strong>ไม่พบรถที่ตรงกับการค้นหา</strong>
+              <small>ลองเปลี่ยนคำค้นหาหรือสถานะ</small>
+            </div>
+          ) : (
+        <ul className="dashboard-park-list">
+          {filtered.map((vehicle) => {
+            const phase = getParkingPhase(vehicle, now)
+            const approver = vehicle.admin_reviewed_by_name || vehicle.reviewed_by_name
+            return (
+              <li key={vehicle.id} className={`dashboard-park-item is-${phase.key}`}>
+                <button
+                  type="button"
+                  className="dashboard-park-item-main"
+                  onClick={() => setDetail(vehicle)}
+                  aria-label={`ดูรายละเอียดรถทะเบียน ${vehicle.vehicle_plate}`}
+                >
+                  <span className="dashboard-park-item-head">
+                    <span className={`dashboard-rv-history-icon${vehicle.guest_name ? ' is-family' : ''}`}>
+                      <CarIcon />
+                    </span>
+                    <span className="dashboard-park-item-title">
+                      <strong>{vehicle.vehicle_plate}</strong>
+                      <small>{vehicle.vehicle_model || 'ไม่ระบุรุ่น'}</small>
+                    </span>
+                    <span className={`dashboard-park-status is-${phase.key}`}>
+                      <span aria-hidden="true" />
+                      {phase.label}
+                    </span>
+                  </span>
+                </button>
+                <div className={`dashboard-park-body${vehicle.vehicle_photos?.length ? ' has-photo' : ''}`}>
+                  {vehicle.vehicle_photos?.length > 0 && (
+                    <button
+                      type="button"
+                      className="dashboard-park-cover"
+                      onClick={() => setLightbox({ photos: vehicle.vehicle_photos, index: 0, plate: vehicle.vehicle_plate })}
+                      aria-label="ดูรูปรถ"
+                    >
+                      <UploadImage src={vehicle.vehicle_photos[0].url} alt={vehicle.vehicle_photos[0].name || 'รูปรถ'} loading="lazy" />
+                      {vehicle.vehicle_photos.length > 1 && <span className="dashboard-park-cover-more">+{vehicle.vehicle_photos.length - 1}</span>}
+                    </button>
+                  )}
+                  <div className="dashboard-park-tiles">
+                    <div className={`dashboard-park-tile is-type${vehicle.guest_name ? ' is-family' : ''}`}>
+                      <span className="dashboard-park-tile-icon" aria-hidden="true">
+                        <CarIcon />
+                      </span>
+                      <span className="dashboard-park-tile-text">
+                        <small>ประเภท</small>
+                        <strong>{vehicle.guest_name ? 'รถครอบครัวที่มาเยี่ยม' : 'รถของฉัน'}</strong>
+                      </span>
+                    </div>
+                    <div className="dashboard-park-tile is-time">
+                      <span className="dashboard-park-tile-icon" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <polyline points="12 7 12 12 15 14" />
+                        </svg>
+                      </span>
+                      <span className="dashboard-park-tile-text">
+                        <small>ช่วงเวลาจอด</small>
+                        <strong>
+                          {formatVisitPoint(vehicle.start_at).day} {formatVisitPoint(vehicle.start_at).time}
+                          <em> → </em>
+                          {vehicle.end_at ? `${formatVisitPoint(vehicle.end_at).day} ${formatVisitPoint(vehicle.end_at).time}` : 'ไม่จำกัดเวลา'}
+                        </strong>
+                      </span>
+                    </div>
+                    {vehicle.guest_name && (
+                      <div className="dashboard-park-tile is-guest">
+                        <span className="dashboard-park-tile-icon" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="8" r="4" />
+                            <path d="M4 21a8 8 0 0 1 16 0" />
+                          </svg>
+                        </span>
+                        <span className="dashboard-park-tile-text">
+                          <small>ผู้มาเยี่ยม</small>
+                          <strong>
+                            {vehicle.guest_name}
+                            {vehicle.guest_phone ? ` · ${vehicle.guest_phone}` : ''}
+                          </strong>
+                        </span>
+                      </div>
+                    )}
+                    {approver && (
+                      <div className="dashboard-park-tile is-approver">
+                        <span className="dashboard-park-tile-icon" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+                            <polyline points="9 12 11 14 15 10" />
+                          </svg>
+                        </span>
+                        <span className="dashboard-park-tile-text">
+                          <small>อนุมัติโดย</small>
+                          <strong className="dashboard-actor">{approver}</strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="dashboard-park-item-foot">
+                  <span className="dashboard-park-photo-count">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
+                      <circle cx="12" cy="13" r="3.5" />
+                    </svg>
+                    {vehicle.vehicle_photos?.length ? `${vehicle.vehicle_photos.length} รูป` : 'ไม่มีรูปรถ'}
+                  </span>
+                  <button type="button" className="dashboard-park-more" onClick={() => setDetail(vehicle)}>
+                    ดูรายละเอียด
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+          )}
+        </>
+      )}
+
+      {detail && (
+        <Modal title="รายละเอียดรถ" onClose={() => setDetail(null)}>
+          {(requestClose) => {
+            const phase = getParkingPhase(detail, now)
+            const approver = detail.admin_reviewed_by_name || detail.reviewed_by_name
+            const approvedAt = detail.admin_reviewed_at || detail.reviewed_at
+            const fields = [
+              ['ทะเบียนรถ', detail.vehicle_plate],
+              ['ยี่ห้อ / รุ่น', detail.vehicle_model],
+              ...(detail.guest_name
+                ? [
+                    ['ผู้มาเยี่ยม', detail.guest_name],
+                    ['เบอร์ผู้มาเยี่ยม', detail.guest_phone],
+                  ]
+                : []),
+              ['เริ่มจอด', formatVisitDateTime(detail.start_at)],
+              ['สิ้นสุด', detail.end_at ? formatVisitDateTime(detail.end_at) : 'ไม่จำกัดเวลา'],
+            ]
+            return (
+              <div className="dashboard-rv">
+                <div className={`dashboard-rv-detail-hero is-${phase.key === 'parked' ? 'approved' : 'pending'}`}>
+                  <span className={`dashboard-rv-history-icon${detail.guest_name ? ' is-family' : ''}`}>
+                    <CarIcon />
+                  </span>
+                  <div className="dashboard-rv-history-text">
+                    <strong>{detail.vehicle_plate}</strong>
+                    <span className="dashboard-rv-meta dashboard-safety-hero-meta">
+                      <span className={`dashboard-rv-kind-chip is-${detail.guest_name ? 'family' : 'self'}`}>
+                        <CarIcon />
+                        {detail.guest_name ? 'รถครอบครัวที่มาเยี่ยม' : 'รถของฉัน'}
+                      </span>
+                      {detail.room_number && <RoomChip room={detail.room_number} />}
+                    </span>
+                  </div>
+                  <span className={`dashboard-park-status is-${phase.key}`}>
+                    <span aria-hidden="true" />
+                    {phase.label}
+                  </span>
+                </div>
+
+                <dl className="dashboard-rv-detail">
+                  {fields.map(([label, value]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{value || '-'}</dd>
+                    </div>
+                  ))}
+                  <div>
+                    <dt>หมายเหตุ</dt>
+                    <dd>{detail.note || '-'}</dd>
+                  </div>
+                </dl>
+
+                {detail.vehicle_photos?.length > 0 && (
+                  <section className="dashboard-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
+                    <h4 className="dashboard-rv-timeline-title">รูปรถ / ป้ายทะเบียน</h4>
+                    <div className="dashboard-rv-photo-grid">
+                      {detail.vehicle_photos.map((photo, index) => (
+                        <button
+                          key={photo.url}
+                          type="button"
+                          className="dashboard-rv-photo"
+                          onClick={() => setLightbox({ photos: detail.vehicle_photos, index, plate: detail.vehicle_plate })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <DetailTimeline
+                  steps={[
+                    { label: 'ลงทะเบียนรถ', meta: formatVisitDateTime(detail.created_at), state: 'done' },
+                    {
+                      label: 'อนุมัติแล้ว',
+                      meta: approvedAt ? formatVisitDateTime(approvedAt) : '-',
+                      by: approver,
+                      state: 'done',
+                      tone: 'success',
+                    },
+                    detail.updated_at
+                      ? { label: 'แก้ไขข้อมูล', meta: formatVisitDateTime(detail.updated_at), by: detail.updated_by_name, state: 'done' }
+                      : null,
+                    {
+                      label: phase.key === 'parked' ? 'กำลังจอด' : 'รอเข้าจอด',
+                      meta:
+                        phase.key === 'parked'
+                          ? detail.end_at
+                            ? `จอดได้ถึง ${formatVisitDateTime(detail.end_at)}`
+                            : 'จอดได้ไม่จำกัดเวลา'
+                          : `เริ่มจอด ${formatVisitDateTime(detail.start_at)}`,
+                      state: 'current',
+                    },
+                  ].filter(Boolean)}
+                />
+
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={`ทะเบียน ${lightbox.plate}`}
+          label="รูปรถ / ป้ายทะเบียน"
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </section>
+  )
+}
+
+function AnnouncementAlertPopup({ announcement, remaining, onAcknowledge }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [lightboxIndex, setLightboxIndex] = useState(null)
+  const photos = announcement.photos ?? []
+
+  const acknowledge = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await onAcknowledge(announcement.id)
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'ปิดประกาศไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="dashboard-alert-overlay" role="presentation">
+        <section
+          className="dashboard-alert"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="dashboard-alert-title"
+          aria-describedby="dashboard-alert-message"
+        >
+          <header className="dashboard-alert-hero">
+            <span className="dashboard-alert-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              </svg>
+            </span>
+            <div className="dashboard-alert-hero-text">
+              <span className="dashboard-alert-eyebrow-row">
+                <span className="dashboard-alert-eyebrow">ประกาศแจ้งเตือนจากหอพัก</span>
+                {remaining > 1 && <span className="dashboard-alert-count">อีก {remaining - 1} ประกาศ</span>}
+              </span>
+              <h3 id="dashboard-alert-title">{announcement.title}</h3>
+            </div>
+          </header>
+          <div className="dashboard-alert-body">
+            <section className="dashboard-alert-note">
+              <span className="dashboard-alert-label">รายละเอียดประกาศ</span>
+              <p id="dashboard-alert-message" className="dashboard-alert-message">
+                {announcement.message}
+              </p>
+            </section>
+            {photos.length > 0 && (
+              <section className="dashboard-alert-gallery">
+                <span className="dashboard-alert-label">
+                  รูปประกอบ
+                  <em>{photos.length} รูป</em>
+                </span>
+                <div className="dashboard-alert-photos">
+                  {photos.map((photo, index) => (
+                    <button
+                      key={photo.url}
+                      type="button"
+                      className="dashboard-alert-photo"
+                      onClick={() => setLightboxIndex(index)}
+                      aria-label={`ดูรูปที่ ${index + 1}`}
+                    >
+                      <UploadImage src={photo.url} alt={photo.name || `รูปประกาศ ${index + 1}`} loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            <div className="dashboard-alert-meta">
+              <div className="dashboard-alert-meta-item">
+                <span className="dashboard-alert-meta-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21a8 8 0 0 1 16 0" />
+                  </svg>
+                </span>
+                <span className="dashboard-alert-meta-text">
+                  <small>ประกาศโดย</small>
+                  <strong className="dashboard-actor">{announcement.author || 'เจ้าหน้าที่'}</strong>
+                </span>
+              </div>
+              <div className="dashboard-alert-meta-item">
+                <span className="dashboard-alert-meta-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <polyline points="12 7 12 12 15 14" />
+                  </svg>
+                </span>
+                <span className="dashboard-alert-meta-text">
+                  <small>วันเวลาที่ประกาศ</small>
+                  <strong>{formatDateTime(announcement.created_at)} น.</strong>
+                </span>
+              </div>
+            </div>
+            {error && (
+              <p className="dashboard-alert-error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+          <footer className="dashboard-alert-actions">
+            <p className="dashboard-alert-hint">ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ</p>
+            <button type="button" className="dashboard-alert-confirm" disabled={busy} onClick={acknowledge}>
+              {busy ? 'กำลังบันทึก...' : 'รับทราบและปิด'}
+            </button>
+          </footer>
+        </section>
+      </div>
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          photos={photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightboxIndex}
+          title={announcement.title}
+          label="รูปประกาศ"
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </>
+  )
+}
+
 function CustomerDashbord() {
   const navigate = useNavigate()
   const dashboardLoadRef = useRef(null)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [acknowledgedAnnouncementIds, setAcknowledgedAnnouncementIds] = useState(() => new Set())
+
+  const acknowledgeAnnouncement = async (announcementId) => {
+    const token = sessionStorage.getItem('token')
+    try {
+      await axios.post(`/api/customer/announcements/${announcementId}/acknowledge`, null, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch (requestError) {
+      if (requestError.response?.status !== 404) throw requestError
+    }
+    setAcknowledgedAnnouncementIds((ids) => new Set(ids).add(announcementId))
+  }
 
   const [, tickCountdown] = useState(0)
   useEffect(() => {
@@ -2754,6 +3470,20 @@ function CustomerDashbord() {
   }, [])
 
   const [customerTab, setCustomerTab] = useState('home')
+  const [activeVehicleCount, setActiveVehicleCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+      .then(({ data }) => {
+        if (!cancelled) setActiveVehicleCount((data.vehicles || []).length)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
@@ -3390,6 +4120,9 @@ function CustomerDashbord() {
     announcements = [],
     parcels = [],
   } = data
+  const pendingAlerts = announcements.filter(
+    (item) => item.tone === 'warning' && !item.acknowledged && !acknowledgedAnnouncementIds.has(item.id),
+  )
   const pendingParcels = parcels.filter((parcel) => parcel.status === 'pending')
   const receivedParcels = parcels.filter((parcel) => parcel.status === 'received')
   const parcelKeyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
@@ -4801,6 +5534,11 @@ function CustomerDashbord() {
                 onClick={() => selectCustomerTab(tab.key)}
               >
                 {tab.label}
+                {tab.key === 'vehicles' && activeVehicleCount > 0 && (
+                  <span className="dashboard-parcel-tab-count is-info" aria-label={`${activeVehicleCount} คันที่อนุมัติ`}>
+                    {activeVehicleCount}
+                  </span>
+                )}
                 {tab.key === 'parcels' && pendingParcels.length > 0 && (
                   <span className="dashboard-parcel-tab-count" aria-label={`${pendingParcels.length} รายการรอรับ`}>
                     {pendingParcels.length}
@@ -5255,6 +5993,8 @@ function CustomerDashbord() {
             </form>
           </div>
         )}
+
+        {customerTab === 'vehicles' && <CustomerParkingTab onCountChange={setActiveVehicleCount} />}
 
         {customerTab === 'rental-history' && (
           <section className="dashboard-card dashboard-rental-history-card">
@@ -6122,6 +6862,15 @@ function CustomerDashbord() {
           </>
         )}
       </div>
+
+      {pendingAlerts.length > 0 && (
+        <AnnouncementAlertPopup
+          key={pendingAlerts[0].id}
+          announcement={pendingAlerts[0]}
+          remaining={pendingAlerts.length}
+          onAcknowledge={acknowledgeAnnouncement}
+        />
+      )}
 
       {receiptRequest && (
         <div style={{ position: 'fixed', top: 0, left: -10000, zIndex: -1 }}>

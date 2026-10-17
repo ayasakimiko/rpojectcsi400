@@ -4,7 +4,16 @@ import './ParcelPhotoPicker.css'
 export const PARCEL_MAX_PHOTOS = 6
 export const PARCEL_MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
-export default function ParcelPhotoPicker({ id, files, onChange, error, onError, required = false }) {
+export default function ParcelPhotoPicker({
+  id,
+  files,
+  onChange,
+  error,
+  onError,
+  required = false,
+  heading = true,
+  maxPhotos = PARCEL_MAX_PHOTOS,
+}) {
   const previews = useMemo(
     () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
     [files],
@@ -30,8 +39,8 @@ export default function ParcelPhotoPicker({ id, files, onChange, error, onError,
       onError('รูปภาพต้องมีขนาดไม่เกิน 5 MB ต่อรูป')
       return
     }
-    if (files.length + selected.length > PARCEL_MAX_PHOTOS) {
-      onError(`แนบรูปได้ไม่เกิน ${PARCEL_MAX_PHOTOS} รูป`)
+    if (files.length + selected.length > maxPhotos) {
+      onError(`แนบรูปได้ไม่เกิน ${maxPhotos} รูป`)
       return
     }
     onError('')
@@ -40,6 +49,7 @@ export default function ParcelPhotoPicker({ id, files, onChange, error, onError,
 
   return (
     <div className="parcel-photo-field">
+      {heading && (
       <div className="parcel-photo-field-heading">
         <span>
           รูปพัสดุ{' '}
@@ -50,10 +60,11 @@ export default function ParcelPhotoPicker({ id, files, onChange, error, onError,
           )}
         </span>
         <small>
-          {required ? 'ต้องแนบอย่างน้อย 1 รูป' : 'แนบได้หลายรูปสำหรับพัสดุชิ้นนี้'} · สูงสุด {PARCEL_MAX_PHOTOS} รูป · JPG, PNG
+          {required ? 'ต้องแนบอย่างน้อย 1 รูป' : 'แนบได้หลายรูปสำหรับพัสดุชิ้นนี้'} · สูงสุด {maxPhotos} รูป · JPG, PNG
           หรือ WebP · ไม่เกิน 5 MB ต่อรูป
         </small>
       </div>
+      )}
       <input
         id={id}
         className="parcel-photo-input"
@@ -83,7 +94,7 @@ export default function ParcelPhotoPicker({ id, files, onChange, error, onError,
             </button>
           </figure>
         ))}
-        {files.length < PARCEL_MAX_PHOTOS && (
+        {files.length < maxPhotos && (
           <label className="parcel-photo-add" htmlFor={id}>
             <span aria-hidden="true">+</span>
             <small>เพิ่มรูป</small>

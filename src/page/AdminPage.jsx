@@ -677,7 +677,7 @@ function AdminSpecialVisitReviewNav() {
                         : `${item.guest_name}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`}
                     </p>
                     <p>
-                      {new Date(item.start_at).toLocaleString('th-TH')} – {new Date(item.end_at).toLocaleString('th-TH')}
+                      {new Date(item.start_at).toLocaleString('th-TH')} – {item.end_at ? new Date(item.end_at).toLocaleString('th-TH') : 'ไม่จำกัดเวลา'}
                     </p>
                     <p className="admin-rv-special-reason">
                       <strong>เหตุผลขออนุมัติพิเศษ:</strong> {item.special_reason}
