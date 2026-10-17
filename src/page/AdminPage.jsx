@@ -8,7 +8,7 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
-import { CheckIcon, DoorIcon, HashIcon, InfoIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
+import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
@@ -56,6 +56,16 @@ function summarizeInspection(checklist) {
   return { counts, tone }
 }
 
+const RENEW_DURATION_LABEL = { 1: '1 เดือน', 3: '3 เดือน', 6: '6 เดือน', 12: '1 ปี (12 เดือน)' }
+const RENEW_PAYMENT_TYPE_LABEL = { monthly: 'จ่ายรายเดือน', lump_sum: 'จ่ายล่วงหน้าทั้งก้อน' }
+const MOVE_ROOM_REASON_LABEL = {
+  room_problem: 'ห้องเดิมมีปัญหา/ชำรุด',
+  price: 'ต้องการห้องราคาที่เหมาะสมขึ้น',
+  amenities: 'ต้องการสิ่งอำนวยความสะดวกเพิ่ม',
+  location: 'ต้องการชั้นหรือตำแหน่งที่สะดวกขึ้น',
+  noise: 'เสียงดัง/ปัญหาเพื่อนบ้าน',
+  other: 'อื่นๆ',
+}
 const MOVE_OUT_INSPECTION_STATUS = {
   pending: 'รอ Admin ตรวจ',
   reviewed: 'Admin ตรวจแล้ว',
@@ -279,7 +289,19 @@ const TABS = [
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'expenses', label: 'รายจ่าย' },
   { key: 'announcements', label: 'ประกาศ' },
+  { key: 'vehicle-requests', label: 'คำขอรถ' },
+  { key: 'safety', label: 'ตรวจเหตุฉุกเฉิน' },
 ]
+
+const TAB_GROUPS = [
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
+  { key: 'building', label: 'พัสดุและประกาศ', tabs: ['parcels', 'announcements'] },
+  { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
+  { key: 'finance', label: 'รายจ่าย', tabs: ['expenses'] },
+]
+const TAB_LABEL = Object.fromEntries(TABS.map((tab) => [tab.key, tab.label]))
+const TAB_GROUP_OF = Object.fromEntries(TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab, group.key])))
 
 const REQUEST_TYPE_LABEL = { renew: 'ต่อสัญญา', moveout: 'แจ้งย้ายออก', move_room: 'ย้ายห้อง' }
 const REQUEST_STATUS_LABEL = {
@@ -501,6 +523,87 @@ function AdminRequestTimeline({ kind, request }) {
   )
 }
 
+function AdminRequestProgress({ request }) {
+  const rejected = request.status === 'rejected'
+  const finished = ['approved', 'rejected'].includes(request.status)
+  const steps = [
+    { key: 'sent', title: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, state: 'done' },
+    {
+      key: 'accepted',
+      title: 'เจ้าหน้าที่รับเรื่อง',
+      by: request.accepted_by_name,
+      date: request.accepted_at,
+      state: request.accepted_at || finished ? 'done' : 'current',
+    },
+    {
+      key: 'result',
+      title: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
+      by: request.completed_by_name,
+      date: request.completed_at,
+      state: finished ? (rejected ? 'rejected' : 'done') : request.accepted_at ? 'current' : 'upcoming',
+    },
+  ]
+  const totalMs = finished && request.completed_at ? new Date(request.completed_at) - new Date(request.created_at) : null
+
+  return (
+    <div className="admin-progress">
+      <div className="admin-progress-head">
+        <h4>ขั้นตอนการดำเนินการ</h4>
+        {totalMs !== null && totalMs >= 0 ? (
+          <span className={`admin-progress-total${rejected ? ' is-rejected' : ''}`}>ใช้เวลาทั้งหมด {formatRemaining(totalMs)}</span>
+        ) : (
+          <span className="admin-progress-total is-waiting">กำลังดำเนินการ</span>
+        )}
+      </div>
+      <ol className="admin-progress-steps">
+        {steps.map((step, index) => {
+          const previous = steps[index - 1]
+          const gapMs = previous?.date && step.date ? new Date(step.date) - new Date(previous.date) : null
+          return (
+            <li key={step.key} className={`admin-progress-step is-${step.state}`}>
+              <span className="admin-progress-marker" aria-hidden="true">
+                {step.state === 'done' ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : step.state === 'rejected' ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                ) : step.state === 'current' ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="8" />
+                    <polyline points="12 8 12 12 14.5 13.5" />
+                  </svg>
+                ) : (
+                  <span>{index + 1}</span>
+                )}
+              </span>
+              <div className="admin-progress-body">
+                {gapMs !== null && gapMs >= 0 && <span className="admin-progress-gap">+ {formatRemaining(gapMs)}</span>}
+                <strong>{step.title}</strong>
+                {step.date ? (
+                  <small>
+                    {formatDateTime(step.date)}
+                    {step.by && (
+                      <>
+                        {' · '}
+                        <span className="admin-actor-inline">{step.by}</span>
+                      </>
+                    )}
+                  </small>
+                ) : (
+                  <small>{step.state === 'current' ? 'กำลังรอดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้'}</small>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 function useExpandedRows() {
   const [expanded, setExpanded] = useState(() => new Set())
   const toggle = (id) => {
@@ -575,6 +678,66 @@ function StaffActionCell({ name, date }) {
   )
 }
 
+function RoomPreferenceIcon({ label }) {
+  const props = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }
+  const text = label.toLowerCase()
+  if (text.includes('แอร์')) {
+    return (
+      <svg {...props}>
+        <path d="M12 2v20M4.9 4.9l14.2 14.2M2 12h20M4.9 19.1 19.1 4.9" />
+      </svg>
+    )
+  }
+  if (text.includes('wi-fi') || text.includes('wifi') || text.includes('ไวไฟ')) {
+    return (
+      <svg {...props}>
+        <path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0" />
+        <circle cx="12" cy="19.5" r="1" />
+      </svg>
+    )
+  }
+  if (text.includes('ตู้เย็น')) {
+    return (
+      <svg {...props}>
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <path d="M5 10h14M9 5v2M9 13v3" />
+      </svg>
+    )
+  }
+  if (text.includes('เตียง')) {
+    return (
+      <svg {...props}>
+        <path d="M3 18V7M3 13h18v5M21 13a3 3 0 0 0-3-3h-7v3" />
+        <circle cx="7" cy="10.5" r="1.5" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+    </svg>
+  )
+}
+
+function RoomPreferenceTags({ value }) {
+  const items = String(value || '')
+    .split(/[,،、/|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (items.length === 0) return 'ไม่ระบุ'
+  return (
+    <span className="admin-preference-tags">
+      {items.map((item) => (
+        <span key={item} className="admin-preference-tag">
+          <RoomPreferenceIcon label={item} />
+          {item}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function ActorName({ name }) {
   if (!name) return <span className="admin-cell-empty">-</span>
   return <span className="admin-actor-name">{name}</span>
@@ -646,102 +809,6 @@ function useAuthHeaders() {
   return useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
 }
 
-function AdminSpecialVisitReviewNav() {
-  const [open, setOpen] = useState(false)
-  const [items, setItems] = useState([])
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const headers = useAuthHeaders()
-
-  const load = useCallback(
-    () =>
-      axios
-        .get('/api/admin/resident-visit-requests/special', { headers })
-        .then(({ data }) => setItems(data.requests || []))
-        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
-    [headers],
-  )
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const review = async (item, decision) => {
-    setBusy(true)
-    setMessage('')
-    try {
-      await axios.post(`/api/admin/resident-visit-requests/${item.id}/special-review`, { decision }, { headers })
-      await load()
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <li className="nav-item">
-      <button
-        type="button"
-        className="nav-link admin-tab-link"
-        onClick={() => {
-          setOpen(true)
-          setMessage('')
-          load()
-        }}
-      >
-        คำขอพิเศษ{items.length ? ` (${items.length})` : ''}
-      </button>
-      {open && (
-        <div
-          className="admin-rv-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false)
-          }}
-        >
-          <div className="admin-rv-modal" role="dialog" aria-modal="true" aria-labelledby="admin-rv-title">
-            <button type="button" className="admin-rv-close" onClick={() => setOpen(false)} aria-label="ปิด">×</button>
-            <span className="admin-rv-kicker">RESIDENT SERVICES</span>
-            <h2 id="admin-rv-title">อนุมัติเคสพิเศษ</h2>
-            <p className="admin-rv-subtitle">ตรวจสอบเหตุผลและตัดสินใจอนุมัติหรือปฏิเสธคำขอ</p>
-            <div className="admin-rv-list">
-              {items.length === 0 ? (
-                <p className="admin-rv-empty">ไม่มีคำขอที่รอดำเนินการ</p>
-              ) : (
-                items.map((item) => (
-                  <article className="admin-rv-card" key={item.id}>
-                    <div className="admin-rv-card-head">
-                      <strong>{RESIDENT_VISIT_TYPE_LABEL[item.request_type]} · ห้อง {item.room_number}</strong>
-                      <span>รออนุมัติ</span>
-                    </div>
-                    <p>
-                      {item.request_type === 'vehicle'
-                        ? `ทะเบียน ${item.vehicle_plate}${item.vehicle_model ? ` · ${item.vehicle_model}` : ''}`
-                        : `${item.guest_name}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`}
-                    </p>
-                    <p>
-                      {new Date(item.start_at).toLocaleString('th-TH')} – {item.end_at ? new Date(item.end_at).toLocaleString('th-TH') : 'ไม่จำกัดเวลา'}
-                    </p>
-                    <p className="admin-rv-special-reason">
-                      <strong>เหตุผลขออนุมัติพิเศษ:</strong> {item.special_reason}
-                    </p>
-                    {item.note && <p>{item.note}</p>}
-                    <small>{item.first_name} {item.last_name} · {item.customer_phone}</small>
-                    <div className="admin-rv-actions">
-                      <button type="button" disabled={busy} onClick={() => review(item, 'approve')}>อนุมัติพิเศษ</button>
-                      <button type="button" className="admin-rv-deny" disabled={busy} onClick={() => review(item, 'reject')}>ปฏิเสธ</button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-            {message && <p className="admin-rv-message" role="status">{message}</p>}
-          </div>
-        </div>
-      )}
-    </li>
-  )
-}
 
 const SAFETY_INCIDENT_TYPE_LABEL = {
   accident: 'อุบัติเหตุ',
@@ -751,35 +818,142 @@ const SAFETY_INCIDENT_TYPE_LABEL = {
   other: 'อื่น ๆ',
 }
 
-function AdminSafetyIncidentReviewNav() {
-  const [open, setOpen] = useState(false)
+const SAFETY_STATUS_INFO = {
+  pending: { label: 'รอตรวจสอบ', tone: 'pending' },
+  reviewed: { label: 'ตรวจสอบแล้ว', tone: 'reviewed' },
+  cancelled: { label: 'ยกเลิกแล้ว', tone: 'cancelled' },
+}
+const SAFETY_FILTERS = [
+  { key: 'pending', label: 'รอตรวจสอบ' },
+  { key: 'reviewed', label: 'ตรวจสอบแล้ว' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว' },
+  { key: 'all', label: 'ทั้งหมด' },
+]
+const SAFETY_ROLE_LABEL = { Customer: 'ผู้เช่า', Staff: 'เจ้าหน้าที่', Admin: 'Admin', Owner: 'Owner' }
+const SAFETY_PAGE_SIZE = 9
+
+function formatIncidentTime(value) {
+  return value ? `${new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })} น.` : '-'
+}
+
+function IncidentShieldIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="M12 8v4M12 16h.01" />
+    </svg>
+  )
+}
+
+const VISIT_STATUS_INFO = {
+  pending: { label: 'รออนุมัติ', tone: 'pending' },
+  approved: { label: 'อนุมัติแล้ว', tone: 'reviewed' },
+  rejected: { label: 'ไม่อนุมัติ', tone: 'rejected' },
+  cancelled: { label: 'ยกเลิกแล้ว', tone: 'cancelled' },
+}
+const VISIT_FILTERS = [
+  { key: 'pending', label: 'รออนุมัติ' },
+  { key: 'approved', label: 'อนุมัติแล้ว' },
+  { key: 'rejected', label: 'ไม่อนุมัติ' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว' },
+  { key: 'all', label: 'ทั้งหมด' },
+]
+const VISIT_PAGE_SIZE = 9
+
+function VisitCarIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17" />
+      <circle cx="7.5" cy="17.5" r="1.5" />
+      <circle cx="16.5" cy="17.5" r="1.5" />
+    </svg>
+  )
+}
+
+function getVisitHeading(item) {
+  return item.request_type === 'vehicle' ? item.vehicle_plate || 'ไม่ระบุทะเบียน' : item.guest_name || 'ผู้มาพัก'
+}
+
+function VisitRange({ item }) {
+  return (
+    <span className="admin-visit-range">
+      <span>{formatIncidentTime(item.start_at)}</span>
+      <span className="admin-visit-range-divider" aria-hidden="true">|</span>
+      <span className={item.end_at ? undefined : 'is-open'}>{item.end_at ? formatIncidentTime(item.end_at) : 'ไม่จำกัดเวลา'}</span>
+    </span>
+  )
+}
+
+function AdminVehicleRequestsTab({ onCountChange }) {
   const [lightbox, setLightbox] = useState(null)
-  const [incidents, setIncidents] = useState([])
-  const [notes, setNotes] = useState({})
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('pending')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detailId, setDetailId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const headers = useAuthHeaders()
-  const pendingCount = incidents.filter((item) => item.status === 'pending').length
 
   const load = useCallback(
     () =>
       axios
-        .get('/api/admin/safety-incidents', { headers })
-        .then(({ data }) => setIncidents(data.incidents || []))
-        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ')),
-    [headers],
+        .get('/api/admin/resident-visit-requests', { headers })
+        .then(({ data }) => {
+          const list = data.requests || []
+          setItems(list)
+          onCountChange?.(list.filter((item) => item.status === 'pending').length)
+        })
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ'))
+        .finally(() => setLoading(false)),
+    [headers, onCountChange],
   )
 
   useEffect(() => {
     load()
   }, [load])
 
-  const markReviewed = async (incident) => {
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? items.filter((item) =>
+        [
+          item.vehicle_plate,
+          item.vehicle_model,
+          item.guest_name,
+          item.guest_phone,
+          item.note,
+          item.room_number ? `ห้อง ${item.room_number}` : '',
+          `${item.first_name || ''} ${item.last_name || ''}`,
+          item.customer_phone,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : items
+  const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
+  const filtered = (filter === 'all' ? searched : searched.filter((item) => item.status === filter))
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / VISIT_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * VISIT_PAGE_SIZE, currentPage * VISIT_PAGE_SIZE)
+  const detail = items.find((item) => item.id === detailId) || null
+
+  const openDetail = (item) => {
+    setMessage('')
+    setDetailId(item.id)
+  }
+
+  const review = async (decision, requestClose) => {
     setBusy(true)
     setMessage('')
     try {
-      await axios.patch(`/api/admin/safety-incidents/${incident.id}/review`, { reviewNote: notes[incident.id] || '' }, { headers })
+      await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {}, { headers })
       await load()
+      requestClose()
     } catch (error) {
       setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
     } finally {
@@ -787,107 +961,697 @@ function AdminSafetyIncidentReviewNav() {
     }
   }
 
+  const openPhotos = (item, index) => setLightbox({ photos: item.vehicle_photos || [], index, title: getVisitHeading(item) })
+
   return (
-    <li className="nav-item">
-      <button
-        type="button"
-        className="nav-link admin-tab-link"
-        onClick={() => {
-          setOpen(true)
-          setMessage('')
-          load()
-        }}
-      >
-        ตรวจเหตุฉุกเฉิน{pendingCount ? ` (${pendingCount})` : ''}
-      </button>
-      {open && (
-        <div
-          className="admin-safety-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false)
+    <div className="admin-card admin-review-page">
+      <div className="admin-card-header">
+        <div>
+          <h2>คำขอรถ / ผู้มาพัก</h2>
+          <p className="admin-review-subtitle">อนุมัติหรือปฏิเสธคำขอจากผู้เช่า พร้อมดูประวัติคำขอทั้งหมด</p>
+        </div>
+        <span className="admin-review-count">{countOf('pending')} รายการรออนุมัติ</span>
+      </div>
+
+      <div className="admin-incident-toolbar">
+        <div className="admin-incident-segments" role="tablist" aria-label="สถานะคำขอ">
+          {VISIT_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.key}
+              className={`admin-incident-segment is-${item.key === 'approved' ? 'reviewed' : item.key}${filter === item.key ? ' active' : ''}`}
+              onClick={() => {
+                setFilter(item.key)
+                setPage(1)
+              }}
+            >
+              {item.label}
+              <span>{countOf(item.key)}</span>
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="form-control admin-search-input admin-incident-search"
+          placeholder="ค้นหาทะเบียน ห้อง ชื่อผู้เช่า หรือผู้มาพัก"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setPage(1)
           }}
-        >
-          <section className="admin-safety-modal" role="dialog" aria-modal="true" aria-labelledby="admin-safety-title">
-            <button className="admin-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
-            <span className="admin-safety-eyebrow">SAFETY & SECURITY</span>
-            <h2 id="admin-safety-title">ตรวจสอบเหตุฉุกเฉิน</h2>
-            <p className="admin-safety-intro">รายการรายงานจากผู้พักอาศัยและเจ้าหน้าที่</p>
-            <div className="admin-safety-list">
-              {incidents.length === 0 ? (
-                <p className="admin-safety-empty">ยังไม่มีรายงานเหตุ</p>
-              ) : (
-                incidents.map((item) => (
-                  <article className="admin-safety-card" key={item.id}>
-                    <div className="admin-safety-card-heading">
-                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
-                      <span className={`admin-safety-status ${item.status} ${item.severity}`}>
-                        {item.status === 'pending' ? 'รอตรวจสอบ' : item.status === 'cancelled' ? 'ยกเลิกแล้ว' : 'ตรวจแล้ว'}
-                        {item.severity === 'urgent' ? ' · ด่วน' : ''}
+        />
+      </div>
+
+      {message && !detail && <p className="admin-safety-message" role="status">{message}</p>}
+
+      {loading && items.length === 0 ? (
+        <p className="admin-safety-empty">กำลังโหลดคำขอ...</p>
+      ) : pageItems.length === 0 ? (
+        <div className="admin-incident-empty">
+          <span aria-hidden="true">
+            <VisitCarIcon size={24} />
+          </span>
+          <strong>{items.length === 0 ? 'ยังไม่มีคำขอ' : 'ไม่พบรายการในหมวดนี้'}</strong>
+          <small>{items.length === 0 ? 'เมื่อผู้เช่าส่งคำขอ รายการจะแสดงที่นี่' : 'ลองเปลี่ยนสถานะหรือคำค้นหา'}</small>
+        </div>
+      ) : (
+        <div className="admin-incident-grid">
+          {pageItems.map((item) => {
+            const status = VISIT_STATUS_INFO[item.status] || VISIT_STATUS_INFO.pending
+            const photos = item.vehicle_photos || []
+            const isVehicle = item.request_type === 'vehicle'
+            return (
+              <article key={item.id} className={`admin-incident-card admin-visit-card is-${status.tone}`}>
+                <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
+                  <span className="admin-incident-head">
+                    <span className="admin-incident-icon">
+                      <VisitCarIcon />
+                    </span>
+                    <span className="admin-incident-title">
+                      <strong>{getVisitHeading(item)}</strong>
+                      <small>ส่งคำขอ {formatIncidentTime(item.created_at)}</small>
+                    </span>
+                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                  </span>
+                  <span className="admin-incident-info">
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ประเภท</span>
+                      <span className="admin-incident-value">{RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type}</span>
+                    </span>
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ห้อง</span>
+                      <span className="admin-incident-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="admin-incident-cell is-wide">
+                      <span className="admin-incident-label">ผู้ขอ</span>
+                      <span className="admin-incident-value">
+                        <span className="admin-incident-name">{item.first_name ? `${item.first_name} ${item.last_name}` : 'เจ้าหน้าที่บันทึก'}</span>
+                        <span className={`admin-incident-role is-${item.customer_id ? 'customer' : 'staff'}`}>
+                          {item.customer_id ? 'ผู้เช่า' : 'เจ้าหน้าที่'}
+                        </span>
                       </span>
+                    </span>
+                  </span>
+                  <span className="admin-incident-section admin-visit-section">
+                    <span className="admin-incident-label">ช่วงเวลา{isVehicle && item.vehicle_model ? ` · ${item.vehicle_model}` : ''}</span>
+                    <span className="admin-incident-desc"><VisitRange item={item} /></span>
+                  </span>
+                </button>
+                <div className="admin-incident-photos">
+                  <span className="admin-incident-label">{photos.length > 0 ? `รูปรถ · ${photos.length} รูป` : 'รูปรถ'}</span>
+                  {photos.length > 0 ? (
+                    <span className="admin-incident-photo-row">
+                      {photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="admin-incident-photo"
+                          onClick={() => openPhotos(item, index)}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="admin-incident-photo-empty">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      ไม่มีรูปรถ
+                    </span>
+                  )}
+                </div>
+                <div className="admin-incident-foot">
+                  <span className="admin-incident-result">
+                    {item.status === 'pending' ? (
+                      'ยังไม่มีผู้อนุมัติ'
+                    ) : item.status === 'cancelled' ? (
+                      <>
+                        ยกเลิกโดย <span className="admin-actor-inline">{item.cancelled_by_name || item.updated_by_name || '-'}</span>
+                      </>
+                    ) : (
+                      <>
+                        {item.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
+                        <span className="admin-actor-inline">{item.reviewed_by_name || item.admin_reviewed_by_name || '-'}</span>
+                      </>
+                    )}
+                  </span>
+                  <button type="button" className={`admin-incident-open${item.status === 'pending' ? ' is-primary' : ''}`} onClick={() => openDetail(item)}>
+                    {item.status === 'pending' ? 'พิจารณา' : 'ดูรายละเอียด'}
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+
+      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+
+      {detail && (
+        <Modal title="รายละเอียดคำขอ" onClose={() => setDetailId(null)}>
+          {(requestClose) => {
+            const status = VISIT_STATUS_INFO[detail.status] || VISIT_STATUS_INFO.pending
+            const photos = detail.vehicle_photos || []
+            const isVehicle = detail.request_type === 'vehicle'
+            const reviewer = detail.reviewed_by_name || detail.admin_reviewed_by_name
+            const reviewedAt = detail.reviewed_at || detail.admin_reviewed_at
+            const steps = [
+              { label: 'ส่งคำขอ', meta: formatIncidentTime(detail.created_at), by: detail.first_name ? `${detail.first_name} ${detail.last_name}` : null, state: 'done' },
+              detail.status === 'pending'
+                ? { label: 'รออนุมัติ', meta: 'กำลังรอ', state: 'current' }
+                : detail.status === 'rejected'
+                  ? { label: 'ไม่อนุมัติ', meta: formatIncidentTime(reviewedAt), by: reviewer, state: 'done', tone: 'danger' }
+                  : { label: 'อนุมัติแล้ว', meta: formatIncidentTime(reviewedAt), by: reviewer, state: 'done', tone: 'success' },
+              ...(detail.status === 'cancelled'
+                ? [{ label: 'ยกเลิกแล้ว', meta: formatIncidentTime(detail.cancelled_at || detail.updated_at), by: detail.cancelled_by_name || detail.updated_by_name, state: 'done', tone: 'danger' }]
+                : []),
+            ]
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                  <div className={`admin-incident-hero admin-visit-hero is-${status.tone}`}>
+                    <span className="admin-incident-icon is-large">
+                      <VisitCarIcon size={22} />
+                    </span>
+                    <div>
+                      <strong>{getVisitHeading(detail)}</strong>
+                      <span className="admin-incident-chip">{RESIDENT_VISIT_TYPE_LABEL[detail.request_type] || detail.request_type}</span>
                     </div>
-                    <p>{item.description}</p>
-                    {item.photos?.length > 0 && (
-                      <div className="admin-safety-photos" aria-label="รูปประกอบการแจ้งเหตุ">
-                        {item.photos.map((photo, index) => (
+                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                  </div>
+
+                  <dl className="admin-incident-fields">
+                    <div>
+                      <dt>ห้อง</dt>
+                      <dd>{detail.room_number ? `ห้อง ${detail.room_number}` : 'ไม่ระบุห้อง'}</dd>
+                    </div>
+                    <div>
+                      <dt>ผู้ขอ</dt>
+                      <dd>
+                        {detail.first_name ? `${detail.first_name} ${detail.last_name}` : 'เจ้าหน้าที่บันทึก'}
+                        {detail.customer_phone ? ` · ${detail.customer_phone}` : ''}
+                      </dd>
+                    </div>
+                    {isVehicle ? (
+                      <>
+                        <div>
+                          <dt>ทะเบียนรถ</dt>
+                          <dd>{detail.vehicle_plate || '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>ยี่ห้อ / รุ่น</dt>
+                          <dd>{detail.vehicle_model || '-'}</dd>
+                        </div>
+                      </>
+                    ) : null}
+                    {(detail.guest_name || !isVehicle) && (
+                      <>
+                        <div>
+                          <dt>ผู้มาพัก</dt>
+                          <dd>{detail.guest_name || '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>เบอร์ติดต่อ</dt>
+                          <dd>{detail.guest_phone || '-'}</dd>
+                        </div>
+                      </>
+                    )}
+                    <div className="is-wide">
+                      <dt>ช่วงเวลา</dt>
+                      <dd><VisitRange item={detail} /></dd>
+                    </div>
+                    {detail.note && (
+                      <div className="is-wide">
+                        <dt>หมายเหตุ</dt>
+                        <dd>{detail.note}</dd>
+                      </div>
+                    )}
+                  </dl>
+
+                  {photos.length > 0 && (
+                    <section className="admin-incident-gallery">
+                      <h4>รูปรถ / ป้ายทะเบียน ({photos.length} รูป)</h4>
+                      <div>
+                        {photos.map((photo, index) => (
                           <button
                             key={`${photo.url}-${index}`}
                             type="button"
-                            className="admin-safety-photo"
-                            onClick={() => setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })}
+                            className="admin-incident-photo"
+                            onClick={() => openPhotos(detail, index)}
                             aria-label={`ดูรูปที่ ${index + 1}`}
                           >
-                            <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                            <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
                           </button>
                         ))}
                       </div>
-                    )}
-                    <small>
-                      {item.reporter_name} ({item.reporter_role})
-                      {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
-                    </small>
-                    {item.status === 'pending' ? (
+                    </section>
+                  )}
+
+                  <section className="admin-incident-timeline">
+                    <h4>ประวัติการดำเนินการ</h4>
+                    <ol>
+                      {steps.map((step) => (
+                        <li key={step.label} className={`is-${step.state}${step.tone ? ` is-${step.tone}` : ''}`}>
+                          <span className="admin-incident-timeline-dot" aria-hidden="true" />
+                          <div>
+                            <strong>{step.label}</strong>
+                            <small>
+                              {step.meta}
+                              {step.by && (
+                                <>
+                                  {' · '}
+                                  <span className="admin-actor-inline">{step.by}</span>
+                                </>
+                              )}
+                            </small>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+
+                  {message && <p className="admin-safety-message" role="status">{message}</p>}
+                </div>
+
+                <div className="admin-incident-actions">
+                  {detail.status === 'pending' && (
+                    <>
+                      <button type="button" className="admin-action-btn is-danger" disabled={busy} onClick={() => review('reject', requestClose)}>
+                        ไม่อนุมัติ
+                      </button>
+                      <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => review('approve', requestClose)}>
+                        {busy ? 'กำลังบันทึก...' : 'อนุมัติ'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={lightbox.title}
+          label="รูปรถ / ป้ายทะเบียน"
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function AdminSafetyIncidentsTab({ onCountChange }) {
+  const [lightbox, setLightbox] = useState(null)
+  const [incidents, setIncidents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('pending')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detailId, setDetailId] = useState(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const headers = useAuthHeaders()
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/admin/safety-incidents', { headers })
+        .then(({ data }) => {
+          const list = data.incidents || []
+          setIncidents(list)
+          onCountChange?.(list.filter((item) => item.status === 'pending').length)
+        })
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ'))
+        .finally(() => setLoading(false)),
+    [headers, onCountChange],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? incidents.filter((item) =>
+        [
+          SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type,
+          item.description,
+          item.reporter_name,
+          item.room_number ? `ห้อง ${item.room_number}` : '',
+          item.review_note,
+          item.cancel_reason,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : incidents
+  const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
+  const filtered = (filter === 'all' ? searched : searched.filter((item) => item.status === filter))
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SAFETY_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * SAFETY_PAGE_SIZE, currentPage * SAFETY_PAGE_SIZE)
+  const detail = incidents.find((item) => item.id === detailId) || null
+
+  const openDetail = (item) => {
+    setNote('')
+    setMessage('')
+    setDetailId(item.id)
+  }
+
+  const markReviewed = async (requestClose) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.patch(`/api/admin/safety-incidents/${detail.id}/review`, { reviewNote: note }, { headers })
+      await load()
+      requestClose()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openPhotos = (item, index) =>
+    setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })
+
+  return (
+    <div className="admin-card admin-review-page">
+      <div className="admin-card-header">
+        <div>
+          <h2>ตรวจสอบเหตุฉุกเฉิน</h2>
+          <p className="admin-review-subtitle">รายงานจากผู้พักอาศัยและเจ้าหน้าที่ พร้อมประวัติการตรวจสอบทั้งหมด</p>
+        </div>
+        <span className="admin-review-count">{countOf('pending')} รายการรอตรวจสอบ</span>
+      </div>
+
+      <div className="admin-incident-toolbar">
+        <div className="admin-incident-segments" role="tablist" aria-label="สถานะรายงาน">
+          {SAFETY_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.key}
+              className={`admin-incident-segment is-${item.key}${filter === item.key ? ' active' : ''}`}
+              onClick={() => {
+                setFilter(item.key)
+                setPage(1)
+              }}
+            >
+              {item.label}
+              <span>{countOf(item.key)}</span>
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="form-control admin-search-input admin-incident-search"
+          placeholder="ค้นหาประเภทเหตุ ห้อง ผู้แจ้ง หรือรายละเอียด"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setPage(1)
+          }}
+        />
+      </div>
+
+      {message && !detail && <p className="admin-safety-message" role="status">{message}</p>}
+
+      {loading && incidents.length === 0 ? (
+        <p className="admin-safety-empty">กำลังโหลดรายงาน...</p>
+      ) : pageItems.length === 0 ? (
+        <div className="admin-incident-empty">
+          <span aria-hidden="true">
+            <IncidentShieldIcon size={24} />
+          </span>
+          <strong>{incidents.length === 0 ? 'ยังไม่มีรายงานเหตุ' : 'ไม่พบรายการในหมวดนี้'}</strong>
+          <small>{incidents.length === 0 ? 'เมื่อมีการแจ้งเหตุ รายการจะแสดงที่นี่' : 'ลองเปลี่ยนสถานะหรือคำค้นหา'}</small>
+        </div>
+      ) : (
+        <div className="admin-incident-grid">
+          {pageItems.map((item) => {
+            const status = SAFETY_STATUS_INFO[item.status] || SAFETY_STATUS_INFO.pending
+            const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type
+            const photos = item.photos || []
+            return (
+              <article key={item.id} className={`admin-incident-card is-${status.tone} is-${item.severity}`}>
+                <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
+                  <span className="admin-incident-head">
+                    <span className="admin-incident-icon">
+                      <IncidentShieldIcon />
+                    </span>
+                    <span className="admin-incident-title">
+                      <strong>{typeLabel}</strong>
+                      <small>{formatIncidentTime(item.created_at)}</small>
+                    </span>
+                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                  </span>
+                  <span className="admin-incident-info">
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ระดับ</span>
+                      <span className={`admin-incident-level is-${item.severity}`}>
+                        <span aria-hidden="true" />
+                        {item.severity === 'urgent' ? 'ด่วน' : 'ทั่วไป'}
+                      </span>
+                    </span>
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ห้อง</span>
+                      <span className="admin-incident-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="admin-incident-cell is-wide">
+                      <span className="admin-incident-label">ผู้แจ้ง</span>
+                      <span className="admin-incident-value">
+                        <span className="admin-incident-name">{item.reporter_name}</span>
+                        <span className={`admin-incident-role is-${String(item.reporter_role || '').toLowerCase()}`}>
+                          {SAFETY_ROLE_LABEL[item.reporter_role] || item.reporter_role}
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                  <span className="admin-incident-section">
+                    <span className="admin-incident-label">รายละเอียดเหตุการณ์</span>
+                    <span className="admin-incident-desc">{item.description}</span>
+                  </span>
+                </button>
+                {photos.length === 0 && (
+                  <div className="admin-incident-photos">
+                    <span className="admin-incident-label">รูปประกอบ</span>
+                    <span className="admin-incident-photo-empty">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      ไม่มีรูปประกอบ
+                    </span>
+                  </div>
+                )}
+                {photos.length > 0 && (
+                  <div className="admin-incident-photos">
+                    <span className="admin-incident-label">รูปประกอบ · {photos.length} รูป</span>
+                    <span className="admin-incident-photo-row">
+                    {photos.slice(0, 4).map((photo, index) => (
+                      <button
+                        key={`${photo.url}-${index}`}
+                        type="button"
+                        className="admin-incident-photo"
+                        onClick={() => openPhotos(item, index)}
+                        aria-label={`ดูรูปที่ ${index + 1}`}
+                      >
+                        <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                        {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                      </button>
+                    ))}
+                    </span>
+                  </div>
+                )}
+                <div className="admin-incident-foot">
+                  <span className="admin-incident-result">
+                    {item.status === 'reviewed' ? (
                       <>
-                        <textarea
-                          aria-label="บันทึกผลตรวจสอบ"
-                          placeholder="บันทึกผลหรือการดำเนินการ (ถ้ามี)"
-                          value={notes[item.id] || ''}
-                          onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })}
-                        />
-                        <button className="admin-safety-review" type="button" disabled={busy} onClick={() => markReviewed(item)}>
-                          บันทึกว่าตรวจสอบแล้ว
-                        </button>
+                        ตรวจโดย <span className="admin-actor-inline">{item.reviewed_by_name || '-'}</span>
                       </>
                     ) : item.status === 'cancelled' ? (
-                      <p className="admin-safety-note">
+                      <>
                         ยกเลิกโดย <span className="admin-actor-inline">{item.cancelled_by_name || '-'}</span>
-                        {item.cancel_reason ? ` · ${item.cancel_reason}` : ''}
-                      </p>
+                      </>
                     ) : (
-                      <p className="admin-safety-note">
-                        ตรวจโดย <span className="admin-actor-inline">{item.reviewed_by_name || '-'}</span>
-                        {item.review_note ? ` · ${item.review_note}` : ''}
-                      </p>
+                      'ยังไม่มีผู้ตรวจสอบ'
                     )}
-                  </article>
-                ))
-              )}
-            </div>
-            {message && <p className="admin-safety-message" role="status">{message}</p>}
-          </section>
+                  </span>
+                  <button type="button" className={`admin-incident-open${item.status === 'pending' ? ' is-primary' : ''}`} onClick={() => openDetail(item)}>
+                    {item.status === 'pending' ? 'ตรวจสอบ' : 'ดูรายละเอียด'}
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
+
+      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+
+      {detail && (
+        <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setDetailId(null)}>
+          {(requestClose) => {
+            const status = SAFETY_STATUS_INFO[detail.status] || SAFETY_STATUS_INFO.pending
+            const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[detail.incident_type] || detail.incident_type
+            const photos = detail.photos || []
+            const steps = [
+              { label: 'แจ้งเหตุ', meta: formatIncidentTime(detail.created_at), by: detail.reporter_name, state: 'done' },
+              detail.status === 'reviewed'
+                ? { label: 'ตรวจสอบแล้ว', meta: formatIncidentTime(detail.reviewed_at), by: detail.reviewed_by_name, note: detail.review_note, state: 'done', tone: 'success' }
+                : detail.status === 'cancelled'
+                  ? { label: 'ยกเลิกแล้ว', meta: formatIncidentTime(detail.cancelled_at), by: detail.cancelled_by_name, note: detail.cancel_reason, state: 'done', tone: 'danger' }
+                  : { label: 'รอตรวจสอบ', meta: 'กำลังรอ', state: 'current' },
+            ]
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                <div className={`admin-incident-hero is-${status.tone} is-${detail.severity}`}>
+                  <span className="admin-incident-icon is-large">
+                    <IncidentShieldIcon size={22} />
+                  </span>
+                  <div>
+                    <strong>{typeLabel}</strong>
+                    <span className={`admin-incident-level is-${detail.severity}`}>
+                      <span aria-hidden="true" />
+                      ระดับ{detail.severity === 'urgent' ? 'ด่วน' : 'ทั่วไป'}
+                    </span>
+                  </div>
+                  <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                </div>
+
+                <dl className="admin-incident-fields">
+                  <div>
+                    <dt>ห้อง</dt>
+                    <dd>{detail.room_number ? `ห้อง ${detail.room_number}` : 'ไม่ระบุห้อง'}</dd>
+                  </div>
+                  <div>
+                    <dt>วันที่แจ้ง</dt>
+                    <dd>{formatIncidentTime(detail.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>ผู้แจ้ง</dt>
+                    <dd>{detail.reporter_name}</dd>
+                  </div>
+                  <div>
+                    <dt>สถานะผู้แจ้ง</dt>
+                    <dd>
+                      <span className={`admin-incident-role is-${String(detail.reporter_role || '').toLowerCase()}`}>
+                        {SAFETY_ROLE_LABEL[detail.reporter_role] || detail.reporter_role}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="is-wide">
+                    <dt>รายละเอียดเหตุการณ์</dt>
+                    <dd>{detail.description}</dd>
+                  </div>
+                </dl>
+
+                {photos.length > 0 && (
+                  <section className="admin-incident-gallery">
+                    <h4>รูปประกอบ ({photos.length} รูป)</h4>
+                    <div>
+                      {photos.map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="admin-incident-photo"
+                          onClick={() => openPhotos(detail, index)}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <section className="admin-incident-timeline">
+                  <h4>ประวัติการดำเนินการ</h4>
+                  <ol>
+                    {steps.map((step) => (
+                      <li key={step.label} className={`is-${step.state}${step.tone ? ` is-${step.tone}` : ''}`}>
+                        <span className="admin-incident-timeline-dot" aria-hidden="true" />
+                        <div>
+                          <strong>{step.label}</strong>
+                          <small>
+                            {step.meta}
+                            {step.by && (
+                              <>
+                                {' · '}
+                                <span className="admin-actor-inline">{step.by}</span>
+                              </>
+                            )}
+                          </small>
+                          {step.note && <p>{step.note}</p>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+
+                {detail.status === 'pending' && (
+                  <section className="admin-incident-review">
+                    <label htmlFor="admin-incident-note">บันทึกผลหรือการดำเนินการ (ถ้ามี)</label>
+                    <textarea
+                      id="admin-incident-note"
+                      rows={3}
+                      maxLength={500}
+                      placeholder="เช่น ตรวจสอบพื้นที่แล้ว แจ้งผู้เกี่ยวข้องเรียบร้อย"
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                    />
+                    <small>{note.length}/500 · ผู้แจ้งจะเห็นผลการตรวจสอบนี้</small>
+                  </section>
+                )}
+
+                {message && <p className="admin-safety-message" role="status">{message}</p>}
+                </div>
+
+                <div className="admin-incident-actions">
+                  {detail.status === 'pending' && (
+                    <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => markReviewed(requestClose)}>
+                      {busy ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจสอบแล้ว'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
       {lightbox && (
-        <div className="admin-safety-lightbox-host">
-          <PhotoLightbox
-            photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
-            initialIndex={lightbox.index}
-            title={lightbox.title}
-            label="รูปประกอบการแจ้งเหตุ"
-            onClose={() => setLightbox(null)}
-          />
-        </div>
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={lightbox.title}
+          label="รูปประกอบการแจ้งเหตุ"
+          onClose={() => setLightbox(null)}
+        />
       )}
-    </li>
+    </div>
   )
 }
 
@@ -895,6 +1659,35 @@ function AdminBackupPage() {
   const navigate = useNavigate()
   const [adminUser, setAdminUser] = useState(null)
   const [activeTab, setActiveTab] = useState('rooms')
+  const [lastTabByGroup, setLastTabByGroup] = useState({})
+  const [pendingVehicleCount, setPendingVehicleCount] = useState(0)
+  const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
+  const tabBadges = { 'vehicle-requests': pendingVehicleCount, safety: pendingSafetyCount }
+
+  useEffect(() => {
+    let cancelled = false
+    const loadReviewCounts = () => {
+      const headers = { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+      axios
+        .get('/api/admin/resident-visit-requests', { headers })
+        .then(({ data }) => {
+          if (!cancelled) setPendingVehicleCount((data.requests || []).filter((item) => item.status === 'pending').length)
+        })
+        .catch(() => {})
+      axios
+        .get('/api/admin/safety-incidents', { headers })
+        .then(({ data }) => {
+          if (!cancelled) setPendingSafetyCount((data.incidents || []).filter((item) => item.status === 'pending').length)
+        })
+        .catch(() => {})
+    }
+    loadReviewCounts()
+    const interval = setInterval(loadReviewCounts, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -931,6 +1724,7 @@ function AdminBackupPage() {
   const [waitingListSearch, setWaitingListSearch] = useState('')
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListModal, setWaitingListModal] = useState(null)
+  const [waitingListDetail, setWaitingListDetail] = useState(null)
   const [waitingListForm, setWaitingListForm] = useState(emptyWaitingListForm)
   const [waitingListFormError, setWaitingListFormError] = useState('')
   const [waitingListFieldErrors, setWaitingListFieldErrors] = useState({})
@@ -1818,6 +2612,7 @@ function AdminBackupPage() {
 
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
+  const [requestDetail, setRequestDetail] = useState(null)
   const [requestLogsError, setRequestLogsError] = useState('')
   const [requestStatusFilter, setRequestStatusFilter] = useState('all')
   const [requestSearch, setRequestSearch] = useState('')
@@ -2376,23 +3171,52 @@ function AdminBackupPage() {
         </div>
 
         <ul className="nav nav-tabs admin-tabs">
-          {TABS.map((tab) => (
-            <li className="nav-item" key={tab.key}>
+          {TAB_GROUPS.map((group) => (
+            <li className="nav-item" key={group.key}>
               <button
                 type="button"
-                className={`nav-link admin-tab-link${activeTab === tab.key ? ' active' : ''}`}
+                className={`nav-link admin-tab-link${TAB_GROUP_OF[activeTab] === group.key ? ' active' : ''}`}
                 onClick={() => {
-                  setActiveTab(tab.key)
+                  if (TAB_GROUP_OF[activeTab] === group.key) return
+                  setActiveTab(lastTabByGroup[group.key] || group.tabs[0])
                   setAnnouncementFocus(null)
                 }}
               >
-                {tab.label}
+                {group.label}
               </button>
             </li>
           ))}
-          <AdminSpecialVisitReviewNav />
-          <AdminSafetyIncidentReviewNav />
         </ul>
+
+        {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
+          <ul
+            key={group.key}
+            className="nav admin-subtabs"
+            hidden={TAB_GROUP_OF[activeTab] !== group.key}
+            aria-label={group.label}
+          >
+            {group.tabs.map((tabKey) => (
+              <li className="nav-item" key={tabKey}>
+                <button
+                  type="button"
+                  className={`nav-link admin-tab-link admin-subtab-link${activeTab === tabKey ? ' active' : ''}`}
+                  onClick={() => {
+                    setActiveTab(tabKey)
+                    setLastTabByGroup((current) => ({ ...current, [group.key]: tabKey }))
+                    setAnnouncementFocus(null)
+                  }}
+                >
+                  {TAB_LABEL[tabKey]}
+                  {tabBadges[tabKey] > 0 && <span className="admin-subtab-badge">{tabBadges[tabKey]}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ))}
+
+        {activeTab === 'vehicle-requests' && <AdminVehicleRequestsTab onCountChange={setPendingVehicleCount} />}
+
+        {activeTab === 'safety' && <AdminSafetyIncidentsTab onCountChange={setPendingSafetyCount} />}
 
         {activeTab === 'announcements' && (
           <AnnouncementBoard
@@ -2408,33 +3232,6 @@ function AdminBackupPage() {
 
         {activeTab === 'parcels' && (
           <div className="parcel-management-card">
-            <div className="parcel-card-header">
-              <div className="parcel-hero-text">
-                <span className="parcel-hero-icon"><PackageIcon size={20} /></span>
-                <div>
-                  <h2 className="parcel-hero-title">จัดการพัสดุ</h2>
-                  <p className="parcel-hero-sub">บันทึกพัสดุที่มาส่งและติดตามการรับของผู้เช่า</p>
-                </div>
-              </div>
-              <dl className="parcel-stats">
-                <div className="parcel-stat is-alert">
-                  <dt>รอผู้เช่ารับ</dt>
-                  <dd>{parcels.filter((parcel) => parcel.status === 'pending').length}</dd>
-                </div>
-                <div className="parcel-stat is-success">
-                  <dt>รับแล้ว</dt>
-                  <dd>{parcels.filter((parcel) => parcel.status === 'received').length}</dd>
-                </div>
-                <div className="parcel-stat">
-                  <dt>ทั้งหมด</dt>
-                  <dd>{parcels.length}</dd>
-                </div>
-              </dl>
-              <p className="parcel-card-note">
-                <InfoIcon size={14} />
-                พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น
-              </p>
-            </div>
             <div className="parcel-list-head">
               <h3 className="parcel-section-title">รายการพัสดุ</h3>
               <button type="button" className="parcel-action-btn is-primary" onClick={() => setParcelFormOpen(true)}>
@@ -3046,18 +3843,19 @@ function AdminBackupPage() {
                     <th className="admin-col-optional">รับเรื่องโดย</th>
                     <th className="admin-col-optional">เสร็จสิ้นโดย</th>
                     <th className="admin-col-optional">วันที่ส่งคำขอ</th>
+                    <th aria-label="รายละเอียด" />
                   </tr>
                 </thead>
                 <tbody>
                   {requestLogsLoading ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : requestLogs.items.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         ไม่พบประวัติคำขอ
                       </td>
                     </tr>
@@ -3086,11 +3884,16 @@ function AdminBackupPage() {
                             <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
                           </td>
                           <td className="admin-col-optional">{formatDateTime(request.created_at)}</td>
+                          <td className="admin-more-cell">
+                            <button type="button" className="admin-more-link" onClick={() => setRequestDetail(request)}>
+                              ดูเพิ่มเติม <span aria-hidden="true">›</span>
+                            </button>
+                          </td>
                         </tr>
-                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={7} onClick={() => toggleRequestRow(request.id)} />
+                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={8} onClick={() => toggleRequestRow(request.id)} />
                         <DetailRow
                           open={expandedRequestRows.has(request.id)}
-                          colSpan={7}
+                          colSpan={8}
                           fields={[
                             { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="tenant" request={request} /> },
                           ]}
@@ -3455,6 +4258,7 @@ function AdminBackupPage() {
                         </td>
                       <td>
                         <div className="admin-row-actions">
+                          <button type="button" className="admin-action-btn is-ghost" onClick={() => setWaitingListDetail({ ...entry, waitedDays: Math.max(0, Math.floor((Date.now() - new Date(entry.created_at).getTime()) / 86400000)) })}>ดูรายละเอียด</button>
                           <button type="button" className="admin-action-btn is-ghost" onClick={() => openWaitingListForm(entry)}>แก้ไข</button>
                           <button type="button" className="admin-action-btn is-danger" onClick={() => removeWaitingListEntry(entry)}>ลบ</button>
                         </div>
@@ -3763,6 +4567,216 @@ function AdminBackupPage() {
         />
       )}
 
+      {requestDetail && (
+        <Modal title="รายละเอียดคำขอผู้เช่า" onClose={() => setRequestDetail(null)}>
+          {() => {
+            const request = requestDetail
+            const priceDiff =
+              request.type === 'move_room' && request.source_room_price != null && request.target_room_price != null
+                ? Number(request.target_room_price) - Number(request.source_room_price)
+                : null
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                  <div className={`admin-incident-hero admin-request-hero is-${request.status}`}>
+                    <span className="admin-incident-icon is-large admin-request-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                        <path d="M14 3v6h6M8 13h8M8 17h5" />
+                      </svg>
+                    </span>
+                    <div>
+                      <strong>คำขอ{REQUEST_TYPE_LABEL[request.type] || request.type}</strong>
+                      <span className={`admin-badge type-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
+                    </div>
+                    <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
+                  </div>
+
+                  <section className="admin-request-section">
+                    <h4>ข้อมูลผู้เช่า</h4>
+                    <dl className="admin-incident-fields">
+                      <div>
+                        <dt>ชื่อผู้เช่า</dt>
+                        <dd>{request.first_name} {request.last_name}</dd>
+                      </div>
+                      <div>
+                        <dt>เบอร์โทร</dt>
+                        <dd>{request.phone ? <a href={`tel:${request.phone}`}>{request.phone}</a> : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>ห้องปัจจุบัน</dt>
+                        <dd>ห้อง {request.room_number}</dd>
+                      </div>
+                      <div>
+                        <dt>เงินประกัน</dt>
+                        <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className="admin-request-section">
+                    <h4>รายละเอียดคำขอ</h4>
+                    <dl className="admin-incident-fields">
+                      <div>
+                        <dt>วันที่ส่งคำขอ</dt>
+                        <dd>{formatDateTime(request.created_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>ประเภทคำขอ</dt>
+                        <dd>{REQUEST_TYPE_LABEL[request.type] || request.type}</dd>
+                      </div>
+                      {request.type === 'renew' && (
+                        <>
+                          <div>
+                            <dt>ระยะเวลาที่ขอต่อ</dt>
+                            <dd>{RENEW_DURATION_LABEL[String(request.renew_duration_months)] || (request.renew_duration_months ? `${request.renew_duration_months} เดือน` : '-')}</dd>
+                          </div>
+                          <div>
+                            <dt>รูปแบบการชำระ</dt>
+                            <dd>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type || '-'}</dd>
+                          </div>
+                        </>
+                      )}
+                      {request.type === 'move_room' && (
+                        <>
+                          <div>
+                            <dt>ห้องที่ต้องการย้ายไป</dt>
+                            <dd>{request.target_room_number ? `ห้อง ${request.target_room_number}` : '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>วันที่ต้องการย้าย</dt>
+                            <dd>{request.preferred_move_date ? formatDate(request.preferred_move_date) : '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>ค่าเช่าห้องเดิม → ห้องใหม่</dt>
+                            <dd>
+                              {request.source_room_price != null ? `฿${formatCurrency(request.source_room_price)}` : '-'} →{' '}
+                              {request.target_room_price != null ? `฿${formatCurrency(request.target_room_price)}` : '-'}
+                              {priceDiff !== null && priceDiff !== 0 && (
+                                <span className={`admin-request-diff ${priceDiff > 0 ? 'is-up' : 'is-down'}`}>
+                                  {priceDiff > 0 ? '+' : '−'}฿{formatCurrency(Math.abs(priceDiff))}/เดือน
+                                </span>
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>เหตุผลที่ย้าย</dt>
+                            <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || request.move_reason || '-'}</dd>
+                          </div>
+                          <div className="is-wide">
+                            <dt>ตรวจสภาพห้องเดิม</dt>
+                            <dd>{request.inspection_id ? MOVE_OUT_INSPECTION_STATUS[request.inspection_status] || 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจห้อง'}</dd>
+                          </div>
+                        </>
+                      )}
+                      {request.type === 'moveout' && (
+                        <div className="is-wide">
+                          <dt>ตรวจสภาพห้องก่อนย้ายออก</dt>
+                          <dd>{request.inspection_id ? MOVE_OUT_INSPECTION_STATUS[request.inspection_status] || 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจห้อง'}</dd>
+                        </div>
+                      )}
+                      <div className="is-wide">
+                        <dt>{request.type === 'moveout' ? 'เหตุผล / รายละเอียดการย้ายออก' : 'หมายเหตุจากผู้เช่า'}</dt>
+                        <dd>{request.note || '-'}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className="admin-request-section">
+                    <h4>ผู้ดำเนินการ</h4>
+                    <dl className="admin-incident-fields">
+                      <div>
+                        <dt>รับเรื่องโดย</dt>
+                        <dd>
+                          <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{request.status === 'rejected' ? 'ปฏิเสธโดย' : 'เสร็จสิ้นโดย'}</dt>
+                        <dd>
+                          <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <AdminRequestProgress request={request} />
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {waitingListDetail && (
+        <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingListDetail(null)}>
+          {(requestClose) => {
+            const entry = waitingListDetail
+            const { waitedDays } = entry
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                  <div className="admin-incident-hero admin-waiting-hero">
+                    <span className="admin-incident-icon is-large admin-waiting-avatar">
+                      {String(entry.full_name || '?').trim().charAt(0) || '?'}
+                    </span>
+                    <div>
+                      <strong>{entry.full_name}</strong>
+                      <a className="admin-incident-chip" href={`tel:${entry.phone}`}>{entry.phone}</a>
+                    </div>
+                    <span className={`admin-incident-status admin-waiting-status is-${entry.status || 'waiting'}`}>
+                      {WAITING_LIST_STATUS_LABEL[entry.status] || WAITING_LIST_STATUS_LABEL.waiting}
+                    </span>
+                  </div>
+                  <dl className="admin-incident-fields">
+                    <div>
+                      <dt>วันที่แจ้ง</dt>
+                      <dd>{formatIncidentTime(entry.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>รอมาแล้ว</dt>
+                      <dd>{waitedDays === 0 ? 'แจ้งวันนี้' : `${waitedDays} วัน`}</dd>
+                    </div>
+                    <div>
+                      <dt>อยากเข้าอยู่</dt>
+                      <dd>{entry.desired_move_in_date ? formatDate(entry.desired_move_in_date) : 'ไม่ระบุ'}</dd>
+                    </div>
+                    <div>
+                      <dt>บันทึกโดย</dt>
+                      <dd>
+                        <ActorName name={entry.submitted_by_name} />
+                      </dd>
+                    </div>
+                    <div className="is-wide">
+                      <dt>ประเภทห้องที่ต้องการ</dt>
+                      <dd>
+                        <RoomPreferenceTags value={entry.room_preference} />
+                      </dd>
+                    </div>
+                    <div className="is-wide">
+                      <dt>หมายเหตุ</dt>
+                      <dd>{entry.note || '-'}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div className="admin-incident-actions">
+                  <button
+                    type="button"
+                    className="admin-action-btn is-primary"
+                    onClick={() => {
+                      requestClose()
+                      openWaitingListForm(entry)
+                    }}
+                  >
+                    แก้ไขข้อมูล
+                  </button>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
       {waitingListModal && (
         <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มผู้สนใจเช่าห้อง' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)} variant="form">
           {(requestClose) => (
@@ -3862,7 +4876,6 @@ function AdminBackupPage() {
               </div>
 
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
                 <button type="submit" className="admin-action-btn is-primary" disabled={waitingListSubmitting}>
                   {waitingListSubmitting ? 'กำลังบันทึก...' : 'บันทึกรายชื่อ'}
                 </button>
@@ -4071,9 +5084,6 @@ function AdminBackupPage() {
               </div>
               <p className="admin-confirm-message">ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?</p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteRoom(requestClose)}>
                   ลบห้องพัก
                 </button>
@@ -4085,7 +5095,7 @@ function AdminBackupPage() {
 
       {parcelFormOpen && (
         <Modal title="บันทึกพัสดุใหม่" onClose={() => setParcelFormOpen(false)}>
-          {(requestClose) => (
+          {() => (
           <form className="parcel-form is-modal" onSubmit={requestParcelSave}>
             <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
             <div className="row g-3">
@@ -4177,9 +5187,6 @@ function AdminBackupPage() {
             </div>
             {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
             <div className="parcel-form-actions">
-              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                ยกเลิก
-              </button>
               <button
                 type="submit"
                 className="parcel-action-btn is-primary"
@@ -4228,9 +5235,6 @@ function AdminBackupPage() {
                   </div>
                 </div>
                 <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>
-                    ยกเลิก
-                  </button>
                   <button type="button" className="admin-action-btn is-primary" onClick={() => handleCreateParcel(requestClose)} disabled={parcelSubmitting}>
                     {parcelSubmitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
                   </button>
@@ -4315,9 +5319,6 @@ function AdminBackupPage() {
                 ต้องการลบพนักงาน {staffDeleteConfirm.first_name} {staffDeleteConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteStaff(requestClose)}>
                   ลบพนักงาน
                 </button>
@@ -4346,9 +5347,6 @@ function AdminBackupPage() {
                 {staffSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button
                   type="button"
                   className={`admin-action-btn ${staffSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
@@ -4418,9 +5416,6 @@ function AdminBackupPage() {
                 {customerSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button
                   type="button"
                   className={`admin-action-btn ${customerSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}

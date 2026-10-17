@@ -1076,7 +1076,7 @@ function buildStaffVisitNotif(request) {
     key: `visit-${request.id}`,
     targetId: request.id,
     title: `${isVehicle ? 'คำขอรถ' : 'คำขอผู้มาพัก'}${request.room_number ? ` ห้อง ${request.room_number}` : ''}`,
-    label: request.is_special ? 'คำขอพิเศษ รออนุมัติ' : 'รออนุมัติ',
+    label: 'รออนุมัติ',
     tone: 'pending',
     date: request.created_at,
     preview: isVehicle ? request.vehicle_plate : request.guest_name,
@@ -3122,6 +3122,29 @@ const RESIDENT_VISIT_VIEWS = {
   },
 }
 
+const STAFF_IC_TONE = { warning: 'pending', info: 'pending', success: 'reviewed', danger: 'rejected', muted: 'cancelled' }
+
+function StaffEmptyPhotoIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  )
+}
+
+function StaffVisitRange({ item }) {
+  const openEnded = !item.end_at
+  return (
+    <span className="staff-ic-range">
+      <span>{formatStaffDateTime(item.start_at)}</span>
+      <span className="staff-ic-range-divider" aria-hidden="true">|</span>
+      <span className={openEnded ? 'is-open' : undefined}>{openEnded ? 'ไม่จำกัดเวลา' : formatStaffDateTime(item.end_at)}</span>
+    </span>
+  )
+}
+
 function getStaffVisitPhase(item, now) {
   if (item.status !== 'approved') return { key: item.status, ...(RESIDENT_VISIT_STATUS[item.status] || RESIDENT_VISIT_STATUS.pending) }
   if (!item.end_at) return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
@@ -3263,15 +3286,6 @@ function StaffRange({ start, end, openEnded = false }) {
   )
 }
 
-function StaffInfoCell({ label, wide = false, children }) {
-  return (
-    <span className={`staff-rv-cell${wide ? ' is-wide' : ''}`}>
-      <span className="staff-rv-cell-label">{label}</span>
-      <span className="staff-rv-cell-value">{children}</span>
-    </span>
-  )
-}
-
 function StaffDetailTimeline({ steps }) {
   return (
     <section className="staff-rv-timeline-card" aria-label="ขั้นตอนการดำเนินการ">
@@ -3363,7 +3377,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
       .then(({ data }) => {
         const requests = data.requests || []
         setItems(requests)
-        onCountChange?.(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+        onCountChange?.(requests.filter((item) => item.status === 'pending').length)
         if (pendingFocusRef.current) {
           const target = requests.find((item) => item.id === pendingFocusRef.current)
           pendingFocusRef.current = null
@@ -3418,7 +3432,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
   }
   const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
   const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
-  const pendingCount = items.filter((item) => item.status === 'pending' && !item.is_special).length
+  const pendingCount = items.filter((item) => item.status === 'pending').length
   const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
 
   const openCreate = () => {
@@ -3612,90 +3626,114 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
           </span>
         </div>
       ) : (
-        <ul className="staff-rv-list">
+        <ul className="staff-rv-list staff-ic-grid">
           {pageItems.map((item) => {
             const info = getStaffVisitPhase(item, now)
-            const canReview = item.status === 'pending' && !item.is_special
+            const tone = STAFF_IC_TONE[info.tone] || 'pending'
+            const canReview = item.status === 'pending'
             const canCancelParking = info.key === 'parked' && item.request_type === 'vehicle'
+            const photos = item.vehicle_photos || []
+            const reviewer = item.reviewed_by_name || item.admin_reviewed_by_name
             return (
-              <li key={item.id} data-staff-focus={item.id} className={`staff-rv-entry is-${info.tone}`}>
-                <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
-                  <span className="staff-rv-entry-head">
-                    <span className={`staff-rv-icon is-${getStaffVisitKind(item)}`}>
+              <li key={item.id} data-staff-focus={item.id} className={`staff-ic-card staff-ic-visit-card is-${tone}`}>
+                <button type="button" className="staff-ic-main" onClick={() => setDetail(item)}>
+                  <span className="staff-ic-head">
+                    <span className="staff-ic-icon">
                       <StaffCarIcon />
                     </span>
-                    <span className="staff-rv-entry-title">
+                    <span className="staff-ic-title">
                       <strong>{getStaffVisitTitle(item)}</strong>
-                      <small>{item.vehicle_model || 'ไม่ระบุรุ่น'}</small>
+                      <small>ส่งคำขอ {formatStaffDateTime(item.created_at)}</small>
                     </span>
-                    <span className={`staff-badge status-${info.badge}`}>
-                      {item.is_special && item.status === 'pending' ? 'รอ Admin' : info.label}
+                    <span className={`staff-ic-status is-${tone}`}>{info.label}</span>
+                  </span>
+                  <span className="staff-ic-info">
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ประเภท</span>
+                      <span className="staff-ic-value">{getStaffVisitOwner(item)}</span>
+                    </span>
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ห้อง</span>
+                      <span className="staff-ic-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="staff-ic-cell is-wide">
+                      <span className="staff-ic-label">ผู้ขอ</span>
+                      <span className="staff-ic-value">
+                        <span className="staff-ic-name">
+                          {item.customer_id ? `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-' : item.guest_name || '-'}
+                        </span>
+                        <span className={`staff-ic-role is-${item.customer_id ? 'customer' : 'external'}`}>
+                          {item.customer_id ? 'ผู้เช่า' : 'บุคคลภายนอก'}
+                        </span>
+                      </span>
                     </span>
                   </span>
-                  <span className="staff-rv-entry-grid">
-                    <StaffInfoCell label="ห้อง">{item.room_number ? `ห้อง ${item.room_number}` : 'บุคคลภายนอก'}</StaffInfoCell>
-                    <StaffInfoCell label="ประเภท">
-                      <span className={`staff-rv-owner is-${getStaffVisitKind(item)}`}>{getStaffVisitOwner(item)}</span>
-                    </StaffInfoCell>
-                    <StaffInfoCell label="ช่วงเวลา" wide>
-                      <StaffRange start={item.start_at} end={item.end_at} openEnded={item.request_type === 'vehicle'} />
-                    </StaffInfoCell>
-                    {item.customer_id ? (
+                  <span className="staff-ic-section staff-ic-visit-section">
+                    <span className="staff-ic-label">ช่วงเวลา{item.vehicle_model ? ` · ${item.vehicle_model}` : ''}</span>
+                    <span className="staff-ic-desc">
+                      <StaffVisitRange item={item} />
+                    </span>
+                  </span>
+                </button>
+                <div className="staff-ic-photos">
+                  <span className="staff-ic-label">{photos.length > 0 ? `รูปรถ · ${photos.length} รูป` : 'รูปรถ'}</span>
+                  {photos.length > 0 ? (
+                    <span className="staff-ic-photo-row">
+                      {photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-ic-photo"
+                          onClick={() => setLightbox({ photos, index, plate: getStaffVisitTitle(item) })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="staff-ic-photo-empty">
+                      <StaffEmptyPhotoIcon />
+                      ไม่มีรูปรถ
+                    </span>
+                  )}
+                </div>
+                <div className="staff-ic-foot">
+                  <span className="staff-ic-result">
+                    {item.status === 'pending' ? (
+                      'ยังไม่มีผู้อนุมัติ'
+                    ) : item.status === 'cancelled' ? (
                       <>
-                        <StaffInfoCell label="ผู้เช่า">
-                          {`${item.first_name || ''} ${item.last_name || ''}`.trim() || '-'}
-                        </StaffInfoCell>
-                        <StaffInfoCell label="เบอร์โทรผู้เช่า">{item.customer_phone || '-'}</StaffInfoCell>
+                        ยกเลิกโดย <span className="staff-actor">{item.cancelled_by_name || item.updated_by_name || '-'}</span>
                       </>
                     ) : (
                       <>
-                        <StaffInfoCell label="ผู้ขอจอด">{item.guest_name || '-'}</StaffInfoCell>
-                        <StaffInfoCell label="เบอร์โทรผู้ขอจอด">{item.guest_phone || '-'}</StaffInfoCell>
+                        {item.status === 'rejected' ? 'ปฏิเสธโดย' : 'อนุมัติโดย'} <span className="staff-actor">{reviewer || '-'}</span>
                       </>
                     )}
-                    {item.customer_id && item.guest_name && (
-                      <>
-                        <StaffInfoCell label="ผู้มาเยี่ยม">{item.guest_name}</StaffInfoCell>
-                        <StaffInfoCell label="เบอร์โทรผู้มาเยี่ยม">{item.guest_phone || '-'}</StaffInfoCell>
-                      </>
-                    )}
-                    {item.status !== 'pending' && (item.admin_reviewed_by_name || item.reviewed_by_name) && (
-                      <StaffInfoCell label={item.status === 'rejected' ? 'ปฏิเสธโดย' : 'อนุมัติโดย'}>
-                        <span className="staff-actor">{item.admin_reviewed_by_name || item.reviewed_by_name}</span>
-                      </StaffInfoCell>
-                    )}
                   </span>
-                </button>
-                <div className="staff-rv-entry-foot">
-                  <span className="staff-rv-entry-extra">
-                    <span className="staff-rv-photo-count">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
-                        <circle cx="12" cy="13" r="3.5" />
-                      </svg>
-                      {item.vehicle_photos?.length ? `${item.vehicle_photos.length} รูป` : 'ไม่มีรูป'}
-                    </span>
-                    {item.note && <span className="staff-rv-entry-note">หมายเหตุ: {item.note}</span>}
-                  </span>
-                  <span className="staff-rv-entry-actions">
+                  <span className="staff-ic-actions">
                     {canCancelParking && (
-                      <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'cancel' })}>
+                      <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'cancel' })}>
                         ยกเลิกรายการ
                       </button>
                     )}
                     {canReview && (
                       <>
-                        <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'reject' })}>
+                        <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'reject' })}>
                           ปฏิเสธ
                         </button>
-                        <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => setConfirm({ item, decision: 'approve' })}>
+                        <button type="button" className="staff-ic-btn is-primary" disabled={busy} onClick={() => setConfirm({ item, decision: 'approve' })}>
                           อนุมัติ
                         </button>
                       </>
                     )}
-                    <button type="button" className="staff-rv-entry-more" onClick={() => setDetail(item)}>
-                      ดูรายละเอียด <span aria-hidden="true">›</span>
-                    </button>
+                    {!canReview && (
+                      <button type="button" className="staff-ic-btn" onClick={() => setDetail(item)}>
+                        ดูรายละเอียด <span aria-hidden="true">›</span>
+                      </button>
+                    )}
                   </span>
                 </div>
               </li>
@@ -3816,7 +3854,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                     </div>
                   )}
                   <div className="staff-rv-detail-primary">
-                    {detail.status === 'pending' && !detail.is_special ? (
+                    {detail.status === 'pending' ? (
                       <>
                         <button type="button" className="staff-action-btn is-danger" onClick={() => setConfirm({ item: detail, decision: 'reject' })}>
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4433,84 +4471,109 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
           <span>{incidents.length ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ' : 'กด "+ แจ้งเหตุ" เมื่อพบเหตุฉุกเฉินหรือปัญหาความปลอดภัย'}</span>
         </div>
       ) : (
-        <ul className="staff-rv-list">
+        <ul className="staff-rv-list staff-ic-grid">
           {pageItems.map((item) => {
             const info = SAFETY_STATUS[item.status] || SAFETY_STATUS.pending
+            const tone = STAFF_IC_TONE[info.tone] || 'pending'
+            const photos = item.photos || []
+            const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type
             return (
-              <li key={item.id} data-staff-focus={item.id} className={`staff-rv-entry is-${info.tone}`}>
-                <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
-                  <span className="staff-rv-entry-head">
-                    <span className={`staff-rv-icon is-safety${item.severity === 'urgent' ? ' is-urgent' : ''}`}>
+              <li
+                key={item.id}
+                data-staff-focus={item.id}
+                className={`staff-ic-card staff-ic-safety-card is-${tone}${item.severity === 'urgent' ? ' is-urgent' : ''}`}
+              >
+                <button type="button" className="staff-ic-main" onClick={() => setDetail(item)}>
+                  <span className="staff-ic-head">
+                    <span className="staff-ic-icon">
                       <StaffShieldIcon />
                     </span>
-                    <span className="staff-rv-entry-title">
-                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
+                    <span className="staff-ic-title">
+                      <strong>{typeLabel}</strong>
                       <small>แจ้งเมื่อ {formatStaffDateTime(item.created_at)}</small>
                     </span>
-                    <span className={`staff-badge status-${info.badge}`}>{info.label}</span>
+                    <span className={`staff-ic-status is-${tone}`}>{info.label}</span>
                   </span>
-                  <span className="staff-rv-entry-grid">
-                    <StaffInfoCell label="ระดับ">
-                      <span className={`staff-rv-level is-${item.severity}`}>
+                  <span className="staff-ic-info">
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ระดับ</span>
+                      <span className={`staff-ic-level is-${item.severity}`}>
                         <span aria-hidden="true" />
                         {SAFETY_SEVERITY_LABEL[item.severity] || item.severity}
                       </span>
-                    </StaffInfoCell>
-                    <StaffInfoCell label="ห้อง">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุห้อง'}</StaffInfoCell>
-                    <StaffInfoCell label="ผู้แจ้ง">
-                      {item.reporter_name}
-                      <small>{SAFETY_REPORTER_ROLE_LABEL[item.reporter_role] || item.reporter_role}</small>
-                    </StaffInfoCell>
-                    {item.status === 'reviewed' && item.reviewed_by_name && (
-                      <StaffInfoCell label="ตรวจโดย">
-                        <span className="staff-actor">{item.reviewed_by_name}</span>
-                      </StaffInfoCell>
-                    )}
-                    {item.status === 'cancelled' && item.cancelled_by_name && (
-                      <StaffInfoCell label="ยกเลิกโดย">
-                        <span className="staff-actor">{item.cancelled_by_name}</span>
-                      </StaffInfoCell>
-                    )}
+                    </span>
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ห้อง</span>
+                      <span className="staff-ic-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="staff-ic-cell is-wide">
+                      <span className="staff-ic-label">ผู้แจ้ง</span>
+                      <span className="staff-ic-value">
+                        <span className="staff-ic-name">{item.reporter_name}</span>
+                        <span className={`staff-ic-role is-${String(item.reporter_role || '').toLowerCase()}`}>
+                          {SAFETY_REPORTER_ROLE_LABEL[item.reporter_role] || item.reporter_role}
+                        </span>
+                      </span>
+                    </span>
                   </span>
-                  <span className="staff-rv-entry-desc-block">
-                    <span className="staff-rv-entry-desc-label">รายละเอียดเหตุการณ์</span>
-                    <span className="staff-rv-entry-desc">{item.description}</span>
+                  <span className="staff-ic-section">
+                    <span className="staff-ic-label">รายละเอียดเหตุการณ์</span>
+                    <span className="staff-ic-desc">{item.description}</span>
                   </span>
-                  {item.photos?.length > 0 && (
-                    <span className="staff-safety-photo-chip">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="m21 15-5-5L5 21" />
-                      </svg>
-                      รูปประกอบ {item.photos.length} รูป
+                </button>
+                <div className="staff-ic-photos">
+                  <span className="staff-ic-label">{photos.length > 0 ? `รูปประกอบ · ${photos.length} รูป` : 'รูปประกอบ'}</span>
+                  {photos.length > 0 ? (
+                    <span className="staff-ic-photo-row">
+                      {photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-ic-photo"
+                          onClick={() => setLightbox({ photos, index, title: typeLabel })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="staff-ic-photo-empty">
+                      <StaffEmptyPhotoIcon />
+                      ไม่มีรูปประกอบ
                     </span>
                   )}
-                </button>
-                <div className="staff-rv-entry-foot">
-                  <span className="staff-rv-entry-extra">
-                    {item.status === 'cancelled' ? (
-                      <span className="staff-rv-entry-note">{item.cancel_reason ? `เหตุผลที่ยกเลิก: ${item.cancel_reason}` : 'ยกเลิกโดยไม่ระบุเหตุผล'}</span>
-                    ) : item.status === 'reviewed' && item.review_note ? (
-                      <span className="staff-rv-entry-note">ผลตรวจ: {item.review_note}</span>
+                </div>
+                <div className="staff-ic-foot">
+                  <span className="staff-ic-result">
+                    {item.status === 'reviewed' ? (
+                      <>
+                        ตรวจโดย <span className="staff-actor">{item.reviewed_by_name || '-'}</span>
+                      </>
+                    ) : item.status === 'cancelled' ? (
+                      <>
+                        ยกเลิกโดย <span className="staff-actor">{item.cancelled_by_name || '-'}</span>
+                      </>
                     ) : (
-                      <span className="staff-rv-entry-note">{item.status === 'pending' ? 'ยังไม่มีผู้รับเรื่อง' : 'ไม่มีบันทึกผล'}</span>
+                      'ยังไม่มีผู้รับเรื่อง'
                     )}
                   </span>
-                  <span className="staff-rv-entry-actions">
-                    {item.status === 'pending' && (
-                      <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => openCancel(item)}>
-                        ยกเลิก
+                  <span className="staff-ic-actions">
+                    {item.status === 'pending' ? (
+                      <>
+                        <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => openCancel(item)}>
+                          ยกเลิก
+                        </button>
+                        <button type="button" className="staff-ic-btn is-primary" disabled={busy} onClick={() => openReview(item)}>
+                          รับเรื่อง
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="staff-ic-btn" onClick={() => setDetail(item)}>
+                        ดูรายละเอียด <span aria-hidden="true">›</span>
                       </button>
                     )}
-                    {item.status === 'pending' && (
-                      <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => openReview(item)}>
-                        รับเรื่อง
-                      </button>
-                    )}
-                    <button type="button" className="staff-rv-entry-more" onClick={() => setDetail(item)}>
-                      ดูรายละเอียด <span aria-hidden="true">›</span>
-                    </button>
                   </span>
                 </div>
               </li>
@@ -4893,6 +4956,7 @@ function StaffMain() {
   const currentParcelPage = Math.min(parcelPage, Math.max(1, Math.ceil(filteredParcels.length / STAFF_LIST_PAGE_SIZE)))
   const pagedParcels = filteredParcels.slice((currentParcelPage - 1) * STAFF_LIST_PAGE_SIZE, currentParcelPage * STAFF_LIST_PAGE_SIZE)
   const [waitingListModalOpen, setWaitingListModalOpen] = useState(false)
+  const [waitingDetail, setWaitingDetail] = useState(null)
   const [waitingListEditing, setWaitingListEditing] = useState(null)
   const [waitingListForm, setWaitingListForm] = useState({
     full_name: '',
@@ -5031,7 +5095,7 @@ function StaffMain() {
           if (cancelled) return
           const requests = data.requests || []
           const now = Date.now()
-          setPendingVisitCount(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+          setPendingVisitCount(requests.filter((item) => item.status === 'pending').length)
           setPendingVisitRequests(requests.filter((item) => item.status === 'pending'))
           setParkedVehicleCount(
             requests.filter(
@@ -7033,6 +7097,89 @@ function StaffMain() {
           </Modal>
         )}
 
+        {waitingDetail && (
+          <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingDetail(null)} variant="detail">
+            {(requestClose) => {
+              const status = WAITING_LIST_STATUS[waitingDetail.status] ? waitingDetail.status : 'waiting'
+              const preferences = splitRoomPreferences(waitingDetail.room_preference)
+              const days = daysSince(waitingDetail.created_at, waitingNow)
+              return (
+                <div className="staff-rv-detail waiting-detail">
+                  <div className={`waiting-detail-hero is-compact is-${WAITING_LIST_STATUS[status].tone}`}>
+                    <span className="waiting-avatar" aria-hidden="true">
+                      {waitingInitial(waitingDetail.full_name)}
+                    </span>
+                    <div>
+                      <strong>{waitingDetail.full_name}</strong>
+                      <a className="waiting-card-phone" href={`tel:${waitingDetail.phone}`}>
+                        {waitingDetail.phone}
+                      </a>
+                    </div>
+                    <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
+                      {WAITING_LIST_STATUS[status].label}
+                    </span>
+                  </div>
+                  <dl className="staff-rv-fields">
+                    <div>
+                      <dt>วันที่แจ้ง</dt>
+                      <dd>{formatStaffDateTime(waitingDetail.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>รอมาแล้ว</dt>
+                      <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
+                    </div>
+                    <div>
+                      <dt>อยากเข้าอยู่</dt>
+                      <dd>
+                        {waitingDetail.desired_move_in_date
+                          ? `${formatDateOnly(waitingDetail.desired_move_in_date)} · ${describeMoveIn(waitingDetail.desired_move_in_date, waitingNow).text}`
+                          : 'ไม่ระบุ'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>บันทึกโดย</dt>
+                      <dd>
+                        <span className={waitingDetail.submitted_by_name ? 'staff-actor' : ''}>{waitingDetail.submitted_by_name || '-'}</span>
+                      </dd>
+                    </div>
+                    <div className="is-wide">
+                      <dt>ประเภทห้องที่ต้องการ</dt>
+                      <dd>
+                        {preferences.length > 0 ? (
+                          <span className="waiting-tags">
+                            {preferences.map((preference) => (
+                              <span key={preference}>{preference}</span>
+                            ))}
+                          </span>
+                        ) : (
+                          'ไม่ระบุประเภทห้อง'
+                        )}
+                      </dd>
+                    </div>
+                    <div className="is-wide">
+                      <dt>หมายเหตุ</dt>
+                      <dd>{waitingDetail.note || '-'}</dd>
+                    </div>
+                  </dl>
+                  <div className="staff-form-actions">
+                    <button
+                      type="button"
+                      className="staff-action-btn is-primary"
+                      onClick={() => {
+                        const entry = waitingDetail
+                        requestClose()
+                        openWaitingListModal(entry)
+                      }}
+                    >
+                      แก้ไขข้อมูล
+                    </button>
+                  </div>
+                </div>
+              )
+            }}
+          </Modal>
+        )}
+
         {waitingListModalOpen && (
           <Modal
             title={waitingListEditing ? 'แก้ไขรายชื่อผู้สนใจ' : 'เพิ่มผู้สนใจเช่าห้อง'}
@@ -7935,10 +8082,15 @@ function StaffMain() {
                                       )}
                                     </div>
                                     {item.note && (
-                                      <p className="waiting-card-note">
-                                        <span>หมายเหตุ</span>
-                                        {item.note}
-                                      </p>
+                                      <div className="waiting-card-note">
+                                        <span className="waiting-card-note-icon" aria-hidden="true">
+                                          <NoteIcon size={17} strokeWidth={1.8} />
+                                        </span>
+                                        <div className="waiting-card-note-content">
+                                          <span className="waiting-card-note-label">หมายเหตุ</span>
+                                          <p>{item.note}</p>
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
                                   <div className="waiting-card-foot">
@@ -7959,6 +8111,18 @@ function StaffMain() {
                                       </span>
                                     </div>
                                     <div className="waiting-card-actions">
+                                      <button
+                                        type="button"
+                                        className="waiting-icon-btn is-view"
+                                        onClick={() => setWaitingDetail(item)}
+                                        aria-label={`ดูรายละเอียด ${item.full_name}`}
+                                        title="ดูรายละเอียด"
+                                      >
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                                          <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                      </button>
                                       <button
                                         type="button"
                                         className="waiting-icon-btn"

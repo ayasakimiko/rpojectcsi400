@@ -2410,7 +2410,6 @@ function ResidentVisitRequestRow() {
                           <span className="dashboard-rv-history-text">
                             <strong>
                               {getVisitTitle(item)}
-                              {item.is_special ? <em>กรณีพิเศษ</em> : null}
                             </strong>
                             <span className="dashboard-rv-meta">
                               <span className={`dashboard-rv-type-chip is-${getVisitKind(item)}`}>
@@ -2503,12 +2502,6 @@ function ResidentVisitRequestRow() {
                     <dt>หมายเหตุ</dt>
                     <dd>{detailItem.note || '-'}</dd>
                   </div>
-                  {detailItem.is_special ? (
-                    <div>
-                      <dt>เหตุผลกรณีพิเศษ</dt>
-                      <dd>{detailItem.special_reason || '-'}</dd>
-                    </div>
-                  ) : null}
                 </dl>
 
                 {detailItem.vehicle_photos?.length > 0 && (
@@ -2679,7 +2672,6 @@ function getRequestDetail(kind, request) {
       ['วันที่ส่งคำขอ', formatVisitDateTime(request.created_at)],
       ['หมายเหตุ', request.note],
     )
-    if (request.is_special) fields.push(['เหตุผลกรณีพิเศษ', request.special_reason])
     photos = request.vehicle_photos || []
   } else if (kind === 'maintenance') {
     title = 'รายละเอียดการแจ้งซ่อม'
@@ -3773,6 +3765,7 @@ function CustomerDashbord() {
   }, [notifOpen])
 
   const [successPopup, setSuccessPopup] = useState(null)
+  const [blockedRequestPopup, setBlockedRequestPopup] = useState(null)
   const [profileForm, setProfileForm] = useState({ phone: '', current_password: '', new_password: '', confirm_password: '' })
   const [profileSubmitting, setProfileSubmitting] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -4203,7 +4196,13 @@ function CustomerDashbord() {
       setSuccessPopup(result.message || 'ส่งคำขอสำเร็จ')
       await loadDashboard()
     } catch (err) {
-      setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (err.response?.data?.code === 'TENANT_REQUEST_ACTIVE') {
+        setActiveRequestType(null)
+        setBlockedRequestPopup({ message: err.response.data.message })
+        loadDashboard()
+      } else {
+        setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      }
     } finally {
       setRequestSubmitting(false)
     }
@@ -5812,6 +5811,60 @@ function CustomerDashbord() {
                 </div>
               </div>
             )}
+          </Modal>
+        )}
+
+        {blockedRequestPopup && (
+          <Modal title="ยังมีคำขอที่รอดำเนินการ" onClose={() => setBlockedRequestPopup(null)} variant="confirm">
+            {(requestClose) => {
+              const activeRequests = tenantRequests.filter((request) => ['pending', 'in_progress'].includes(request.status))
+              return (
+                <div className="dashboard-confirm-body">
+                  <div className="dashboard-confirm-icon is-pending">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <polyline points="12 7 12 12 15 14" />
+                    </svg>
+                  </div>
+                  <p className="dashboard-confirm-message">{blockedRequestPopup.message}</p>
+                  <div className="dashboard-blocked-list">
+                    <span className="dashboard-blocked-label">คำขอที่กำลังดำเนินการอยู่</span>
+                    {activeRequests.length === 0 ? (
+                      <span className="dashboard-blocked-empty">ไม่พบรายการ กรุณารีเฟรชหน้าอีกครั้ง</span>
+                    ) : (
+                      activeRequests.map((request) => (
+                        <button
+                          key={request.id}
+                          type="button"
+                          className="dashboard-blocked-item"
+                          onClick={() => {
+                            requestClose()
+                            setStatusPopup({ kind: request.type, status: request.status, request })
+                          }}
+                        >
+                          <span className="dashboard-blocked-item-text">
+                            <strong>
+                              คำขอ{TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
+                              {request.type === 'move_room' && request.target_room_number ? ` → ห้อง ${request.target_room_number}` : ''}
+                            </strong>
+                            <small>ส่งเมื่อ {formatVisitDateTime(request.created_at)}</small>
+                          </span>
+                          <span className={`dashboard-badge status-${tenantRequestBadgeClass(request.status)}`}>
+                            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+                          </span>
+                          <span className="dashboard-blocked-item-chevron" aria-hidden="true">›</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="dashboard-form-actions">
+                    <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                      เข้าใจแล้ว
+                    </button>
+                  </div>
+                </div>
+              )
+            }}
           </Modal>
         )}
 
