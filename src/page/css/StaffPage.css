@@ -4879,6 +4879,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
 }
 
 .waiting-detail-hero {
@@ -4886,10 +4887,23 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid #e8eff8;
-  border-radius: 14px;
-  background: linear-gradient(120deg, #f5f9ff 0%, #ffffff 70%);
+  padding: 18px;
+  border: 1px solid #dce9fb;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #eaf3ff, #f8fbff 80%);
+}
+
+.waiting-detail-hero > .waiting-avatar {
+  background: #dbeafe;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85);
+}
+
+.waiting-detail-eyebrow {
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .waiting-detail-name {
@@ -4903,121 +4917,184 @@
 
 .waiting-detail-name strong {
   color: #0f2b52;
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 800;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .waiting-detail-contact {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-
-.waiting-detail-contact a.staff-action-btn {
-  text-decoration: none;
-}
-
-.waiting-detail-hero.is-compact {
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  border-color: #dce9fb;
-  padding: 14px;
-  background: #f5f9ff;
+  padding: 14px 16px;
+  border: 1px solid #e1ecfb;
+  border-radius: 14px;
+  background: #ffffff;
 }
 
-.waiting-detail-hero.is-compact > div {
+.waiting-detail-phone {
   display: flex;
-  flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
-.waiting-detail-hero.is-compact strong {
+.waiting-detail-phone > span {
+  color: #6b859e;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.waiting-detail-phone > strong {
   color: #0f2b52;
   font-size: 17px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.waiting-detail-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.waiting-detail-contact-actions .staff-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  text-decoration: none;
 }
 
 .waiting-detail-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
+  margin: 0;
 }
 
 .waiting-detail-stats > div {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 7px;
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid #edf2f9;
-  border-radius: 10px;
+  padding: 13px 14px;
+  border: 1px solid #e6eef9;
+  border-radius: 12px;
   background: #fbfdff;
 }
 
-.waiting-detail-stats span {
-  color: #8aa0b6;
+.waiting-detail-stats dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #6b859e;
   font-size: 11.5px;
   font-weight: 600;
 }
 
-.waiting-detail-stats strong {
+.waiting-detail-stats dt svg {
+  flex-shrink: 0;
+  color: #6093d4;
+}
+
+.waiting-detail-stats dd {
+  margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 
-.waiting-detail-stats .is-long strong {
+.waiting-detail-stats small {
+  color: #6b859e;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.waiting-detail-stats .is-long dd {
   color: #b45309;
 }
 
 .waiting-detail-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 11px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e6eef9;
+  border-radius: 14px;
+  background: #ffffff;
 }
 
 .waiting-detail-section h4 {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   color: #0f2b52;
   font-size: 13px;
   font-weight: 800;
 }
 
+.waiting-detail-section h4 > svg {
+  flex-shrink: 0;
+  color: #6093d4;
+}
+
+.waiting-detail-section.is-note {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.waiting-detail-section.is-note h4,
+.waiting-detail-section.is-note h4 > svg {
+  color: #92400e;
+}
+
 .waiting-detail-note {
   margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #e1ecfb;
-  border-left: 3px solid #93c5fd;
-  border-radius: 10px;
-  background: #f8fbff;
-  color: #1e3a5f;
+  color: #78350f;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .waiting-detail-note.is-empty {
-  border-left-color: #e1ecfb;
-  color: #9db4cc;
+  color: #7a8fa6;
+}
+
+.waiting-detail-section.is-vacancies h4 > svg {
+  color: #16a34a;
+}
+
+.waiting-detail-section.is-vacancies .staff-count-pill {
+  margin-left: auto;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
 }
 
 .waiting-vacant-rooms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .waiting-vacant-rooms span {
   display: inline-flex;
   flex-direction: column;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 1px solid #bbf7d0;
   border-radius: 10px;
   background: #f0fdf4;
@@ -5035,19 +5112,49 @@
 }
 
 .waiting-detail-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
   margin: 0;
-  color: #9db4cc;
+  color: #6b859e;
   font-size: 11.5px;
-  text-align: center;
+  line-height: 1.6;
+}
+
+.waiting-detail-hint svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.waiting-detail-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: 0;
+  padding-bottom: 2px;
+  background: #ffffff;
 }
 
 .waiting-detail-actions .staff-action-btn {
+  display: inline-flex;
   flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
 @media (max-width: 640px) {
   .waiting-detail-stats {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .waiting-detail-contact-actions {
+    width: 100%;
+  }
+
+  .waiting-detail-contact-actions .staff-action-btn {
+    flex: 1;
   }
 }
 
@@ -5799,15 +5906,15 @@
   color: #b45309;
 }
 
-.waiting-detail-stats .is-movein-soon strong {
+.waiting-detail-stats .is-movein-soon dd {
   color: #15803d;
 }
 
-.waiting-detail-stats .is-movein-late strong {
+.waiting-detail-stats .is-movein-late dd {
   color: #b45309;
 }
 
-.waiting-detail-stats .is-movein-later strong {
+.waiting-detail-stats .is-movein-later dd {
   color: #1d4ed8;
 }
 
