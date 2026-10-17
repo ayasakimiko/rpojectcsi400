@@ -663,14 +663,14 @@ router.post("/requests", async (req, res) => {
     );
     if (activeRequests.some((request) => request.type === type)) {
       await connection.rollback();
-      return res.status(409).json({ message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
+      return res.status(409).json({ code: "TENANT_REQUEST_ACTIVE", message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
     }
     if (
       (type === "move_room" && activeRequests.some((request) => request.type !== "move_room"))
       || (type !== "move_room" && activeRequests.some((request) => request.type === "move_room"))
     ) {
       await connection.rollback();
-      return res.status(409).json({ message: "กรุณารอให้คำขอเกี่ยวกับการเปลี่ยนห้องดำเนินการเสร็จก่อน" });
+      return res.status(409).json({ code: "TENANT_REQUEST_ACTIVE", message: "กรุณารอให้คำขอเกี่ยวกับการเปลี่ยนห้องดำเนินการเสร็จก่อน" });
     }
 
     if (type === "move_room") {
