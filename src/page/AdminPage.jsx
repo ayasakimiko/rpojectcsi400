@@ -121,6 +121,49 @@ function printMonthlyInvoices(rooms, targetWindow = window.open('', '_blank', 'w
   return occupiedRooms.length
 }
 
+function NotifKindIcon({ kind }) {
+  const props = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  if (kind === 'announcement') {
+    return (
+      <svg {...props}>
+        <path d="m3 11 18-5v12L3 14v-3z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    )
+  }
+  if (kind === 'maintenance') {
+    return (
+      <svg {...props}>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />
+      </svg>
+    )
+  }
+  if (kind === 'staff') {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </svg>
+  )
+}
+
 function buildAnnouncementNotif(item) {
   return {
     key: `announcement-${item.id}`,
@@ -332,7 +375,7 @@ function calcStayDays(start, end) {
   return Math.floor(ms / (1000 * 60 * 60 * 24))
 }
 
-const NOTIF_PAGE_SIZE = 6
+const NOTIF_PAGE_SIZE = 30
 const ADMIN_STAFF_NOTIF_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 const ADMIN_TENANT_NOTIF_INFO = {
@@ -710,6 +753,7 @@ const SAFETY_INCIDENT_TYPE_LABEL = {
 
 function AdminSafetyIncidentReviewNav() {
   const [open, setOpen] = useState(false)
+  const [lightbox, setLightbox] = useState(null)
   const [incidents, setIncidents] = useState([])
   const [notes, setNotes] = useState({})
   const [busy, setBusy] = useState(false)
@@ -782,6 +826,21 @@ function AdminSafetyIncidentReviewNav() {
                       </span>
                     </div>
                     <p>{item.description}</p>
+                    {item.photos?.length > 0 && (
+                      <div className="admin-safety-photos" aria-label="รูปประกอบการแจ้งเหตุ">
+                        {item.photos.map((photo, index) => (
+                          <button
+                            key={`${photo.url}-${index}`}
+                            type="button"
+                            className="admin-safety-photo"
+                            onClick={() => setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })}
+                            aria-label={`ดูรูปที่ ${index + 1}`}
+                          >
+                            <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <small>
                       {item.reporter_name} ({item.reporter_role})
                       {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
@@ -810,6 +869,17 @@ function AdminSafetyIncidentReviewNav() {
             </div>
             {message && <p className="admin-safety-message" role="status">{message}</p>}
           </section>
+        </div>
+      )}
+      {lightbox && (
+        <div className="admin-safety-lightbox-host">
+          <PhotoLightbox
+            photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+            initialIndex={lightbox.index}
+            title={lightbox.title}
+            label="รูปประกอบการแจ้งเหตุ"
+            onClose={() => setLightbox(null)}
+          />
         </div>
       )}
     </li>
@@ -872,6 +942,8 @@ function AdminBackupPage() {
     }
   })
   const [notifPage, setNotifPage] = useState(1)
+  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
+  const notifListRef = useRef(null)
   const notifTargetRef = useRef(null)
   const [notifTargetReady, setNotifTargetReady] = useState(0)
   const [notifTenantItems, setNotifTenantItems] = useState([])
@@ -1989,9 +2061,10 @@ function AdminBackupPage() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [notifTenantItems, notifMaintenanceItems, staffList, announcements])
 
-  const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
+  const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
 
   const markNotificationsRead = () => {
+    setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
     const keys = notifications.map((notification) => notification.key)
     setSeenNotificationKeys(keys)
     localStorage.setItem(getNotificationStorageKey('admin'), JSON.stringify(keys))
@@ -2023,7 +2096,6 @@ function AdminBackupPage() {
     resetMoveoutRows()
   }, [moveoutLogs.page, activeTab])
 
-  // A notification opens the detail of its own item: switch to the matching tab and expand that row.
   const openNotification = (notif) => {
     closeNotifPanel()
     if (notif.kind === 'announcement') {
@@ -2055,7 +2127,6 @@ function AdminBackupPage() {
     loadMaintenanceLogs(1, 'all', '').finally(() => setNotifTargetReady((count) => count + 1))
   }
 
-  // Declared after the row-reset effects above so the reset runs first and the target row is expanded afterwards.
   useEffect(() => {
     const target = notifTargetRef.current
     if (!target || activeTab !== target.tab) return
@@ -2101,7 +2172,9 @@ function AdminBackupPage() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {hasUnreadNotifications && <span className="admin-notif-dot" />}
+                {newNotifications.length > 0 && (
+                  <span className="admin-notif-dot">{newNotifications.length > 99 ? '99+' : newNotifications.length}</span>
+                )}
               </button>
               {notifOpen && (
                 <div
@@ -2114,7 +2187,14 @@ function AdminBackupPage() {
                   }}
                 >
                   <div className="admin-notif-panel-header">
-                    <span>การแจ้งเตือน</span>
+                    <span className="admin-notif-panel-title">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      การแจ้งเตือน
+                      {notifications.length > 0 && <span className="admin-notif-count">{notifications.length}</span>}
+                    </span>
                     <button type="button" className="admin-notif-panel-close" onClick={closeNotifPanel} aria-label="ปิด">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18" />
@@ -2123,44 +2203,80 @@ function AdminBackupPage() {
                     </button>
                   </div>
                   {notifications.length === 0 ? (
-                    <p className="admin-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                    <div className="admin-notif-empty">
+                      <span className="admin-notif-empty-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                      </span>
+                      ยังไม่มีการแจ้งเตือน
+                    </div>
                   ) : (
                     <>
-                      <div className="admin-notif-list">
+                      <div className="admin-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
                           <button
                             type="button"
                             key={notif.key}
-                            className={`admin-notif-item is-${notif.tone}`}
+                            className={`admin-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => openNotification(notif)}
                           >
-                            <p className="admin-notif-item-title">{notif.title}</p>
-                            <p className="admin-notif-item-status">{notif.label}</p>
-                            <p className="admin-notif-item-date">{formatDateTime(notif.date)}</p>
+                            <span className="admin-notif-item-icon">
+                              <NotifKindIcon kind={notif.kind} />
+                            </span>
+                            <span className="admin-notif-item-main">
+                              <span className="admin-notif-item-head">
+                                <span className="admin-notif-item-title">
+                                  {freshNotifKeys.has(notif.key) && <span className="admin-notif-item-new">ใหม่</span>}
+                                  {notif.title}
+                                </span>
+                                <time className="admin-notif-item-date">{formatDateTime(notif.date)}</time>
+                              </span>
+                              <span className="admin-notif-item-status">{notif.label}</span>
+                            </span>
                           </button>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (
                         <div className="admin-notif-pagination">
-                          <button
-                            type="button"
-                            className="admin-notif-page-btn"
-                            disabled={notifCurrentPage <= 1}
-                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
-                          >
-                            ก่อนหน้า
-                          </button>
                           <span className="admin-notif-page-info">
-                            หน้า {notifCurrentPage} / {notifTotalPages}
+                            {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
+                            {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
                           </span>
-                          <button
-                            type="button"
-                            className="admin-notif-page-btn"
-                            disabled={notifCurrentPage >= notifTotalPages}
-                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
-                          >
-                            ถัดไป
-                          </button>
+                          <div className="admin-notif-page-nav">
+                            <button
+                              type="button"
+                              className="admin-notif-page-btn"
+                              aria-label="หน้าก่อนหน้า"
+                              disabled={notifCurrentPage <= 1}
+                              onClick={() => {
+                                setNotifPage(Math.max(1, notifCurrentPage - 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M15 18l-6-6 6-6" />
+                              </svg>
+                            </button>
+                            <span className="admin-notif-page-current">
+                              {notifCurrentPage} / {notifTotalPages}
+                            </span>
+                            <button
+                              type="button"
+                              className="admin-notif-page-btn"
+                              aria-label="หน้าถัดไป"
+                              disabled={notifCurrentPage >= notifTotalPages}
+                              onClick={() => {
+                                setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>

@@ -521,6 +521,7 @@ CREATE TABLE IF NOT EXISTS SafetyIncident (
     incident_type VARCHAR(80) NOT NULL,
     severity ENUM('urgent', 'normal') NOT NULL DEFAULT 'normal',
     description VARCHAR(1000) NOT NULL,
+    photos LONGTEXT NULL,
     status ENUM('pending', 'reviewed') NOT NULL DEFAULT 'pending',
     reviewed_by_name VARCHAR(255) NULL,
     reviewed_at DATETIME NULL,
@@ -604,6 +605,16 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND INDEX_NAME = 'idx_safety_incident_reporter'),
     'SELECT 1',
     'CREATE INDEX `idx_safety_incident_reporter` ON `SafetyIncident` (reporter_role, reporter_id, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND COLUMN_NAME = 'photos'),
+    'SELECT 1',
+    'ALTER TABLE `SafetyIncident` ADD COLUMN `photos` LONGTEXT NULL AFTER description'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;

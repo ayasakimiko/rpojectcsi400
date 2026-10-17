@@ -144,7 +144,7 @@ function formatPhotoSize(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-function MaintenancePhotoPicker({ id, files, onChange, onError }) {
+function MaintenancePhotoPicker({ id, files, onChange, onError, max = MAINTENANCE_MAX_PHOTOS }) {
   const [dragging, setDragging] = useState(false)
   const previewUrls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files])
 
@@ -160,11 +160,11 @@ function MaintenancePhotoPicker({ id, files, onChange, onError }) {
     if (list.length === 0) return
     const images = list.filter((file) => file.type.startsWith('image/'))
     const withinSize = images.filter((file) => file.size <= MAINTENANCE_MAX_PHOTO_BYTES)
-    const room = MAINTENANCE_MAX_PHOTOS - files.length
+    const room = max - files.length
     const accepted = withinSize.slice(0, Math.max(0, room))
     if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
     else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 5 MB ต่อรูป')
-    else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${MAINTENANCE_MAX_PHOTOS} รูป`)
+    else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${max} รูป`)
     else onError('')
     if (accepted.length > 0) onChange([...files, ...accepted])
   }
@@ -226,7 +226,7 @@ function MaintenancePhotoPicker({ id, files, onChange, onError }) {
             {dragging ? 'ปล่อยรูปที่นี่' : 'ลากรูปมาวางที่นี่ หรือ '}
             {!dragging && <span className="maint-photo-dropzone-link">คลิกเพื่อเลือกรูป</span>}
           </span>
-          <span className="maint-photo-dropzone-hint">สูงสุด {MAINTENANCE_MAX_PHOTOS} รูป รูปละไม่เกิน 5 MB</span>
+          <span className="maint-photo-dropzone-hint">สูงสุด {max} รูป รูปละไม่เกิน 5 MB</span>
         </label>
       ) : (
         <div className="maint-photo-grid">
@@ -263,7 +263,7 @@ function MaintenancePhotoPicker({ id, files, onChange, onError }) {
               </button>
             </figure>
           ))}
-          {files.length < MAINTENANCE_MAX_PHOTOS && (
+          {files.length < max && (
             <label htmlFor={id} className="maint-photo-add">
               <span aria-hidden="true">+</span>
               <small>{dragging ? 'ปล่อยเพื่อเพิ่ม' : 'เพิ่มรูป'}</small>
@@ -498,6 +498,63 @@ function CalendarIcon() {
   )
 }
 
+function NotifKindIcon({ kind, paymentType }) {
+  const props = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  if (kind === 'announcement') {
+    return (
+      <svg {...props}>
+        <path d="m3 11 18-5v12L3 14v-3z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    )
+  }
+  if (kind === 'parcel') {
+    return (
+      <svg {...props}>
+        <path d="M21 8 12 3 3 8v8l9 5 9-5V8z" />
+        <path d="m3 8 9 5 9-5M12 13v8" />
+      </svg>
+    )
+  }
+  if (kind === 'maintenance') {
+    return (
+      <svg {...props}>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />
+      </svg>
+    )
+  }
+  if (kind === 'utility' && paymentType === 'electricity') {
+    return (
+      <svg {...props}>
+        <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
+      </svg>
+    )
+  }
+  if (kind === 'utility') {
+    return (
+      <svg {...props}>
+        <path d="M12 2.7s-6 6.4-6 11.3a6 6 0 0 0 12 0c0-4.9-6-11.3-6-11.3z" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </svg>
+  )
+}
+
 function Modal({ title, onClose, children, variant, onBack }) {
   const [isClosing, setIsClosing] = useState(false)
 
@@ -552,6 +609,7 @@ function Modal({ title, onClose, children, variant, onBack }) {
           </button>
         </div>
         <div className="dashboard-modal-body">
+          {(variant === 'confirm' || variant === 'success') && <h3 className="dashboard-modal-alert-title">{title}</h3>}
           {typeof children === 'function' ? children(requestClose) : children}
         </div>
       </div>
@@ -1566,7 +1624,7 @@ function ParcelProgress({ parcel, compact = false }) {
   )
 }
 
-const NOTIF_PAGE_SIZE = 6
+const NOTIF_PAGE_SIZE = 30
 
 const CUSTOMER_TABS = [
   { key: 'home', label: 'หน้าแรก' },
@@ -2524,7 +2582,8 @@ const SAFETY_FILTERS = [
   { key: 'reviewed', label: 'ตรวจสอบแล้ว', tone: 'success' },
 ]
 const SAFETY_DESCRIPTION_MAX = 1000
-const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '' }
+const SAFETY_MAX_PHOTOS = 4
+const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', photos: [] }
 
 function ShieldIcon() {
   return (
@@ -2578,6 +2637,7 @@ function getRequestDetail(kind, request) {
     if (request.status === 'reviewed') {
       fields.push(['ตรวจสอบโดย', request.reviewed_by_name], ['ผลการตรวจสอบ', request.review_note])
     }
+    photos = request.photos || []
   } else if (kind === 'resident_visit') {
     title = 'รายละเอียดคำขอรถ / ผู้มาติดต่อ'
     heading = getVisitTitle(request)
@@ -2754,7 +2814,12 @@ function SafetyIncidentReportRow() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await axios.post('/api/customer/safety-incidents', form, { headers })
+      const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
+      const { data } = await axios.post(
+        '/api/customer/safety-incidents',
+        { incidentType: form.incidentType, description: form.description, photos },
+        { headers },
+      )
       setSentSeverity(data.severity || '')
       setForm(EMPTY_SAFETY_FORM)
       setView('success')
@@ -2878,6 +2943,17 @@ function SafetyIncidentReportRow() {
                   </span>
                 </div>
 
+                <label htmlFor="safety-photos">
+                  รูปประกอบ <span className="dashboard-safety-optional">(ไม่บังคับ)</span>
+                </label>
+                <MaintenancePhotoPicker
+                  id="safety-photos"
+                  files={form.photos}
+                  max={SAFETY_MAX_PHOTOS}
+                  onChange={(photos) => setForm((current) => ({ ...current, photos }))}
+                  onError={setError}
+                />
+
                 {error && <p className="dashboard-form-error">{error}</p>}
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
@@ -2993,6 +3069,16 @@ function SafetyIncidentReportRow() {
                               <span className="dashboard-rv-meta-label">รายละเอียดเหตุการณ์</span>
                               <span className="dashboard-rv-meta-text">{item.description}</span>
                             </span>
+                            {item.photos?.length > 0 && (
+                              <span className="dashboard-safety-photo-chip">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                                  <circle cx="8.5" cy="8.5" r="1.5" />
+                                  <path d="m21 15-5-5L5 21" />
+                                </svg>
+                                {item.photos.length} รูป
+                              </span>
+                            )}
                           </span>
                           <span className={`dashboard-badge status-${SAFETY_STATUS_BADGE[item.status] || 'pending'}`}>
                             {SAFETY_STATUS_LABEL[item.status] || item.status}
@@ -3572,8 +3658,20 @@ function CustomerDashbord() {
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [notifSeen, setNotifSeen] = useState(false)
+  const [notifSeenVersion, setNotifSeenVersion] = useState(0)
+  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
+  const notifSeenStorageKey = data?.customer?.id ? `notif_seen_keys_${data.customer.id}` : null
+  const seenNotifKeys = useMemo(() => {
+    if (!notifSeenStorageKey || notifSeenVersion < 0) return new Set()
+    try {
+      const stored = JSON.parse(localStorage.getItem(notifSeenStorageKey) || '[]')
+      return new Set(Array.isArray(stored) ? stored : [])
+    } catch {
+      return new Set()
+    }
+  }, [notifSeenStorageKey, notifSeenVersion])
   const [notifPage, setNotifPage] = useState(1)
+  const notifListRef = useRef(null)
   const [notifDetail, setNotifDetail] = useState(null)
   const [parcelReceiveId, setParcelReceiveId] = useState(null)
   const [parcelReceiveConfirm, setParcelReceiveConfirm] = useState(null)
@@ -4368,6 +4466,7 @@ function CustomerDashbord() {
           </span>
         ),
         kind: 'utility',
+        paymentType: payment.type,
       },
     ]
   }
@@ -4416,6 +4515,21 @@ function CustomerDashbord() {
       kind: 'announcement',
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
+
+  const newNotifications = notifications.filter((notif) => !seenNotifKeys.has(notif.key))
+
+  const markNotificationsSeen = () => {
+    setFreshNotifKeys(new Set(newNotifications.map((notif) => notif.key)))
+    if (newNotifications.length === 0) return
+    try {
+      if (notifSeenStorageKey) {
+        localStorage.setItem(notifSeenStorageKey, JSON.stringify(notifications.map((notif) => notif.key)))
+      }
+    } catch {
+      return
+    }
+    setNotifSeenVersion((version) => version + 1)
+  }
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
   const notifCurrentPage = Math.min(notifPage, notifTotalPages)
@@ -4649,7 +4763,7 @@ function CustomerDashbord() {
                     <tr key={payment.id}>
                       <td>{formatDateTime(payment.created_at)}</td>
                       <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
-                      <td>฿{formatCurrency(payment.amount)}</td>
+                      <td className="dashboard-payment-amount">฿{formatCurrency(payment.amount)}</td>
                       <td>
                         <span className={`dashboard-badge status-${payment.status}`}>
                           {payment.status === 'pending' && payment.slip_path ? 'รอตรวจสอบสลิป' : STATUS_LABEL[payment.status] || payment.status}
@@ -4782,7 +4896,7 @@ function CustomerDashbord() {
                     closeNotifPanel()
                   } else {
                     setNotifOpen(true)
-                    setNotifSeen(true)
+                    markNotificationsSeen()
                     setNotifPage(1)
                   }
                 }}
@@ -4801,7 +4915,9 @@ function CustomerDashbord() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {!notifSeen && notifications.length > 0 && <span className="dashboard-notif-dot" />}
+                {newNotifications.length > 0 && (
+                  <span className="dashboard-notif-dot">{newNotifications.length > 99 ? '99+' : newNotifications.length}</span>
+                )}
               </button>
               {notifOpen && (
                 <div
@@ -4876,12 +4992,12 @@ function CustomerDashbord() {
                     </div>
                   ) : (
                     <>
-                      <div className="dashboard-notif-list">
+                      <div className="dashboard-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
                           <button
                             type="button"
                             key={notif.key}
-                            className={`dashboard-notif-item is-${notif.tone}`}
+                            className={`dashboard-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
                               if (notif.kind === 'announcement') {
@@ -4899,34 +5015,62 @@ function CustomerDashbord() {
                               else setNotifDetail(notif)
                             }}
                           >
-                            <p className="dashboard-notif-item-title">{notif.title}</p>
-                            <p className="dashboard-notif-item-status">{notif.label}</p>
-                            {notif.preview && <p className="dashboard-notif-item-preview">{notif.preview}</p>}
-                            <p className="dashboard-notif-item-date">{formatDateTime(notif.date)}</p>
+                            <span className="dashboard-notif-item-icon">
+                              <NotifKindIcon kind={notif.kind} paymentType={notif.paymentType} />
+                            </span>
+                            <span className="dashboard-notif-item-main">
+                              <span className="dashboard-notif-item-head">
+                                <span className="dashboard-notif-item-title">
+                                  {freshNotifKeys.has(notif.key) && <span className="dashboard-notif-item-new">ใหม่</span>}
+                                  {notif.title}
+                                </span>
+                                <time className="dashboard-notif-item-date">{formatDateTime(notif.date)}</time>
+                              </span>
+                              <span className="dashboard-notif-item-status">{notif.label}</span>
+                              {notif.preview && <span className="dashboard-notif-item-preview">{notif.preview}</span>}
+                            </span>
                           </button>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (
                         <div className="dashboard-notif-pagination">
-                          <button
-                            type="button"
-                            className="dashboard-notif-page-btn"
-                            disabled={notifCurrentPage <= 1}
-                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
-                          >
-                            ก่อนหน้า
-                          </button>
                           <span className="dashboard-notif-page-info">
-                            หน้า {notifCurrentPage} / {notifTotalPages}
+                            {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
+                            {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
                           </span>
-                          <button
-                            type="button"
-                            className="dashboard-notif-page-btn"
-                            disabled={notifCurrentPage >= notifTotalPages}
-                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
-                          >
-                            ถัดไป
-                          </button>
+                          <div className="dashboard-notif-page-nav">
+                            <button
+                              type="button"
+                              className="dashboard-notif-page-btn"
+                              aria-label="หน้าก่อนหน้า"
+                              disabled={notifCurrentPage <= 1}
+                              onClick={() => {
+                                setNotifPage(Math.max(1, notifCurrentPage - 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M15 18l-6-6 6-6" />
+                              </svg>
+                            </button>
+                            <span className="dashboard-notif-page-current">
+                              {notifCurrentPage} / {notifTotalPages}
+                            </span>
+                            <button
+                              type="button"
+                              className="dashboard-notif-page-btn"
+                              aria-label="หน้าถัดไป"
+                              disabled={notifCurrentPage >= notifTotalPages}
+                              onClick={() => {
+                                setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>

@@ -7,6 +7,26 @@ const URL_PREFIX = "/uploads";
 const EXTENSIONS = { jpeg: ".jpg", png: ".png", webp: ".webp" };
 const DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/;
 
+export function parseStoredPhotos(photos) {
+  if (typeof photos === "string") {
+    try {
+      photos = JSON.parse(photos);
+    } catch {
+      photos = [];
+    }
+  }
+  return Array.isArray(photos) ? photos.flatMap((photo) => {
+    const url = typeof photo === "string" ? photo : photo?.url || photo?.dataUrl;
+    if (typeof url !== "string" || !url.trim()) return [];
+    const name = typeof photo?.name === "string" ? photo.name : "";
+    return [{ name, url: url.trim() }];
+  }) : [];
+}
+
+export function withIncidentPhotos(incidents) {
+  return incidents.map((incident) => ({ ...incident, photos: parseStoredPhotos(incident.photos) }));
+}
+
 export async function deletePublicImages(urls) {
   for (const url of urls) {
     if (typeof url !== "string" || !url.startsWith(`${URL_PREFIX}/`)) continue;

@@ -6,7 +6,13 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
-import { deletePublicImages, PUBLIC_UPLOAD_DIR, savePublicImages } from "../middleware/publicUploads.js";
+import {
+  deletePublicImages,
+  parseStoredPhotos,
+  PUBLIC_UPLOAD_DIR,
+  savePublicImages,
+  withIncidentPhotos,
+} from "../middleware/publicUploads.js";
 import { listAnnouncements } from "./AnnouncementRouter.js";
 import {
   isPositiveId,
@@ -20,6 +26,7 @@ import { attachParcelPhotos } from "./ParcelRouter.js";
 
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
+const SAFETY_INCIDENT_MAX_PHOTOS = 4;
 const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
 const URGENT_INCIDENT_KEYWORDS = [
@@ -30,23 +37,7 @@ const URGENT_INCIDENT_KEYWORDS = [
 ];
 
 export function withVehiclePhotos(requests) {
-  return requests.map((request) => {
-    let photos = request.vehicle_photos;
-    if (typeof photos === "string") {
-      try {
-        photos = JSON.parse(photos);
-      } catch {
-        photos = [];
-      }
-    }
-    const vehiclePhotos = Array.isArray(photos) ? photos.flatMap((photo) => {
-      const url = typeof photo === "string" ? photo : photo?.url || photo?.dataUrl;
-      if (typeof url !== "string" || !url.trim()) return [];
-      const name = typeof photo?.name === "string" ? photo.name : "";
-      return [{ name, url: url.trim() }];
-    }) : [];
-    return { ...request, vehicle_photos: vehiclePhotos };
-  });
+  return requests.map((request) => ({ ...request, vehicle_photos: parseStoredPhotos(request.vehicle_photos) }));
 }
 
 export async function isPlateRegisteredByOther(pool, customerId, plate) {
@@ -121,12 +112,15 @@ export async function requireActiveCustomer(req, res, next) {
 }
 
 export async function createSafetyIncident(req, res) {
+  let savedPhotos = [];
   try {
-    const { incidentType, description, roomNumber } = req.body ?? {};
+    const { incidentType, description, roomNumber, photos } = req.body ?? {};
     if (!String(incidentType ?? "").trim() || !String(description ?? "").trim()) {
       return res.status(400).json({ message: "กรุณาระบุประเภทเหตุและรายละเอียด" });
     }
     if (String(description).length > 1000) return res.status(400).json({ message: "รายละเอียดต้องไม่เกิน 1,000 ตัวอักษร" });
+    const parsedPhotos = parsePhotoList(photos, SAFETY_INCIDENT_MAX_PHOTOS);
+    if (parsedPhotos.error) return res.status(400).json({ message: parsedPhotos.error });
 
     const table = SAFETY_REPORTER_TABLE[req.user?.role];
     if (!table) return res.status(403).json({ message: "ไม่มีสิทธิ์รายงานเหตุ" });
@@ -142,13 +136,24 @@ export async function createSafetyIncident(req, res) {
     const requestedRoom = Number(roomNumber);
     const safeRoom = isCustomer ? user.room_number : Number.isInteger(requestedRoom) && requestedRoom > 0 ? requestedRoom : null;
     const severity = classifySafetySeverity(String(incidentType).trim(), description);
+    savedPhotos = await savePublicImages("incidents", parsedPhotos.value);
     await pool.query(
-      `INSERT INTO SafetyIncident (reporter_role, reporter_id, reporter_name, room_number, incident_type, severity, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.role, req.user.id, name, safeRoom, String(incidentType).trim().slice(0, 80), severity, String(description).trim()],
+      `INSERT INTO SafetyIncident (reporter_role, reporter_id, reporter_name, room_number, incident_type, severity, description, photos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.role,
+        req.user.id,
+        name,
+        safeRoom,
+        String(incidentType).trim().slice(0, 80),
+        severity,
+        String(description).trim(),
+        savedPhotos.length ? JSON.stringify(savedPhotos) : null,
+      ],
     );
     return res.status(201).json({ message: "ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว", severity });
   } catch (error) {
+    if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
     console.error("Create safety incident error:", error);
     return res.status(500).json({ message: "ไม่สามารถส่งรายงานเหตุได้" });
   }
@@ -221,7 +226,6 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
   if (now < start || now > end) return null;
 
-  // Anchor each anniversary to the original day, including contracts starting on the 29th–31st.
   const periodAt = (offset) => {
     const date = new Date(start.getFullYear(), start.getMonth() + offset, 1, start.getHours(), start.getMinutes(), start.getSeconds());
     const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -242,11 +246,9 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
   }
   if (periods.length === 0) return null;
 
-  // Prepaid dates also cover legacy records where advance payments were not itemized.
   const prepaidUntil = room.prepaid_until ? new Date(room.prepaid_until) : null;
   const prepaidCents = prepaidUntil && !Number.isNaN(prepaidUntil.getTime())
     ? periods.filter((period) => period.periodEnd <= prepaidUntil).length * priceCents : 0;
-  // New receipts after a legacy prepaid boundary add credit instead of being absorbed by its floor.
   let receiptsAfterPrepaidCents = 0;
   if (prepaidUntil && !Number.isNaN(prepaidUntil.getTime())) {
     const cutoffDay = new Date(prepaidUntil.getFullYear(), prepaidUntil.getMonth(), prepaidUntil.getDate());
@@ -826,11 +828,11 @@ router.post("/resident-visit-requests", async (req, res) => {
 router.get("/safety-incidents", async (req, res) => {
   try {
     const [incidents] = await getPool().query(
-      `SELECT id, room_number, incident_type, severity, description, status, reviewed_by_name, reviewed_at, review_note, created_at
+      `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note, created_at
        FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? ORDER BY created_at DESC`,
       [req.user.id],
     );
-    return res.json({ incidents });
+    return res.json({ incidents: withIncidentPhotos(incidents) });
   } catch (error) {
     console.error("Fetch own safety incidents error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดประวัติการแจ้งเหตุได้" });

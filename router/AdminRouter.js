@@ -15,7 +15,7 @@ import {
   validatePersonUpdateInput,
   validateRoomFields,
 } from "../middleware/validation.js";
-import { deletePublicImages } from "../middleware/publicUploads.js";
+import { deletePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
@@ -52,7 +52,7 @@ const SAFETY_REVIEWER_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" }
 export async function listSafetyIncidents(_req, res) {
   try {
     const [incidents] = await getPool().query("SELECT * FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC");
-    return res.json({ incidents });
+    return res.json({ incidents: withIncidentPhotos(incidents) });
   } catch (error) {
     console.error("Fetch safety incidents error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดรายงานเหตุได้" });
