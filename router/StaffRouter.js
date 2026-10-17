@@ -1302,11 +1302,12 @@ router.post("/resident-visit-requests", async (req, res) => {
     const { roomNumber, owner, vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, photos } = req.body ?? {};
     const room = Number(roomNumber);
     const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
-    const endTime = typeof endAt === "string" ? Date.parse(endAt) : NaN;
+    const openEnded = endAt === null || endAt === undefined || endAt === "";
+    const endTime = openEnded ? null : typeof endAt === "string" ? Date.parse(endAt) : NaN;
     if (!["self", "family", "external"].includes(owner)) return res.status(400).json({ message: "กรุณาเลือกประเภทรถ" });
     const isExternal = owner === "external";
     if (!isExternal && !isPositiveId(room)) return res.status(400).json({ message: "กรุณาเลือกห้อง" });
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    if (!Number.isFinite(startTime) || (!openEnded && (!Number.isFinite(endTime) || endTime <= startTime))) {
       return res.status(400).json({ message: "กรุณาระบุช่วงเวลาให้ถูกต้อง" });
     }
     const textFields = [[vehiclePlate, 20], [vehicleModel, 100], [guestName, 255], [guestPhone, 20], [note, 500]];
@@ -1349,7 +1350,7 @@ router.post("/resident-visit-requests", async (req, res) => {
         hasVisitor ? guestName.trim() : null,
         hasVisitor ? guestPhone?.trim() || null : null,
         startAt,
-        endAt,
+        openEnded ? null : endAt,
         note?.trim() || null,
         staffName,
       ],
@@ -1369,8 +1370,9 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
     if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     const { vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, keepPhotos, photos } = req.body ?? {};
     const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
-    const endTime = typeof endAt === "string" ? Date.parse(endAt) : NaN;
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    const openEnded = endAt === null || endAt === undefined || endAt === "";
+    const endTime = openEnded ? null : typeof endAt === "string" ? Date.parse(endAt) : NaN;
+    if (!Number.isFinite(startTime) || (!openEnded && (!Number.isFinite(endTime) || endTime <= startTime))) {
       return res.status(400).json({ message: "กรุณาระบุช่วงเวลาให้ถูกต้อง" });
     }
     const textFields = [[vehiclePlate, 20], [vehicleModel, 100], [guestName, 255], [guestPhone, 20], [note, 500]];
@@ -1419,7 +1421,7 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
         hasVisitor ? guestName.trim() : null,
         hasVisitor ? guestPhone?.trim() || null : null,
         startAt,
-        endAt,
+        openEnded ? null : endAt,
         note?.trim() || null,
         staffName,
         id,
