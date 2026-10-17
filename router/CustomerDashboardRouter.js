@@ -6,7 +6,14 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
-import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
+import { requireActiveCustomer } from "../middleware/accounts.js";
+import {
+  deletePublicImages,
+  parseStoredPhotos,
+  PUBLIC_UPLOAD_DIR,
+  savePublicImages,
+  withIncidentPhotos,
+} from "../middleware/publicUploads.js";
 import { listAnnouncements } from "./AnnouncementRouter.js";
 import {
   isPositiveId,
@@ -19,6 +26,37 @@ import {
 import { attachParcelPhotos } from "./ParcelRouter.js";
 
 const router = Router();
+const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
+const SAFETY_INCIDENT_MAX_PHOTOS = 4;
+const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
+const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
+const URGENT_INCIDENT_KEYWORDS = [
+  "ด่วน", "ช่วยด้วย", "ฉุกเฉิน", "ไฟไหม้", "ควัน", "ระเบิด", "แก๊สรั่ว", "ก๊าซรั่ว", "ไฟช็อต", "ไฟดูด",
+  "บาดเจ็บ", "เลือด", "หมดสติ", "ไม่หายใจ", "ชัก", "หัวใจ", "ล้ม", "ตกบันได",
+  "บุกรุก", "ขโมย", "งัด", "ปล้น", "อาวุธ", "มีด", "ปืน", "ทำร้าย", "ทะเลาะ", "ข่มขู่",
+  "น้ำท่วม", "ท่อแตก", "ติดลิฟต์",
+];
+
+export function withVehiclePhotos(requests) {
+  return requests.map((request) => ({ ...request, vehicle_photos: parseStoredPhotos(request.vehicle_photos) }));
+}
+
+export async function isPlateRegisteredByOther(pool, customerId, plate) {
+  const [owners] = await pool.query(
+    `SELECT 1 FROM ResidentVisitRequest
+     WHERE request_type = 'vehicle' AND NOT (customer_id <=> ?) AND status IN ('pending', 'approved') AND (end_at IS NULL OR end_at > NOW())
+       AND REPLACE(UPPER(vehicle_plate), ' ', '') = REPLACE(UPPER(?), ' ', '')
+     LIMIT 1`,
+    [customerId, String(plate).trim()],
+  );
+  return owners.length > 0;
+}
+
+export function classifySafetySeverity(incidentType, description) {
+  if (URGENT_INCIDENT_TYPES.has(incidentType)) return "urgent";
+  const text = String(description ?? "").toLowerCase();
+  return URGENT_INCIDENT_KEYWORDS.some((keyword) => text.includes(keyword)) ? "urgent" : "normal";
+}
 const PAYMENT_SLIP_FOLDER = "payment-slips";
 const PAYMENT_SLIP_EXTENSIONS = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
@@ -47,30 +85,65 @@ function parsePaymentSlip(req, res, next) {
 export async function attachMaintenancePhotos(pool, requests) {
   if (requests.length === 0) return requests;
   const [photos] = await pool.query(
-    `SELECT maintenance_request_id, name, data_url FROM MaintenancePhoto
-     WHERE maintenance_request_id IN (?) ORDER BY id ASC`,
+    `SELECT maintenance_request_id, name, url FROM MaintenancePhoto
+     WHERE maintenance_request_id IN (?) AND url IS NOT NULL ORDER BY id ASC`,
     [requests.map((request) => request.id)],
   );
   const photosByRequestId = new Map();
   for (const photo of photos) {
     const list = photosByRequestId.get(photo.maintenance_request_id) || [];
-    list.push({ name: photo.name, dataUrl: photo.data_url });
+    list.push({ name: photo.name, url: photo.url });
     photosByRequestId.set(photo.maintenance_request_id, list);
   }
   return requests.map((request) => ({ ...request, photos: photosByRequestId.get(request.id) || [] }));
 }
 
-export async function requireActiveCustomer(req, res, next) {
+
+export async function createSafetyIncident(req, res) {
+  let savedPhotos = [];
   try {
-    const pool = getPool();
-    const [rows] = await pool.query(`SELECT is_suspended FROM Customer WHERE id = ?`, [req.user.id]);
-    if (!rows[0] || rows[0].is_suspended) {
-      return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
+    const { incidentType, description, roomNumber, photos } = req.body ?? {};
+    if (!String(incidentType ?? "").trim() || !String(description ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุประเภทเหตุและรายละเอียด" });
     }
-    next();
+    if (String(description).length > 1000) return res.status(400).json({ message: "รายละเอียดต้องไม่เกิน 1,000 ตัวอักษร" });
+    const parsedPhotos = parsePhotoList(photos, SAFETY_INCIDENT_MAX_PHOTOS);
+    if (parsedPhotos.error) return res.status(400).json({ message: parsedPhotos.error });
+
+    const table = SAFETY_REPORTER_TABLE[req.user?.role];
+    if (!table) return res.status(403).json({ message: "ไม่มีสิทธิ์รายงานเหตุ" });
+    const isCustomer = req.user.role === "Customer";
+    const pool = getPool();
+    const [users] = await pool.query(
+      `SELECT first_name, last_name, ${isCustomer ? "room_number" : "NULL AS room_number"} FROM ${table} WHERE id = ?`,
+      [req.user.id],
+    );
+    const user = users[0];
+    if (!user) return res.status(404).json({ message: "ไม่พบข้อมูลผู้รายงาน" });
+    const name = `${user.first_name} ${user.last_name}`.trim();
+    const requestedRoom = Number(roomNumber);
+    const safeRoom = isCustomer ? user.room_number : Number.isInteger(requestedRoom) && requestedRoom > 0 ? requestedRoom : null;
+    const severity = classifySafetySeverity(String(incidentType).trim(), description);
+    savedPhotos = await savePublicImages("incidents", parsedPhotos.value);
+    await pool.query(
+      `INSERT INTO SafetyIncident (reporter_role, reporter_id, reporter_name, room_number, incident_type, severity, description, photos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.role,
+        req.user.id,
+        name,
+        safeRoom,
+        String(incidentType).trim().slice(0, 80),
+        severity,
+        String(description).trim(),
+        savedPhotos.length ? JSON.stringify(savedPhotos) : null,
+      ],
+    );
+    return res.status(201).json({ message: "ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว", severity });
   } catch (error) {
-    console.error("Check customer suspension error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+    if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
+    console.error("Create safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถส่งรายงานเหตุได้" });
   }
 }
 
@@ -134,102 +207,73 @@ const GRACE_DAYS = 3;
 
 function computeRentDue(room, paymentsForBooking, depositAmount) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
-
   const start = new Date(room.rental_start_date);
   const end = new Date(room.rental_end_date);
   const now = new Date();
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-
+  const priceCents = Math.round(Number(room.price) * 100);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
   if (now < start || now > end) return null;
 
-  const billingDay = start.getDate();
-  let periodStart = new Date(now.getFullYear(), now.getMonth(), billingDay, start.getHours(), start.getMinutes());
-  if (periodStart > now) {
-    periodStart = new Date(periodStart.getFullYear(), periodStart.getMonth() - 1, billingDay, start.getHours(), start.getMinutes());
-  }
-  if (periodStart < start) periodStart = start;
-
-  let earliestPeriodStart = start;
-  if (room.prepaid_until) {
-    const prepaidUntil = new Date(room.prepaid_until);
-    if (!Number.isNaN(prepaidUntil.getTime())) {
-      if (periodStart < prepaidUntil) return null;
-      if (prepaidUntil > earliestPeriodStart) earliestPeriodStart = prepaidUntil;
-    }
-  }
-
-  const isWithinPeriod = (value, periodStartDate, periodEndDate) => {
-    const periodStartDay = new Date(periodStartDate.getFullYear(), periodStartDate.getMonth(), periodStartDate.getDate());
-    const periodEndDay = new Date(periodEndDate.getFullYear(), periodEndDate.getMonth(), periodEndDate.getDate());
-    const d = new Date(value);
-    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    return day >= periodStartDay && day < periodEndDay;
+  const periodAt = (offset) => {
+    const date = new Date(start.getFullYear(), start.getMonth() + offset, 1, start.getHours(), start.getMinutes(), start.getSeconds());
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(start.getDate(), lastDay));
+    return date;
   };
+  const rentPayments = paymentsForBooking.filter((payment) => !["deposit", "water", "electricity"].includes(payment.type));
+  const paidRentCents = Math.max(0, rentPayments.reduce((total, payment) => {
+    const amount = Math.round(Number(payment.amount) * 100);
+    return payment.status === "paid" && Number.isSafeInteger(amount) ? total + amount : total;
+  }, 0));
+  const depositCents = Math.min(priceCents, Math.max(0, Math.round((Number(depositAmount) || 0) * 100)));
+  const periods = [];
+  for (let offset = 0; ; offset += 1) {
+    const periodStart = periodAt(offset);
+    if (periodStart > now || periodStart >= end) break;
+    periods.push({ periodStart, periodEnd: periodAt(offset + 1), index: offset });
+  }
+  if (periods.length === 0) return null;
 
-  const rentPayments = paymentsForBooking.filter(
-    (p) => p.type !== "deposit" && p.type !== "water" && p.type !== "electricity",
-  );
-
+  const prepaidUntil = room.prepaid_until ? new Date(room.prepaid_until) : null;
+  const prepaidCents = prepaidUntil && !Number.isNaN(prepaidUntil.getTime())
+    ? periods.filter((period) => period.periodEnd <= prepaidUntil).length * priceCents : 0;
+  let receiptsAfterPrepaidCents = 0;
+  if (prepaidUntil && !Number.isNaN(prepaidUntil.getTime())) {
+    const cutoffDay = new Date(prepaidUntil.getFullYear(), prepaidUntil.getMonth(), prepaidUntil.getDate());
+    receiptsAfterPrepaidCents = rentPayments.reduce((total, payment) => {
+      const date = new Date(payment.payment_date);
+      const amount = Math.round(Number(payment.amount) * 100);
+      const paymentDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      return payment.status === "paid" && Number.isSafeInteger(amount) && paymentDay >= cutoffDay ? total + amount : total;
+    }, 0);
+  }
+  let creditCents = Math.max(0, Math.max(paidRentCents - receiptsAfterPrepaidCents + depositCents, prepaidCents) + receiptsAfterPrepaidCents);
   const unpaidPeriods = [];
-  let cursor = new Date(earliestPeriodStart);
-  while (cursor <= periodStart) {
-    const cursorEnd = new Date(cursor);
-    cursorEnd.setMonth(cursorEnd.getMonth() + 1);
-    const paid = rentPayments.some((p) => p.status === "paid" && isWithinPeriod(p.payment_date, cursor, cursorEnd));
-    if (!paid) {
-      unpaidPeriods.push({
-        periodStart: new Date(cursor),
-        periodEnd: new Date(cursorEnd),
-        isFirstPeriodEver: cursor.getTime() === start.getTime(),
-      });
-    }
-    cursor = cursorEnd;
+  for (const period of periods) {
+    const applied = Math.min(priceCents, creditCents);
+    creditCents -= applied;
+    const outstandingCents = priceCents - applied;
+    if (outstandingCents > 0) unpaidPeriods.push({ ...period, outstandingCents });
   }
-
-  const currentPeriodEnd = new Date(periodStart);
-  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
-
+  const currentPeriod = periods[periods.length - 1];
   if (unpaidPeriods.length === 0) {
-    return {
-      amount: 0,
-      depositApplied: 0,
-      lumpSumMonths: null,
-      overdueMonths: 0,
-      periodStart,
-      periodEnd: currentPeriodEnd,
-      dueDate: null,
-      status: "paid",
-    };
+    return { amount: 0, depositApplied: 0, lumpSumMonths: null, overdueMonths: 0,
+      periodStart: currentPeriod.periodStart, periodEnd: currentPeriod.periodEnd, dueDate: null, status: "paid" };
   }
-
   const earliestUnpaid = unpaidPeriods[0];
   const latestUnpaid = unpaidPeriods[unpaidPeriods.length - 1];
-
-  const notifiedThisPeriod = rentPayments.some(
-    (p) => p.status === "pending" && isWithinPeriod(p.payment_date, periodStart, currentPeriodEnd),
-  );
-
   const dueDate = new Date(earliestUnpaid.periodStart);
   dueDate.setDate(dueDate.getDate() + GRACE_DAYS);
-
-  const status = notifiedThisPeriod ? "pending" : now > dueDate ? "overdue" : "due";
-
-  const basePrice = Number(room.price);
-  const depositApplied = unpaidPeriods.some((p) => p.isFirstPeriodEver)
-    ? Math.min(Number(depositAmount) || 0, basePrice)
-    : 0;
-
-  const overdueMonths = unpaidPeriods.length - 1;
-  const lumpSumMonths =
-    status !== "paid" && Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
-  const currentCycleMonths = lumpSumMonths || 1;
-  const amount = basePrice * (overdueMonths + currentCycleMonths) - depositApplied;
-
+  const pendingSlip = rentPayments.some((payment) => payment.status === "pending" && Number(payment.amount) > 0);
+  const status = pendingSlip ? "pending" : now > dueDate ? "overdue" : "due";
+  const lumpSumMonths = Number(room.pending_lump_sum_months) > 1 ? Number(room.pending_lump_sum_months) : null;
+  const outstandingCents = unpaidPeriods.reduce((total, period) => total + period.outstandingCents, 0)
+    + priceCents * ((lumpSumMonths || 1) - 1);
   return {
-    amount,
-    depositApplied,
+    amount: outstandingCents / 100,
+    depositApplied: earliestUnpaid.index === 0 ? depositCents / 100 : 0,
     lumpSumMonths,
-    overdueMonths,
+    overdueMonths: unpaidPeriods.length - 1,
     periodStart: earliestUnpaid.periodStart,
     periodEnd: latestUnpaid.periodEnd,
     dueDate,
@@ -292,95 +336,121 @@ router.get("/me", async (req, res) => {
     const pool = getPool();
 
     const [customerRows] = await pool.query(
-      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount
+      `SELECT id, first_name, last_name, phone, room_number, deposit_amount
        FROM Customer WHERE id = ?`,
       [req.user.id],
     );
-    
-    const customer = customerRows[0];
-    if (!customer) {
+
+    const customerRow = customerRows[0];
+    if (!customerRow) {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
+    const { deposit_amount: depositAmount, ...customer } = customerRow;
 
-    const [roomRows] = await pool.query(
-      `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
-       FROM Room WHERE room_number = ?`,
-      [customer.room_number],
-    );
-    const [availableRooms] = await pool.query(
-      `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price
-       FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
-    );
-
-    const [bookings] = await pool.query(
-      `SELECT b.id AS booking_id, r.room_number, b.created_at,
-              COALESCE(b.rental_start_date, r.rental_start_date) AS rental_start_date,
-              COALESCE(b.rental_end_date, r.rental_end_date) AS rental_end_date
-       FROM Booking b
-       JOIN Room r ON r.id = b.room_id
-       WHERE b.customer_id = ?
-       ORDER BY b.created_at DESC, b.id DESC`,
-      [customer.id],
-    );
+    const [
+      [roomRows],
+      [availableRooms],
+      [bookings],
+      [maintenanceRequests],
+      [tenantRequests],
+      [acknowledgedRows],
+      announcementList,
+      [parcels],
+    ] = await Promise.all([
+      pool.query(
+        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+         FROM Room WHERE room_number = ?`,
+        [customer.room_number],
+      ),
+      pool.query(
+        `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price
+         FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
+      ),
+      pool.query(
+        `SELECT b.id AS booking_id, r.room_number, b.created_at,
+                COALESCE(b.rental_start_date, r.rental_start_date) AS rental_start_date,
+                COALESCE(b.rental_end_date, r.rental_end_date) AS rental_end_date
+         FROM Booking b
+         JOIN Room r ON r.id = b.room_id
+         WHERE b.customer_id = ?
+         ORDER BY b.created_at DESC, b.id DESC`,
+        [customer.id],
+      ),
+      pool.query(
+        `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
+         FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+        [customer.id],
+      ),
+      pool.query(
+        `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
+                tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
+                tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
+                sr.price AS source_room_price, tg.price AS target_room_price,
+                (moi.id IS NOT NULL) AS room_inspected
+         FROM TenantRequest tr
+         LEFT JOIN Room sr ON sr.room_number = tr.room_number
+         LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
+         LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+         WHERE tr.customer_id = ? ORDER BY tr.created_at DESC, tr.id DESC`,
+        [customer.id],
+      ),
+      pool.query(`SELECT announcement_id FROM AnnouncementAcknowledgement WHERE customer_id = ?`, [customer.id]),
+      listAnnouncements(pool),
+      pool.query(
+        `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
+         FROM Parcel WHERE customer_id = ? AND room_number = ? ORDER BY created_at DESC`,
+        [customer.id, customer.room_number],
+      ),
+    ]);
 
     const bookingIds = bookings.map((booking) => booking.booking_id);
-    let payments = [];
-    if (bookingIds.length > 0) {
-      [payments] = await pool.query(
-        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
-         FROM Payment
-         WHERE booking_id IN (?)
-         ORDER BY payment_date DESC, created_at DESC`,
-        [bookingIds],
-      );
-    }
+    const [[payments], maintenanceWithPhotos, parcelsWithPhotos] = await Promise.all([
+      bookingIds.length > 0
+        ? pool.query(
+            `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
+             FROM Payment
+             WHERE booking_id IN (?)
+             ORDER BY payment_date DESC, created_at DESC`,
+            [bookingIds],
+          )
+        : [[]],
+      attachMaintenancePhotos(pool, maintenanceRequests),
+      attachParcelPhotos(pool, parcels),
+    ]);
 
+    const paymentsByBooking = new Map();
+    for (const payment of payments) {
+      const list = paymentsByBooking.get(payment.booking_id) || [];
+      list.push(payment);
+      paymentsByBooking.set(payment.booking_id, list);
+    }
     const rentalHistory = bookings.map((booking) => ({
       ...booking,
-      payments: payments.filter((payment) => payment.booking_id === booking.booking_id),
+      payments: paymentsByBooking.get(booking.booking_id) || [],
     }));
 
-    const [maintenanceRequests] = await pool.query(
-      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, completed_at, completed_by_name, created_at
-       FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
-      [customer.id],
-    );
+    const acknowledgedIds = new Set(acknowledgedRows.map((row) => row.announcement_id));
+    const announcements = announcementList.map((announcement) => ({
+      ...announcement,
+      acknowledged: acknowledgedIds.has(announcement.id),
+    }));
 
-    const [tenantRequests] = await pool.query(
-      `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
-              tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
-              tr.status, tr.accepted_at, tr.completed_at, tr.created_at,
-              sr.price AS source_room_price, tg.price AS target_room_price,
-              (moi.id IS NOT NULL) AS room_inspected
-       FROM TenantRequest tr
-       LEFT JOIN Room sr ON sr.room_number = tr.room_number
-       LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
-       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
-       WHERE tr.customer_id = ? ORDER BY tr.created_at DESC, tr.id DESC`,
-      [customer.id],
-    );
-
-    const announcements = await listAnnouncements(pool);
-
-    const latestBookingId = bookings[0]?.booking_id;
-    const paymentsForCurrentBooking = payments.filter((payment) => payment.booking_id === latestBookingId);
-    const currentDue = computeCurrentDue(roomRows[0], paymentsForCurrentBooking, customer.deposit_amount);
-    const [parcels] = await pool.query(
-      `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
-       FROM Parcel WHERE customer_id = ? AND room_number = ? ORDER BY created_at DESC`,
-      [customer.id, customer.room_number],
-    );
+    const currentRoom = roomRows[0] || null;
+    const paymentsForCurrentBooking = paymentsByBooking.get(bookings[0]?.booking_id) || [];
+    const currentDue = computeCurrentDue(currentRoom, paymentsForCurrentBooking, depositAmount);
+    const room = currentRoom ? { ...currentRoom } : null;
+    if (room) delete room.pending_lump_sum_months;
 
     return res.json({
       customer,
-      room: roomRows[0] || null,
+      room,
       availableRooms,
       rentalHistory,
-      maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests),
+      maintenanceRequests: maintenanceWithPhotos,
       tenantRequests,
       announcements,
       currentDue,
-      parcels: await attachParcelPhotos(pool, parcels),
+      parcels: parcelsWithPhotos,
     });
   } catch (error) {
     console.error("Customer dashboard error:", error);
@@ -495,6 +565,7 @@ router.post("/maintenance", async (req, res) => {
       return res.status(400).json({ message: "กรุณาแนบรูปปัญหาอย่างน้อย 1 รูป" });
     }
 
+    const savedPhotos = await savePublicImages("maintenance", photos.value);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -503,15 +574,14 @@ router.post("/maintenance", async (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?)`,
         [customer.id, customer.room_number, description, category, contactPhone, preferredTime],
       );
-      if (photos.value.length > 0) {
-        await connection.query(`INSERT INTO MaintenancePhoto (maintenance_request_id, name, data_url) VALUES ?`, [
-          photos.value.map((photo) => [result.insertId, photo.name, photo.dataUrl]),
-        ]);
-      }
+      await connection.query(`INSERT INTO MaintenancePhoto (maintenance_request_id, name, url) VALUES ?`, [
+        savedPhotos.map((photo) => [result.insertId, photo.name, photo.url]),
+      ]);
       await connection.commit();
       return res.status(201).json({ message: "แจ้งซ่อมสำเร็จ ทางผู้ดูแลจะดำเนินการโดยเร็วที่สุด", maintenanceId: result.insertId });
     } catch (error) {
       await connection.rollback();
+      await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
       throw error;
     } finally {
       connection.release();
@@ -640,5 +710,141 @@ router.post("/requests", async (req, res) => {
     connection?.release();
   }
 });
+
+router.post("/announcements/:id/acknowledge", async (req, res) => {
+  try {
+    const announcementId = Number(req.params.id);
+    if (!isPositiveId(announcementId)) {
+      return res.status(400).json({ message: "รหัสประกาศไม่ถูกต้อง" });
+    }
+    const pool = getPool();
+    const [rows] = await pool.query(`SELECT id FROM Announcement WHERE id = ?`, [announcementId]);
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบประกาศ" });
+    }
+    await pool.query(
+      `INSERT IGNORE INTO AnnouncementAcknowledgement (announcement_id, customer_id) VALUES (?, ?)`,
+      [announcementId, req.user.id],
+    );
+    return res.json({ message: "รับทราบประกาศแล้ว" });
+  } catch (error) {
+    console.error("Acknowledge announcement error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/parked-vehicles", async (req, res) => {
+  try {
+    const pool = getPool();
+    const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
+    const roomNumber = customers[0]?.room_number;
+    if (!roomNumber) return res.json({ roomNumber: null, vehicles: [] });
+    const [vehicles] = await pool.query(
+      `SELECT id, room_number, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note,
+              status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at, updated_by_name, updated_at, created_at
+       FROM ResidentVisitRequest
+       WHERE customer_id = ? AND room_number = ? AND request_type = 'vehicle' AND status = 'approved'
+         AND (end_at IS NULL OR end_at > NOW())
+       ORDER BY (start_at <= NOW()) DESC, start_at ASC`,
+      [req.user.id, roomNumber],
+    );
+    return res.json({ roomNumber, vehicles: withVehiclePhotos(vehicles) });
+  } catch (error) {
+    console.error("Fetch parked vehicles error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลรถได้" });
+  }
+});
+
+router.get("/resident-visit-requests", async (req, res) => {
+  try {
+    const [requests] = await getPool().query("SELECT * FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC", [req.user.id]);
+    return res.json({ requests: withVehiclePhotos(requests) });
+  } catch (error) {
+    console.error("Fetch resident visit requests error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอได้" });
+  }
+});
+
+router.post("/resident-visit-requests", async (req, res) => {
+  let savedPhotos = [];
+  try {
+    const { requestType, vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, isSpecial, specialReason, photos } = req.body ?? {};
+    const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
+    const openEnded = requestType === "vehicle" && (endAt === null || endAt === "");
+    const endTime = openEnded ? null : typeof endAt === "string" ? Date.parse(endAt) : NaN;
+    if (
+      !["vehicle", "overnight_guest"].includes(requestType) ||
+      !Number.isFinite(startTime) ||
+      (!openEnded && (!Number.isFinite(endTime) || endTime <= startTime))
+    ) {
+      return res.status(400).json({ message: "กรุณากรอกประเภทคำขอและช่วงเวลาให้ถูกต้อง" });
+    }
+    const parsedPhotos = parsePhotoList(requestType === "vehicle" ? photos : undefined, CUSTOMER_VEHICLE_MAX_PHOTOS);
+    if (parsedPhotos.error) return res.status(400).json({ message: parsedPhotos.error });
+    const textFields = [[vehiclePlate, 20], [vehicleModel, 100], [guestName, 255], [guestPhone, 20], [note, 500], [specialReason, 500]];
+    if (textFields.some(([value, maxLength]) => value != null && (typeof value !== "string" || value.trim().length > maxLength))) {
+      return res.status(400).json({ message: "ข้อมูลข้อความไม่ถูกต้องหรือยาวเกินที่กำหนด" });
+    }
+    if (isSpecial !== undefined && typeof isSpecial !== "boolean") {
+      return res.status(400).json({ message: "กรุณาระบุประเภทคำขอพิเศษให้ถูกต้อง" });
+    }
+    if (requestType === "vehicle" && !String(vehiclePlate ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุทะเบียนรถ" });
+    }
+    if (requestType === "overnight_guest" && !String(guestName ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุชื่อแขก" });
+    }
+    if (isSpecial && !String(specialReason ?? "").trim()) {
+      return res.status(400).json({ message: "กรุณาระบุเหตุผลที่ขออนุมัติพิเศษ" });
+    }
+    const pool = getPool();
+    const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
+    if (!customers[0]?.room_number) return res.status(400).json({ message: "ไม่พบห้องพักที่ผูกกับบัญชีนี้" });
+    if (requestType === "vehicle" && (await isPlateRegisteredByOther(pool, req.user.id, vehiclePlate))) {
+      return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
+    }
+    savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
+    const [result] = await pool.query(
+      `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note, is_special, special_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        customers[0].room_number,
+        requestType,
+        vehiclePlate?.trim() || null,
+        vehicleModel?.trim() || null,
+        savedPhotos.length ? JSON.stringify(savedPhotos) : null,
+        guestName?.trim() || null,
+        guestPhone?.trim() || null,
+        startAt,
+        openEnded ? null : endAt,
+        note?.trim() || null,
+        Boolean(isSpecial),
+        isSpecial ? specialReason.trim() : null,
+      ],
+    );
+    return res.status(201).json({ id: result.insertId, message: "ส่งคำขอให้เจ้าหน้าที่แล้ว" });
+  } catch (error) {
+    if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
+    console.error("Create resident visit request error:", error);
+    return res.status(500).json({ message: "ไม่สามารถส่งคำขอได้" });
+  }
+});
+
+router.get("/safety-incidents", async (req, res) => {
+  try {
+    const [incidents] = await getPool().query(
+      `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note, created_at
+       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? ORDER BY created_at DESC`,
+      [req.user.id],
+    );
+    return res.json({ incidents: withIncidentPhotos(incidents) });
+  } catch (error) {
+    console.error("Fetch own safety incidents error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดประวัติการแจ้งเหตุได้" });
+  }
+});
+
+router.post("/safety-incidents", createSafetyIncident);
 
 export default router;

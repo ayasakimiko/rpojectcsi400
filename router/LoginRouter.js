@@ -17,7 +17,7 @@ function toPublicUser(row) {
 
 router.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body ?? {};
+    const { username, password, role: selectedRole } = req.body ?? {};
 
     const validationError = validateLoginInput({ username, password });
     if (validationError) {
@@ -27,15 +27,16 @@ router.post("/login", async (req, res) => {
     const normalizedUsername = username.trim();
     const isIdcard = /^\d{13}$/.test(normalizedUsername);
 
+    const roles = ["Customer", "Staff", "Admin", "Owner"];
+    if (selectedRole !== undefined && selectedRole !== "" && !roles.includes(selectedRole)) {
+      return res.status(400).json({ message: "สิทธิ์ผู้ใช้งานไม่ถูกต้อง" });
+    }
     const pool = getPool();
-    let user;
+    const candidates = [];
     if (isIdcard) {
-      for (const table of ["Customer", "Staff", "Admin", "Owner"]) {
+      for (const table of selectedRole ? [selectedRole] : roles) {
         const [rows] = await pool.query(`SELECT * FROM ${table} WHERE idcard = ?`, [normalizedUsername]);
-        if (rows[0]) {
-          user = rows[0];
-          break;
-        }
+        if (rows[0]) candidates.push({ ...rows[0], role: table });
       }
     } else {
       const [rows] = await pool.query(
@@ -45,21 +46,23 @@ router.post("/login", async (req, res) => {
          LIMIT 1`,
         [normalizedUsername],
       );
-      user = rows[0];
+      if (rows[0] && (!selectedRole || selectedRole === "Customer")) candidates.push({ ...rows[0], role: "Customer" });
     }
 
-    if (!user) {
+    const matches = [];
+    for (const candidate of candidates) {
+      if (candidate.is_suspended) continue;
+      const isPhoneAsPassword = Boolean(candidate.phone) && password === candidate.phone;
+      if (isPhoneAsPassword || await bcrypt.compare(password, candidate.password)) matches.push(candidate);
+    }
+    if (matches.length === 0) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });
     }
-    if (user.is_suspended) {
-      return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });
+    if (matches.length > 1) {
+      return res.status(409).json({ code: "LOGIN_ROLE_REQUIRED", roles: matches.map((candidate) => candidate.role),
+        message: "พบหลายบัญชี กรุณาเลือกสิทธิ์ที่ต้องการเข้าสู่ระบบ" });
     }
-
-    const isPhoneAsPassword = Boolean(user.phone) && password === user.phone;
-    const passwordMatches = isPhoneAsPassword || (await bcrypt.compare(password, user.password));
-    if (!passwordMatches) {
-      return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });
-    }
+    const user = matches[0];
 
     const token = jwt.sign({ id: user.id, role: user.role, idcard: user.idcard }, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,

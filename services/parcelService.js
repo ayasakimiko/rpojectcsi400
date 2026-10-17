@@ -7,9 +7,12 @@ import {
   requireCustomerRole,
   requireStaffRole,
 } from "../middleware/authMiddleware.js";
-import { getActingAdminName } from "../router/AdminRouter.js";
-import { getActingStaffName, requireActiveStaff } from "../router/StaffRouter.js";
-import { requireActiveCustomer } from "../router/CustomerDashboardRouter.js";
+import {
+  getActingAdminName,
+  getActingStaffName,
+  requireActiveCustomer,
+  requireActiveStaff,
+} from "../middleware/accounts.js";
 import { createParcelRouter, customerParcelRouter } from "../router/ParcelRouter.js";
 
 const app = express();
@@ -26,6 +29,8 @@ app.use("/api/admin/parcels", authenticate, requireAdminRole, requireActiveStaff
 app.use("/api/staff/parcels", authenticate, requireStaffRole, requireActiveStaff, createParcelRouter(getActingStaffName));
 app.use("/api/customer/parcels", authenticate, requireCustomerRole, requireActiveCustomer, customerParcelRouter);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Parcel service is running on http://localhost:${PORT}`);
 });
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

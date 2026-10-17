@@ -173,6 +173,16 @@ CREATE TABLE IF NOT EXISTS Announcement (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS AnnouncementAcknowledgement (
+    announcement_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    acknowledged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (announcement_id, customer_id),
+    INDEX idx_announcement_ack_customer (customer_id),
+    FOREIGN KEY (announcement_id) REFERENCES Announcement(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES Customer(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS WaitingList (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL,
@@ -207,11 +217,23 @@ CREATE TABLE IF NOT EXISTS MaintenancePhoto (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     maintenance_request_id INT NOT NULL,
     name VARCHAR(255) NOT NULL,
-    data_url MEDIUMTEXT NOT NULL,
+    url VARCHAR(255) NULL,
+    data_url MEDIUMTEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    INDEX idx_maintenance_photo_url (url),
     FOREIGN KEY (maintenance_request_id) REFERENCES MaintenanceRequest(id) ON DELETE CASCADE
 );
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MaintenancePhoto' AND COLUMN_NAME = 'url'),
+    'SELECT 1',
+    'ALTER TABLE `MaintenancePhoto` ADD COLUMN `url` VARCHAR(255) NULL AFTER name, MODIFY `data_url` MEDIUMTEXT NULL, ADD INDEX `idx_maintenance_photo_url` (url)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
 
 CREATE TABLE IF NOT EXISTS Parcel (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -390,3 +412,222 @@ UPDATE Parcel p
          SELECT 1 FROM Customer c
          WHERE c.room_number = p.room_number AND c.is_suspended = FALSE
        );
+
+CREATE TABLE IF NOT EXISTS ResidentVisitRequest (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    customer_id INT UNSIGNED NULL,
+    room_number INT UNSIGNED NULL,
+    request_type ENUM('vehicle', 'overnight_guest') NOT NULL,
+    vehicle_plate VARCHAR(20) NULL,
+    vehicle_model VARCHAR(100) NULL,
+    vehicle_photos LONGTEXT NULL,
+    guest_name VARCHAR(255) NULL,
+    guest_phone VARCHAR(20) NULL,
+    start_at DATETIME NOT NULL,
+    end_at DATETIME NULL,
+    note VARCHAR(500) NULL,
+    is_special BOOLEAN NOT NULL DEFAULT FALSE,
+    special_reason VARCHAR(500) NULL,
+    status ENUM('pending', 'approved', 'rejected', 'cancelled') NOT NULL DEFAULT 'pending',
+    reviewed_by_name VARCHAR(255) NULL,
+    reviewed_at DATETIME NULL,
+    admin_reviewed_by_name VARCHAR(255) NULL,
+    admin_reviewed_at DATETIME NULL,
+    updated_by_name VARCHAR(255) NULL,
+    updated_at DATETIME NULL,
+    cancelled_by_name VARCHAR(255) NULL,
+    cancelled_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_resident_visit_customer FOREIGN KEY (customer_id) REFERENCES Customer(id),
+    INDEX idx_resident_visit_status (status, created_at),
+    INDEX idx_resident_visit_customer (customer_id, created_at)
+);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'customer_id' AND IS_NULLABLE = 'NO'),
+    'ALTER TABLE `ResidentVisitRequest` MODIFY COLUMN `customer_id` INT UNSIGNED NULL, MODIFY COLUMN `room_number` INT UNSIGNED NULL',
+    'SELECT 1'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'vehicle_photos'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest` ADD COLUMN `vehicle_photos` LONGTEXT NULL AFTER vehicle_model'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'end_at' AND IS_NULLABLE = 'NO'),
+    'ALTER TABLE `ResidentVisitRequest` MODIFY COLUMN `end_at` DATETIME NULL',
+    'SELECT 1'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'status'
+              AND COLUMN_TYPE LIKE '%cancelled%'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest` MODIFY COLUMN `status` ENUM(''pending'', ''approved'', ''rejected'', ''cancelled'') NOT NULL DEFAULT ''pending'''
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'updated_by_name'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest` ADD COLUMN `updated_by_name` VARCHAR(255) NULL AFTER admin_reviewed_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'updated_at'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest` ADD COLUMN `updated_at` DATETIME NULL AFTER updated_by_name'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'cancelled_by_name'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest` ADD COLUMN `cancelled_by_name` VARCHAR(255) NULL AFTER updated_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'cancelled_at'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest` ADD COLUMN `cancelled_at` DATETIME NULL AFTER cancelled_by_name'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+CREATE TABLE IF NOT EXISTS SafetyIncident (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    reporter_role VARCHAR(20) NOT NULL,
+    reporter_id INT UNSIGNED NULL,
+    reporter_name VARCHAR(255) NOT NULL,
+    room_number INT UNSIGNED NULL,
+    incident_type VARCHAR(80) NOT NULL,
+    severity ENUM('urgent', 'normal') NOT NULL DEFAULT 'normal',
+    description VARCHAR(1000) NOT NULL,
+    photos LONGTEXT NULL,
+    status ENUM('pending', 'reviewed') NOT NULL DEFAULT 'pending',
+    reviewed_by_name VARCHAR(255) NULL,
+    reviewed_at DATETIME NULL,
+    review_note VARCHAR(500) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_safety_incident_status (status, created_at)
+);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND INDEX_NAME = 'idx_payment_status_date'),
+    'SELECT 1',
+    'CREATE INDEX `idx_payment_status_date` ON `Payment` (status, payment_date)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND INDEX_NAME = 'idx_expense_date'),
+    'SELECT 1',
+    'CREATE INDEX `idx_expense_date` ON `Expense` (expense_date)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND INDEX_NAME = 'idx_announcement_expires'),
+    'SELECT 1',
+    'CREATE INDEX `idx_announcement_expires` ON `Announcement` (expires_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'TenantRequest' AND INDEX_NAME = 'idx_tenant_request_status'),
+    'SELECT 1',
+    'CREATE INDEX `idx_tenant_request_status` ON `TenantRequest` (status, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MaintenanceRequest' AND INDEX_NAME = 'idx_maintenance_status'),
+    'SELECT 1',
+    'CREATE INDEX `idx_maintenance_status` ON `MaintenanceRequest` (status, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND INDEX_NAME = 'idx_booking_customer_created'),
+    'SELECT 1',
+    'CREATE INDEX `idx_booking_customer_created` ON `Booking` (customer_id, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'WaitingList' AND INDEX_NAME = 'idx_waiting_list_created'),
+    'SELECT 1',
+    'CREATE INDEX `idx_waiting_list_created` ON `WaitingList` (created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND INDEX_NAME = 'idx_safety_incident_reporter'),
+    'SELECT 1',
+    'CREATE INDEX `idx_safety_incident_reporter` ON `SafetyIncident` (reporter_role, reporter_id, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND COLUMN_NAME = 'photos'),
+    'SELECT 1',
+    'ALTER TABLE `SafetyIncident` ADD COLUMN `photos` LONGTEXT NULL AFTER description'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
