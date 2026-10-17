@@ -1652,3 +1652,27 @@
 .announcement-detail > .announcement-detail-body.is-warning::-webkit-scrollbar-thumb:hover {
   background: #e3b552;
 }
+
+@keyframes announcement-post-focus {
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4), 0 12px 28px rgba(37, 99, 235, 0.16);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+.announcement-post.is-focus-highlight {
+  animation: announcement-post-focus 3s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-post.is-focus-highlight {
+    animation-duration: 0.01s;
+  }
+}
+
+.announcement-post {
+  scroll-margin: 24px 0;
+}

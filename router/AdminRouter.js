@@ -44,7 +44,7 @@ export async function listSafetyIncidents(_req, res) {
   try {
     const [incidents] = await getPool().query(
       `SELECT id, reporter_role, reporter_name, room_number, incident_type, severity, description, photos,
-              status, reviewed_by_name, reviewed_at, review_note, created_at
+              status, reviewed_by_name, reviewed_at, review_note, cancelled_by_name, cancelled_at, cancel_reason, created_at
        FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC`,
     );
     return res.json({ incidents: withIncidentPhotos(incidents) });
@@ -70,7 +70,7 @@ export async function reviewSafetyIncident(req, res) {
       "UPDATE SafetyIncident SET status = 'reviewed', reviewed_by_name = ?, reviewed_at = NOW(), review_note = ? WHERE id = ? AND status = 'pending'",
       [reviewerName, note || null, id],
     );
-    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบแล้ว" });
+    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบหรือยกเลิกไปแล้ว" });
     return res.json({ message: "บันทึกผลตรวจสอบแล้ว" });
   } catch (error) {
     console.error("Review safety incident error:", error);
