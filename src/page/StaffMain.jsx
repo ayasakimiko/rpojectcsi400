@@ -772,6 +772,23 @@ function splitRoomPreferences(value) {
     .filter(Boolean)
 }
 
+function WaitingDetailIcon({ type, size = 16 }) {
+  const paths = {
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
+    copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[type]}
+    </svg>
+  )
+}
+
 function waitingInitial(name) {
   const trimmed = (name || '').trim().replace(/^[เแโใไ]/, '')
   return trimmed.charAt(0).toUpperCase() || '?'
@@ -4956,7 +4973,6 @@ function StaffMain() {
   const currentParcelPage = Math.min(parcelPage, Math.max(1, Math.ceil(filteredParcels.length / STAFF_LIST_PAGE_SIZE)))
   const pagedParcels = filteredParcels.slice((currentParcelPage - 1) * STAFF_LIST_PAGE_SIZE, currentParcelPage * STAFF_LIST_PAGE_SIZE)
   const [waitingListModalOpen, setWaitingListModalOpen] = useState(false)
-  const [waitingDetail, setWaitingDetail] = useState(null)
   const [waitingListEditing, setWaitingListEditing] = useState(null)
   const [waitingListForm, setWaitingListForm] = useState({
     full_name: '',
@@ -6930,55 +6946,68 @@ function StaffMain() {
                       {waitingInitial(item.full_name)}
                     </span>
                     <div className="waiting-detail-name">
+                      <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
                       <strong>{item.full_name}</strong>
-                      <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
-                        {WAITING_LIST_STATUS[status].label}
-                      </span>
                     </div>
-                    <div className="waiting-detail-contact">
+                    <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
+                      {WAITING_LIST_STATUS[status].label}
+                    </span>
+                  </div>
+
+                  <div className="waiting-detail-contact">
+                    <div className="waiting-detail-phone">
+                      <span>เบอร์ติดต่อ</span>
+                      <strong>{item.phone}</strong>
+                    </div>
+                    <div className="waiting-detail-contact-actions">
                       <a className="staff-action-btn is-primary" href={`tel:${item.phone}`}>
-                        โทร {item.phone}
+                        <WaitingDetailIcon type="phone" />
+                        โทรติดต่อ
                       </a>
                       <button
                         type="button"
                         className="staff-action-btn is-ghost"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(item.phone).then(
-                            () => setWaitingPhoneCopied(item.id),
-                            () => setWaitingPhoneCopied(null),
-                          )
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(item.phone)
+                            setWaitingPhoneCopied(item.id)
+                          } catch {
+                            setWaitingPhoneCopied(null)
+                          }
                         }}
                       >
-                        {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว ✓' : 'คัดลอกเบอร์'}
+                        {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
+                        {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
                       </button>
                     </div>
                   </div>
 
-                  <div className="waiting-detail-stats">
+                  <dl className="waiting-detail-stats">
                     <div className={days >= 30 ? 'is-long' : ''}>
-                      <span>ระยะเวลาที่รอ</span>
-                      <strong>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</strong>
+                      <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
+                      <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
                     </div>
                     <div>
-                      <span>วันที่แจ้ง</span>
-                      <strong>{formatDateTime(item.created_at)}</strong>
+                      <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
+                      <dd>{formatDateTime(item.created_at)}</dd>
                     </div>
                     <div>
-                      <span>บันทึกโดย</span>
-                      <strong className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</strong>
+                      <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
+                      <dd className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</dd>
                     </div>
                     <div className={item.desired_move_in_date ? `is-movein-${describeMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
-                      <span>ต้องการเข้าอยู่</span>
-                      <strong>
+                      <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
+                      <dd>
                         {item.desired_move_in_date
-                          ? `${formatDateOnly(item.desired_move_in_date)} · ${describeMoveIn(item.desired_move_in_date, waitingNow).text}`
+                          ? formatDateOnly(item.desired_move_in_date)
                           : 'ไม่ระบุ'}
-                      </strong>
+                      </dd>
+                      {item.desired_move_in_date && <small>{describeMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
                     </div>
-                  </div>
+                  </dl>
 
                   <section className="waiting-detail-section">
-                    <h4>ประเภทห้องที่สนใจ</h4>
+                    <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
                     <div className="waiting-tags">
                       {preferences.length > 0 ? (
                         preferences.map((preference) => <span key={preference}>{preference}</span>)
@@ -6988,13 +7017,14 @@ function StaffMain() {
                     </div>
                   </section>
 
-                  <section className="waiting-detail-section">
-                    <h4>หมายเหตุ</h4>
+                  <section className="waiting-detail-section is-note">
+                    <h4><NoteIcon size={17} />หมายเหตุ</h4>
                     <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
                   </section>
 
-                  <section className="waiting-detail-section">
+                  <section className="waiting-detail-section is-vacancies">
                     <h4>
+                      <DoorIcon size={17} />
                       ห้องว่างตอนนี้ <span className="staff-count-pill">{vacantRooms.length}</span>
                     </h4>
                     {vacantRooms.length > 0 ? (
@@ -7011,7 +7041,7 @@ function StaffMain() {
                     )}
                   </section>
 
-                  <p className="waiting-detail-hint">สถานะของรายชื่อนี้จัดการโดย Admin</p>
+                  <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />สถานะของรายชื่อนี้จัดการโดย Admin</p>
 
                   <div className="staff-form-actions waiting-detail-actions">
                     <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
@@ -7025,6 +7055,7 @@ function StaffMain() {
                         openWaitingListModal(item)
                       }}
                     >
+                      <WaitingDetailIcon type="edit" />
                       แก้ไขข้อมูล
                     </button>
                   </div>
@@ -7094,89 +7125,6 @@ function StaffMain() {
                 </div>
               </div>
             )}
-          </Modal>
-        )}
-
-        {waitingDetail && (
-          <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingDetail(null)} variant="detail">
-            {(requestClose) => {
-              const status = WAITING_LIST_STATUS[waitingDetail.status] ? waitingDetail.status : 'waiting'
-              const preferences = splitRoomPreferences(waitingDetail.room_preference)
-              const days = daysSince(waitingDetail.created_at, waitingNow)
-              return (
-                <div className="staff-rv-detail waiting-detail">
-                  <div className={`waiting-detail-hero is-compact is-${WAITING_LIST_STATUS[status].tone}`}>
-                    <span className="waiting-avatar" aria-hidden="true">
-                      {waitingInitial(waitingDetail.full_name)}
-                    </span>
-                    <div>
-                      <strong>{waitingDetail.full_name}</strong>
-                      <a className="waiting-card-phone" href={`tel:${waitingDetail.phone}`}>
-                        {waitingDetail.phone}
-                      </a>
-                    </div>
-                    <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
-                      {WAITING_LIST_STATUS[status].label}
-                    </span>
-                  </div>
-                  <dl className="staff-rv-fields">
-                    <div>
-                      <dt>วันที่แจ้ง</dt>
-                      <dd>{formatStaffDateTime(waitingDetail.created_at)}</dd>
-                    </div>
-                    <div>
-                      <dt>รอมาแล้ว</dt>
-                      <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
-                    </div>
-                    <div>
-                      <dt>อยากเข้าอยู่</dt>
-                      <dd>
-                        {waitingDetail.desired_move_in_date
-                          ? `${formatDateOnly(waitingDetail.desired_move_in_date)} · ${describeMoveIn(waitingDetail.desired_move_in_date, waitingNow).text}`
-                          : 'ไม่ระบุ'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>บันทึกโดย</dt>
-                      <dd>
-                        <span className={waitingDetail.submitted_by_name ? 'staff-actor' : ''}>{waitingDetail.submitted_by_name || '-'}</span>
-                      </dd>
-                    </div>
-                    <div className="is-wide">
-                      <dt>ประเภทห้องที่ต้องการ</dt>
-                      <dd>
-                        {preferences.length > 0 ? (
-                          <span className="waiting-tags">
-                            {preferences.map((preference) => (
-                              <span key={preference}>{preference}</span>
-                            ))}
-                          </span>
-                        ) : (
-                          'ไม่ระบุประเภทห้อง'
-                        )}
-                      </dd>
-                    </div>
-                    <div className="is-wide">
-                      <dt>หมายเหตุ</dt>
-                      <dd>{waitingDetail.note || '-'}</dd>
-                    </div>
-                  </dl>
-                  <div className="staff-form-actions">
-                    <button
-                      type="button"
-                      className="staff-action-btn is-primary"
-                      onClick={() => {
-                        const entry = waitingDetail
-                        requestClose()
-                        openWaitingListModal(entry)
-                      }}
-                    >
-                      แก้ไขข้อมูล
-                    </button>
-                  </div>
-                </div>
-              )
-            }}
           </Modal>
         )}
 
@@ -8114,7 +8062,7 @@ function StaffMain() {
                                       <button
                                         type="button"
                                         className="waiting-icon-btn is-view"
-                                        onClick={() => setWaitingDetail(item)}
+                                        onClick={() => setWaitingListDetail(item)}
                                         aria-label={`ดูรายละเอียด ${item.full_name}`}
                                         title="ดูรายละเอียด"
                                       >
