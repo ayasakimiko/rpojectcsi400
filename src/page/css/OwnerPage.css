@@ -2154,3 +2154,8 @@
     flex-direction: column;
   }
 }
+
+.owner-actor {
+  color: #1d4ed8;
+  font-weight: 700;
+}

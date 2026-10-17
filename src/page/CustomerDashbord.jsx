@@ -861,6 +861,7 @@ function tenantRequestBadgeClass(status) {
   if (status === 'approved') return 'paid'
   if (status === 'rejected') return 'overdue'
   if (status === 'in_progress') return 'in-progress'
+  if (status === 'cancelled') return 'cancelled'
   return 'pending'
 }
 
@@ -1150,6 +1151,12 @@ function getStatusPopupContent(popup) {
 function getRequestTimeline(kind, request) {
   if (!request || kind === 'announcement') return []
   if (kind === 'resident_visit') {
+    if (request.status === 'cancelled') {
+      return [
+        { label: 'ส่งคำขอ', date: request.created_at, done: true },
+        { label: 'ยกเลิกรายการ', date: request.cancelled_at || request.created_at, done: true, by: request.cancelled_by_name },
+      ]
+    }
     const finalLabel = TENANT_REQUEST_FINAL_LOG_LABEL[request.status]
     return [
       { label: 'ส่งคำขอ', date: request.created_at, done: true },
@@ -1157,6 +1164,7 @@ function getRequestTimeline(kind, request) {
         label: finalLabel || REQUEST_TIMELINE_PENDING_FINAL_LABEL,
         date: finalLabel ? request.admin_reviewed_at || request.reviewed_at || request.created_at : null,
         done: Boolean(finalLabel),
+        by: finalLabel ? request.admin_reviewed_by_name || request.reviewed_by_name : null,
       },
     ]
   }
@@ -1182,11 +1190,12 @@ function getRequestTimeline(kind, request) {
 
   return [
     { label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at, done: true },
-    { label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at, done: Boolean(request.accepted_at) },
+    { label: 'เจ้าหน้าที่รับเรื่อง', date: request.accepted_at, done: Boolean(request.accepted_at), by: request.accepted_by_name },
     {
       label: finalLabel || REQUEST_TIMELINE_PENDING_FINAL_LABEL,
       date: isFinal ? request.completed_at || request.accepted_at || request.created_at : null,
       done: isFinal,
+      by: isFinal && !isSelfCancelledMaintenance ? request.completed_by_name : null,
     },
   ]
 }
@@ -1319,6 +1328,11 @@ function RequestTimeline({ kind, request, compact = false }) {
                   '-'
                 )}
               </p>
+              {!compact && step.done && step.by && (
+                <p className="dashboard-step-by">
+                  โดย <span className="dashboard-actor">{step.by}</span>
+                </p>
+              )}
               {!compact && stepMs !== null && <p className="dashboard-step-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
             </li>
           )
@@ -1644,7 +1658,7 @@ function formatRemaining(ms) {
 }
 
 const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แขกค้างคืน' }
-const RESIDENT_VISIT_STATUS_LABEL = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ' }
+const RESIDENT_VISIT_STATUS_LABEL = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', cancelled: 'ยกเลิกแล้ว' }
 const RESIDENT_VEHICLE_OWNER_LABEL = { self: 'รถของฉัน', family: 'รถครอบครัวที่มาเยี่ยม' }
 const EMPTY_RESIDENT_VISIT_FORM = {
   owner: 'self',
@@ -1713,7 +1727,15 @@ function DetailTimeline({ steps }) {
                 )}
               </span>
               <strong>{step.label}</strong>
-              <small>{step.meta}</small>
+              <small>
+                {step.meta}
+                {step.by && (
+                  <>
+                    {' · '}
+                    <span className="dashboard-rv-timeline-by">โดย {step.by}</span>
+                  </>
+                )}
+              </small>
             </li>
           )
         })}
@@ -1765,6 +1787,7 @@ const RESIDENT_VISIT_FILTERS = [
   { key: 'pending', label: 'รออนุมัติ', tone: 'warning' },
   { key: 'approved', label: 'อนุมัติแล้ว', tone: 'success' },
   { key: 'rejected', label: 'ไม่อนุมัติ', tone: 'danger' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว' },
 ]
 
 function getVisitKind(item) {
@@ -1802,6 +1825,7 @@ function ResidentVisitRequestRow() {
   const [historyFilter, setHistoryFilter] = useState('all')
   const [historySearch, setHistorySearch] = useState('')
   const [detailId, setDetailId] = useState(null)
+  const [lightbox, setLightbox] = useState(null)
   const [form, setForm] = useState(EMPTY_RESIDENT_VISIT_FORM)
   const token = sessionStorage.getItem('token')
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
@@ -2055,6 +2079,15 @@ function ResidentVisitRequestRow() {
           )}
         </Modal>
       )}
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={`ทะเบียน ${lightbox.plate}`}
+          label="รูปรถ / ป้ายทะเบียน"
+          onClose={() => setLightbox(null)}
+        />
+      )}
       {view === 'success' && submitted && (
         <Modal title="ส่งคำขอแล้ว" onClose={() => setView(null)} variant="success">
           {(requestClose) => (
@@ -2238,19 +2271,55 @@ function ResidentVisitRequestRow() {
                   ) : null}
                 </dl>
 
+                {detailItem.vehicle_photos?.length > 0 && (
+                  <section className="dashboard-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
+                    <h4 className="dashboard-rv-timeline-title">รูปรถ / ป้ายทะเบียน</h4>
+                    <div className="dashboard-rv-photo-grid">
+                      {detailItem.vehicle_photos.map((photo, index) => (
+                        <button
+                          key={photo.url}
+                          type="button"
+                          className="dashboard-rv-photo"
+                          onClick={() => setLightbox({ photos: detailItem.vehicle_photos, index, plate: getVisitTitle(detailItem) })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 <DetailTimeline
                   steps={[
                     { label: 'ส่งคำขอ', meta: formatVisitDateTime(detailItem.created_at), state: 'done' },
-                    {
-                      label: detailItem.status === 'pending' ? 'รอเจ้าหน้าที่อนุมัติ' : detailItem.status === 'approved' ? 'อนุมัติแล้ว' : 'ไม่อนุมัติ',
-                      meta:
-                        detailItem.status === 'pending'
-                          ? 'กำลังรอ'
-                          : `${reviewedAt ? formatVisitDateTime(reviewedAt) : '-'}${reviewer ? ` · โดย ${reviewer}` : ''}`,
-                      state: detailItem.status === 'pending' ? 'current' : 'done',
-                      tone: detailItem.status === 'rejected' ? 'danger' : detailItem.status === 'approved' ? 'success' : undefined,
-                    },
-                  ]}
+                    detailItem.status === 'pending' || reviewedAt
+                      ? {
+                          label:
+                            detailItem.status === 'pending'
+                              ? 'รอเจ้าหน้าที่อนุมัติ'
+                              : detailItem.status === 'rejected'
+                                ? 'ไม่อนุมัติ'
+                                : 'อนุมัติแล้ว',
+                          meta: detailItem.status === 'pending' ? 'กำลังรอ' : formatVisitDateTime(reviewedAt),
+                          by: detailItem.status === 'pending' ? null : reviewer,
+                          state: detailItem.status === 'pending' ? 'current' : 'done',
+                          tone: detailItem.status === 'rejected' ? 'danger' : detailItem.status === 'pending' ? undefined : 'success',
+                        }
+                      : null,
+                    detailItem.updated_at
+                      ? { label: 'แก้ไขข้อมูล', meta: formatVisitDateTime(detailItem.updated_at), by: detailItem.updated_by_name, state: 'done' }
+                      : null,
+                    detailItem.status === 'cancelled'
+                      ? {
+                          label: 'ยกเลิกรายการ',
+                          meta: detailItem.cancelled_at ? formatVisitDateTime(detailItem.cancelled_at) : '-',
+                          by: detailItem.cancelled_by_name,
+                          state: 'done',
+                          tone: 'danger',
+                        }
+                      : null,
+                  ].filter(Boolean)}
                 />
 
                 <div className="dashboard-form-actions">
@@ -2383,7 +2452,7 @@ function SafetyIncidentReportRow() {
       <div className="dashboard-request-info">
         <p className="dashboard-request-title">รายงานเหตุฉุกเฉิน / ความปลอดภัย</p>
         <p className="dashboard-request-desc">
-          {pendingCount > 0 ? `มีรายงานรอตรวจสอบ ${pendingCount} รายการ` : 'แจ้งเหตุให้ Admin และ Owner ตรวจสอบโดยเร็ว'}
+          {pendingCount > 0 ? `มีรายงานรอตรวจสอบ ${pendingCount} รายการ` : 'แจ้งเหตุให้เจ้าหน้าที่ตรวจสอบโดยเร็ว'}
         </p>
       </div>
       <button type="button" className="dashboard-action-btn is-danger" onClick={openModal}>
@@ -2408,7 +2477,7 @@ function SafetyIncidentReportRow() {
           {(requestClose) => (
             <div className="dashboard-safety">
               <div className="dashboard-rv-top">
-                <p className="dashboard-rv-intro">รายงานจะถูกส่งให้ Admin และ Owner ทันที</p>
+                <p className="dashboard-rv-intro">รายงานจะถูกส่งถึงเจ้าหน้าที่ทันที</p>
                 <button type="button" className="dashboard-rv-history-link" onClick={openHistory}>
                   ประวัติการแจ้งเหตุ
                   {incidents.length > 0 && <span className="dashboard-rv-history-count">{incidents.length}</span>}
@@ -2491,7 +2560,7 @@ function SafetyIncidentReportRow() {
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
-              <p className="dashboard-confirm-message">ส่งรายงานเหตุให้ Admin และ Owner แล้ว</p>
+              <p className="dashboard-confirm-message">ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว</p>
               {SAFETY_SEVERITY_RESULT[sentSeverity] && (
                 <p className={`dashboard-safety-result is-${sentSeverity}`}>
                   <span>ระบบจัดระดับเป็น</span>
@@ -2643,11 +2712,12 @@ function SafetyIncidentReportRow() {
                 steps={[
                   { label: 'แจ้งเหตุ', meta: formatVisitDateTime(detailItem.created_at), state: 'done' },
                   {
-                    label: detailItem.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอ Admin / Owner ตรวจสอบ',
+                    label: detailItem.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอเจ้าหน้าที่ตรวจสอบ',
                     meta:
                       detailItem.status === 'reviewed'
-                        ? `${detailItem.reviewed_at ? formatVisitDateTime(detailItem.reviewed_at) : '-'}${detailItem.reviewed_by_name ? ` · โดย ${detailItem.reviewed_by_name}` : ''}`
+                        ? (detailItem.reviewed_at ? formatVisitDateTime(detailItem.reviewed_at) : '-')
                         : 'กำลังรอ',
+                    by: detailItem.status === 'reviewed' ? detailItem.reviewed_by_name : null,
                     state: detailItem.status === 'reviewed' ? 'done' : 'current',
                     tone: detailItem.status === 'reviewed' ? 'success' : undefined,
                   },
@@ -3502,7 +3572,7 @@ function CustomerDashbord() {
             <span>ผู้ส่ง: {parcel.sender_name || 'พัสดุทั่วไป'}</span>
             {parcel.tracking_number && <span>เลขพัสดุ: {parcel.tracking_number}</span>}
             {parcel.description && <span>รายละเอียด: {parcel.description}</span>}
-            <span className="dashboard-notif-utility-by">บันทึกโดย {parcel.staff_name || 'เจ้าหน้าที่'}</span>
+            <span className="dashboard-notif-utility-by">บันทึกโดย <span className="dashboard-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span></span>
           </span>
         ),
         preview: parcel.description || parcel.tracking_number || parcel.sender_name || 'กรุณาติดต่อรับพัสดุ',
@@ -3523,7 +3593,7 @@ function CustomerDashbord() {
           </span>
         </>
       ),
-      byline: `ประกาศโดย ${item.author || 'เจ้าหน้าที่'}`,
+      bylineName: item.author || 'เจ้าหน้าที่',
       preview: item.message,
       kind: 'announcement',
     })),
@@ -4092,7 +4162,12 @@ function CustomerDashbord() {
                       <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
                     ) : (
                       <p className="dashboard-notif-item-date">
-                        {notifDetail.byline ? `${notifDetail.byline} · ` : ''}
+                        {notifDetail.bylineName && (
+                          <>
+                            ประกาศโดย <span className="dashboard-actor">{notifDetail.bylineName}</span>
+                            {' · '}
+                          </>
+                        )}
                         {formatDateTime(notifDetail.date)}
                       </p>
                     )}
@@ -4512,7 +4587,7 @@ function CustomerDashbord() {
                           </div>
                           <div className="dashboard-maintenance-detail-row">
                             <span>บันทึกโดย</span>
-                            <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
+                            <strong className="dashboard-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
                           </div>
                           {parcel.description && (
                             <div className="dashboard-maintenance-detail-row is-note">
@@ -4944,7 +5019,7 @@ function CustomerDashbord() {
                                         <circle cx="12" cy="8" r="4" />
                                         <path d="M4 21a8 8 0 0 1 16 0" />
                                       </svg>
-                                      บันทึกโดย <strong>{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
+                                      บันทึกโดย <strong className="dashboard-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</strong>
                                     </span>
                                     <span>
                                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

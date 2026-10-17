@@ -26,6 +26,8 @@ app.use("/api/admin/parcels", authenticate, requireAdminRole, requireActiveStaff
 app.use("/api/staff/parcels", authenticate, requireStaffRole, requireActiveStaff, createParcelRouter(getActingStaffName));
 app.use("/api/customer/parcels", authenticate, requireCustomerRole, requireActiveCustomer, customerParcelRouter);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Parcel service is running on http://localhost:${PORT}`);
 });
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

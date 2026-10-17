@@ -15,6 +15,8 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/admin", adminRouter);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Admin service is running on http://localhost:${PORT}`);
 });
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

@@ -18,6 +18,8 @@ app.get("/api/health", (req, res) => {
 app.use("/api/files", createUploadRouter(getPool));
 app.use("/api/customer", customerDashboardRouter);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Customer service is running on http://localhost:${PORT}`);
 });
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

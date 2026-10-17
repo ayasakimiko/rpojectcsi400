@@ -661,7 +661,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               <dl className="announcement-detail-meta">
                 <div>
                   <dt>ประกาศโดย</dt>
-                  <dd>{detail.author || 'เจ้าหน้าที่'}</dd>
+                  <dd className="announcement-actor">{detail.author || 'เจ้าหน้าที่'}</dd>
                 </div>
                 <div>
                   <dt>วันเวลาที่ประกาศ</dt>

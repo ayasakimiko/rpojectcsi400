@@ -28,6 +28,29 @@ const URGENT_INCIDENT_KEYWORDS = [
   "น้ำท่วม", "ท่อแตก", "ติดลิฟต์",
 ];
 
+export function withVehiclePhotos(requests) {
+  return requests.map((request) => {
+    let photos = [];
+    try {
+      photos = request.vehicle_photos ? JSON.parse(request.vehicle_photos) : [];
+    } catch {
+      photos = [];
+    }
+    return { ...request, vehicle_photos: Array.isArray(photos) ? photos : [] };
+  });
+}
+
+export async function isPlateRegisteredByOther(pool, customerId, plate) {
+  const [owners] = await pool.query(
+    `SELECT 1 FROM ResidentVisitRequest
+     WHERE request_type = 'vehicle' AND NOT (customer_id <=> ?) AND status IN ('pending', 'approved') AND end_at > NOW()
+       AND REPLACE(UPPER(vehicle_plate), ' ', '') = REPLACE(UPPER(?), ' ', '')
+     LIMIT 1`,
+    [customerId, String(plate).trim()],
+  );
+  return owners.length > 0;
+}
+
 export function classifySafetySeverity(incidentType, description) {
   if (URGENT_INCIDENT_TYPES.has(incidentType)) return "urgent";
   const text = String(description ?? "").toLowerCase();
@@ -115,7 +138,7 @@ export async function createSafetyIncident(req, res) {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [req.user.role, req.user.id, name, safeRoom, String(incidentType).trim().slice(0, 80), severity, String(description).trim()],
     );
-    return res.status(201).json({ message: "ส่งรายงานเหตุให้ Admin และ Owner แล้ว", severity });
+    return res.status(201).json({ message: "ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว", severity });
   } catch (error) {
     console.error("Create safety incident error:", error);
     return res.status(500).json({ message: "ไม่สามารถส่งรายงานเหตุได้" });
@@ -363,7 +386,7 @@ router.get("/me", async (req, res) => {
     }));
 
     const [maintenanceRequests] = await pool.query(
-      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, completed_at, completed_by_name, created_at
+      `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
        FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
       [customer.id],
     );
@@ -371,7 +394,7 @@ router.get("/me", async (req, res) => {
     const [tenantRequests] = await pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
-              tr.status, tr.accepted_at, tr.completed_at, tr.created_at,
+              tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
               sr.price AS source_room_price, tg.price AS target_room_price,
               (moi.id IS NOT NULL) AS room_inspected
        FROM TenantRequest tr
@@ -666,7 +689,7 @@ router.post("/requests", async (req, res) => {
 router.get("/resident-visit-requests", async (req, res) => {
   try {
     const [requests] = await getPool().query("SELECT * FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC", [req.user.id]);
-    return res.json({ requests });
+    return res.json({ requests: withVehiclePhotos(requests) });
   } catch (error) {
     console.error("Fetch resident visit requests error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดคำขอได้" });
@@ -700,17 +723,8 @@ router.post("/resident-visit-requests", async (req, res) => {
     const pool = getPool();
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     if (!customers[0]?.room_number) return res.status(400).json({ message: "ไม่พบห้องพักที่ผูกกับบัญชีนี้" });
-    if (requestType === "vehicle") {
-      const [owners] = await pool.query(
-        `SELECT 1 FROM ResidentVisitRequest
-         WHERE request_type = 'vehicle' AND customer_id <> ? AND status IN ('pending', 'approved') AND end_at > NOW()
-           AND REPLACE(UPPER(vehicle_plate), ' ', '') = REPLACE(UPPER(?), ' ', '')
-         LIMIT 1`,
-        [req.user.id, vehiclePlate.trim()],
-      );
-      if (owners.length > 0) {
-        return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
-      }
+    if (requestType === "vehicle" && (await isPlateRegisteredByOther(pool, req.user.id, vehiclePlate))) {
+      return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
     }
     const [result] = await pool.query(
       `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, vehicle_plate, vehicle_model, guest_name, guest_phone, start_at, end_at, note, is_special, special_reason)
