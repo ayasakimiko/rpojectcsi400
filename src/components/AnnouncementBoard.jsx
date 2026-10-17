@@ -134,6 +134,16 @@ function formatRelativeTime(value, now) {
   return formatAnnouncementDate(value)
 }
 
+function formatPostTime(value, now) {
+  const date = new Date(value)
+  const clock = `${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
+  const hours = (now - date.getTime()) / 3600000
+  if (hours < 24) return formatRelativeTime(value, now)
+  if (hours < 24 * 7) return `${formatRelativeTime(value, now)} · ${clock}`
+  const day = date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
+  return `${day} · ${clock}`
+}
+
 function getDaysInMonth(year, month) {
   if (!year || !month) return 31
   return new Date(Number(year), Number(month), 0).getDate()
@@ -515,11 +525,27 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                                 </span>
                                 <div className="announcement-post-byline">
                                   <strong>{item.author || 'เจ้าหน้าที่'}</strong>
-                                  <span title={`${formatAnnouncementDate(item.created_at)} น.`}>
-                                    {formatRelativeTime(item.created_at, now)}
-                                    <span aria-hidden="true"> · </span>
-                                    ประกาศจากหอพัก
-                                  </span>
+                                  <div className="announcement-post-meta">
+                                    <time
+                                      className="announcement-post-time"
+                                      dateTime={new Date(item.created_at).toISOString()}
+                                      title={`${formatAnnouncementDate(item.created_at)} น.`}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="9" />
+                                        <polyline points="12 7 12 12 15 14" />
+                                      </svg>
+                                      {formatPostTime(item.created_at, now)}
+                                    </time>
+                                    <span className="announcement-post-source">
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M3 21h18" />
+                                        <path d="M5 21V7l7-4 7 4v14" />
+                                        <path d="M9 21v-5h6v5" />
+                                      </svg>
+                                      ประกาศจากหอพัก
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="announcement-post-badges">
                                   {isNew && <span className="announcement-post-new">ใหม่</span>}
@@ -623,31 +649,80 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 </svg>
               </button>
             </header>
-            <div className="announcement-detail-body">
+            <div className={`announcement-detail-body is-${detail.tone === 'warning' ? 'warning' : 'info'}`}>
               <div className="announcement-detail-heading">
-                <h4>{detail.title}</h4>
-                <span className={`announcement-tone is-${detail.tone || 'info'}`}>
-                  {TONE_LABEL[detail.tone] || TONE_LABEL.info}
+                <span className="announcement-detail-icon" aria-hidden="true">
+                  {detail.tone === 'warning' ? (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                    </svg>
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3 11 18-5v12L3 14v-3z" />
+                      <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                    </svg>
+                  )}
                 </span>
-              </div>
-              <p className="announcement-detail-message">{detail.message}</p>
-              <PostPhotos photos={detail.photos} onOpen={(index) => openLightbox(detail, index)} />
-              <dl className="announcement-detail-meta">
-                <div>
-                  <dt>ประกาศโดย</dt>
-                  <dd>{detail.author || 'เจ้าหน้าที่'}</dd>
+                <div className="announcement-detail-heading-text">
+                  <span className={`announcement-tone is-${detail.tone || 'info'}`}>
+                    {TONE_LABEL[detail.tone] || TONE_LABEL.info}
+                  </span>
+                  <h4>{detail.title}</h4>
                 </div>
-                <div>
-                  <dt>วันเวลาที่ประกาศ</dt>
-                  <dd>{formatAnnouncementDate(detail.created_at)} น.</dd>
+              </div>
+              <section className="announcement-detail-note">
+                <span className="announcement-detail-label">รายละเอียดประกาศ</span>
+                <p className="announcement-detail-message">{detail.message}</p>
+              </section>
+              {detail.photos?.length > 0 && (
+                <section className="announcement-detail-gallery">
+                  <span className="announcement-detail-label">
+                    รูปประกอบ
+                    <em>{detail.photos.length} รูป</em>
+                  </span>
+                  <PostPhotos photos={detail.photos} onOpen={(index) => openLightbox(detail, index)} />
+                </section>
+              )}
+              <div className="announcement-detail-meta">
+                <div className="announcement-detail-meta-item">
+                  <span className="announcement-detail-meta-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 21a8 8 0 0 1 16 0" />
+                    </svg>
+                  </span>
+                  <span className="announcement-detail-meta-text">
+                    <small>ประกาศโดย</small>
+                    <strong className="announcement-actor">{detail.author || 'เจ้าหน้าที่'}</strong>
+                  </span>
+                </div>
+                <div className="announcement-detail-meta-item">
+                  <span className="announcement-detail-meta-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <polyline points="12 7 12 12 15 14" />
+                    </svg>
+                  </span>
+                  <span className="announcement-detail-meta-text">
+                    <small>วันเวลาที่ประกาศ</small>
+                    <strong>{formatAnnouncementDate(detail.created_at)} น.</strong>
+                  </span>
                 </div>
                 {canManage && (
-                  <div>
-                    <dt>ลบอัตโนมัติ</dt>
-                    <dd>{detail.expires_at ? formatExpiryDate(detail.expires_at) : 'ไม่กำหนด'}</dd>
+                  <div className="announcement-detail-meta-item is-wide">
+                    <span className="announcement-detail-meta-icon is-muted" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                      </svg>
+                    </span>
+                    <span className="announcement-detail-meta-text">
+                      <small>ลบอัตโนมัติ</small>
+                      <strong>{detail.expires_at ? formatExpiryDate(detail.expires_at) : 'ไม่กำหนด'}</strong>
+                    </span>
                   </div>
                 )}
-              </dl>
+              </div>
             </div>
             <div className="announcement-form-actions">
               <button type="button" className="announcement-board-cancel" onClick={closeDetail}>

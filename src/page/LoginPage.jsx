@@ -4,18 +4,21 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 
-const initialLoginForm = { username: '', password: '' }
+const initialLoginForm = { username: '', password: '', role: '' }
+const ROLE_LABELS = { Customer: 'ผู้เช่า', Staff: 'เจ้าหน้าที่', Admin: 'ผู้ดูแลระบบ', Owner: 'เจ้าของหอพัก' }
 
 function LoginPage() {
   const navigate = useNavigate()
   const [loginForm, setLoginForm] = useState(initialLoginForm)
   const [loading, setLoading] = useState(false)
+  const [availableRoles, setAvailableRoles] = useState([])
   const [error, setError] = useState(() => sessionStorage.getItem('apiBackendNotice') || '')
   const [success, setSuccess] = useState('')
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target
-    setLoginForm((prev) => ({ ...prev, [name]: value }))
+    if (name !== 'role') setAvailableRoles([])
+    setLoginForm((prev) => ({ ...prev, ...(name !== 'role' ? { role: '' } : {}), [name]: value }))
   }
 
   const handleLoginSubmit = async (e) => {
@@ -46,6 +49,9 @@ function LoginPage() {
               : '/staff'
       setTimeout(() => navigate(destination), 600)
     } catch (err) {
+      if (err.response?.data?.code === 'LOGIN_ROLE_REQUIRED') {
+        setAvailableRoles((err.response.data.roles || []).filter((role) => Object.hasOwn(ROLE_LABELS, role)))
+      }
       setError(err.response?.data?.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setLoading(false)
@@ -117,7 +123,16 @@ function LoginPage() {
                     />
                   </div>
                 </div>
-                <button type="submit" className="auth-submit-btn" disabled={loading}>
+                {availableRoles.length > 0 && (
+                  <div className="mt-3">
+                    <label className="form-label" htmlFor="login-role">สิทธิ์ที่ต้องการเข้าสู่ระบบ</label>
+                    <select id="login-role" name="role" className="form-select" value={loginForm.role} onChange={handleLoginChange}>
+                      <option value="">เลือกสิทธิ์ผู้ใช้งาน</option>
+                      {availableRoles.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
+                    </select>
+                  </div>
+                )}
+                <button type="submit" className="auth-submit-btn" disabled={loading || (availableRoles.length > 0 && !loginForm.role)}>
                   {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
                 </button>
               </form>

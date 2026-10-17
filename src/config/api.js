@@ -18,8 +18,10 @@ export function createBackendSelector({
   baseUrl = (backend) => backend.origin,
   fetchImpl = (...args) => globalThis.fetch(...args),
   timeoutMs = 1800,
-  cacheMs = 5000,
+  cacheMs = 30000,
   now = Date.now,
+  preferredId = () => null,
+  onSelect = () => {},
 } = {}) {
   let current = null
   let validUntil = 0
@@ -45,31 +47,53 @@ export function createBackendSelector({
     }
   }
 
-  async function select({ force = false } = {}) {
-    if (!force && current && now() < validUntil) return current
+  async function probe() {
+    const checks = backends.map((backend) => ({ backend, ok: healthy(backend) }))
+    const preferred = checks.find((check) => check.backend.id === preferredId())
+    if (preferred && (await preferred.ok)) return preferred.backend
+    for (const check of checks) {
+      if (await check.ok) return check.backend
+    }
+    return null
+  }
+
+  function refresh() {
     if (pending) return pending
     pending = (async () => {
-      for (const backend of backends) {
-        if (await healthy(backend)) {
-          current = backend
-          validUntil = now() + cacheMs
-          return backend
-        }
+      const backend = await probe()
+      if (!backend) {
+        current = null
+        validUntil = 0
+        throw connectionError('เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบเซิร์ฟเวอร์แล้วลองใหม่', 'ERR_BACKEND_UNAVAILABLE')
       }
-      current = null
-      validUntil = 0
-      throw connectionError('เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบเซิร์ฟเวอร์แล้วลองใหม่', 'ERR_BACKEND_UNAVAILABLE')
+      current = backend
+      validUntil = now() + cacheMs
+      onSelect(backend)
+      return backend
     })()
-    try {
-      return await pending
-    } finally {
-      pending = null
+    pending.then(
+      () => { pending = null },
+      () => { pending = null },
+    )
+    return pending
+  }
+
+  async function select({ force = false } = {}) {
+    if (!force && current) {
+      if (now() >= validUntil) refresh().catch(() => {})
+      return current
     }
+    return refresh()
   }
 
   return {
     select,
-    invalidate(id) { if (!id || current?.id === id) validUntil = 0 },
+    invalidate(id) {
+      if (!id || current?.id === id) {
+        current = null
+        validUntil = 0
+      }
+    },
     get current() { return current },
   }
 }
@@ -90,7 +114,15 @@ export function configureApiClient({
 } = {}) {
   client[REGISTRATION]?.dispose()
   const baseUrl = (backend) => development ? backend.proxy : backend.origin
-  const selector = createBackendSelector({ backends, baseUrl, fetchImpl, timeoutMs, cacheMs })
+  const selector = createBackendSelector({
+    backends,
+    baseUrl,
+    fetchImpl,
+    timeoutMs,
+    cacheMs,
+    preferredId: () => storage.getItem('apiBackend') || storage.getItem('apiBackendLast'),
+    onSelect: (backend) => storage.setItem('apiBackendLast', backend.id),
+  })
   client.defaults.baseURL = development ? '/' : backends[0].origin
 
   function bearer(config) {

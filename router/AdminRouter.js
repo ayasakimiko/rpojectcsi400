@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole } from "../middleware/authMiddleware.js";
+import { getActingAdminName } from "../middleware/accounts.js";
 import {
   hasField,
   isPositiveId,
@@ -15,7 +16,7 @@ import {
   validatePersonUpdateInput,
   validateRoomFields,
 } from "../middleware/validation.js";
-import { deletePublicImages } from "../middleware/publicUploads.js";
+import { deletePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
@@ -37,15 +38,81 @@ function buildUpdate(allowedColumns, body) {
   return { columns, values };
 }
 
-const ADMIN_ROLE_TABLE = { Admin: "Admin", Owner: "Owner" };
+const SAFETY_REVIEWER_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
-export async function getActingAdminName(pool, user) {
-  const table = ADMIN_ROLE_TABLE[user?.role];
-  if (!table) return null;
-  const [rows] = await pool.query(`SELECT first_name, last_name FROM ${table} WHERE id = ?`, [user.id]);
-  const row = rows[0];
-  return row ? `${row.first_name} ${row.last_name}` : null;
+export async function listSafetyIncidents(_req, res) {
+  try {
+    const [incidents] = await getPool().query(
+      `SELECT id, reporter_role, reporter_name, room_number, incident_type, severity, description, photos,
+              status, reviewed_by_name, reviewed_at, review_note, created_at
+       FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC`,
+    );
+    return res.json({ incidents: withIncidentPhotos(incidents) });
+  } catch (error) {
+    console.error("Fetch safety incidents error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายงานเหตุได้" });
+  }
 }
+
+export async function reviewSafetyIncident(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสรายงานไม่ถูกต้อง" });
+    const note = String(req.body?.reviewNote ?? "").trim();
+    if (note.length > 500) return res.status(400).json({ message: "บันทึกผลต้องไม่เกิน 500 ตัวอักษร" });
+    const pool = getPool();
+    const reviewerTable = SAFETY_REVIEWER_TABLE[req.user?.role];
+    const [reviewers] = reviewerTable
+      ? await pool.query(`SELECT first_name, last_name FROM ${reviewerTable} WHERE id = ?`, [req.user.id])
+      : [[]];
+    const reviewerName = reviewers[0] ? `${reviewers[0].first_name} ${reviewers[0].last_name}` : req.user.role;
+    const [result] = await pool.query(
+      "UPDATE SafetyIncident SET status = 'reviewed', reviewed_by_name = ?, reviewed_at = NOW(), review_note = ? WHERE id = ? AND status = 'pending'",
+      [reviewerName, note || null, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบแล้ว" });
+    return res.json({ message: "บันทึกผลตรวจสอบแล้ว" });
+  } catch (error) {
+    console.error("Review safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกผลตรวจสอบได้" });
+  }
+}
+
+router.get("/safety-incidents", listSafetyIncidents);
+router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
+
+router.get("/resident-visit-requests/special", async (_req, res) => {
+  try {
+    const [requests] = await getPool().query(
+      `SELECT r.*, c.first_name, c.last_name, c.phone AS customer_phone
+       FROM ResidentVisitRequest r JOIN Customer c ON c.id = r.customer_id
+       WHERE r.is_special = TRUE AND r.status = 'pending' ORDER BY r.created_at ASC`,
+    );
+    return res.json({ requests });
+  } catch (error) {
+    console.error("Fetch special resident requests error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอพิเศษได้" });
+  }
+});
+
+router.post("/resident-visit-requests/:id/special-review", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const status = req.body?.decision === "approve" ? "approved" : req.body?.decision === "reject" ? "rejected" : null;
+    if (!isPositiveId(id) || !status) return res.status(400).json({ message: "ข้อมูลคำขอไม่ถูกต้อง" });
+    const pool = getPool();
+    const adminName = await getActingAdminName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE ResidentVisitRequest SET status = ?, admin_reviewed_by_name = ?, admin_reviewed_at = NOW() WHERE id = ? AND is_special = TRUE AND status = 'pending'`,
+      [status, adminName, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการแล้ว" });
+    return res.json({ message: status === "approved" ? "อนุมัติกรณีพิเศษแล้ว" : "ปฏิเสธกรณีพิเศษแล้ว" });
+  } catch (error) {
+    console.error("Review special resident request error:", error);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกผลได้" });
+  }
+});
 
 router.get("/waiting-list", async (_req, res) => {
   try {

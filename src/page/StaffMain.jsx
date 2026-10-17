@@ -528,6 +528,49 @@ function printMonthlyInvoices(rooms, targetWindow = window.open('', '_blank', 'w
   return occupiedRooms.length
 }
 
+function NotifKindIcon({ kind }) {
+  const props = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  if (kind === 'announcement') {
+    return (
+      <svg {...props}>
+        <path d="m3 11 18-5v12L3 14v-3z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    )
+  }
+  if (kind === 'maintenance') {
+    return (
+      <svg {...props}>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />
+      </svg>
+    )
+  }
+  if (kind === 'staff') {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </svg>
+  )
+}
+
 function buildAnnouncementNotif(item) {
   return {
     key: `announcement-${item.id}`,
@@ -538,14 +581,13 @@ function buildAnnouncementNotif(item) {
     date: item.created_at,
     details: [
       { label: 'รายละเอียด', value: item.message },
-      { label: 'ประกาศโดย', value: item.author || 'เจ้าหน้าที่' },
+      { label: 'ประกาศโดย', value: <span className="staff-actor">{item.author || 'เจ้าหน้าที่'}</span> },
       { label: 'ลบอัตโนมัติ', value: item.expires_at ? `${formatDateTime(item.expires_at)} น.` : 'ไม่กำหนด' },
     ],
     kind: 'announcement',
   }
 }
 
-// Modals can stack (e.g. a detail popup over a history list); Esc closes only the topmost one.
 const openModalStack = []
 
 function Modal({ title, onClose, children, variant }) {
@@ -577,7 +619,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -679,6 +721,8 @@ const STAFF_TABS = [
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
+  { key: 'resident-visits', label: 'คำขอรถ' },
+  { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
 ]
 
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
@@ -804,7 +848,7 @@ const REQUEST_PREVIEW_COUNT = 3
 const ROOMS_PER_PAGE = 5
 const STAFF_LIST_PAGE_SIZE = 10
 const MODAL_ITEMS_PER_PAGE = 10
-const NOTIF_PAGE_SIZE = 6
+const NOTIF_PAGE_SIZE = 30
 const PAYMENT_HISTORY_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
@@ -987,7 +1031,7 @@ function getStaffRequestTimeline(kind, request) {
   if (!request) return []
   const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
   if (request.accepted_at) {
-    steps.push({ label: 'รับเรื่อง', date: request.accepted_at })
+    steps.push({ label: 'รับเรื่อง', date: request.accepted_at, by: request.accepted_by_name })
   }
   return steps
 }
@@ -1006,7 +1050,15 @@ function StaffRequestTimeline({ kind, request }) {
             <div key={step.label} className="staff-request-log-item">
               <span className="staff-request-log-dot" />
               <div className="staff-request-log-content">
-                <p className="staff-request-log-label">{step.label}</p>
+                <p className="staff-request-log-label">
+                  {step.label}
+                  {step.by && (
+                    <>
+                      {' โดย '}
+                      <span className="staff-actor">{step.by}</span>
+                    </>
+                  )}
+                </p>
                 <p className="staff-request-log-date">{formatDateTime(step.date)}</p>
                 {stepMs !== null && <p className="staff-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
               </div>
@@ -1082,8 +1134,6 @@ const TENANT_TYPE_SEGMENTS = [
   { key: 'move_room', label: 'ย้ายห้อง' },
 ]
 
-// Filter panel used across the staff page: optional segment buttons, a search box,
-// extra controls passed as children, and a result count with a clear link.
 function StaffFilterPanel({
   segments,
   active,
@@ -1149,7 +1199,6 @@ function StaffFilterPanel({
   )
 }
 
-// `counts` is optional: the history modal is paginated on the server and has no per-type totals.
 function TenantRequestFilters({
   type,
   onType,
@@ -1249,7 +1298,7 @@ function TenantRequestCard({ request, steps = [], children }) {
               <span className="staff-req-meta-dot" aria-hidden="true" />
               <span className="staff-req-meta-label">
                 {step.label}
-                {step.by && <strong> {step.by}</strong>}
+                {step.by && <strong className="staff-actor"> {step.by}</strong>}
               </span>
               <time dateTime={step.date}>
                 {new Date(step.date).toLocaleString('th-TH', {
@@ -1518,7 +1567,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
   const photos = parcel.photos || []
   const tenantName = parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
   return (
-    <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="transfer">
+    <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="parcel-detail">
       {(requestClose) => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
@@ -1577,7 +1626,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                     </div>
                     <div>
                       <dt>บันทึกโดย</dt>
-                      <dd>{parcel.staff_name || 'เจ้าหน้าที่'}</dd>
+                      <dd className="staff-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</dd>
                     </div>
                   </dl>
                 </div>
@@ -1619,7 +1668,9 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                 <li className="is-done">
                   <span className="staff-req-step-dot" />
                   <div>
-                    <p>บันทึกพัสดุเข้าห้อง โดย {parcel.staff_name || 'เจ้าหน้าที่'}</p>
+                    <p>
+                บันทึกพัสดุเข้าห้อง โดย <span className="staff-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
+              </p>
                     <small>{formatDateTime(parcel.created_at)}</small>
                   </div>
                 </li>
@@ -1651,7 +1702,6 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
   const isMove = request.type === 'move_room'
   const isOpen = ['pending', 'in_progress'].includes(request.status)
   const [openedAt] = useState(() => Date.now())
-  // Contract, balance and room-availability figures describe the rooms now, so only show them while the request is open.
   const due = isOpen ? sourceRoom?.currentDue : null
   const hasDue = due && due.status !== 'paid' && Number(due.amount) > 0
   const contractEnd = isOpen ? request.source_rental_end_date || sourceRoom?.rental_end_date : null
@@ -1664,7 +1714,8 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
     { key: 'created', label: 'ส่งคำขอ', date: request.created_at, done: true },
     {
       key: 'accepted',
-      label: request.accepted_by_name ? `รับเรื่องโดย ${request.accepted_by_name}` : 'เจ้าหน้าที่รับเรื่อง',
+      label: request.accepted_by_name ? 'รับเรื่องโดย' : 'เจ้าหน้าที่รับเรื่อง',
+      by: request.accepted_by_name,
       date: request.accepted_at,
       done: Boolean(request.accepted_at) || request.status !== 'pending',
     },
@@ -1672,10 +1723,11 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
       key: 'final',
       label:
         request.status === 'approved'
-          ? `อนุมัติ${request.completed_by_name ? `โดย ${request.completed_by_name}` : ''}`
+          ? `อนุมัติ${request.completed_by_name ? 'โดย' : ''}`
           : request.status === 'rejected'
-            ? `ปฏิเสธ${request.completed_by_name ? `โดย ${request.completed_by_name}` : ''}`
+            ? `ปฏิเสธ${request.completed_by_name ? 'โดย' : ''}`
             : 'รอผลดำเนินการ',
+      by: ['approved', 'rejected'].includes(request.status) ? request.completed_by_name : null,
       date: request.completed_at,
       done: ['approved', 'rejected'].includes(request.status),
       tone: request.status === 'rejected' ? 'danger' : request.status === 'approved' ? 'success' : '',
@@ -1922,7 +1974,10 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
                   >
                     <span className="staff-req-step-dot" />
                     <div>
-                      <p>{step.label}</p>
+                      <p>
+                        {step.label}
+                        {step.by && <span className="staff-actor"> {step.by}</span>}
+                      </p>
                       <small>{step.done && step.date ? formatDateTime(step.date) : step.done ? '' : 'ยังไม่ถึงขั้นตอนนี้'}</small>
                     </div>
                   </li>
@@ -2060,7 +2115,12 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
           )}
           <p className="staff-transfer-muted">
             ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
-            {inspection.inspected_by_name ? ` โดย ${inspection.inspected_by_name}` : ''}
+            {inspection.inspected_by_name && (
+              <>
+                {' โดย '}
+                <span className="staff-actor">{inspection.inspected_by_name}</span>
+              </>
+            )}
           </p>
         </>
       ) : null}
@@ -2326,6 +2386,75 @@ const SUMMARY_ICON_PATHS = {
       <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
     </>
   ),
+  queue: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5" />
+    </>
+  ),
+  slip: (
+    <>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </>
+  ),
+  maintenance: (
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4Z" />
+  ),
+  request: (
+    <>
+      <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" />
+    </>
+  ),
+  parcel: (
+    <>
+      <path d="M21 8 12 3 3 8v8l9 5 9-5Z" />
+      <path d="M3 8l9 5 9-5M12 13v8" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8" />
+      <rect x="3" y="10" width="18" height="8" rx="2" />
+      <path d="M7 14h.01M17 14h.01M5 18v2M19 18v2" />
+    </>
+  ),
+  carPending: (
+    <>
+      <path d="M14.5 13H3.8a1 1 0 0 0-.8.4V19h12v-5.6a1 1 0 0 0-.5-.4Z" />
+      <path d="m3 13 1.4-3.3A1.5 1.5 0 0 1 5.8 9h6.4" />
+      <path d="M6 16h.01M12 16h.01M4 19v2M14 19v2" />
+      <circle cx="18" cy="7" r="4" />
+      <path d="M18 5v2l1.3 1" />
+    </>
+  ),
+  safety: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="M12 8v4M12 16h.01" />
+    </>
+  ),
+}
+
+function StaffSummaryTile({ icon, label, value, hint, tone, alert = false, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`staff-summary-tile is-${tone}${value === 0 ? ' is-zero' : ''}${alert ? ' is-alert' : ''}`}
+      onClick={onClick}
+    >
+      <span className="staff-summary-tile-icon">
+        <SummaryIcon type={icon} />
+      </span>
+      <span className="staff-summary-tile-text">
+        <span className="staff-summary-tile-label">{label}</span>
+        <strong className="staff-summary-tile-value">{value}</strong>
+        {hint && <small className="staff-summary-tile-hint">{hint}</small>}
+      </span>
+    </button>
+  )
 }
 
 function SummaryIcon({ type }) {
@@ -2843,6 +2972,1614 @@ function StaffPaymentReview({ onCountChange }) {
   )
 }
 
+const RESIDENT_VISIT_STATUS = {
+  pending: { label: 'รออนุมัติ', badge: 'pending', tone: 'warning' },
+  approved: { label: 'อนุมัติแล้ว', badge: 'approved', tone: 'success' },
+  rejected: { label: 'ไม่อนุมัติ', badge: 'rejected', tone: 'danger' },
+  cancelled: { label: 'ยกเลิกแล้ว', badge: 'cancelled', tone: 'muted' },
+}
+const RESIDENT_VISIT_ACTIVE_PHASES = new Set(['parked', 'pending'])
+const RESIDENT_VISIT_VIEWS = {
+  main: {
+    label: 'หน้าหลัก',
+    defaultFilter: 'active',
+    filters: [
+      { key: 'active', label: 'ทั้งหมด' },
+      { key: 'parked', label: 'กำลังจอด', tone: 'success' },
+      { key: 'pending', label: 'รออนุมัติ', tone: 'warning' },
+    ],
+  },
+  history: {
+    label: 'ประวัติ',
+    defaultFilter: 'closed',
+    filters: [
+      { key: 'closed', label: 'ทั้งหมด' },
+      { key: 'expired', label: 'หมดเวลาจอด', tone: 'muted' },
+      { key: 'rejected', label: 'ไม่อนุมัติ', tone: 'danger' },
+      { key: 'cancelled', label: 'ยกเลิกแล้ว', tone: 'muted' },
+    ],
+  },
+}
+
+function getStaffVisitPhase(item, now) {
+  if (item.status !== 'approved') return { key: item.status, ...(RESIDENT_VISIT_STATUS[item.status] || RESIDENT_VISIT_STATUS.pending) }
+  if (!item.end_at) return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
+  const end = new Date(item.end_at).getTime()
+  if (now >= end) return { key: 'expired', label: 'หมดเวลาจอด', badge: 'expired', tone: 'muted' }
+  return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
+}
+
+function staffVisitOwnerKey(item) {
+  if (!item.customer_id) return 'external'
+  return item.guest_name ? 'family' : 'self'
+}
+const STAFF_VEHICLE_MAX_PHOTOS = 6
+const RESIDENT_VEHICLE_OWNER_LABEL = {
+  self: 'รถของผู้เช่า',
+  family: 'รถครอบครัวที่มาเยี่ยม',
+  external: 'บุคคลภายนอก (มาขอจอด)',
+}
+const EMPTY_STAFF_VEHICLE_FORM = {
+  roomNumber: '',
+  owner: 'self',
+  vehiclePlate: '',
+  vehicleModel: '',
+  guestName: '',
+  guestPhone: '',
+  startAt: null,
+  endAt: null,
+  limitTime: true,
+  note: '',
+  photos: [],
+}
+
+function defaultParkingWindow() {
+  const start = new Date()
+  start.setSeconds(0, 0)
+  start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { startAt: start, endAt: end }
+}
+
+function startOfToday() {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today
+}
+
+function staffAuthHeaders() {
+  return { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+}
+
+function toLocalDateTime(date) {
+  const pad = (number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`
+}
+
+function formatStaffDateTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  return `${date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} ${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
+}
+
+function formatStaffPoint(value) {
+  const date = new Date(value)
+  return {
+    day: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }),
+    time: date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+  }
+}
+
+function StaffCarIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8" />
+      <rect x="3" y="10" width="18" height="8" rx="2" />
+      <path d="M7 14h.01M17 14h.01" />
+      <path d="M5 18v2M19 18v2" />
+    </svg>
+  )
+}
+
+function StaffShieldIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  )
+}
+
+function StaffRange({ start, end, openEnded = false }) {
+  const from = formatStaffPoint(start)
+  const to = end ? formatStaffPoint(end) : null
+  return (
+    <span className="staff-rv-range">
+      <span>
+        <b>{from.day}</b> {from.time}
+      </span>
+      {!to && openEnded && (
+        <>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+          <span className="staff-rv-range-open">ไม่จำกัดเวลา</span>
+        </>
+      )}
+      {to && (
+        <>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+          <span>
+            <b>{to.day}</b> {to.time}
+          </span>
+        </>
+      )}
+    </span>
+  )
+}
+
+function StaffInfoCell({ label, wide = false, children }) {
+  return (
+    <span className={`staff-rv-cell${wide ? ' is-wide' : ''}`}>
+      <span className="staff-rv-cell-label">{label}</span>
+      <span className="staff-rv-cell-value">{children}</span>
+    </span>
+  )
+}
+
+function StaffDetailTimeline({ steps }) {
+  return (
+    <section className="staff-rv-timeline-card" aria-label="ขั้นตอนการดำเนินการ">
+      <h4 className="staff-rv-timeline-title">ขั้นตอนการดำเนินการ</h4>
+      <ol className="staff-rv-timeline">
+        {steps.map((step, index) => (
+          <li
+            key={step.label}
+            className={[
+              `is-${step.state}`,
+              step.tone ? `is-${step.tone}` : '',
+              step.state === 'done' && steps[index + 1]?.state === 'done' ? 'is-line-done' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <span className="staff-rv-timeline-dot" aria-hidden="true">
+              {step.state === 'done' && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  {step.tone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
+                </svg>
+              )}
+            </span>
+            <strong>{step.label}</strong>
+            <small>
+              {step.meta}
+              {step.by && (
+                <>
+                  {' · '}
+                  <span className="staff-rv-timeline-by">โดย {step.by}</span>
+                </>
+              )}
+            </small>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+function getStaffVisitKind(item) {
+  if (item.request_type !== 'vehicle') return 'guest'
+  if (!item.customer_id) return 'external'
+  return item.guest_name ? 'family' : 'self'
+}
+
+function getStaffVisitOwner(item) {
+  const kind = getStaffVisitKind(item)
+  return kind === 'guest' ? 'แขกค้างคืน' : kind === 'external' ? 'บุคคลภายนอก' : RESIDENT_VEHICLE_OWNER_LABEL[kind]
+}
+
+function getStaffVisitPerson(item) {
+  const kind = getStaffVisitKind(item)
+  if (kind === 'external') return `ผู้ขอจอด ${item.guest_name || '-'}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`
+  return `${item.first_name || ''} ${item.last_name || ''}`.trim() + (item.guest_name ? ` · ผู้มาเยี่ยม ${item.guest_name}` : '')
+}
+
+function getStaffVisitTitle(item) {
+  return item.request_type === 'vehicle' ? item.vehicle_plate || '-' : item.guest_name || '-'
+}
+
+function StaffResidentVisitsTab({ rooms, onCountChange }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState('main')
+  const [status, setStatus] = useState(RESIDENT_VISIT_VIEWS.main.defaultFilter)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detail, setDetail] = useState(null)
+  const [confirm, setConfirm] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState(EMPTY_STAFF_VEHICLE_FORM)
+  const [formError, setFormError] = useState('')
+  const [lightbox, setLightbox] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const load = useCallback(() => {
+    return axios
+      .get('/api/staff/resident-visit-requests', { headers: staffAuthHeaders() })
+      .then(({ data }) => {
+        const requests = data.requests || []
+        setItems(requests)
+        onCountChange?.(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+      })
+      .catch((error) => setNotice({ type: 'error', message: error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ' }))
+      .finally(() => setLoading(false))
+  }, [onCountChange])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const occupiedRooms = useMemo(() => (rooms || []).filter((room) => room.tenant?.id), [rooms])
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? items.filter((item) =>
+        [
+          item.vehicle_plate,
+          item.vehicle_model,
+          item.guest_name,
+          item.guest_phone,
+          item.note,
+          `ห้อง ${item.room_number}`,
+          getStaffVisitPerson(item),
+          item.customer_phone,
+          getStaffVisitOwner(item),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : items
+  const isActive = (item) => RESIDENT_VISIT_ACTIVE_PHASES.has(getStaffVisitPhase(item, now).key)
+  const matchesFilter = (item, key) => {
+    if (key === 'active') return isActive(item)
+    if (key === 'closed') return !isActive(item)
+    return getStaffVisitPhase(item, now).key === key
+  }
+  const filtered = searched.filter((item) => matchesFilter(item, status))
+  const activeCount = items.filter(isActive).length
+  const historyCount = items.length - activeCount
+  const switchView = (next) => {
+    setView(next)
+    setStatus(RESIDENT_VISIT_VIEWS[next].defaultFilter)
+    setPage(1)
+  }
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
+  const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
+  const pendingCount = items.filter((item) => item.status === 'pending' && !item.is_special).length
+  const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
+
+  const openCreate = () => {
+    setEditing(null)
+    setForm({ ...EMPTY_STAFF_VEHICLE_FORM, ...defaultParkingWindow() })
+    setFormError('')
+    setFormOpen(true)
+  }
+
+  const openEdit = (item) => {
+    setEditing(item)
+    setForm({
+      ...EMPTY_STAFF_VEHICLE_FORM,
+      roomNumber: item.room_number ? String(item.room_number) : '',
+      owner: staffVisitOwnerKey(item),
+      vehiclePlate: item.vehicle_plate || '',
+      vehicleModel: item.vehicle_model || '',
+      guestName: item.guest_name || '',
+      guestPhone: item.guest_phone || '',
+      startAt: new Date(item.start_at),
+      endAt: item.end_at ? new Date(item.end_at) : null,
+      limitTime: Boolean(item.end_at),
+      note: item.note || '',
+      photos: [],
+      keepPhotos: (item.vehicle_photos || []).map((photo) => photo.url),
+    })
+    setFormError('')
+    setDetail(null)
+    setFormOpen(true)
+  }
+
+  const review = async (requestClose) => {
+    setBusy(true)
+    try {
+      const { data } =
+        confirm.decision === 'cancel'
+          ? await axios.delete(`/api/staff/resident-visit-requests/${confirm.item.id}`, { headers: staffAuthHeaders() })
+          : await axios.post(`/api/staff/resident-visit-requests/${confirm.item.id}/${confirm.decision}`, {}, { headers: staffAuthHeaders() })
+      requestClose()
+      setDetail(null)
+      setNotice({ type: 'success', message: data.message || 'บันทึกผลแล้ว' })
+      await load()
+    } catch (error) {
+      requestClose()
+      setNotice({ type: 'error', message: error.response?.data?.message || 'บันทึกผลไม่สำเร็จ' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updateField = (field, value) => {
+    setForm((current) => {
+      const next = { ...current, [field]: value }
+      if (field === 'owner' && value === 'external') next.roomNumber = ''
+      if (field === 'owner' && value === 'self') {
+        next.guestName = ''
+        next.guestPhone = ''
+      }
+      if (field === 'startAt' && value && next.endAt && next.endAt <= value) next.endAt = null
+      if (field === 'limitTime' && value && !next.endAt && next.startAt) {
+        const end = new Date(next.startAt)
+        end.setDate(end.getDate() + 1)
+        next.endAt = end
+      }
+      return next
+    })
+    if (formError) setFormError('')
+  }
+
+  const submitVehicle = async (event, requestClose) => {
+    event.preventDefault()
+    if (!editing && form.owner !== 'external' && !form.roomNumber) return setFormError('กรุณาเลือกห้อง')
+    if (!form.vehiclePlate.trim()) return setFormError('กรุณาระบุทะเบียนรถ')
+    if (form.owner !== 'self' && !form.guestName.trim()) {
+      return setFormError(form.owner === 'external' ? 'กรุณาระบุชื่อผู้ขอจอด' : 'กรุณาระบุชื่อผู้มาเยี่ยม')
+    }
+    if (!form.startAt) return setFormError('กรุณาเลือกวันเวลาเริ่ม')
+    if (form.limitTime && !form.endAt) return setFormError('กรุณาเลือกวันเวลาสิ้นสุด หรือปิด "กำหนดระยะเวลาจอด"')
+    if (form.limitTime && form.endAt <= form.startAt) return setFormError('วันสิ้นสุดต้องอยู่หลังวันเริ่ม')
+    setBusy(true)
+    try {
+      const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
+      const payload = {
+        ...form,
+        photos,
+        startAt: toLocalDateTime(form.startAt),
+        endAt: form.limitTime ? toLocalDateTime(form.endAt) : null,
+      }
+      const { data } = editing
+        ? await axios.patch(`/api/staff/resident-visit-requests/${editing.id}`, payload, { headers: staffAuthHeaders() })
+        : await axios.post('/api/staff/resident-visit-requests', payload, { headers: staffAuthHeaders() })
+      requestClose()
+      setForm(EMPTY_STAFF_VEHICLE_FORM)
+      setEditing(null)
+      setNotice({ type: 'success', message: data.message || (editing ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มรถเรียบร้อยแล้ว') })
+      await load()
+    } catch (error) {
+      setFormError(error.response?.data?.message || error.message || 'เพิ่มรถไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="staff-card staff-tab-card staff-rv-card">
+      <div className="staff-card-header">
+        <div>
+          <h2>
+            คำขอรถ / ผู้มาติดต่อ <span className="staff-count-pill">{items.length}</span>
+          </h2>
+          <p className="staff-rv-subtitle">
+            {pendingCount > 0 ? `รออนุมัติ ${pendingCount} รายการ` : 'ไม่มีคำขอที่รออนุมัติ'} · เพิ่มรถของผู้เช่าได้โดยตรง
+          </p>
+        </div>
+        <div className="staff-rv-header-actions">
+          <span className="staff-rv-parked-chip" aria-label={`กำลังจอดอยู่ ${parkedCount} คัน`}>
+            <span className="staff-rv-parked-icon" aria-hidden="true">P</span>
+            <span>
+              กำลังจอดอยู่ <strong>{parkedCount}</strong> คัน
+            </span>
+          </span>
+          <button type="button" className="staff-action-btn is-primary" onClick={openCreate}>
+            + เพิ่มรถ
+          </button>
+        </div>
+      </div>
+
+      <div className="staff-rv-subtabs" role="tablist" aria-label="มุมมองคำขอรถ">
+        {Object.entries(RESIDENT_VISIT_VIEWS).map(([key, info]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            className={`staff-rv-subtab${view === key ? ' is-active' : ''}`}
+            onClick={() => switchView(key)}
+          >
+            {info.label}
+            <span>{key === 'main' ? activeCount : historyCount}</span>
+          </button>
+        ))}
+      </div>
+
+      <StaffFilterPanel
+        segments={RESIDENT_VISIT_VIEWS[view].filters.map((filter) => ({
+          key: filter.key,
+          label: filter.label,
+          className: filter.tone ? `tone-${filter.tone}` : undefined,
+          count: searched.filter((item) => matchesFilter(item, filter.key)).length,
+        }))}
+        active={status}
+        onSegment={(value) => {
+          setStatus(value)
+          setPage(1)
+        }}
+        search={search}
+        onSearch={(value) => {
+          setSearch(value)
+          setPage(1)
+        }}
+        searchPlaceholder="ค้นหาทะเบียนรถ ห้อง ชื่อผู้เช่า หรือผู้มาเยี่ยม"
+        resultText={`พบ ${filtered.length} จาก ${items.length} รายการ`}
+        canClear={status !== RESIDENT_VISIT_VIEWS[view].defaultFilter || Boolean(keyword)}
+        onClear={() => {
+          setStatus(RESIDENT_VISIT_VIEWS[view].defaultFilter)
+          setSearch('')
+          setPage(1)
+        }}
+      />
+
+      {loading && items.length === 0 ? (
+        <p className="staff-empty">กำลังโหลดรายการ...</p>
+      ) : filtered.length === 0 ? (
+        <div className="staff-rv-empty">
+          <span className="staff-rv-empty-icon" aria-hidden="true">
+            <StaffCarIcon />
+          </span>
+          <strong>
+            {keyword || status !== RESIDENT_VISIT_VIEWS[view].defaultFilter
+              ? 'ไม่พบรายการตามเงื่อนไข'
+              : view === 'main'
+                ? 'ไม่มีรถที่กำลังจอดหรือคำขอที่รออยู่'
+                : 'ยังไม่มีประวัติ'}
+          </strong>
+          <span>
+            {keyword || status !== RESIDENT_VISIT_VIEWS[view].defaultFilter
+              ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ'
+              : view === 'main'
+                ? 'กด "+ เพิ่มรถ" เพื่อบันทึกรถของผู้เช่าหรือผู้มาขอจอด'
+                : 'รายการที่หมดเวลา ไม่อนุมัติ หรือยกเลิกจะแสดงที่นี่'}
+          </span>
+        </div>
+      ) : (
+        <ul className="staff-rv-list">
+          {pageItems.map((item) => {
+            const info = getStaffVisitPhase(item, now)
+            const canReview = item.status === 'pending' && !item.is_special
+            const canCancelParking = info.key === 'parked' && item.request_type === 'vehicle'
+            return (
+              <li key={item.id} className={`staff-rv-entry is-${info.tone}`}>
+                <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
+                  <span className="staff-rv-entry-head">
+                    <span className={`staff-rv-icon is-${getStaffVisitKind(item)}`}>
+                      <StaffCarIcon />
+                    </span>
+                    <span className="staff-rv-entry-title">
+                      <strong>{getStaffVisitTitle(item)}</strong>
+                      <small>{item.vehicle_model || 'ไม่ระบุรุ่น'}</small>
+                    </span>
+                    <span className={`staff-badge status-${info.badge}`}>
+                      {item.is_special && item.status === 'pending' ? 'รอ Admin' : info.label}
+                    </span>
+                  </span>
+                  <span className="staff-rv-entry-grid">
+                    <StaffInfoCell label="ห้อง">{item.room_number ? `ห้อง ${item.room_number}` : 'บุคคลภายนอก'}</StaffInfoCell>
+                    <StaffInfoCell label="ประเภท">
+                      <span className={`staff-rv-owner is-${getStaffVisitKind(item)}`}>{getStaffVisitOwner(item)}</span>
+                    </StaffInfoCell>
+                    <StaffInfoCell label="ช่วงเวลา" wide>
+                      <StaffRange start={item.start_at} end={item.end_at} openEnded={item.request_type === 'vehicle'} />
+                    </StaffInfoCell>
+                    {item.customer_id ? (
+                      <>
+                        <StaffInfoCell label="ผู้เช่า">
+                          {`${item.first_name || ''} ${item.last_name || ''}`.trim() || '-'}
+                        </StaffInfoCell>
+                        <StaffInfoCell label="เบอร์โทรผู้เช่า">{item.customer_phone || '-'}</StaffInfoCell>
+                      </>
+                    ) : (
+                      <>
+                        <StaffInfoCell label="ผู้ขอจอด">{item.guest_name || '-'}</StaffInfoCell>
+                        <StaffInfoCell label="เบอร์โทรผู้ขอจอด">{item.guest_phone || '-'}</StaffInfoCell>
+                      </>
+                    )}
+                    {item.customer_id && item.guest_name && (
+                      <>
+                        <StaffInfoCell label="ผู้มาเยี่ยม">{item.guest_name}</StaffInfoCell>
+                        <StaffInfoCell label="เบอร์โทรผู้มาเยี่ยม">{item.guest_phone || '-'}</StaffInfoCell>
+                      </>
+                    )}
+                    {item.status !== 'pending' && (item.admin_reviewed_by_name || item.reviewed_by_name) && (
+                      <StaffInfoCell label={item.status === 'rejected' ? 'ปฏิเสธโดย' : 'อนุมัติโดย'}>
+                        <span className="staff-actor">{item.admin_reviewed_by_name || item.reviewed_by_name}</span>
+                      </StaffInfoCell>
+                    )}
+                  </span>
+                </button>
+                <div className="staff-rv-entry-foot">
+                  <span className="staff-rv-entry-extra">
+                    <span className="staff-rv-photo-count">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
+                        <circle cx="12" cy="13" r="3.5" />
+                      </svg>
+                      {item.vehicle_photos?.length ? `${item.vehicle_photos.length} รูป` : 'ไม่มีรูป'}
+                    </span>
+                    {item.note && <span className="staff-rv-entry-note">หมายเหตุ: {item.note}</span>}
+                  </span>
+                  <span className="staff-rv-entry-actions">
+                    {canCancelParking && (
+                      <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'cancel' })}>
+                        ยกเลิกรายการ
+                      </button>
+                    )}
+                    {canReview && (
+                      <>
+                        <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'reject' })}>
+                          ปฏิเสธ
+                        </button>
+                        <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => setConfirm({ item, decision: 'approve' })}>
+                          อนุมัติ
+                        </button>
+                      </>
+                    )}
+                    <button type="button" className="staff-rv-entry-more" onClick={() => setDetail(item)}>
+                      ดูรายละเอียด <span aria-hidden="true">›</span>
+                    </button>
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <StaffPagination page={currentPage} total={filtered.length} onChange={setPage} />
+
+      {detail && (
+        <Modal title="รายละเอียดคำขอรถ" onClose={() => setDetail(null)} variant="detail">
+          {(requestClose) => {
+            const info = getStaffVisitPhase(detail, now)
+            const canManage = ['pending', 'approved'].includes(detail.status) && detail.request_type === 'vehicle'
+            const reviewer = detail.admin_reviewed_by_name || detail.reviewed_by_name
+            const reviewedAt = detail.admin_reviewed_at || detail.reviewed_at
+            const tenantName = [detail.first_name, detail.last_name].filter(Boolean).join(' ').trim()
+            const fields = [
+              ['ทะเบียนรถ', detail.vehicle_plate],
+              ['ยี่ห้อ / รุ่น', detail.vehicle_model],
+              ...(detail.customer_id
+                ? [
+                    [detail.guest_name ? 'ชื่อผู้แจ้ง / ผู้เช่า' : 'ชื่อผู้จอด / ผู้เช่า', tenantName],
+                    ['เบอร์ผู้เช่า', detail.customer_phone],
+                  ]
+                : []),
+              ...(detail.guest_name || !detail.customer_id
+                ? [
+                    [detail.request_type === 'vehicle' ? 'ชื่อผู้จอด' : 'ชื่อผู้มาติดต่อ', detail.guest_name],
+                    [detail.customer_id ? 'เบอร์ผู้มาเยี่ยม' : 'เบอร์ผู้ขอจอด', detail.guest_phone],
+                  ]
+                : []),
+              ['เริ่ม', formatStaffDateTime(detail.start_at)],
+              ['สิ้นสุด', detail.end_at ? formatStaffDateTime(detail.end_at) : 'ไม่จำกัดเวลา'],
+            ]
+            return (
+              <div className="staff-rv-detail">
+                <div className={`staff-rv-detail-hero is-${info.tone}`}>
+                  <span className={`staff-rv-icon is-large is-${getStaffVisitKind(detail)}`}>
+                    <StaffCarIcon />
+                  </span>
+                  <div className="staff-rv-text">
+                    <strong>{getStaffVisitTitle(detail)}</strong>
+                    <span className="staff-rv-meta">
+                      {detail.room_number && <span className="staff-rv-room">ห้อง {detail.room_number}</span>}
+                      <span className={`staff-rv-owner is-${getStaffVisitKind(detail)}`}>{getStaffVisitOwner(detail)}</span>
+                    </span>
+                  </div>
+                  <span className={`staff-badge status-${info.badge}`}>{info.label}</span>
+                </div>
+                <dl className="staff-rv-fields">
+                  {fields.map(([label, value]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{value || '-'}</dd>
+                    </div>
+                  ))}
+                  <div className="is-wide">
+                    <dt>หมายเหตุ</dt>
+                    <dd>{detail.note || '-'}</dd>
+                  </div>
+                </dl>
+                {detail.vehicle_photos?.length > 0 && (
+                  <section className="staff-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
+                    <h4 className="staff-rv-timeline-title">รูปรถ / ป้ายทะเบียน ({detail.vehicle_photos.length} รูป)</h4>
+                    <div className="staff-rv-photo-grid">
+                      {detail.vehicle_photos.map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-rv-photo"
+                          onClick={() => setLightbox({ photos: detail.vehicle_photos, index, plate: getStaffVisitTitle(detail) })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                <StaffDetailTimeline
+                  steps={[
+                    { label: 'ส่งคำขอ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
+                    detail.status === 'pending' || reviewedAt
+                      ? {
+                          label: detail.status === 'pending' ? 'รออนุมัติ' : detail.status === 'rejected' ? 'ไม่อนุมัติ' : 'อนุมัติแล้ว',
+                          meta: detail.status === 'pending' ? 'กำลังรอ' : formatStaffDateTime(reviewedAt),
+                          by: detail.status === 'pending' ? null : reviewer,
+                          state: detail.status === 'pending' ? 'current' : 'done',
+                          tone: detail.status === 'rejected' ? 'danger' : detail.status === 'pending' ? undefined : 'success',
+                        }
+                      : null,
+                    detail.updated_at
+                      ? { label: 'แก้ไขข้อมูล', meta: formatStaffDateTime(detail.updated_at), by: detail.updated_by_name, state: 'done' }
+                      : null,
+                    detail.status === 'cancelled'
+                      ? {
+                          label: 'ยกเลิกรายการ',
+                          meta: formatStaffDateTime(detail.cancelled_at),
+                          by: detail.cancelled_by_name,
+                          state: 'done',
+                          tone: 'danger',
+                        }
+                      : null,
+                  ].filter(Boolean)}
+                />
+                <div className="staff-rv-detail-actions">
+                  {canManage && detail.status === 'pending' && (
+                    <div className="staff-rv-detail-manage">
+                      <span className="staff-rv-detail-manage-label">จัดการรายการ</span>
+                      <button type="button" className="staff-rv-pill" onClick={() => openEdit(detail)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                        แก้ไข
+                      </button>
+                    </div>
+                  )}
+                  <div className="staff-rv-detail-primary">
+                    {detail.status === 'pending' && !detail.is_special ? (
+                      <>
+                        <button type="button" className="staff-action-btn is-danger" onClick={() => setConfirm({ item: detail, decision: 'reject' })}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                          </svg>
+                          ปฏิเสธ
+                        </button>
+                        <button type="button" className="staff-action-btn is-primary" onClick={() => setConfirm({ item: detail, decision: 'approve' })}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          อนุมัติ
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                          ปิด
+                        </button>
+                        {canManage && (
+                          <button type="button" className="staff-action-btn is-primary" onClick={() => openEdit(detail)}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                            </svg>
+                            แก้ไขข้อมูล
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {confirm && (
+        <Modal
+          title={confirm.decision === 'approve' ? 'ยืนยันการอนุมัติ' : confirm.decision === 'cancel' ? 'ยืนยันการยกเลิกรายการ' : 'ยืนยันการปฏิเสธ'}
+          onClose={() => setConfirm(null)}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className={`staff-confirm-icon ${confirm.decision === 'approve' ? 'is-success' : 'is-warning'}`}>
+                <StaffCarIcon />
+              </div>
+              <p className="staff-confirm-message">
+                {confirm.decision === 'approve'
+                  ? 'อนุมัติคำขอรถคันนี้?'
+                  : confirm.decision === 'cancel'
+                    ? 'ยกเลิกรายการรถคันนี้?'
+                    : 'ปฏิเสธคำขอรถคันนี้?'}
+              </p>
+              {confirm.decision === 'cancel' && (
+                <p className="staff-confirm-note">รายการจะเปลี่ยนสถานะเป็น "ยกเลิกแล้ว" และยังเก็บไว้ในประวัติ ไม่ได้ลบออกจากระบบ</p>
+              )}
+              <div className="staff-confirm-details">
+                <div className="staff-confirm-detail-row">
+                  <span>ทะเบียนรถ</span>
+                  <strong>{getStaffVisitTitle(confirm.item)}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ห้อง</span>
+                  <strong>{confirm.item.room_number || 'บุคคลภายนอก'}</strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ช่วงเวลา</span>
+                  <strong>
+                    <StaffRange start={confirm.item.start_at} end={confirm.item.end_at} openEnded />
+                  </strong>
+                </div>
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  className={`staff-action-btn ${confirm.decision === 'approve' ? 'is-primary' : 'is-danger'}`}
+                  disabled={busy}
+                  onClick={() => review(requestClose)}
+                >
+                  {busy
+                    ? 'กำลังดำเนินการ...'
+                    : confirm.decision === 'approve'
+                      ? 'ยืนยันอนุมัติ'
+                      : confirm.decision === 'cancel'
+                        ? 'ยืนยันยกเลิก'
+                        : 'ยืนยันปฏิเสธ'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {lightbox && createPortal(
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={`ทะเบียน ${lightbox.plate}`}
+          label="รูปรถ / ป้ายทะเบียน"
+          onClose={() => setLightbox(null)}
+        />,
+        document.body,
+      )}
+
+      {formOpen && (
+        <Modal
+          title={editing ? 'แก้ไขข้อมูลรถ' : 'เพิ่มรถของผู้เช่า'}
+          onClose={() => {
+            setFormOpen(false)
+            setEditing(null)
+          }}
+          variant="waiting-form"
+        >
+          {(requestClose) => (
+            <form className="staff-rv-form" onSubmit={(event) => submitVehicle(event, requestClose)} noValidate>
+              <p className="staff-rv-form-note">
+                {editing ? (
+                  <>
+                    {RESIDENT_VEHICLE_OWNER_LABEL[form.owner]}
+                    {editing.room_number ? ` · ห้อง ${editing.room_number}` : ''} · แก้ไขทะเบียน วันเวลา และรูปได้
+                  </>
+                ) : (
+                  'รถที่เจ้าหน้าที่เพิ่มจะได้รับการอนุมัติทันที'
+                )}
+              </p>
+              {formError && (
+                <p className="staff-form-error staff-form-error-block" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="waiting-form-grid">
+                {!editing && (
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="staff-rv-owner">
+                    รถของ
+                  </label>
+                  <select
+                    id="staff-rv-owner"
+                    className="staff-form-input"
+                    value={form.owner}
+                    onChange={(event) => updateField('owner', event.target.value)}
+                  >
+                    {Object.entries(RESIDENT_VEHICLE_OWNER_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                )}
+                {!editing && form.owner !== 'external' && (
+                  <div className="staff-form-field">
+                    <label className="staff-form-label" htmlFor="staff-rv-room">
+                      ห้อง <span className="staff-form-required">*</span>
+                    </label>
+                    <select
+                      id="staff-rv-room"
+                      className="staff-form-input"
+                      value={form.roomNumber}
+                      onChange={(event) => updateField('roomNumber', event.target.value)}
+                    >
+                      <option value="">{occupiedRooms.length ? 'เลือกห้อง' : 'ยังไม่มีห้องที่มีผู้เช่า'}</option>
+                      {(rooms || []).map((room) => (
+                        <option key={room.room_number} value={room.room_number} disabled={!room.tenant?.id}>
+                          ห้อง {room.room_number} · {room.tenant?.id ? `${room.tenant.first_name} ${room.tenant.last_name}` : 'ห้องว่าง'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="staff-rv-plate">
+                    ทะเบียนรถ <span className="staff-form-required">*</span>
+                  </label>
+                  <input
+                    id="staff-rv-plate"
+                    className="staff-form-input"
+                    maxLength={20}
+                    placeholder="กข 1234"
+                    value={form.vehiclePlate}
+                    onChange={(event) => updateField('vehiclePlate', event.target.value)}
+                  />
+                </div>
+                <div className="staff-form-field">
+                  <label className="staff-form-label" htmlFor="staff-rv-model">
+                    ยี่ห้อ / รุ่น
+                  </label>
+                  <input
+                    id="staff-rv-model"
+                    className="staff-form-input"
+                    maxLength={100}
+                    placeholder="เช่น Toyota Yaris"
+                    value={form.vehicleModel}
+                    onChange={(event) => updateField('vehicleModel', event.target.value)}
+                  />
+                </div>
+                {form.owner !== 'self' && (
+                  <>
+                    <div className="staff-form-field">
+                      <label className="staff-form-label" htmlFor="staff-rv-guest">
+                        {form.owner === 'external' ? 'ชื่อผู้ขอจอด' : 'ชื่อผู้มาเยี่ยม'} <span className="staff-form-required">*</span>
+                      </label>
+                      <input
+                        id="staff-rv-guest"
+                        className="staff-form-input"
+                        maxLength={255}
+                        placeholder="ชื่อ - นามสกุล"
+                        value={form.guestName}
+                        onChange={(event) => updateField('guestName', event.target.value)}
+                      />
+                    </div>
+                    <div className="staff-form-field">
+                      <label className="staff-form-label" htmlFor="staff-rv-guest-phone">
+                        {form.owner === 'external' ? 'เบอร์ผู้ขอจอด' : 'เบอร์ผู้มาเยี่ยม'}
+                      </label>
+                      <input
+                        id="staff-rv-guest-phone"
+                        type="tel"
+                        className="staff-form-input"
+                        maxLength={20}
+                        placeholder="08x-xxx-xxxx"
+                        value={form.guestPhone}
+                        onChange={(event) => updateField('guestPhone', event.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="staff-rv-time-box">
+                <label className={`staff-rv-switch${form.limitTime ? ' is-on' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={form.limitTime}
+                    onChange={(event) => updateField('limitTime', event.target.checked)}
+                  />
+                  <span className="staff-rv-switch-track" aria-hidden="true" />
+                  <span className="staff-rv-switch-text">
+                    <strong>กำหนดระยะเวลาจอด</strong>
+                    <small>{form.limitTime ? 'ระบุวันเวลาเริ่มและสิ้นสุด' : 'จอดได้ไม่จำกัดเวลา จนกว่าเจ้าหน้าที่จะยกเลิกรายการ'}</small>
+                  </span>
+                </label>
+                <div className="waiting-form-grid">
+                  <div className="staff-form-field">
+                    <label className="staff-form-label" htmlFor="staff-rv-start">
+                      เริ่ม <span className="staff-form-required">*</span>
+                    </label>
+                    <ThaiDatePicker
+                      id="staff-rv-start"
+                      valueType="date"
+                      className="staff-form-input"
+                      placeholder="เลือกวันเวลา"
+                      value={form.startAt}
+                      onChange={(date) => updateField('startAt', date)}
+                      minDate={startOfToday()}
+                      showTimeSelect
+                      timeIntervals={15}
+                      portalId="staff-date-portal"
+                    />
+                  </div>
+                  {form.limitTime ? (
+                    <div className="staff-form-field">
+                      <label className="staff-form-label" htmlFor="staff-rv-end">
+                        สิ้นสุด <span className="staff-form-required">*</span>
+                      </label>
+                      <ThaiDatePicker
+                        id="staff-rv-end"
+                        valueType="date"
+                        className="staff-form-input"
+                        placeholder="เลือกวันเวลา"
+                        value={form.endAt}
+                        onChange={(date) => updateField('endAt', date)}
+                        minDate={form.startAt || startOfToday()}
+                        openToDate={form.endAt || form.startAt || undefined}
+                        filterTime={(time) => !form.startAt || time > form.startAt}
+                        showTimeSelect
+                        timeIntervals={15}
+                        portalId="staff-date-portal"
+                      />
+                    </div>
+                  ) : (
+                    <div className="staff-form-field">
+                      <span className="staff-form-label">สิ้นสุด</span>
+                      <span className="staff-rv-open-end">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
+                        </svg>
+                        ไม่จำกัดเวลา
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="staff-form-field">
+                <div className="staff-rv-photo-head">
+                  <span className="staff-form-label">รูปรถ / ป้ายทะเบียน</span>
+                  <span className="staff-rv-photo-tag">ไม่บังคับ</span>
+                  <span className="staff-rv-photo-counter">
+                    {(form.keepPhotos?.length || 0) + form.photos.length}/{STAFF_VEHICLE_MAX_PHOTOS}
+                  </span>
+                </div>
+                <p className="staff-rv-photo-hint">ถ่ายให้เห็นตัวรถและป้ายทะเบียนชัดเจน · JPG, PNG หรือ WebP · ไม่เกิน 5 MB ต่อรูป</p>
+                {editing && form.keepPhotos?.length > 0 && (
+                  <div className="staff-rv-photo-grid staff-rv-keep-photos">
+                    {(editing.vehicle_photos || [])
+                      .filter((photo) => form.keepPhotos.includes(photo.url))
+                      .map((photo) => (
+                        <div key={photo.url} className="staff-rv-photo is-keep">
+                          <UploadImage src={photo.url} alt={photo.name || 'รูปรถ'} loading="lazy" />
+                          <button
+                            type="button"
+                            className="staff-rv-photo-remove"
+                            onClick={() => updateField('keepPhotos', form.keepPhotos.filter((url) => url !== photo.url))}
+                            aria-label="ลบรูปนี้"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                <ParcelPhotoPicker
+                  id="staff-rv-photos"
+                  heading={false}
+                  maxPhotos={STAFF_VEHICLE_MAX_PHOTOS - (form.keepPhotos?.length || 0)}
+                  files={form.photos}
+                  onChange={(files) => updateField('photos', files)}
+                  onError={setFormError}
+                />
+              </div>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="staff-rv-note">
+                  หมายเหตุ
+                </label>
+                <textarea
+                  id="staff-rv-note"
+                  className="staff-form-input staff-rv-note"
+                  rows={4}
+                  maxLength={500}
+                  placeholder="เช่น จอดได้เฉพาะช่องด้านหลังอาคาร หรือรายละเอียดเพิ่มเติม"
+                  value={form.note}
+                  onChange={(event) => updateField('note', event.target.value)}
+                />
+                <span className="staff-rv-hint">{form.note.length}/500</span>
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button type="submit" className="staff-action-btn is-primary" disabled={busy}>
+                  {busy ? 'กำลังบันทึก...' : editing ? 'บันทึกการแก้ไข' : 'บันทึกรถ'}
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+
+      {notice && (
+        <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
+                </svg>
+              </div>
+              <p className="staff-confirm-message">{notice.message}</p>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+    </section>
+  )
+}
+
+const SAFETY_INCIDENT_TYPES = [
+  ['accident', 'อุบัติเหตุ'],
+  ['security', 'ความปลอดภัย'],
+  ['fire', 'ไฟไหม้ / ควัน'],
+  ['medical', 'เจ็บป่วยฉุกเฉิน'],
+  ['other', 'อื่น ๆ'],
+]
+const SAFETY_INCIDENT_TYPE_LABEL = Object.fromEntries(SAFETY_INCIDENT_TYPES)
+const SAFETY_SEVERITY_LABEL = { urgent: 'ด่วน', normal: 'ทั่วไป' }
+const SAFETY_REPORTER_ROLE_LABEL = { Customer: 'ผู้เช่า', Staff: 'เจ้าหน้าที่', Admin: 'Admin', Owner: 'Owner' }
+const SAFETY_STATUS = {
+  pending: { label: 'รอตรวจสอบ', badge: 'pending', tone: 'warning' },
+  reviewed: { label: 'ตรวจสอบแล้ว', badge: 'reviewed', tone: 'success' },
+}
+const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '', photos: [] }
+const STAFF_SAFETY_MAX_PHOTOS = 4
+
+function StaffSafetyTab({ rooms, onCountChange }) {
+  const [incidents, setIncidents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState('all')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detail, setDetail] = useState(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState(EMPTY_SAFETY_FORM)
+  const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
+  const [reviewTarget, setReviewTarget] = useState(null)
+  const [reviewNote, setReviewNote] = useState('')
+  const [lightbox, setLightbox] = useState(null)
+
+  const load = useCallback(() => {
+    return axios
+      .get('/api/staff/safety-incidents', { headers: staffAuthHeaders() })
+      .then(({ data }) => {
+        const list = data.incidents || []
+        setIncidents(list)
+        onCountChange?.(list.filter((item) => item.status === 'pending').length)
+      })
+      .catch((error) => setNotice({ type: 'error', message: error.response?.data?.message || 'โหลดรายการแจ้งเหตุไม่สำเร็จ' }))
+      .finally(() => setLoading(false))
+  }, [onCountChange])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? incidents.filter((item) =>
+        [
+          SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type,
+          item.description,
+          item.review_note,
+          item.room_number ? `ห้อง ${item.room_number}` : '',
+          item.reporter_name,
+          SAFETY_REPORTER_ROLE_LABEL[item.reporter_role],
+          SAFETY_SEVERITY_LABEL[item.severity],
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : incidents
+  const filtered = status === 'all' ? searched : searched.filter((item) => item.status === status)
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
+  const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
+
+  const pendingCount = incidents.filter((item) => item.status === 'pending').length
+
+  const openReview = (item) => {
+    setReviewNote('')
+    setReviewTarget(item)
+  }
+
+  const submitReview = async (requestClose) => {
+    setBusy(true)
+    try {
+      const { data } = await axios.patch(
+        `/api/staff/safety-incidents/${reviewTarget.id}/review`,
+        { reviewNote },
+        { headers: staffAuthHeaders() },
+      )
+      requestClose()
+      setDetail(null)
+      setNotice({ type: 'success', message: data.message || 'บันทึกผลตรวจสอบแล้ว' })
+      await load()
+    } catch (error) {
+      requestClose()
+      setNotice({ type: 'error', message: error.response?.data?.message || 'บันทึกผลไม่สำเร็จ' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submit = async (event, requestClose) => {
+    event.preventDefault()
+    if (!form.description.trim()) return setFormError('กรุณาระบุรายละเอียดเหตุการณ์')
+    setBusy(true)
+    try {
+      const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
+      const { data } = await axios.post(
+        '/api/staff/safety-incidents',
+        {
+          incidentType: form.incidentType,
+          description: form.description,
+          roomNumber: form.roomNumber || undefined,
+          photos,
+        },
+        { headers: staffAuthHeaders() },
+      )
+      requestClose()
+      setForm(EMPTY_SAFETY_FORM)
+      setNotice({
+        type: 'success',
+        message: `${data.message || 'ส่งรายงานแล้ว'}${data.severity ? ` · ระบบจัดระดับเป็น ${SAFETY_SEVERITY_LABEL[data.severity]}` : ''}`,
+      })
+      await load()
+    } catch (error) {
+      setFormError(error.response?.data?.message || 'ส่งรายงานไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="staff-card staff-tab-card staff-rv-card">
+      <div className="staff-card-header">
+        <div>
+          <h2>
+            แจ้งเหตุฉุกเฉิน <span className="staff-count-pill">{incidents.length}</span>
+          </h2>
+          <p className="staff-rv-subtitle">
+            {pendingCount > 0 ? `รอรับเรื่อง ${pendingCount} รายการ` : 'ไม่มีรายงานที่รอรับเรื่อง'} · รายงานจากผู้เช่าและเจ้าหน้าที่
+          </p>
+        </div>
+        <button
+          type="button"
+          className="staff-action-btn is-danger"
+          onClick={() => {
+            setForm(EMPTY_SAFETY_FORM)
+            setFormError('')
+            setFormOpen(true)
+          }}
+        >
+          + แจ้งเหตุ
+        </button>
+      </div>
+
+      <StaffFilterPanel
+        segments={[
+          { key: 'all', label: 'ทั้งหมด', count: searched.length },
+          ...Object.entries(SAFETY_STATUS).map(([key, info]) => ({
+            key,
+            label: info.label,
+            className: `tone-${info.tone}`,
+            count: searched.filter((item) => item.status === key).length,
+          })),
+        ]}
+        active={status}
+        onSegment={(value) => {
+          setStatus(value)
+          setPage(1)
+        }}
+        search={search}
+        onSearch={(value) => {
+          setSearch(value)
+          setPage(1)
+        }}
+        searchPlaceholder="ค้นหาประเภทเหตุ ห้อง ผู้แจ้ง รายละเอียด หรือผลตรวจสอบ"
+        resultText={`พบ ${filtered.length} จาก ${incidents.length} รายการ`}
+        canClear={status !== 'all' || Boolean(keyword)}
+        onClear={() => {
+          setStatus('all')
+          setSearch('')
+          setPage(1)
+        }}
+      />
+
+      {loading && incidents.length === 0 ? (
+        <p className="staff-empty">กำลังโหลดรายการ...</p>
+      ) : filtered.length === 0 ? (
+        <div className="staff-rv-empty">
+          <span className="staff-rv-empty-icon is-danger" aria-hidden="true">
+            <StaffShieldIcon />
+          </span>
+          <strong>{incidents.length ? 'ไม่พบรายการตามเงื่อนไข' : 'ยังไม่มีการแจ้งเหตุ'}</strong>
+          <span>{incidents.length ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ' : 'กด "+ แจ้งเหตุ" เมื่อพบเหตุฉุกเฉินหรือปัญหาความปลอดภัย'}</span>
+        </div>
+      ) : (
+        <ul className="staff-rv-list">
+          {pageItems.map((item) => {
+            const info = SAFETY_STATUS[item.status] || SAFETY_STATUS.pending
+            return (
+              <li key={item.id} className={`staff-rv-entry is-${info.tone}`}>
+                <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
+                  <span className="staff-rv-entry-head">
+                    <span className={`staff-rv-icon is-safety${item.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                      <StaffShieldIcon />
+                    </span>
+                    <span className="staff-rv-entry-title">
+                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
+                      <small>แจ้งเมื่อ {formatStaffDateTime(item.created_at)}</small>
+                    </span>
+                    <span className={`staff-badge status-${info.badge}`}>{info.label}</span>
+                  </span>
+                  <span className="staff-rv-entry-grid">
+                    <StaffInfoCell label="ระดับ">
+                      <span className={`staff-rv-level is-${item.severity}`}>
+                        <span aria-hidden="true" />
+                        {SAFETY_SEVERITY_LABEL[item.severity] || item.severity}
+                      </span>
+                    </StaffInfoCell>
+                    <StaffInfoCell label="ห้อง">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุห้อง'}</StaffInfoCell>
+                    <StaffInfoCell label="ผู้แจ้ง">
+                      {item.reporter_name}
+                      <small>{SAFETY_REPORTER_ROLE_LABEL[item.reporter_role] || item.reporter_role}</small>
+                    </StaffInfoCell>
+                    {item.status === 'reviewed' && item.reviewed_by_name && (
+                      <StaffInfoCell label="ตรวจโดย">
+                        <span className="staff-actor">{item.reviewed_by_name}</span>
+                      </StaffInfoCell>
+                    )}
+                  </span>
+                  <span className="staff-rv-entry-desc-block">
+                    <span className="staff-rv-entry-desc-label">รายละเอียดเหตุการณ์</span>
+                    <span className="staff-rv-entry-desc">{item.description}</span>
+                  </span>
+                  {item.photos?.length > 0 && (
+                    <span className="staff-safety-photo-chip">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      รูปประกอบ {item.photos.length} รูป
+                    </span>
+                  )}
+                </button>
+                <div className="staff-rv-entry-foot">
+                  <span className="staff-rv-entry-extra">
+                    {item.status === 'reviewed' && item.review_note ? (
+                      <span className="staff-rv-entry-note">ผลตรวจ: {item.review_note}</span>
+                    ) : (
+                      <span className="staff-rv-entry-note">{item.status === 'pending' ? 'ยังไม่มีผู้รับเรื่อง' : 'ไม่มีบันทึกผล'}</span>
+                    )}
+                  </span>
+                  <span className="staff-rv-entry-actions">
+                    {item.status === 'pending' && (
+                      <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => openReview(item)}>
+                        รับเรื่อง
+                      </button>
+                    )}
+                    <button type="button" className="staff-rv-entry-more" onClick={() => setDetail(item)}>
+                      ดูรายละเอียด <span aria-hidden="true">›</span>
+                    </button>
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <StaffPagination page={currentPage} total={filtered.length} onChange={setPage} />
+
+      {detail && (
+        <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setDetail(null)} variant="detail">
+          {(requestClose) => {
+            const info = SAFETY_STATUS[detail.status] || SAFETY_STATUS.pending
+            return (
+              <div className="staff-rv-detail">
+                <div className={`staff-rv-detail-hero is-${info.tone}`}>
+                  <span className={`staff-rv-icon is-large is-safety${detail.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                    <StaffShieldIcon />
+                  </span>
+                  <div className="staff-rv-text">
+                    <strong>{SAFETY_INCIDENT_TYPE_LABEL[detail.incident_type] || detail.incident_type}</strong>
+                    <span className="staff-rv-meta">
+                      <span className={`staff-rv-level is-${detail.severity}`}>
+                        <span aria-hidden="true" />
+                        ระดับ{SAFETY_SEVERITY_LABEL[detail.severity] || detail.severity}
+                      </span>
+                      {detail.room_number && <span className="staff-rv-room">ห้อง {detail.room_number}</span>}
+                    </span>
+                  </div>
+                  <span className={`staff-badge status-${info.badge}`}>{info.label}</span>
+                </div>
+                <dl className="staff-rv-fields">
+                  <div>
+                    <dt>ผู้แจ้ง</dt>
+                    <dd>{detail.reporter_name}</dd>
+                  </div>
+                  <div>
+                    <dt>สถานะผู้แจ้ง</dt>
+                    <dd>{SAFETY_REPORTER_ROLE_LABEL[detail.reporter_role] || detail.reporter_role}</dd>
+                  </div>
+                  <div className="is-wide">
+                    <dt>รายละเอียดเหตุการณ์</dt>
+                    <dd>{detail.description}</dd>
+                  </div>
+                  {detail.status === 'reviewed' && (
+                    <div className="is-wide">
+                      <dt>ผลการตรวจสอบ</dt>
+                      <dd>{detail.review_note || '-'}</dd>
+                    </div>
+                  )}
+                </dl>
+                {detail.photos?.length > 0 && (
+                  <section className="staff-rv-photos" aria-label="รูปประกอบการแจ้งเหตุ">
+                    <h4 className="staff-rv-timeline-title">รูปประกอบ ({detail.photos.length} รูป)</h4>
+                    <div className="staff-rv-photo-grid">
+                      {detail.photos.map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-rv-photo"
+                          onClick={() => setLightbox({ photos: detail.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[detail.incident_type] || detail.incident_type })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                <StaffDetailTimeline
+                  steps={[
+                    { label: 'แจ้งเหตุ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
+                    {
+                      label: detail.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอรับเรื่อง',
+                      meta:
+                        detail.status === 'reviewed'
+                          ? formatStaffDateTime(detail.reviewed_at)
+                          : 'กำลังรอ',
+                      by: detail.status === 'reviewed' ? detail.reviewed_by_name : null,
+                      state: detail.status === 'reviewed' ? 'done' : 'current',
+                      tone: detail.status === 'reviewed' ? 'success' : undefined,
+                    },
+                  ]}
+                />
+                <div className="staff-form-actions">
+                  <button type="button" className={`staff-action-btn ${detail.status === 'pending' ? 'is-ghost' : 'is-primary'}`} onClick={requestClose}>
+                    ปิด
+                  </button>
+                  {detail.status === 'pending' && (
+                    <button type="button" className="staff-action-btn is-primary" onClick={() => openReview(detail)}>
+                      รับเรื่อง / บันทึกผล
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {reviewTarget && (
+        <Modal title="รับเรื่องและบันทึกผล" onClose={() => setReviewTarget(null)} variant="waiting-form">
+          {(requestClose) => (
+            <div className="staff-rv-form">
+              <div className="staff-rv-review-summary">
+                <span className={`staff-rv-icon is-safety${reviewTarget.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                  <StaffShieldIcon />
+                </span>
+                <div className="staff-rv-text">
+                  <strong>{SAFETY_INCIDENT_TYPE_LABEL[reviewTarget.incident_type] || reviewTarget.incident_type}</strong>
+                  <span className="staff-rv-desc">{reviewTarget.description}</span>
+                </div>
+              </div>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="staff-safety-review-note">
+                  บันทึกผลหรือการดำเนินการ
+                </label>
+                <textarea
+                  id="staff-safety-review-note"
+                  className="staff-form-input"
+                  rows={4}
+                  maxLength={500}
+                  placeholder="เช่น ตรวจสอบพื้นที่แล้ว แจ้งผู้เกี่ยวข้องเรียบร้อย"
+                  value={reviewNote}
+                  onChange={(event) => setReviewNote(event.target.value)}
+                />
+                <span className="staff-rv-hint">{reviewNote.length}/500 · ผู้แจ้งจะเห็นผลการตรวจสอบนี้</span>
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button type="button" className="staff-action-btn is-primary" disabled={busy} onClick={() => submitReview(requestClose)}>
+                  {busy ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจสอบแล้ว'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {formOpen && (
+        <Modal title="แจ้งเหตุฉุกเฉิน / ความปลอดภัย" onClose={() => setFormOpen(false)} variant="waiting-form">
+          {(requestClose) => (
+            <form className="staff-rv-form" onSubmit={(event) => submit(event, requestClose)} noValidate>
+              <div className="staff-rv-alert" role="note">
+                หากมีอันตรายต่อชีวิต โทร <b>191</b> (ตำรวจ) <b>199</b> (ดับเพลิง) หรือ <b>1669</b> (การแพทย์ฉุกเฉิน) ทันที
+              </div>
+              {formError && (
+                <p className="staff-form-error staff-form-error-block" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="staff-form-field">
+                <span className="staff-form-label">ประเภทเหตุ</span>
+                <div className="staff-rv-types" role="radiogroup" aria-label="ประเภทเหตุ">
+                  {SAFETY_INCIDENT_TYPES.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={form.incidentType === value}
+                      className={`staff-rv-type${form.incidentType === value ? ' is-active' : ''}`}
+                      onClick={() => setForm({ ...form, incidentType: value })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="staff-safety-room">
+                  ห้องที่เกี่ยวข้อง (ถ้ามี)
+                </label>
+                <select
+                  id="staff-safety-room"
+                  className="staff-form-input"
+                  value={form.roomNumber}
+                  onChange={(event) => setForm({ ...form, roomNumber: event.target.value })}
+                >
+                  <option value="">ไม่ระบุห้อง</option>
+                  {(rooms || []).map((room) => (
+                    <option key={room.room_number} value={room.room_number}>
+                      ห้อง {room.room_number}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="staff-safety-description">
+                  รายละเอียดเหตุการณ์ <span className="staff-form-required">*</span>
+                </label>
+                <textarea
+                  id="staff-safety-description"
+                  className="staff-form-input"
+                  rows={4}
+                  maxLength={1000}
+                  placeholder="ระบุสถานที่ เวลา และสิ่งที่เกิดขึ้น"
+                  value={form.description}
+                  onChange={(event) => {
+                    setForm({ ...form, description: event.target.value })
+                    if (formError) setFormError('')
+                  }}
+                />
+                <span className="staff-rv-hint">
+                  ระบบจะประเมินระดับความเร่งด่วนให้อัตโนมัติ · {form.description.length}/1000
+                </span>
+              </div>
+              <div className="staff-form-field">
+                <span className="staff-form-label">
+                  รูปประกอบ <span className="staff-rv-hint">(ไม่บังคับ สูงสุด {STAFF_SAFETY_MAX_PHOTOS} รูป)</span>
+                </span>
+                <ParcelPhotoPicker
+                  id="staff-safety-photos"
+                  heading={false}
+                  maxPhotos={STAFF_SAFETY_MAX_PHOTOS}
+                  files={form.photos}
+                  onChange={(files) => setForm((current) => ({ ...current, photos: files }))}
+                  onError={setFormError}
+                />
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button type="submit" className="staff-action-btn is-danger" disabled={busy || !form.description.trim()}>
+                  {busy ? 'กำลังส่ง...' : 'ส่งรายงาน'}
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+
+      {lightbox && createPortal(
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={lightbox.title}
+          label="รูปประกอบการแจ้งเหตุ"
+          onClose={() => setLightbox(null)}
+        />,
+        document.body,
+      )}
+
+      {notice && (
+        <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
+          {(requestClose) => (
+            <div className="staff-confirm-body">
+              <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
+                </svg>
+              </div>
+              <p className="staff-confirm-message">{notice.message}</p>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+    </section>
+  )
+}
+
 function StaffMain() {
   const navigate = useNavigate()
   const [staffUser, setStaffUser] = useState(() => {
@@ -2961,6 +4698,8 @@ function StaffMain() {
     }
   })
   const [notifPage, setNotifPage] = useState(1)
+  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
+  const notifListRef = useRef(null)
   const [notifDetail, setNotifDetail] = useState(null)
   const notifRef = useRef(null)
 
@@ -3001,6 +4740,50 @@ function StaffMain() {
   const [staffTab, setStaffTab] = useState('home')
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
+  const [pendingVisitCount, setPendingVisitCount] = useState(0)
+  const [parkedVehicleCount, setParkedVehicleCount] = useState(0)
+  const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
+  const [urgentSafetyCount, setUrgentSafetyCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadOperationalCounts = () => {
+      const headers = { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+      axios
+        .get('/api/staff/resident-visit-requests', { headers })
+        .then(({ data }) => {
+          if (cancelled) return
+          const requests = data.requests || []
+          const now = Date.now()
+          setPendingVisitCount(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+          setParkedVehicleCount(
+            requests.filter(
+              (item) =>
+                item.status === 'approved' &&
+                item.vehicle_plate &&
+                new Date(item.start_at).getTime() <= now &&
+                (!item.end_at || new Date(item.end_at).getTime() > now),
+            ).length,
+          )
+        })
+        .catch(() => {})
+      axios
+        .get('/api/staff/safety-incidents', { headers })
+        .then(({ data }) => {
+          if (cancelled) return
+          const pending = (data.incidents || []).filter((item) => item.status === 'pending')
+          setPendingSafetyCount(pending.length)
+          setUrgentSafetyCount(pending.filter((item) => item.severity === 'urgent').length)
+        })
+        .catch(() => {})
+    }
+    loadOperationalCounts()
+    const interval = setInterval(loadOperationalCounts, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const [utilityRoom, setUtilityRoom] = useState(null)
   const [utilityForm, setUtilityForm] = useState({
@@ -3343,7 +5126,6 @@ function StaffMain() {
     }
   }
 
-  // Choosing the answer that is already selected clears it again.
   const setChecklistResult = (key, value) => {
     setInspectionForm((form) => {
       const { [key]: current, ...rest } = form.checklist
@@ -3422,7 +5204,6 @@ function StaffMain() {
     }
   }
 
-  // roomNumber: print only that room's invoice; omitted = one combined document with every occupied room
   const handlePrintMonthlyInvoices = async (roomNumber = null) => {
     setInvoicePrintError('')
     const printWindow = window.open('', '_blank', 'width=900,height=720')
@@ -3961,7 +5742,6 @@ function StaffMain() {
     })
   }
 
-  // The slip viewer in the payment history: Esc closes only the viewer, not the history window behind it.
   useEffect(() => {
     if (!historySlip) return undefined
     const handleKeyDown = (event) => {
@@ -4072,9 +5852,10 @@ function StaffMain() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [tenantRequests, maintenanceRequests, announcements])
 
-  const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
+  const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
 
   const markNotificationsRead = () => {
+    setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
     const keys = notifications.map((notification) => notification.key)
     setSeenNotificationKeys(keys)
     localStorage.setItem(getNotificationStorageKey('staff'), JSON.stringify(keys))
@@ -4196,6 +5977,21 @@ function StaffMain() {
     const dueCount = rooms.filter((room) => room.currentDue && room.currentDue.status !== 'paid').length
     return { total, booked, vacant, dueCount }
   }, [rooms])
+
+  const occupancyRate = summary.total ? Math.round((summary.booked / summary.total) * 100) : 0
+  const waitingQueueCount = waitingList.filter((item) => item.status === 'waiting' || item.status === 'contacted').length
+  const pendingParcelCount = parcels.filter((parcel) => parcel.status === 'pending').length
+  const pendingMaintenanceCount = maintenanceRequests.filter((request) => request.status === 'pending').length
+  const financeTaskCount = summary.dueCount + pendingSlipCount + maintenanceRequests.length + tenantRequests.length
+
+  const openSummaryTarget = (tab, roomFilter) => {
+    setStaffTab(tab)
+    setAnnouncementFocus(null)
+    if (roomFilter) {
+      setStatusFilter(roomFilter)
+      setRoomsPage(1)
+    }
+  }
 
   const filteredRooms = useMemo(() => {
     return rooms
@@ -4509,7 +6305,9 @@ function StaffMain() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {hasUnreadNotifications && <span className="staff-notif-dot" />}
+                {newNotifications.length > 0 && (
+                  <span className="staff-notif-dot">{newNotifications.length > 99 ? '99+' : newNotifications.length}</span>
+                )}
               </button>
               {notifOpen && (
                 <div
@@ -4522,7 +6320,14 @@ function StaffMain() {
                   }}
                 >
                   <div className="staff-notif-panel-header">
-                    <span>การแจ้งเตือน</span>
+                    <span className="staff-notif-panel-title">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      การแจ้งเตือน
+                      {notifications.length > 0 && <span className="staff-notif-count">{notifications.length}</span>}
+                    </span>
                     <button
                       type="button"
                       className="staff-notif-panel-close"
@@ -4546,15 +6351,23 @@ function StaffMain() {
                     </button>
                   </div>
                   {notifications.length === 0 ? (
-                    <p className="staff-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                    <div className="staff-notif-empty">
+                      <span className="staff-notif-empty-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                      </span>
+                      ยังไม่มีการแจ้งเตือน
+                    </div>
                   ) : (
                     <>
-                      <div className="staff-notif-list">
+                      <div className="staff-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
                           <button
                             type="button"
                             key={notif.key}
-                            className={`staff-notif-item is-${notif.tone}`}
+                            className={`staff-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
                               if (notif.kind === 'announcement') {
@@ -4562,7 +6375,6 @@ function StaffMain() {
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
-                              // Requests and maintenance are listed on the home tab
                               setStaffTab('home')
                               setAnnouncementFocus(null)
                               if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
@@ -4570,33 +6382,61 @@ function StaffMain() {
                               else setNotifDetail(notif)
                             }}
                           >
-                            <p className="staff-notif-item-title">{notif.title}</p>
-                            <p className="staff-notif-item-status">{notif.label}</p>
-                            <p className="staff-notif-item-date">{formatDateTime(notif.date)}</p>
+                            <span className="staff-notif-item-icon">
+                              <NotifKindIcon kind={notif.kind} />
+                            </span>
+                            <span className="staff-notif-item-main">
+                              <span className="staff-notif-item-head">
+                                <span className="staff-notif-item-title">
+                                  {freshNotifKeys.has(notif.key) && <span className="staff-notif-item-new">ใหม่</span>}
+                                  {notif.title}
+                                </span>
+                                <time className="staff-notif-item-date">{formatDateTime(notif.date)}</time>
+                              </span>
+                              <span className="staff-notif-item-status">{notif.label}</span>
+                            </span>
                           </button>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (
                         <div className="staff-notif-pagination">
-                          <button
-                            type="button"
-                            className="staff-notif-page-btn"
-                            disabled={notifCurrentPage <= 1}
-                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
-                          >
-                            ก่อนหน้า
-                          </button>
                           <span className="staff-notif-page-info">
-                            หน้า {notifCurrentPage} / {notifTotalPages}
+                            {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
+                            {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
                           </span>
-                          <button
-                            type="button"
-                            className="staff-notif-page-btn"
-                            disabled={notifCurrentPage >= notifTotalPages}
-                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
-                          >
-                            ถัดไป
-                          </button>
+                          <div className="staff-notif-page-nav">
+                            <button
+                              type="button"
+                              className="staff-notif-page-btn"
+                              aria-label="หน้าก่อนหน้า"
+                              disabled={notifCurrentPage <= 1}
+                              onClick={() => {
+                                setNotifPage(Math.max(1, notifCurrentPage - 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M15 18l-6-6 6-6" />
+                              </svg>
+                            </button>
+                            <span className="staff-notif-page-current">
+                              {notifCurrentPage} / {notifTotalPages}
+                            </span>
+                            <button
+                              type="button"
+                              className="staff-notif-page-btn"
+                              aria-label="หน้าถัดไป"
+                              disabled={notifCurrentPage >= notifTotalPages}
+                              onClick={() => {
+                                setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>
@@ -4744,7 +6584,7 @@ function StaffMain() {
                     </div>
                     <div>
                       <span>บันทึกโดย</span>
-                      <strong>{item.submitted_by_name || '-'}</strong>
+                      <strong className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</strong>
                     </div>
                     <div className={item.desired_move_in_date ? `is-movein-${describeMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
                       <span>ต้องการเข้าอยู่</span>
@@ -5362,44 +7202,65 @@ function StaffMain() {
         )}
 
         <div className="staff-summary-grid">
-          <div className="staff-summary-card">
-            <span className="staff-summary-icon">
-              <SummaryIcon type="total" />
-            </span>
-            <span className="staff-summary-text">
-              <span className="staff-summary-label">ห้องทั้งหมด</span>
-              <span className="staff-summary-value">{summary.total}</span>
-            </span>
-          </div>
-          <div className="staff-summary-card is-booked">
-            <span className="staff-summary-icon">
-              <SummaryIcon type="booked" />
-            </span>
-            <span className="staff-summary-text">
-              <span className="staff-summary-label">ห้องไม่ว่าง</span>
-              <span className="staff-summary-value">{summary.booked}</span>
-            </span>
-          </div>
-          <div className="staff-summary-card is-vacant">
-            <span className="staff-summary-icon">
-              <SummaryIcon type="vacant" />
-            </span>
-            <span className="staff-summary-text">
-              <span className="staff-summary-label">ห้องว่าง</span>
-              <span className="staff-summary-value">{summary.vacant}</span>
-            </span>
-          </div>
-          <div className="staff-summary-card is-due">
-            <span className="staff-summary-icon">
-              <SummaryIcon type="due" />
-            </span>
-            <span className="staff-summary-text">
-              <span className="staff-summary-label">รอเก็บเงิน</span>
-              <span className="staff-summary-value">{summary.dueCount}</span>
-            </span>
-          </div>
+          <section className="staff-summary-panel">
+            <header className="staff-summary-panel-head">
+              <span className="staff-summary-panel-title">ห้องพัก</span>
+              <span className="staff-summary-panel-meta">อัตราเข้าพัก {occupancyRate}%</span>
+            </header>
+            <div className="staff-summary-occupancy" role="presentation">
+              <span style={{ width: `${occupancyRate}%` }} />
+            </div>
+            <div className="staff-summary-tiles">
+              <StaffSummaryTile icon="total" tone="slate" label="ห้องทั้งหมด" value={summary.total} onClick={() => openSummaryTarget('home', 'all')} />
+              <StaffSummaryTile icon="booked" tone="blue" label="มีผู้เช่า" value={summary.booked} onClick={() => openSummaryTarget('home', 'booked')} />
+              <StaffSummaryTile icon="vacant" tone="green" label="ห้องว่าง" value={summary.vacant} onClick={() => openSummaryTarget('home', 'vacant')} />
+              <StaffSummaryTile icon="queue" tone="violet" label="คิวรอห้องว่าง" value={waitingQueueCount} onClick={() => openSummaryTarget('waiting-list')} />
+            </div>
+          </section>
+          <section className="staff-summary-panel">
+            <header className="staff-summary-panel-head">
+              <span className="staff-summary-panel-title">การเงินและคำขอ</span>
+              <span className="staff-summary-panel-meta">{financeTaskCount > 0 ? `รอดำเนินการ ${financeTaskCount} รายการ` : 'ไม่มีงานค้าง'}</span>
+            </header>
+            <div className="staff-summary-tiles">
+              <StaffSummaryTile icon="due" tone="amber" label="รอเก็บเงิน" value={summary.dueCount} onClick={() => openSummaryTarget('home', 'due')} />
+              <StaffSummaryTile icon="slip" tone="blue" label="สลิปรอตรวจ" value={pendingSlipCount} onClick={() => openSummaryTarget('payment-review')} />
+              <StaffSummaryTile
+                icon="maintenance"
+                tone="orange"
+                label="แจ้งซ่อม"
+                value={maintenanceRequests.length}
+                hint={maintenanceRequests.length > 0 ? `รอรับ ${pendingMaintenanceCount} · กำลังซ่อม ${maintenanceRequests.length - pendingMaintenanceCount}` : null}
+                onClick={() => openSummaryTarget('home')}
+              />
+              <StaffSummaryTile icon="request" tone="indigo" label="คำขอผู้เช่า" value={tenantRequests.length} onClick={() => openSummaryTarget('home')} />
+            </div>
+          </section>
+          <section className="staff-summary-panel">
+            <header className="staff-summary-panel-head">
+              <span className="staff-summary-panel-title">พัสดุ รถ และความปลอดภัย</span>
+              {urgentSafetyCount > 0 ? (
+                <span className="staff-summary-panel-meta is-danger">มีเหตุด่วน {urgentSafetyCount} รายการ</span>
+              ) : (
+                <span className="staff-summary-panel-meta">อัปเดตทุก 30 วินาที</span>
+              )}
+            </header>
+            <div className="staff-summary-tiles">
+              <StaffSummaryTile icon="parcel" tone="teal" label="พัสดุรอรับ" value={pendingParcelCount} onClick={() => openSummaryTarget('parcels')} />
+              <StaffSummaryTile icon="car" tone="blue" label="รถที่จอดอยู่" value={parkedVehicleCount} onClick={() => openSummaryTarget('resident-visits')} />
+              <StaffSummaryTile icon="carPending" tone="amber" label="คำขอรถรออนุมัติ" value={pendingVisitCount} onClick={() => openSummaryTarget('resident-visits')} />
+              <StaffSummaryTile
+                icon="safety"
+                tone="red"
+                label="เหตุรอรับเรื่อง"
+                value={pendingSafetyCount}
+                hint={urgentSafetyCount > 0 ? `ด่วน ${urgentSafetyCount} รายการ` : null}
+                alert={urgentSafetyCount > 0}
+                onClick={() => openSummaryTarget('safety')}
+              />
+            </div>
+          </section>
         </div>
-
         <ul className="nav nav-tabs staff-tabs">
           {STAFF_TABS.map((tab) => (
             <li className="nav-item" key={tab.key}>
@@ -5417,12 +7278,26 @@ function StaffMain() {
                     {pendingSlipCount}
                   </span>
                 )}
+                {tab.key === 'resident-visits' && pendingVisitCount > 0 && (
+                  <span className="staff-tab-badge" aria-label={`${pendingVisitCount} คำขอรออนุมัติ`}>
+                    {pendingVisitCount}
+                  </span>
+                )}
+                {tab.key === 'safety' && pendingSafetyCount > 0 && (
+                  <span className="staff-tab-badge" aria-label={`${pendingSafetyCount} รายงานรอรับเรื่อง`}>
+                    {pendingSafetyCount}
+                  </span>
+                )}
               </button>
             </li>
           ))}
         </ul>
 
         {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}
+
+        {staffTab === 'resident-visits' && <StaffResidentVisitsTab rooms={rooms} onCountChange={setPendingVisitCount} />}
+
+        {staffTab === 'safety' && <StaffSafetyTab rooms={rooms} onCountChange={setPendingSafetyCount} />}
 
         {staffTab === 'announcements' && (
           <AnnouncementBoard
@@ -5554,7 +7429,9 @@ function StaffMain() {
                           <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
                           <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
                         </td>
-                        <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
+                        <td>
+                          <span className="staff-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                        </td>
                         <td>
                           <span className="parcel-detail-link">ดูรายละเอียด</span>
                         </td>
@@ -5751,7 +7628,7 @@ function StaffMain() {
                                           <circle cx="12" cy="8" r="4" />
                                           <path d="M4 21a8 8 0 0 1 16 0" />
                                         </svg>
-                                        {item.submitted_by_name || '-'}
+                                        <span className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</span>
                                       </span>
                                     </div>
                                     <div className="waiting-card-actions">
@@ -5977,7 +7854,7 @@ function StaffMain() {
                             </div>
                           </td>
                           <td className={inspection.inspected_by_name ? '' : 'inspection-cell-muted'}>
-                            {inspection.inspected_by_name || '-'}
+                            {inspection.inspected_by_name ? <span className="staff-actor">{inspection.inspected_by_name}</span> : '-'}
                           </td>
                           <td>
                             <span className="inspection-photo-count">{inspection.photo_count || 0} รูป</span>
@@ -6021,7 +7898,7 @@ function StaffMain() {
 
         {staffTab === 'home' && (
           <>
-            <div className="staff-card">
+            <div className="staff-card staff-rooms-card">
               <div className="staff-card-header">
                 <h2>รายการห้องพัก</h2>
                 <div className="staff-card-header-actions">
@@ -6491,7 +8368,7 @@ function StaffMain() {
                             <td>{formatDate(expense.expense_date)}</td>
                             <td>{expense.category}</td>
                             <td>{expense.description || '-'}</td>
-                            <td>{expense.recorded_by_name || '-'}</td>
+                            <td>{expense.recorded_by_name ? <span className="staff-actor">{expense.recorded_by_name}</span> : '-'}</td>
                             <td>฿{formatCurrency(expense.amount)}</td>
                             <td>
                               <div className="staff-row-actions">
@@ -7949,14 +9826,14 @@ function StaffMain() {
                     {maintenanceDetail.photos.map((photo, index) => (
                       <a
                         key={`${photo.name}-${index}`}
-                        href={photo.dataUrl}
+                        href={photo.url}
                         title="คลิกเพื่อดูตัวอย่างรูป"
                         onClick={(event) => {
                           event.preventDefault()
                           setMaintenancePhotoPreview({ index })
                         }}
                       >
-                        <UploadImage src={photo.dataUrl} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
+                        <UploadImage src={photo.url} alt={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number} ${index + 1}`} />
                         <span className="staff-maintenance-photo-caption">
                           <span>{photo.name || `รูปที่ ${index + 1}`}</span>
                           <small>รูปที่ {index + 1}</small>
@@ -7980,7 +9857,7 @@ function StaffMain() {
         <PhotoLightbox
           photos={(maintenanceDetail.photos || []).map((photo, index) => ({
             name: photo.name || `รูปที่ ${index + 1}`,
-            url: photo.dataUrl,
+            url: photo.url,
           }))}
           initialIndex={maintenancePhotoPreview.index}
           title={`รูปแจ้งซ่อมห้อง ${maintenanceDetail.room_number}`}

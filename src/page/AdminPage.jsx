@@ -121,6 +121,49 @@ function printMonthlyInvoices(rooms, targetWindow = window.open('', '_blank', 'w
   return occupiedRooms.length
 }
 
+function NotifKindIcon({ kind }) {
+  const props = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  if (kind === 'announcement') {
+    return (
+      <svg {...props}>
+        <path d="m3 11 18-5v12L3 14v-3z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    )
+  }
+  if (kind === 'maintenance') {
+    return (
+      <svg {...props}>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />
+      </svg>
+    )
+  }
+  if (kind === 'staff') {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </svg>
+  )
+}
+
 function buildAnnouncementNotif(item) {
   return {
     key: `announcement-${item.id}`,
@@ -131,7 +174,7 @@ function buildAnnouncementNotif(item) {
     date: item.created_at,
     details: [
       { label: 'รายละเอียด', value: item.message },
-      { label: 'ประกาศโดย', value: item.author || 'เจ้าหน้าที่' },
+      { label: 'ประกาศโดย', value: <span className="admin-actor-inline">{item.author || 'เจ้าหน้าที่'}</span> },
       { label: 'ลบอัตโนมัติ', value: item.expires_at ? `${formatDateTime(item.expires_at)} น.` : 'ไม่กำหนด' },
     ],
     kind: 'announcement',
@@ -332,7 +375,7 @@ function calcStayDays(start, end) {
   return Math.floor(ms / (1000 * 60 * 60 * 24))
 }
 
-const NOTIF_PAGE_SIZE = 6
+const NOTIF_PAGE_SIZE = 30
 const ADMIN_STAFF_NOTIF_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 const ADMIN_TENANT_NOTIF_INFO = {
@@ -421,10 +464,10 @@ function getAdminRequestTimeline(kind, request) {
   if (!request || kind === 'staff') return []
   const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
   if (request.accepted_at) {
-    steps.push({ label: request.accepted_by_name ? `รับเรื่องโดย ${request.accepted_by_name}` : 'รับเรื่อง', date: request.accepted_at })
+    steps.push({ label: request.accepted_by_name ? 'รับเรื่องโดย' : 'รับเรื่อง', by: request.accepted_by_name, date: request.accepted_at })
   }
   if (request.completed_at) {
-    steps.push({ label: request.completed_by_name ? `เสร็จสิ้นโดย ${request.completed_by_name}` : 'เสร็จสิ้น', date: request.completed_at })
+    steps.push({ label: request.completed_by_name ? 'เสร็จสิ้นโดย' : 'เสร็จสิ้น', by: request.completed_by_name, date: request.completed_at })
   }
   return steps
 }
@@ -443,7 +486,10 @@ function AdminRequestTimeline({ kind, request }) {
             <div key={step.label} className="admin-request-log-item">
               <span className="admin-request-log-dot" />
               <div className="admin-request-log-content">
-                <p className="admin-request-log-label">{step.label}</p>
+                <p className="admin-request-log-label">
+                  {step.label}
+                  {step.by && <span className="admin-actor-inline"> {step.by}</span>}
+                </p>
                 <p className="admin-request-log-date">{formatDateTime(step.date)}</p>
                 {stepMs !== null && stepMs >= 0 && <p className="admin-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
               </div>
@@ -593,6 +639,253 @@ const INSPECTION_GALLERY_PAGE_SIZE = 8
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 
+const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แจ้งแขกค้างคืน' }
+
+function useAuthHeaders() {
+  const token = sessionStorage.getItem('token')
+  return useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
+}
+
+function AdminSpecialVisitReviewNav() {
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const headers = useAuthHeaders()
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/admin/resident-visit-requests/special', { headers })
+        .then(({ data }) => setItems(data.requests || []))
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
+    [headers],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const review = async (item, decision) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.post(`/api/admin/resident-visit-requests/${item.id}/special-review`, { decision }, { headers })
+      await load()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="nav-item">
+      <button
+        type="button"
+        className="nav-link admin-tab-link"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+          load()
+        }}
+      >
+        คำขอพิเศษ{items.length ? ` (${items.length})` : ''}
+      </button>
+      {open && (
+        <div
+          className="admin-rv-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <div className="admin-rv-modal" role="dialog" aria-modal="true" aria-labelledby="admin-rv-title">
+            <button type="button" className="admin-rv-close" onClick={() => setOpen(false)} aria-label="ปิด">×</button>
+            <span className="admin-rv-kicker">RESIDENT SERVICES</span>
+            <h2 id="admin-rv-title">อนุมัติเคสพิเศษ</h2>
+            <p className="admin-rv-subtitle">ตรวจสอบเหตุผลและตัดสินใจอนุมัติหรือปฏิเสธคำขอ</p>
+            <div className="admin-rv-list">
+              {items.length === 0 ? (
+                <p className="admin-rv-empty">ไม่มีคำขอที่รอดำเนินการ</p>
+              ) : (
+                items.map((item) => (
+                  <article className="admin-rv-card" key={item.id}>
+                    <div className="admin-rv-card-head">
+                      <strong>{RESIDENT_VISIT_TYPE_LABEL[item.request_type]} · ห้อง {item.room_number}</strong>
+                      <span>รออนุมัติ</span>
+                    </div>
+                    <p>
+                      {item.request_type === 'vehicle'
+                        ? `ทะเบียน ${item.vehicle_plate}${item.vehicle_model ? ` · ${item.vehicle_model}` : ''}`
+                        : `${item.guest_name}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`}
+                    </p>
+                    <p>
+                      {new Date(item.start_at).toLocaleString('th-TH')} – {item.end_at ? new Date(item.end_at).toLocaleString('th-TH') : 'ไม่จำกัดเวลา'}
+                    </p>
+                    <p className="admin-rv-special-reason">
+                      <strong>เหตุผลขออนุมัติพิเศษ:</strong> {item.special_reason}
+                    </p>
+                    {item.note && <p>{item.note}</p>}
+                    <small>{item.first_name} {item.last_name} · {item.customer_phone}</small>
+                    <div className="admin-rv-actions">
+                      <button type="button" disabled={busy} onClick={() => review(item, 'approve')}>อนุมัติพิเศษ</button>
+                      <button type="button" className="admin-rv-deny" disabled={busy} onClick={() => review(item, 'reject')}>ปฏิเสธ</button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+            {message && <p className="admin-rv-message" role="status">{message}</p>}
+          </div>
+        </div>
+      )}
+    </li>
+  )
+}
+
+const SAFETY_INCIDENT_TYPE_LABEL = {
+  accident: 'อุบัติเหตุ',
+  security: 'ความปลอดภัย',
+  fire: 'ไฟไหม้ / ควัน',
+  medical: 'เหตุฉุกเฉินทางการแพทย์',
+  other: 'อื่น ๆ',
+}
+
+function AdminSafetyIncidentReviewNav() {
+  const [open, setOpen] = useState(false)
+  const [lightbox, setLightbox] = useState(null)
+  const [incidents, setIncidents] = useState([])
+  const [notes, setNotes] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const headers = useAuthHeaders()
+  const pendingCount = incidents.filter((item) => item.status === 'pending').length
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/admin/safety-incidents', { headers })
+        .then(({ data }) => setIncidents(data.incidents || []))
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ')),
+    [headers],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const markReviewed = async (incident) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.patch(`/api/admin/safety-incidents/${incident.id}/review`, { reviewNote: notes[incident.id] || '' }, { headers })
+      await load()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="nav-item">
+      <button
+        type="button"
+        className="nav-link admin-tab-link"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+          load()
+        }}
+      >
+        ตรวจเหตุฉุกเฉิน{pendingCount ? ` (${pendingCount})` : ''}
+      </button>
+      {open && (
+        <div
+          className="admin-safety-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <section className="admin-safety-modal" role="dialog" aria-modal="true" aria-labelledby="admin-safety-title">
+            <button className="admin-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
+            <span className="admin-safety-eyebrow">SAFETY & SECURITY</span>
+            <h2 id="admin-safety-title">ตรวจสอบเหตุฉุกเฉิน</h2>
+            <p className="admin-safety-intro">รายการรายงานจากผู้พักอาศัยและเจ้าหน้าที่</p>
+            <div className="admin-safety-list">
+              {incidents.length === 0 ? (
+                <p className="admin-safety-empty">ยังไม่มีรายงานเหตุ</p>
+              ) : (
+                incidents.map((item) => (
+                  <article className="admin-safety-card" key={item.id}>
+                    <div className="admin-safety-card-heading">
+                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
+                      <span className={`admin-safety-status ${item.status} ${item.severity}`}>
+                        {item.status === 'pending' ? 'รอตรวจสอบ' : 'ตรวจแล้ว'}
+                        {item.severity === 'urgent' ? ' · ด่วน' : ''}
+                      </span>
+                    </div>
+                    <p>{item.description}</p>
+                    {item.photos?.length > 0 && (
+                      <div className="admin-safety-photos" aria-label="รูปประกอบการแจ้งเหตุ">
+                        {item.photos.map((photo, index) => (
+                          <button
+                            key={`${photo.url}-${index}`}
+                            type="button"
+                            className="admin-safety-photo"
+                            onClick={() => setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })}
+                            aria-label={`ดูรูปที่ ${index + 1}`}
+                          >
+                            <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <small>
+                      {item.reporter_name} ({item.reporter_role})
+                      {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
+                    </small>
+                    {item.status === 'pending' ? (
+                      <>
+                        <textarea
+                          aria-label="บันทึกผลตรวจสอบ"
+                          placeholder="บันทึกผลหรือการดำเนินการ (ถ้ามี)"
+                          value={notes[item.id] || ''}
+                          onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })}
+                        />
+                        <button className="admin-safety-review" type="button" disabled={busy} onClick={() => markReviewed(item)}>
+                          บันทึกว่าตรวจสอบแล้ว
+                        </button>
+                      </>
+                    ) : (
+                      <p className="admin-safety-note">
+                        ตรวจโดย <span className="admin-actor-inline">{item.reviewed_by_name || '-'}</span>
+                        {item.review_note ? ` · ${item.review_note}` : ''}
+                      </p>
+                    )}
+                  </article>
+                ))
+              )}
+            </div>
+            {message && <p className="admin-safety-message" role="status">{message}</p>}
+          </section>
+        </div>
+      )}
+      {lightbox && (
+        <div className="admin-safety-lightbox-host">
+          <PhotoLightbox
+            photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+            initialIndex={lightbox.index}
+            title={lightbox.title}
+            label="รูปประกอบการแจ้งเหตุ"
+            onClose={() => setLightbox(null)}
+          />
+        </div>
+      )}
+    </li>
+  )
+}
+
 function AdminBackupPage() {
   const navigate = useNavigate()
   const [adminUser, setAdminUser] = useState(null)
@@ -649,6 +942,8 @@ function AdminBackupPage() {
     }
   })
   const [notifPage, setNotifPage] = useState(1)
+  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
+  const notifListRef = useRef(null)
   const notifTargetRef = useRef(null)
   const [notifTargetReady, setNotifTargetReady] = useState(0)
   const [notifTenantItems, setNotifTenantItems] = useState([])
@@ -1766,9 +2061,10 @@ function AdminBackupPage() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [notifTenantItems, notifMaintenanceItems, staffList, announcements])
 
-  const hasUnreadNotifications = notifications.some((notification) => !seenNotificationKeys.includes(notification.key))
+  const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
 
   const markNotificationsRead = () => {
+    setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
     const keys = notifications.map((notification) => notification.key)
     setSeenNotificationKeys(keys)
     localStorage.setItem(getNotificationStorageKey('admin'), JSON.stringify(keys))
@@ -1800,7 +2096,6 @@ function AdminBackupPage() {
     resetMoveoutRows()
   }, [moveoutLogs.page, activeTab])
 
-  // A notification opens the detail of its own item: switch to the matching tab and expand that row.
   const openNotification = (notif) => {
     closeNotifPanel()
     if (notif.kind === 'announcement') {
@@ -1832,7 +2127,6 @@ function AdminBackupPage() {
     loadMaintenanceLogs(1, 'all', '').finally(() => setNotifTargetReady((count) => count + 1))
   }
 
-  // Declared after the row-reset effects above so the reset runs first and the target row is expanded afterwards.
   useEffect(() => {
     const target = notifTargetRef.current
     if (!target || activeTab !== target.tab) return
@@ -1878,7 +2172,9 @@ function AdminBackupPage() {
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {hasUnreadNotifications && <span className="admin-notif-dot" />}
+                {newNotifications.length > 0 && (
+                  <span className="admin-notif-dot">{newNotifications.length > 99 ? '99+' : newNotifications.length}</span>
+                )}
               </button>
               {notifOpen && (
                 <div
@@ -1891,7 +2187,14 @@ function AdminBackupPage() {
                   }}
                 >
                   <div className="admin-notif-panel-header">
-                    <span>การแจ้งเตือน</span>
+                    <span className="admin-notif-panel-title">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      การแจ้งเตือน
+                      {notifications.length > 0 && <span className="admin-notif-count">{notifications.length}</span>}
+                    </span>
                     <button type="button" className="admin-notif-panel-close" onClick={closeNotifPanel} aria-label="ปิด">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18" />
@@ -1900,44 +2203,80 @@ function AdminBackupPage() {
                     </button>
                   </div>
                   {notifications.length === 0 ? (
-                    <p className="admin-notif-empty">ยังไม่มีการแจ้งเตือน</p>
+                    <div className="admin-notif-empty">
+                      <span className="admin-notif-empty-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                      </span>
+                      ยังไม่มีการแจ้งเตือน
+                    </div>
                   ) : (
                     <>
-                      <div className="admin-notif-list">
+                      <div className="admin-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
                           <button
                             type="button"
                             key={notif.key}
-                            className={`admin-notif-item is-${notif.tone}`}
+                            className={`admin-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => openNotification(notif)}
                           >
-                            <p className="admin-notif-item-title">{notif.title}</p>
-                            <p className="admin-notif-item-status">{notif.label}</p>
-                            <p className="admin-notif-item-date">{formatDateTime(notif.date)}</p>
+                            <span className="admin-notif-item-icon">
+                              <NotifKindIcon kind={notif.kind} />
+                            </span>
+                            <span className="admin-notif-item-main">
+                              <span className="admin-notif-item-head">
+                                <span className="admin-notif-item-title">
+                                  {freshNotifKeys.has(notif.key) && <span className="admin-notif-item-new">ใหม่</span>}
+                                  {notif.title}
+                                </span>
+                                <time className="admin-notif-item-date">{formatDateTime(notif.date)}</time>
+                              </span>
+                              <span className="admin-notif-item-status">{notif.label}</span>
+                            </span>
                           </button>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (
                         <div className="admin-notif-pagination">
-                          <button
-                            type="button"
-                            className="admin-notif-page-btn"
-                            disabled={notifCurrentPage <= 1}
-                            onClick={() => setNotifPage(Math.max(1, notifCurrentPage - 1))}
-                          >
-                            ก่อนหน้า
-                          </button>
                           <span className="admin-notif-page-info">
-                            หน้า {notifCurrentPage} / {notifTotalPages}
+                            {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
+                            {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
                           </span>
-                          <button
-                            type="button"
-                            className="admin-notif-page-btn"
-                            disabled={notifCurrentPage >= notifTotalPages}
-                            onClick={() => setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))}
-                          >
-                            ถัดไป
-                          </button>
+                          <div className="admin-notif-page-nav">
+                            <button
+                              type="button"
+                              className="admin-notif-page-btn"
+                              aria-label="หน้าก่อนหน้า"
+                              disabled={notifCurrentPage <= 1}
+                              onClick={() => {
+                                setNotifPage(Math.max(1, notifCurrentPage - 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M15 18l-6-6 6-6" />
+                              </svg>
+                            </button>
+                            <span className="admin-notif-page-current">
+                              {notifCurrentPage} / {notifTotalPages}
+                            </span>
+                            <button
+                              type="button"
+                              className="admin-notif-page-btn"
+                              aria-label="หน้าถัดไป"
+                              disabled={notifCurrentPage >= notifTotalPages}
+                              onClick={() => {
+                                setNotifPage(Math.min(notifTotalPages, notifCurrentPage + 1))
+                                notifListRef.current?.scrollTo({ top: 0 })
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>
@@ -2046,6 +2385,8 @@ function AdminBackupPage() {
               </button>
             </li>
           ))}
+          <AdminSpecialVisitReviewNav />
+          <AdminSafetyIncidentReviewNav />
         </ul>
 
         {activeTab === 'announcements' && (
@@ -2195,7 +2536,9 @@ function AdminBackupPage() {
                         <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
                         <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
                       </td>
-                      <td>{parcel.staff_name || 'เจ้าหน้าที่'}</td>
+                      <td>
+                            <ActorName name={parcel.staff_name || 'เจ้าหน้าที่'} />
+                          </td>
                     </tr>
                   ))}
                 </tbody>
@@ -3037,7 +3380,9 @@ function AdminBackupPage() {
                         <td>{formatDate(expense.expense_date)}</td>
                         <td className="admin-strong-cell">{expense.category}</td>
                         <td className="admin-col-optional">{expense.description || '-'}</td>
-                        <td className="admin-col-optional">{expense.recorded_by_name || '-'}</td>
+                        <td className="admin-col-optional">
+                          <ActorName name={expense.recorded_by_name} />
+                        </td>
                         <td>฿{Number(expense.amount).toLocaleString('th-TH')}</td>
                         <td>
                           <div className="admin-row-actions">
@@ -3100,7 +3445,9 @@ function AdminBackupPage() {
                         </select>
                       </td>
                       <td className="admin-col-optional">{entry.note || '-'}</td>
-                      <td className="admin-col-optional">{entry.submitted_by_name || '-'}</td>
+                      <td className="admin-col-optional">
+                          <ActorName name={entry.submitted_by_name} />
+                        </td>
                       <td>
                         <div className="admin-row-actions">
                           <button type="button" className="admin-action-btn is-ghost" onClick={() => openWaitingListForm(entry)}>แก้ไข</button>
