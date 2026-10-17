@@ -1176,6 +1176,7 @@ function getRequestTimeline(kind, request) {
         label: isReviewed ? 'ตรวจสอบแล้ว' : REQUEST_TIMELINE_PENDING_FINAL_LABEL,
         date: isReviewed ? request.reviewed_at || request.created_at : null,
         done: isReviewed,
+        by: isReviewed ? request.reviewed_by_name : null,
       },
     ]
   }
@@ -1299,23 +1300,13 @@ function RequestTimelineDropdown({ kind, request }) {
         </div>
       )}
       {showDetail && (
-        <Modal title="ความคืบหน้าของคำขอ" onClose={() => setShowDetail(false)}>
-          {(requestClose) => (
-            <div className="dashboard-progress-modal">
-              <div className="dashboard-progress-modal-subject">
-                <small>ขั้นตอนของ</small>
-                <strong>{subject.title}</strong>
-                <span>{subject.meta}</span>
-              </div>
-              <RequestTimeline kind={kind} request={request} />
-              <div className="dashboard-form-actions">
-                <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        <RequestDetailModal
+          kind={kind}
+          request={request}
+          onClose={() => setShowDetail(false)}
+          onBack={() => setShowDetail(false)}
+          backLabel="กลับไปที่ความคืบหน้า"
+        />
       )}
     </div>
   )
@@ -2545,6 +2536,183 @@ function ShieldIcon() {
   )
 }
 
+function getRequestDetail(kind, request) {
+  const fields = []
+  let title = `รายละเอียดคำขอ${TENANT_REQUEST_TYPE_LABEL[kind] || ''}`
+  let heading = TENANT_REQUEST_TYPE_LABEL[kind] || 'คำขอ'
+  let icon = kind === 'renew' ? <CalendarIcon /> : <GuestIcon />
+  let iconClass = ''
+  let meta = null
+  let statusLabel = TENANT_REQUEST_STATUS_LABEL[request.status]
+  let badge = tenantRequestBadgeClass(request.status)
+  let heroStatus = request.status === 'done' || request.status === 'reviewed' ? 'approved' : request.status
+  let photos = []
+
+  if (kind === 'safety') {
+    title = 'รายละเอียดการแจ้งเหตุ'
+    heading = SAFETY_INCIDENT_TYPE_LABEL[request.incident_type] || request.incident_type
+    icon = <ShieldIcon />
+    iconClass = `is-safety is-${request.severity}`
+    statusLabel = SAFETY_STATUS_LABEL[request.status]
+    badge = SAFETY_STATUS_BADGE[request.status] || 'pending'
+    heroStatus = request.status === 'reviewed' ? 'approved' : 'pending'
+    const severity = SAFETY_SEVERITY_RESULT[request.severity]?.label || request.severity
+    meta = (
+      <span className={`dashboard-safety-level-chip is-${request.severity}`}>
+        <span aria-hidden="true" />
+        ระดับ{severity}
+      </span>
+    )
+    fields.push(
+      ['ประเภทเหตุ', heading],
+      ['ระดับความรุนแรง', (
+        <span className={`dashboard-safety-level-chip is-compact is-${request.severity}`}>
+          <span aria-hidden="true" />
+          {severity}
+        </span>
+      )],
+      ['ห้อง', request.room_number],
+      ['รายละเอียดเหตุการณ์', request.description],
+      ['วันที่แจ้ง', formatVisitDateTime(request.created_at)],
+    )
+    if (request.status === 'reviewed') {
+      fields.push(['ตรวจสอบโดย', request.reviewed_by_name], ['ผลการตรวจสอบ', request.review_note])
+    }
+  } else if (kind === 'resident_visit') {
+    title = 'รายละเอียดคำขอรถ / ผู้มาติดต่อ'
+    heading = getVisitTitle(request)
+    icon = request.request_type === 'vehicle' ? <CarIcon /> : <GuestIcon />
+    iconClass = `is-${request.request_type}`
+    statusLabel = RESIDENT_VISIT_STATUS_LABEL[request.status]
+    meta = <span className={`dashboard-rv-kind-chip is-${getVisitKind(request)}`}>{getVisitKindLabel(request)}</span>
+    if (request.request_type === 'vehicle') {
+      fields.push(['รถของ', getVisitKindLabel(request)], ['ทะเบียนรถ', request.vehicle_plate], ['ยี่ห้อ / รุ่น', request.vehicle_model])
+    }
+    if (request.guest_name || request.request_type !== 'vehicle') {
+      fields.push(['ผู้มาเยี่ยม', request.guest_name], ['เบอร์ติดต่อ', request.guest_phone])
+    }
+    fields.push(
+      ['ห้อง', request.room_number],
+      ['เริ่ม', formatVisitDateTime(request.start_at)],
+      ['สิ้นสุด', request.end_at ? formatVisitDateTime(request.end_at) : 'ไม่จำกัดเวลา'],
+      ['วันที่ส่งคำขอ', formatVisitDateTime(request.created_at)],
+      ['หมายเหตุ', request.note],
+    )
+    if (request.is_special) fields.push(['เหตุผลกรณีพิเศษ', request.special_reason])
+    photos = request.vehicle_photos || []
+  } else if (kind === 'maintenance') {
+    title = 'รายละเอียดการแจ้งซ่อม'
+    heading = MAINTENANCE_CATEGORY_LABEL[request.category] || 'แจ้งซ่อม'
+    icon = <MaintenanceCategoryIcon category={request.category} />
+    statusLabel = MAINTENANCE_STATUS_LABEL[request.status]
+    badge = maintenanceBadgeClass(request.status)
+    fields.push(
+      ['ประเภท', heading],
+      ['ห้อง', request.room_number],
+      ['ช่วงเวลาที่สะดวก', MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้'],
+      ['เบอร์โทร', request.contact_phone],
+      ['รายละเอียดปัญหา', request.description],
+      ['วันที่แจ้งซ่อม', formatVisitDateTime(request.created_at)],
+    )
+    photos = (request.photos || []).map((photo) => ({ ...photo, url: photo.dataUrl }))
+  } else {
+    fields.push(['ประเภทคำขอ', heading], ['ห้อง', request.room_number])
+    if (kind === 'renew') {
+      fields.push(
+        ['ระยะเวลาที่ขอต่อ', RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`],
+        ['รูปแบบการชำระ', RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type],
+      )
+    }
+    if (kind === 'move_room') {
+      fields.push(['ห้องที่ย้ายไป', request.target_room_number])
+      if (request.target_room_price != null) fields.push(['ค่าเช่าห้องใหม่', `฿${formatCurrency(request.target_room_price)}/เดือน`])
+      fields.push(['เหตุผลที่ย้าย', MOVE_ROOM_REASON_LABEL[request.move_reason]], ['วันที่ต้องการย้าย', formatDateOnly(request.preferred_move_date)])
+      if (['pending', 'in_progress'].includes(request.status)) {
+        fields.push(['ตรวจสภาพห้องเดิม', request.room_inspected ? 'ตรวจเรียบร้อยแล้ว' : 'รอเจ้าหน้าที่ตรวจห้อง'])
+      }
+    }
+    fields.push(
+      ['วันที่ส่งคำขอ', formatVisitDateTime(request.created_at)],
+      [kind === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ', request.note],
+    )
+  }
+
+  return { title, heading, icon, iconClass, meta, statusLabel, badge, heroStatus, fields, photos }
+}
+
+function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'กลับไปที่รายการ' }) {
+  const [photoIndex, setPhotoIndex] = useState(null)
+  const detail = getRequestDetail(kind, request)
+  const timeline = getRequestTimeline(kind, request)
+  const currentIndex = timeline.findIndex((step) => !step.done)
+  const finalTone = ['rejected', 'cancelled'].includes(request.status) ? 'danger' : 'success'
+  const steps = timeline.map((step, index) => ({
+    label: kind === 'safety' && !step.done
+      ? 'รอเจ้าหน้าที่ตรวจสอบ'
+      : kind === 'resident_visit' && !step.done
+        ? 'รอเจ้าหน้าที่อนุมัติ'
+        : step.label,
+    meta: step.done ? (step.date ? formatVisitDateTime(step.date) : '-') : index === currentIndex ? 'กำลังรอ' : '-',
+    by: step.by,
+    state: step.done ? 'done' : index === currentIndex ? 'current' : 'pending',
+    tone: index === timeline.length - 1 && step.done ? finalTone : undefined,
+  }))
+
+  return (
+    <>
+      <Modal title={detail.title} onClose={onClose} onBack={onBack}>
+        {(requestClose) => (
+          <div className="dashboard-rv">
+            <div className={`dashboard-rv-detail-hero is-${detail.heroStatus}`}>
+              <span className={`dashboard-rv-history-icon ${detail.iconClass}`}>{detail.icon}</span>
+              <div className="dashboard-rv-history-text">
+                <strong>{detail.heading}</strong>
+                <span className="dashboard-rv-meta dashboard-safety-hero-meta">
+                  {detail.meta}
+                  {request.room_number && <RoomChip room={request.room_number} />}
+                </span>
+              </div>
+              <span className={`dashboard-badge status-${detail.badge}`}>{detail.statusLabel || request.status}</span>
+            </div>
+
+            <dl className="dashboard-rv-detail">
+              {detail.fields.map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd className={label === 'ตรวจสอบโดย' ? 'dashboard-actor' : undefined}>{value || '-'}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {detail.photos.length > 0 && (
+              <section className="dashboard-rv-photos" aria-label="รูปประกอบคำขอ">
+                <h4 className="dashboard-rv-timeline-title">รูปประกอบ ({detail.photos.length})</h4>
+                <div className="dashboard-rv-photo-grid">
+                  {detail.photos.map((photo, index) => (
+                    <button key={`${photo.url}-${index}`} type="button" className="dashboard-rv-photo" onClick={() => setPhotoIndex(index)} aria-label={`ดูรูปที่ ${index + 1}`}>
+                      <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <DetailTimeline steps={steps} />
+
+            <div className="dashboard-form-actions">
+              {onBack && <button type="button" className="dashboard-action-btn is-ghost" onClick={onBack}>{backLabel}</button>}
+              <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>ปิด</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+      {photoIndex !== null && (
+        <PhotoLightbox photos={detail.photos} initialIndex={photoIndex} title="รูปประกอบคำขอ" subtitle={detail.heading} label="รูปประกอบ" onClose={() => setPhotoIndex(null)} />
+      )}
+    </>
+  )
+}
+
 function SafetyIncidentReportRow() {
   const [view, setView] = useState(null)
   const [form, setForm] = useState(EMPTY_SAFETY_FORM)
@@ -2850,95 +3018,12 @@ function SafetyIncidentReportRow() {
       )}
 
       {view === 'detail' && detailItem && (
-        <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setView(null)} onBack={() => setView('history')}>
-          {(requestClose) => (
-            <div className="dashboard-rv">
-              <div className={`dashboard-rv-detail-hero is-${detailItem.status === 'reviewed' ? 'approved' : 'pending'}`}>
-                <span className={`dashboard-rv-history-icon is-safety is-${detailItem.severity}`}>
-                  <ShieldIcon />
-                </span>
-                <div className="dashboard-rv-history-text">
-                  <strong>{SAFETY_INCIDENT_TYPE_LABEL[detailItem.incident_type] || detailItem.incident_type}</strong>
-                  <span className="dashboard-rv-meta dashboard-safety-hero-meta">
-                    <span className={`dashboard-safety-level-chip is-${detailItem.severity}`}>
-                      <span aria-hidden="true" />
-                      ระดับ{SAFETY_SEVERITY_RESULT[detailItem.severity]?.label || detailItem.severity}
-                    </span>
-                    {detailItem.room_number && <RoomChip room={detailItem.room_number} />}
-                  </span>
-                </div>
-                <span className={`dashboard-badge status-${SAFETY_STATUS_BADGE[detailItem.status] || 'pending'}`}>
-                  {SAFETY_STATUS_LABEL[detailItem.status] || detailItem.status}
-                </span>
-              </div>
-
-              <dl className="dashboard-rv-detail">
-                <div>
-                  <dt>ประเภทเหตุ</dt>
-                  <dd>{SAFETY_INCIDENT_TYPE_LABEL[detailItem.incident_type] || detailItem.incident_type}</dd>
-                </div>
-                <div>
-                  <dt>ระดับความรุนแรง</dt>
-                  <dd>
-                    <span className={`dashboard-safety-level-chip is-compact is-${detailItem.severity}`}>
-                      <span aria-hidden="true" />
-                      {SAFETY_SEVERITY_RESULT[detailItem.severity]?.label || detailItem.severity}
-                    </span>
-                  </dd>
-                </div>
-                <div>
-                  <dt>ห้อง</dt>
-                  <dd>{detailItem.room_number || '-'}</dd>
-                </div>
-                <div>
-                  <dt>รายละเอียดเหตุการณ์</dt>
-                  <dd>{detailItem.description}</dd>
-                </div>
-                <div>
-                  <dt>วันที่แจ้ง</dt>
-                  <dd>{formatVisitDateTime(detailItem.created_at)}</dd>
-                </div>
-                {detailItem.status === 'reviewed' && (
-                  <>
-                    <div>
-                      <dt>ตรวจสอบโดย</dt>
-                      <dd className="dashboard-actor">{detailItem.reviewed_by_name || '-'}</dd>
-                    </div>
-                    <div>
-                      <dt>ผลการตรวจสอบ</dt>
-                      <dd>{detailItem.review_note || '-'}</dd>
-                    </div>
-                  </>
-                )}
-              </dl>
-
-              <DetailTimeline
-                steps={[
-                  { label: 'แจ้งเหตุ', meta: formatVisitDateTime(detailItem.created_at), state: 'done' },
-                  {
-                    label: detailItem.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอเจ้าหน้าที่ตรวจสอบ',
-                    meta:
-                      detailItem.status === 'reviewed'
-                        ? (detailItem.reviewed_at ? formatVisitDateTime(detailItem.reviewed_at) : '-')
-                        : 'กำลังรอ',
-                    by: detailItem.status === 'reviewed' ? detailItem.reviewed_by_name : null,
-                    state: detailItem.status === 'reviewed' ? 'done' : 'current',
-                    tone: detailItem.status === 'reviewed' ? 'success' : undefined,
-                  },
-                ]}
-              />
-
-              <div className="dashboard-form-actions">
-                <button type="button" className="dashboard-action-btn is-ghost" onClick={() => setView('history')}>
-                  กลับไปที่รายการ
-                </button>
-                <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        <RequestDetailModal
+          kind="safety"
+          request={detailItem}
+          onClose={() => setView(null)}
+          onBack={() => setView('history')}
+        />
       )}
     </div>
   )
