@@ -14,6 +14,605 @@ import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIc
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
+const WAITING_UI_STATUSES = {
+  waiting: { label: 'รอห้องว่าง', tone: 'warning' },
+  contacted: { label: 'ติดต่อแล้ว', tone: 'info' },
+  reserved: { label: 'จองแล้ว', tone: 'success' },
+  closed: { label: 'ปิดรายการ', tone: 'muted' },
+}
+
+const WAITING_UI_ROOM_PREFERENCES = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
+
+function splitWaitingPreferences(value) {
+  return String(value || '').split('|').map((item) => item.trim()).filter(Boolean)
+}
+
+function waitingDayKey(value) {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function waitingDateFromKey(value) {
+  return value ? new Date(`${value.slice(0, 10)}T00:00:00`) : undefined
+}
+
+function formatWaitingDate(value) {
+  if (!value) return '-'
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? waitingDateFromKey(value) : new Date(value)
+  return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function formatWaitingDateTime(value) {
+  return value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '-'
+}
+
+function waitingDaysSince(value, now) {
+  if (!value) return 0
+  const elapsed = now - new Date(value).getTime()
+  return Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 86400000)) : 0
+}
+
+function describeWaitingMoveIn(value, now) {
+  const today = new Date(now)
+  const diff = Math.round((waitingDateFromKey(value).getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000)
+  if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
+  if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
+  return { text: `อีก ${diff} วัน`, tone: diff <= 7 ? 'soon' : 'later' }
+}
+
+function waitingNameInitial(name) {
+  return String(name || '').trim().replace(/^[เแโใไ]/, '').charAt(0).toUpperCase() || '?'
+}
+
+function getWaitingMoveInPresets(now) {
+  const today = new Date(now)
+  return [
+    { label: 'สัปดาห์หน้า', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)) },
+    { label: 'ต้นเดือนหน้า', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth() + 1, 1)) },
+    { label: 'อีก 1 เดือน', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth() + 1, today.getDate())) },
+  ]
+}
+
+function groupWaitingEntries(items) {
+  return items.reduce((groups, item) => {
+    const key = waitingDayKey(item.created_at)
+    const previous = groups[groups.length - 1]
+    if (previous?.key === key) previous.items.push(item)
+    else groups.push({ key, date: new Date(item.created_at), items: [item] })
+    return groups
+  }, [])
+}
+
+function WaitingDetailIcon({ type, size = 16 }) {
+  const paths = {
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
+    copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[type]}
+    </svg>
+  )
+}
+
+function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusChange, statusBusyId = null }) {
+  const waitingNow = now
+  const waitingToday = new Date(now)
+  const waitingTodayKey = waitingDayKey(now)
+  const waitingYesterdayKey = waitingDayKey(new Date(waitingToday.getFullYear(), waitingToday.getMonth(), waitingToday.getDate() - 1))
+  const waitingDayGroups = groupWaitingEntries(items)
+  return (
+    <div className="waiting-timeline">
+      {waitingDayGroups.map((group) => {
+        const relativeDay =
+          group.key === waitingTodayKey ? 'วันนี้' : group.key === waitingYesterdayKey ? 'เมื่อวาน' : null
+        const weekday = group.date.toLocaleDateString('th-TH', { weekday: 'long' })
+        return (
+          <section className="waiting-day" key={group.key}>
+            <header className="waiting-day-head">
+              <div className="waiting-day-date">
+                <strong>{group.date.getDate()}</strong>
+                <small>{group.date.toLocaleDateString('th-TH', { month: 'short' })}</small>
+              </div>
+              <div className="waiting-day-card">
+                <div className="waiting-day-text">
+                  <strong>{relativeDay || weekday}</strong>
+                  <span>
+                    {relativeDay ? `${weekday} ` : ''}
+                    {group.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+                <span className="waiting-day-count">{group.items.length} รายชื่อ</span>
+              </div>
+            </header>
+            <div className="waiting-day-items">
+              {group.items.map((item) => {
+                const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+                const preferences = splitWaitingPreferences(item.room_preference)
+                const days = waitingDaysSince(item.created_at, waitingNow)
+                return (
+                  <div className={`waiting-day-item is-${WAITING_UI_STATUSES[status].tone}`} key={item.id}>
+                    <span className="waiting-day-dot" aria-hidden="true" />
+                    <article className={`waiting-card is-${WAITING_UI_STATUSES[status].tone}`}>
+                      <div className="waiting-card-top">
+                        <span className="waiting-avatar" aria-hidden="true">
+                          {waitingNameInitial(item.full_name)}
+                        </span>
+                        <div className="waiting-card-id">
+                          <div className="waiting-card-head">
+                            <strong>{item.full_name}</strong>
+                            <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
+                              {WAITING_UI_STATUSES[status].label}
+                            </span>
+                          </div>
+                          <a className="waiting-card-phone" href={`tel:${item.phone}`}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />
+                            </svg>
+                            {item.phone}
+                          </a>
+                        </div>
+                        <div className={`waiting-card-days${days >= 30 ? ' is-long' : ''}${days === 0 ? ' is-new' : ''}`}>
+                          <strong>{days === 0 ? 'ใหม่' : days}</strong>
+                          <span>{days === 0 ? 'แจ้งวันนี้' : 'วันที่รอ'}</span>
+                        </div>
+                      </div>
+                      <div className="waiting-card-body">
+                        {onStatusChange && (
+                          <label className="waiting-status-control">
+                            <span>จัดการสถานะ</span>
+                            <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)} aria-label={`สถานะของ ${item.full_name}`}>
+                              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        {item.desired_move_in_date && (
+                          <span className={`waiting-movein is-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}`}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 10.5 12 3l9 7.5" />
+                              <path d="M5 9.5V21h14V9.5" />
+                            </svg>
+                            อยากเข้าอยู่ {formatWaitingDate(item.desired_move_in_date)}
+                            <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>
+                          </span>
+                        )}
+                        <div className="waiting-tags">
+                          {preferences.length > 0 ? (
+                            preferences.map((preference) => <span key={preference}>{preference}</span>)
+                          ) : (
+                            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
+                          )}
+                        </div>
+                        {item.note && (
+                          <div className="waiting-card-note">
+                            <span className="waiting-card-note-icon" aria-hidden="true">
+                              <NoteIcon size={17} strokeWidth={1.8} />
+                            </span>
+                            <div className="waiting-card-note-content">
+                              <span className="waiting-card-note-label">หมายเหตุ</span>
+                              <p>{item.note}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="waiting-card-foot">
+                        <div className="waiting-card-meta">
+                          <span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+                              <path d="M16 3v3M8 3v3M3 10h18" />
+                            </svg>
+                            {formatWaitingDate(item.created_at)}
+                          </span>
+                          <span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="8" r="4" />
+                              <path d="M4 21a8 8 0 0 1 16 0" />
+                            </svg>
+                            <span className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</span>
+                          </span>
+                        </div>
+                        <div className="waiting-card-actions">
+                          <button
+                            type="button"
+                            className="waiting-icon-btn is-view"
+                            onClick={() => onDetail(item)}
+                            aria-label={`ดูรายละเอียด ${item.full_name}`}
+                            title="ดูรายละเอียด"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="waiting-icon-btn"
+                            onClick={() => onEdit(item)}
+                            aria-label={`แก้ไขข้อมูล ${item.full_name}`}
+                            title="แก้ไข"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="waiting-icon-btn is-danger"
+                            onClick={() => {
+                              onDelete(item)
+                            }}
+                            aria-label={`ลบรายชื่อ ${item.full_name}`}
+                            title="ลบ"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                            </svg>
+                          </button>
+                          <button type="button" className="waiting-detail-btn" onClick={() => onDetail(item)}>
+                            ดูรายละเอียด
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M9 18l6-6-6-6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
+  const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
+  const waitingNow = now
+  const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+  const preferences = splitWaitingPreferences(item.room_preference)
+  const days = waitingDaysSince(item.created_at, now)
+  const formatCurrency = (value) => Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <div className="waiting-detail">
+      <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
+        <span className="waiting-avatar is-large" aria-hidden="true">
+          {waitingNameInitial(item.full_name)}
+        </span>
+        <div className="waiting-detail-name">
+          <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
+          <strong>{item.full_name}</strong>
+        </div>
+        <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
+          {WAITING_UI_STATUSES[status].label}
+        </span>
+      </div>
+
+      <div className="waiting-detail-contact">
+        <div className="waiting-detail-phone">
+          <span>เบอร์ติดต่อ</span>
+          <strong>{item.phone}</strong>
+        </div>
+        <div className="waiting-detail-contact-actions">
+          <a className="waiting-ui-action-btn is-primary" href={`tel:${item.phone}`}>
+            <WaitingDetailIcon type="phone" />
+            โทรติดต่อ
+          </a>
+          <button
+            type="button"
+            className="waiting-ui-action-btn is-ghost"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(item.phone)
+                setWaitingPhoneCopied(item.id)
+              } catch {
+                setWaitingPhoneCopied(null)
+              }
+            }}
+          >
+            {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
+            {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
+          </button>
+        </div>
+      </div>
+
+
+      {actionError && <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">{actionError}</p>}
+      {onStatusChange && (
+        <label className="waiting-status-control is-detail">
+          <span>จัดการสถานะรายชื่อ</span>
+          <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)}>
+            {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
+          </select>
+        </label>
+      )}
+      <dl className="waiting-detail-stats">
+        <div className={days >= 30 ? 'is-long' : ''}>
+          <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
+          <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
+        </div>
+        <div>
+          <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
+          <dd>{formatWaitingDateTime(item.created_at)}</dd>
+        </div>
+        <div>
+          <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
+          <dd className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</dd>
+        </div>
+        <div className={item.desired_move_in_date ? `is-movein-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
+          <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
+          <dd>
+            {item.desired_move_in_date
+              ? formatWaitingDate(item.desired_move_in_date)
+              : 'ไม่ระบุ'}
+          </dd>
+          {item.desired_move_in_date && <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
+        </div>
+      </dl>
+
+      <section className="waiting-detail-section">
+        <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
+        <div className="waiting-tags">
+          {preferences.length > 0 ? (
+            preferences.map((preference) => <span key={preference}>{preference}</span>)
+          ) : (
+            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
+          )}
+        </div>
+      </section>
+
+      <section className="waiting-detail-section is-note">
+        <h4><NoteIcon size={17} />หมายเหตุ</h4>
+        <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
+      </section>
+
+      <section className="waiting-detail-section is-vacancies">
+        <h4>
+          <DoorIcon size={17} />
+          ห้องว่างตอนนี้ <span className="waiting-ui-count-pill">{vacantRooms.length}</span>
+        </h4>
+        {vacantRooms.length > 0 ? (
+          <div className="waiting-vacant-rooms">
+            {vacantRooms.map((room) => (
+              <span key={room.room_number}>
+                <strong>ห้อง {room.room_number}</strong>
+                {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
+        )}
+      </section>
+
+      <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
+
+      <div className="waiting-ui-form-actions waiting-detail-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ปิด
+        </button>
+        <button
+          type="button"
+          className="waiting-ui-action-btn is-primary"
+          onClick={() => {
+            onEdit(item)
+          }}
+        >
+          <WaitingDetailIcon type="edit" />
+          แก้ไขข้อมูล
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WaitingListForm({ value, fieldErrors = {}, error = '', busy = false, editing = false, now, onChange, onSubmit, onClose, idPrefix = 'waiting' }) {
+  const waitingListForm = value
+  const waitingListFieldErrors = fieldErrors
+  const waitingListError = error
+  const waitingListSubmitting = busy
+  const waitingListEditing = editing
+  const waitingNow = now
+  const waitingFormTodayKey = waitingDayKey(now)
+  const waitingMoveInPresets = getWaitingMoveInPresets(now)
+  const waitingListPreferences = splitWaitingPreferences(value.room_preference)
+  const updateWaitingListField = onChange
+  const toggleRoomPreference = (chip) => {
+    const next = waitingListPreferences.includes(chip) ? waitingListPreferences.filter(item => item !== chip) : [...waitingListPreferences, chip]
+    const text = next.join(' | ')
+    if (text.length <= 100) onChange('room_preference', text)
+  }
+  return (
+    <form
+      className="waiting-form"
+      onSubmit={(event) => onSubmit(event)}
+      noValidate
+    >
+      <div className="waiting-form-intro">
+        <span className="waiting-form-intro-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M19 8v6M22 11h-6" />
+          </svg>
+        </span>
+        <div>
+          <strong>{waitingListEditing ? 'แก้ไขข้อมูลผู้สนใจ' : 'บันทึกผู้สนใจเช่าห้อง'}</strong>
+          <p>เก็บข้อมูลไว้ติดต่อกลับเมื่อมีห้องว่างตรงกับความต้องการ</p>
+        </div>
+      </div>
+
+      {waitingListError && (
+        <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">
+          {waitingListError}
+        </p>
+      )}
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>1</span>
+          ข้อมูลติดต่อ
+        </h4>
+        <div className="waiting-form-grid">
+          <div className="waiting-ui-form-field">
+            <label className="waiting-ui-form-label" htmlFor={`${idPrefix}-full-name`}>
+              ชื่อผู้สนใจ <span className="waiting-ui-form-required">*</span>
+            </label>
+            <input
+              id={`${idPrefix}-full-name`}
+              className={`waiting-ui-form-input${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
+              maxLength={255}
+              autoFocus
+              autoComplete="off"
+              placeholder="ชื่อ-นามสกุล"
+              value={waitingListForm.full_name}
+              onChange={(event) => updateWaitingListField('full_name', event.target.value)}
+            />
+            {waitingListFieldErrors.full_name && (
+              <span className="waiting-ui-form-field-error">{waitingListFieldErrors.full_name}</span>
+            )}
+          </div>
+          <div className="waiting-ui-form-field">
+            <label className="waiting-ui-form-label" htmlFor={`${idPrefix}-phone`}>
+              เบอร์โทรศัพท์ <span className="waiting-ui-form-required">*</span>
+            </label>
+            <input
+              id={`${idPrefix}-phone`}
+              className={`waiting-ui-form-input${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
+              type="tel"
+              inputMode="tel"
+              maxLength={20}
+              autoComplete="off"
+              placeholder="เช่น 0812345678"
+              value={waitingListForm.phone}
+              onChange={(event) => updateWaitingListField('phone', event.target.value)}
+            />
+            {waitingListFieldErrors.phone && (
+              <span className="waiting-ui-form-field-error">{waitingListFieldErrors.phone}</span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>2</span>
+          วันที่ต้องการเข้าอยู่ <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+        </h4>
+        <div className="waiting-form-movein">
+          <ThaiDatePicker
+            className={`waiting-ui-form-input waiting-form-date${waitingListFieldErrors.desired_move_in_date ? ' is-invalid' : ''}`}
+            placeholder="เลือกวันที่ต้องการเข้าอยู่"
+            value={waitingListForm.desired_move_in_date}
+            minDate={waitingDateFromKey(waitingFormTodayKey)}
+            isClearable
+            portalId="waiting-date-portal"
+            onChange={(value) => updateWaitingListField('desired_move_in_date', value)}
+          />
+          <div className="waiting-form-chips" role="group" aria-label="เลือกวันเข้าอยู่แบบเร็ว">
+            {waitingMoveInPresets.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className={`waiting-form-chip${waitingListForm.desired_move_in_date === preset.value ? ' is-active' : ''}`}
+                aria-pressed={waitingListForm.desired_move_in_date === preset.value}
+                onClick={() =>
+                  updateWaitingListField(
+                    'desired_move_in_date',
+                    waitingListForm.desired_move_in_date === preset.value ? '' : preset.value,
+                  )
+                }
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {waitingListForm.desired_move_in_date && (
+          <p className="waiting-form-hint">
+            เข้าอยู่ {formatWaitingDate(waitingListForm.desired_move_in_date)} ·{' '}
+            {describeWaitingMoveIn(waitingListForm.desired_move_in_date, waitingNow).text}
+          </p>
+        )}
+        {waitingListFieldErrors.desired_move_in_date && (
+          <span className="waiting-ui-form-field-error">{waitingListFieldErrors.desired_move_in_date}</span>
+        )}
+      </section>
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>3</span>
+          ประเภทห้องที่สนใจ <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+        </h4>
+        <div className="waiting-form-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
+          {WAITING_UI_ROOM_PREFERENCES.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              className={`waiting-form-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
+              aria-pressed={waitingListPreferences.includes(chip)}
+              onClick={() => toggleRoomPreference(chip)}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+        <input
+          id={`${idPrefix}-room-preference`}
+          className="waiting-ui-form-input"
+          maxLength={100}
+          autoComplete="off"
+          aria-label="ประเภทห้องที่สนใจ"
+          placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
+          value={waitingListForm.room_preference}
+          onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
+        />
+      </section>
+
+      <section className="waiting-form-section">
+        <div className="waiting-ui-form-label-row">
+          <h4 className="waiting-form-section-title">
+            <span>4</span>
+            <label htmlFor={`${idPrefix}-note`}>หมายเหตุ</label> <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+          </h4>
+          <span className="waiting-ui-form-counter">{waitingListForm.note.length}/500</span>
+        </div>
+        <textarea
+          id={`${idPrefix}-note`}
+          className="waiting-ui-form-input waiting-ui-form-textarea"
+          rows={3}
+          maxLength={500}
+          placeholder="เช่น จำนวนผู้พัก งบประมาณ หรือเวลาที่สะดวกให้ติดต่อ"
+          value={waitingListForm.note}
+          onChange={(event) => updateWaitingListField('note', event.target.value)}
+        />
+      </section>
+
+      <div className="waiting-ui-form-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ยกเลิก
+        </button>
+        <button type="submit" className="waiting-ui-action-btn is-primary" disabled={waitingListSubmitting}>
+          {waitingListSubmitting
+            ? 'กำลังบันทึก...'
+            : waitingListEditing
+              ? 'บันทึกการแก้ไข'
+              : 'บันทึกรายชื่อ'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 const MOVE_OUT_CHECKLIST = [
   { key: 'walls', label: 'ผนังและสี (รอยแตก คราบ สีลอก)' },
   { key: 'floor', label: 'พื้น (รอยแตก คราบ ความเสียหาย)' },
@@ -753,7 +1352,6 @@ const STAFF_TABS = [
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
 ]
 
-const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 const WAITING_LIST_STATUS = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
   contacted: { label: 'ติดต่อแล้ว', tone: 'info' },
@@ -764,35 +1362,6 @@ const WAITING_LIST_SORTS = [
   { value: 'newest', label: 'แจ้งล่าสุดก่อน' },
   { value: 'oldest', label: 'รอนานสุดก่อน' },
 ]
-
-function splitRoomPreferences(value) {
-  return (value || '')
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function WaitingDetailIcon({ type, size = 16 }) {
-  const paths = {
-    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
-    copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
-    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" /></>,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
-    edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
-    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {paths[type]}
-    </svg>
-  )
-}
-
-function waitingInitial(name) {
-  const trimmed = (name || '').trim().replace(/^[เแโใไ]/, '')
-  return trimmed.charAt(0).toUpperCase() || '?'
-}
 
 function dayKeyToDate(key) {
   return key ? new Date(`${key}T00:00:00`) : undefined
@@ -873,20 +1442,6 @@ function localDayKey(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function describeMoveIn(dayKey, now) {
-  const today = new Date(now)
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
-  const diff = Math.round((dayKeyToDate(dayKey).getTime() - startOfToday) / (24 * 60 * 60 * 1000))
-  if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
-  if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
-  if (diff <= 7) return { text: `อีก ${diff} วัน`, tone: 'soon' }
-  return { text: `อีก ${diff} วัน`, tone: 'later' }
-}
-
-function daysSince(value, now) {
-  if (!value) return 0
-  return Math.max(0, Math.floor((now - new Date(value).getTime()) / (24 * 60 * 60 * 1000)))
-}
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const REQUEST_PREVIEW_COUNT = 3
@@ -4997,7 +5552,6 @@ function StaffMain() {
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListSort, setWaitingListSort] = useState('newest')
   const [waitingListDetail, setWaitingListDetail] = useState(null)
-  const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
   const [waitingNow] = useState(() => Date.now())
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
@@ -5332,36 +5886,6 @@ function StaffMain() {
   const updateWaitingListField = (field, value) => {
     setWaitingListForm((form) => ({ ...form, [field]: value }))
     setWaitingListFieldErrors((errors) => ({ ...errors, [field]: undefined }))
-  }
-
-  const waitingFormToday = new Date(waitingNow)
-  const waitingFormTodayKey = localDayKey(waitingFormToday)
-  const waitingMoveInPresets = [
-    {
-      label: 'สัปดาห์หน้า',
-      value: localDayKey(new Date(waitingFormToday.getFullYear(), waitingFormToday.getMonth(), waitingFormToday.getDate() + 7)),
-    },
-    {
-      label: 'ต้นเดือนหน้า',
-      value: localDayKey(new Date(waitingFormToday.getFullYear(), waitingFormToday.getMonth() + 1, 1)),
-    },
-    {
-      label: 'อีก 1 เดือน',
-      value: localDayKey(new Date(waitingFormToday.getFullYear(), waitingFormToday.getMonth() + 1, waitingFormToday.getDate())),
-    },
-  ]
-
-  const waitingListPreferences = waitingListForm.room_preference
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-  const toggleRoomPreference = (chip) => {
-    const next = waitingListPreferences.includes(chip)
-      ? waitingListPreferences.filter((item) => item !== chip)
-      : [...waitingListPreferences, chip]
-    const text = next.join(' | ')
-    if (text.length <= 100) updateWaitingListField('room_preference', text)
   }
 
   const submitWaitingListEntry = async (event, requestClose) => {
@@ -6297,18 +6821,6 @@ function StaffMain() {
     (currentWaitingListPage - 1) * STAFF_LIST_PAGE_SIZE,
     currentWaitingListPage * STAFF_LIST_PAGE_SIZE,
   )
-  const waitingToday = new Date(waitingNow)
-  const waitingTodayKey = localDayKey(waitingToday)
-  const waitingYesterdayKey = localDayKey(
-    new Date(waitingToday.getFullYear(), waitingToday.getMonth(), waitingToday.getDate() - 1),
-  )
-  const waitingDayGroups = waitingListPageItems.reduce((groups, item) => {
-    const key = localDayKey(item.created_at)
-    const last = groups[groups.length - 1]
-    if (last && last.key === key) last.items.push(item)
-    else groups.push({ key, date: new Date(item.created_at), items: [item] })
-    return groups
-  }, [])
   const inspectionKindCounts = moveOutInspections.reduce((counts, inspection) => {
     const kind = inspectionKindOf(inspection)
     counts[kind] = (counts[kind] || 0) + 1
@@ -6934,132 +7446,10 @@ function StaffMain() {
 
         {waitingListDetail && (() => {
           const item = waitingList.find((entry) => entry.id === waitingListDetail.id) || waitingListDetail
-          const status = WAITING_LIST_STATUS[item.status] ? item.status : 'waiting'
-          const preferences = splitRoomPreferences(item.room_preference)
-          const days = daysSince(item.created_at, waitingNow)
           return (
             <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingListDetail(null)} variant="detail">
               {(requestClose) => (
-                <div className="waiting-detail">
-                  <div className={`waiting-detail-hero is-${WAITING_LIST_STATUS[status].tone}`}>
-                    <span className="waiting-avatar is-large" aria-hidden="true">
-                      {waitingInitial(item.full_name)}
-                    </span>
-                    <div className="waiting-detail-name">
-                      <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
-                      <strong>{item.full_name}</strong>
-                    </div>
-                    <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
-                      {WAITING_LIST_STATUS[status].label}
-                    </span>
-                  </div>
-
-                  <div className="waiting-detail-contact">
-                    <div className="waiting-detail-phone">
-                      <span>เบอร์ติดต่อ</span>
-                      <strong>{item.phone}</strong>
-                    </div>
-                    <div className="waiting-detail-contact-actions">
-                      <a className="staff-action-btn is-primary" href={`tel:${item.phone}`}>
-                        <WaitingDetailIcon type="phone" />
-                        โทรติดต่อ
-                      </a>
-                      <button
-                        type="button"
-                        className="staff-action-btn is-ghost"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(item.phone)
-                            setWaitingPhoneCopied(item.id)
-                          } catch {
-                            setWaitingPhoneCopied(null)
-                          }
-                        }}
-                      >
-                        {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
-                        {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <dl className="waiting-detail-stats">
-                    <div className={days >= 30 ? 'is-long' : ''}>
-                      <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
-                      <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
-                    </div>
-                    <div>
-                      <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
-                      <dd>{formatDateTime(item.created_at)}</dd>
-                    </div>
-                    <div>
-                      <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
-                      <dd className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</dd>
-                    </div>
-                    <div className={item.desired_move_in_date ? `is-movein-${describeMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
-                      <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
-                      <dd>
-                        {item.desired_move_in_date
-                          ? formatDateOnly(item.desired_move_in_date)
-                          : 'ไม่ระบุ'}
-                      </dd>
-                      {item.desired_move_in_date && <small>{describeMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
-                    </div>
-                  </dl>
-
-                  <section className="waiting-detail-section">
-                    <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
-                    <div className="waiting-tags">
-                      {preferences.length > 0 ? (
-                        preferences.map((preference) => <span key={preference}>{preference}</span>)
-                      ) : (
-                        <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="waiting-detail-section is-note">
-                    <h4><NoteIcon size={17} />หมายเหตุ</h4>
-                    <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
-                  </section>
-
-                  <section className="waiting-detail-section is-vacancies">
-                    <h4>
-                      <DoorIcon size={17} />
-                      ห้องว่างตอนนี้ <span className="staff-count-pill">{vacantRooms.length}</span>
-                    </h4>
-                    {vacantRooms.length > 0 ? (
-                      <div className="waiting-vacant-rooms">
-                        {vacantRooms.map((room) => (
-                          <span key={room.room_number}>
-                            <strong>ห้อง {room.room_number}</strong>
-                            {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
-                    )}
-                  </section>
-
-                  <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />สถานะของรายชื่อนี้จัดการโดย Admin</p>
-
-                  <div className="staff-form-actions waiting-detail-actions">
-                    <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                      ปิด
-                    </button>
-                    <button
-                      type="button"
-                      className="staff-action-btn is-primary"
-                      onClick={() => {
-                        setWaitingListDetail(null)
-                        openWaitingListModal(item)
-                      }}
-                    >
-                      <WaitingDetailIcon type="edit" />
-                      แก้ไขข้อมูล
-                    </button>
-                  </div>
-                </div>
+                <WaitingListDetails item={item} now={waitingNow} vacantRooms={vacantRooms} onClose={requestClose} onEdit={(entry) => { setWaitingListDetail(null); openWaitingListModal(entry) }} />
               )}
             </Modal>
           )
@@ -7138,184 +7528,7 @@ function StaffMain() {
             variant="waiting-form"
           >
             {(requestClose) => (
-              <form
-                className="waiting-form"
-                onSubmit={(event) => submitWaitingListEntry(event, requestClose)}
-                noValidate
-              >
-                <div className="waiting-form-intro">
-                  <span className="waiting-form-intro-icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M19 8v6M22 11h-6" />
-                    </svg>
-                  </span>
-                  <div>
-                    <strong>{waitingListEditing ? 'แก้ไขข้อมูลผู้สนใจ' : 'บันทึกผู้สนใจเช่าห้อง'}</strong>
-                    <p>เก็บข้อมูลไว้ติดต่อกลับเมื่อมีห้องว่างตรงกับความต้องการ</p>
-                  </div>
-                </div>
-
-                {waitingListError && (
-                  <p className="staff-form-error staff-form-error-block" role="alert">
-                    {waitingListError}
-                  </p>
-                )}
-
-                <section className="waiting-form-section">
-                  <h4 className="waiting-form-section-title">
-                    <span>1</span>
-                    ข้อมูลติดต่อ
-                  </h4>
-                  <div className="waiting-form-grid">
-                    <div className="staff-form-field">
-                      <label className="staff-form-label" htmlFor="waiting-full-name">
-                        ชื่อผู้สนใจ <span className="staff-form-required">*</span>
-                      </label>
-                      <input
-                        id="waiting-full-name"
-                        className={`staff-form-input${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
-                        maxLength={255}
-                        autoFocus
-                        autoComplete="off"
-                        placeholder="ชื่อ-นามสกุล"
-                        value={waitingListForm.full_name}
-                        onChange={(event) => updateWaitingListField('full_name', event.target.value)}
-                      />
-                      {waitingListFieldErrors.full_name && (
-                        <span className="staff-form-field-error">{waitingListFieldErrors.full_name}</span>
-                      )}
-                    </div>
-                    <div className="staff-form-field">
-                      <label className="staff-form-label" htmlFor="waiting-phone">
-                        เบอร์โทรศัพท์ <span className="staff-form-required">*</span>
-                      </label>
-                      <input
-                        id="waiting-phone"
-                        className={`staff-form-input${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={20}
-                        autoComplete="off"
-                        placeholder="เช่น 0812345678"
-                        value={waitingListForm.phone}
-                        onChange={(event) => updateWaitingListField('phone', event.target.value)}
-                      />
-                      {waitingListFieldErrors.phone && (
-                        <span className="staff-form-field-error">{waitingListFieldErrors.phone}</span>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="waiting-form-section">
-                  <h4 className="waiting-form-section-title">
-                    <span>2</span>
-                    วันที่ต้องการเข้าอยู่ <span className="staff-form-optional">(ไม่บังคับ)</span>
-                  </h4>
-                  <div className="waiting-form-movein">
-                    <ThaiDatePicker
-                      className={`staff-form-input waiting-form-date${waitingListFieldErrors.desired_move_in_date ? ' is-invalid' : ''}`}
-                      placeholder="เลือกวันที่ต้องการเข้าอยู่"
-                      value={waitingListForm.desired_move_in_date}
-                      minDate={dayKeyToDate(waitingFormTodayKey)}
-                      isClearable
-                      portalId="staff-date-portal"
-                      onChange={(value) => updateWaitingListField('desired_move_in_date', value)}
-                    />
-                    <div className="waiting-form-chips" role="group" aria-label="เลือกวันเข้าอยู่แบบเร็ว">
-                      {waitingMoveInPresets.map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          className={`waiting-form-chip${waitingListForm.desired_move_in_date === preset.value ? ' is-active' : ''}`}
-                          aria-pressed={waitingListForm.desired_move_in_date === preset.value}
-                          onClick={() =>
-                            updateWaitingListField(
-                              'desired_move_in_date',
-                              waitingListForm.desired_move_in_date === preset.value ? '' : preset.value,
-                            )
-                          }
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {waitingListForm.desired_move_in_date && (
-                    <p className="waiting-form-hint">
-                      เข้าอยู่ {formatDateOnly(waitingListForm.desired_move_in_date)} ·{' '}
-                      {describeMoveIn(waitingListForm.desired_move_in_date, waitingNow).text}
-                    </p>
-                  )}
-                  {waitingListFieldErrors.desired_move_in_date && (
-                    <span className="staff-form-field-error">{waitingListFieldErrors.desired_move_in_date}</span>
-                  )}
-                </section>
-
-                <section className="waiting-form-section">
-                  <h4 className="waiting-form-section-title">
-                    <span>3</span>
-                    ประเภทห้องที่สนใจ <span className="staff-form-optional">(ไม่บังคับ)</span>
-                  </h4>
-                  <div className="waiting-form-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
-                    {ROOM_PREFERENCE_CHIPS.map((chip) => (
-                      <button
-                        key={chip}
-                        type="button"
-                        className={`waiting-form-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
-                        aria-pressed={waitingListPreferences.includes(chip)}
-                        onClick={() => toggleRoomPreference(chip)}
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    id="waiting-room-preference"
-                    className="staff-form-input"
-                    maxLength={100}
-                    autoComplete="off"
-                    aria-label="ประเภทห้องที่สนใจ"
-                    placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
-                    value={waitingListForm.room_preference}
-                    onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
-                  />
-                </section>
-
-                <section className="waiting-form-section">
-                  <div className="staff-form-label-row">
-                    <h4 className="waiting-form-section-title">
-                      <span>4</span>
-                      <label htmlFor="waiting-note">หมายเหตุ</label> <span className="staff-form-optional">(ไม่บังคับ)</span>
-                    </h4>
-                    <span className="staff-form-counter">{waitingListForm.note.length}/500</span>
-                  </div>
-                  <textarea
-                    id="waiting-note"
-                    className="staff-form-input staff-form-textarea"
-                    rows={3}
-                    maxLength={500}
-                    placeholder="เช่น จำนวนผู้พัก งบประมาณ หรือเวลาที่สะดวกให้ติดต่อ"
-                    value={waitingListForm.note}
-                    onChange={(event) => updateWaitingListField('note', event.target.value)}
-                  />
-                </section>
-
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ยกเลิก
-                  </button>
-                  <button type="submit" className="staff-action-btn is-primary" disabled={waitingListSubmitting}>
-                    {waitingListSubmitting
-                      ? 'กำลังบันทึก...'
-                      : waitingListEditing
-                        ? 'บันทึกการแก้ไข'
-                        : 'บันทึกรายชื่อ'}
-                  </button>
-                </div>
-              </form>
+              <WaitingListForm value={waitingListForm} fieldErrors={waitingListFieldErrors} error={waitingListError} busy={waitingListSubmitting} editing={Boolean(waitingListEditing)} now={waitingNow} onChange={updateWaitingListField} onSubmit={(event) => submitWaitingListEntry(event, requestClose)} onClose={requestClose} idPrefix="staff-waiting" />
             )}
           </Modal>
         )}
@@ -7956,164 +8169,7 @@ function StaffMain() {
                   <span>{waitingList.length ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะ' : 'กด "+ เพิ่มผู้สนใจ" เพื่อบันทึกรายชื่อแรก'}</span>
                 </div>
               ) : (
-                <div className="waiting-timeline">
-                  {waitingDayGroups.map((group) => {
-                    const relativeDay =
-                      group.key === waitingTodayKey ? 'วันนี้' : group.key === waitingYesterdayKey ? 'เมื่อวาน' : null
-                    const weekday = group.date.toLocaleDateString('th-TH', { weekday: 'long' })
-                    return (
-                      <section className="waiting-day" key={group.key}>
-                        <header className="waiting-day-head">
-                          <div className="waiting-day-date">
-                            <strong>{group.date.getDate()}</strong>
-                            <small>{group.date.toLocaleDateString('th-TH', { month: 'short' })}</small>
-                          </div>
-                          <div className="waiting-day-card">
-                            <div className="waiting-day-text">
-                              <strong>{relativeDay || weekday}</strong>
-                              <span>
-                                {relativeDay ? `${weekday} ` : ''}
-                                {group.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
-                              </span>
-                            </div>
-                            <span className="waiting-day-count">{group.items.length} รายชื่อ</span>
-                          </div>
-                        </header>
-                        <div className="waiting-day-items">
-                          {group.items.map((item) => {
-                            const status = WAITING_LIST_STATUS[item.status] ? item.status : 'waiting'
-                            const preferences = splitRoomPreferences(item.room_preference)
-                            const days = daysSince(item.created_at, waitingNow)
-                            return (
-                              <div className={`waiting-day-item is-${WAITING_LIST_STATUS[status].tone}`} key={item.id}>
-                                <span className="waiting-day-dot" aria-hidden="true" />
-                                <article className={`waiting-card is-${WAITING_LIST_STATUS[status].tone}`}>
-                                  <div className="waiting-card-top">
-                                    <span className="waiting-avatar" aria-hidden="true">
-                                      {waitingInitial(item.full_name)}
-                                    </span>
-                                    <div className="waiting-card-id">
-                                      <div className="waiting-card-head">
-                                        <strong>{item.full_name}</strong>
-                                        <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
-                                          {WAITING_LIST_STATUS[status].label}
-                                        </span>
-                                      </div>
-                                      <a className="waiting-card-phone" href={`tel:${item.phone}`}>
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />
-                                        </svg>
-                                        {item.phone}
-                                      </a>
-                                    </div>
-                                    <div className={`waiting-card-days${days >= 30 ? ' is-long' : ''}${days === 0 ? ' is-new' : ''}`}>
-                                      <strong>{days === 0 ? 'ใหม่' : days}</strong>
-                                      <span>{days === 0 ? 'แจ้งวันนี้' : 'วันที่รอ'}</span>
-                                    </div>
-                                  </div>
-                                  <div className="waiting-card-body">
-                                    {item.desired_move_in_date && (
-                                      <span className={`waiting-movein is-${describeMoveIn(item.desired_move_in_date, waitingNow).tone}`}>
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M3 10.5 12 3l9 7.5" />
-                                          <path d="M5 9.5V21h14V9.5" />
-                                        </svg>
-                                        อยากเข้าอยู่ {formatDateOnly(item.desired_move_in_date)}
-                                        <small>{describeMoveIn(item.desired_move_in_date, waitingNow).text}</small>
-                                      </span>
-                                    )}
-                                    <div className="waiting-tags">
-                                      {preferences.length > 0 ? (
-                                        preferences.map((preference) => <span key={preference}>{preference}</span>)
-                                      ) : (
-                                        <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-                                      )}
-                                    </div>
-                                    {item.note && (
-                                      <div className="waiting-card-note">
-                                        <span className="waiting-card-note-icon" aria-hidden="true">
-                                          <NoteIcon size={17} strokeWidth={1.8} />
-                                        </span>
-                                        <div className="waiting-card-note-content">
-                                          <span className="waiting-card-note-label">หมายเหตุ</span>
-                                          <p>{item.note}</p>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="waiting-card-foot">
-                                    <div className="waiting-card-meta">
-                                      <span>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
-                                          <path d="M16 3v3M8 3v3M3 10h18" />
-                                        </svg>
-                                        {formatDate(item.created_at)}
-                                      </span>
-                                      <span>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <circle cx="12" cy="8" r="4" />
-                                          <path d="M4 21a8 8 0 0 1 16 0" />
-                                        </svg>
-                                        <span className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</span>
-                                      </span>
-                                    </div>
-                                    <div className="waiting-card-actions">
-                                      <button
-                                        type="button"
-                                        className="waiting-icon-btn is-view"
-                                        onClick={() => setWaitingListDetail(item)}
-                                        aria-label={`ดูรายละเอียด ${item.full_name}`}
-                                        title="ดูรายละเอียด"
-                                      >
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-                                          <circle cx="12" cy="12" r="3" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="waiting-icon-btn"
-                                        onClick={() => openWaitingListModal(item)}
-                                        aria-label={`แก้ไขข้อมูล ${item.full_name}`}
-                                        title="แก้ไข"
-                                      >
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M12 20h9" />
-                                          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="waiting-icon-btn is-danger"
-                                        onClick={() => {
-                                          setWaitingListDeleteError('')
-                                          setWaitingListDelete(item)
-                                        }}
-                                        aria-label={`ลบรายชื่อ ${item.full_name}`}
-                                        title="ลบ"
-                                      >
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                                        </svg>
-                                      </button>
-                                      <button type="button" className="waiting-detail-btn" onClick={() => setWaitingListDetail(item)}>
-                                        ดูรายละเอียด
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M9 18l6-6-6-6" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </div>
-                                </article>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </section>
-                    )
-                  })}
-                </div>
+                <WaitingListTimeline items={waitingListPageItems} now={waitingNow} onDetail={setWaitingListDetail} onEdit={openWaitingListModal} onDelete={(item) => { setWaitingListDeleteError(''); setWaitingListDelete(item) }} />
               )}
             </div>
             <StaffPagination page={currentWaitingListPage} total={filteredWaitingList.length} onChange={setWaitingListPage} />
