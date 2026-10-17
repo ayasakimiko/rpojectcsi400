@@ -14,6 +14,7 @@ import {
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
 import expenseRouter from "./ExpenseRouter.js";
+import safetyIncidentRouter from "./SafetyIncidentRouter.js";
 
 const router = Router();
 
@@ -21,6 +22,26 @@ const requireActiveOwner = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireOwnerRole, requireActiveOwner);
 router.use("/expenses", expenseRouter);
+router.use("/safety-incidents", safetyIncidentRouter);
+
+router.get("/parking/summary", async (_req, res) => {
+  try {
+    const [[{ parkedCount }]] = await getPool().query(
+      `SELECT COUNT(DISTINCT vehicle_plate) AS parkedCount
+       FROM ResidentVisitRequest
+       WHERE request_type = 'vehicle' AND status = 'approved'
+         AND start_at <= NOW() AND end_at > NOW()`,
+    );
+    const capacityText = process.env.PARKING_CAPACITY?.trim() || "";
+    const parsedCapacity = /^\d+$/.test(capacityText) ? Number(capacityText) : NaN;
+    const capacity = Number.isSafeInteger(parsedCapacity) ? parsedCapacity : null;
+    const count = Number(parkedCount);
+    return res.json({ parkedCount: count, capacity, isFull: capacity !== null && count >= capacity });
+  } catch (error) {
+    console.error("Fetch parking summary error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลที่จอดรถได้" });
+  }
+});
 
 function buildUpdate(allowedColumns, body) {
   const columns = [];

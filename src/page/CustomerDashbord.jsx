@@ -9,6 +9,8 @@ import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
+import SafetyIncidents from '../components/SafetyIncidents.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 
@@ -3437,6 +3439,8 @@ function CustomerDashbord() {
               </button>
             </li>
           ))}
+          <ResidentVisitRequests nav />
+          <SafetyIncidents nav />
         </ul>
 
         {customerTab === 'parcels' && (

@@ -1859,3 +1859,4 @@
 
 }
 
+.owner-resident-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;margin:12px 0 20px}.owner-resident-tools .owner-parking-summary{margin:0}@media(max-width:700px){.owner-resident-tools{grid-template-columns:1fr}.owner-resident-tools .safety-entry{justify-content:flex-start}}
