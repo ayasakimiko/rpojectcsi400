@@ -10,8 +10,6 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, InfoIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import ResidentVisitRequests from '../components/ResidentVisitRequests.jsx'
-import SafetyIncidents from '../components/SafetyIncidents.jsx'
 
 const WAITING_LIST_STATUS_LABEL = {
   waiting: 'รอห้องว่าง',
@@ -594,6 +592,223 @@ const INSPECTION_PHOTO_PREVIEW_COUNT = 4
 const INSPECTION_GALLERY_PAGE_SIZE = 8
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
+
+const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แจ้งแขกค้างคืน' }
+
+function useAuthHeaders() {
+  const token = sessionStorage.getItem('token')
+  return useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
+}
+
+function AdminSpecialVisitReviewNav() {
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const headers = useAuthHeaders()
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/admin/resident-visit-requests/special', { headers })
+        .then(({ data }) => setItems(data.requests || []))
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
+    [headers],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const review = async (item, decision) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.post(`/api/admin/resident-visit-requests/${item.id}/special-review`, { decision }, { headers })
+      await load()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="nav-item">
+      <button
+        type="button"
+        className="nav-link admin-tab-link"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+          load()
+        }}
+      >
+        คำขอพิเศษ{items.length ? ` (${items.length})` : ''}
+      </button>
+      {open && (
+        <div
+          className="admin-rv-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <div className="admin-rv-modal" role="dialog" aria-modal="true" aria-labelledby="admin-rv-title">
+            <button type="button" className="admin-rv-close" onClick={() => setOpen(false)} aria-label="ปิด">×</button>
+            <span className="admin-rv-kicker">RESIDENT SERVICES</span>
+            <h2 id="admin-rv-title">อนุมัติเคสพิเศษ</h2>
+            <p className="admin-rv-subtitle">ตรวจสอบเหตุผลและตัดสินใจอนุมัติหรือปฏิเสธคำขอ</p>
+            <div className="admin-rv-list">
+              {items.length === 0 ? (
+                <p className="admin-rv-empty">ไม่มีคำขอที่รอดำเนินการ</p>
+              ) : (
+                items.map((item) => (
+                  <article className="admin-rv-card" key={item.id}>
+                    <div className="admin-rv-card-head">
+                      <strong>{RESIDENT_VISIT_TYPE_LABEL[item.request_type]} · ห้อง {item.room_number}</strong>
+                      <span>รออนุมัติ</span>
+                    </div>
+                    <p>
+                      {item.request_type === 'vehicle'
+                        ? `ทะเบียน ${item.vehicle_plate}${item.vehicle_model ? ` · ${item.vehicle_model}` : ''}`
+                        : `${item.guest_name}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`}
+                    </p>
+                    <p>
+                      {new Date(item.start_at).toLocaleString('th-TH')} – {new Date(item.end_at).toLocaleString('th-TH')}
+                    </p>
+                    <p className="admin-rv-special-reason">
+                      <strong>เหตุผลขออนุมัติพิเศษ:</strong> {item.special_reason}
+                    </p>
+                    {item.note && <p>{item.note}</p>}
+                    <small>{item.first_name} {item.last_name} · {item.customer_phone}</small>
+                    <div className="admin-rv-actions">
+                      <button type="button" disabled={busy} onClick={() => review(item, 'approve')}>อนุมัติพิเศษ</button>
+                      <button type="button" className="admin-rv-deny" disabled={busy} onClick={() => review(item, 'reject')}>ปฏิเสธ</button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+            {message && <p className="admin-rv-message" role="status">{message}</p>}
+          </div>
+        </div>
+      )}
+    </li>
+  )
+}
+
+const SAFETY_INCIDENT_TYPE_LABEL = {
+  accident: 'อุบัติเหตุ',
+  security: 'ความปลอดภัย',
+  fire: 'ไฟไหม้ / ควัน',
+  medical: 'เหตุฉุกเฉินทางการแพทย์',
+  other: 'อื่น ๆ',
+}
+
+function AdminSafetyIncidentReviewNav() {
+  const [open, setOpen] = useState(false)
+  const [incidents, setIncidents] = useState([])
+  const [notes, setNotes] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const headers = useAuthHeaders()
+  const pendingCount = incidents.filter((item) => item.status === 'pending').length
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/admin/safety-incidents', { headers })
+        .then(({ data }) => setIncidents(data.incidents || []))
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ')),
+    [headers],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const markReviewed = async (incident) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.patch(`/api/admin/safety-incidents/${incident.id}/review`, { reviewNote: notes[incident.id] || '' }, { headers })
+      await load()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="nav-item">
+      <button
+        type="button"
+        className="nav-link admin-tab-link"
+        onClick={() => {
+          setOpen(true)
+          setMessage('')
+          load()
+        }}
+      >
+        ตรวจเหตุฉุกเฉิน{pendingCount ? ` (${pendingCount})` : ''}
+      </button>
+      {open && (
+        <div
+          className="admin-safety-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+        >
+          <section className="admin-safety-modal" role="dialog" aria-modal="true" aria-labelledby="admin-safety-title">
+            <button className="admin-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
+            <span className="admin-safety-eyebrow">SAFETY & SECURITY</span>
+            <h2 id="admin-safety-title">ตรวจสอบเหตุฉุกเฉิน</h2>
+            <p className="admin-safety-intro">รายการรายงานจากผู้พักอาศัยและเจ้าหน้าที่</p>
+            <div className="admin-safety-list">
+              {incidents.length === 0 ? (
+                <p className="admin-safety-empty">ยังไม่มีรายงานเหตุ</p>
+              ) : (
+                incidents.map((item) => (
+                  <article className="admin-safety-card" key={item.id}>
+                    <div className="admin-safety-card-heading">
+                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
+                      <span className={`admin-safety-status ${item.status} ${item.severity}`}>
+                        {item.status === 'pending' ? 'รอตรวจสอบ' : 'ตรวจแล้ว'}
+                        {item.severity === 'urgent' ? ' · ด่วน' : ''}
+                      </span>
+                    </div>
+                    <p>{item.description}</p>
+                    <small>
+                      {item.reporter_name} ({item.reporter_role})
+                      {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
+                    </small>
+                    {item.status === 'pending' ? (
+                      <>
+                        <textarea
+                          aria-label="บันทึกผลตรวจสอบ"
+                          placeholder="บันทึกผลหรือการดำเนินการ (ถ้ามี)"
+                          value={notes[item.id] || ''}
+                          onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })}
+                        />
+                        <button className="admin-safety-review" type="button" disabled={busy} onClick={() => markReviewed(item)}>
+                          บันทึกว่าตรวจสอบแล้ว
+                        </button>
+                      </>
+                    ) : (
+                      item.review_note && <p className="admin-safety-note">ผลตรวจสอบ: {item.review_note}</p>
+                    )}
+                  </article>
+                ))
+              )}
+            </div>
+            {message && <p className="admin-safety-message" role="status">{message}</p>}
+          </section>
+        </div>
+      )}
+    </li>
+  )
+}
 
 function AdminBackupPage() {
   const navigate = useNavigate()
@@ -2048,8 +2263,8 @@ function AdminBackupPage() {
               </button>
             </li>
           ))}
-          <ResidentVisitRequests admin nav />
-          <SafetyIncidents reviewer base="admin" nav />
+          <AdminSpecialVisitReviewNav />
+          <AdminSafetyIncidentReviewNav />
         </ul>
 
         {activeTab === 'announcements' && (

@@ -671,6 +671,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 4px;
   min-width: 0;
   line-height: 1.35;
 }
@@ -684,10 +685,42 @@
   white-space: nowrap;
 }
 
-.announcement-post-byline > span {
-  color: #8aa0b6;
-  font-size: 12px;
-  font-weight: 500;
+.announcement-post-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.announcement-post-time,
+.announcement-post-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.announcement-post-time {
+  color: #6b859e;
+}
+
+.announcement-post-time svg {
+  color: #93a8bf;
+}
+
+.announcement-post-source {
+  padding: 0 8px;
+  border: 1px solid #e3ecf8;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #5b7590;
+}
+
+.announcement-post-source svg {
+  color: #7f9bb8;
 }
 
 .announcement-post-badges {

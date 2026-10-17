@@ -134,6 +134,16 @@ function formatRelativeTime(value, now) {
   return formatAnnouncementDate(value)
 }
 
+function formatPostTime(value, now) {
+  const date = new Date(value)
+  const clock = `${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
+  const hours = (now - date.getTime()) / 3600000
+  if (hours < 24) return formatRelativeTime(value, now)
+  if (hours < 24 * 7) return `${formatRelativeTime(value, now)} · ${clock}`
+  const day = date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
+  return `${day} · ${clock}`
+}
+
 function getDaysInMonth(year, month) {
   if (!year || !month) return 31
   return new Date(Number(year), Number(month), 0).getDate()
@@ -515,11 +525,27 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                                 </span>
                                 <div className="announcement-post-byline">
                                   <strong>{item.author || 'เจ้าหน้าที่'}</strong>
-                                  <span title={`${formatAnnouncementDate(item.created_at)} น.`}>
-                                    {formatRelativeTime(item.created_at, now)}
-                                    <span aria-hidden="true"> · </span>
-                                    ประกาศจากหอพัก
-                                  </span>
+                                  <div className="announcement-post-meta">
+                                    <time
+                                      className="announcement-post-time"
+                                      dateTime={new Date(item.created_at).toISOString()}
+                                      title={`${formatAnnouncementDate(item.created_at)} น.`}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="9" />
+                                        <polyline points="12 7 12 12 15 14" />
+                                      </svg>
+                                      {formatPostTime(item.created_at, now)}
+                                    </time>
+                                    <span className="announcement-post-source">
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M3 21h18" />
+                                        <path d="M5 21V7l7-4 7 4v14" />
+                                        <path d="M9 21v-5h6v5" />
+                                      </svg>
+                                      ประกาศจากหอพัก
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="announcement-post-badges">
                                   {isNew && <span className="announcement-post-new">ใหม่</span>}

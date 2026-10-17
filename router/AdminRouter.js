@@ -18,14 +18,12 @@ import {
 import { deletePublicImages } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
-import safetyIncidentRouter from "./SafetyIncidentRouter.js";
 
 const router = Router();
 
 router.use(authenticate, requireAdminRole, createRequireActiveAccount(getPool));
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
-router.use("/safety-incidents", safetyIncidentRouter);
 
 function buildUpdate(allowedColumns, body) {
   const columns = [];
@@ -48,6 +46,39 @@ export async function getActingAdminName(pool, user) {
   const row = rows[0];
   return row ? `${row.first_name} ${row.last_name}` : null;
 }
+
+export async function listSafetyIncidents(_req, res) {
+  try {
+    const [incidents] = await getPool().query("SELECT * FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC");
+    return res.json({ incidents });
+  } catch (error) {
+    console.error("Fetch safety incidents error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายงานเหตุได้" });
+  }
+}
+
+export async function reviewSafetyIncident(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสรายงานไม่ถูกต้อง" });
+    const note = String(req.body?.reviewNote ?? "").trim();
+    if (note.length > 500) return res.status(400).json({ message: "บันทึกผลต้องไม่เกิน 500 ตัวอักษร" });
+    const pool = getPool();
+    const reviewerName = (await getActingAdminName(pool, req.user)) || req.user.role;
+    const [result] = await pool.query(
+      "UPDATE SafetyIncident SET status = 'reviewed', reviewed_by_name = ?, reviewed_at = NOW(), review_note = ? WHERE id = ? AND status = 'pending'",
+      [reviewerName, note || null, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบแล้ว" });
+    return res.json({ message: "บันทึกผลตรวจสอบแล้ว" });
+  } catch (error) {
+    console.error("Review safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกผลตรวจสอบได้" });
+  }
+}
+
+router.get("/safety-incidents", listSafetyIncidents);
+router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
 router.get("/resident-visit-requests/special", async (_req, res) => {
   try {
