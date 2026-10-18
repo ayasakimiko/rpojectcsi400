@@ -53,6 +53,14 @@ Gateway คุยกับ service ย่อยผ่าน Docker network โ�
 
 MySQL เชื่อมจากเครื่องผ่าน `localhost:3308` ส่วน container เชื่อมผ่าน `db:3306` หากใช้ MySQL บนพอร์ตอื่น ให้กำหนด `DB_PORT` ในไฟล์ `.env`
 
+phpMyAdmin เริ่มพร้อมบริการอื่นโดยอัตโนมัติ เข้าใช้งานที่ `http://localhost:8080` ด้วยชื่อผู้ใช้ `root` และรหัสผ่านจาก `DB_PASSWORD` ใน `.env` (ค่าเริ่มต้น `rootpass`) หากรันบนเซิร์ฟเวอร์ ให้เปลี่ยน `localhost` เป็น IP หรือโดเมนของเซิร์ฟเวอร์
+
+หากต้องการเปิดเฉพาะ phpMyAdmin และ MySQL โดยไม่ build backend:
+
+```bash
+docker compose up -d phpmyadmin
+```
+
 > หมายเหตุ: Dockerfile จะ copy source เข้า image ตอน build เท่านั้น (ไม่ใช่ live-reload) — แก้ `server.js` / `services/*` / `router/*` / `Database/*` แล้วต้องรัน `docker compose up -d --build` ใหม่ทุกครั้งถึงจะมีผล
 
 ### รัน backend แบบ dev (ไม่ผ่าน Docker)

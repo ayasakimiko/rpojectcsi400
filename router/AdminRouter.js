@@ -296,6 +296,142 @@ router.get("/rooms", async (req, res) => {
   }
 });
 
+router.get("/rooms/:room_number/detail", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [roomRows] = await pool.query(
+      `SELECT id, room_number, is_booked, price,
+         air_conditioner, wifi, refrigerator, bed, bathroom, cctv,
+         electricity_unit_price, water_price,
+         rental_duration_months, rental_start_date, rental_end_date,
+         prepaid_until, pending_lump_sum_months, created_at
+       FROM Room WHERE room_number = ?`,
+      [roomNumberValue],
+    );
+    const room = roomRows[0];
+    if (!room) {
+      return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    }
+
+    const [tenantRows] = await pool.query(
+      `SELECT id, first_name, last_name, phone, age, deposit_amount, created_at
+       FROM Customer
+       WHERE room_number = ? AND is_suspended = FALSE
+       ORDER BY id DESC LIMIT 1`,
+      [roomNumberValue],
+    );
+    const tenant = tenantRows[0] ?? null;
+
+    const [history] = await pool.query(
+      `SELECT b.id AS booking_id, b.created_at, b.rental_start_date, b.rental_end_date,
+         c.id AS customer_id, c.first_name, c.last_name, c.phone
+       FROM Booking b
+       JOIN Customer c ON c.id = b.customer_id
+       WHERE b.room_id = ?
+       ORDER BY b.created_at DESC, b.id DESC
+       LIMIT 6`,
+      [room.id],
+    );
+
+    let payments = [];
+    const currentBooking = tenant ? history.find((booking) => booking.customer_id === tenant.id) : null;
+    if (currentBooking) {
+      [payments] = await pool.query(
+        `SELECT id, amount, payment_date, status, type, note
+         FROM Payment WHERE booking_id = ?
+         ORDER BY payment_date DESC, created_at DESC LIMIT 6`,
+        [currentBooking.booking_id],
+      );
+    }
+
+    const [maintenanceCounts] = await pool.query(
+      `SELECT status, COUNT(*) AS count FROM MaintenanceRequest WHERE room_number = ? GROUP BY status`,
+      [roomNumberValue],
+    );
+    const [maintenance] = await pool.query(
+      `SELECT id, category, description, status, created_at, completed_at
+       FROM MaintenanceRequest WHERE room_number = ?
+       ORDER BY created_at DESC LIMIT 5`,
+      [roomNumberValue],
+    );
+
+    const [parcelRows] = await pool.query(
+      `SELECT
+         SUM(status = 'pending') AS pending,
+         COUNT(*) AS total
+       FROM Parcel WHERE room_number = ?`,
+      [roomNumberValue],
+    );
+
+    const [inspectionRows] = await pool.query(
+      `SELECT id, tenant_name, status, inspected_by_name, created_at
+       FROM MoveOutInspection WHERE room_number = ?
+       ORDER BY created_at DESC LIMIT 1`,
+      [roomNumberValue],
+    );
+
+    return res.json({
+      room,
+      tenant,
+      payments,
+      history,
+      maintenance,
+      maintenanceCounts: Object.fromEntries(maintenanceCounts.map((row) => [row.status, Number(row.count)])),
+      parcels: { pending: Number(parcelRows[0]?.pending ?? 0), total: Number(parcelRows[0]?.total ?? 0) },
+      lastInspection: inspectionRows[0] ?? null,
+    });
+  } catch (error) {
+    console.error("Admin fetch room detail error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/rooms/:room_number/history", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [bookings] = await pool.query(
+      `SELECT b.id AS booking_id, b.created_at, cu.id AS customer_id, cu.first_name, cu.last_name
+       FROM Booking b
+       JOIN Room r ON r.id = b.room_id
+       JOIN Customer cu ON cu.id = b.customer_id
+       WHERE r.room_number = ?
+       ORDER BY b.created_at DESC`,
+      [roomNumberValue],
+    );
+
+    const bookingIds = bookings.map((booking) => booking.booking_id);
+    let payments = [];
+    if (bookingIds.length > 0) {
+      [payments] = await pool.query(
+        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
+         FROM Payment WHERE booking_id IN (?)
+         ORDER BY payment_date DESC, created_at DESC`,
+        [bookingIds],
+      );
+    }
+
+    const rentalHistory = bookings.map((booking) => ({
+      ...booking,
+      payments: payments.filter((payment) => payment.booking_id === booking.booking_id),
+    }));
+
+    return res.json({ rentalHistory });
+  } catch (error) {
+    console.error("Admin fetch room history error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.post("/rooms", async (req, res) => {
   try {
     const {

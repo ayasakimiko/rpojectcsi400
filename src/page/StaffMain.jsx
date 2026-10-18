@@ -277,7 +277,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
   )
 }
 
-function WaitingListDetails({ item, now, vacantRooms = [], onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
+function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
   const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
   const waitingNow = now
   const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
@@ -399,6 +399,9 @@ function WaitingListDetails({ item, now, vacantRooms = [], onEdit, onStatusChang
       <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
 
       <div className="waiting-ui-form-actions waiting-detail-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ปิด
+        </button>
         <button
           type="button"
           className="waiting-ui-action-btn is-primary"
@@ -2212,7 +2215,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
   const tenantName = parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
   return (
     <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="parcel-detail">
-      {() => (
+      {(requestClose) => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-transfer-hero">
@@ -2318,6 +2321,13 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
             />
           </div>
 
+          <div className="staff-transfer-footer">
+            <div className="staff-form-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                ปิด
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </Modal>
@@ -2363,9 +2373,9 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
     <Modal
       title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[request.type] || 'คำขอ'}`}
       onClose={onClose}
-      variant={isMove ? 'transfer-detail' : 'transfer'}
+      variant={isMove || request.type === 'moveout' ? 'transfer-detail' : 'transfer'}
     >
-      {() => (
+      {(requestClose) => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-req-detail-head">
@@ -2404,9 +2414,16 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
                 </div>
               </div>
             ) : (
-              <div className="staff-req-detail-room">
-                <span>ห้อง</span>
-                <strong>{request.room_number}</strong>
+              <div className="staff-req-detail-room is-summary">
+                <span className="staff-req-detail-room-icon"><DoorIcon size={22} /></span>
+                <div className="staff-req-detail-room-identity">
+                  <small>{request.type === 'moveout' ? 'ห้องที่แจ้งย้ายออก' : 'ห้องพัก'}</small>
+                  <strong>{request.room_number || '-'}</strong>
+                </div>
+                <div className="staff-req-detail-room-tenant">
+                  <small>ผู้เช่า</small>
+                  <span>{[request.first_name, request.last_name].filter(Boolean).join(' ') || '-'}</span>
+                </div>
               </div>
             )}
           </div>
@@ -2607,6 +2624,13 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
             />
           </div>
 
+          <div className="staff-transfer-footer">
+            <div className="staff-form-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                ปิด
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </Modal>
@@ -3546,7 +3570,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
           onClose={() => setNotice(null)}
           variant="confirm"
         >
-          {() => (
+          {(requestClose) => (
             <div className="staff-confirm-body">
               <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
                 <svg
@@ -3569,6 +3593,11 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                 </svg>
               </div>
               <StaffNoticeMessage message={notice.message} type={notice.type} />
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
             </div>
           )}
         </Modal>
@@ -4333,7 +4362,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
 
       {detail && (
         <Modal title="รายละเอียดคำขอรถ" onClose={() => setDetail(null)} variant="detail">
-          {() => {
+          {(requestClose) => {
             const info = getStaffVisitPhase(detail, now)
             const canManage = ['pending', 'approved'].includes(detail.status) && detail.request_type === 'vehicle'
             const reviewer = detail.admin_reviewed_by_name || detail.reviewed_by_name
@@ -4459,6 +4488,9 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                       </>
                     ) : (
                       <>
+                        <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                          ปิด
+                        </button>
                         {canManage && (
                           <button type="button" className="staff-action-btn is-primary" onClick={() => openEdit(detail)}>
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4805,7 +4837,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
 
       {notice && (
         <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
-          {() => (
+          {(requestClose) => (
             <div className="staff-confirm-body">
               <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4813,6 +4845,11 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                 </svg>
               </div>
               <StaffNoticeMessage message={notice.message} type={notice.type} />
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
             </div>
           )}
         </Modal>
@@ -5467,7 +5504,7 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
 
       {notice && (
         <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
-          {() => (
+          {(requestClose) => (
             <div className="staff-confirm-body">
               <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -5475,6 +5512,11 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
                 </svg>
               </div>
               <StaffNoticeMessage message={notice.message} type={notice.type} />
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
             </div>
           )}
         </Modal>
@@ -7373,7 +7415,7 @@ function StaffMain() {
 
         {notifDetail && (
           <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
-            {() => (
+            {(requestClose) => (
               <div className="staff-confirm-body">
                 <div className={`staff-confirm-icon is-${notifDetail.tone}`}>
                   <svg
@@ -7415,6 +7457,11 @@ function StaffMain() {
                   </div>
                 )}
                 <StaffRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
               </div>
             )}
           </Modal>
@@ -7422,7 +7469,7 @@ function StaffMain() {
 
         {actionSuccess && (
           <Modal title="สำเร็จ" onClose={() => setActionSuccess('')} variant="confirm">
-            {() => (
+            {(requestClose) => (
               <div className="staff-confirm-body">
                 <div className="staff-confirm-icon is-success">
                   <svg
@@ -7438,6 +7485,11 @@ function StaffMain() {
                   </svg>
                 </div>
                 <StaffNoticeMessage message={actionSuccess} />
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
               </div>
             )}
           </Modal>
@@ -10261,7 +10313,7 @@ function StaffMain() {
 
       {maintenanceDetail && (
         <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="detail">
-          {() => (
+          {(requestClose) => (
             <div className="staff-confirm-body">
               <div className="staff-confirm-details">
                 <div className="staff-confirm-detail-row">
@@ -10325,6 +10377,11 @@ function StaffMain() {
                   </div>
                 </div>
               )}
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
+              </div>
             </div>
           )}
         </Modal>
