@@ -23,7 +23,7 @@ export function InspectionRoomCell({ roomNumber, targetRoomNumber, isMoveRoom })
           </svg>
           <span className="insp-room-pill is-target">{targetRoomNumber || '-'}</span>
         </span>
-        <small>ห้องเดิม → ห้องใหม่</small>
+        <small>ตรวจก่อนย้ายห้อง</small>
       </div>
     )
   }
@@ -33,6 +33,7 @@ export function InspectionRoomCell({ roomNumber, targetRoomNumber, isMoveRoom })
         <HomeIcon />
         {roomNumber}
       </span>
+      <small>ตรวจย้ายออก</small>
     </div>
   )
 }

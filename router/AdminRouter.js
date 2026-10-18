@@ -10,6 +10,8 @@ import {
   isValidMoney,
   MOVE_OUT_INSPECTION_STATUSES,
   normalizePersonUpdate,
+  parseMoveOutInspectionInput,
+  parseMoveOutInspectionUpdate,
   parsePage,
   parseSearch,
   parseWaitingListInput,
@@ -17,7 +19,7 @@ import {
   validatePersonUpdateInput,
   validateRoomFields,
 } from "../middleware/validation.js";
-import { deletePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
+import { deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
@@ -176,6 +178,7 @@ router.get("/move-out-inspections", async (_req, res) => {
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       WHERE moi.hidden_at IS NULL
        ORDER BY moi.created_at DESC, moi.id DESC`,
     );
     return res.json({
@@ -183,6 +186,140 @@ router.get("/move-out-inspections", async (_req, res) => {
     });
   } catch (error) {
     console.error("Fetch move-out inspections error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-out-inspections/move-room-candidates", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [requests] = await pool.query(
+      `SELECT tr.id, tr.room_number, tr.target_room_number, tr.status, tr.created_at, tr.preferred_move_date,
+              c.first_name, c.last_name, c.phone
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+       WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND moi.id IS NULL
+       ORDER BY tr.created_at ASC, tr.id ASC`,
+    );
+    return res.json({ requests });
+  } catch (error) {
+    console.error("Fetch move-room inspection candidates error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/move-out-inspections", async (req, res) => {
+  let photos = [];
+  let connection;
+  try {
+    const { error, value } = parseMoveOutInspectionInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    const tenantRequestId = Number(req.body?.tenant_request_id);
+    if (!isPositiveId(tenantRequestId)) {
+      return res.status(400).json({ message: "กรุณาเลือกคำขอย้ายห้องที่ต้องการตรวจ" });
+    }
+
+    const pool = getPool();
+    const adminName = await getActingAdminName(pool, req.user);
+    photos = await savePublicImages("move-out-inspections", value.photos);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [requestRows] = await connection.query(
+      `SELECT tr.id, tr.room_number, tr.type, tr.status, c.first_name, c.last_name, c.phone
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       WHERE tr.id = ? FOR UPDATE`,
+      [tenantRequestId],
+    );
+    const tenantRequest = requestRows[0];
+    if (
+      !tenantRequest
+      || tenantRequest.type !== "move_room"
+      || !["pending", "in_progress"].includes(tenantRequest.status)
+      || tenantRequest.room_number !== value.roomNumber
+    ) {
+      await connection.rollback();
+      await deletePublicImages(photos.map((photo) => photo.url));
+      return res.status(409).json({ message: "ไม่พบคำขอย้ายห้องที่ตรงกับห้องที่ตรวจ" });
+    }
+    const [existing] = await connection.query(`SELECT id FROM MoveOutInspection WHERE tenant_request_id = ?`, [tenantRequestId]);
+    if (existing.length > 0) {
+      await connection.rollback();
+      await deletePublicImages(photos.map((photo) => photo.url));
+      return res.status(409).json({ message: "มีผลตรวจสำหรับคำขอนี้แล้ว กรุณาแก้ไขผลตรวจเดิม" });
+    }
+
+    const [result] = await connection.query(
+      `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, photos, inspected_by_name, status, reviewed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reviewed', NOW())`,
+      [
+        value.roomNumber,
+        tenantRequestId,
+        `${tenantRequest.first_name} ${tenantRequest.last_name}`,
+        tenantRequest.phone || null,
+        JSON.stringify(value.checklist),
+        value.damageNote,
+        JSON.stringify(photos),
+        adminName,
+      ],
+    );
+    await connection.query(
+      `UPDATE TenantRequest
+       SET status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END,
+           accepted_at = COALESCE(accepted_at, NOW()),
+           accepted_by_name = COALESCE(accepted_by_name, ?)
+       WHERE id = ?`,
+      [adminName, tenantRequestId],
+    );
+    await connection.commit();
+    return res.status(201).json({ message: "บันทึกผลตรวจห้องสำเร็จ", inspectionId: result.insertId });
+  } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
+    await deletePublicImages(photos.map((photo) => photo.url));
+    console.error("Admin create move-room inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
+  }
+});
+
+router.put("/move-out-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    const existingPhotos = JSON.parse(rows[0].photos);
+    const { error, value } = parseMoveOutInspectionUpdate(req.body ?? {}, existingPhotos);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const savedPhotos = await savePublicImages("move-out-inspections", value.newPhotos);
+    try {
+      await pool.query(
+        `UPDATE MoveOutInspection SET checklist = ?, damage_note = ?, photos = ?, updated_at = NOW() WHERE id = ?`,
+        [JSON.stringify(value.checklist), value.damageNote, JSON.stringify([...value.keptPhotos, ...savedPhotos]), inspectionId],
+      );
+    } catch (updateError) {
+      await deletePublicImages(savedPhotos.map((photo) => photo.url));
+      throw updateError;
+    }
+    const keptUrls = new Set(value.keptPhotos.map((photo) => photo.url));
+    await deletePublicImages(existingPhotos.filter((photo) => !keptUrls.has(photo.url)).map((photo) => photo.url));
+    return res.json({ message: "แก้ไขผลตรวจห้องสำเร็จ" });
+  } catch (error) {
+    console.error("Admin update move-out inspection error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
@@ -201,7 +338,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
-       WHERE moi.id = ?`,
+       WHERE moi.id = ? AND moi.hidden_at IS NULL`,
       [inspectionId],
     );
     const inspection = rows[0];
@@ -229,7 +366,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [inspections] = await pool.query(`SELECT tenant_request_id FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    const [inspections] = await pool.query(`SELECT tenant_request_id FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
     if (!inspections[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
@@ -258,12 +395,17 @@ router.delete("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
-    await pool.query(`DELETE FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
-    await deletePublicImages(JSON.parse(rows[0].photos).map((photo) => photo.url));
+    const adminName = await getActingAdminName(pool, req.user);
+    await pool.query(
+      `UPDATE MoveOutInspection
+       SET hidden_at = NOW(), hidden_by_name = ?, hidden_tenant_request_id = tenant_request_id, tenant_request_id = NULL
+       WHERE id = ? AND hidden_at IS NULL`,
+      [adminName, inspectionId],
+    );
     return res.json({ message: "ลบผลตรวจห้องสำเร็จ" });
   } catch (error) {
     console.error("Delete move-out inspection error:", error);
@@ -371,7 +513,7 @@ router.get("/rooms/:room_number/detail", async (req, res) => {
 
     const [inspectionRows] = await pool.query(
       `SELECT id, tenant_name, status, inspected_by_name, created_at
-       FROM MoveOutInspection WHERE room_number = ?
+       FROM MoveOutInspection WHERE room_number = ? AND hidden_at IS NULL
        ORDER BY created_at DESC LIMIT 1`,
       [roomNumberValue],
     );
@@ -1147,7 +1289,7 @@ router.get("/moveouts/:id", async (req, res) => {
     const [inspectionRows] = await pool.query(
       `SELECT id, status, damage_note, inspected_by_name, created_at, checklist, JSON_LENGTH(photos) AS photo_count
        FROM MoveOutInspection
-       WHERE room_number = ? AND tenant_request_id IS NULL AND tenant_name = ?
+       WHERE room_number = ? AND tenant_request_id IS NULL AND hidden_at IS NULL AND tenant_name = ?
        ORDER BY created_at DESC, id DESC
        LIMIT 1`,
       [moveout.room_number, `${moveout.first_name} ${moveout.last_name}`],

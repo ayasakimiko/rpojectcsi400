@@ -652,3 +652,13 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'hidden_at'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `hidden_at` DATETIME NULL, ADD COLUMN `hidden_by_name` VARCHAR(255) NULL, ADD COLUMN `hidden_tenant_request_id` INT NULL'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
