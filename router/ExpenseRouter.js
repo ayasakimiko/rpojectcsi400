@@ -35,8 +35,10 @@ router.get("/", async (req, res) => {
     if (dateError) return res.status(400).json({ message: dateError });
 
     const pool = getPool();
-    const page = parsePage(req.query.page);
-    const offset = (page - 1) * EXPENSE_LOG_PAGE_SIZE;
+    const requestedPageSize = Number(req.query.pageSize);
+    const pageSize = Number.isSafeInteger(requestedPageSize) && requestedPageSize >= 1 && requestedPageSize <= EXPENSE_LOG_PAGE_SIZE
+      ? requestedPageSize
+      : EXPENSE_LOG_PAGE_SIZE;
 
     const conditions = [];
     const params = [];
@@ -51,13 +53,16 @@ router.get("/", async (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const [countRows] = await pool.query(`SELECT COUNT(*) AS total, COALESCE(SUM(amount), 0) AS totalAmount FROM Expense ${whereClause}`, params);
+    const totalPages = Math.max(1, Math.ceil(countRows[0].total / pageSize));
+    const page = Math.min(parsePage(req.query.page), totalPages);
+    const offset = (page - 1) * pageSize;
 
     const [expenses] = await pool.query(
       `SELECT id, category, description, amount, expense_date, recorded_by_name, created_at
        FROM Expense ${whereClause}
-       ORDER BY expense_date DESC, created_at DESC
+       ORDER BY expense_date DESC, created_at DESC, id DESC
        LIMIT ? OFFSET ?`,
-      [...params, EXPENSE_LOG_PAGE_SIZE, offset],
+      [...params, pageSize, offset],
     );
 
     const [byCategory] = await pool.query(
@@ -74,7 +79,7 @@ router.get("/", async (req, res) => {
       total: countRows[0].total,
       totalAmount: countRows[0].totalAmount,
       page,
-      pageSize: EXPENSE_LOG_PAGE_SIZE,
+      pageSize,
     });
   } catch (error) {
     console.error("Fetch expenses error:", error);

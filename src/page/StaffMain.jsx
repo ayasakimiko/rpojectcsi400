@@ -99,6 +99,8 @@ function WaitingDetailIcon({ type, size = 16 }) {
     user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
     edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+    wallet: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
+    tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5Z" />,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1287,9 +1289,10 @@ function localDayKey(value) {
 
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
-const REQUEST_PREVIEW_COUNT = 3
+const TENANT_GRID_COUNT = 9
 const ROOMS_PER_PAGE = 5
 const STAFF_LIST_PAGE_SIZE = 10
+const EXPENSES_PAGE_SIZE = 8
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 30
 const PAYMENT_HISTORY_PAGE_SIZE = 5
@@ -1615,6 +1618,62 @@ function getTenantRequestFacts(request) {
   return facts
 }
 
+const DEFAULT_HOME_REQUEST_FILTER = { search: '', status: 'all', sort: 'oldest' }
+
+const TENANT_HOME_EXTRA_FILTERS = {
+  renew: [
+    {
+      key: 'duration',
+      label: 'ระยะเวลา',
+      all: 'ทุกระยะเวลา',
+      options: Object.entries(RENEW_DURATION_LABEL),
+      match: (request, value) => String(request.renew_duration_months) === value,
+    },
+    {
+      key: 'payment',
+      label: 'การชำระเงิน',
+      all: 'ทุกรูปแบบการชำระ',
+      options: Object.entries(RENEW_PAYMENT_TYPE_LABEL),
+      match: (request, value) => request.renew_payment_type === value,
+    },
+  ],
+  moveout: [],
+  move_room: [
+    {
+      key: 'inspection',
+      label: 'การตรวจห้อง',
+      all: 'ทุกสถานะการตรวจห้อง',
+      options: [
+        ['done', 'ตรวจห้องแล้ว'],
+        ['waiting', 'รอตรวจสภาพห้อง'],
+      ],
+      match: (request, value) => (value === 'done') === Boolean(request.inspection_id),
+    },
+    {
+      key: 'reason',
+      label: 'เหตุผล',
+      all: 'ทุกเหตุผล',
+      options: Object.entries(MOVE_ROOM_REASON_LABEL),
+      match: (request, value) => request.move_reason === value,
+    },
+  ],
+}
+
+const TENANT_HOME_CARDS = [
+  { type: 'renew', title: 'คำขอต่อสัญญา' },
+  { type: 'moveout', title: 'คำขอแจ้งย้ายออก' },
+  { type: 'move_room', title: 'คำขอย้ายห้อง' },
+]
+
+const HOME_SECTIONS = [
+  { key: 'rooms', label: 'ห้องพัก' },
+  { key: 'renew', label: 'ต่อสัญญา' },
+  { key: 'moveout', label: 'แจ้งย้ายออก' },
+  { key: 'move_room', label: 'ย้ายห้อง' },
+  { key: 'maintenance', label: 'แจ้งซ่อม' },
+  { key: 'expenses', label: 'รายจ่าย' },
+]
+
 const TENANT_TYPE_SEGMENTS = [
   { key: 'all', label: 'ทั้งหมด' },
   { key: 'renew', label: 'ต่อสัญญา' },
@@ -1738,71 +1797,187 @@ function TenantRequestFilters({
   )
 }
 
-function TenantRequestCard({ request, steps = [], children }) {
-  const facts = getTenantRequestFacts(request)
+function MoveRoomRequestBody({ request }) {
+  const open = ['pending', 'in_progress'].includes(request.status)
+  const details = [
+    { key: 'phone', icon: 'phone', label: 'โทร', value: request.phone || '-' },
+    { key: 'reason', icon: 'info', label: 'เหตุผล', value: request.move_reason ? MOVE_ROOM_REASON_LABEL[request.move_reason] || request.move_reason : '-' },
+    { key: 'date', icon: 'calendar', label: 'ต้องการย้าย', value: request.preferred_move_date ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ' },
+  ]
   return (
-    <article className={`staff-req-card type-${request.type}`}>
-      <div className="staff-req-head">
-        <span className={`staff-badge type-${request.type}`}>
-          {TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
+    <>
+      <div className="staff-req-route">
+        <div className="staff-req-route-room">
+          <small>ห้องเดิม</small>
+          <strong>{request.room_number}</strong>
+        </div>
+        <span className="staff-req-route-arrow" aria-hidden="true">
+          <RouteArrowIcon />
         </span>
-        <span className="staff-req-room">
-          ห้อง {request.room_number}
-          {request.type === 'move_room' && request.target_room_number && (
-            <>
-              <RouteArrowIcon />
-              {request.target_room_number}
-            </>
-          )}
+        <div className="staff-req-route-room is-target">
+          <small>ห้องใหม่</small>
+          <strong>{request.target_room_number || '-'}</strong>
+        </div>
+        {open && (
+          <span className={`staff-req-route-check ${request.inspection_id ? 'is-done' : 'is-waiting'}`}>
+            {request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}
+          </span>
+        )}
+      </div>
+      <TenantRequestDetails details={details} />
+    </>
+  )
+}
+
+const MAINTENANCE_NEXT_STEP = {
+  pending: { label: 'ขั้นต่อไป: รับเรื่อง', tone: 'is-waiting' },
+  in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'is-info' },
+}
+
+const MOVEOUT_NEXT_STEP = {
+  pending: 'รับเรื่อง',
+  in_progress: 'ตรวจห้องและอนุมัติ',
+}
+
+function MoveoutRequestBody({ request }) {
+  const nextStep = MOVEOUT_NEXT_STEP[request.status]
+  return (
+    <>
+      <div className="staff-req-route">
+        <div className="staff-req-route-room is-target">
+          <small>ห้องที่แจ้งย้ายออก</small>
+          <strong>{request.room_number}</strong>
+        </div>
+      </div>
+      <TenantRequestDetails
+        details={[
+          { key: 'phone', icon: 'phone', label: 'โทร', value: request.phone || '-' },
+          { key: 'created', icon: 'clock', label: 'แจ้งเมื่อ', value: `${formatDateTime(request.created_at)} น.` },
+          ...(nextStep ? [{ key: 'next', icon: 'info', label: 'ขั้นต่อไป', value: nextStep }] : []),
+        ]}
+      />
+    </>
+  )
+}
+
+function TenantRequestDetails({ details }) {
+  return (
+    <dl className="staff-req-details">
+      {details.map((detail) => (
+        <div key={detail.key} className="staff-req-detail">
+          <dt>
+            <WaitingDetailIcon type={detail.icon} size={15} />
+            {detail.label}
+          </dt>
+          <dd>{detail.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+const RENEW_NEXT_STEP = {
+  pending: { label: 'ขั้นต่อไป: อนุมัติต่อสัญญา', tone: 'is-waiting' },
+  in_progress: { label: 'ขั้นต่อไป: อนุมัติต่อสัญญา', tone: 'is-info' },
+}
+
+function RenewRequestBody({ request }) {
+  const nextStep = RENEW_NEXT_STEP[request.status]
+  return (
+    <>
+      <div className="staff-req-route">
+        <div className="staff-req-route-room is-target">
+          <small>ห้องที่ขอต่อสัญญา</small>
+          <strong>{request.room_number}</strong>
+        </div>
+        {nextStep && <span className={`staff-req-route-check ${nextStep.tone}`}>{nextStep.label}</span>}
+      </div>
+      <TenantRequestDetails
+        details={[
+          { key: 'phone', icon: 'phone', label: 'โทร', value: request.phone || '-' },
+          {
+            key: 'duration',
+            icon: 'calendar',
+            label: 'ระยะเวลา',
+            value: RENEW_DURATION_LABEL[request.renew_duration_months] || (request.renew_duration_months ? `${request.renew_duration_months} เดือน` : '-'),
+          },
+          {
+            key: 'payment',
+            icon: 'wallet',
+            label: 'การชำระเงิน',
+            value: RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type || '-',
+          },
+        ]}
+      />
+    </>
+  )
+}
+
+const TENANT_REQUEST_BODY = {
+  renew: RenewRequestBody,
+  moveout: MoveoutRequestBody,
+  move_room: MoveRoomRequestBody,
+}
+
+const TENANT_REQUEST_NOTE_LABEL = {
+  moveout: 'เหตุผลการย้ายออก',
+}
+
+function TenantRequestCard({ request, steps = [], children }) {
+  const Body = TENANT_REQUEST_BODY[request.type] || RenewRequestBody
+  return (
+    <article className={`staff-req-card type-${request.type} is-structured`}>
+      <div className="staff-req-head is-identity">
+        <span className="staff-req-avatar" aria-hidden="true">
+          <WaitingDetailIcon type="user" size={18} />
         </span>
+        <div className="staff-req-identity">
+          <strong>
+            {request.first_name} {request.last_name}
+          </strong>
+          <span className={`staff-badge type-${request.type}`}>{TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}</span>
+        </div>
         <span className={`staff-badge status-${request.status} staff-req-status`}>
           {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
         </span>
       </div>
-      <div className="staff-req-tenant">
-        <strong>
-          {request.first_name} {request.last_name}
-        </strong>
-        {request.phone && <span>โทร {request.phone}</span>}
-      </div>
-      {facts.length > 0 && (
-        <div className="staff-req-facts">
-          {facts.map((fact) => (
-            <span key={fact.label} className={`staff-req-fact${fact.tone ? ` is-${fact.tone}` : ''}`}>
-              {fact.label}
-            </span>
-          ))}
+      <Body request={request} />
+      {request.note && (
+        <div className="staff-req-note">
+          <span className="staff-req-note-label">{TENANT_REQUEST_NOTE_LABEL[request.type] || 'หมายเหตุ'}</span>
+          <p>{request.note}</p>
         </div>
       )}
-      {request.note && (
-        <p className="staff-req-note">
-          <span>หมายเหตุ</span> {request.note}
-        </p>
-      )}
-      <div className="staff-req-footer">
-        <ol className="staff-req-meta">
-          {steps.map((step) => (
-            <li key={step.key} className={`staff-req-meta-step${step.tone ? ` is-${step.tone}` : ''}`}>
-              <span className="staff-req-meta-dot" aria-hidden="true" />
-              <span className="staff-req-meta-label">
-                {step.label}
-                {step.by && <strong className="staff-actor"> {step.by}</strong>}
-              </span>
-              <time dateTime={step.date}>
-                {new Date(step.date).toLocaleString('th-TH', {
-                  year: '2-digit',
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </time>
-            </li>
-          ))}
-        </ol>
-        <div className="staff-req-actions">{children}</div>
-      </div>
+      <TenantRequestCardFooter steps={steps}>{children}</TenantRequestCardFooter>
     </article>
+  )
+}
+
+function TenantRequestCardFooter({ steps, children }) {
+  return (
+    <div className="staff-req-footer">
+      <ol className="staff-req-meta">
+        {steps.map((step) => (
+          <li key={step.key} className={`staff-req-meta-step${step.tone ? ` is-${step.tone}` : ''}`}>
+            <span className="staff-req-meta-dot" aria-hidden="true" />
+            <span className="staff-req-meta-label">
+              {step.label}
+              {step.by && <strong className="staff-actor"> {step.by}</strong>}
+            </span>
+            <time dateTime={step.date}>
+              {new Date(step.date).toLocaleString('th-TH', {
+                year: '2-digit',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </time>
+          </li>
+        ))}
+      </ol>
+      <div className="staff-req-actions">{children}</div>
+    </div>
   )
 }
 
@@ -2214,7 +2389,7 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
     <Modal
       title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[request.type] || 'คำขอ'}`}
       onClose={onClose}
-      variant={isMove || request.type === 'moveout' ? 'transfer-detail' : 'transfer'}
+      variant="transfer-detail"
     >
       {(requestClose) => (
         <div className="staff-transfer-body">
@@ -2264,6 +2439,12 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
                 <div className="staff-req-detail-room-tenant">
                   <small>ผู้เช่า</small>
                   <span>{[request.first_name, request.last_name].filter(Boolean).join(' ') || '-'}</span>
+                  {request.phone && (
+                    <em className="staff-req-detail-room-phone">
+                      <WaitingDetailIcon type="phone" size={13} />
+                      {request.phone}
+                    </em>
+                  )}
                 </div>
               </div>
             )}
@@ -5525,6 +5706,58 @@ function StaffMain() {
 
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
+  const [homeSection, setHomeSection] = useState('rooms')
+  const [homePages, setHomePages] = useState({})
+  const [homeRequestFilters, setHomeRequestFilters] = useState({})
+  const updateHomeRequestFilter = (type, patch) => {
+    setHomeRequestFilters((current) => ({ ...current, [type]: { ...current[type], ...patch } }))
+    setHomePages((current) => ({ ...current, [type]: 1 }))
+  }
+  const filterHomeRequests = (type, items) => {
+    const filters = { ...DEFAULT_HOME_REQUEST_FILTER, ...homeRequestFilters[type] }
+    const keyword = filters.search.trim().toLowerCase()
+    const list = items.filter((request) => {
+      if (filters.status !== 'all' && request.status !== filters.status) return false
+      const extraMismatch = (TENANT_HOME_EXTRA_FILTERS[type] || []).some(
+        (extra) => filters[extra.key] && filters[extra.key] !== 'all' && !extra.match(request, filters[extra.key]),
+      )
+      if (extraMismatch) return false
+      if (!keyword) return true
+      return (
+        String(request.room_number).includes(keyword) ||
+        String(request.target_room_number || '').includes(keyword) ||
+        `${request.first_name} ${request.last_name}`.toLowerCase().includes(keyword) ||
+        Boolean(request.phone?.includes(keyword))
+      )
+    })
+    return { filters, list: filters.sort === 'newest' ? list.reverse() : list }
+  }
+  const getHomePage = (section, total) =>
+    Math.min(homePages[section] || 1, Math.max(1, Math.ceil(total / TENANT_GRID_COUNT)))
+  const renderHomePager = (section, total) => {
+    const totalPages = Math.ceil(total / TENANT_GRID_COUNT)
+    if (totalPages <= 1) return null
+    const page = getHomePage(section, total)
+    const goTo = (next) => setHomePages((current) => ({ ...current, [section]: next }))
+    return (
+      <div className="staff-pagination">
+        <span className="staff-pagination-info">
+          แสดง {(page - 1) * TENANT_GRID_COUNT + 1}-{Math.min(page * TENANT_GRID_COUNT, total)} จาก {total} รายการ
+        </span>
+        <div className="staff-pagination-controls">
+          <button type="button" className="staff-action-btn is-ghost" disabled={page <= 1} onClick={() => goTo(page - 1)}>
+            ก่อนหน้า
+          </button>
+          <span className="staff-pagination-page">
+            หน้า {page} / {totalPages}
+          </span>
+          <button type="button" className="staff-action-btn is-ghost" disabled={page >= totalPages} onClick={() => goTo(page + 1)}>
+            ถัดไป
+          </button>
+        </div>
+      </div>
+    )
+  }
   const [tabFocus, setTabFocus] = useState(null)
   const [seenTabKeys, setSeenTabKeys] = useState(() => {
     try {
@@ -5540,6 +5773,7 @@ function StaffMain() {
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [urgentSafetyCount, setUrgentSafetyCount] = useState(0)
   const [pendingSafetyIncidents, setPendingSafetyIncidents] = useState([])
+  const [safetyStatusCounts, setSafetyStatusCounts] = useState({ reviewed: 0, cancelled: 0 })
   const [pendingVisitRequests, setPendingVisitRequests] = useState([])
   const [pendingSlips, setPendingSlips] = useState([])
 
@@ -5574,6 +5808,10 @@ function StaffMain() {
           setPendingSafetyCount(pending.length)
           setUrgentSafetyCount(pending.filter((item) => item.severity === 'urgent').length)
           setPendingSafetyIncidents(pending)
+          setSafetyStatusCounts({
+            reviewed: (data.incidents || []).filter((item) => item.status === 'reviewed').length,
+            cancelled: (data.incidents || []).filter((item) => item.status === 'cancelled').length,
+          })
         })
         .catch(() => {})
     }
@@ -6033,6 +6271,7 @@ function StaffMain() {
   const [expensesError, setExpensesError] = useState('')
   const [expensesPage, setExpensesPage] = useState(1)
   const [expensesTotalPages, setExpensesTotalPages] = useState(1)
+  const [expensesTotal, setExpensesTotal] = useState(0)
   const [expenseModal, setExpenseModal] = useState(null)
   const [expenseDelete, setExpenseDelete] = useState(null)
   const [expenseDeleting, setExpenseDeleting] = useState(false)
@@ -6042,12 +6281,15 @@ function StaffMain() {
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
 
   const loadExpenses = (page = 1) => {
+    setExpensesLoading(true)
+    setExpensesError('')
     return axios
-      .get('/api/staff/expenses', { headers: authHeaders(), params: { page } })
+      .get('/api/staff/expenses', { headers: authHeaders(), params: { page, pageSize: EXPENSES_PAGE_SIZE } })
       .then(({ data }) => {
         setExpenses(data.expenses)
         setExpensesPage(data.page)
-        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20))))
+        setExpensesTotal(data.total || 0)
+        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || EXPENSES_PAGE_SIZE))))
         setExpensesError('')
       })
       .catch((err) => {
@@ -6455,28 +6697,55 @@ function StaffMain() {
   const renderMaintenanceRequestItem = (request) => {
     const key = `maintenance-${request.id}`
     const isProcessing = processingRequestKey === key
+    const nextStep = MAINTENANCE_NEXT_STEP[request.status]
     return (
-      <div key={key} className="staff-request-item is-maintenance">
-        <div className="staff-request-main">
-          <div className="staff-request-headline">
-            <span className="staff-badge type-maintenance">แจ้งซ่อม</span>
-            <span className="staff-request-room">ห้อง {request.room_number}</span>
-            <span className="staff-request-tenant">
+      <article key={key} className="staff-req-card type-maintenance is-structured">
+        <div className="staff-req-head is-identity">
+          <span className="staff-req-avatar" aria-hidden="true">
+            <WaitingDetailIcon type="user" size={18} />
+          </span>
+          <div className="staff-req-identity">
+            <strong>
               {request.first_name} {request.last_name}
-            </span>
+            </strong>
+            <span className="staff-badge type-maintenance">แจ้งซ่อม</span>
           </div>
-          <div className="staff-request-meta">
-            <span>{MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ'}</span>
-            <span>{MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้'}</span>
-            {request.contact_phone && <span>โทร {request.contact_phone}</span>}
-          </div>
-          <p className="staff-request-note">{request.description}</p>
-          <p className="staff-request-date is-reported">
-            <span className="staff-request-date-label">แจ้งซ่อม</span>
-            <span className="staff-request-date-value">{formatDateTime(request.created_at)}</span>
-          </p>
+          <span className={`staff-badge status-${request.status} staff-req-status`}>
+            {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
+          </span>
         </div>
-        <div className="staff-row-actions">
+        <div className="staff-req-route">
+          <div className="staff-req-route-room is-target">
+            <small>ห้องที่แจ้งซ่อม</small>
+            <strong>{request.room_number}</strong>
+          </div>
+          {nextStep && <span className={`staff-req-route-check ${nextStep.tone}`}>{nextStep.label}</span>}
+        </div>
+        <TenantRequestDetails
+          details={[
+            { key: 'phone', icon: 'phone', label: 'โทร', value: request.contact_phone || '-' },
+            { key: 'category', icon: 'tool', label: 'หมวดหมู่', value: MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ' },
+            { key: 'time', icon: 'clock', label: 'เวลาสะดวก', value: MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้' },
+          ]}
+        />
+        {request.description && (
+          <div className="staff-req-note">
+            <span className="staff-req-note-label">รายละเอียดปัญหา</span>
+            <p>{request.description}</p>
+          </div>
+        )}
+        <TenantRequestCardFooter steps={[{ key: 'created', label: 'แจ้งซ่อม', date: request.created_at, tone: 'info' }]}>
+          <button type="button" className="staff-text-link" onClick={() => setMaintenanceDetail(request)}>
+            ดูรายละเอียด
+          </button>
+          <button
+            type="button"
+            className="staff-action-btn is-ghost"
+            disabled={isProcessing}
+            onClick={() => setMaintenanceRejectConfirm(request)}
+          >
+            ปฏิเสธ
+          </button>
           {request.status === 'pending' ? (
             <button
               type="button"
@@ -6496,24 +6765,8 @@ function StaffMain() {
               {isProcessing ? 'กำลังดำเนินการ...' : 'เสร็จสิ้น'}
             </button>
           )}
-          <button
-            type="button"
-            className="staff-action-btn is-ghost"
-            disabled={isProcessing}
-            onClick={() => setMaintenanceRejectConfirm(request)}
-          >
-            ปฏิเสธ
-          </button>
-        </div>
-        <div className="staff-request-footer">
-          <span className={`staff-badge status-${request.status}`}>
-            {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
-          </span>
-          <button type="button" className="staff-text-link" onClick={() => setMaintenanceDetail(request)}>
-            ดูเพิ่มเติม
-          </button>
-        </div>
-      </div>
+        </TenantRequestCardFooter>
+      </article>
     )
   }
 
@@ -6784,16 +7037,16 @@ function StaffMain() {
     return { total, booked, vacant, dueCount }
   }, [rooms])
 
-  const occupancyRate = summary.total ? Math.round((summary.booked / summary.total) * 100) : 0
   const waitingQueueCount = waitingList.filter((item) => item.status === 'waiting' || item.status === 'contacted').length
   const pendingParcelCount = parcels.filter((parcel) => parcel.status === 'pending').length
   const pendingMaintenanceCount = maintenanceRequests.filter((request) => request.status === 'pending').length
-  const financeTaskCount = summary.dueCount + pendingSlipCount + maintenanceRequests.length + tenantRequests.length
 
-  const openSummaryTarget = (tab, roomFilter) => {
+  const openSummaryTarget = (tab, roomFilter, section) => {
     goToStaffTab(tab)
     setAnnouncementFocus(null)
+    if (section) setHomeSection(section)
     if (roomFilter) {
+      setHomeSection('rooms')
       setStatusFilter(roomFilter)
       setRoomsPage(1)
     }
@@ -7054,6 +7307,93 @@ function StaffMain() {
     )
   }
 
+  const safetyTile = {
+    key: 'safety',
+    icon: 'safety',
+    tone: 'red',
+    label: 'เหตุรอรับเรื่อง',
+    value: pendingSafetyCount,
+    hint: urgentSafetyCount > 0 ? `ด่วน ${urgentSafetyCount} รายการ` : null,
+    alert: urgentSafetyCount > 0,
+    onClick: () => openSummaryTarget('safety'),
+  }
+  const roomsSummary = {
+    title: 'ห้องพัก',
+    tiles: [
+      { key: 'total', icon: 'total', tone: 'slate', label: 'ห้องทั้งหมด', value: summary.total, onClick: () => openSummaryTarget('home', 'all') },
+      { key: 'booked', icon: 'booked', tone: 'blue', label: 'มีผู้เช่า', value: summary.booked, onClick: () => openSummaryTarget('home', 'booked') },
+      { key: 'vacant', icon: 'vacant', tone: 'green', label: 'ห้องว่าง', value: summary.vacant, onClick: () => openSummaryTarget('home', 'vacant') },
+      { key: 'due', icon: 'due', tone: 'amber', label: 'รอเก็บเงิน', value: summary.dueCount, onClick: () => openSummaryTarget('home', 'due') },
+    ],
+  }
+  const tenantSummary = {
+    title: 'คำขอผู้เช่า',
+    tiles: [
+      { key: 'renew', icon: 'request', tone: 'indigo', label: 'ต่อสัญญา', value: tenantTypeCounts.renew, onClick: () => openSummaryTarget('home', null, 'renew') },
+      { key: 'moveout', icon: 'request', tone: 'orange', label: 'แจ้งย้ายออก', value: tenantTypeCounts.moveout, onClick: () => openSummaryTarget('home', null, 'moveout') },
+      { key: 'move_room', icon: 'request', tone: 'teal', label: 'ย้ายห้อง', value: tenantTypeCounts.move_room, onClick: () => openSummaryTarget('home', null, 'move_room') },
+    ],
+  }
+  const summaryByView = {
+    'home:rooms': roomsSummary,
+    'home:renew': tenantSummary,
+    'home:moveout': tenantSummary,
+    'home:move_room': tenantSummary,
+    'home:maintenance': {
+      title: 'แจ้งซ่อม',
+      tiles: [
+        { key: 'pending', icon: 'maintenance', tone: 'amber', label: 'รอรับเรื่อง', value: pendingMaintenanceCount, onClick: () => openSummaryTarget('home', null, 'maintenance') },
+        { key: 'progress', icon: 'maintenance', tone: 'orange', label: 'กำลังซ่อม', value: maintenanceRequests.length - pendingMaintenanceCount, onClick: () => openSummaryTarget('home', null, 'maintenance') },
+      ],
+    },
+    'payment-review': {
+      title: 'การเงิน',
+      tiles: [
+        { key: 'slip', icon: 'slip', tone: 'blue', label: 'สลิปรอตรวจ', value: pendingSlipCount, onClick: () => openSummaryTarget('payment-review') },
+        { key: 'due', icon: 'due', tone: 'amber', label: 'รอเก็บเงิน', value: summary.dueCount, onClick: () => openSummaryTarget('home', 'due') },
+      ],
+    },
+    parcels: {
+      title: 'พัสดุ',
+      tiles: [{ key: 'parcel', icon: 'parcel', tone: 'teal', label: 'พัสดุรอรับ', value: pendingParcelCount, onClick: () => openSummaryTarget('parcels') }],
+    },
+    'waiting-list': {
+      title: 'รายชื่อรอห้องว่าง',
+      tiles: [
+        { key: 'queue', icon: 'queue', tone: 'violet', label: 'คิวรอห้องว่าง', value: waitingQueueCount, onClick: () => openSummaryTarget('waiting-list') },
+        { key: 'vacant', icon: 'vacant', tone: 'green', label: 'ห้องว่าง', value: summary.vacant, onClick: () => openSummaryTarget('home', 'vacant') },
+      ],
+    },
+    'move-out-inspections': {
+      title: 'ตรวจสภาพห้อง',
+      tiles: [
+        { key: 'moveout', icon: 'request', tone: 'orange', label: 'คำขอแจ้งย้ายออก', value: tenantTypeCounts.moveout, onClick: () => openSummaryTarget('home', null, 'moveout') },
+        { key: 'move_room', icon: 'request', tone: 'teal', label: 'คำขอย้ายห้อง', value: tenantTypeCounts.move_room, onClick: () => openSummaryTarget('home', null, 'move_room') },
+      ],
+    },
+    'resident-visits': {
+      title: 'รถ',
+      tiles: [
+        { key: 'car', icon: 'car', tone: 'blue', label: 'รถที่จอดอยู่', value: parkedVehicleCount, onClick: () => openSummaryTarget('resident-visits') },
+        { key: 'carPending', icon: 'carPending', tone: 'amber', label: 'คำขอรถรออนุมัติ', value: pendingVisitCount, onClick: () => openSummaryTarget('resident-visits') },
+      ],
+    },
+    safety: {
+      title: 'แจ้งเหตุฉุกเฉิน',
+      tiles: [
+        { ...safetyTile, label: 'รอตรวจสอบ', hint: null, alert: false },
+        { key: 'urgent', icon: 'safety', tone: 'red', label: 'เหตุด่วน', value: urgentSafetyCount, alert: urgentSafetyCount > 0, onClick: () => openSummaryTarget('safety') },
+        { key: 'normal', icon: 'safety', tone: 'amber', label: 'เหตุทั่วไป', value: Math.max(0, pendingSafetyCount - urgentSafetyCount), onClick: () => openSummaryTarget('safety') },
+        { key: 'reviewed', icon: 'safety', tone: 'green', label: 'ตรวจสอบแล้ว', value: safetyStatusCounts.reviewed, onClick: () => openSummaryTarget('safety') },
+        { key: 'cancelled', icon: 'safety', tone: 'slate', label: 'ยกเลิกแล้ว', value: safetyStatusCounts.cancelled, onClick: () => openSummaryTarget('safety') },
+      ],
+    },
+  }
+  const activeSummary = summaryByView[staffTab === 'home' ? `home:${homeSection}` : staffTab]
+  const summaryTiles = activeSummary
+    ? [...activeSummary.tiles, ...(staffTab !== 'safety' && urgentSafetyCount > 0 ? [safetyTile] : [])]
+    : []
+
   return (
     <div className="staff-page">
       <div className="staff-container">
@@ -7190,6 +7530,8 @@ function StaffMain() {
                               }
                               goToStaffTab('home')
                               setAnnouncementFocus(null)
+                              if (notif.kind === 'tenant' && TENANT_HOME_CARDS.some((card) => card.type === notif.request?.type)) setHomeSection(notif.request.type)
+                              else if (notif.kind === 'maintenance') setHomeSection('maintenance')
                               if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
                               else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
                               else setNotifDetail(notif)
@@ -7811,66 +8153,19 @@ function StaffMain() {
           </Modal>
         )}
 
-        <div className="staff-summary-grid">
+        {activeSummary && (
           <section className="staff-summary-panel">
             <header className="staff-summary-panel-head">
-              <span className="staff-summary-panel-title">ห้องพัก</span>
-              <span className="staff-summary-panel-meta">อัตราเข้าพัก {occupancyRate}%</span>
-            </header>
-            <div className="staff-summary-occupancy" role="presentation">
-              <span style={{ width: `${occupancyRate}%` }} />
-            </div>
-            <div className="staff-summary-tiles">
-              <StaffSummaryTile icon="total" tone="slate" label="ห้องทั้งหมด" value={summary.total} onClick={() => openSummaryTarget('home', 'all')} />
-              <StaffSummaryTile icon="booked" tone="blue" label="มีผู้เช่า" value={summary.booked} onClick={() => openSummaryTarget('home', 'booked')} />
-              <StaffSummaryTile icon="vacant" tone="green" label="ห้องว่าง" value={summary.vacant} onClick={() => openSummaryTarget('home', 'vacant')} />
-              <StaffSummaryTile icon="queue" tone="violet" label="คิวรอห้องว่าง" value={waitingQueueCount} onClick={() => openSummaryTarget('waiting-list')} />
-            </div>
-          </section>
-          <section className="staff-summary-panel">
-            <header className="staff-summary-panel-head">
-              <span className="staff-summary-panel-title">การเงินและคำขอ</span>
-              <span className="staff-summary-panel-meta">{financeTaskCount > 0 ? `รอดำเนินการ ${financeTaskCount} รายการ` : 'ไม่มีงานค้าง'}</span>
+              <span className="staff-summary-panel-title">{activeSummary.title}</span>
             </header>
             <div className="staff-summary-tiles">
-              <StaffSummaryTile icon="due" tone="amber" label="รอเก็บเงิน" value={summary.dueCount} onClick={() => openSummaryTarget('home', 'due')} />
-              <StaffSummaryTile icon="slip" tone="blue" label="สลิปรอตรวจ" value={pendingSlipCount} onClick={() => openSummaryTarget('payment-review')} />
-              <StaffSummaryTile
-                icon="maintenance"
-                tone="orange"
-                label="แจ้งซ่อม"
-                value={maintenanceRequests.length}
-                hint={maintenanceRequests.length > 0 ? `รอรับ ${pendingMaintenanceCount} · กำลังซ่อม ${maintenanceRequests.length - pendingMaintenanceCount}` : null}
-                onClick={() => openSummaryTarget('home')}
-              />
-              <StaffSummaryTile icon="request" tone="indigo" label="คำขอผู้เช่า" value={tenantRequests.length} onClick={() => openSummaryTarget('home')} />
+              {summaryTiles.map(({ key, ...tile }) => (
+                <StaffSummaryTile key={key} {...tile} />
+              ))}
             </div>
           </section>
-          <section className="staff-summary-panel">
-            <header className="staff-summary-panel-head">
-              <span className="staff-summary-panel-title">พัสดุ รถ และความปลอดภัย</span>
-              {urgentSafetyCount > 0 ? (
-                <span className="staff-summary-panel-meta is-danger">มีเหตุด่วน {urgentSafetyCount} รายการ</span>
-              ) : (
-                <span className="staff-summary-panel-meta">อัปเดตทุก 30 วินาที</span>
-              )}
-            </header>
-            <div className="staff-summary-tiles">
-              <StaffSummaryTile icon="parcel" tone="teal" label="พัสดุรอรับ" value={pendingParcelCount} onClick={() => openSummaryTarget('parcels')} />
-              <StaffSummaryTile icon="car" tone="blue" label="รถที่จอดอยู่" value={parkedVehicleCount} onClick={() => openSummaryTarget('resident-visits')} />
-              <StaffSummaryTile icon="carPending" tone="amber" label="คำขอรถรออนุมัติ" value={pendingVisitCount} onClick={() => openSummaryTarget('resident-visits')} />
-              <StaffSummaryTile
-                icon="safety"
-                tone="red"
-                label="เหตุรอรับเรื่อง"
-                value={pendingSafetyCount}
-                hint={urgentSafetyCount > 0 ? `ด่วน ${urgentSafetyCount} รายการ` : null}
-                alert={urgentSafetyCount > 0}
-                onClick={() => openSummaryTarget('safety')}
-              />
-            </div>
-          </section>
-        </div>
+        )}
+
         <ul className="nav nav-tabs staff-tabs">
           {STAFF_TABS.map((tab) => (
             <li className="nav-item" key={tab.key}>
@@ -7892,6 +8187,26 @@ function StaffMain() {
             </li>
           ))}
         </ul>
+
+        {staffTab === 'home' && (
+          <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
+            {HOME_SECTIONS.map((section) => {
+              const count = section.key === 'maintenance' ? maintenanceRequests.length : tenantTypeCounts[section.key] ?? 0
+              return (
+                <li className="nav-item" key={section.key}>
+                  <button
+                    type="button"
+                    className={`nav-link staff-subtab-link${homeSection === section.key ? ' active' : ''}`}
+                    onClick={() => setHomeSection(section.key)}
+                  >
+                    {section.label}
+                    {count > 0 && <span className="staff-subtab-badge">{count}</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         {staffTab === 'payment-review' && (
           <StaffPaymentReview
@@ -8368,6 +8683,7 @@ function StaffMain() {
 
         {staffTab === 'home' && (
           <>
+            {homeSection === 'rooms' && (
             <div className="staff-card staff-rooms-card">
               <div className="staff-card-header">
                 <h2>รายการห้องพัก</h2>
@@ -8690,58 +9006,113 @@ function StaffMain() {
                 </div>
               )}
             </div>
+            )}
 
-            <div className="staff-requests-grid">
-              <div className="staff-card">
-                <div className="staff-card-header">
-                  <h2>
-                    คำขอต่อสัญญา / แจ้งย้ายออก
-                    {tenantRequests.length > 0 && <span className="staff-count-pill">{tenantRequests.length}</span>}
-                  </h2>
-                  <div className="staff-card-header-actions">
-                    <button type="button" className="staff-view-all-btn" onClick={openTenantHistory}>
-                      ดูประวัติ
-                    </button>
-                    {filteredTenantRequests.length > REQUEST_PREVIEW_COUNT && (
-                      <button type="button" className="staff-view-all-btn" onClick={() => setViewAllRequests('tenant')}>
-                        ดูทั้งหมด
-                      </button>
-                    )}
-                  </div>
-                </div>
+              {TENANT_HOME_CARDS.filter((card) => card.type === homeSection).map((card) => {
+                const items = tenantRequests.filter((request) => request.type === card.type)
+                const { filters, list: shownItems } = filterHomeRequests(card.type, items)
+                const extras = TENANT_HOME_EXTRA_FILTERS[card.type] || []
+                const filtersActive =
+                  filters.status !== 'all' ||
+                  Boolean(filters.search.trim()) ||
+                  filters.sort !== 'oldest' ||
+                  extras.some((extra) => filters[extra.key] && filters[extra.key] !== 'all')
+                const page = getHomePage(card.type, shownItems.length)
+                return (
+                  <div className="staff-card staff-home-request-card" key={card.type}>
+                    <div className="staff-card-header">
+                      <h2>
+                        {card.title}
+                        {items.length > 0 && <span className="staff-count-pill">{items.length}</span>}
+                      </h2>
+                      <div className="staff-card-header-actions">
+                        <button type="button" className="staff-view-all-btn" onClick={openTenantHistory}>
+                          ดูประวัติ
+                        </button>
+                      </div>
+                    </div>
 
-                {tenantRequests.length > 0 && <TenantRequestFilters {...tenantFilterProps} />}
-
-                <div className="staff-card-body">
-                  {requestsError ? (
-                    <div className="staff-inline-error">
-                      <p className="staff-form-error staff-form-error-block">{requestsError}</p>
-                      <button
-                        type="button"
-                        className="staff-action-btn is-ghost"
-                        onClick={() => {
-                          setRequestsLoading(true)
-                          loadRequests().finally(() => setRequestsLoading(false))
+                    {items.length > 0 && (
+                      <StaffFilterPanel
+                        segments={[
+                          { key: 'all', label: 'ทั้งหมด', count: items.length },
+                          { key: 'pending', label: 'รอดำเนินการ', count: items.filter((request) => request.status === 'pending').length },
+                          { key: 'in_progress', label: 'รับเรื่องแล้ว', count: items.filter((request) => request.status === 'in_progress').length },
+                        ]}
+                        active={filters.status}
+                        onSegment={(value) => updateHomeRequestFilter(card.type, { status: value })}
+                        search={filters.search}
+                        onSearch={(value) => updateHomeRequestFilter(card.type, { search: value })}
+                        searchPlaceholder={card.type === 'move_room' ? 'ค้นหาเลขห้องเดิม/ห้องใหม่ ชื่อ หรือเบอร์โทร' : 'ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร'}
+                        resultText={filtersActive ? `พบ ${shownItems.length} จาก ${items.length} รายการ` : null}
+                        canClear={filtersActive}
+                        onClear={() => {
+                          setHomeRequestFilters((current) => ({ ...current, [card.type]: {} }))
+                          setHomePages((current) => ({ ...current, [card.type]: 1 }))
                         }}
                       >
-                        ลองใหม่
-                      </button>
-                    </div>
-                  ) : requestsLoading ? (
-                    <p className="staff-empty">กำลังโหลดข้อมูล...</p>
-                  ) : tenantRequests.length === 0 ? (
-                    <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
-                  ) : filteredTenantRequests.length === 0 ? (
-                    <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
-                  ) : (
-                    <div className="staff-requests-list">
-                      {filteredTenantRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderTenantRequestItem)}
-                    </div>
-                  )}
-                </div>
-              </div>
+                        {extras.map((extra) => (
+                          <select
+                            key={extra.key}
+                            className="staff-filter-select"
+                            value={filters[extra.key] || 'all'}
+                            onChange={(event) => updateHomeRequestFilter(card.type, { [extra.key]: event.target.value })}
+                            aria-label={extra.label}
+                          >
+                            <option value="all">{extra.all}</option>
+                            {extra.options.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        ))}
+                        <select
+                          className="staff-filter-select"
+                          value={filters.sort}
+                          onChange={(event) => updateHomeRequestFilter(card.type, { sort: event.target.value })}
+                          aria-label="เรียงลำดับ"
+                        >
+                          <option value="oldest">รอนานสุดก่อน</option>
+                          <option value="newest">ล่าสุดก่อน</option>
+                        </select>
+                      </StaffFilterPanel>
+                    )}
 
-              <div className="staff-card">
+                    <div className="staff-card-body">
+                      {requestsError ? (
+                        <div className="staff-inline-error">
+                          <p className="staff-form-error staff-form-error-block">{requestsError}</p>
+                          <button
+                            type="button"
+                            className="staff-action-btn is-ghost"
+                            onClick={() => {
+                              setRequestsLoading(true)
+                              loadRequests().finally(() => setRequestsLoading(false))
+                            }}
+                          >
+                            ลองใหม่
+                          </button>
+                        </div>
+                      ) : requestsLoading ? (
+                        <p className="staff-empty">กำลังโหลดข้อมูล...</p>
+                      ) : items.length === 0 ? (
+                        <p className="staff-empty">ไม่มีคำขอที่รอดำเนินการในขณะนี้</p>
+                      ) : shownItems.length === 0 ? (
+                        <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
+                      ) : (
+                        <div className="staff-requests-list is-grid">
+                          {shownItems.slice((page - 1) * TENANT_GRID_COUNT, page * TENANT_GRID_COUNT).map(renderTenantRequestItem)}
+                        </div>
+                      )}
+                    </div>
+                    {renderHomePager(card.type, shownItems.length)}
+                  </div>
+                )
+              })}
+
+            {homeSection === 'maintenance' && (
+              <div className="staff-card staff-home-request-card">
                 <div className="staff-card-header">
                   <h2>
                     คำขอแจ้งซ่อม
@@ -8753,7 +9124,7 @@ function StaffMain() {
                     <button type="button" className="staff-view-all-btn" onClick={openMaintenanceHistory}>
                       ดูประวัติ
                     </button>
-                    {filteredMaintenanceRequests.length > REQUEST_PREVIEW_COUNT && (
+                    {filteredMaintenanceRequests.length > TENANT_GRID_COUNT && (
                       <button
                         type="button"
                         className="staff-view-all-btn"
@@ -8789,15 +9160,22 @@ function StaffMain() {
                   ) : filteredMaintenanceRequests.length === 0 ? (
                     <p className="staff-empty">ไม่พบคำขอที่ตรงกับเงื่อนไข</p>
                   ) : (
-                    <div className="staff-requests-list">
-                      {filteredMaintenanceRequests.slice(0, REQUEST_PREVIEW_COUNT).map(renderMaintenanceRequestItem)}
+                    <div className="staff-requests-list is-grid">
+                      {filteredMaintenanceRequests
+                        .slice(
+                          (getHomePage('maintenance', filteredMaintenanceRequests.length) - 1) * TENANT_GRID_COUNT,
+                          getHomePage('maintenance', filteredMaintenanceRequests.length) * TENANT_GRID_COUNT,
+                        )
+                        .map(renderMaintenanceRequestItem)}
                     </div>
                   )}
                 </div>
+                {renderHomePager('maintenance', filteredMaintenanceRequests.length)}
               </div>
-            </div>
+            )}
 
-            <div className="staff-card">
+            {homeSection === 'expenses' && (
+            <div className="staff-card staff-expenses-card">
               <div className="staff-card-header">
                 <h2>รายจ่าย</h2>
                 <div className="staff-card-header-actions">
@@ -8811,7 +9189,7 @@ function StaffMain() {
                 {expensesError ? (
                   <div className="staff-inline-error">
                     <p className="staff-form-error staff-form-error-block">{expensesError}</p>
-                    <button type="button" className="staff-action-btn is-ghost" onClick={() => loadExpenses(expensesPage)}>
+                    <button type="button" className="staff-action-btn is-ghost" disabled={expensesLoading} onClick={() => loadExpenses(expensesPage)}>
                       ลองใหม่
                     </button>
                   </div>
@@ -8867,34 +9245,38 @@ function StaffMain() {
                     </table>
                   </div>
                 )}
+              </div>
 
-                {expensesTotalPages > 1 && (
-                  <div className="staff-pagination">
-                    <span className="staff-pagination-info">
-                      หน้า {expensesPage} / {expensesTotalPages}
-                    </span>
-                    <div className="staff-pagination-controls">
-                      <button
-                        type="button"
-                        className="staff-action-btn is-ghost"
-                        disabled={expensesPage <= 1}
-                        onClick={() => loadExpenses(expensesPage - 1)}
-                      >
-                        ก่อนหน้า
-                      </button>
-                      <button
-                        type="button"
-                        className="staff-action-btn is-ghost"
-                        disabled={expensesPage >= expensesTotalPages}
-                        onClick={() => loadExpenses(expensesPage + 1)}
-                      >
-                        ถัดไป
-                      </button>
-                    </div>
-                  </div>
-                )}
+              <div className="staff-pagination" aria-label="แบ่งหน้ารายจ่าย">
+                <span className="staff-pagination-info">
+                  {expensesTotal > 0
+                    ? `แสดง ${(expensesPage - 1) * EXPENSES_PAGE_SIZE + 1}-${Math.min(expensesPage * EXPENSES_PAGE_SIZE, expensesTotal)} จาก ${expensesTotal} รายการ`
+                    : '0 รายการ'}
+                </span>
+                <div className="staff-pagination-controls">
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    disabled={expensesLoading || expensesPage <= 1}
+                    onClick={() => loadExpenses(expensesPage - 1)}
+                  >
+                    ก่อนหน้า
+                  </button>
+                  <span className="staff-pagination-page">
+                    หน้า {expensesPage} / {expensesTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-ghost"
+                    disabled={expensesLoading || expensesPage >= expensesTotalPages}
+                    onClick={() => loadExpenses(expensesPage + 1)}
+                  >
+                    ถัดไป
+                  </button>
+                </div>
               </div>
             </div>
+            )}
           </>
         )}
       </div>
@@ -9043,7 +9425,7 @@ function StaffMain() {
 
       {viewAllRequests === 'tenant' && (
         <Modal
-          title="คำขอต่อสัญญา / แจ้งย้ายออก (ทั้งหมด)"
+          title={`${TENANT_HOME_CARDS.find((card) => card.type === tenantFilterType)?.title ?? 'คำขอผู้เช่า'} (ทั้งหมด)`}
           onClose={() => {
             setViewAllRequests(null)
             resetTenantFilters()
@@ -10236,50 +10618,54 @@ function StaffMain() {
       )}
 
       {maintenanceDetail && (
-        <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="detail">
+        <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="transfer-detail">
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{maintenanceDetail.room_number}</strong>
+            <div className="staff-transfer-body">
+              <div className="staff-transfer-top">
+                <div className="staff-req-detail-head">
+                  <span className="staff-badge type-maintenance">แจ้งซ่อม</span>
+                  <span className={`staff-badge status-${maintenanceDetail.status}`}>
+                    {MAINTENANCE_STATUS_LABEL[maintenanceDetail.status] || maintenanceDetail.status}
+                  </span>
+                  <span className="staff-req-detail-date">แจ้งซ่อม {formatDateTime(maintenanceDetail.created_at)}</span>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {maintenanceDetail.first_name} {maintenanceDetail.last_name}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ประเภท</span>
-                  <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceDetail.category] || 'อื่นๆ'}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ช่วงเวลาที่สะดวก</span>
-                  <strong>{MAINTENANCE_TIME_LABEL[maintenanceDetail.preferred_time] || 'เวลาไหนก็ได้'}</strong>
-                </div>
-                {maintenanceDetail.contact_phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{maintenanceDetail.contact_phone}</strong>
+                <div className="staff-req-detail-room is-summary">
+                  <span className="staff-req-detail-room-icon"><DoorIcon size={22} /></span>
+                  <div className="staff-req-detail-room-identity">
+                    <small>ห้องที่แจ้งซ่อม</small>
+                    <strong>{maintenanceDetail.room_number || '-'}</strong>
                   </div>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>สถานะ</span>
-                  <strong>{MAINTENANCE_STATUS_LABEL[maintenanceDetail.status] || maintenanceDetail.status}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่แจ้งซ่อม</span>
-                  <strong>{formatDateTime(maintenanceDetail.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>รายละเอียดปัญหา</span>
-                  <strong>{maintenanceDetail.description || '-'}</strong>
+                  <div className="staff-req-detail-room-tenant">
+                    <small>ผู้เช่า</small>
+                    <span>{[maintenanceDetail.first_name, maintenanceDetail.last_name].filter(Boolean).join(' ') || '-'}</span>
+                    {maintenanceDetail.contact_phone && (
+                      <em className="staff-req-detail-room-phone">
+                        <WaitingDetailIcon type="phone" size={13} />
+                        {maintenanceDetail.contact_phone}
+                      </em>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              <div className="staff-transfer-scroll">
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">ข้อมูลการแจ้งซ่อม</h4>
+                <TenantRequestDetails
+                  details={[
+                    { key: 'category', icon: 'tool', label: 'หมวดหมู่', value: MAINTENANCE_CATEGORY_LABEL[maintenanceDetail.category] || 'อื่นๆ' },
+                    { key: 'time', icon: 'clock', label: 'เวลาสะดวก', value: MAINTENANCE_TIME_LABEL[maintenanceDetail.preferred_time] || 'เวลาไหนก็ได้' },
+                    { key: 'created', icon: 'calendar', label: 'วันที่แจ้ง', value: `${formatDateTime(maintenanceDetail.created_at)} น.` },
+                  ]}
+                />
+                <div className="staff-req-note">
+                  <span className="staff-req-note-label">รายละเอียดปัญหา</span>
+                  <p className="is-full">{maintenanceDetail.description || '-'}</p>
+                </div>
+              </section>
               {maintenanceDetail.photos?.length > 0 && (
-                <div className="staff-maintenance-photos-section">
-                  <p className="staff-maintenance-photos-title">รูปประกอบ ({maintenanceDetail.photos.length})</p>
+                <section className="staff-transfer-section staff-maintenance-photos-section">
+                  <h4 className="staff-transfer-section-title">รูปประกอบ ({maintenanceDetail.photos.length})</h4>
                   <div className="staff-maintenance-photos">
                     {maintenanceDetail.photos.map((photo, index) => (
                       <a
@@ -10299,12 +10685,16 @@ function StaffMain() {
                       </a>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ปิด
-                </button>
+              </div>
+
+              <div className="staff-transfer-footer">
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
               </div>
             </div>
           )}
