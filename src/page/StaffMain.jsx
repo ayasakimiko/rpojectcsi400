@@ -11,9 +11,16 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
-import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
+import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
+import {
+  InspectionDateCell,
+  InspectionInspectorCell,
+  InspectionPersonCell,
+  InspectionPhotosCell,
+  InspectionRoomCell,
+} from '../components/InspectionCells.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const WAITING_UI_STATUSES = {
@@ -60,10 +67,6 @@ function describeWaitingMoveIn(value, now) {
   if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
   if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
   return { text: `อีก ${diff} วัน`, tone: diff <= 7 ? 'soon' : 'later' }
-}
-
-function waitingNameInitial(name) {
-  return String(name || '').trim().replace(/^[เแโใไ]/, '').charAt(0).toUpperCase() || '?'
 }
 
 function getWaitingMoveInPresets(now) {
@@ -143,7 +146,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                     <article className={`waiting-card is-${WAITING_UI_STATUSES[status].tone}`}>
                       <div className="waiting-card-top">
                         <span className="waiting-avatar" aria-hidden="true">
-                          {waitingNameInitial(item.full_name)}
+                          <PersonIcon size={18} />
                         </span>
                         <div className="waiting-card-id">
                           <div className="waiting-card-head">
@@ -288,7 +291,7 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
     <div className="waiting-detail">
       <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
         <span className="waiting-avatar is-large" aria-hidden="true">
-          {waitingNameInitial(item.full_name)}
+          <PersonIcon size={18} />
         </span>
         <div className="waiting-detail-name">
           <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
@@ -635,7 +638,6 @@ const CHECKLIST_RESULT_OPTIONS = [
 ]
 const INSPECTION_MAX_PHOTOS = 15
 const INSPECTION_RESULT_ORDER = ['good', 'wear', 'damaged', 'missing', 'not_applicable']
-const INSPECTION_RESULT_LABEL = Object.fromEntries(CHECKLIST_RESULT_OPTIONS.map((option) => [option.key, option.label]))
 const INSPECTION_KINDS = {
   moveout: {
     label: 'ตรวจห้องย้ายออก',
@@ -760,7 +762,7 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
         {selected ? (
           <>
             <span className="room-picker-avatar" aria-hidden="true">
-              {selected.tenant.first_name?.[0] || '?'}
+              <PersonIcon size={17} />
             </span>
             <span className="room-picker-main">
               <strong>
@@ -7680,7 +7682,7 @@ function StaffMain() {
                     {inspectionEditing || inspectionTenantRequest ? (
                       <div className="room-picker-trigger inspection-room-fixed" id="inspection-room">
                         <span className="room-picker-avatar" aria-hidden="true">
-                          {(inspectionEditing?.tenant_name || `${inspectionTenantRequest?.first_name || ''} ${inspectionTenantRequest?.last_name || ''}`)?.[0] || '?'}
+                          <PersonIcon size={17} />
                         </span>
                         <span className="room-picker-main">
                           <strong>
@@ -8324,7 +8326,7 @@ function StaffMain() {
               </select>
             </StaffFilterPanel>
             <div className="table-responsive">
-              <table className="staff-table inspection-table">
+              <table className="staff-table inspection-table insp-table">
                 <colgroup>
                   <col className="is-room" />
                   <col className="is-tenant" />
@@ -8359,51 +8361,31 @@ function StaffMain() {
                       return (
                         <tr key={inspection.id}>
                           <td>
-                            <div className="inspection-cell-room">
-                              {inspection.tenant_request_id ? (
-                                <>
-                                  <strong>
-                                    {inspection.room_number} → {inspection.target_room_number || '-'}
-                                  </strong>
-                                  <small>ห้องเดิม → ห้องใหม่</small>
-                                </>
-                              ) : (
-                                <strong>ห้อง {inspection.room_number}</strong>
-                              )}
-                            </div>
+                            <InspectionRoomCell
+                              roomNumber={inspection.room_number}
+                              targetRoomNumber={inspection.target_room_number}
+                              isMoveRoom={Boolean(inspection.tenant_request_id)}
+                            />
                           </td>
                           <td>
-                            <div className="inspection-cell-stack">
-                              <strong>{inspection.tenant_name}</strong>
-                              {inspection.tenant_phone && <small>{inspection.tenant_phone}</small>}
-                            </div>
+                            <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} />
                           </td>
-                          <td className="inspection-cell-date">{formatDateTime(inspection.created_at)}</td>
+                          <td>
+                            <InspectionDateCell value={inspection.created_at} />
+                          </td>
                           <td>
                             <div className="inspection-cell-result">
                               <span className={`inspection-result is-${summary.tone}`}>
                                 {summary.label}
                                 {issueCount > 0 && ` ${issueCount} ข้อ`}
                               </span>
-                              <div className="inspection-meter" aria-hidden="true">
-                                {INSPECTION_RESULT_ORDER.map((key) =>
-                                  summary.counts[key] > 0 ? (
-                                    <span
-                                      key={key}
-                                      className={`is-${key}`}
-                                      style={{ flexGrow: summary.counts[key] }}
-                                      title={`${INSPECTION_RESULT_LABEL[key]} ${summary.counts[key]} ข้อ`}
-                                    />
-                                  ) : null,
-                                )}
-                              </div>
                             </div>
                           </td>
-                          <td className={inspection.inspected_by_name ? '' : 'inspection-cell-muted'}>
-                            {inspection.inspected_by_name ? <span className="staff-actor">{inspection.inspected_by_name}</span> : '-'}
+                          <td>
+                            <InspectionInspectorCell name={inspection.inspected_by_name} className="staff-actor" />
                           </td>
                           <td>
-                            <span className="inspection-photo-count">{inspection.photo_count || 0} รูป</span>
+                            <InspectionPhotosCell count={inspection.photo_count} />
                           </td>
                           <td className="inspection-col-actions">
                             <div className="staff-row-actions">
@@ -9809,7 +9791,7 @@ function StaffMain() {
 
                 <div className="collect-tenant">
                   <span className="collect-avatar" aria-hidden="true">
-                    {(collectRoom.tenant?.first_name || '?').trim().charAt(0)}
+                    <PersonIcon size={20} />
                   </span>
                   <div className="collect-tenant-text">
                     <strong>{tenantName}</strong>

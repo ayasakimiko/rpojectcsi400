@@ -3755,7 +3755,11 @@ function AnnouncementAlertPopup({ announcement, remaining, onAcknowledge }) {
             )}
           </div>
           <footer className="dashboard-alert-actions">
-            <p className="dashboard-alert-hint">ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ</p>
+            <p className="dashboard-alert-hint">
+              {announcement.popup_until
+                ? `ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ หรือถึง ${formatDateTime(announcement.popup_until)} น.`
+                : 'ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ'}
+            </p>
             <button type="button" className="dashboard-alert-confirm" disabled={busy} onClick={acknowledge}>
               {busy ? 'กำลังบันทึก...' : 'รับทราบและปิด'}
             </button>
@@ -3796,8 +3800,12 @@ function CustomerDashbord() {
   }
 
   const [, tickCountdown] = useState(0)
+  const [popupNow, setPopupNow] = useState(() => Date.now())
   useEffect(() => {
-    const interval = setInterval(() => tickCountdown((tick) => tick + 1), 30000)
+    const interval = setInterval(() => {
+      tickCountdown((tick) => tick + 1)
+      setPopupNow(Date.now())
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -4508,7 +4516,12 @@ function CustomerDashbord() {
     parcels = [],
   } = data
   const pendingAlerts = announcements.filter(
-    (item) => item.tone === 'warning' && !item.acknowledged && !acknowledgedAnnouncementIds.has(item.id),
+    (item) =>
+      item.tone === 'warning' &&
+      !item.acknowledged &&
+      !acknowledgedAnnouncementIds.has(item.id) &&
+      item.popup_active !== false &&
+      !(item.popup_epoch && item.popup_epoch * 1000 <= popupNow),
   )
   const pendingParcels = parcels.filter((parcel) => parcel.status === 'pending')
   const receivedParcels = parcels.filter((parcel) => parcel.status === 'received')
