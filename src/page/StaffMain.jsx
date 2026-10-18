@@ -21,6 +21,8 @@ import {
   InspectionPhotosCell,
   InspectionRoomCell,
 } from '../components/InspectionCells.jsx'
+import InspectionDetail from '../components/InspectionDetail.jsx'
+import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const WAITING_UI_STATUSES = {
@@ -637,6 +639,11 @@ const CHECKLIST_RESULT_OPTIONS = [
   { key: 'not_applicable', label: 'ไม่มี', title: 'ไม่มีหรือติดตั้งรายการนี้ในห้อง' },
 ]
 const INSPECTION_MAX_PHOTOS = 15
+const STAFF_INSPECTION_STATUS_LABEL = {
+  pending: 'รอ Admin ตรวจ',
+  reviewed: 'Admin ตรวจแล้ว',
+  follow_up: 'ต้องติดตาม',
+}
 const INSPECTION_RESULT_ORDER = ['good', 'wear', 'damaged', 'missing', 'not_applicable']
 const INSPECTION_KINDS = {
   moveout: {
@@ -672,13 +679,6 @@ function summarizeInspection(checklist) {
   const label = tone === 'danger' ? 'พบชำรุด/สูญหาย' : tone === 'warning' ? 'พบสึกหรอ' : 'สภาพปกติ'
   return { counts, issues, tone, label }
 }
-const INSPECTION_MAX_PHOTO_BYTES = 5 * 1024 * 1024
-
-function formatPhotoSize(bytes) {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`
-}
-
 function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -868,167 +868,6 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
               })
             )}
           </ul>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChange, onError }) {
-  const [dragging, setDragging] = useState(false)
-  const previewUrls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files])
-
-  useEffect(
-    () => () => {
-      previewUrls.forEach((url) => URL.revokeObjectURL(url))
-    },
-    [previewUrls],
-  )
-
-  const addFiles = (incoming) => {
-    const list = Array.from(incoming || [])
-    if (list.length === 0) return
-    const images = list.filter((file) => file.type.startsWith('image/'))
-    const withinSize = images.filter((file) => file.size <= INSPECTION_MAX_PHOTO_BYTES)
-    const room = INSPECTION_MAX_PHOTOS - existing.length - files.length
-    const accepted = withinSize.slice(0, Math.max(0, room))
-    if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
-    else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 5 MB ต่อรูป')
-    else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${INSPECTION_MAX_PHOTOS} รูป`)
-    else onError('')
-    if (accepted.length > 0) onChange([...files, ...accepted])
-  }
-
-  const dragsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files')
-  const canAddMore = existing.length + files.length < INSPECTION_MAX_PHOTOS
-
-  return (
-    <div
-      className={`photo-field${dragging ? ' is-dragging' : ''}`}
-      onDragEnter={(event) => {
-        if (!dragsFiles(event)) return
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDragOver={(event) => {
-        if (!dragsFiles(event)) return
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false)
-      }}
-      onDrop={(event) => {
-        event.preventDefault()
-        setDragging(false)
-        addFiles(event.dataTransfer?.files)
-      }}
-    >
-      <input
-        id="inspection-photos"
-        className="photo-input"
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={(event) => {
-          addFiles(event.target.files)
-          event.target.value = ''
-        }}
-      />
-      {existing.length + files.length === 0 ? (
-        <label htmlFor="inspection-photos" className="photo-dropzone">
-          <span className="photo-dropzone-icon" aria-hidden="true">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="m21 15-5-5L5 21" />
-            </svg>
-          </span>
-          <span className="photo-dropzone-text">
-            <span className="photo-dropzone-title">
-              {dragging ? 'ปล่อยรูปที่นี่' : 'ลากรูปมาวางที่นี่ หรือ '}
-              {!dragging && <span className="photo-dropzone-link">คลิกเพื่อเลือกรูป</span>}
-            </span>
-            <span className="photo-dropzone-hint">สูงสุด {INSPECTION_MAX_PHOTOS} รูป รูปละไม่เกิน 5 MB</span>
-          </span>
-        </label>
-      ) : (
-        <div className="photo-grid">
-          {existing.map((photo, index) => (
-            <figure className="photo-tile" key={`saved-${photo.url}`}>
-              <UploadImage src={photo.url} alt={`รูปที่บันทึกไว้ ${index + 1}`} />
-              <figcaption title={photo.name}>
-                <span>{photo.name}</span>
-                <small>บันทึกไว้แล้ว</small>
-              </figcaption>
-              <button
-                type="button"
-                className="photo-tile-remove"
-                aria-label={`ลบรูป ${photo.name}`}
-                onClick={() => onRemoveExisting?.(photo.url)}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </figure>
-          ))}
-          {files.map((file, index) => (
-            <figure className="photo-tile" key={`${file.name}-${index}`}>
-              <UploadImage src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
-              <figcaption title={file.name}>
-                <span>{file.name}</span>
-                <small>{formatPhotoSize(file.size)}</small>
-              </figcaption>
-              <button
-                type="button"
-                className="photo-tile-remove"
-                aria-label={`ลบรูป ${file.name}`}
-                onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </figure>
-          ))}
-          {canAddMore && (
-            <label htmlFor="inspection-photos" className="photo-add-tile">
-              <span aria-hidden="true">+</span>
-              <small>{dragging ? 'ปล่อยเพื่อเพิ่ม' : 'เพิ่มรูป'}</small>
-            </label>
-          )}
         </div>
       )}
     </div>
@@ -1247,7 +1086,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -5591,7 +5430,7 @@ function StaffMain() {
   const [inspectionSearch, setInspectionSearch] = useState('')
   const [inspectionResultFilter, setInspectionResultFilter] = useState('all')
   const [inspectionSort, setInspectionSort] = useState('newest')
-  const [inspectionKind, setInspectionKind] = useState('moveout')
+  const [inspectionKind, setInspectionKind] = useState('all')
   const [waitingListDelete, setWaitingListDelete] = useState(null)
   const [waitingListDeleting, setWaitingListDeleting] = useState(false)
   const [waitingListDeleteError, setWaitingListDeleteError] = useState('')
@@ -5613,6 +5452,8 @@ function StaffMain() {
   const [inspectionTenantRequest, setInspectionTenantRequest] = useState(null)
   const [inspectionEditing, setInspectionEditing] = useState(null)
   const [inspectionLoadingId, setInspectionLoadingId] = useState(null)
+  const [inspectionView, setInspectionView] = useState(null)
+  const [inspectionViewPhoto, setInspectionViewPhoto] = useState(null)
   const [inspectionListError, setInspectionListError] = useState('')
   const [inspectionDelete, setInspectionDelete] = useState(null)
   const [inspectionDeleting, setInspectionDeleting] = useState(false)
@@ -6004,6 +5845,20 @@ function StaffMain() {
     setInspectionError('')
     setInspectionFieldErrors({})
     setInspectionModal(true)
+  }
+
+  const openInspectionView = async (inspection) => {
+    setInspectionView({ summary: inspection, data: null, loading: true, error: '' })
+    try {
+      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      setInspectionView((prev) => (prev?.summary.id === inspection.id ? { ...prev, data: data.inspection, loading: false } : prev))
+    } catch (err) {
+      setInspectionView((prev) =>
+        prev?.summary.id === inspection.id
+          ? { ...prev, loading: false, error: err.response?.data?.message || 'ไม่สามารถโหลดผลตรวจห้องได้' }
+          : prev,
+      )
+    }
   }
 
   const openEditInspection = async (inspection) => {
@@ -6874,7 +6729,8 @@ function StaffMain() {
     counts[kind] = (counts[kind] || 0) + 1
     return counts
   }, {})
-  const kindInspections = moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
+  const kindInspections =
+    inspectionKind === 'all' ? moveOutInspections : moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
   const inspectionToneCounts = kindInspections.reduce((counts, inspection) => {
     const tone = summarizeInspection(inspection.checklist).tone
     counts[tone] = (counts[tone] || 0) + 1
@@ -6902,7 +6758,8 @@ function StaffMain() {
       const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       return inspectionSort === 'oldest' ? diff : -diff
     })
-  const inspectionFiltersActive = Boolean(inspectionKeyword) || inspectionResultFilter !== 'all' || inspectionSort !== 'newest'
+  const inspectionFiltersActive =
+    Boolean(inspectionKeyword) || inspectionResultFilter !== 'all' || inspectionSort !== 'newest' || inspectionKind !== 'all'
   const currentInspectionsPage = Math.min(
     inspectionsPage,
     Math.max(1, Math.ceil(filteredInspections.length / STAFF_LIST_PAGE_SIZE)),
@@ -7586,6 +7443,81 @@ function StaffMain() {
           </Modal>
         )}
 
+        {inspectionView && (
+          <Modal
+            title={`ผลตรวจห้อง ${inspectionView.summary.room_number}`}
+            onClose={() => {
+              setInspectionViewPhoto(null)
+              setInspectionView(null)
+            }}
+            variant="inspection-detail"
+          >
+            {(requestClose) =>
+              inspectionView.loading ? (
+                <p className="staff-empty">กำลังโหลดผลตรวจห้อง...</p>
+              ) : inspectionView.error ? (
+                <p className="staff-form-error">{inspectionView.error}</p>
+              ) : (
+                <InspectionDetail
+                  inspection={{ ...inspectionView.summary, ...inspectionView.data }}
+                  statusLabel={inspectionView.data.tenant_request_id ? 'Staff ตรวจแล้ว' : STAFF_INSPECTION_STATUS_LABEL[inspectionView.data.status || 'pending']}
+                  statusTone={inspectionView.data.tenant_request_id ? 'reviewed' : inspectionView.data.status || 'pending'}
+                  actorClassName="staff-actor"
+                  onOpenPhoto={setInspectionViewPhoto}
+                  footer={
+                    <footer className="idt-footer">
+                      <button
+                        type="button"
+                        className="idt-footer-btn is-danger"
+                        onClick={() => {
+                          const target = inspectionView.summary
+                          requestClose()
+                          setInspectionDeleteError('')
+                          setInspectionDelete(target)
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                        </svg>
+                        ลบผลตรวจ
+                      </button>
+                      <div className="idt-footer-right">
+                        <button
+                          type="button"
+                          className="idt-footer-btn is-primary"
+                          disabled={inspectionLoadingId === inspectionView.summary.id}
+                          onClick={() => {
+                            const target = inspectionView.summary
+                            requestClose()
+                            openEditInspection(target)
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" />
+                          </svg>
+                          แก้ไขผลตรวจ
+                        </button>
+                      </div>
+                    </footer>
+                  }
+                />
+              )
+            }
+          </Modal>
+        )}
+
+        {inspectionView?.data && inspectionViewPhoto !== null && (inspectionView.data.photos || [])[inspectionViewPhoto] && createPortal(
+          <PhotoLightbox
+            photos={inspectionView.data.photos}
+            initialIndex={inspectionViewPhoto}
+            title={`ผลตรวจห้อง ${inspectionView.summary.room_number}`}
+            subtitle={inspectionView.summary.tenant_name}
+            label={`ภาพตรวจห้อง ${inspectionView.summary.room_number}`}
+            onClose={() => setInspectionViewPhoto(null)}
+          />,
+          document.body,
+        )}
+
         {inspectionDelete && (
           <Modal title="ยืนยันการลบผลตรวจห้อง" onClose={() => setInspectionDelete(null)} variant="confirm">
             {(requestClose) => (
@@ -7604,7 +7536,7 @@ function StaffMain() {
                     <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
                   </svg>
                 </div>
-                <p className="staff-confirm-message">ลบผลตรวจห้องนี้ออกจากระบบ? รูปที่แนบจะถูกลบด้วย</p>
+                <p className="staff-confirm-message">ลบผลตรวจห้องนี้? ผลตรวจจะถูกซ่อนจากหน้าระบบ แต่ข้อมูลและรูปยังเก็บไว้</p>
                 <div className="staff-confirm-details">
                   <div className="staff-confirm-detail-row">
                     <span>ห้อง</span>
@@ -8234,50 +8166,18 @@ function StaffMain() {
             <div className="staff-card-header">
               <div>
                 <h2>
-                  {INSPECTION_KINDS[inspectionKind].title}{' '}
-                  <span className="staff-count-pill">{kindInspections.length}</span>
+                  ผลตรวจห้อง <span className="staff-count-pill">{moveOutInspections.length}</span>
                 </h2>
-                <p className="waiting-list-storage-note">{INSPECTION_KINDS[inspectionKind].note}</p>
+                <p className="waiting-list-storage-note">รวมผลตรวจห้องตอนย้ายออก และผลตรวจห้องเดิมก่อนอนุมัติย้ายห้อง</p>
               </div>
-              {inspectionKind === 'moveout' && (
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  onClick={openMoveOutInspection}
-                  disabled={!rooms.some((room) => room.is_booked && room.tenant)}
-                >
-                  + เริ่มตรวจห้อง
-                </button>
-              )}
-            </div>
-            <div className="inspection-kind-tabs" role="tablist" aria-label="ประเภทการตรวจห้อง">
-              {Object.entries(INSPECTION_KINDS).map(([key, info]) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={inspectionKind === key}
-                  className={`inspection-kind-tab${inspectionKind === key ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setInspectionKind(key)
-                    setInspectionResultFilter('all')
-                    setInspectionsPage(1)
-                  }}
-                >
-                  {key === 'moveout' ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <path d="m16 17 5-5-5-5M21 12H9" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M7 7h11l-3-3M17 17H6l3 3" />
-                    </svg>
-                  )}
-                  {info.label}
-                  <span>{inspectionKindCounts[key] || 0}</span>
-                </button>
-              ))}
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                onClick={openMoveOutInspection}
+                disabled={!rooms.some((room) => room.is_booked && room.tenant)}
+              >
+                + เริ่มตรวจห้อง
+              </button>
             </div>
             {inspectionListError && (
               <p className="staff-form-error staff-form-error-block" role="alert">
@@ -8309,9 +8209,26 @@ function StaffMain() {
                 setInspectionSearch('')
                 setInspectionResultFilter('all')
                 setInspectionSort('newest')
+                setInspectionKind('all')
                 setInspectionsPage(1)
               }}
             >
+              <select
+                className="staff-filter-select"
+                value={inspectionKind}
+                onChange={(event) => {
+                  setInspectionKind(event.target.value)
+                  setInspectionsPage(1)
+                }}
+                aria-label="ประเภทการตรวจห้อง"
+              >
+                <option value="all">ทุกประเภท ({moveOutInspections.length})</option>
+                {Object.entries(INSPECTION_KINDS).map(([key, info]) => (
+                  <option key={key} value={key}>
+                    {info.label} ({inspectionKindCounts[key] || 0})
+                  </option>
+                ))}
+              </select>
               <select
                 className="staff-filter-select"
                 value={inspectionSort}
@@ -8351,7 +8268,7 @@ function StaffMain() {
                   {filteredInspections.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="staff-empty">
-                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : INSPECTION_KINDS[inspectionKind].empty}
+                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : inspectionKind === 'all' ? 'ยังไม่มีผลตรวจห้อง' : INSPECTION_KINDS[inspectionKind].empty}
                       </td>
                     </tr>
                   ) : (
@@ -8359,7 +8276,20 @@ function StaffMain() {
                       const summary = summarizeInspection(inspection.checklist)
                       const issueCount = summary.counts.damaged + summary.counts.missing
                       return (
-                        <tr key={inspection.id}>
+                        <tr
+                          key={inspection.id}
+                          className="insp-row-clickable"
+                          tabIndex={0}
+                          aria-label={`ดูผลตรวจห้อง ${inspection.room_number}`}
+                          onClick={() => openInspectionView(inspection)}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              openInspectionView(inspection)
+                            }
+                          }}
+                        >
                           <td>
                             <InspectionRoomCell
                               roomNumber={inspection.room_number}
@@ -8387,26 +8317,38 @@ function StaffMain() {
                           <td>
                             <InspectionPhotosCell count={inspection.photo_count} />
                           </td>
-                          <td className="inspection-col-actions">
-                            <div className="staff-row-actions">
-                              <button
-                                type="button"
-                                className="staff-action-btn is-ghost"
-                                disabled={inspectionLoadingId === inspection.id}
-                                onClick={() => openEditInspection(inspection)}
+                          <td className="inspection-col-actions insp-actions-cell">
+                            <div className="insp-actions">
+                              <div
+                                className="insp-actions-row"
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
                               >
-                                {inspectionLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
-                              </button>
-                              <button
-                                type="button"
-                                className="staff-action-btn is-danger"
-                                onClick={() => {
-                                  setInspectionDeleteError('')
-                                  setInspectionDelete(inspection)
-                                }}
-                              >
-                                ลบ
-                              </button>
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-ghost"
+                                  disabled={inspectionLoadingId === inspection.id}
+                                  onClick={() => openEditInspection(inspection)}
+                                >
+                                  {inspectionLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-danger"
+                                  onClick={() => {
+                                    setInspectionDeleteError('')
+                                    setInspectionDelete(inspection)
+                                  }}
+                                >
+                                  ลบ
+                                </button>
+                              </div>
+                              <span className="insp-actions-hint" aria-hidden="true">
+                                ดูรายละเอียด
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M9 18l6-6-6-6" />
+                                </svg>
+                              </span>
                             </div>
                           </td>
                         </tr>

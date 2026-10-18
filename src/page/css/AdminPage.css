@@ -4482,7 +4482,7 @@
 }
 
 .admin-inspection-table {
-  min-width: 1290px;
+  min-width: 1400px;
 }
 
 .admin-inspection-table col.is-room {
@@ -4514,7 +4514,7 @@
 }
 
 .admin-inspection-table col.is-actions {
-  width: 220px;
+  width: 330px;
 }
 
 .admin-inspection-table tbody td {
@@ -11798,4 +11798,31 @@
   padding-top: 12px;
   padding-bottom: 12px;
   vertical-align: middle;
+}
+
+.admin-inspection-table.insp-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+}
+
+.admin-inspection-table.insp-table col {
+  width: auto !important;
+}
+
+.admin-inspection-table.insp-table td.admin-inspection-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.admin-inspection-table.insp-table .insp-actions-row {
+  flex-wrap: nowrap;
+}
+
+.admin-inspection-table.insp-table .insp-person strong {
+  max-width: 180px;
+}
+
+.admin-inspection-table.insp-table .insp-inspector > span {
+  max-width: 140px;
 }

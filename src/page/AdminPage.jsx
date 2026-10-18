@@ -19,6 +19,8 @@ import {
   InspectionPhotosCell,
   InspectionRoomCell,
 } from '../components/InspectionCells.jsx'
+import InspectionDetail from '../components/InspectionDetail.jsx'
+import InspectionForm from '../components/InspectionForm.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -983,7 +985,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
@@ -4627,12 +4629,16 @@ function AdminBackupPage() {
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
   const [parcelPage, setParcelPage] = useState(1)
   const [moveOutInspections, setMoveOutInspections] = useState([])
-  const [inspectionKind, setInspectionKind] = useState('moveout')
+  const [inspectionKind, setInspectionKind] = useState('all')
   const [inspectionSearch, setInspectionSearch] = useState('')
   const [inspectionResultFilter, setInspectionResultFilter] = useState('all')
   const [inspectionStatusFilter, setInspectionStatusFilter] = useState('all')
   const [announcements, setAnnouncements] = useState([])
   const [inspectionDetail, setInspectionDetail] = useState(null)
+  const [inspectionEditor, setInspectionEditor] = useState(null)
+  const [inspectionEditLoadingId, setInspectionEditLoadingId] = useState(null)
+  const [inspectionConfirm, setInspectionConfirm] = useState(null)
+  const [inspectionConfirmBusy, setInspectionConfirmBusy] = useState(false)
   const [photoPreview, setPhotoPreview] = useState(null)
   const [photoGalleryPage, setPhotoGalleryPage] = useState(null)
   const [slipPreview, setSlipPreview] = useState(null)
@@ -4997,6 +5003,62 @@ function AdminBackupPage() {
     }
   }
 
+  const openCreateInspection = () => {
+    setInspectionEditor({ mode: 'create', initial: null, candidates: [], candidatesLoading: true, submitting: false, error: '' })
+    axios
+      .get('/api/admin/move-out-inspections/move-room-candidates', { headers: authHeaders() })
+      .then(({ data }) => {
+        setInspectionEditor((prev) => (prev?.mode === 'create' ? { ...prev, candidates: data.requests || [], candidatesLoading: false } : prev))
+      })
+      .catch((err) => {
+        if (handleUnauthorized(err)) return
+        setInspectionEditor((prev) =>
+          prev?.mode === 'create'
+            ? { ...prev, candidatesLoading: false, error: err.response?.data?.message || 'ไม่สามารถโหลดคำขอย้ายห้องได้' }
+            : prev,
+        )
+      })
+  }
+
+  const openEditInspectionForm = (inspection) => {
+    setInspectionDetail(null)
+    setPhotoPreview(null)
+    setPhotoGalleryPage(null)
+    setInspectionEditor({ mode: 'edit', initial: inspection, candidates: [], candidatesLoading: false, submitting: false, error: '' })
+  }
+
+  const openEditInspectionFromRow = async (inspection) => {
+    setInspectionEditLoadingId(inspection.id)
+    try {
+      const { data } = await axios.get(`/api/admin/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      openEditInspectionForm(data.inspection)
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setPageError(err.response?.data?.message || 'ไม่สามารถโหลดผลตรวจห้องได้')
+    } finally {
+      setInspectionEditLoadingId(null)
+    }
+  }
+
+  const submitInspectionEditor = async (payload, requestClose) => {
+    if (!inspectionEditor) return
+    setInspectionEditor((prev) => ({ ...prev, submitting: true, error: '' }))
+    try {
+      const { data } =
+        inspectionEditor.mode === 'create'
+          ? await axios.post('/api/admin/move-out-inspections', payload, { headers: authHeaders() })
+          : await axios.put(`/api/admin/move-out-inspections/${inspectionEditor.initial.id}`, payload, { headers: authHeaders() })
+      setSuccessMessage(data.message || 'บันทึกผลตรวจห้องสำเร็จ')
+      requestClose()
+      await loadMoveOutInspections()
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setInspectionEditor((prev) =>
+        prev ? { ...prev, submitting: false, error: err.response?.data?.message || 'บันทึกผลตรวจไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' } : prev,
+      )
+    }
+  }
+
   const openInspectionDetail = async (inspection) => {
     try {
       const { data } = await axios.get(`/api/admin/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
@@ -5018,8 +5080,11 @@ function AdminBackupPage() {
     }
   }
 
-  const removeMoveOutInspection = async (inspection) => {
-    if (!window.confirm(`ลบผลตรวจห้อง ${inspection.room_number} หรือไม่?`)) return
+  const removeMoveOutInspection = (inspection) => {
+    setInspectionConfirm({ kind: 'delete', inspection })
+  }
+
+  const deleteMoveOutInspection = async (inspection) => {
     try {
       const { data } = await axios.delete(`/api/admin/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
       setSuccessMessage(data.message)
@@ -5827,7 +5892,8 @@ function AdminBackupPage() {
     counts[kind] = (counts[kind] || 0) + 1
     return counts
   }, {})
-  const kindInspections = moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
+  const kindInspections =
+    inspectionKind === 'all' ? moveOutInspections : moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
   const inspectionToneCounts = kindInspections.reduce((counts, inspection) => {
     const tone = summarizeInspection(inspection.checklist).tone
     counts[tone] = (counts[tone] || 0) + 1
@@ -5836,7 +5902,10 @@ function AdminBackupPage() {
   const inspectionKeyword = inspectionSearch.trim().toLocaleLowerCase('th-TH')
   const filteredInspections = kindInspections.filter((inspection) => {
     if (inspectionResultFilter !== 'all' && summarizeInspection(inspection.checklist).tone !== inspectionResultFilter) return false
-    if (inspectionKind === 'moveout' && inspectionStatusFilter !== 'all' && (inspection.status || 'pending') !== inspectionStatusFilter) {
+    if (
+      inspectionStatusFilter !== 'all'
+      && (inspectionKindOf(inspection) !== 'moveout' || (inspection.status || 'pending') !== inspectionStatusFilter)
+    ) {
       return false
     }
     if (!inspectionKeyword) return true
@@ -7474,40 +7543,12 @@ function AdminBackupPage() {
           <div className="admin-card">
             <div className="admin-card-header">
               <div>
-                <h2>
-                  {ADMIN_INSPECTION_KINDS[inspectionKind].title} ({kindInspections.length})
-                </h2>
-                <p className="waiting-list-storage-note">{ADMIN_INSPECTION_KINDS[inspectionKind].note}</p>
+                <h2>ผลตรวจห้อง ({moveOutInspections.length})</h2>
+                <p className="waiting-list-storage-note">รวมผลตรวจห้องตอนย้ายออก และผลตรวจห้องเดิมก่อนอนุมัติย้ายห้อง</p>
               </div>
-            </div>
-            <div className="inspection-kind-tabs" role="tablist" aria-label="ประเภทการตรวจห้อง">
-              {Object.entries(ADMIN_INSPECTION_KINDS).map(([key, info]) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={inspectionKind === key}
-                  className={`inspection-kind-tab${inspectionKind === key ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setInspectionKind(key)
-                    setInspectionResultFilter('all')
-                    setInspectionStatusFilter('all')
-                  }}
-                >
-                  {key === 'moveout' ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <path d="m16 17 5-5-5-5M21 12H9" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M7 7h11l-3-3M17 17H6l3 3" />
-                    </svg>
-                  )}
-                  {info.label}
-                  <span>{inspectionKindCounts[key] || 0}</span>
-                </button>
-              ))}
+              <button type="button" className="admin-action-btn is-primary" onClick={openCreateInspection}>
+                + เพิ่มผลตรวจก่อนย้ายห้อง
+              </button>
             </div>
             <div className="admin-toolbar">
               <div className="admin-search-group">
@@ -7522,6 +7563,22 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="admin-toolbar-filters">
+                <div className="admin-filter-group">
+                  <label className="admin-toolbar-label" htmlFor="inspection-kind-filter">ประเภท</label>
+                  <select
+                    id="inspection-kind-filter"
+                    className="form-select admin-filter-select"
+                    value={inspectionKind}
+                    onChange={(event) => setInspectionKind(event.target.value)}
+                  >
+                    <option value="all">ทุกประเภท ({moveOutInspections.length})</option>
+                    {Object.entries(ADMIN_INSPECTION_KINDS).map(([key, info]) => (
+                      <option key={key} value={key}>
+                        {info.label} ({inspectionKindCounts[key] || 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="admin-filter-group">
                   <label className="admin-toolbar-label" htmlFor="inspection-result-filter">ผลตรวจ</label>
                   <select
@@ -7538,7 +7595,7 @@ function AdminBackupPage() {
                     ))}
                   </select>
                 </div>
-                {inspectionKind === 'moveout' && (
+                {inspectionKind !== 'move_room' && (
                   <div className="admin-filter-group">
                     <label className="admin-toolbar-label" htmlFor="inspection-status-filter">สถานะ</label>
                     <select
@@ -7586,7 +7643,7 @@ function AdminBackupPage() {
                   {filteredInspections.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="admin-empty">
-                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : ADMIN_INSPECTION_KINDS[inspectionKind].empty}
+                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : inspectionKind === 'all' ? 'ยังไม่มีผลตรวจห้อง' : ADMIN_INSPECTION_KINDS[inspectionKind].empty}
                       </td>
                     </tr>
                   ) : (
@@ -7654,8 +7711,33 @@ function AdminBackupPage() {
                                 >
                                   <InspectionStatusActions
                                     status={inspection.status || 'pending'}
-                                    onChange={(next) => setMoveOutInspectionStatus(inspection, next)}
+                                    onChange={(next) => setInspectionConfirm({ kind: 'status', inspection, next })}
                                   />
+                                </div>
+                              )}
+                              {inspection.tenant_request_id && (
+                                <div
+                                  className="insp-actions-row"
+                                  onClick={(event) => event.stopPropagation()}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    className="insp-status-action is-edit"
+                                    disabled={inspectionEditLoadingId === inspection.id}
+                                    onClick={() => openEditInspectionFromRow(inspection)}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" />
+                                    </svg>
+                                    {inspectionEditLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
+                                  </button>
+                                  <button type="button" className="insp-status-action is-delete" onClick={() => removeMoveOutInspection(inspection)}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                                    </svg>
+                                    ลบ
+                                  </button>
                                 </div>
                               )}
                               <span className="insp-actions-hint" aria-hidden="true">
@@ -7704,164 +7786,188 @@ function AdminBackupPage() {
       {inspectionDetail && (
         <Modal title={`ผลตรวจห้อง ${inspectionDetail.room_number}`} onClose={() => { setPhotoPreview(null); setPhotoGalleryPage(null); setInspectionDetail(null) }} variant="inspection-detail">
           {() => {
-            const summary = summarizeInspection(inspectionDetail.checklist)
-            const issueCount = summary.counts.damaged + summary.counts.missing
             const isMoveRoom = Boolean(inspectionDetail.tenant_request_id)
             const status = isMoveRoom ? 'reviewed' : inspectionDetail.status || 'pending'
-            const photos = inspectionDetail.photos || []
             return (
-              <div className="insp-detail">
-                <div className="insp-detail-scroll">
-                  <div className={`insp-detail-hero is-${summary.tone}`}>
-                    <div className="insp-detail-hero-top">
-                      <span className="insp-detail-avatar" aria-hidden="true"><PersonIcon size={22} /></span>
-                      <div className="insp-detail-hero-main">
-                        <strong>{inspectionDetail.tenant_name}</strong>
-                        <div className="insp-detail-hero-rooms">
-                          {isMoveRoom ? (
-                            <>
-                              <span className="insp-room-pill">{inspectionDetail.room_number}</span>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <line x1="4" y1="12" x2="20" y2="12" />
-                                <polyline points="14 6 20 12 14 18" />
-                              </svg>
-                              <span className="insp-room-pill is-target">{inspectionDetail.target_room_number || '-'}</span>
-                              <small>ตรวจห้องก่อนย้าย</small>
-                            </>
-                          ) : (
-                            <>
-                              <span className="insp-room-pill">
-                                <RoomDetailIcon type="home" size={13} />
-                                ห้อง {inspectionDetail.room_number}
-                              </span>
-                              <small>ตรวจห้องย้ายออก</small>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`insp-status-badge is-${status}`}>
-                        {isMoveRoom ? 'Staff ตรวจแล้ว' : MOVE_OUT_INSPECTION_STATUS[status]}
-                      </span>
-                    </div>
-                    <dl className="insp-detail-meta">
-                      <div>
-                        <dt><RoomDetailIcon type="phone" size={13} />เบอร์โทร</dt>
-                        <dd>
-                          {inspectionDetail.tenant_phone ? (
-                            <a className="maintenance-detail-tel" href={`tel:${inspectionDetail.tenant_phone}`}>{inspectionDetail.tenant_phone}</a>
-                          ) : '-'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt><RoomDetailIcon type="user" size={13} />ตรวจโดย</dt>
-                        <dd className={inspectionDetail.inspected_by ? 'admin-actor-inline' : ''}>{inspectionDetail.inspected_by || '-'}</dd>
-                      </div>
-                      <div>
-                        <dt><RoomDetailIcon type="calendar" size={13} />ตรวจเมื่อ</dt>
-                        <dd>{formatDateTime(inspectionDetail.created_at)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <section className="payment-detail-section">
-                    <div className="insp-detail-section-head">
-                      <h4><RoomDetailIcon type="clipboard" size={16} />Checklist</h4>
-                      <span className={`inspection-result is-${summary.tone}`}>
-                        {INSPECTION_TONE_LABEL[summary.tone]}
-                        {issueCount > 0 && ` ${issueCount} ข้อ`}
-                      </span>
-                    </div>
-                    <div className="insp-detail-counts">
-                      <span className="is-success"><strong>{summary.counts.good}</strong>ปกติ</span>
-                      <span className="is-warning"><strong>{summary.counts.wear}</strong>สึกหรอ</span>
-                      <span className="is-danger"><strong>{summary.counts.damaged}</strong>ชำรุด</span>
-                      <span className="is-danger"><strong>{summary.counts.missing}</strong>สูญหาย</span>
-                      <span><strong>{summary.counts.not_applicable}</strong>ไม่มี</span>
-                    </div>
-                    <ul className="insp-detail-checklist">
-                      {MOVE_OUT_CHECKLIST.map((item) => {
-                        const result = inspectionDetail.checklist?.[item.key]
-                        const info = INSPECTION_RESULT_INFO[result] || INSPECTION_RESULT_INFO.none
-                        const label = {
-                          good: 'ปกติ',
-                          wear: 'สึกหรอตามปกติ',
-                          damaged: 'ชำรุด',
-                          missing: 'สูญหาย',
-                          not_applicable: 'ไม่มี/ไม่ได้ติดตั้ง',
-                        }[result] || 'ไม่ได้ระบุ'
-                        return (
-                          <li key={item.key} className={`is-${info.tone}`}>
-                            <span className={`moveout-card-dot is-${info.tone}`} aria-hidden="true" />
-                            <span className="insp-detail-checklist-label">{item.label}</span>
-                            <span className={`room-detail-chip is-${info.tone}`}>{label}</span>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </section>
-
-                  <section className="payment-detail-section">
-                    <h4><RoomDetailIcon type="note" size={16} />รายละเอียดที่พบ / หมายเหตุ</h4>
-                    <div className={`request-detail-note${inspectionDetail.damage_note ? '' : ' is-empty'}`}>
-                      <p>{inspectionDetail.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
-                    </div>
-                  </section>
-
-                  <section className="payment-detail-section">
-                    <div className="insp-detail-section-head">
-                      <h4>
-                        <RoomDetailIcon type="receipt" size={16} />
-                        รูปภาพประกอบ
-                        <span className="maintenance-detail-count">{photos.length}</span>
-                      </h4>
-                      {photos.length > 0 && (
-                        <button type="button" className="room-detail-section-link" onClick={() => setPhotoGalleryPage(1)}>
-                          ดูทั้งหมด
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M9 18l6-6-6-6" />
+              <InspectionDetail
+                inspection={inspectionDetail}
+                statusLabel={isMoveRoom ? 'Staff ตรวจแล้ว' : MOVE_OUT_INSPECTION_STATUS[status]}
+                statusTone={status}
+                actorClassName="admin-actor-inline"
+                photoLimit={INSPECTION_PHOTO_PREVIEW_COUNT}
+                onOpenPhoto={showPhoto}
+                onOpenGallery={() => setPhotoGalleryPage(1)}
+                footer={
+                  <footer className="idt-footer">
+                    <button type="button" className="idt-footer-btn is-danger" onClick={() => removeMoveOutInspection(inspectionDetail)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                      </svg>
+                      ลบผลตรวจ
+                    </button>
+                    {isMoveRoom && (
+                      <div className="idt-footer-right">
+                        <button type="button" className="idt-footer-btn is-primary" onClick={() => openEditInspectionForm(inspectionDetail)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" />
                           </svg>
+                          แก้ไขผลตรวจ
                         </button>
-                      )}
-                    </div>
-                    {photos.length ? (
-                      <div className="moveout-inspection-photo-grid">
-                        {photos.slice(0, INSPECTION_PHOTO_PREVIEW_COUNT).map(renderInspectionPhoto)}
-                      </div>
-                    ) : (
-                      <div className="payment-detail-slip-empty">
-                        <RoomDetailIcon type="receipt" size={20} />
-                        <span>ไม่มีรูปภาพแนบ</span>
                       </div>
                     )}
-                  </section>
-                </div>
-
-                <footer className="admin-form-actions moveout-inspection-status-bar insp-detail-footer">
-                  <button type="button" className="insp-detail-delete" onClick={() => removeMoveOutInspection(inspectionDetail)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                    </svg>
-                    ลบผลตรวจ
-                  </button>
-                  {!isMoveRoom && (
-                    <div className="insp-detail-footer-right">
-                      <span className="insp-detail-footer-label">
-                        สถานะตอนนี้
-                        <span className={`insp-status-badge is-${status}`}>{MOVE_OUT_INSPECTION_STATUS[status]}</span>
-                      </span>
-                      <div className="insp-detail-footer-actions">
-                        <InspectionStatusActions
-                          status={status}
-                          size="lg"
-                          onChange={(next) => setMoveOutInspectionStatus(inspectionDetail, next)}
-                        />
+                    {!isMoveRoom && (
+                      <div className="idt-footer-right">
+                        <span className="idt-footer-label">
+                          สถานะตอนนี้
+                          <span className={`insp-status-badge is-${status}`}>{MOVE_OUT_INSPECTION_STATUS[status]}</span>
+                        </span>
+                        <div className="idt-footer-actions">
+                          <InspectionStatusActions
+                            status={status}
+                            size="lg"
+                            onChange={(next) => setInspectionConfirm({ kind: 'status', inspection: inspectionDetail, next })}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </footer>
-              </div>
+                    )}
+                  </footer>
+                }
+              />
             )
           }}
+        </Modal>
+      )}
+
+      {inspectionEditor && (
+        <Modal
+          title={
+            inspectionEditor.mode === 'create'
+              ? 'เพิ่มผลตรวจห้องก่อนย้ายห้อง'
+              : `แก้ไขผลตรวจห้อง ${inspectionEditor.initial?.room_number || ''}`
+          }
+          onClose={() => setInspectionEditor(null)}
+          variant="inspection-form"
+        >
+          {(requestClose) => (
+            <InspectionForm
+              key={inspectionEditor.mode === 'create' ? `create-${inspectionEditor.candidates.length}` : `edit-${inspectionEditor.initial?.id}`}
+              mode={inspectionEditor.mode}
+              initial={inspectionEditor.initial}
+              candidates={inspectionEditor.candidates}
+              candidatesLoading={inspectionEditor.candidatesLoading}
+              submitting={inspectionEditor.submitting}
+              error={inspectionEditor.error}
+              onCancel={() => setInspectionConfirm({ kind: 'cancel', close: requestClose })}
+              onSubmit={(payload) => setInspectionConfirm({ kind: 'save', payload, close: requestClose })}
+            />
+          )}
+        </Modal>
+      )}
+
+      {inspectionConfirm && (
+        <Modal
+          title={
+            inspectionConfirm.kind === 'delete'
+              ? 'ยืนยันการลบผลตรวจ'
+              : inspectionConfirm.kind === 'status'
+                ? 'ยืนยันการเปลี่ยนสถานะ'
+                : inspectionConfirm.kind === 'save'
+                ? 'ยืนยันการบันทึกผลตรวจ'
+                : 'ยืนยันการยกเลิก'
+          }
+          onClose={() => {
+            if (!inspectionConfirmBusy) setInspectionConfirm(null)
+          }}
+          variant="confirm"
+        >
+          {(requestClose) => (
+            <div className="admin-confirm-body">
+              <div
+                className={`admin-confirm-icon ${
+                  inspectionConfirm.kind === 'save' || (inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'reviewed')
+                    ? 'is-success'
+                    : 'is-danger'
+                }`}
+              >
+                {inspectionConfirm.kind === 'save' || (inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'reviewed') ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m5 12 5 5 9-10" />
+                  </svg>
+                ) : inspectionConfirm.kind === 'delete' ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7.5v5.5M12 16.5h.01" />
+                  </svg>
+                )}
+              </div>
+              <p className="admin-confirm-message">
+                {inspectionConfirm.kind === 'delete'
+                  ? `ต้องการลบผลตรวจห้อง ${inspectionConfirm.inspection.room_number} ใช่หรือไม่? ผลตรวจจะถูกซ่อนจากหน้าระบบ แต่ข้อมูลและรูปยังเก็บไว้`
+                  : inspectionConfirm.kind === 'status'
+                    ? inspectionConfirm.next === 'reviewed'
+                      ? `ยืนยันว่าตรวจผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เรียบร้อยแล้วใช่หรือไม่?`
+                      : inspectionConfirm.next === 'follow_up'
+                        ? `ต้องการตั้งผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เป็น "ต้องติดตาม" ใช่หรือไม่?`
+                        : `ต้องการยกเลิกสถานะและย้อนผลตรวจห้อง ${inspectionConfirm.inspection.room_number} กลับเป็น "รอ Admin ตรวจ" ใช่หรือไม่?`
+                  : inspectionConfirm.kind === 'save'
+                    ? inspectionEditor?.mode === 'create'
+                      ? 'ต้องการบันทึกผลตรวจห้องนี้ใช่หรือไม่?'
+                      : 'ต้องการบันทึกการแก้ไขผลตรวจห้องนี้ใช่หรือไม่?'
+                    : 'ต้องการยกเลิกใช่หรือไม่? ข้อมูลที่กรอกไว้จะไม่ถูกบันทึก'}
+              </p>
+              <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" disabled={inspectionConfirmBusy} onClick={requestClose}>
+                  {inspectionConfirm.kind === 'cancel' ? 'กลับไปแก้ไขต่อ' : 'ยกเลิก'}
+                </button>
+                <button
+                  type="button"
+                  className={`admin-action-btn ${
+                    inspectionConfirm.kind === 'save' || (inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'reviewed')
+                      ? 'is-primary'
+                      : inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'follow_up'
+                        ? 'is-warning'
+                        : 'is-danger'
+                  }`}
+                  disabled={inspectionConfirmBusy}
+                  onClick={async () => {
+                    const current = inspectionConfirm
+                    if (current.kind === 'cancel') {
+                      requestClose()
+                      current.close?.()
+                      return
+                    }
+                    setInspectionConfirmBusy(true)
+                    try {
+                      if (current.kind === 'save') await submitInspectionEditor(current.payload, current.close)
+                      else if (current.kind === 'status') await setMoveOutInspectionStatus(current.inspection, current.next)
+                      else await deleteMoveOutInspection(current.inspection)
+                    } finally {
+                      setInspectionConfirmBusy(false)
+                      requestClose()
+                    }
+                  }}
+                >
+                  {inspectionConfirmBusy
+                    ? 'กำลังดำเนินการ...'
+                    : inspectionConfirm.kind === 'delete'
+                      ? 'ลบผลตรวจ'
+                      : inspectionConfirm.kind === 'status'
+                        ? inspectionConfirm.next === 'reviewed'
+                          ? 'ยืนยันตรวจแล้ว'
+                          : inspectionConfirm.next === 'follow_up'
+                            ? 'ตั้งเป็นต้องติดตาม'
+                            : 'ยืนยันยกเลิกสถานะ'
+                      : inspectionConfirm.kind === 'save'
+                        ? 'ยืนยันบันทึก'
+                        : 'ยืนยันยกเลิก'}
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 

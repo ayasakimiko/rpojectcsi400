@@ -1,0 +1,128 @@
+.admin-modal.admin-modal-inspection-form {
+  width: 100%;
+  max-width: 760px;
+}
+
+.admin-modal-inspection-form .admin-modal-body {
+  padding: 20px 24px 0;
+}
+
+.idf-candidates-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed #dce9fb;
+  border-radius: 12px;
+  background: #fbfdff;
+  color: #8aa0b6;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.idf-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.idf-requests.is-invalid .idf-request {
+  border-color: #fca5a5;
+}
+
+.idf-request {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 12px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.idf-request:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.idf-request.is-active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.idf-request-info {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.idf-request-info strong {
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.idf-request-info span {
+  overflow: hidden;
+  color: #6b859e;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.idf-request-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 50%;
+  color: #ffffff;
+}
+
+.idf-request.is-active .idf-request-check {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.admin-inspection-form .inspection-footer {
+  z-index: 3;
+  gap: 10px;
+  margin: 8px -24px 0;
+  padding: 14px 24px 18px;
+  border-top: 1px solid #e6eef9;
+  background: #ffffff;
+  box-shadow: 0 -10px 20px -18px rgba(15, 43, 82, 0.45);
+}
+
+.admin-inspection-form .inspection-footer-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-inspection-form .inspection-footer-actions .staff-action-btn {
+  min-height: 40px;
+}
+
+@media (max-width: 640px) {
+  .admin-modal-inspection-form .admin-modal-body {
+    padding: 16px 16px 0;
+  }
+
+  .admin-inspection-form .inspection-footer {
+    margin: 8px -16px 0;
+    padding: 12px 16px 14px;
+  }
+}
