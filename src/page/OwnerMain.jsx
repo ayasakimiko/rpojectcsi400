@@ -223,12 +223,14 @@ const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
+  { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
 ]
 
 const OWNER_PERIOD_BAR_CONTENT = {
   rooms: { title: 'สรุปข้อมูลห้องพัก', subtitle: 'ภาพรวมห้องพักและผู้เข้าพักประจำเดือน' },
   finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
   staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
+  utilities: { title: 'ค่าน้ำ-ค่าไฟรายห้อง', subtitle: 'หน่วยที่ใช้ ยอดเรียกเก็บ และสถานะการชำระแยกตามห้อง' },
 }
 
 const PAYMENT_DATE_PRESETS = [
@@ -496,6 +498,9 @@ function OwnerMain() {
   const [isOccupancyTrendLoading, setIsOccupancyTrendLoading] = useState(false)
   const [expenseCategoryPage, setExpenseCategoryPage] = useState(1)
   const [staffList, setStaffList] = useState([])
+  const [utilities, setUtilities] = useState({ summary: {}, rooms: [] })
+  const [utilityMonth, setUtilityMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [utilityRoomFilter, setUtilityRoomFilter] = useState('all')
   const [paymentLogs, setPaymentLogs] = useState({ payments: [], total: 0, page: 1, pageSize: 20 })
   const [occupancyLogs, setOccupancyLogs] = useState({ logs: [], total: 0, page: 1, pageSize: 10 })
   const [occupancyFilter, setOccupancyFilter] = useState({ search: '', type: 'all' })
@@ -880,9 +885,18 @@ function OwnerMain() {
     }
   }
 
-  const loadStaff = async () => {
+   const loadStaff = async () => {
     const { data } = await axios.get('/api/owner/staff', { headers: getAuthHeaders() })
     setStaffList(data.staff || [])
+  }
+
+  const loadUtilities = async () => {
+    const [year, month] = utilityMonth.split('-')
+    const { data } = await axios.get('/api/owner/utilities', {
+      headers: getAuthHeaders(),
+      params: { year, month },
+    })
+    setUtilities({ summary: data.summary || {}, rooms: data.rooms || [] })
   }
 
   const loadPaymentLogs = async (page = paymentLogs.page || 1, overrides = {}) => {
@@ -945,6 +959,14 @@ function OwnerMain() {
 
     fetchAll()
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'utilities') return
+
+    loadUtilities().catch((error) => {
+      setMessage('danger', error.response?.data?.message || 'โหลดข้อมูลค่าน้ำ-ค่าไฟไม่สำเร็จ')
+    })
+  }, [activeTab, utilityMonth])
 
   useEffect(() => {
     const isModalOpen = Boolean(displayRoomDetail) || Boolean(displayRoomListFilter) || displayStaffModalOpen || Boolean(displayViewingStaff)
@@ -1507,6 +1529,79 @@ function OwnerMain() {
                   </button>
                 </div>
               )}
+            </section>
+          </>
+        )}
+
+        {!isLoading && activeTab === 'utilities' && (
+          <>
+            <section className="owner-card-grid">
+              <article className="owner-stat-card blue">
+                <div className="owner-stat-header"><span>ค่าน้ำรวม</span></div>
+                <h2>฿{formatCurrency(utilities.summary.waterTotal)}</h2>
+                <p>{utilities.summary.waterUnits ?? 0} หน่วย</p>
+              </article>
+              <article className="owner-stat-card orange">
+                <div className="owner-stat-header"><span>ค่าไฟรวม</span></div>
+                <h2>฿{formatCurrency(utilities.summary.electricityTotal)}</h2>
+                <p>{utilities.summary.electricityUnits ?? 0} หน่วย</p>
+              </article>
+              <article className="owner-stat-card red">
+                <div className="owner-stat-header"><span>ค้างชำระ</span></div>
+                <h2>฿{formatCurrency(utilities.summary.unpaidTotal)}</h2>
+                <p>ค่าน้ำ-ค่าไฟที่ยังไม่ชำระ</p>
+              </article>
+              <article className="owner-stat-card purple">
+                <div className="owner-stat-header"><span>จำนวนห้อง</span></div>
+                <h2>{utilities.rooms.length}</h2>
+                <p>ห้องที่มีข้อมูล</p>
+              </article>
+            </section>
+
+            <section className="owner-panel">
+              <div className="owner-panel-header">
+                <h3>ค่าน้ำ-ค่าไฟแยกตามห้อง</h3>
+                <input
+                  type="month"
+                  value={utilityMonth}
+                  onChange={(event) => setUtilityMonth(event.target.value)}
+                  aria-label="เลือกเดือน"
+                />
+              </div>
+
+              <div className="owner-table-wrap">
+                <table className="owner-table">
+                  <thead>
+                    <tr>
+                      <th>ห้อง</th><th>ผู้เช่า</th><th>ค่าน้ำ (หน่วย)</th><th>ค่าน้ำ</th>
+                      <th>ค่าไฟ (หน่วย)</th><th>ค่าไฟ</th><th>รวม</th><th>สถานะ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {utilities.rooms
+                      .filter((room) => utilityRoomFilter === 'all' || String(room.room_number) === utilityRoomFilter)
+                      .map((room) => (
+                        <tr key={room.room_number}>
+                          <td>{room.room_number}</td>
+                          <td>{room.tenant_name || '-'}</td>
+                          <td>{room.water_units ?? 0}</td>
+                          <td>฿{formatCurrency(room.water_amount)}</td>
+                          <td>{room.electricity_units ?? 0}</td>
+                          <td>฿{formatCurrency(room.electricity_amount)}</td>
+                          <td><strong>฿{formatCurrency(room.total)}</strong></td>
+                          <td>
+                            <span className={`owner-status-badge ${room.status === 'paid' ? 'active' : 'pending'}`}>
+                              {room.status === 'paid' ? 'ชำระแล้ว' : 'รอชำระ'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    {!utilities.rooms.length && (
+                      <tr><td colSpan="8" className="owner-empty-row">ไม่มีข้อมูลค่าน้ำ-ค่าไฟ</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </section>
           </>
         )}
