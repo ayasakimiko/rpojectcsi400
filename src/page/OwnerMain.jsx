@@ -413,7 +413,7 @@ function OwnerSafetyIncidentReview() {
                     <div className="owner-safety-card-heading">
                       <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
                       <span className={`owner-safety-status ${item.status} ${item.severity}`}>
-                        {item.status === 'pending' ? 'รอตรวจสอบ' : 'ตรวจแล้ว'}
+                        {item.status === 'pending' ? 'รอตรวจสอบ' : item.status === 'cancelled' ? 'ยกเลิกแล้ว' : 'ตรวจแล้ว'}
                         {item.severity === 'urgent' ? ' · ด่วน' : ''}
                       </span>
                     </div>
@@ -449,6 +449,11 @@ function OwnerSafetyIncidentReview() {
                           บันทึกว่าตรวจสอบแล้ว
                         </button>
                       </>
+                    ) : item.status === 'cancelled' ? (
+                      <p className="owner-safety-note">
+                        ยกเลิกโดย <span className="owner-actor">{item.cancelled_by_name || '-'}</span>
+                        {item.cancel_reason ? ` · ${item.cancel_reason}` : ''}
+                      </p>
                     ) : (
                       <p className="owner-safety-note">
                         ตรวจโดย <span className="owner-actor">{item.reviewed_by_name || '-'}</span>

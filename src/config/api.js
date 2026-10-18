@@ -172,7 +172,6 @@ export function configureApiClient({
     }
     const token = bearer(config)
     if (token && token !== storage.getItem('token')) {
-      // Old responses must not sign out or overwrite a newer login.
       throw staleSession(config)
     }
     if (error.response?.status === 401 && !/^\/api\/auth\/login(?:[/?#]|$)/.test(config.url || '')) {
@@ -185,7 +184,6 @@ export function configureApiClient({
     const unreachable = !error.response || [502, 503, 504].includes(error.response.status)
     if (!unreachable) throw error
     selector.invalidate(config.backendId)
-    // Never replay a write: the first server may already have accepted it.
     if (!['get', 'head'].includes(config.method) || config.backendRetried) throw error
     let next
     try {

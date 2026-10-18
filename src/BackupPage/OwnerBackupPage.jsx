@@ -189,7 +189,6 @@ function OwnerBackupPage() {
     navigate('/login', { replace: true })
   }
 
-  /* ------------------------------- Overview -------------------------------- */
   const [overview, setOverview] = useState(null)
   const [overviewLoading, setOverviewLoading] = useState(true)
   const [overviewError, setOverviewError] = useState('')
@@ -227,7 +226,6 @@ function OwnerBackupPage() {
         setTrendsError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลแนวโน้มได้')
       })
       .finally(() => setTrendsLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trendMonths])
 
   const [incomeByType, setIncomeByType] = useState([])
@@ -261,7 +259,6 @@ function OwnerBackupPage() {
       .finally(() => setRoomStatusLoading(false))
   }
 
-  /* ------------------------------- Expenses -------------------------------- */
   const [expenseLogs, setExpenseLogs] = useState({ items: [], total: 0, totalAmount: 0, page: 1, pageSize: 20 })
   const [expensesLoading, setExpensesLoading] = useState(false)
   const [expensesError, setExpensesError] = useState('')
@@ -375,10 +372,8 @@ function OwnerBackupPage() {
     if (activeTab !== 'expenses') return
     const timeout = setTimeout(() => loadExpenses(1, expensesFrom, expensesTo), 400)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expensesFrom, expensesTo])
 
-  /* -------------------------------- Payments ------------------------------- */
   const [paymentLogs, setPaymentLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [paymentsLoading, setPaymentsLoading] = useState(false)
   const [paymentsError, setPaymentsError] = useState('')
@@ -415,10 +410,8 @@ function OwnerBackupPage() {
     if (activeTab !== 'payments') return
     const timeout = setTimeout(() => loadPayments(1, paymentsSearch, paymentsFrom, paymentsTo), 400)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentsSearch, paymentsFrom, paymentsTo])
 
-  /* ---------------------------------- Staff --------------------------------- */
   const [staffList, setStaffList] = useState([])
   const [staffLoading, setStaffLoading] = useState(false)
   const [staffError, setStaffError] = useState('')
@@ -567,7 +560,6 @@ function OwnerBackupPage() {
     setStaffPage(1)
   }, [staffSearch, staffRoleFilter])
 
-  /* --------------------------------- Mount --------------------------------- */
   useEffect(() => {
     const token = sessionStorage.getItem('token')
     if (!token) {
@@ -590,17 +582,14 @@ function OwnerBackupPage() {
     loadOverview()
     loadIncomeByType()
     loadRoomStatus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (activeTab === 'expenses') loadExpenses(1, expensesFrom, expensesTo)
     if (activeTab === 'payments') loadPayments(1, paymentsSearch, paymentsFrom, paymentsTo)
     if (activeTab === 'staff') loadStaff()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  /* -------------------------------- Derived -------------------------------- */
   const netProfit = overview ? overview.finance.netProfit : 0
 
   const occupancyPieData = useMemo(() => {

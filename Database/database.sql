@@ -261,7 +261,6 @@ CREATE TABLE IF NOT EXISTS ParcelPhoto (
 
     FOREIGN KEY (parcel_id) REFERENCES Parcel(id) ON DELETE CASCADE
 );
--- Upgrade existing tables without replacing existing records.
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
@@ -389,7 +388,6 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
--- Backfill existing records for room transfers and parcel ownership.
 
 UPDATE TenantRequest tr
      JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
@@ -534,10 +532,13 @@ CREATE TABLE IF NOT EXISTS SafetyIncident (
     severity ENUM('urgent', 'normal') NOT NULL DEFAULT 'normal',
     description VARCHAR(1000) NOT NULL,
     photos LONGTEXT NULL,
-    status ENUM('pending', 'reviewed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending', 'reviewed', 'cancelled') NOT NULL DEFAULT 'pending',
     reviewed_by_name VARCHAR(255) NULL,
     reviewed_at DATETIME NULL,
     review_note VARCHAR(500) NULL,
+    cancelled_by_name VARCHAR(255) NULL,
+    cancelled_at DATETIME NULL,
+    cancel_reason VARCHAR(500) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_safety_incident_status (status, created_at)
 );
@@ -627,6 +628,16 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND COLUMN_NAME = 'photos'),
     'SELECT 1',
     'ALTER TABLE `SafetyIncident` ADD COLUMN `photos` LONGTEXT NULL AFTER description'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND COLUMN_NAME = 'cancelled_at'),
+    'SELECT 1',
+    'ALTER TABLE `SafetyIncident` MODIFY `status` ENUM(''pending'', ''reviewed'', ''cancelled'') NOT NULL DEFAULT ''pending'', ADD COLUMN `cancelled_by_name` VARCHAR(255) NULL AFTER review_note, ADD COLUMN `cancelled_at` DATETIME NULL AFTER cancelled_by_name, ADD COLUMN `cancel_reason` VARCHAR(500) NULL AFTER cancelled_at'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;

@@ -8,12 +8,12 @@ x-service-env: &service-env
   PARKING_CAPACITY: ${PARKING_CAPACITY:-}
   JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
   CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
-  NODE_OPTIONS: --max-old-space-size=96
+  NODE_OPTIONS: --max-old-space-size=96 --max-semi-space-size=2
   TZ: Asia/Bangkok
 
 x-upload-env: &upload-env
   <<: *service-env
-  NODE_OPTIONS: --max-old-space-size=192
+  NODE_OPTIONS: --max-old-space-size=160 --max-semi-space-size=4
 
 services:
   db:
@@ -30,6 +30,10 @@ services:
       - --tmp-table-size=16M
       - --max-heap-table-size=16M
       - --thread-cache-size=8
+      - --innodb-buffer-pool-size=${DB_BUFFER_POOL_SIZE:-32M}
+      - --innodb-log-buffer-size=4M
+      - --key-buffer-size=1M
+      - --skip-log-bin
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
       MYSQL_DATABASE: ${DB_NAME:-projectcsi400}
@@ -54,7 +58,7 @@ services:
     restart: "no"
     environment:
       <<: *service-env
-      NODE_OPTIONS: --max-old-space-size=192
+      NODE_OPTIONS: --max-old-space-size=192 --max-semi-space-size=4
     volumes:
       - ./public/uploads:/app/public/uploads
     depends_on:
@@ -92,7 +96,7 @@ services:
       ADMIN_SERVICE_URL: http://admin-service:4005
       OWNER_SERVICE_URL: http://owner-service:4006
       PARCEL_SERVICE_URL: http://parcel-service:4007
-      NODE_OPTIONS: --max-old-space-size=64
+      NODE_OPTIONS: --max-old-space-size=64 --max-semi-space-size=2
       TZ: Asia/Bangkok
     ports:
       - "${PORT:-4000}:4000"

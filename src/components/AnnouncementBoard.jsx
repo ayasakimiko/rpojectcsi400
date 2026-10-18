@@ -188,6 +188,35 @@ function describeExpiry(expiry) {
   return 'ไม่กำหนด'
 }
 
+function findScrollParent(element) {
+  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+    const { overflowY } = window.getComputedStyle(node)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node
+  }
+  return null
+}
+
+function scrollPostIntoView(post) {
+  const gap = 12
+  const container = findScrollParent(post)
+  if (!container) {
+    const fits = post.getBoundingClientRect().height <= window.innerHeight - gap * 4
+    post.scrollIntoView({ behavior: 'smooth', block: fits ? 'center' : 'start' })
+    return
+  }
+  const containerRect = container.getBoundingClientRect()
+  const postRect = post.getBoundingClientRect()
+  const postTop = postRect.top - containerRect.top + container.scrollTop
+  const room = container.clientHeight - postRect.height
+  const target = room > gap * 2 ? postTop - room / 2 : postTop - gap
+  container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+  const outside = containerRect.top < 0 || containerRect.bottom > window.innerHeight
+  if (outside) {
+    const fits = containerRect.height <= window.innerHeight - gap * 4
+    container.scrollIntoView({ behavior: 'smooth', block: fits ? 'center' : 'start' })
+  }
+}
+
 function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onChange, variant = 'staff', openId = null }) {
   const classes = VARIANT_CLASSES[variant] || VARIANT_CLASSES.staff
   const [isCreating, setIsCreating] = useState(false)
@@ -225,7 +254,10 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const [formClosing, setFormClosing] = useState(false)
   const [confirmClosing, setConfirmClosing] = useState(false)
   const [resultClosing, setResultClosing] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(ANNOUNCEMENTS_PER_PAGE)
+  const [visibleCount, setVisibleCount] = useState(() => {
+    const index = announcements.findIndex((item) => item.id === openId)
+    return index < 0 ? ANNOUNCEMENTS_PER_PAGE : Math.max(ANNOUNCEMENTS_PER_PAGE, Math.ceil((index + 1) / ANNOUNCEMENTS_PER_PAGE) * ANNOUNCEMENTS_PER_PAGE)
+  })
   const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [now, setNow] = useState(() => Date.now())
 
@@ -249,6 +281,17 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       else next.add(id)
       return next
     })
+
+  useEffect(() => {
+    if (openId == null) return
+    const post = document.querySelector(`[data-announcement-id="${openId}"]`)
+    if (!post) return
+    scrollPostIntoView(post)
+    post.classList.remove('is-focus-highlight')
+    void post.offsetWidth
+    post.classList.add('is-focus-highlight')
+    post.addEventListener('animationend', () => post.classList.remove('is-focus-highlight'), { once: true })
+  }, [openId])
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 30000)
@@ -515,7 +558,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                         return (
                           <li key={item.id} className={`announcement-day-item is-${tone}`}>
                             <span className="announcement-day-dot" aria-hidden="true" />
-                            <article className={`announcement-post is-${tone}`}>
+                            <article data-announcement-id={item.id} className={`announcement-post is-${tone}`}>
                               <header className="announcement-post-head">
                                 <span className="announcement-post-avatar" aria-hidden="true">
                                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -13,7 +13,6 @@ function copyPublicAssets() {
     configResolved(resolved) { config = resolved },
     async closeBundle() {
       if (!config.publicDir || !existsSync(config.publicDir)) return
-      // Keep uploaded files, including payment slips, on the backend.
       await cp(config.publicDir, path.resolve(config.root, config.build.outDir), {
         recursive: true,
         filter: (source) => path.relative(config.publicDir, source).split(path.sep)[0] !== 'uploads',
@@ -29,7 +28,6 @@ function backendProxy(target, prefix = '') {
     rewrite: (url) => prefix ? url.slice(prefix.length) : url,
     configure(proxy) {
       proxy.on('proxyReq', (proxyReq) => {
-        // Requests from the local dev proxy are server-to-server requests.
         proxyReq.removeHeader('origin')
       })
     },

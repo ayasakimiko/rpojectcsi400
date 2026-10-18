@@ -8,14 +8,709 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
-import { CheckIcon, DoorIcon, HashIcon, InfoIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
+import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import StepTimeline from '../components/StepTimeline.jsx'
 
-const WAITING_LIST_STATUS_LABEL = {
-  waiting: 'รอห้องว่าง',
-  contacted: 'ติดต่อแล้ว',
-  reserved: 'จองแล้ว',
-  closed: 'ปิดรายการ',
+const WAITING_UI_STATUSES = {
+  waiting: { label: 'รอห้องว่าง', tone: 'warning' },
+  contacted: { label: 'ติดต่อแล้ว', tone: 'info' },
+  reserved: { label: 'จองแล้ว', tone: 'success' },
+  closed: { label: 'ปิดรายการ', tone: 'muted' },
+}
+
+const WAITING_UI_ROOM_PREFERENCES = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
+
+function splitWaitingPreferences(value) {
+  return String(value || '').split('|').map((item) => item.trim()).filter(Boolean)
+}
+
+function waitingDayKey(value) {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function waitingDateFromKey(value) {
+  return value ? new Date(`${value.slice(0, 10)}T00:00:00`) : undefined
+}
+
+function formatWaitingDate(value) {
+  if (!value) return '-'
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? waitingDateFromKey(value) : new Date(value)
+  return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function formatWaitingDateTime(value) {
+  return value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '-'
+}
+
+function waitingDaysSince(value, now) {
+  if (!value) return 0
+  const elapsed = now - new Date(value).getTime()
+  return Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 86400000)) : 0
+}
+
+function describeWaitingMoveIn(value, now) {
+  const today = new Date(now)
+  const diff = Math.round((waitingDateFromKey(value).getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000)
+  if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
+  if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
+  return { text: `อีก ${diff} วัน`, tone: diff <= 7 ? 'soon' : 'later' }
+}
+
+function waitingNameInitial(name) {
+  return String(name || '').trim().replace(/^[เแโใไ]/, '').charAt(0).toUpperCase() || '?'
+}
+
+function getWaitingMoveInPresets(now) {
+  const today = new Date(now)
+  return [
+    { label: 'สัปดาห์หน้า', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)) },
+    { label: 'ต้นเดือนหน้า', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth() + 1, 1)) },
+    { label: 'อีก 1 เดือน', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth() + 1, today.getDate())) },
+  ]
+}
+
+function groupWaitingEntries(items) {
+  return items.reduce((groups, item) => {
+    const key = waitingDayKey(item.created_at)
+    const previous = groups[groups.length - 1]
+    if (previous?.key === key) previous.items.push(item)
+    else groups.push({ key, date: new Date(item.created_at), items: [item] })
+    return groups
+  }, [])
+}
+
+function WaitingListPanel({ items, now, vacantCount, onAdd, onDetail, onEdit, onDelete, onStatusChange, statusBusyId }) {
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('all')
+  const [sort, setSort] = useState('newest')
+  const [dates, setDates] = useState({ from: '', to: '' })
+  const [page, setPage] = useState(1)
+  const counts = items.reduce((result, item) => {
+    const key = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+    result[key] = (result[key] || 0) + 1
+    return result
+  }, {})
+  const keyword = search.trim().toLocaleLowerCase('th-TH')
+  const filtered = items.filter(item => {
+    const key = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+    if (status !== 'all' && status !== key) return false
+    const created = waitingDayKey(item.created_at)
+    if ((dates.from && created < dates.from) || (dates.to && created > dates.to)) return false
+    return !keyword || [item.full_name, item.phone, item.room_preference, item.note, item.submitted_by_name].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
+  }).sort((a, b) => {
+    const difference = new Date(a.created_at) - new Date(b.created_at)
+    return sort === 'oldest' ? difference : -difference
+  })
+  const pageSize = 10
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const filtersActive = Boolean(keyword || status !== 'all' || sort !== 'newest' || dates.from || dates.to)
+  return (
+    <section className="waiting-board">
+      <header className="waiting-board-header">
+        <div>
+          <h2>รายชื่อคนรอห้องว่าง <span className="waiting-ui-count-pill">{items.length}</span></h2>
+          <p className="waiting-list-storage-note">ห้องว่างตอนนี้ {vacantCount} ห้อง · รายชื่อจาก Staff และ Admin</p>
+        </div>
+        <button type="button" className="waiting-ui-action-btn is-primary" onClick={onAdd}>+ เพิ่มผู้สนใจ</button>
+      </header>
+      <div className="waiting-filter-panel">
+        <div className="waiting-filter-segments" role="group" aria-label="สถานะรายชื่อ">
+          {[{ key: 'all', label: 'ทั้งหมด', tone: 'all' }, ...Object.entries(WAITING_UI_STATUSES).map(([key, info]) => ({ key, ...info }))].map(info => (
+            <button key={info.key} type="button" className={`waiting-filter-segment is-${info.tone}${status === info.key ? ' active' : ''}`} aria-pressed={status === info.key} onClick={() => { setStatus(info.key); setPage(1) }}>
+              {info.label}<span>{info.key === 'all' ? items.length : counts[info.key] || 0}</span>
+            </button>
+          ))}
+        </div>
+        <div className="waiting-filter-row">
+          <label className="waiting-filter-search">
+            <span className="waiting-sr-only">ค้นหารายชื่อ</span>
+            <input type="search" className="waiting-ui-form-input" placeholder="ค้นหาชื่อ เบอร์โทร ประเภทห้อง หรือหมายเหตุ" value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} />
+          </label>
+          <select className="waiting-ui-form-input waiting-filter-sort" aria-label="เรียงลำดับ" value={sort} onChange={event => { setSort(event.target.value); setPage(1) }}>
+            <option value="newest">แจ้งล่าสุดก่อน</option><option value="oldest">รอนานสุดก่อน</option>
+          </select>
+        </div>
+        <div className="waiting-filter-dates">
+          <span><WaitingDetailIcon type="calendar" />วันที่แจ้ง</span>
+          <ThaiDatePicker className="waiting-ui-form-input" placeholder="ตั้งแต่วันที่" value={dates.from} maxDate={waitingDateFromKey(dates.to || waitingDayKey(now))} isClearable portalId="waiting-date-portal" onChange={value => { setDates(current => ({ ...current, from: value })); setPage(1) }} />
+          <span>ถึง</span>
+          <ThaiDatePicker className="waiting-ui-form-input" placeholder="ถึงวันที่" value={dates.to} minDate={waitingDateFromKey(dates.from)} maxDate={waitingDateFromKey(waitingDayKey(now))} isClearable portalId="waiting-date-portal" onChange={value => { setDates(current => ({ ...current, to: value })); setPage(1) }} />
+        </div>
+        <div className="waiting-filter-result">
+          <span>พบ {filtered.length} จาก {items.length} รายชื่อ</span>
+          {filtersActive && <button type="button" onClick={() => { setSearch(''); setStatus('all'); setSort('newest'); setDates({ from: '', to: '' }); setPage(1) }}>ล้างตัวกรอง</button>}
+        </div>
+      </div>
+      <div className="waiting-cards-scroll">
+        {pageItems.length ? <WaitingListTimeline items={pageItems} now={now} onDetail={onDetail} onEdit={onEdit} onDelete={onDelete} onStatusChange={onStatusChange} statusBusyId={statusBusyId} /> : (
+          <div className="waiting-empty">
+            <span className="waiting-empty-icon"><WaitingDetailIcon type="user" size={26} /></span>
+            <strong>{items.length ? 'ไม่พบรายชื่อตามเงื่อนไข' : 'ยังไม่มีรายชื่อผู้รอห้องว่าง'}</strong>
+            <span>{items.length ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะ' : 'กด "+ เพิ่มผู้สนใจ" เพื่อบันทึกรายชื่อแรก'}</span>
+          </div>
+        )}
+      </div>
+      <nav className="waiting-pagination" aria-label="หน้ารายชื่อผู้รอห้องว่าง">
+        <span>ทั้งหมด {filtered.length} รายชื่อ</span>
+        <div>
+          <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>ก่อนหน้า</button>
+          <span>หน้า {currentPage} / {totalPages}</span>
+          <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>ถัดไป</button>
+        </div>
+      </nav>
+    </section>
+  )
+}
+
+function WaitingListDelete({ item, busy, error, onClose, onConfirm }) {
+  return (
+    <div className="waiting-delete">
+      <span className="waiting-delete-icon"><NoteIcon size={25} /></span>
+      <strong>ลบรายชื่อผู้สนใจนี้ออกจากระบบ?</strong>
+      <dl><div><dt>ชื่อผู้สนใจ</dt><dd>{item.full_name}</dd></div><div><dt>เบอร์โทรศัพท์</dt><dd>{item.phone}</dd></div></dl>
+      {error && <p className="waiting-ui-form-error" role="alert">{error}</p>}
+      <div className="waiting-ui-form-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" disabled={busy} onClick={onClose}>ยกเลิก</button>
+        <button type="button" className="waiting-ui-action-btn is-danger" disabled={busy} onClick={onConfirm}>{busy ? 'กำลังลบ...' : 'ยืนยันลบ'}</button>
+      </div>
+    </div>
+  )
+}
+
+function WaitingDetailIcon({ type, size = 16 }) {
+  const paths = {
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
+    copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[type]}
+    </svg>
+  )
+}
+
+function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusChange, statusBusyId = null }) {
+  const waitingNow = now
+  const waitingToday = new Date(now)
+  const waitingTodayKey = waitingDayKey(now)
+  const waitingYesterdayKey = waitingDayKey(new Date(waitingToday.getFullYear(), waitingToday.getMonth(), waitingToday.getDate() - 1))
+  const waitingDayGroups = groupWaitingEntries(items)
+  return (
+    <div className="waiting-timeline">
+      {waitingDayGroups.map((group) => {
+        const relativeDay =
+          group.key === waitingTodayKey ? 'วันนี้' : group.key === waitingYesterdayKey ? 'เมื่อวาน' : null
+        const weekday = group.date.toLocaleDateString('th-TH', { weekday: 'long' })
+        return (
+          <section className="waiting-day" key={group.key}>
+            <header className="waiting-day-head">
+              <div className="waiting-day-date">
+                <strong>{group.date.getDate()}</strong>
+                <small>{group.date.toLocaleDateString('th-TH', { month: 'short' })}</small>
+              </div>
+              <div className="waiting-day-card">
+                <div className="waiting-day-text">
+                  <strong>{relativeDay || weekday}</strong>
+                  <span>
+                    {relativeDay ? `${weekday} ` : ''}
+                    {group.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+                <span className="waiting-day-count">{group.items.length} รายชื่อ</span>
+              </div>
+            </header>
+            <div className="waiting-day-items">
+              {group.items.map((item) => {
+                const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+                const preferences = splitWaitingPreferences(item.room_preference)
+                const days = waitingDaysSince(item.created_at, waitingNow)
+                return (
+                  <div className={`waiting-day-item is-${WAITING_UI_STATUSES[status].tone}`} key={item.id}>
+                    <span className="waiting-day-dot" aria-hidden="true" />
+                    <article className={`waiting-card is-${WAITING_UI_STATUSES[status].tone}`}>
+                      <div className="waiting-card-top">
+                        <span className="waiting-avatar" aria-hidden="true">
+                          {waitingNameInitial(item.full_name)}
+                        </span>
+                        <div className="waiting-card-id">
+                          <div className="waiting-card-head">
+                            <strong>{item.full_name}</strong>
+                            <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
+                              {WAITING_UI_STATUSES[status].label}
+                            </span>
+                          </div>
+                          <a className="waiting-card-phone" href={`tel:${item.phone}`}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />
+                            </svg>
+                            {item.phone}
+                          </a>
+                        </div>
+                        <div className={`waiting-card-days${days >= 30 ? ' is-long' : ''}${days === 0 ? ' is-new' : ''}`}>
+                          <strong>{days === 0 ? 'ใหม่' : days}</strong>
+                          <span>{days === 0 ? 'แจ้งวันนี้' : 'วันที่รอ'}</span>
+                        </div>
+                      </div>
+                      <div className="waiting-card-body">
+                        {onStatusChange && (
+                          <label className="waiting-status-control">
+                            <span>จัดการสถานะ</span>
+                            <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)} aria-label={`สถานะของ ${item.full_name}`}>
+                              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        {item.desired_move_in_date && (
+                          <span className={`waiting-movein is-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}`}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 10.5 12 3l9 7.5" />
+                              <path d="M5 9.5V21h14V9.5" />
+                            </svg>
+                            อยากเข้าอยู่ {formatWaitingDate(item.desired_move_in_date)}
+                            <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>
+                          </span>
+                        )}
+                        <div className="waiting-tags">
+                          {preferences.length > 0 ? (
+                            preferences.map((preference) => <span key={preference}>{preference}</span>)
+                          ) : (
+                            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
+                          )}
+                        </div>
+                        {item.note && (
+                          <div className="waiting-card-note">
+                            <span className="waiting-card-note-icon" aria-hidden="true">
+                              <NoteIcon size={17} strokeWidth={1.8} />
+                            </span>
+                            <div className="waiting-card-note-content">
+                              <span className="waiting-card-note-label">หมายเหตุ</span>
+                              <p>{item.note}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="waiting-card-foot">
+                        <div className="waiting-card-meta">
+                          <span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+                              <path d="M16 3v3M8 3v3M3 10h18" />
+                            </svg>
+                            {formatWaitingDate(item.created_at)}
+                          </span>
+                          <span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="8" r="4" />
+                              <path d="M4 21a8 8 0 0 1 16 0" />
+                            </svg>
+                            <span className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</span>
+                          </span>
+                        </div>
+                        <div className="waiting-card-actions">
+                          <button
+                            type="button"
+                            className="waiting-icon-btn is-view"
+                            onClick={() => onDetail(item)}
+                            aria-label={`ดูรายละเอียด ${item.full_name}`}
+                            title="ดูรายละเอียด"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="waiting-icon-btn"
+                            onClick={() => onEdit(item)}
+                            aria-label={`แก้ไขข้อมูล ${item.full_name}`}
+                            title="แก้ไข"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="waiting-icon-btn is-danger"
+                            onClick={() => {
+                              onDelete(item)
+                            }}
+                            aria-label={`ลบรายชื่อ ${item.full_name}`}
+                            title="ลบ"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                            </svg>
+                          </button>
+                          <button type="button" className="waiting-detail-btn" onClick={() => onDetail(item)}>
+                            ดูรายละเอียด
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M9 18l6-6-6-6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
+  const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
+  const waitingNow = now
+  const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+  const preferences = splitWaitingPreferences(item.room_preference)
+  const days = waitingDaysSince(item.created_at, now)
+  const formatCurrency = (value) => Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <div className="waiting-detail">
+      <div className="waiting-detail-scroll">
+        <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
+          <span className="waiting-avatar is-large" aria-hidden="true">
+            {waitingNameInitial(item.full_name)}
+          </span>
+          <div className="waiting-detail-name">
+            <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
+            <strong>{item.full_name}</strong>
+          </div>
+          <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
+            {WAITING_UI_STATUSES[status].label}
+          </span>
+        </div>
+
+        <div className="waiting-detail-contact">
+          <div className="waiting-detail-phone">
+            <span>เบอร์ติดต่อ</span>
+            <strong>{item.phone}</strong>
+          </div>
+          <div className="waiting-detail-contact-actions">
+            <a className="waiting-ui-action-btn is-primary" href={`tel:${item.phone}`}>
+              <WaitingDetailIcon type="phone" />
+              โทรติดต่อ
+            </a>
+            <button
+              type="button"
+              className="waiting-ui-action-btn is-ghost"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(item.phone)
+                  setWaitingPhoneCopied(item.id)
+                } catch {
+                  setWaitingPhoneCopied(null)
+                }
+              }}
+            >
+              {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
+              {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
+            </button>
+          </div>
+        </div>
+
+
+        {actionError && <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">{actionError}</p>}
+        {onStatusChange && (
+          <label className="waiting-status-control is-detail">
+            <span>จัดการสถานะรายชื่อ</span>
+            <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)}>
+              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
+            </select>
+          </label>
+        )}
+        <dl className="waiting-detail-stats">
+          <div className={days >= 30 ? 'is-long' : ''}>
+            <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
+            <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
+          </div>
+          <div>
+            <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
+            <dd>{formatWaitingDateTime(item.created_at)}</dd>
+          </div>
+          <div>
+            <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
+            <dd className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</dd>
+          </div>
+          <div className={item.desired_move_in_date ? `is-movein-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
+            <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
+            <dd>
+              {item.desired_move_in_date
+                ? formatWaitingDate(item.desired_move_in_date)
+                : 'ไม่ระบุ'}
+            </dd>
+            {item.desired_move_in_date && <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
+          </div>
+        </dl>
+
+        <section className="waiting-detail-section">
+          <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
+          <div className="waiting-tags">
+            {preferences.length > 0 ? (
+              preferences.map((preference) => <span key={preference}>{preference}</span>)
+            ) : (
+              <span className="is-muted">ไม่ระบุประเภทห้อง</span>
+            )}
+          </div>
+        </section>
+
+        <section className="waiting-detail-section is-note">
+          <h4><NoteIcon size={17} />หมายเหตุ</h4>
+          <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
+        </section>
+
+        <section className="waiting-detail-section is-vacancies">
+          <h4>
+            <DoorIcon size={17} />
+            ห้องว่างตอนนี้ <span className="waiting-ui-count-pill">{vacantRooms.length}</span>
+          </h4>
+          {vacantRooms.length > 0 ? (
+            <div className="waiting-vacant-rooms">
+              {vacantRooms.map((room) => (
+                <span key={room.room_number}>
+                  <strong>ห้อง {room.room_number}</strong>
+                  {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
+          )}
+        </section>
+
+        <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
+      </div>
+
+      <footer className="waiting-ui-form-actions waiting-detail-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ปิด
+        </button>
+        <button
+          type="button"
+          className="waiting-ui-action-btn is-primary"
+          onClick={() => {
+            onEdit(item)
+          }}
+        >
+          <WaitingDetailIcon type="edit" />
+          แก้ไขข้อมูล
+        </button>
+      </footer>
+    </div>
+  )
+}
+
+function WaitingListForm({ value, fieldErrors = {}, error = '', busy = false, editing = false, now, onChange, onSubmit, onClose, idPrefix = 'waiting' }) {
+  const waitingListForm = value
+  const waitingListFieldErrors = fieldErrors
+  const waitingListError = error
+  const waitingListSubmitting = busy
+  const waitingListEditing = editing
+  const waitingNow = now
+  const waitingFormTodayKey = waitingDayKey(now)
+  const waitingMoveInPresets = getWaitingMoveInPresets(now)
+  const waitingListPreferences = splitWaitingPreferences(value.room_preference)
+  const updateWaitingListField = onChange
+  const toggleRoomPreference = (chip) => {
+    const next = waitingListPreferences.includes(chip) ? waitingListPreferences.filter(item => item !== chip) : [...waitingListPreferences, chip]
+    const text = next.join(' | ')
+    if (text.length <= 100) onChange('room_preference', text)
+  }
+  return (
+    <form
+      className="waiting-form"
+      onSubmit={(event) => onSubmit(event)}
+      noValidate
+    >
+      <div className="waiting-form-intro">
+        <span className="waiting-form-intro-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M19 8v6M22 11h-6" />
+          </svg>
+        </span>
+        <div>
+          <strong>{waitingListEditing ? 'แก้ไขข้อมูลผู้สนใจ' : 'บันทึกผู้สนใจเช่าห้อง'}</strong>
+          <p>เก็บข้อมูลไว้ติดต่อกลับเมื่อมีห้องว่างตรงกับความต้องการ</p>
+        </div>
+      </div>
+
+      {waitingListError && (
+        <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">
+          {waitingListError}
+        </p>
+      )}
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>1</span>
+          ข้อมูลติดต่อ
+        </h4>
+        <div className="waiting-form-grid">
+          <div className="waiting-ui-form-field">
+            <label className="waiting-ui-form-label" htmlFor={`${idPrefix}-full-name`}>
+              ชื่อผู้สนใจ <span className="waiting-ui-form-required">*</span>
+            </label>
+            <input
+              id={`${idPrefix}-full-name`}
+              className={`waiting-ui-form-input${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
+              maxLength={255}
+              autoFocus
+              autoComplete="off"
+              placeholder="ชื่อ-นามสกุล"
+              value={waitingListForm.full_name}
+              onChange={(event) => updateWaitingListField('full_name', event.target.value)}
+            />
+            {waitingListFieldErrors.full_name && (
+              <span className="waiting-ui-form-field-error">{waitingListFieldErrors.full_name}</span>
+            )}
+          </div>
+          <div className="waiting-ui-form-field">
+            <label className="waiting-ui-form-label" htmlFor={`${idPrefix}-phone`}>
+              เบอร์โทรศัพท์ <span className="waiting-ui-form-required">*</span>
+            </label>
+            <input
+              id={`${idPrefix}-phone`}
+              className={`waiting-ui-form-input${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
+              type="tel"
+              inputMode="tel"
+              maxLength={20}
+              autoComplete="off"
+              placeholder="เช่น 0812345678"
+              value={waitingListForm.phone}
+              onChange={(event) => updateWaitingListField('phone', event.target.value)}
+            />
+            {waitingListFieldErrors.phone && (
+              <span className="waiting-ui-form-field-error">{waitingListFieldErrors.phone}</span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>2</span>
+          วันที่ต้องการเข้าอยู่ <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+        </h4>
+        <div className="waiting-form-movein">
+          <ThaiDatePicker
+            className={`waiting-ui-form-input waiting-form-date${waitingListFieldErrors.desired_move_in_date ? ' is-invalid' : ''}`}
+            placeholder="เลือกวันที่ต้องการเข้าอยู่"
+            value={waitingListForm.desired_move_in_date}
+            minDate={waitingDateFromKey(waitingFormTodayKey)}
+            isClearable
+            portalId="waiting-date-portal"
+            onChange={(value) => updateWaitingListField('desired_move_in_date', value)}
+          />
+          <div className="waiting-form-chips" role="group" aria-label="เลือกวันเข้าอยู่แบบเร็ว">
+            {waitingMoveInPresets.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className={`waiting-form-chip${waitingListForm.desired_move_in_date === preset.value ? ' is-active' : ''}`}
+                aria-pressed={waitingListForm.desired_move_in_date === preset.value}
+                onClick={() =>
+                  updateWaitingListField(
+                    'desired_move_in_date',
+                    waitingListForm.desired_move_in_date === preset.value ? '' : preset.value,
+                  )
+                }
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {waitingListForm.desired_move_in_date && (
+          <p className="waiting-form-hint">
+            เข้าอยู่ {formatWaitingDate(waitingListForm.desired_move_in_date)} ·{' '}
+            {describeWaitingMoveIn(waitingListForm.desired_move_in_date, waitingNow).text}
+          </p>
+        )}
+        {waitingListFieldErrors.desired_move_in_date && (
+          <span className="waiting-ui-form-field-error">{waitingListFieldErrors.desired_move_in_date}</span>
+        )}
+      </section>
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>3</span>
+          ประเภทห้องที่สนใจ <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+        </h4>
+        <div className="waiting-form-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
+          {WAITING_UI_ROOM_PREFERENCES.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              className={`waiting-form-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
+              aria-pressed={waitingListPreferences.includes(chip)}
+              onClick={() => toggleRoomPreference(chip)}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+        <input
+          id={`${idPrefix}-room-preference`}
+          className="waiting-ui-form-input"
+          maxLength={100}
+          autoComplete="off"
+          aria-label="ประเภทห้องที่สนใจ"
+          placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
+          value={waitingListForm.room_preference}
+          onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
+        />
+      </section>
+
+      <section className="waiting-form-section">
+        <div className="waiting-ui-form-label-row">
+          <h4 className="waiting-form-section-title">
+            <span>4</span>
+            <label htmlFor={`${idPrefix}-note`}>หมายเหตุ</label> <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+          </h4>
+          <span className="waiting-ui-form-counter">{waitingListForm.note.length}/500</span>
+        </div>
+        <textarea
+          id={`${idPrefix}-note`}
+          className="waiting-ui-form-input waiting-ui-form-textarea"
+          rows={3}
+          maxLength={500}
+          placeholder="เช่น จำนวนผู้พัก งบประมาณ หรือเวลาที่สะดวกให้ติดต่อ"
+          value={waitingListForm.note}
+          onChange={(event) => updateWaitingListField('note', event.target.value)}
+        />
+      </section>
+
+      <div className="waiting-ui-form-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ยกเลิก
+        </button>
+        <button type="submit" className="waiting-ui-action-btn is-primary" disabled={waitingListSubmitting}>
+          {waitingListSubmitting
+            ? 'กำลังบันทึก...'
+            : waitingListEditing
+              ? 'บันทึกการแก้ไข'
+              : 'บันทึกรายชื่อ'}
+        </button>
+      </div>
+    </form>
+  )
 }
 
 const MOVE_OUT_CHECKLIST = [
@@ -56,6 +751,16 @@ function summarizeInspection(checklist) {
   return { counts, tone }
 }
 
+const RENEW_DURATION_LABEL = { 1: '1 เดือน', 3: '3 เดือน', 6: '6 เดือน', 12: '1 ปี (12 เดือน)' }
+const RENEW_PAYMENT_TYPE_LABEL = { monthly: 'จ่ายรายเดือน', lump_sum: 'จ่ายล่วงหน้าทั้งก้อน' }
+const MOVE_ROOM_REASON_LABEL = {
+  room_problem: 'ห้องเดิมมีปัญหา/ชำรุด',
+  price: 'ต้องการห้องราคาที่เหมาะสมขึ้น',
+  amenities: 'ต้องการสิ่งอำนวยความสะดวกเพิ่ม',
+  location: 'ต้องการชั้นหรือตำแหน่งที่สะดวกขึ้น',
+  noise: 'เสียงดัง/ปัญหาเพื่อนบ้าน',
+  other: 'อื่นๆ',
+}
 const MOVE_OUT_INSPECTION_STATUS = {
   pending: 'รอ Admin ตรวจ',
   reviewed: 'Admin ตรวจแล้ว',
@@ -229,7 +934,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
@@ -279,7 +984,19 @@ const TABS = [
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'expenses', label: 'รายจ่าย' },
   { key: 'announcements', label: 'ประกาศ' },
+  { key: 'vehicle-requests', label: 'คำขอรถ' },
+  { key: 'safety', label: 'ตรวจเหตุฉุกเฉิน' },
 ]
+
+const TAB_GROUPS = [
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
+  { key: 'building', label: 'พัสดุและประกาศ', tabs: ['parcels', 'announcements'] },
+  { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
+  { key: 'finance', label: 'รายจ่าย', tabs: ['expenses'] },
+]
+const TAB_LABEL = Object.fromEntries(TABS.map((tab) => [tab.key, tab.label]))
+const TAB_GROUP_OF = Object.fromEntries(TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab, group.key])))
 
 const REQUEST_TYPE_LABEL = { renew: 'ต่อสัญญา', moveout: 'แจ้งย้ายออก', move_room: 'ย้ายห้อง' }
 const REQUEST_STATUS_LABEL = {
@@ -501,6 +1218,45 @@ function AdminRequestTimeline({ kind, request }) {
   )
 }
 
+function AdminRequestProgress({ request }) {
+  const rejected = request.status === 'rejected'
+  const finished = ['approved', 'rejected'].includes(request.status)
+  const raw = [
+    { label: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, state: 'done' },
+    {
+      label: 'เจ้าหน้าที่รับเรื่อง',
+      by: request.accepted_by_name,
+      date: request.accepted_at,
+      state: request.accepted_at || finished ? 'done' : 'current',
+    },
+    {
+      label: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
+      by: request.completed_by_name,
+      date: request.completed_at,
+      state: finished ? 'done' : request.accepted_at ? 'current' : 'pending',
+      tone: finished ? (rejected ? 'danger' : 'success') : undefined,
+    },
+  ]
+  const steps = raw.map((step, index) => {
+    const previous = raw[index - 1]
+    const gapMs = previous?.date && step.date ? new Date(step.date) - new Date(previous.date) : null
+    return {
+      ...step,
+      meta: step.date ? formatDateTime(step.date) : step.state === 'current' ? 'กำลังรอดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้',
+      by: step.date ? step.by : null,
+      extra: gapMs !== null && gapMs >= 0 ? `+ ${formatRemaining(gapMs)}` : null,
+    }
+  })
+  const totalMs = finished && request.completed_at ? new Date(request.completed_at) - new Date(request.created_at) : null
+  const aside =
+    totalMs !== null && totalMs >= 0 ? (
+      <span className={`admin-progress-total${rejected ? ' is-rejected' : ''}`}>ใช้เวลาทั้งหมด {formatRemaining(totalMs)}</span>
+    ) : (
+      <span className="admin-progress-total is-waiting">กำลังดำเนินการ</span>
+    )
+  return <StepTimeline steps={steps} aside={aside} actorClassName="admin-actor-inline" />
+}
+
 function useExpandedRows() {
   const [expanded, setExpanded] = useState(() => new Set())
   const toggle = (id) => {
@@ -633,11 +1389,10 @@ const emptyStaffForm = { idcard: '', password: '', phone: '', first_name: '', la
 const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '' }
 
 const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
-const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '' }
+const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '', desired_move_in_date: '' }
 const INSPECTION_PHOTO_PREVIEW_COUNT = 4
 const INSPECTION_GALLERY_PAGE_SIZE = 8
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
-const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 
 const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แจ้งแขกค้างคืน' }
 
@@ -646,102 +1401,6 @@ function useAuthHeaders() {
   return useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
 }
 
-function AdminSpecialVisitReviewNav() {
-  const [open, setOpen] = useState(false)
-  const [items, setItems] = useState([])
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const headers = useAuthHeaders()
-
-  const load = useCallback(
-    () =>
-      axios
-        .get('/api/admin/resident-visit-requests/special', { headers })
-        .then(({ data }) => setItems(data.requests || []))
-        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
-    [headers],
-  )
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const review = async (item, decision) => {
-    setBusy(true)
-    setMessage('')
-    try {
-      await axios.post(`/api/admin/resident-visit-requests/${item.id}/special-review`, { decision }, { headers })
-      await load()
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <li className="nav-item">
-      <button
-        type="button"
-        className="nav-link admin-tab-link"
-        onClick={() => {
-          setOpen(true)
-          setMessage('')
-          load()
-        }}
-      >
-        คำขอพิเศษ{items.length ? ` (${items.length})` : ''}
-      </button>
-      {open && (
-        <div
-          className="admin-rv-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false)
-          }}
-        >
-          <div className="admin-rv-modal" role="dialog" aria-modal="true" aria-labelledby="admin-rv-title">
-            <button type="button" className="admin-rv-close" onClick={() => setOpen(false)} aria-label="ปิด">×</button>
-            <span className="admin-rv-kicker">RESIDENT SERVICES</span>
-            <h2 id="admin-rv-title">อนุมัติเคสพิเศษ</h2>
-            <p className="admin-rv-subtitle">ตรวจสอบเหตุผลและตัดสินใจอนุมัติหรือปฏิเสธคำขอ</p>
-            <div className="admin-rv-list">
-              {items.length === 0 ? (
-                <p className="admin-rv-empty">ไม่มีคำขอที่รอดำเนินการ</p>
-              ) : (
-                items.map((item) => (
-                  <article className="admin-rv-card" key={item.id}>
-                    <div className="admin-rv-card-head">
-                      <strong>{RESIDENT_VISIT_TYPE_LABEL[item.request_type]} · ห้อง {item.room_number}</strong>
-                      <span>รออนุมัติ</span>
-                    </div>
-                    <p>
-                      {item.request_type === 'vehicle'
-                        ? `ทะเบียน ${item.vehicle_plate}${item.vehicle_model ? ` · ${item.vehicle_model}` : ''}`
-                        : `${item.guest_name}${item.guest_phone ? ` · ${item.guest_phone}` : ''}`}
-                    </p>
-                    <p>
-                      {new Date(item.start_at).toLocaleString('th-TH')} – {item.end_at ? new Date(item.end_at).toLocaleString('th-TH') : 'ไม่จำกัดเวลา'}
-                    </p>
-                    <p className="admin-rv-special-reason">
-                      <strong>เหตุผลขออนุมัติพิเศษ:</strong> {item.special_reason}
-                    </p>
-                    {item.note && <p>{item.note}</p>}
-                    <small>{item.first_name} {item.last_name} · {item.customer_phone}</small>
-                    <div className="admin-rv-actions">
-                      <button type="button" disabled={busy} onClick={() => review(item, 'approve')}>อนุมัติพิเศษ</button>
-                      <button type="button" className="admin-rv-deny" disabled={busy} onClick={() => review(item, 'reject')}>ปฏิเสธ</button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-            {message && <p className="admin-rv-message" role="status">{message}</p>}
-          </div>
-        </div>
-      )}
-    </li>
-  )
-}
 
 const SAFETY_INCIDENT_TYPE_LABEL = {
   accident: 'อุบัติเหตุ',
@@ -751,35 +1410,142 @@ const SAFETY_INCIDENT_TYPE_LABEL = {
   other: 'อื่น ๆ',
 }
 
-function AdminSafetyIncidentReviewNav() {
-  const [open, setOpen] = useState(false)
+const SAFETY_STATUS_INFO = {
+  pending: { label: 'รอตรวจสอบ', tone: 'pending' },
+  reviewed: { label: 'ตรวจสอบแล้ว', tone: 'reviewed' },
+  cancelled: { label: 'ยกเลิกแล้ว', tone: 'cancelled' },
+}
+const SAFETY_FILTERS = [
+  { key: 'pending', label: 'รอตรวจสอบ' },
+  { key: 'reviewed', label: 'ตรวจสอบแล้ว' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว' },
+  { key: 'all', label: 'ทั้งหมด' },
+]
+const SAFETY_ROLE_LABEL = { Customer: 'ผู้เช่า', Staff: 'เจ้าหน้าที่', Admin: 'Admin', Owner: 'Owner' }
+const SAFETY_PAGE_SIZE = 9
+
+function formatIncidentTime(value) {
+  return value ? `${new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })} น.` : '-'
+}
+
+function IncidentShieldIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="M12 8v4M12 16h.01" />
+    </svg>
+  )
+}
+
+const VISIT_STATUS_INFO = {
+  pending: { label: 'รออนุมัติ', tone: 'pending' },
+  approved: { label: 'อนุมัติแล้ว', tone: 'reviewed' },
+  rejected: { label: 'ไม่อนุมัติ', tone: 'rejected' },
+  cancelled: { label: 'ยกเลิกแล้ว', tone: 'cancelled' },
+}
+const VISIT_FILTERS = [
+  { key: 'pending', label: 'รออนุมัติ' },
+  { key: 'approved', label: 'อนุมัติแล้ว' },
+  { key: 'rejected', label: 'ไม่อนุมัติ' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว' },
+  { key: 'all', label: 'ทั้งหมด' },
+]
+const VISIT_PAGE_SIZE = 9
+
+function VisitCarIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17" />
+      <circle cx="7.5" cy="17.5" r="1.5" />
+      <circle cx="16.5" cy="17.5" r="1.5" />
+    </svg>
+  )
+}
+
+function getVisitHeading(item) {
+  return item.request_type === 'vehicle' ? item.vehicle_plate || 'ไม่ระบุทะเบียน' : item.guest_name || 'ผู้มาพัก'
+}
+
+function VisitRange({ item }) {
+  return (
+    <span className="admin-visit-range">
+      <span>{formatIncidentTime(item.start_at)}</span>
+      <span className="admin-visit-range-divider" aria-hidden="true">|</span>
+      <span className={item.end_at ? undefined : 'is-open'}>{item.end_at ? formatIncidentTime(item.end_at) : 'ไม่จำกัดเวลา'}</span>
+    </span>
+  )
+}
+
+function AdminVehicleRequestsTab({ onCountChange }) {
   const [lightbox, setLightbox] = useState(null)
-  const [incidents, setIncidents] = useState([])
-  const [notes, setNotes] = useState({})
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('pending')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detailId, setDetailId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const headers = useAuthHeaders()
-  const pendingCount = incidents.filter((item) => item.status === 'pending').length
 
   const load = useCallback(
     () =>
       axios
-        .get('/api/admin/safety-incidents', { headers })
-        .then(({ data }) => setIncidents(data.incidents || []))
-        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ')),
-    [headers],
+        .get('/api/admin/resident-visit-requests', { headers })
+        .then(({ data }) => {
+          const list = data.requests || []
+          setItems(list)
+          onCountChange?.(list.filter((item) => item.status === 'pending').length)
+        })
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ'))
+        .finally(() => setLoading(false)),
+    [headers, onCountChange],
   )
 
   useEffect(() => {
     load()
   }, [load])
 
-  const markReviewed = async (incident) => {
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? items.filter((item) =>
+        [
+          item.vehicle_plate,
+          item.vehicle_model,
+          item.guest_name,
+          item.guest_phone,
+          item.note,
+          item.room_number ? `ห้อง ${item.room_number}` : '',
+          `${item.first_name || ''} ${item.last_name || ''}`,
+          item.customer_phone,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : items
+  const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
+  const filtered = (filter === 'all' ? searched : searched.filter((item) => item.status === filter))
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / VISIT_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * VISIT_PAGE_SIZE, currentPage * VISIT_PAGE_SIZE)
+  const detail = items.find((item) => item.id === detailId) || null
+
+  const openDetail = (item) => {
+    setMessage('')
+    setDetailId(item.id)
+  }
+
+  const review = async (decision, requestClose) => {
     setBusy(true)
     setMessage('')
     try {
-      await axios.patch(`/api/admin/safety-incidents/${incident.id}/review`, { reviewNote: notes[incident.id] || '' }, { headers })
+      await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {}, { headers })
       await load()
+      requestClose()
     } catch (error) {
       setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
     } finally {
@@ -787,102 +1553,654 @@ function AdminSafetyIncidentReviewNav() {
     }
   }
 
+  const openPhotos = (item, index) => setLightbox({ photos: item.vehicle_photos || [], index, title: getVisitHeading(item) })
+
   return (
-    <li className="nav-item">
-      <button
-        type="button"
-        className="nav-link admin-tab-link"
-        onClick={() => {
-          setOpen(true)
-          setMessage('')
-          load()
-        }}
-      >
-        ตรวจเหตุฉุกเฉิน{pendingCount ? ` (${pendingCount})` : ''}
-      </button>
-      {open && (
-        <div
-          className="admin-safety-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false)
+    <div className="admin-card admin-review-page">
+      <div className="admin-card-header">
+        <div>
+          <h2>คำขอรถ / ผู้มาพัก</h2>
+          <p className="admin-review-subtitle">อนุมัติหรือปฏิเสธคำขอจากผู้เช่า พร้อมดูประวัติคำขอทั้งหมด</p>
+        </div>
+        <span className="admin-review-count">{countOf('pending')} รายการรออนุมัติ</span>
+      </div>
+
+      <div className="admin-incident-toolbar">
+        <div className="admin-incident-segments" role="tablist" aria-label="สถานะคำขอ">
+          {VISIT_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.key}
+              className={`admin-incident-segment is-${item.key === 'approved' ? 'reviewed' : item.key}${filter === item.key ? ' active' : ''}`}
+              onClick={() => {
+                setFilter(item.key)
+                setPage(1)
+              }}
+            >
+              {item.label}
+              <span>{countOf(item.key)}</span>
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="form-control admin-search-input admin-incident-search"
+          placeholder="ค้นหาทะเบียน ห้อง ชื่อผู้เช่า หรือผู้มาพัก"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setPage(1)
           }}
-        >
-          <section className="admin-safety-modal" role="dialog" aria-modal="true" aria-labelledby="admin-safety-title">
-            <button className="admin-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
-            <span className="admin-safety-eyebrow">SAFETY & SECURITY</span>
-            <h2 id="admin-safety-title">ตรวจสอบเหตุฉุกเฉิน</h2>
-            <p className="admin-safety-intro">รายการรายงานจากผู้พักอาศัยและเจ้าหน้าที่</p>
-            <div className="admin-safety-list">
-              {incidents.length === 0 ? (
-                <p className="admin-safety-empty">ยังไม่มีรายงานเหตุ</p>
-              ) : (
-                incidents.map((item) => (
-                  <article className="admin-safety-card" key={item.id}>
-                    <div className="admin-safety-card-heading">
-                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
-                      <span className={`admin-safety-status ${item.status} ${item.severity}`}>
-                        {item.status === 'pending' ? 'รอตรวจสอบ' : 'ตรวจแล้ว'}
-                        {item.severity === 'urgent' ? ' · ด่วน' : ''}
+        />
+      </div>
+
+      {message && !detail && <p className="admin-safety-message" role="status">{message}</p>}
+
+      {loading && items.length === 0 ? (
+        <p className="admin-safety-empty">กำลังโหลดคำขอ...</p>
+      ) : pageItems.length === 0 ? (
+        <div className="admin-incident-empty">
+          <span aria-hidden="true">
+            <VisitCarIcon size={24} />
+          </span>
+          <strong>{items.length === 0 ? 'ยังไม่มีคำขอ' : 'ไม่พบรายการในหมวดนี้'}</strong>
+          <small>{items.length === 0 ? 'เมื่อผู้เช่าส่งคำขอ รายการจะแสดงที่นี่' : 'ลองเปลี่ยนสถานะหรือคำค้นหา'}</small>
+        </div>
+      ) : (
+        <div className="admin-incident-grid">
+          {pageItems.map((item) => {
+            const status = VISIT_STATUS_INFO[item.status] || VISIT_STATUS_INFO.pending
+            const photos = item.vehicle_photos || []
+            const isVehicle = item.request_type === 'vehicle'
+            return (
+              <article key={item.id} className={`admin-incident-card admin-visit-card is-${status.tone}`}>
+                <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
+                  <span className="admin-incident-head">
+                    <span className="admin-incident-icon">
+                      <VisitCarIcon />
+                    </span>
+                    <span className="admin-incident-title">
+                      <strong>{getVisitHeading(item)}</strong>
+                      <small>ส่งคำขอ {formatIncidentTime(item.created_at)}</small>
+                    </span>
+                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                  </span>
+                  <span className="admin-incident-info">
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ประเภท</span>
+                      <span className="admin-incident-value">{RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type}</span>
+                    </span>
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ห้อง</span>
+                      <span className="admin-incident-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="admin-incident-cell is-wide">
+                      <span className="admin-incident-label">ผู้ขอ</span>
+                      <span className="admin-incident-value">
+                        <span className="admin-incident-name">{item.first_name ? `${item.first_name} ${item.last_name}` : 'เจ้าหน้าที่บันทึก'}</span>
+                        <span className={`admin-incident-role is-${item.customer_id ? 'customer' : 'staff'}`}>
+                          {item.customer_id ? 'ผู้เช่า' : 'เจ้าหน้าที่'}
+                        </span>
                       </span>
+                    </span>
+                  </span>
+                  <span className="admin-incident-section admin-visit-section">
+                    <span className="admin-incident-label">ช่วงเวลา{isVehicle && item.vehicle_model ? ` · ${item.vehicle_model}` : ''}</span>
+                    <span className="admin-incident-desc"><VisitRange item={item} /></span>
+                  </span>
+                </button>
+                <div className="admin-incident-photos">
+                  <span className="admin-incident-label">{photos.length > 0 ? `รูปรถ · ${photos.length} รูป` : 'รูปรถ'}</span>
+                  {photos.length > 0 ? (
+                    <span className="admin-incident-photo-row">
+                      {photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="admin-incident-photo"
+                          onClick={() => openPhotos(item, index)}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="admin-incident-photo-empty">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      ไม่มีรูปรถ
+                    </span>
+                  )}
+                </div>
+                <div className="admin-incident-foot">
+                  <span className="admin-incident-result">
+                    {item.status === 'pending' ? (
+                      'ยังไม่มีผู้อนุมัติ'
+                    ) : item.status === 'cancelled' ? (
+                      <>
+                        ยกเลิกโดย <span className="admin-actor-inline">{item.cancelled_by_name || item.updated_by_name || '-'}</span>
+                      </>
+                    ) : (
+                      <>
+                        {item.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
+                        <span className="admin-actor-inline">{item.reviewed_by_name || item.admin_reviewed_by_name || '-'}</span>
+                      </>
+                    )}
+                  </span>
+                  <button type="button" className={`admin-incident-open${item.status === 'pending' ? ' is-primary' : ''}`} onClick={() => openDetail(item)}>
+                    {item.status === 'pending' ? 'พิจารณา' : 'ดูรายละเอียด'}
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+
+      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+
+      {detail && (
+        <Modal title="รายละเอียดคำขอ" onClose={() => setDetailId(null)}>
+          {(requestClose) => {
+            const status = VISIT_STATUS_INFO[detail.status] || VISIT_STATUS_INFO.pending
+            const photos = detail.vehicle_photos || []
+            const isVehicle = detail.request_type === 'vehicle'
+            const reviewer = detail.reviewed_by_name || detail.admin_reviewed_by_name
+            const reviewedAt = detail.reviewed_at || detail.admin_reviewed_at
+            const steps = [
+              { label: 'ส่งคำขอ', meta: formatIncidentTime(detail.created_at), by: detail.first_name ? `${detail.first_name} ${detail.last_name}` : null, state: 'done' },
+              detail.status === 'pending'
+                ? { label: 'รออนุมัติ', meta: 'กำลังรอ', state: 'current' }
+                : detail.status === 'rejected'
+                  ? { label: 'ไม่อนุมัติ', meta: formatIncidentTime(reviewedAt), by: reviewer, state: 'done', tone: 'danger' }
+                  : { label: 'อนุมัติแล้ว', meta: formatIncidentTime(reviewedAt), by: reviewer, state: 'done', tone: 'success' },
+              ...(detail.status === 'cancelled'
+                ? [{ label: 'ยกเลิกแล้ว', meta: formatIncidentTime(detail.cancelled_at || detail.updated_at), by: detail.cancelled_by_name || detail.updated_by_name, state: 'done', tone: 'danger' }]
+                : []),
+            ]
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                  <div className={`admin-incident-hero admin-visit-hero is-${status.tone}`}>
+                    <span className="admin-incident-icon is-large">
+                      <VisitCarIcon size={22} />
+                    </span>
+                    <div>
+                      <strong>{getVisitHeading(detail)}</strong>
+                      <span className="admin-incident-chip">{RESIDENT_VISIT_TYPE_LABEL[detail.request_type] || detail.request_type}</span>
                     </div>
-                    <p>{item.description}</p>
-                    {item.photos?.length > 0 && (
-                      <div className="admin-safety-photos" aria-label="รูปประกอบการแจ้งเหตุ">
-                        {item.photos.map((photo, index) => (
+                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                  </div>
+
+                  <dl className="admin-incident-fields">
+                    <div>
+                      <dt>ห้อง</dt>
+                      <dd>{detail.room_number ? `ห้อง ${detail.room_number}` : 'ไม่ระบุห้อง'}</dd>
+                    </div>
+                    <div>
+                      <dt>ผู้ขอ</dt>
+                      <dd>
+                        {detail.first_name ? `${detail.first_name} ${detail.last_name}` : 'เจ้าหน้าที่บันทึก'}
+                        {detail.customer_phone ? ` · ${detail.customer_phone}` : ''}
+                      </dd>
+                    </div>
+                    {isVehicle ? (
+                      <>
+                        <div>
+                          <dt>ทะเบียนรถ</dt>
+                          <dd>{detail.vehicle_plate || '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>ยี่ห้อ / รุ่น</dt>
+                          <dd>{detail.vehicle_model || '-'}</dd>
+                        </div>
+                      </>
+                    ) : null}
+                    {(detail.guest_name || !isVehicle) && (
+                      <>
+                        <div>
+                          <dt>ผู้มาพัก</dt>
+                          <dd>{detail.guest_name || '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>เบอร์ติดต่อ</dt>
+                          <dd>{detail.guest_phone || '-'}</dd>
+                        </div>
+                      </>
+                    )}
+                    <div className="is-wide">
+                      <dt>ช่วงเวลา</dt>
+                      <dd><VisitRange item={detail} /></dd>
+                    </div>
+                    {detail.note && (
+                      <div className="is-wide">
+                        <dt>หมายเหตุ</dt>
+                        <dd>{detail.note}</dd>
+                      </div>
+                    )}
+                  </dl>
+
+                  {photos.length > 0 && (
+                    <section className="admin-incident-gallery">
+                      <h4>รูปรถ / ป้ายทะเบียน ({photos.length} รูป)</h4>
+                      <div>
+                        {photos.map((photo, index) => (
                           <button
                             key={`${photo.url}-${index}`}
                             type="button"
-                            className="admin-safety-photo"
-                            onClick={() => setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })}
+                            className="admin-incident-photo"
+                            onClick={() => openPhotos(detail, index)}
                             aria-label={`ดูรูปที่ ${index + 1}`}
                           >
-                            <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                            <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
                           </button>
                         ))}
                       </div>
-                    )}
-                    <small>
-                      {item.reporter_name} ({item.reporter_role})
-                      {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
-                    </small>
-                    {item.status === 'pending' ? (
+                    </section>
+                  )}
+
+                  <StepTimeline title="ประวัติการดำเนินการ" steps={steps} actorClassName="admin-actor-inline" />
+
+                  {message && <p className="admin-safety-message" role="status">{message}</p>}
+                </div>
+
+                <div className="admin-incident-actions">
+                  {detail.status === 'pending' && (
+                    <>
+                      <button type="button" className="admin-action-btn is-danger" disabled={busy} onClick={() => review('reject', requestClose)}>
+                        ไม่อนุมัติ
+                      </button>
+                      <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => review('approve', requestClose)}>
+                        {busy ? 'กำลังบันทึก...' : 'อนุมัติ'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={lightbox.title}
+          label="รูปรถ / ป้ายทะเบียน"
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function AdminSafetyIncidentsTab({ onCountChange }) {
+  const [lightbox, setLightbox] = useState(null)
+  const [incidents, setIncidents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('pending')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detailId, setDetailId] = useState(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const headers = useAuthHeaders()
+
+  const load = useCallback(
+    () =>
+      axios
+        .get('/api/admin/safety-incidents', { headers })
+        .then(({ data }) => {
+          const list = data.incidents || []
+          setIncidents(list)
+          onCountChange?.(list.filter((item) => item.status === 'pending').length)
+        })
+        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ'))
+        .finally(() => setLoading(false)),
+    [headers, onCountChange],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const keyword = search.trim().toLowerCase()
+  const searched = keyword
+    ? incidents.filter((item) =>
+        [
+          SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type,
+          item.description,
+          item.reporter_name,
+          item.room_number ? `ห้อง ${item.room_number}` : '',
+          item.review_note,
+          item.cancel_reason,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : incidents
+  const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
+  const filtered = (filter === 'all' ? searched : searched.filter((item) => item.status === filter))
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SAFETY_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * SAFETY_PAGE_SIZE, currentPage * SAFETY_PAGE_SIZE)
+  const detail = incidents.find((item) => item.id === detailId) || null
+
+  const openDetail = (item) => {
+    setNote('')
+    setMessage('')
+    setDetailId(item.id)
+  }
+
+  const markReviewed = async (requestClose) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await axios.patch(`/api/admin/safety-incidents/${detail.id}/review`, { reviewNote: note }, { headers })
+      await load()
+      requestClose()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openPhotos = (item, index) =>
+    setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })
+
+  return (
+    <div className="admin-card admin-review-page">
+      <div className="admin-card-header">
+        <div>
+          <h2>ตรวจสอบเหตุฉุกเฉิน</h2>
+          <p className="admin-review-subtitle">รายงานจากผู้พักอาศัยและเจ้าหน้าที่ พร้อมประวัติการตรวจสอบทั้งหมด</p>
+        </div>
+        <span className="admin-review-count">{countOf('pending')} รายการรอตรวจสอบ</span>
+      </div>
+
+      <div className="admin-incident-toolbar">
+        <div className="admin-incident-segments" role="tablist" aria-label="สถานะรายงาน">
+          {SAFETY_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.key}
+              className={`admin-incident-segment is-${item.key}${filter === item.key ? ' active' : ''}`}
+              onClick={() => {
+                setFilter(item.key)
+                setPage(1)
+              }}
+            >
+              {item.label}
+              <span>{countOf(item.key)}</span>
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="form-control admin-search-input admin-incident-search"
+          placeholder="ค้นหาประเภทเหตุ ห้อง ผู้แจ้ง หรือรายละเอียด"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setPage(1)
+          }}
+        />
+      </div>
+
+      {message && !detail && <p className="admin-safety-message" role="status">{message}</p>}
+
+      {loading && incidents.length === 0 ? (
+        <p className="admin-safety-empty">กำลังโหลดรายงาน...</p>
+      ) : pageItems.length === 0 ? (
+        <div className="admin-incident-empty">
+          <span aria-hidden="true">
+            <IncidentShieldIcon size={24} />
+          </span>
+          <strong>{incidents.length === 0 ? 'ยังไม่มีรายงานเหตุ' : 'ไม่พบรายการในหมวดนี้'}</strong>
+          <small>{incidents.length === 0 ? 'เมื่อมีการแจ้งเหตุ รายการจะแสดงที่นี่' : 'ลองเปลี่ยนสถานะหรือคำค้นหา'}</small>
+        </div>
+      ) : (
+        <div className="admin-incident-grid">
+          {pageItems.map((item) => {
+            const status = SAFETY_STATUS_INFO[item.status] || SAFETY_STATUS_INFO.pending
+            const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type
+            const photos = item.photos || []
+            return (
+              <article key={item.id} className={`admin-incident-card is-${status.tone} is-${item.severity}`}>
+                <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
+                  <span className="admin-incident-head">
+                    <span className="admin-incident-icon">
+                      <IncidentShieldIcon />
+                    </span>
+                    <span className="admin-incident-title">
+                      <strong>{typeLabel}</strong>
+                      <small>{formatIncidentTime(item.created_at)}</small>
+                    </span>
+                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                  </span>
+                  <span className="admin-incident-info">
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ระดับ</span>
+                      <span className={`admin-incident-level is-${item.severity}`}>
+                        <span aria-hidden="true" />
+                        {item.severity === 'urgent' ? 'ด่วน' : 'ทั่วไป'}
+                      </span>
+                    </span>
+                    <span className="admin-incident-cell">
+                      <span className="admin-incident-label">ห้อง</span>
+                      <span className="admin-incident-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="admin-incident-cell is-wide">
+                      <span className="admin-incident-label">ผู้แจ้ง</span>
+                      <span className="admin-incident-value">
+                        <span className="admin-incident-name">{item.reporter_name}</span>
+                        <span className={`admin-incident-role is-${String(item.reporter_role || '').toLowerCase()}`}>
+                          {SAFETY_ROLE_LABEL[item.reporter_role] || item.reporter_role}
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                  <span className="admin-incident-section">
+                    <span className="admin-incident-label">รายละเอียดเหตุการณ์</span>
+                    <span className="admin-incident-desc">{item.description}</span>
+                  </span>
+                </button>
+                {photos.length === 0 && (
+                  <div className="admin-incident-photos">
+                    <span className="admin-incident-label">รูปประกอบ</span>
+                    <span className="admin-incident-photo-empty">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      ไม่มีรูปประกอบ
+                    </span>
+                  </div>
+                )}
+                {photos.length > 0 && (
+                  <div className="admin-incident-photos">
+                    <span className="admin-incident-label">รูปประกอบ · {photos.length} รูป</span>
+                    <span className="admin-incident-photo-row">
+                    {photos.slice(0, 4).map((photo, index) => (
+                      <button
+                        key={`${photo.url}-${index}`}
+                        type="button"
+                        className="admin-incident-photo"
+                        onClick={() => openPhotos(item, index)}
+                        aria-label={`ดูรูปที่ ${index + 1}`}
+                      >
+                        <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                        {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                      </button>
+                    ))}
+                    </span>
+                  </div>
+                )}
+                <div className="admin-incident-foot">
+                  <span className="admin-incident-result">
+                    {item.status === 'reviewed' ? (
                       <>
-                        <textarea
-                          aria-label="บันทึกผลตรวจสอบ"
-                          placeholder="บันทึกผลหรือการดำเนินการ (ถ้ามี)"
-                          value={notes[item.id] || ''}
-                          onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })}
-                        />
-                        <button className="admin-safety-review" type="button" disabled={busy} onClick={() => markReviewed(item)}>
-                          บันทึกว่าตรวจสอบแล้ว
-                        </button>
+                        ตรวจโดย <span className="admin-actor-inline">{item.reviewed_by_name || '-'}</span>
+                      </>
+                    ) : item.status === 'cancelled' ? (
+                      <>
+                        ยกเลิกโดย <span className="admin-actor-inline">{item.cancelled_by_name || '-'}</span>
                       </>
                     ) : (
-                      <p className="admin-safety-note">
-                        ตรวจโดย <span className="admin-actor-inline">{item.reviewed_by_name || '-'}</span>
-                        {item.review_note ? ` · ${item.review_note}` : ''}
-                      </p>
+                      'ยังไม่มีผู้ตรวจสอบ'
                     )}
-                  </article>
-                ))
-              )}
-            </div>
-            {message && <p className="admin-safety-message" role="status">{message}</p>}
-          </section>
+                  </span>
+                  <button type="button" className={`admin-incident-open${item.status === 'pending' ? ' is-primary' : ''}`} onClick={() => openDetail(item)}>
+                    {item.status === 'pending' ? 'ตรวจสอบ' : 'ดูรายละเอียด'}
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
+
+      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+
+      {detail && (
+        <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setDetailId(null)}>
+          {(requestClose) => {
+            const status = SAFETY_STATUS_INFO[detail.status] || SAFETY_STATUS_INFO.pending
+            const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[detail.incident_type] || detail.incident_type
+            const photos = detail.photos || []
+            const steps = [
+              { label: 'แจ้งเหตุ', meta: formatIncidentTime(detail.created_at), by: detail.reporter_name, state: 'done' },
+              detail.status === 'reviewed'
+                ? { label: 'ตรวจสอบแล้ว', meta: formatIncidentTime(detail.reviewed_at), by: detail.reviewed_by_name, note: detail.review_note, state: 'done', tone: 'success' }
+                : detail.status === 'cancelled'
+                  ? { label: 'ยกเลิกแล้ว', meta: formatIncidentTime(detail.cancelled_at), by: detail.cancelled_by_name, note: detail.cancel_reason, state: 'done', tone: 'danger' }
+                  : { label: 'รอตรวจสอบ', meta: 'กำลังรอ', state: 'current' },
+            ]
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                <div className={`admin-incident-hero is-${status.tone} is-${detail.severity}`}>
+                  <span className="admin-incident-icon is-large">
+                    <IncidentShieldIcon size={22} />
+                  </span>
+                  <div>
+                    <strong>{typeLabel}</strong>
+                    <span className={`admin-incident-level is-${detail.severity}`}>
+                      <span aria-hidden="true" />
+                      ระดับ{detail.severity === 'urgent' ? 'ด่วน' : 'ทั่วไป'}
+                    </span>
+                  </div>
+                  <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
+                </div>
+
+                <dl className="admin-incident-fields">
+                  <div>
+                    <dt>ห้อง</dt>
+                    <dd>{detail.room_number ? `ห้อง ${detail.room_number}` : 'ไม่ระบุห้อง'}</dd>
+                  </div>
+                  <div>
+                    <dt>วันที่แจ้ง</dt>
+                    <dd>{formatIncidentTime(detail.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>ผู้แจ้ง</dt>
+                    <dd>{detail.reporter_name}</dd>
+                  </div>
+                  <div>
+                    <dt>สถานะผู้แจ้ง</dt>
+                    <dd>
+                      <span className={`admin-incident-role is-${String(detail.reporter_role || '').toLowerCase()}`}>
+                        {SAFETY_ROLE_LABEL[detail.reporter_role] || detail.reporter_role}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="is-wide">
+                    <dt>รายละเอียดเหตุการณ์</dt>
+                    <dd>{detail.description}</dd>
+                  </div>
+                </dl>
+
+                {photos.length > 0 && (
+                  <section className="admin-incident-gallery">
+                    <h4>รูปประกอบ ({photos.length} รูป)</h4>
+                    <div>
+                      {photos.map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="admin-incident-photo"
+                          onClick={() => openPhotos(detail, index)}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <StepTimeline title="ประวัติการดำเนินการ" steps={steps} actorClassName="admin-actor-inline" />
+
+                {detail.status === 'pending' && (
+                  <section className="admin-incident-review">
+                    <label htmlFor="admin-incident-note">บันทึกผลหรือการดำเนินการ (ถ้ามี)</label>
+                    <textarea
+                      id="admin-incident-note"
+                      rows={3}
+                      maxLength={500}
+                      placeholder="เช่น ตรวจสอบพื้นที่แล้ว แจ้งผู้เกี่ยวข้องเรียบร้อย"
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                    />
+                    <small>{note.length}/500 · ผู้แจ้งจะเห็นผลการตรวจสอบนี้</small>
+                  </section>
+                )}
+
+                {message && <p className="admin-safety-message" role="status">{message}</p>}
+                </div>
+
+                <div className="admin-incident-actions">
+                  {detail.status === 'pending' && (
+                    <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => markReviewed(requestClose)}>
+                      {busy ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจสอบแล้ว'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
       {lightbox && (
-        <div className="admin-safety-lightbox-host">
-          <PhotoLightbox
-            photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
-            initialIndex={lightbox.index}
-            title={lightbox.title}
-            label="รูปประกอบการแจ้งเหตุ"
-            onClose={() => setLightbox(null)}
-          />
-        </div>
+        <PhotoLightbox
+          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
+          initialIndex={lightbox.index}
+          title={lightbox.title}
+          label="รูปประกอบการแจ้งเหตุ"
+          onClose={() => setLightbox(null)}
+        />
       )}
-    </li>
+    </div>
   )
 }
 
@@ -890,6 +2208,35 @@ function AdminBackupPage() {
   const navigate = useNavigate()
   const [adminUser, setAdminUser] = useState(null)
   const [activeTab, setActiveTab] = useState('rooms')
+  const [lastTabByGroup, setLastTabByGroup] = useState({})
+  const [pendingVehicleCount, setPendingVehicleCount] = useState(0)
+  const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
+  const tabBadges = { 'vehicle-requests': pendingVehicleCount, safety: pendingSafetyCount }
+
+  useEffect(() => {
+    let cancelled = false
+    const loadReviewCounts = () => {
+      const headers = { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+      axios
+        .get('/api/admin/resident-visit-requests', { headers })
+        .then(({ data }) => {
+          if (!cancelled) setPendingVehicleCount((data.requests || []).filter((item) => item.status === 'pending').length)
+        })
+        .catch(() => {})
+      axios
+        .get('/api/admin/safety-incidents', { headers })
+        .then(({ data }) => {
+          if (!cancelled) setPendingSafetyCount((data.incidents || []).filter((item) => item.status === 'pending').length)
+        })
+        .catch(() => {})
+    }
+    loadReviewCounts()
+    const interval = setInterval(loadReviewCounts, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -923,9 +2270,14 @@ function AdminBackupPage() {
   const [photoPreview, setPhotoPreview] = useState(null)
   const [photoGalleryPage, setPhotoGalleryPage] = useState(null)
   const [slipPreview, setSlipPreview] = useState(null)
-  const [waitingListSearch, setWaitingListSearch] = useState('')
-  const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListModal, setWaitingListModal] = useState(null)
+  const [waitingListDetail, setWaitingListDetail] = useState(null)
+  const [waitingListDelete, setWaitingListDelete] = useState(null)
+  const [waitingListDeleting, setWaitingListDeleting] = useState(false)
+  const [waitingListDeleteError, setWaitingListDeleteError] = useState('')
+  const [waitingListStatusBusyId, setWaitingListStatusBusyId] = useState(null)
+  const [waitingListActionError, setWaitingListActionError] = useState('')
+  const [waitingNow] = useState(() => Date.now())
   const [waitingListForm, setWaitingListForm] = useState(emptyWaitingListForm)
   const [waitingListFormError, setWaitingListFormError] = useState('')
   const [waitingListFieldErrors, setWaitingListFieldErrors] = useState({})
@@ -1086,6 +2438,7 @@ function AdminBackupPage() {
       phone: entry.phone || '',
       room_preference: entry.room_preference || '',
       note: entry.note || '',
+      desired_move_in_date: entry.desired_move_in_date || '',
     } : emptyWaitingListForm)
     setWaitingListFormError('')
     setWaitingListFieldErrors({})
@@ -1097,23 +2450,10 @@ function AdminBackupPage() {
     setWaitingListFieldErrors((errors) => ({ ...errors, [field]: undefined }))
   }
 
-  const waitingListPreferences = waitingListForm.room_preference
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-  const toggleRoomPreference = (chip) => {
-    const next = waitingListPreferences.includes(chip)
-      ? waitingListPreferences.filter((item) => item !== chip)
-      : [...waitingListPreferences, chip]
-    const text = next.join(' | ')
-    if (text.length <= 100) updateWaitingListField('room_preference', text)
-  }
-
   const loadWaitingList = () => {
     return axios
       .get('/api/admin/waiting-list', { headers: authHeaders() })
-      .then(({ data }) => setWaitingList(data.waitingList))
+      .then(({ data }) => setWaitingList(data.waitingList || []))
       .catch((err) => {
         if (handleUnauthorized(err)) return
         setPageError(err.response?.data?.message || 'โหลดรายชื่อคนรอห้องว่างไม่สำเร็จ')
@@ -1220,6 +2560,7 @@ function AdminBackupPage() {
       phone,
       room_preference: waitingListForm.room_preference.trim(),
       note: waitingListForm.note.trim(),
+      desired_move_in_date: waitingListForm.desired_move_in_date || '',
     }
     setWaitingListSubmitting(true)
     try {
@@ -1240,24 +2581,37 @@ function AdminBackupPage() {
   }
 
   const setWaitingListEntryStatus = async (entry, status) => {
+    if (waitingListStatusBusyId != null) return
+    setWaitingListStatusBusyId(entry.id)
+    setWaitingListActionError('')
     try {
-      await axios.patch(`/api/admin/waiting-list/${entry.id}`, { status }, { headers: authHeaders() })
+      await axios.patch('/api/admin/waiting-list/' + entry.id, { status }, { headers: authHeaders() })
       await loadWaitingList()
     } catch (err) {
       if (handleUnauthorized(err)) return
-      setPageError(err.response?.data?.message || 'เปลี่ยนสถานะไม่สำเร็จ')
+      const message = err.response?.data?.message || 'เปลี่ยนสถานะไม่สำเร็จ'
+      setWaitingListActionError(message)
+      setPageError(message)
+    } finally {
+      setWaitingListStatusBusyId(null)
     }
   }
 
-  const removeWaitingListEntry = async (entry) => {
-    if (!window.confirm(`ลบรายชื่อ ${entry.full_name} หรือไม่?`)) return
+  const removeWaitingListEntry = async (requestClose) => {
+    if (!waitingListDelete || waitingListDeleting) return
+    setWaitingListDeleting(true)
+    setWaitingListDeleteError('')
     try {
-      const { data } = await axios.delete(`/api/admin/waiting-list/${entry.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete('/api/admin/waiting-list/' + waitingListDelete.id, { headers: authHeaders() })
       setSuccessMessage(data.message)
+      requestClose()
+      if (waitingListDetail?.id === waitingListDelete.id) setWaitingListDetail(null)
       await loadWaitingList()
     } catch (err) {
       if (handleUnauthorized(err)) return
-      setPageError(err.response?.data?.message || 'ลบรายการไม่สำเร็จ')
+      setWaitingListDeleteError(err.response?.data?.message || 'ลบรายการไม่สำเร็จ')
+    } finally {
+      setWaitingListDeleting(false)
     }
   }
 
@@ -1813,6 +3167,7 @@ function AdminBackupPage() {
 
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
+  const [requestDetail, setRequestDetail] = useState(null)
   const [requestLogsError, setRequestLogsError] = useState('')
   const [requestStatusFilter, setRequestStatusFilter] = useState('all')
   const [requestSearch, setRequestSearch] = useState('')
@@ -1997,14 +3352,6 @@ function AdminBackupPage() {
     const activeCustomers = customers.filter((customer) => !customer.is_suspended).length
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
-
-  const filteredWaitingList = waitingList.filter((entry) => {
-    const matchesStatus = waitingListStatus === 'all' || entry.status === waitingListStatus
-    const search = waitingListSearch.trim().toLocaleLowerCase('th-TH')
-    const matchesSearch = !search || [entry.full_name, entry.phone, entry.room_preference, entry.note, entry.submitted_by_name]
-      .some((value) => String(value || '').toLocaleLowerCase('th-TH').includes(search))
-    return matchesStatus && matchesSearch
-  })
 
   const inspectionKindCounts = moveOutInspections.reduce((counts, inspection) => {
     const kind = inspectionKindOf(inspection)
@@ -2371,23 +3718,52 @@ function AdminBackupPage() {
         </div>
 
         <ul className="nav nav-tabs admin-tabs">
-          {TABS.map((tab) => (
-            <li className="nav-item" key={tab.key}>
+          {TAB_GROUPS.map((group) => (
+            <li className="nav-item" key={group.key}>
               <button
                 type="button"
-                className={`nav-link admin-tab-link${activeTab === tab.key ? ' active' : ''}`}
+                className={`nav-link admin-tab-link${TAB_GROUP_OF[activeTab] === group.key ? ' active' : ''}`}
                 onClick={() => {
-                  setActiveTab(tab.key)
+                  if (TAB_GROUP_OF[activeTab] === group.key) return
+                  setActiveTab(lastTabByGroup[group.key] || group.tabs[0])
                   setAnnouncementFocus(null)
                 }}
               >
-                {tab.label}
+                {group.label}
               </button>
             </li>
           ))}
-          <AdminSpecialVisitReviewNav />
-          <AdminSafetyIncidentReviewNav />
         </ul>
+
+        {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
+          <ul
+            key={group.key}
+            className="nav admin-subtabs"
+            hidden={TAB_GROUP_OF[activeTab] !== group.key}
+            aria-label={group.label}
+          >
+            {group.tabs.map((tabKey) => (
+              <li className="nav-item" key={tabKey}>
+                <button
+                  type="button"
+                  className={`nav-link admin-tab-link admin-subtab-link${activeTab === tabKey ? ' active' : ''}`}
+                  onClick={() => {
+                    setActiveTab(tabKey)
+                    setLastTabByGroup((current) => ({ ...current, [group.key]: tabKey }))
+                    setAnnouncementFocus(null)
+                  }}
+                >
+                  {TAB_LABEL[tabKey]}
+                  {tabBadges[tabKey] > 0 && <span className="admin-subtab-badge">{tabBadges[tabKey]}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ))}
+
+        {activeTab === 'vehicle-requests' && <AdminVehicleRequestsTab onCountChange={setPendingVehicleCount} />}
+
+        {activeTab === 'safety' && <AdminSafetyIncidentsTab onCountChange={setPendingSafetyCount} />}
 
         {activeTab === 'announcements' && (
           <AnnouncementBoard
@@ -2403,33 +3779,6 @@ function AdminBackupPage() {
 
         {activeTab === 'parcels' && (
           <div className="parcel-management-card">
-            <div className="parcel-card-header">
-              <div className="parcel-hero-text">
-                <span className="parcel-hero-icon"><PackageIcon size={20} /></span>
-                <div>
-                  <h2 className="parcel-hero-title">จัดการพัสดุ</h2>
-                  <p className="parcel-hero-sub">บันทึกพัสดุที่มาส่งและติดตามการรับของผู้เช่า</p>
-                </div>
-              </div>
-              <dl className="parcel-stats">
-                <div className="parcel-stat is-alert">
-                  <dt>รอผู้เช่ารับ</dt>
-                  <dd>{parcels.filter((parcel) => parcel.status === 'pending').length}</dd>
-                </div>
-                <div className="parcel-stat is-success">
-                  <dt>รับแล้ว</dt>
-                  <dd>{parcels.filter((parcel) => parcel.status === 'received').length}</dd>
-                </div>
-                <div className="parcel-stat">
-                  <dt>ทั้งหมด</dt>
-                  <dd>{parcels.length}</dd>
-                </div>
-              </dl>
-              <p className="parcel-card-note">
-                <InfoIcon size={14} />
-                พัสดุ 1 ชิ้นต่อ 1 รายการ หากมีหลายชิ้น กรุณาบันทึกแยกแต่ละชิ้น
-              </p>
-            </div>
             <div className="parcel-list-head">
               <h3 className="parcel-section-title">รายการพัสดุ</h3>
               <button type="button" className="parcel-action-btn is-primary" onClick={() => setParcelFormOpen(true)}>
@@ -3041,18 +4390,19 @@ function AdminBackupPage() {
                     <th className="admin-col-optional">รับเรื่องโดย</th>
                     <th className="admin-col-optional">เสร็จสิ้นโดย</th>
                     <th className="admin-col-optional">วันที่ส่งคำขอ</th>
+                    <th aria-label="รายละเอียด" />
                   </tr>
                 </thead>
                 <tbody>
                   {requestLogsLoading ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : requestLogs.items.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         ไม่พบประวัติคำขอ
                       </td>
                     </tr>
@@ -3081,11 +4431,16 @@ function AdminBackupPage() {
                             <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
                           </td>
                           <td className="admin-col-optional">{formatDateTime(request.created_at)}</td>
+                          <td className="admin-more-cell">
+                            <button type="button" className="admin-more-link" onClick={() => setRequestDetail(request)}>
+                              ดูเพิ่มเติม <span aria-hidden="true">›</span>
+                            </button>
+                          </td>
                         </tr>
-                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={7} onClick={() => toggleRequestRow(request.id)} />
+                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={8} onClick={() => toggleRequestRow(request.id)} />
                         <DetailRow
                           open={expandedRequestRows.has(request.id)}
-                          colSpan={7}
+                          colSpan={8}
                           fields={[
                             { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="tenant" request={request} /> },
                           ]}
@@ -3405,61 +4760,17 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'waiting-list' && (
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div>
-                <h2>รายชื่อคนรอห้องว่าง ({waitingList.length})</h2>
-                <p className="waiting-list-storage-note">รายชื่อจาก Staff และ Admin</p>
-              </div>
-              <button type="button" className="admin-action-btn is-primary" onClick={() => openWaitingListForm()}>
-                + เพิ่มรายชื่อ
-              </button>
-            </div>
-            <div className="admin-toolbar">
-              <div className="admin-search-group">
-                <label className="admin-toolbar-label" htmlFor="waiting-list-search">ค้นหา</label>
-                <input id="waiting-list-search" type="search" className="form-control admin-search-input" placeholder="ชื่อ, เบอร์โทร, ประเภทห้อง..." value={waitingListSearch} onChange={(event) => setWaitingListSearch(event.target.value)} />
-              </div>
-              <div className="admin-filter-group">
-                <label className="admin-toolbar-label" htmlFor="waiting-list-status">สถานะ</label>
-                <select id="waiting-list-status" className="form-select admin-filter-select" value={waitingListStatus} onChange={(event) => setWaitingListStatus(event.target.value)}>
-                  <option value="all">ทุกสถานะ</option>
-                  {Object.entries(WAITING_LIST_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="table-responsive">
-              <table className="table admin-table">
-                <thead><tr><th>ชื่อผู้สนใจ</th><th>เบอร์โทร</th><th>ประเภทห้อง</th><th>สถานะ</th><th className="admin-col-optional">หมายเหตุ</th><th className="admin-col-optional">บันทึกโดย</th><th>จัดการ</th></tr></thead>
-                <tbody>
-                  {filteredWaitingList.length === 0 ? (
-                    <tr><td colSpan={7} className="admin-empty">{waitingList.length ? 'ไม่พบรายชื่อตามเงื่อนไข' : 'ยังไม่มีรายชื่อผู้รอห้องว่าง'}</td></tr>
-                  ) : filteredWaitingList.map((entry) => (
-                    <tr key={entry.id}>
-                      <td className="admin-strong-cell">{entry.full_name}<small className="waiting-list-date">{formatDate(entry.created_at)}</small></td>
-                      <td>{entry.phone}</td>
-                      <td>{entry.room_preference || '-'}</td>
-                      <td>
-                        <select aria-label={`สถานะของ ${entry.full_name}`} className="form-select waiting-list-status-select" value={entry.status || 'waiting'} onChange={(event) => setWaitingListEntryStatus(entry, event.target.value)}>
-                          {Object.entries(WAITING_LIST_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
-                      </td>
-                      <td className="admin-col-optional">{entry.note || '-'}</td>
-                      <td className="admin-col-optional">
-                          <ActorName name={entry.submitted_by_name} />
-                        </td>
-                      <td>
-                        <div className="admin-row-actions">
-                          <button type="button" className="admin-action-btn is-ghost" onClick={() => openWaitingListForm(entry)}>แก้ไข</button>
-                          <button type="button" className="admin-action-btn is-danger" onClick={() => removeWaitingListEntry(entry)}>ลบ</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <WaitingListPanel
+            items={waitingList}
+            now={waitingNow}
+            vacantCount={summary.vacantRooms}
+            onAdd={() => openWaitingListForm()}
+            onDetail={(entry) => { setWaitingListActionError(''); setWaitingListDetail(entry) }}
+            onEdit={openWaitingListForm}
+            onDelete={(entry) => { setWaitingListDeleteError(''); setWaitingListDelete(entry) }}
+            onStatusChange={setWaitingListEntryStatus}
+            statusBusyId={waitingListStatusBusyId}
+          />
         )}
 
         {activeTab === 'move-out-inspections' && (
@@ -3758,112 +5069,175 @@ function AdminBackupPage() {
         />
       )}
 
-      {waitingListModal && (
-        <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มผู้สนใจเช่าห้อง' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)} variant="form">
+      {requestDetail && (
+        <Modal title="รายละเอียดคำขอผู้เช่า" onClose={() => setRequestDetail(null)}>
+          {() => {
+            const request = requestDetail
+            const priceDiff =
+              request.type === 'move_room' && request.source_room_price != null && request.target_room_price != null
+                ? Number(request.target_room_price) - Number(request.source_room_price)
+                : null
+            return (
+              <div className="admin-incident-detail">
+                <div className="admin-incident-scroll">
+                  <div className={`admin-incident-hero admin-request-hero is-${request.status}`}>
+                    <span className="admin-incident-icon is-large admin-request-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                        <path d="M14 3v6h6M8 13h8M8 17h5" />
+                      </svg>
+                    </span>
+                    <div>
+                      <strong>คำขอ{REQUEST_TYPE_LABEL[request.type] || request.type}</strong>
+                      <span className={`admin-badge type-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
+                    </div>
+                    <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
+                  </div>
+
+                  <section className="admin-request-section">
+                    <h4>ข้อมูลผู้เช่า</h4>
+                    <dl className="admin-incident-fields">
+                      <div>
+                        <dt>ชื่อผู้เช่า</dt>
+                        <dd>{request.first_name} {request.last_name}</dd>
+                      </div>
+                      <div>
+                        <dt>เบอร์โทร</dt>
+                        <dd>{request.phone ? <a href={`tel:${request.phone}`}>{request.phone}</a> : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>ห้องปัจจุบัน</dt>
+                        <dd>ห้อง {request.room_number}</dd>
+                      </div>
+                      <div>
+                        <dt>เงินประกัน</dt>
+                        <dd>{request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className="admin-request-section">
+                    <h4>รายละเอียดคำขอ</h4>
+                    <dl className="admin-incident-fields">
+                      <div>
+                        <dt>วันที่ส่งคำขอ</dt>
+                        <dd>{formatDateTime(request.created_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>ประเภทคำขอ</dt>
+                        <dd>{REQUEST_TYPE_LABEL[request.type] || request.type}</dd>
+                      </div>
+                      {request.type === 'renew' && (
+                        <>
+                          <div>
+                            <dt>ระยะเวลาที่ขอต่อ</dt>
+                            <dd>{RENEW_DURATION_LABEL[String(request.renew_duration_months)] || (request.renew_duration_months ? `${request.renew_duration_months} เดือน` : '-')}</dd>
+                          </div>
+                          <div>
+                            <dt>รูปแบบการชำระ</dt>
+                            <dd>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type || '-'}</dd>
+                          </div>
+                        </>
+                      )}
+                      {request.type === 'move_room' && (
+                        <>
+                          <div>
+                            <dt>ห้องที่ต้องการย้ายไป</dt>
+                            <dd>{request.target_room_number ? `ห้อง ${request.target_room_number}` : '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>วันที่ต้องการย้าย</dt>
+                            <dd>{request.preferred_move_date ? formatDate(request.preferred_move_date) : '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>ค่าเช่าห้องเดิม → ห้องใหม่</dt>
+                            <dd>
+                              {request.source_room_price != null ? `฿${formatCurrency(request.source_room_price)}` : '-'} →{' '}
+                              {request.target_room_price != null ? `฿${formatCurrency(request.target_room_price)}` : '-'}
+                              {priceDiff !== null && priceDiff !== 0 && (
+                                <span className={`admin-request-diff ${priceDiff > 0 ? 'is-up' : 'is-down'}`}>
+                                  {priceDiff > 0 ? '+' : '−'}฿{formatCurrency(Math.abs(priceDiff))}/เดือน
+                                </span>
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>เหตุผลที่ย้าย</dt>
+                            <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || request.move_reason || '-'}</dd>
+                          </div>
+                          <div className="is-wide">
+                            <dt>ตรวจสภาพห้องเดิม</dt>
+                            <dd>{request.inspection_id ? MOVE_OUT_INSPECTION_STATUS[request.inspection_status] || 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจห้อง'}</dd>
+                          </div>
+                        </>
+                      )}
+                      {request.type === 'moveout' && (
+                        <div className="is-wide">
+                          <dt>ตรวจสภาพห้องก่อนย้ายออก</dt>
+                          <dd>{request.inspection_id ? MOVE_OUT_INSPECTION_STATUS[request.inspection_status] || 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจห้อง'}</dd>
+                        </div>
+                      )}
+                      <div className="is-wide">
+                        <dt>{request.type === 'moveout' ? 'เหตุผล / รายละเอียดการย้ายออก' : 'หมายเหตุจากผู้เช่า'}</dt>
+                        <dd>{request.note || '-'}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className="admin-request-section">
+                    <h4>ผู้ดำเนินการ</h4>
+                    <dl className="admin-incident-fields">
+                      <div>
+                        <dt>รับเรื่องโดย</dt>
+                        <dd>
+                          <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{request.status === 'rejected' ? 'ปฏิเสธโดย' : 'เสร็จสิ้นโดย'}</dt>
+                        <dd>
+                          <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <AdminRequestProgress request={request} />
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {waitingListDetail && (
+        <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingListDetail(null)} variant="waiting-detail">
           {(requestClose) => (
-            <form className="admin-waiting-form" onSubmit={(event) => submitWaitingListForm(event, requestClose)} noValidate>
-              <div className="admin-waiting-intro">
-                <span className="admin-waiting-intro-icon" aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M19 8v6M22 11h-6" />
-                  </svg>
-                </span>
-                <p>บันทึกคนที่สนใจเช่าห้อง เพื่อติดต่อกลับเมื่อมีห้องว่าง</p>
-              </div>
-
-              {waitingListFormError && <p className="admin-waiting-error" role="alert">{waitingListFormError}</p>}
-
-              <div className="admin-waiting-field">
-                <label className="admin-waiting-label" htmlFor="admin-waiting-name">
-                  ชื่อผู้สนใจ <span className="admin-waiting-required">*</span>
-                </label>
-                <input
-                  id="admin-waiting-name"
-                  className={`form-control${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
-                  maxLength={255}
-                  autoFocus
-                  autoComplete="off"
-                  placeholder="ชื่อ-นามสกุล"
-                  value={waitingListForm.full_name}
-                  onChange={(event) => updateWaitingListField('full_name', event.target.value)}
-                />
-                {waitingListFieldErrors.full_name && <span className="admin-waiting-field-error">{waitingListFieldErrors.full_name}</span>}
-              </div>
-
-              <div className="admin-waiting-field">
-                <label className="admin-waiting-label" htmlFor="admin-waiting-phone">
-                  เบอร์โทรศัพท์ <span className="admin-waiting-required">*</span>
-                </label>
-                <input
-                  id="admin-waiting-phone"
-                  className={`form-control${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
-                  type="tel"
-                  inputMode="tel"
-                  maxLength={20}
-                  autoComplete="off"
-                  placeholder="เช่น 0812345678"
-                  value={waitingListForm.phone}
-                  onChange={(event) => updateWaitingListField('phone', event.target.value)}
-                />
-                {waitingListFieldErrors.phone && <span className="admin-waiting-field-error">{waitingListFieldErrors.phone}</span>}
-              </div>
-
-              <div className="admin-waiting-field">
-                <label className="admin-waiting-label" htmlFor="admin-waiting-room">
-                  ประเภทห้องที่สนใจ <span className="admin-waiting-optional">(ไม่บังคับ)</span>
-                </label>
-                <div className="admin-waiting-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
-                  {ROOM_PREFERENCE_CHIPS.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      className={`admin-waiting-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
-                      aria-pressed={waitingListPreferences.includes(chip)}
-                      onClick={() => toggleRoomPreference(chip)}
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  id="admin-waiting-room"
-                  className="form-control"
-                  maxLength={100}
-                  autoComplete="off"
-                  placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
-                  value={waitingListForm.room_preference}
-                  onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
-                />
-              </div>
-
-              <div className="admin-waiting-field">
-                <div className="admin-waiting-label-row">
-                  <label className="admin-waiting-label" htmlFor="admin-waiting-note">
-                    หมายเหตุ <span className="admin-waiting-optional">(ไม่บังคับ)</span>
-                  </label>
-                  <span className="admin-waiting-counter">{waitingListForm.note.length}/500</span>
-                </div>
-                <textarea
-                  id="admin-waiting-note"
-                  className="form-control"
-                  rows={3}
-                  maxLength={500}
-                  placeholder="เช่น ต้องการเข้าอยู่ต้นเดือนหน้า"
-                  value={waitingListForm.note}
-                  onChange={(event) => updateWaitingListField('note', event.target.value)}
-                />
-              </div>
-
-              <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
-                <button type="submit" className="admin-action-btn is-primary" disabled={waitingListSubmitting}>
-                  {waitingListSubmitting ? 'กำลังบันทึก...' : 'บันทึกรายชื่อ'}
-                </button>
-              </div>
-            </form>
+            <WaitingListDetails
+              item={waitingList.find(entry => entry.id === waitingListDetail.id) || waitingListDetail}
+              now={waitingNow}
+              vacantRooms={rooms.filter(room => !room.is_booked).sort((a, b) => String(a.room_number).localeCompare(String(b.room_number), 'th', { numeric: true }))}
+              onClose={requestClose}
+              onEdit={(entry) => { setWaitingListDetail(null); openWaitingListForm(entry) }}
+              onStatusChange={setWaitingListEntryStatus}
+              statusBusyId={waitingListStatusBusyId}
+              actionError={waitingListActionError}
+            />
           )}
+        </Modal>
+      )}
+
+      {waitingListModal && (
+        <Modal title={waitingListModal.mode === 'create' ? 'เพิ่มผู้สนใจเช่าห้อง' : 'แก้ไขรายชื่อผู้สนใจ'} onClose={() => setWaitingListModal(null)} variant="waiting-form">
+          {(requestClose) => (
+            <WaitingListForm value={waitingListForm} fieldErrors={waitingListFieldErrors} error={waitingListFormError} busy={waitingListSubmitting} editing={waitingListModal.mode === 'edit'} now={waitingNow} onChange={updateWaitingListField} onSubmit={(event) => submitWaitingListForm(event, requestClose)} onClose={requestClose} idPrefix="admin-waiting" />
+          )}
+        </Modal>
+      )}
+
+      {waitingListDelete && (
+        <Modal title="ยืนยันการลบรายชื่อ" onClose={() => setWaitingListDelete(null)} variant="confirm">
+          {(requestClose) => <WaitingListDelete item={waitingListDelete} busy={waitingListDeleting} error={waitingListDeleteError} onClose={requestClose} onConfirm={() => removeWaitingListEntry(requestClose)} />}
         </Modal>
       )}
 
@@ -4066,9 +5440,6 @@ function AdminBackupPage() {
               </div>
               <p className="admin-confirm-message">ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?</p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteRoom(requestClose)}>
                   ลบห้องพัก
                 </button>
@@ -4080,7 +5451,7 @@ function AdminBackupPage() {
 
       {parcelFormOpen && (
         <Modal title="บันทึกพัสดุใหม่" onClose={() => setParcelFormOpen(false)}>
-          {(requestClose) => (
+          {() => (
           <form className="parcel-form is-modal" onSubmit={requestParcelSave}>
             <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
             <div className="row g-3">
@@ -4172,9 +5543,6 @@ function AdminBackupPage() {
             </div>
             {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
             <div className="parcel-form-actions">
-              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                ยกเลิก
-              </button>
               <button
                 type="submit"
                 className="parcel-action-btn is-primary"
@@ -4223,9 +5591,6 @@ function AdminBackupPage() {
                   </div>
                 </div>
                 <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>
-                    ยกเลิก
-                  </button>
                   <button type="button" className="admin-action-btn is-primary" onClick={() => handleCreateParcel(requestClose)} disabled={parcelSubmitting}>
                     {parcelSubmitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
                   </button>
@@ -4310,9 +5675,6 @@ function AdminBackupPage() {
                 ต้องการลบพนักงาน {staffDeleteConfirm.first_name} {staffDeleteConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteStaff(requestClose)}>
                   ลบพนักงาน
                 </button>
@@ -4341,9 +5703,6 @@ function AdminBackupPage() {
                 {staffSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button
                   type="button"
                   className={`admin-action-btn ${staffSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
@@ -4413,9 +5772,6 @@ function AdminBackupPage() {
                 {customerSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
                 <button
                   type="button"
                   className={`admin-action-btn ${customerSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
