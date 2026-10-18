@@ -7282,6 +7282,41 @@
   box-shadow: 0 6px 16px -12px rgba(15, 43, 82, 0.35);
 }
 
+.room-detail-rows > li.is-clickable {
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.room-detail-rows > li.is-clickable:hover,
+.room-detail-rows > li.is-clickable:focus-visible {
+  border-color: #bcd4f3;
+  background: #f7faff;
+  transform: translateY(-1px);
+}
+
+.room-detail-rows > li.is-clickable:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.room-detail-rows > li.is-clickable:active {
+  transform: translateY(0);
+}
+
+.room-detail-row-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: #b4c6da;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.room-detail-rows > li.is-clickable:hover .room-detail-row-chevron,
+.room-detail-rows > li.is-clickable:focus-visible .room-detail-row-chevron {
+  color: #2563eb;
+  transform: translateX(2px);
+}
+
 .room-detail-rows > li.is-success,
 .room-detail-rows > li.is-maintenance-done {
   --row-accent: #34d399;
