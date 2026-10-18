@@ -1292,7 +1292,33 @@ const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 const TENANT_GRID_COUNT = 9
 const ROOMS_PER_PAGE = 5
 const STAFF_LIST_PAGE_SIZE = 10
-const EXPENSES_PAGE_SIZE = 8
+const EXPENSES_PAGE_SIZE = 9
+
+const EMPTY_EXPENSE_FORM = {
+  category: '',
+  description: '',
+  amount: '',
+  expense_date: '',
+  vendor: '',
+  payment_method: '',
+  receipt_number: '',
+  room_number: '',
+  keptPhotos: [],
+  newPhotos: [],
+}
+
+const EMPTY_EXPENSE_FILTERS = { search: '', category: '', from: '', to: '' }
+
+const EXPENSE_CATEGORY_PRESETS = ['ค่าน้ำ', 'ค่าไฟ', 'ซ่อมบำรุง', 'ทำความสะอาด', 'วัสดุอุปกรณ์', 'อินเทอร์เน็ต', 'เงินเดือน', 'อื่นๆ']
+
+const EXPENSE_PAYMENT_METHOD_LABEL = {
+  cash: 'เงินสด',
+  transfer: 'โอนเงิน',
+  card: 'บัตร',
+  other: 'อื่นๆ',
+}
+
+const EXPENSE_MAX_PHOTOS = 6
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 30
 const PAYMENT_HISTORY_PAGE_SIZE = 5
@@ -2401,7 +2427,13 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
               <span className={`staff-badge status-${request.status}`}>
                 {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
               </span>
-              <span className="staff-req-detail-date">ส่งคำขอ {formatDateTime(request.created_at)}</span>
+              <span className="staff-req-detail-date">
+                <WaitingDetailIcon type="clock" size={16} />
+                <span>
+                  <small>ส่งคำขอ</small>
+                  <strong>{formatDateTime(request.created_at)} น.</strong>
+                </span>
+              </span>
             </div>
             {isMove ? (
               <div className="staff-transfer-route">
@@ -6276,20 +6308,45 @@ function StaffMain() {
   const [expenseDelete, setExpenseDelete] = useState(null)
   const [expenseDeleting, setExpenseDeleting] = useState(false)
   const [expenseDeleteError, setExpenseDeleteError] = useState('')
-  const [expenseForm, setExpenseForm] = useState({ category: '', description: '', amount: '', expense_date: '' })
+  const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE_FORM)
   const [expenseFormError, setExpenseFormError] = useState('')
+  const [expensePhotoError, setExpensePhotoError] = useState('')
+  const [expenseExtraOpen, setExpenseExtraOpen] = useState(false)
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
+  const [expenseFilters, setExpenseFilters] = useState(EMPTY_EXPENSE_FILTERS)
+  const expenseFiltersRef = useRef(EMPTY_EXPENSE_FILTERS)
+  const expenseSearchTimerRef = useRef(null)
+  const [expenseSummary, setExpenseSummary] = useState({ totalAmount: 0, byCategory: [] })
+  const [expenseDetail, setExpenseDetail] = useState(null)
+  const [expensePhotoPreview, setExpensePhotoPreview] = useState(null)
+  const [expenseDetailPhotoIndex, setExpenseDetailPhotoIndex] = useState(0)
+  const openExpenseDetail = (expense) => {
+    setExpenseDetailPhotoIndex(0)
+    setExpenseDetail(expense)
+  }
 
   const loadExpenses = (page = 1) => {
+    const filters = expenseFiltersRef.current
     setExpensesLoading(true)
     setExpensesError('')
     return axios
-      .get('/api/staff/expenses', { headers: authHeaders(), params: { page, pageSize: EXPENSES_PAGE_SIZE } })
+      .get('/api/staff/expenses', {
+        headers: authHeaders(),
+        params: {
+          page,
+          pageSize: EXPENSES_PAGE_SIZE,
+          search: filters.search.trim() || undefined,
+          category: filters.category || undefined,
+          from: filters.from || undefined,
+          to: filters.to || undefined,
+        },
+      })
       .then(({ data }) => {
         setExpenses(data.expenses)
         setExpensesPage(data.page)
         setExpensesTotal(data.total || 0)
         setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || EXPENSES_PAGE_SIZE))))
+        setExpenseSummary({ totalAmount: Number(data.totalAmount) || 0, byCategory: data.byCategory || [] })
         setExpensesError('')
       })
       .catch((err) => {
@@ -6298,20 +6355,48 @@ function StaffMain() {
       .finally(() => setExpensesLoading(false))
   }
 
+  const updateExpenseFilters = (patch, { debounce = false } = {}) => {
+    const next = { ...expenseFiltersRef.current, ...patch }
+    expenseFiltersRef.current = next
+    setExpenseFilters(next)
+    clearTimeout(expenseSearchTimerRef.current)
+    if (debounce) {
+      expenseSearchTimerRef.current = setTimeout(() => loadExpenses(1), 350)
+    } else {
+      loadExpenses(1)
+    }
+  }
+
+  const expenseFiltersActive = Boolean(
+    expenseFilters.search.trim() || expenseFilters.category || expenseFilters.from || expenseFilters.to,
+  )
+
   const openCreateExpense = () => {
-    setExpenseForm({ category: '', description: '', amount: '', expense_date: getTodayInputDate() })
+    setExpenseForm({ ...EMPTY_EXPENSE_FORM, expense_date: getTodayInputDate() })
+    setExpenseExtraOpen(false)
     setExpenseFormError('')
+    setExpensePhotoError('')
     setExpenseModal({ mode: 'create' })
   }
 
   const openEditExpense = (expense) => {
     setExpenseForm({
+      ...EMPTY_EXPENSE_FORM,
       category: expense.category || '',
       description: expense.description || '',
       amount: String(expense.amount ?? ''),
       expense_date: (expense.expense_date || '').slice(0, 10),
+      vendor: expense.vendor || '',
+      payment_method: expense.payment_method || '',
+      receipt_number: expense.receipt_number || '',
+      room_number: expense.room_number ? String(expense.room_number) : '',
+      keptPhotos: expense.photos || [],
     })
+    setExpenseExtraOpen(
+      Boolean(expense.vendor || expense.payment_method || expense.receipt_number || expense.room_number),
+    )
     setExpenseFormError('')
+    setExpensePhotoError('')
     setExpenseModal({ mode: 'edit', expense })
   }
 
@@ -6331,7 +6416,7 @@ function StaffMain() {
     }
   }
 
-  const submitExpenseForm = (event, requestClose) => {
+  const submitExpenseForm = async (event, requestClose) => {
     event.preventDefault()
     if (!expenseForm.category.trim()) {
       setExpenseFormError('กรุณาระบุหมวดหมู่รายจ่าย')
@@ -6346,29 +6431,43 @@ function StaffMain() {
       setExpenseFormError('กรุณาระบุวันที่')
       return
     }
+    if (!expenseForm.description.trim()) {
+      setExpenseFormError('กรุณากรอกรายละเอียดรายจ่าย')
+      return
+    }
+    if (expenseForm.keptPhotos.length + expenseForm.newPhotos.length === 0) {
+      setExpenseFormError('กรุณาแนบรูปใบเสร็จหรือหลักฐานอย่างน้อย 1 รูป')
+      return
+    }
 
     setExpenseSubmitting(true)
     setExpenseFormError('')
-    const payload = {
-      category: expenseForm.category.trim(),
-      description: expenseForm.description.trim() || null,
-      amount: amountValue,
-      expense_date: expenseForm.expense_date,
+    try {
+      const photos = (await Promise.all(expenseForm.newPhotos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
+      const payload = {
+        category: expenseForm.category.trim(),
+        description: expenseForm.description.trim() || null,
+        amount: amountValue,
+        expense_date: expenseForm.expense_date,
+        vendor: expenseForm.vendor.trim() || null,
+        payment_method: expenseForm.payment_method || null,
+        receipt_number: expenseForm.receipt_number.trim() || null,
+        room_number: expenseForm.room_number || null,
+        photos,
+        keep_photos: expenseForm.keptPhotos.map((photo) => photo.url),
+      }
+      if (expenseModal.mode === 'create') {
+        await axios.post('/api/staff/expenses', payload, { headers: authHeaders() })
+      } else {
+        await axios.put(`/api/staff/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+      }
+      requestClose()
+      loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
+    } catch (err) {
+      setExpenseFormError(err.response?.data?.message || err.message || 'ไม่สามารถบันทึกรายจ่ายได้')
+    } finally {
+      setExpenseSubmitting(false)
     }
-    const request =
-      expenseModal.mode === 'create'
-        ? axios.post('/api/staff/expenses', payload, { headers: authHeaders() })
-        : axios.put(`/api/staff/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
-
-    request
-      .then(() => {
-        requestClose()
-        loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
-      })
-      .catch((err) => {
-        setExpenseFormError(err.response?.data?.message || 'ไม่สามารถบันทึกรายจ่ายได้')
-      })
-      .finally(() => setExpenseSubmitting(false))
   }
 
   const loadRequests = () => {
@@ -7344,6 +7443,37 @@ function StaffMain() {
       tiles: [
         { key: 'pending', icon: 'maintenance', tone: 'amber', label: 'รอรับเรื่อง', value: pendingMaintenanceCount, onClick: () => openSummaryTarget('home', null, 'maintenance') },
         { key: 'progress', icon: 'maintenance', tone: 'orange', label: 'กำลังซ่อม', value: maintenanceRequests.length - pendingMaintenanceCount, onClick: () => openSummaryTarget('home', null, 'maintenance') },
+      ],
+    },
+    'home:expenses': {
+      title: 'รายจ่าย',
+      tiles: [
+        {
+          key: 'amount',
+          icon: 'due',
+          tone: 'blue',
+          label: 'ยอดรวมรายจ่าย',
+          value: `฿${formatCurrency(expenseSummary.totalAmount)}`,
+          hint: expenseFiltersActive ? 'ตามตัวกรองที่เลือก' : 'ทุกรายการ',
+          onClick: () => openSummaryTarget('home', null, 'expenses'),
+        },
+        {
+          key: 'count',
+          icon: 'total',
+          tone: 'slate',
+          label: 'จำนวนรายการ',
+          value: expensesTotal,
+          onClick: () => openSummaryTarget('home', null, 'expenses'),
+        },
+        {
+          key: 'top',
+          icon: 'request',
+          tone: 'amber',
+          label: 'หมวดที่ใช้จ่ายมากที่สุด',
+          value: expenseSummary.byCategory[0]?.category || '-',
+          hint: expenseSummary.byCategory[0] ? `฿${formatCurrency(expenseSummary.byCategory[0].total)}` : null,
+          onClick: () => openSummaryTarget('home', null, 'expenses'),
+        },
       ],
     },
     'payment-review': {
@@ -9177,13 +9307,44 @@ function StaffMain() {
             {homeSection === 'expenses' && (
             <div className="staff-card staff-expenses-card">
               <div className="staff-card-header">
-                <h2>รายจ่าย</h2>
+                <h2>
+                  รายจ่าย
+                  {expensesTotal > 0 && <span className="staff-count-pill">{expensesTotal}</span>}
+                </h2>
                 <div className="staff-card-header-actions">
                   <button type="button" className="staff-action-btn is-primary" onClick={openCreateExpense}>
                     + บันทึกรายจ่าย
                   </button>
                 </div>
               </div>
+
+              <StaffFilterPanel
+                search={expenseFilters.search}
+                onSearch={(value) => updateExpenseFilters({ search: value }, { debounce: true })}
+                searchPlaceholder="ค้นหาหมวดหมู่ รายละเอียด ร้านค้า เลขใบเสร็จ หรือเลขห้อง"
+                dateRange={{
+                  from: expenseFilters.from,
+                  to: expenseFilters.to,
+                  onChange: (range) => updateExpenseFilters(range),
+                }}
+                resultText={expenseFiltersActive ? `พบ ${expensesTotal} รายการ` : null}
+                canClear={expenseFiltersActive}
+                onClear={() => updateExpenseFilters(EMPTY_EXPENSE_FILTERS)}
+              >
+                <select
+                  className="staff-filter-select"
+                  value={expenseFilters.category}
+                  onChange={(event) => updateExpenseFilters({ category: event.target.value })}
+                  aria-label="หมวดหมู่"
+                >
+                  <option value="">ทุกหมวดหมู่</option>
+                  {expenseSummary.byCategory.map((item) => (
+                    <option key={item.category} value={item.category}>
+                      {item.category} ({item.count})
+                    </option>
+                  ))}
+                </select>
+              </StaffFilterPanel>
 
               <div className="staff-card-body">
                 {expensesError ? (
@@ -9196,53 +9357,71 @@ function StaffMain() {
                 ) : expensesLoading ? (
                   <p className="staff-empty">กำลังโหลดข้อมูล...</p>
                 ) : expenses.length === 0 ? (
-                  <p className="staff-empty">ยังไม่มีรายการรายจ่าย</p>
+                  <p className="staff-empty">{expenseFiltersActive ? 'ไม่พบรายจ่ายที่ตรงกับเงื่อนไข' : 'ยังไม่มีรายการรายจ่าย'}</p>
                 ) : (
-                  <div className="table-responsive">
-                    <table className="staff-table">
-                      <thead>
-                        <tr>
-                          <th>วันที่</th>
-                          <th>หมวดหมู่</th>
-                          <th>รายละเอียด</th>
-                          <th>บันทึกโดย</th>
-                          <th>จำนวนเงิน</th>
-                          <th>จัดการ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {expenses.map((expense) => (
-                          <tr key={expense.id}>
-                            <td>{formatDate(expense.expense_date)}</td>
-                            <td>{expense.category}</td>
-                            <td>{expense.description || '-'}</td>
-                            <td>{expense.recorded_by_name ? <span className="staff-actor">{expense.recorded_by_name}</span> : '-'}</td>
-                            <td>฿{formatCurrency(expense.amount)}</td>
-                            <td>
-                              <div className="staff-row-actions">
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-ghost"
-                                  onClick={() => openEditExpense(expense)}
-                                >
-                                  แก้ไข
-                                </button>
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-danger"
-                                  onClick={() => {
-                                    setExpenseDeleteError('')
-                                    setExpenseDelete(expense)
-                                  }}
-                                >
-                                  ลบ
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="staff-requests-list is-grid">
+                    {expenses.map((expense) => (
+                      <article key={expense.id} className="staff-req-card type-expense is-structured">
+                        <div className="staff-req-head is-identity">
+                          <span className="staff-req-avatar" aria-hidden="true">
+                            <WaitingDetailIcon type="user" size={18} />
+                          </span>
+                          <div className="staff-req-identity">
+                            <strong title={expense.description || expense.category}>{expense.description || expense.category}</strong>
+                            <span className="staff-expense-category">{expense.category}</span>
+                          </div>
+                          <span className="staff-badge staff-req-status staff-expense-date">{formatDate(expense.expense_date)}</span>
+                        </div>
+                        <div className="staff-req-route">
+                          <div className="staff-req-route-room is-target">
+                            <small>จำนวนเงิน</small>
+                            <strong>฿{formatCurrency(expense.amount)}</strong>
+                          </div>
+                          {expense.payment_method && (
+                            <span className="staff-req-route-check is-info">{EXPENSE_PAYMENT_METHOD_LABEL[expense.payment_method]}</span>
+                          )}
+                        </div>
+                        <TenantRequestDetails
+                          details={[
+                            { key: 'vendor', icon: 'user', label: 'ผู้รับเงิน', value: expense.vendor || '-' },
+                            { key: 'receipt', icon: 'copy', label: 'เลขใบเสร็จ', value: expense.receipt_number || '-' },
+                            { key: 'room', icon: 'info', label: 'ห้อง', value: expense.room_number ? `ห้อง ${expense.room_number}` : '-' },
+                          ]}
+                        />
+                        {expense.photos?.length > 0 && (
+                          <button
+                            type="button"
+                            className="staff-expense-thumbs"
+                            onClick={() => openExpenseDetail(expense)}
+                          >
+                            {expense.photos.slice(0, 3).map((photo, index) => (
+                              <UploadImage key={photo.url} src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                            ))}
+                            <span>{expense.photos.length} รูป</span>
+                          </button>
+                        )}
+                        <TenantRequestCardFooter
+                          steps={[{ key: 'created', label: 'บันทึกโดย', by: expense.recorded_by_name || '-', date: expense.created_at, tone: 'info' }]}
+                        >
+                          <button type="button" className="staff-text-link" onClick={() => openExpenseDetail(expense)}>
+                            ดูรายละเอียด
+                          </button>
+                          <button
+                            type="button"
+                            className="staff-action-btn is-danger"
+                            onClick={() => {
+                              setExpenseDeleteError('')
+                              setExpenseDelete(expense)
+                            }}
+                          >
+                            ลบ
+                          </button>
+                          <button type="button" className="staff-action-btn is-primary" onClick={() => openEditExpense(expense)}>
+                            แก้ไข
+                          </button>
+                        </TenantRequestCardFooter>
+                      </article>
+                    ))}
                   </div>
                 )}
               </div>
@@ -9346,81 +9525,394 @@ function StaffMain() {
         <Modal
           title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'}
           onClose={() => setExpenseModal(null)}
-          variant="confirm"
+          variant="transfer-detail"
         >
+          {(requestClose) => {
+            const setField = (field) => (event) => setExpenseForm((prev) => ({ ...prev, [field]: event.target.value }))
+            const photoCount = expenseForm.keptPhotos.length + expenseForm.newPhotos.length
+            const expenseExtraFilled = ['vendor', 'payment_method', 'receipt_number', 'room_number'].filter(
+              (field) => String(expenseForm[field]).trim(),
+            ).length
+            return (
+              <form
+                className="staff-transfer-body"
+                onSubmit={(event) => submitExpenseForm(event, requestClose)}
+                noValidate
+              >
+                <div className="staff-transfer-scroll">
+                  <section className="staff-transfer-section">
+                    <h4 className="staff-transfer-section-title">ข้อมูลรายจ่าย</h4>
+                    <div className="staff-expense-form-grid">
+                      <div className="staff-form-field is-full">
+                        <label className="staff-form-label" htmlFor="expense-category">
+                          หมวดหมู่ <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          id="expense-category"
+                          type="text"
+                          className="staff-form-input"
+                          placeholder="พิมพ์เอง หรือเลือกจากด้านล่าง"
+                          maxLength={50}
+                          value={expenseForm.category}
+                          onChange={setField('category')}
+                        />
+                        <div className="staff-expense-chips" role="group" aria-label="หมวดหมู่ที่ใช้บ่อย">
+                          {EXPENSE_CATEGORY_PRESETS.map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              className={`staff-expense-chip${expenseForm.category.trim() === preset ? ' is-active' : ''}`}
+                              onClick={() => setExpenseForm((prev) => ({ ...prev, category: preset }))}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="expense-amount">
+                          จำนวนเงิน (บาท) <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          id="expense-amount"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="staff-form-input no-spinner"
+                          value={expenseForm.amount}
+                          onChange={setField('amount')}
+                        />
+                      </div>
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="expense-date">
+                          วันที่จ่าย <span className="text-danger">*</span>
+                        </label>
+                        <ThaiDatePicker
+                          id="expense-date"
+                          className="staff-form-input"
+                          value={expenseForm.expense_date}
+                          onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
+                        />
+                      </div>
+                      <div className="staff-form-field is-full">
+                        <label className="staff-form-label" htmlFor="expense-description">
+                          รายละเอียด <span className="text-danger">*</span>
+                        </label>
+                        <textarea
+                          id="expense-description"
+                          className="staff-form-input staff-form-textarea"
+                          rows={3}
+                          maxLength={255}
+                          placeholder="อธิบายรายจ่ายนี้ เช่น ซื้ออะไร ซ่อมจุดไหน"
+                          value={expenseForm.description}
+                          onChange={setField('description')}
+                        />
+                        <small className="staff-expense-counter">{expenseForm.description.length}/255</small>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={`staff-transfer-section staff-expense-collapsible${expenseExtraOpen ? ' is-open' : ''}`}>
+                    <button
+                      type="button"
+                      className="staff-expense-collapse-toggle"
+                      aria-expanded={expenseExtraOpen}
+                      aria-controls="expense-extra-fields"
+                      onClick={() => setExpenseExtraOpen((open) => !open)}
+                    >
+                      <span className="staff-transfer-section-title">
+                        รายละเอียดเพิ่มเติม
+                        <small className="staff-expense-optional">ไม่บังคับ</small>
+                      </span>
+                      {!expenseExtraOpen && expenseExtraFilled > 0 && (
+                        <span className="staff-expense-filled">กรอกแล้ว {expenseExtraFilled} ช่อง</span>
+                      )}
+                      <svg className="staff-expense-collapse-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    <div className="staff-expense-form-grid" id="expense-extra-fields" hidden={!expenseExtraOpen}>
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="expense-vendor">
+                          ผู้รับเงิน / ร้านค้า
+                        </label>
+                        <input
+                          id="expense-vendor"
+                          type="text"
+                          className="staff-form-input"
+                          placeholder="เช่น การไฟฟ้า, ร้านวัสดุ"
+                          maxLength={120}
+                          value={expenseForm.vendor}
+                          onChange={setField('vendor')}
+                        />
+                      </div>
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="expense-payment">
+                          วิธีชำระเงิน
+                        </label>
+                        <select
+                          id="expense-payment"
+                          className="staff-form-input"
+                          value={expenseForm.payment_method}
+                          onChange={setField('payment_method')}
+                        >
+                          <option value="">ไม่ระบุ</option>
+                          {Object.entries(EXPENSE_PAYMENT_METHOD_LABEL).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="expense-receipt">
+                          เลขที่ใบเสร็จ / อ้างอิง
+                        </label>
+                        <input
+                          id="expense-receipt"
+                          type="text"
+                          className="staff-form-input"
+                          maxLength={60}
+                          value={expenseForm.receipt_number}
+                          onChange={setField('receipt_number')}
+                        />
+                      </div>
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="expense-room">
+                          ห้องที่เกี่ยวข้อง
+                        </label>
+                        <select
+                          id="expense-room"
+                          className="staff-form-input"
+                          value={expenseForm.room_number}
+                          onChange={setField('room_number')}
+                        >
+                          <option value="">ไม่เกี่ยวกับห้องใด</option>
+                          {[...rooms]
+                            .sort((a, b) => a.room_number - b.room_number)
+                            .map((room) => (
+                              <option key={room.room_number} value={String(room.room_number)}>
+                                ห้อง {room.room_number}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="staff-transfer-section">
+                    <h4 className="staff-transfer-section-title">
+                      รูปใบเสร็จ / หลักฐาน <span className="text-danger">*</span>
+                      <small className="staff-expense-counter">
+                        {photoCount}/{EXPENSE_MAX_PHOTOS} รูป · JPG, PNG, WebP ไม่เกิน 5 MB
+                      </small>
+                    </h4>
+                    {expenseForm.keptPhotos.length > 0 && (
+                      <div className="staff-expense-kept-photos">
+                        {expenseForm.keptPhotos.map((photo, index) => (
+                          <figure key={photo.url} className="staff-expense-kept-photo">
+                            <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                            <button
+                              type="button"
+                              className="parcel-photo-remove"
+                              aria-label={`นำรูปที่ ${index + 1} ออก`}
+                              onClick={() =>
+                                setExpenseForm((prev) => ({
+                                  ...prev,
+                                  keptPhotos: prev.keptPhotos.filter((item) => item.url !== photo.url),
+                                }))
+                              }
+                            >
+                              ลบ
+                            </button>
+                          </figure>
+                        ))}
+                      </div>
+                    )}
+                    <ParcelPhotoPicker
+                      id="expense-photos"
+                      files={expenseForm.newPhotos}
+                      onChange={(files) => setExpenseForm((prev) => ({ ...prev, newPhotos: files }))}
+                      error={expensePhotoError}
+                      onError={setExpensePhotoError}
+                      heading={false}
+                      maxPhotos={Math.max(0, EXPENSE_MAX_PHOTOS - expenseForm.keptPhotos.length)}
+                    />
+                  </section>
+                </div>
+
+                <div className="staff-transfer-footer">
+                  {expenseFormError && <p className="staff-form-error">{expenseFormError}</p>}
+                  <div className="staff-form-actions">
+                    <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                      ยกเลิก
+                    </button>
+                    <button type="submit" className="staff-action-btn is-primary" disabled={expenseSubmitting}>
+                      {expenseSubmitting ? 'กำลังบันทึก...' : expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'บันทึกการแก้ไข'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )
+          }}
+        </Modal>
+      )}
+
+      {expenseDetail && (
+        <Modal title="รายละเอียดรายจ่าย" onClose={() => setExpenseDetail(null)} variant="transfer-detail">
           {(requestClose) => (
-            <form
-              className="staff-confirm-body"
-              onSubmit={(event) => submitExpenseForm(event, requestClose)}
-              noValidate
-            >
-              <div className="staff-form-field">
-                <label className="staff-form-label" htmlFor="expense-category">
-                  หมวดหมู่
-                </label>
-                <input
-                  id="expense-category"
-                  type="text"
-                  className="staff-form-input"
-                  placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซ่อมบำรุง"
-                  value={expenseForm.category}
-                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, category: event.target.value }))}
-                />
+            <div className="staff-transfer-body">
+              <div className="staff-transfer-top">
+                <div className="staff-req-detail-head">
+                  <span className="staff-expense-category">{expenseDetail.category}</span>
+                  {expenseDetail.payment_method && (
+                    <span className="staff-badge status-in_progress">{EXPENSE_PAYMENT_METHOD_LABEL[expenseDetail.payment_method]}</span>
+                  )}
+                  <span className="staff-req-detail-date">
+                    <WaitingDetailIcon type="calendar" size={16} />
+                    <span>
+                      <small>วันที่จ่าย</small>
+                      <strong>{formatDate(expenseDetail.expense_date)}</strong>
+                    </span>
+                  </span>
+                </div>
+                <div className="staff-req-detail-room is-summary">
+                  <span className="staff-req-detail-room-icon">
+                    <WaitingDetailIcon type="wallet" size={30} />
+                  </span>
+                  <div className="staff-req-detail-room-identity">
+                    <small>จำนวนเงิน</small>
+                    <strong>฿{formatCurrency(expenseDetail.amount)}</strong>
+                  </div>
+                  <div className="staff-req-detail-room-tenant">
+                    <small>ผู้รับเงิน / ร้านค้า</small>
+                    <span>{expenseDetail.vendor || '-'}</span>
+                    {expenseDetail.receipt_number && (
+                      <em className="staff-req-detail-room-phone">
+                        <WaitingDetailIcon type="copy" size={13} />
+                        ใบเสร็จ {expenseDetail.receipt_number}
+                      </em>
+                    )}
+                  </div>
+                </div>
               </div>
-
-              <div className="staff-form-field">
-                <label className="staff-form-label" htmlFor="expense-description">
-                  รายละเอียด (ไม่บังคับ)
-                </label>
-                <input
-                  id="expense-description"
-                  type="text"
-                  className="staff-form-input"
-                  value={expenseForm.description}
-                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, description: event.target.value }))}
-                />
+              <div className="staff-transfer-scroll">
+                <div className="staff-expense-detail-layout">
+                <section className="staff-transfer-section staff-expense-gallery">
+                  <h4 className="staff-transfer-section-title">
+                    รูปใบเสร็จ / หลักฐาน
+                    {expenseDetail.photos?.length > 0 && (
+                      <small className="staff-expense-counter">
+                        {Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1) + 1}/{expenseDetail.photos.length}
+                      </small>
+                    )}
+                  </h4>
+                  {expenseDetail.photos?.length > 0 ? (
+                    (() => {
+                      const activeIndex = Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1)
+                      const activePhoto = expenseDetail.photos[activeIndex]
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className="staff-expense-gallery-main"
+                            title="คลิกเพื่อดูรูปขนาดเต็ม"
+                            onClick={() => setExpensePhotoPreview({ index: activeIndex })}
+                          >
+                            <UploadImage src={activePhoto.url} alt={activePhoto.name || `รูปที่ ${activeIndex + 1}`} />
+                            <span className="staff-expense-gallery-zoom">ดูรูปขนาดเต็ม</span>
+                          </button>
+                          {expenseDetail.photos.length > 1 && (
+                            <div className="staff-expense-gallery-thumbs">
+                              {expenseDetail.photos.map((photo, index) => (
+                                <button
+                                  key={photo.url}
+                                  type="button"
+                                  className={`staff-expense-gallery-thumb${index === activeIndex ? ' is-active' : ''}`}
+                                  aria-label={`ดูรูปที่ ${index + 1}`}
+                                  onClick={() => setExpenseDetailPhotoIndex(index)}
+                                >
+                                  <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()
+                  ) : (
+                    <div className="staff-expense-gallery-empty">
+                      <WaitingDetailIcon type="copy" size={28} />
+                      <span>ยังไม่มีรูปใบเสร็จหรือหลักฐาน</span>
+                      <button
+                        type="button"
+                        className="staff-text-link"
+                        onClick={() => {
+                          const target = expenseDetail
+                          requestClose()
+                          openEditExpense(target)
+                        }}
+                      >
+                        แนบรูปเพิ่ม
+                      </button>
+                    </div>
+                  )}
+                </section>
+                <section className="staff-transfer-section">
+                  <h4 className="staff-transfer-section-title">ข้อมูลรายจ่าย</h4>
+                  <TenantRequestDetails
+                    details={[
+                      { key: 'date', icon: 'calendar', label: 'วันที่จ่าย', value: formatDate(expenseDetail.expense_date) },
+                      { key: 'payment', icon: 'wallet', label: 'ชำระโดย', value: EXPENSE_PAYMENT_METHOD_LABEL[expenseDetail.payment_method] || 'ไม่ระบุ' },
+                      { key: 'room', icon: 'info', label: 'ห้องที่เกี่ยวข้อง', value: expenseDetail.room_number ? `ห้อง ${expenseDetail.room_number}` : 'ไม่เกี่ยวกับห้องใด' },
+                      { key: 'by', icon: 'user', label: 'บันทึกโดย', value: expenseDetail.recorded_by_name || '-' },
+                      { key: 'created', icon: 'clock', label: 'บันทึกเมื่อ', value: `${formatDateTime(expenseDetail.created_at)} น.` },
+                    ]}
+                  />
+                  <div className="staff-req-note">
+                    <span className="staff-req-note-label">รายละเอียด</span>
+                    <p className="is-full">{expenseDetail.description || '-'}</p>
+                  </div>
+                </section>
+                </div>
               </div>
-
-              <div className="staff-form-field">
-                <label className="staff-form-label" htmlFor="expense-amount">
-                  จำนวนเงิน (บาท)
-                </label>
-                <input
-                  id="expense-amount"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  className="staff-form-input no-spinner"
-                  value={expenseForm.amount}
-                  onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))}
-                />
+              <div className="staff-transfer-footer">
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    onClick={() => {
+                      const target = expenseDetail
+                      requestClose()
+                      openEditExpense(target)
+                    }}
+                  >
+                    แก้ไข
+                  </button>
+                </div>
               </div>
-
-              <div className="staff-form-field">
-                <label className="staff-form-label" htmlFor="expense-date">
-                  วันที่
-                </label>
-                <ThaiDatePicker
-                  id="expense-date"
-                  className="staff-form-input"
-                  value={expenseForm.expense_date}
-                  onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
-                />
-              </div>
-
-              {expenseFormError && <p className="staff-form-error">{expenseFormError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button type="submit" className="staff-action-btn is-primary" disabled={expenseSubmitting}>
-                  {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
-                </button>
-              </div>
-            </form>
+            </div>
           )}
         </Modal>
+      )}
+
+      {expenseDetail && expensePhotoPreview && (
+        <PhotoLightbox
+          photos={(expenseDetail.photos || []).map((photo, index) => ({
+            name: photo.name || `รูปที่ ${index + 1}`,
+            url: photo.url,
+          }))}
+          initialIndex={expensePhotoPreview.index}
+          title={`รายจ่าย ${expenseDetail.category}`}
+          subtitle={`฿${formatCurrency(expenseDetail.amount)} · ${formatDate(expenseDetail.expense_date)}`}
+          label="รูปรายจ่าย"
+          onClose={() => setExpensePhotoPreview(null)}
+        />
       )}
 
       {viewAllRequests === 'tenant' && (
@@ -10627,7 +11119,13 @@ function StaffMain() {
                   <span className={`staff-badge status-${maintenanceDetail.status}`}>
                     {MAINTENANCE_STATUS_LABEL[maintenanceDetail.status] || maintenanceDetail.status}
                   </span>
-                  <span className="staff-req-detail-date">แจ้งซ่อม {formatDateTime(maintenanceDetail.created_at)}</span>
+                  <span className="staff-req-detail-date">
+                    <WaitingDetailIcon type="clock" size={16} />
+                    <span>
+                      <small>แจ้งซ่อม</small>
+                      <strong>{formatDateTime(maintenanceDetail.created_at)} น.</strong>
+                    </span>
+                  </span>
                 </div>
                 <div className="staff-req-detail-room is-summary">
                   <span className="staff-req-detail-room-icon"><DoorIcon size={22} /></span>

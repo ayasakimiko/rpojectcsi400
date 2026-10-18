@@ -574,6 +574,56 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'vendor'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `vendor` VARCHAR(120) NULL AFTER description'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'payment_method'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `payment_method` VARCHAR(20) NULL AFTER vendor'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'receipt_number'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `receipt_number` VARCHAR(60) NULL AFTER payment_method'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'room_number'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `room_number` INT UNSIGNED NULL AFTER receipt_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'photos'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `photos` LONGTEXT NULL AFTER room_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND INDEX_NAME = 'idx_announcement_expires'),
     'SELECT 1',

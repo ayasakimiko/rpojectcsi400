@@ -3295,63 +3295,92 @@
 .admin-incident-segments {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 4px;
-  border: 1px solid #e3ecf8;
-  border-radius: 12px;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid #e3ecf7;
+  border-radius: 14px;
   padding: 4px;
-  background: #f8fbff;
+  background: #ffffff;
 }
 
 .admin-incident-segment {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 0;
-  border-radius: 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   padding: 7px 12px;
   background: transparent;
   color: #4b6a88;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .admin-incident-segment span {
+  display: inline-grid;
   min-width: 20px;
+  height: 20px;
+  place-items: center;
   border-radius: 999px;
-  padding: 1px 7px;
-  background: #e8eef7;
-  color: #4b6a88;
+  padding: 0 6px;
+  background: #e0ecff;
+  color: #335d91;
   font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
   text-align: center;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.admin-incident-segment:hover:not(.active) {
-  background: #eef4fd;
-  color: #1d4ed8;
+@media (hover: hover) and (pointer: fine) {
+  .admin-incident-segment:hover:not(.active) {
+    border-color: #dce9fb;
+    background: #f4f8ff;
+    color: #2563eb;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.06);
+  }
+
+  .admin-incident-segment:hover:not(.active) span {
+    background: #eaf2ff;
+    color: #2563eb;
+  }
+
+  .admin-incident-segment.active:hover {
+    border-color: #1d4ed8;
+    background: #1d4ed8;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+  }
 }
 
 .admin-incident-segment.active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.18);
+}
+
+.admin-incident-segment.active span {
   background: #fff;
-  color: #1d4ed8;
-  box-shadow: 0 2px 8px rgba(15, 43, 82, 0.08);
-}
-
-.admin-incident-segment.is-pending.active span {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.admin-incident-segment.is-reviewed.active span {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.admin-incident-segment.is-cancelled.active span,
-.admin-incident-segment.is-all.active span {
-  background: #eaf2ff;
   color: #2563eb;
+}
+
+.admin-incident-segment:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.3);
+  outline-offset: 2px;
+}
+
+.admin-incident-segment:active {
+  box-shadow: inset 0 1px 3px rgba(15, 43, 82, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-incident-segment,
+  .admin-incident-segment span {
+    transition: none;
+  }
 }
 
 .admin-incident-search {
@@ -4335,11 +4364,6 @@
 .admin-incident-hero.is-rejected {
   border-color: #fecaca;
   background: #fff8f8;
-}
-
-.admin-incident-segment.is-rejected.active span {
-  background: #fee2e2;
-  color: #b42318;
 }
 
 .admin-visit-card .admin-incident-icon,
