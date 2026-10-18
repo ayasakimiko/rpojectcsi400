@@ -1,28 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import { API_ORIGIN, LOCAL_API_ORIGIN } from '../config/api.js'
+import { getUploadApiPath } from '../utils/uploadFiles.js'
 
 const RELEASE_DELAY_MS = 30000
 const blobCache = new Map()
-
-function getUploadApiPath(value) {
-  if (typeof value !== 'string' || !value) return null
-  try {
-    const url = new URL(value, API_ORIGIN)
-    if (!['http:', 'https:'].includes(url.protocol)) return null
-    const configuredOrigins = [API_ORIGIN, LOCAL_API_ORIGIN]
-    const isVps = [new URL(API_ORIGIN).hostname, '14.207.142.105'].includes(url.hostname)
-    const isLocalService = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-      && Number(url.port) >= 4000 && Number(url.port) <= 4007
-    const isFrontend = typeof window !== 'undefined' && url.origin === window.location.origin
-    if (!configuredOrigins.includes(url.origin) && !isVps && !isLocalService && !isFrontend) return null
-    const pathname = url.pathname.replace(/^\/__api\/(?:vps|local)(?=\/)/, '')
-    const match = /^\/(?:uploads|api\/files)\/(.+)$/.exec(pathname)
-    return match ? `/api/files/${match[1]}` : null
-  } catch {
-    return null
-  }
-}
 
 function fetchBlobUrl(apiPath, token) {
   return new Promise((resolve, reject) => {

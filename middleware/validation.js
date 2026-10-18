@@ -385,6 +385,7 @@ export function parsePhotoList(photos, maxPhotos = MAX_PHOTOS) {
 
 const ANNOUNCEMENT_TONES = new Set(["info", "warning"]);
 const MAX_EXPIRY_MINUTES = 30 * 24 * 60;
+const MAX_POPUP_MINUTES = 365 * 24 * 60;
 export const ANNOUNCEMENT_MAX_PHOTOS = 6;
 
 export function parseAnnouncementInput(body = {}, existingPhotos = []) {
@@ -417,6 +418,21 @@ export function parseAnnouncementInput(body = {}, existingPhotos = []) {
     expiresInMinutes = minutes;
   }
 
+  let popupInMinutes;
+  if (tone !== "warning") {
+    popupInMinutes = null;
+  } else if (body.popup_in_minutes === null || body.popup_in_minutes === "") {
+    popupInMinutes = null;
+  } else if (body.popup_in_minutes !== undefined) {
+    const raw = body.popup_in_minutes;
+    const isNumeric = typeof raw === "number" || (typeof raw === "string" && /^\d+$/.test(raw.trim()));
+    const minutes = isNumeric ? Number(raw) : Number.NaN;
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_POPUP_MINUTES) {
+      return { error: "ระยะเวลาแสดง popup ต้องอยู่ระหว่าง 1 นาที ถึง 365 วัน" };
+    }
+    popupInMinutes = minutes;
+  }
+
   let keptPhotos = existingPhotos;
   if (body.keep_photos !== undefined) {
     if (!Array.isArray(body.keep_photos)) return { error: "รายการรูปที่เก็บไว้ไม่ถูกต้อง" };
@@ -436,6 +452,7 @@ export function parseAnnouncementInput(body = {}, existingPhotos = []) {
       tone,
       expiresAt,
       expiresInMinutes,
+      popupInMinutes,
       keptPhotos,
       newPhotos: newPhotos.value,
     },

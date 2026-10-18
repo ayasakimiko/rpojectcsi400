@@ -68,7 +68,6 @@ services:
   phpmyadmin:
     image: phpmyadmin:latest
     container_name: projectcsi400-phpmyadmin
-    profiles: ["tools"]
     restart: unless-stopped
     environment:
       PMA_HOST: db

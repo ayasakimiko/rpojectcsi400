@@ -2388,7 +2388,7 @@ function ResidentVisitRequestRow() {
                 {error && <p className="dashboard-form-error">{error}</p>}
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
+                    ยกเลิก
                   </button>
                   <button type="submit" className="dashboard-action-btn is-primary" disabled={busy}>
                     {busy ? 'กำลังส่ง...' : 'ส่งคำขอ'}
@@ -3755,7 +3755,11 @@ function AnnouncementAlertPopup({ announcement, remaining, onAcknowledge }) {
             )}
           </div>
           <footer className="dashboard-alert-actions">
-            <p className="dashboard-alert-hint">ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ</p>
+            <p className="dashboard-alert-hint">
+              {announcement.popup_until
+                ? `ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ หรือถึง ${formatDateTime(announcement.popup_until)} น.`
+                : 'ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ'}
+            </p>
             <button type="button" className="dashboard-alert-confirm" disabled={busy} onClick={acknowledge}>
               {busy ? 'กำลังบันทึก...' : 'รับทราบและปิด'}
             </button>
@@ -3796,8 +3800,12 @@ function CustomerDashbord() {
   }
 
   const [, tickCountdown] = useState(0)
+  const [popupNow, setPopupNow] = useState(() => Date.now())
   useEffect(() => {
-    const interval = setInterval(() => tickCountdown((tick) => tick + 1), 30000)
+    const interval = setInterval(() => {
+      tickCountdown((tick) => tick + 1)
+      setPopupNow(Date.now())
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -4508,7 +4516,12 @@ function CustomerDashbord() {
     parcels = [],
   } = data
   const pendingAlerts = announcements.filter(
-    (item) => item.tone === 'warning' && !item.acknowledged && !acknowledgedAnnouncementIds.has(item.id),
+    (item) =>
+      item.tone === 'warning' &&
+      !item.acknowledged &&
+      !acknowledgedAnnouncementIds.has(item.id) &&
+      item.popup_active !== false &&
+      !(item.popup_epoch && item.popup_epoch * 1000 <= popupNow),
   )
   const pendingParcels = parcels.filter((parcel) => parcel.status === 'pending')
   const receivedParcels = parcels.filter((parcel) => parcel.status === 'received')
@@ -4592,6 +4605,8 @@ function CustomerDashbord() {
         title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
         ...TENANT_REQUEST_NOTIF_INFO.in_progress,
         date: request.accepted_at,
+        preview: request.note,
+        previewLabel: 'หมายเหตุของคุณ',
         detail:
           [
             STATUS_POPUP_CONTENT_BY_KIND[request.type]?.in_progress?.message,
@@ -4609,6 +4624,8 @@ function CustomerDashbord() {
         title: TENANT_REQUEST_TYPE_LABEL[request.type] || request.type,
         ...TENANT_REQUEST_NOTIF_INFO[request.status],
         date: request.completed_at || request.created_at,
+        preview: request.note,
+        previewLabel: 'หมายเหตุของคุณ',
         detail:
           (request.type === 'moveout' && MOVEOUT_STATUS_POPUP_CONTENT[request.status]?.message)
           || (request.type === 'move_room' && MOVE_ROOM_STATUS_POPUP_CONTENT[request.status]?.message)
@@ -4631,6 +4648,8 @@ function CustomerDashbord() {
         title: 'แจ้งซ่อม',
         ...MAINTENANCE_NOTIF_INFO.in_progress,
         date: request.accepted_at,
+        preview: request.description,
+        previewLabel: 'รายละเอียดการแจ้งซ่อม',
         detail: request.description || null,
         kind: 'maintenance',
         request,
@@ -4642,6 +4661,8 @@ function CustomerDashbord() {
         title: 'แจ้งซ่อม',
         ...MAINTENANCE_NOTIF_INFO[request.status],
         date: request.completed_at || request.created_at,
+        preview: request.description,
+        previewLabel: 'รายละเอียดการแจ้งซ่อม',
         detail: request.description || null,
         kind: 'maintenance',
         request,
@@ -4662,6 +4683,8 @@ function CustomerDashbord() {
         title: PAYMENT_TYPE_LABEL[payment.type],
         ...info,
         date: payment.created_at,
+        preview: `฿${formatCurrency(payment.amount)}`,
+        previewLabel: 'ยอดเงิน',
         detail: (
           <span className="dashboard-notif-utility-detail">
             <span className="dashboard-notif-utility-amount">จำนวนเงิน ฿{formatCurrency(payment.amount)}</span>
@@ -4697,6 +4720,7 @@ function CustomerDashbord() {
           </span>
         ),
         preview: parcel.description || parcel.tracking_number || parcel.sender_name || 'กรุณาติดต่อรับพัสดุ',
+        previewLabel: parcel.description ? 'รายละเอียดพัสดุ' : parcel.tracking_number ? 'เลขพัสดุ' : parcel.sender_name ? 'ผู้ส่ง' : 'การรับพัสดุ',
         kind: 'parcel',
         parcel,
       })),
@@ -4716,6 +4740,7 @@ function CustomerDashbord() {
       ),
       bylineName: item.author || 'เจ้าหน้าที่',
       preview: item.message,
+      previewLabel: 'รายละเอียดประกาศ',
       kind: 'announcement',
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -5254,7 +5279,12 @@ function CustomerDashbord() {
                                 <time className="dashboard-notif-item-date">{formatDateTime(notif.date)}</time>
                               </span>
                               <span className="dashboard-notif-item-status">{notif.label}</span>
-                              {notif.preview && <span className="dashboard-notif-item-preview">{notif.preview}</span>}
+                              {notif.preview && (
+                                <span className="dashboard-notif-item-preview">
+                                  <span className="dashboard-notif-item-preview-label">{notif.previewLabel}</span>
+                                  <span className="dashboard-notif-item-preview-text">{notif.preview}</span>
+                                </span>
+                              )}
                             </span>
                           </button>
                         ))}

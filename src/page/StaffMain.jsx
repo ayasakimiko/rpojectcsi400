@@ -1,4 +1,5 @@
-import { UploadImage, UploadLink } from '../components/UploadMedia.jsx'
+import { UploadImage } from '../components/UploadMedia.jsx'
+import { downloadUploadFile } from '../utils/uploadFiles.js'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { createPortal } from 'react-dom'
@@ -10,9 +11,18 @@ import './css/ParcelManagement.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
-import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
+import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
+import {
+  InspectionDateCell,
+  InspectionInspectorCell,
+  InspectionPersonCell,
+  InspectionPhotosCell,
+  InspectionRoomCell,
+} from '../components/InspectionCells.jsx'
+import InspectionDetail from '../components/InspectionDetail.jsx'
+import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const WAITING_UI_STATUSES = {
@@ -59,10 +69,6 @@ function describeWaitingMoveIn(value, now) {
   if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
   if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
   return { text: `อีก ${diff} วัน`, tone: diff <= 7 ? 'soon' : 'later' }
-}
-
-function waitingNameInitial(name) {
-  return String(name || '').trim().replace(/^[เแโใไ]/, '').charAt(0).toUpperCase() || '?'
 }
 
 function getWaitingMoveInPresets(now) {
@@ -142,7 +148,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                     <article className={`waiting-card is-${WAITING_UI_STATUSES[status].tone}`}>
                       <div className="waiting-card-top">
                         <span className="waiting-avatar" aria-hidden="true">
-                          {waitingNameInitial(item.full_name)}
+                          <PersonIcon size={18} />
                         </span>
                         <div className="waiting-card-id">
                           <div className="waiting-card-head">
@@ -287,7 +293,7 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
     <div className="waiting-detail">
       <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
         <span className="waiting-avatar is-large" aria-hidden="true">
-          {waitingNameInitial(item.full_name)}
+          <PersonIcon size={18} />
         </span>
         <div className="waiting-detail-name">
           <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
@@ -633,8 +639,12 @@ const CHECKLIST_RESULT_OPTIONS = [
   { key: 'not_applicable', label: 'ไม่มี', title: 'ไม่มีหรือติดตั้งรายการนี้ในห้อง' },
 ]
 const INSPECTION_MAX_PHOTOS = 15
+const STAFF_INSPECTION_STATUS_LABEL = {
+  pending: 'รอ Admin ตรวจ',
+  reviewed: 'Admin ตรวจแล้ว',
+  follow_up: 'ต้องติดตาม',
+}
 const INSPECTION_RESULT_ORDER = ['good', 'wear', 'damaged', 'missing', 'not_applicable']
-const INSPECTION_RESULT_LABEL = Object.fromEntries(CHECKLIST_RESULT_OPTIONS.map((option) => [option.key, option.label]))
 const INSPECTION_KINDS = {
   moveout: {
     label: 'ตรวจห้องย้ายออก',
@@ -669,13 +679,6 @@ function summarizeInspection(checklist) {
   const label = tone === 'danger' ? 'พบชำรุด/สูญหาย' : tone === 'warning' ? 'พบสึกหรอ' : 'สภาพปกติ'
   return { counts, issues, tone, label }
 }
-const INSPECTION_MAX_PHOTO_BYTES = 5 * 1024 * 1024
-
-function formatPhotoSize(bytes) {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`
-}
-
 function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -759,7 +762,7 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
         {selected ? (
           <>
             <span className="room-picker-avatar" aria-hidden="true">
-              {selected.tenant.first_name?.[0] || '?'}
+              <PersonIcon size={17} />
             </span>
             <span className="room-picker-main">
               <strong>
@@ -865,167 +868,6 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
               })
             )}
           </ul>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InspectionPhotoPicker({ files, existing = [], onRemoveExisting, onChange, onError }) {
-  const [dragging, setDragging] = useState(false)
-  const previewUrls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files])
-
-  useEffect(
-    () => () => {
-      previewUrls.forEach((url) => URL.revokeObjectURL(url))
-    },
-    [previewUrls],
-  )
-
-  const addFiles = (incoming) => {
-    const list = Array.from(incoming || [])
-    if (list.length === 0) return
-    const images = list.filter((file) => file.type.startsWith('image/'))
-    const withinSize = images.filter((file) => file.size <= INSPECTION_MAX_PHOTO_BYTES)
-    const room = INSPECTION_MAX_PHOTOS - existing.length - files.length
-    const accepted = withinSize.slice(0, Math.max(0, room))
-    if (images.length < list.length) onError('เลือกได้เฉพาะไฟล์รูปภาพ')
-    else if (withinSize.length < images.length) onError('รูปภาพต้องมีขนาดไม่เกิน 5 MB ต่อรูป')
-    else if (accepted.length < withinSize.length) onError(`แนบรูปได้ไม่เกิน ${INSPECTION_MAX_PHOTOS} รูป`)
-    else onError('')
-    if (accepted.length > 0) onChange([...files, ...accepted])
-  }
-
-  const dragsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files')
-  const canAddMore = existing.length + files.length < INSPECTION_MAX_PHOTOS
-
-  return (
-    <div
-      className={`photo-field${dragging ? ' is-dragging' : ''}`}
-      onDragEnter={(event) => {
-        if (!dragsFiles(event)) return
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDragOver={(event) => {
-        if (!dragsFiles(event)) return
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false)
-      }}
-      onDrop={(event) => {
-        event.preventDefault()
-        setDragging(false)
-        addFiles(event.dataTransfer?.files)
-      }}
-    >
-      <input
-        id="inspection-photos"
-        className="photo-input"
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={(event) => {
-          addFiles(event.target.files)
-          event.target.value = ''
-        }}
-      />
-      {existing.length + files.length === 0 ? (
-        <label htmlFor="inspection-photos" className="photo-dropzone">
-          <span className="photo-dropzone-icon" aria-hidden="true">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="m21 15-5-5L5 21" />
-            </svg>
-          </span>
-          <span className="photo-dropzone-text">
-            <span className="photo-dropzone-title">
-              {dragging ? 'ปล่อยรูปที่นี่' : 'ลากรูปมาวางที่นี่ หรือ '}
-              {!dragging && <span className="photo-dropzone-link">คลิกเพื่อเลือกรูป</span>}
-            </span>
-            <span className="photo-dropzone-hint">สูงสุด {INSPECTION_MAX_PHOTOS} รูป รูปละไม่เกิน 5 MB</span>
-          </span>
-        </label>
-      ) : (
-        <div className="photo-grid">
-          {existing.map((photo, index) => (
-            <figure className="photo-tile" key={`saved-${photo.url}`}>
-              <UploadImage src={photo.url} alt={`รูปที่บันทึกไว้ ${index + 1}`} />
-              <figcaption title={photo.name}>
-                <span>{photo.name}</span>
-                <small>บันทึกไว้แล้ว</small>
-              </figcaption>
-              <button
-                type="button"
-                className="photo-tile-remove"
-                aria-label={`ลบรูป ${photo.name}`}
-                onClick={() => onRemoveExisting?.(photo.url)}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </figure>
-          ))}
-          {files.map((file, index) => (
-            <figure className="photo-tile" key={`${file.name}-${index}`}>
-              <UploadImage src={previewUrls[index]} alt={`รูปที่แนบ ${index + 1}`} />
-              <figcaption title={file.name}>
-                <span>{file.name}</span>
-                <small>{formatPhotoSize(file.size)}</small>
-              </figcaption>
-              <button
-                type="button"
-                className="photo-tile-remove"
-                aria-label={`ลบรูป ${file.name}`}
-                onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </figure>
-          ))}
-          {canAddMore && (
-            <label htmlFor="inspection-photos" className="photo-add-tile">
-              <span aria-hidden="true">+</span>
-              <small>{dragging ? 'ปล่อยเพื่อเพิ่ม' : 'เพิ่มรูป'}</small>
-            </label>
-          )}
         </div>
       )}
     </div>
@@ -1244,7 +1086,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -2372,7 +2214,7 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
     <Modal
       title={`รายละเอียด${TENANT_REQUEST_TYPE_LABEL[request.type] || 'คำขอ'}`}
       onClose={onClose}
-      variant={isMove ? 'transfer-detail' : 'transfer'}
+      variant={isMove || request.type === 'moveout' ? 'transfer-detail' : 'transfer'}
     >
       {(requestClose) => (
         <div className="staff-transfer-body">
@@ -2413,9 +2255,16 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
                 </div>
               </div>
             ) : (
-              <div className="staff-req-detail-room">
-                <span>ห้อง</span>
-                <strong>{request.room_number}</strong>
+              <div className="staff-req-detail-room is-summary">
+                <span className="staff-req-detail-room-icon"><DoorIcon size={22} /></span>
+                <div className="staff-req-detail-room-identity">
+                  <small>{request.type === 'moveout' ? 'ห้องที่แจ้งย้ายออก' : 'ห้องพัก'}</small>
+                  <strong>{request.room_number || '-'}</strong>
+                </div>
+                <div className="staff-req-detail-room-tenant">
+                  <small>ผู้เช่า</small>
+                  <span>{[request.first_name, request.last_name].filter(Boolean).join(' ') || '-'}</span>
+                </div>
               </div>
             )}
           </div>
@@ -3188,6 +3037,61 @@ function useListFocus() {
   return { page, setPage, focusedId, focusItem, resolvePage }
 }
 
+const SLIP_FIELD_ICON_PATHS = {
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
+  phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />,
+  list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
+  date: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+      <path d="M16 3v3M8 3v3M3 10h18" />
+    </>
+  ),
+  status: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.5 2.5 4.5-5" />
+    </>
+  ),
+}
+
+function SlipDownloadButton({ url, fileName }) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const download = async () => {
+    setBusy(true)
+    setFailed(false)
+    try {
+      await downloadUploadFile(url, fileName)
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button type="button" className={`payment-slip-download${failed ? ' is-failed' : ''}`} onClick={download} disabled={busy}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+      </svg>
+      {busy ? 'กำลังบันทึก...' : failed ? 'บันทึกไม่สำเร็จ ลองอีกครั้ง' : 'บันทึกรูปสลิป'}
+    </button>
+  )
+}
+
+function SlipFieldIcon({ name }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SLIP_FIELD_ICON_PATHS[name]}
+    </svg>
+  )
+}
+
 function StaffPaymentReview({ onCountChange, focusId }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -3196,6 +3100,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const [confirmReview, setConfirmReview] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [slipViewerOpen, setSlipViewerOpen] = useState(false)
   const [previewClosing, setPreviewClosing] = useState(false)
   const { setPage, focusItem, resolvePage } = useListFocus()
 
@@ -3260,11 +3165,11 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   useEffect(() => {
     if (!preview) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !confirmReview) setPreviewClosing(true)
+      if (event.key === 'Escape' && !confirmReview && !slipViewerOpen) setPreviewClosing(true)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [preview, confirmReview])
+  }, [preview, confirmReview, slipViewerOpen])
 
   const hasPreview = Boolean(preview)
   useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
@@ -3275,6 +3180,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const openSlip = (payment) => {
     setError('')
     setPreviewClosing(false)
+    setSlipViewerOpen(false)
     setPreview({ payment, url: payment.slip_path })
   }
 
@@ -3553,6 +3459,12 @@ function StaffPaymentReview({ onCountChange, focusId }) {
           >
             <header className="payment-slip-header">
               <div className="payment-slip-heading">
+                <span className="payment-slip-heading-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+                    <path d="M9 7h6M9 11h6M9 15h4" />
+                  </svg>
+                </span>
                 <h3 id="payment-slip-title">สลิปโอนเงิน</h3>
                 <span className="payment-slip-room">ห้อง {preview.payment.room_number}</span>
               </div>
@@ -3576,9 +3488,9 @@ function StaffPaymentReview({ onCountChange, focusId }) {
 
             <div className="payment-slip-body">
               <div className="payment-slip-image-frame">
-                <UploadLink href={preview.url} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                <button type="button" className="payment-slip-image-btn" onClick={() => setSlipViewerOpen(true)} title="คลิกเพื่อดูรูปขนาดเต็ม">
                   <UploadImage src={preview.url} alt={`สลิปชำระเงินห้อง ${preview.payment.room_number}`} />
-                </UploadLink>
+                </button>
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
@@ -3594,17 +3506,26 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                   </dd>
                 </div>
                 <div>
-                  <dt>ผู้เช่า</dt>
+                  <dt>
+                    <SlipFieldIcon name="user" />
+                    ผู้เช่า
+                  </dt>
                   <dd>
                     {preview.payment.first_name} {preview.payment.last_name}
                   </dd>
                 </div>
                 <div>
-                  <dt>เบอร์โทร</dt>
+                  <dt>
+                    <SlipFieldIcon name="phone" />
+                    เบอร์โทร
+                  </dt>
                   <dd>{preview.payment.phone || '-'}</dd>
                 </div>
                 <div>
-                  <dt>รายการ</dt>
+                  <dt>
+                    <SlipFieldIcon name="list" />
+                    รายการ
+                  </dt>
                   <dd>
                     {String(preview.payment.payment_types || '')
                       .split(',')
@@ -3613,7 +3534,10 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                   </dd>
                 </div>
                 <div>
-                  <dt>วันที่ส่ง</dt>
+                  <dt>
+                    <SlipFieldIcon name="date" />
+                    วันที่ส่ง
+                  </dt>
                   <dd>
                     {new Date(preview.payment.payment_date).toLocaleDateString('th-TH', {
                       year: 'numeric',
@@ -3626,9 +3550,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
             </div>
 
             <footer className="payment-slip-footer">
-              <button type="button" className="staff-action-btn is-ghost" onClick={closeSlip}>
-                ปิด
-              </button>
+              <SlipDownloadButton url={preview.url} fileName={`slip-room-${preview.payment.room_number}-${preview.payment.id}`} />
               <button
                 type="button"
                 className="staff-action-btn is-danger"
@@ -3648,6 +3570,18 @@ function StaffPaymentReview({ onCountChange, focusId }) {
             </footer>
           </section>
         </div>
+      )}
+
+      {preview && slipViewerOpen && createPortal(
+        <PhotoLightbox
+          photos={[{ name: `สลิปห้อง ${preview.payment.room_number}`, url: preview.url }]}
+          initialIndex={0}
+          title="สลิปโอนเงิน"
+          subtitle={`ห้อง ${preview.payment.room_number} · ${preview.payment.first_name} ${preview.payment.last_name}`}
+          label="สลิปโอนเงิน"
+          onClose={() => setSlipViewerOpen(false)}
+        />,
+        document.body,
       )}
     </section>
   )
@@ -5496,7 +5430,7 @@ function StaffMain() {
   const [inspectionSearch, setInspectionSearch] = useState('')
   const [inspectionResultFilter, setInspectionResultFilter] = useState('all')
   const [inspectionSort, setInspectionSort] = useState('newest')
-  const [inspectionKind, setInspectionKind] = useState('moveout')
+  const [inspectionKind, setInspectionKind] = useState('all')
   const [waitingListDelete, setWaitingListDelete] = useState(null)
   const [waitingListDeleting, setWaitingListDeleting] = useState(false)
   const [waitingListDeleteError, setWaitingListDeleteError] = useState('')
@@ -5518,6 +5452,8 @@ function StaffMain() {
   const [inspectionTenantRequest, setInspectionTenantRequest] = useState(null)
   const [inspectionEditing, setInspectionEditing] = useState(null)
   const [inspectionLoadingId, setInspectionLoadingId] = useState(null)
+  const [inspectionView, setInspectionView] = useState(null)
+  const [inspectionViewPhoto, setInspectionViewPhoto] = useState(null)
   const [inspectionListError, setInspectionListError] = useState('')
   const [inspectionDelete, setInspectionDelete] = useState(null)
   const [inspectionDeleting, setInspectionDeleting] = useState(false)
@@ -5575,6 +5511,7 @@ function StaffMain() {
   const [historyRoom, setHistoryRoom] = useState(null)
   const [historySlip, setHistorySlip] = useState(null)
   const [historySlipClosing, setHistorySlipClosing] = useState(false)
+  const [historySlipViewerOpen, setHistorySlipViewerOpen] = useState(false)
   const [historyData, setHistoryData] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState('')
@@ -5908,6 +5845,20 @@ function StaffMain() {
     setInspectionError('')
     setInspectionFieldErrors({})
     setInspectionModal(true)
+  }
+
+  const openInspectionView = async (inspection) => {
+    setInspectionView({ summary: inspection, data: null, loading: true, error: '' })
+    try {
+      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      setInspectionView((prev) => (prev?.summary.id === inspection.id ? { ...prev, data: data.inspection, loading: false } : prev))
+    } catch (err) {
+      setInspectionView((prev) =>
+        prev?.summary.id === inspection.id
+          ? { ...prev, loading: false, error: err.response?.data?.message || 'ไม่สามารถโหลดผลตรวจห้องได้' }
+          : prev,
+      )
+    }
   }
 
   const openEditInspection = async (inspection) => {
@@ -6579,7 +6530,7 @@ function StaffMain() {
   }
 
   useEffect(() => {
-    if (!historySlip) return undefined
+    if (!historySlip || historySlipViewerOpen) return undefined
     const handleKeyDown = (event) => {
       if (event.key !== 'Escape') return
       event.stopImmediatePropagation()
@@ -6587,13 +6538,14 @@ function StaffMain() {
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [historySlip])
+  }, [historySlip, historySlipViewerOpen])
 
   useEffect(() => {
     if (!historySlipClosing) return undefined
     const timer = setTimeout(() => {
       setHistorySlip(null)
       setHistorySlipClosing(false)
+      setHistorySlipViewerOpen(false)
     }, 160)
     return () => clearTimeout(timer)
   }, [historySlipClosing])
@@ -6777,7 +6729,8 @@ function StaffMain() {
     counts[kind] = (counts[kind] || 0) + 1
     return counts
   }, {})
-  const kindInspections = moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
+  const kindInspections =
+    inspectionKind === 'all' ? moveOutInspections : moveOutInspections.filter((inspection) => inspectionKindOf(inspection) === inspectionKind)
   const inspectionToneCounts = kindInspections.reduce((counts, inspection) => {
     const tone = summarizeInspection(inspection.checklist).tone
     counts[tone] = (counts[tone] || 0) + 1
@@ -6805,7 +6758,8 @@ function StaffMain() {
       const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       return inspectionSort === 'oldest' ? diff : -diff
     })
-  const inspectionFiltersActive = Boolean(inspectionKeyword) || inspectionResultFilter !== 'all' || inspectionSort !== 'newest'
+  const inspectionFiltersActive =
+    Boolean(inspectionKeyword) || inspectionResultFilter !== 'all' || inspectionSort !== 'newest' || inspectionKind !== 'all'
   const currentInspectionsPage = Math.min(
     inspectionsPage,
     Math.max(1, Math.ceil(filteredInspections.length / STAFF_LIST_PAGE_SIZE)),
@@ -7489,6 +7443,81 @@ function StaffMain() {
           </Modal>
         )}
 
+        {inspectionView && (
+          <Modal
+            title={`ผลตรวจห้อง ${inspectionView.summary.room_number}`}
+            onClose={() => {
+              setInspectionViewPhoto(null)
+              setInspectionView(null)
+            }}
+            variant="inspection-detail"
+          >
+            {(requestClose) =>
+              inspectionView.loading ? (
+                <p className="staff-empty">กำลังโหลดผลตรวจห้อง...</p>
+              ) : inspectionView.error ? (
+                <p className="staff-form-error">{inspectionView.error}</p>
+              ) : (
+                <InspectionDetail
+                  inspection={{ ...inspectionView.summary, ...inspectionView.data }}
+                  statusLabel={inspectionView.data.tenant_request_id ? 'Staff ตรวจแล้ว' : STAFF_INSPECTION_STATUS_LABEL[inspectionView.data.status || 'pending']}
+                  statusTone={inspectionView.data.tenant_request_id ? 'reviewed' : inspectionView.data.status || 'pending'}
+                  actorClassName="staff-actor"
+                  onOpenPhoto={setInspectionViewPhoto}
+                  footer={
+                    <footer className="idt-footer">
+                      <button
+                        type="button"
+                        className="idt-footer-btn is-danger"
+                        onClick={() => {
+                          const target = inspectionView.summary
+                          requestClose()
+                          setInspectionDeleteError('')
+                          setInspectionDelete(target)
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                        </svg>
+                        ลบผลตรวจ
+                      </button>
+                      <div className="idt-footer-right">
+                        <button
+                          type="button"
+                          className="idt-footer-btn is-primary"
+                          disabled={inspectionLoadingId === inspectionView.summary.id}
+                          onClick={() => {
+                            const target = inspectionView.summary
+                            requestClose()
+                            openEditInspection(target)
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" />
+                          </svg>
+                          แก้ไขผลตรวจ
+                        </button>
+                      </div>
+                    </footer>
+                  }
+                />
+              )
+            }
+          </Modal>
+        )}
+
+        {inspectionView?.data && inspectionViewPhoto !== null && (inspectionView.data.photos || [])[inspectionViewPhoto] && createPortal(
+          <PhotoLightbox
+            photos={inspectionView.data.photos}
+            initialIndex={inspectionViewPhoto}
+            title={`ผลตรวจห้อง ${inspectionView.summary.room_number}`}
+            subtitle={inspectionView.summary.tenant_name}
+            label={`ภาพตรวจห้อง ${inspectionView.summary.room_number}`}
+            onClose={() => setInspectionViewPhoto(null)}
+          />,
+          document.body,
+        )}
+
         {inspectionDelete && (
           <Modal title="ยืนยันการลบผลตรวจห้อง" onClose={() => setInspectionDelete(null)} variant="confirm">
             {(requestClose) => (
@@ -7507,7 +7536,7 @@ function StaffMain() {
                     <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
                   </svg>
                 </div>
-                <p className="staff-confirm-message">ลบผลตรวจห้องนี้ออกจากระบบ? รูปที่แนบจะถูกลบด้วย</p>
+                <p className="staff-confirm-message">ลบผลตรวจห้องนี้? ผลตรวจจะถูกซ่อนจากหน้าระบบ แต่ข้อมูลและรูปยังเก็บไว้</p>
                 <div className="staff-confirm-details">
                   <div className="staff-confirm-detail-row">
                     <span>ห้อง</span>
@@ -7585,7 +7614,7 @@ function StaffMain() {
                     {inspectionEditing || inspectionTenantRequest ? (
                       <div className="room-picker-trigger inspection-room-fixed" id="inspection-room">
                         <span className="room-picker-avatar" aria-hidden="true">
-                          {(inspectionEditing?.tenant_name || `${inspectionTenantRequest?.first_name || ''} ${inspectionTenantRequest?.last_name || ''}`)?.[0] || '?'}
+                          <PersonIcon size={17} />
                         </span>
                         <span className="room-picker-main">
                           <strong>
@@ -8137,50 +8166,18 @@ function StaffMain() {
             <div className="staff-card-header">
               <div>
                 <h2>
-                  {INSPECTION_KINDS[inspectionKind].title}{' '}
-                  <span className="staff-count-pill">{kindInspections.length}</span>
+                  ผลตรวจห้อง <span className="staff-count-pill">{moveOutInspections.length}</span>
                 </h2>
-                <p className="waiting-list-storage-note">{INSPECTION_KINDS[inspectionKind].note}</p>
+                <p className="waiting-list-storage-note">รวมผลตรวจห้องตอนย้ายออก และผลตรวจห้องเดิมก่อนอนุมัติย้ายห้อง</p>
               </div>
-              {inspectionKind === 'moveout' && (
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  onClick={openMoveOutInspection}
-                  disabled={!rooms.some((room) => room.is_booked && room.tenant)}
-                >
-                  + เริ่มตรวจห้อง
-                </button>
-              )}
-            </div>
-            <div className="inspection-kind-tabs" role="tablist" aria-label="ประเภทการตรวจห้อง">
-              {Object.entries(INSPECTION_KINDS).map(([key, info]) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={inspectionKind === key}
-                  className={`inspection-kind-tab${inspectionKind === key ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setInspectionKind(key)
-                    setInspectionResultFilter('all')
-                    setInspectionsPage(1)
-                  }}
-                >
-                  {key === 'moveout' ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <path d="m16 17 5-5-5-5M21 12H9" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M7 7h11l-3-3M17 17H6l3 3" />
-                    </svg>
-                  )}
-                  {info.label}
-                  <span>{inspectionKindCounts[key] || 0}</span>
-                </button>
-              ))}
+              <button
+                type="button"
+                className="staff-action-btn is-primary"
+                onClick={openMoveOutInspection}
+                disabled={!rooms.some((room) => room.is_booked && room.tenant)}
+              >
+                + เริ่มตรวจห้อง
+              </button>
             </div>
             {inspectionListError && (
               <p className="staff-form-error staff-form-error-block" role="alert">
@@ -8212,9 +8209,26 @@ function StaffMain() {
                 setInspectionSearch('')
                 setInspectionResultFilter('all')
                 setInspectionSort('newest')
+                setInspectionKind('all')
                 setInspectionsPage(1)
               }}
             >
+              <select
+                className="staff-filter-select"
+                value={inspectionKind}
+                onChange={(event) => {
+                  setInspectionKind(event.target.value)
+                  setInspectionsPage(1)
+                }}
+                aria-label="ประเภทการตรวจห้อง"
+              >
+                <option value="all">ทุกประเภท ({moveOutInspections.length})</option>
+                {Object.entries(INSPECTION_KINDS).map(([key, info]) => (
+                  <option key={key} value={key}>
+                    {info.label} ({inspectionKindCounts[key] || 0})
+                  </option>
+                ))}
+              </select>
               <select
                 className="staff-filter-select"
                 value={inspectionSort}
@@ -8229,7 +8243,7 @@ function StaffMain() {
               </select>
             </StaffFilterPanel>
             <div className="table-responsive">
-              <table className="staff-table inspection-table">
+              <table className="staff-table inspection-table insp-table">
                 <colgroup>
                   <col className="is-room" />
                   <col className="is-tenant" />
@@ -8254,7 +8268,7 @@ function StaffMain() {
                   {filteredInspections.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="staff-empty">
-                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : INSPECTION_KINDS[inspectionKind].empty}
+                        {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : inspectionKind === 'all' ? 'ยังไม่มีผลตรวจห้อง' : INSPECTION_KINDS[inspectionKind].empty}
                       </td>
                     </tr>
                   ) : (
@@ -8262,74 +8276,79 @@ function StaffMain() {
                       const summary = summarizeInspection(inspection.checklist)
                       const issueCount = summary.counts.damaged + summary.counts.missing
                       return (
-                        <tr key={inspection.id}>
+                        <tr
+                          key={inspection.id}
+                          className="insp-row-clickable"
+                          tabIndex={0}
+                          aria-label={`ดูผลตรวจห้อง ${inspection.room_number}`}
+                          onClick={() => openInspectionView(inspection)}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              openInspectionView(inspection)
+                            }
+                          }}
+                        >
                           <td>
-                            <div className="inspection-cell-room">
-                              {inspection.tenant_request_id ? (
-                                <>
-                                  <strong>
-                                    {inspection.room_number} → {inspection.target_room_number || '-'}
-                                  </strong>
-                                  <small>ห้องเดิม → ห้องใหม่</small>
-                                </>
-                              ) : (
-                                <strong>ห้อง {inspection.room_number}</strong>
-                              )}
-                            </div>
+                            <InspectionRoomCell
+                              roomNumber={inspection.room_number}
+                              targetRoomNumber={inspection.target_room_number}
+                              isMoveRoom={Boolean(inspection.tenant_request_id)}
+                            />
                           </td>
                           <td>
-                            <div className="inspection-cell-stack">
-                              <strong>{inspection.tenant_name}</strong>
-                              {inspection.tenant_phone && <small>{inspection.tenant_phone}</small>}
-                            </div>
+                            <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} />
                           </td>
-                          <td className="inspection-cell-date">{formatDateTime(inspection.created_at)}</td>
+                          <td>
+                            <InspectionDateCell value={inspection.created_at} />
+                          </td>
                           <td>
                             <div className="inspection-cell-result">
                               <span className={`inspection-result is-${summary.tone}`}>
                                 {summary.label}
                                 {issueCount > 0 && ` ${issueCount} ข้อ`}
                               </span>
-                              <div className="inspection-meter" aria-hidden="true">
-                                {INSPECTION_RESULT_ORDER.map((key) =>
-                                  summary.counts[key] > 0 ? (
-                                    <span
-                                      key={key}
-                                      className={`is-${key}`}
-                                      style={{ flexGrow: summary.counts[key] }}
-                                      title={`${INSPECTION_RESULT_LABEL[key]} ${summary.counts[key]} ข้อ`}
-                                    />
-                                  ) : null,
-                                )}
-                              </div>
                             </div>
                           </td>
-                          <td className={inspection.inspected_by_name ? '' : 'inspection-cell-muted'}>
-                            {inspection.inspected_by_name ? <span className="staff-actor">{inspection.inspected_by_name}</span> : '-'}
+                          <td>
+                            <InspectionInspectorCell name={inspection.inspected_by_name} className="staff-actor" />
                           </td>
                           <td>
-                            <span className="inspection-photo-count">{inspection.photo_count || 0} รูป</span>
+                            <InspectionPhotosCell count={inspection.photo_count} />
                           </td>
-                          <td className="inspection-col-actions">
-                            <div className="staff-row-actions">
-                              <button
-                                type="button"
-                                className="staff-action-btn is-ghost"
-                                disabled={inspectionLoadingId === inspection.id}
-                                onClick={() => openEditInspection(inspection)}
+                          <td className="inspection-col-actions insp-actions-cell">
+                            <div className="insp-actions">
+                              <div
+                                className="insp-actions-row"
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
                               >
-                                {inspectionLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
-                              </button>
-                              <button
-                                type="button"
-                                className="staff-action-btn is-danger"
-                                onClick={() => {
-                                  setInspectionDeleteError('')
-                                  setInspectionDelete(inspection)
-                                }}
-                              >
-                                ลบ
-                              </button>
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-ghost"
+                                  disabled={inspectionLoadingId === inspection.id}
+                                  onClick={() => openEditInspection(inspection)}
+                                >
+                                  {inspectionLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="staff-action-btn is-danger"
+                                  onClick={() => {
+                                    setInspectionDeleteError('')
+                                    setInspectionDelete(inspection)
+                                  }}
+                                >
+                                  ลบ
+                                </button>
+                              </div>
+                              <span className="insp-actions-hint" aria-hidden="true">
+                                ดูรายละเอียด
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M9 18l6-6-6-6" />
+                                </svg>
+                              </span>
                             </div>
                           </td>
                         </tr>
@@ -9425,6 +9444,12 @@ function StaffMain() {
           >
             <header className="payment-slip-header">
               <div className="payment-slip-heading">
+                <span className="payment-slip-heading-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+                    <path d="M9 7h6M9 11h6M9 15h4" />
+                  </svg>
+                </span>
                 <h3 id="history-slip-title">สลิปโอนเงิน</h3>
                 {historyRoom && <span className="payment-slip-room">ห้อง {historyRoom.room_number}</span>}
               </div>
@@ -9453,9 +9478,9 @@ function StaffMain() {
 
             <div className="payment-slip-body">
               <div className="payment-slip-image-frame">
-                <UploadLink href={historySlip.slip_path} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                <button type="button" className="payment-slip-image-btn" onClick={() => setHistorySlipViewerOpen(true)} title="คลิกเพื่อดูรูปขนาดเต็ม">
                   <UploadImage src={historySlip.slip_path} alt="สลิปโอนเงิน" />
-                </UploadLink>
+                </button>
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
@@ -9465,31 +9490,53 @@ function StaffMain() {
                   <dd>฿{formatCurrency(historySlip.amount)}</dd>
                 </div>
                 <div>
-                  <dt>ผู้เช่า</dt>
+                  <dt>
+                    <SlipFieldIcon name="user" />
+                    ผู้เช่า
+                  </dt>
                   <dd>{historySlip.tenantName}</dd>
                 </div>
                 <div>
-                  <dt>รายการ</dt>
+                  <dt>
+                    <SlipFieldIcon name="list" />
+                    รายการ
+                  </dt>
                   <dd>{PAYMENT_TYPE_LABEL[historySlip.type] || 'ค่าเช่าห้อง'}</dd>
                 </div>
                 <div>
-                  <dt>สถานะ</dt>
+                  <dt>
+                    <SlipFieldIcon name="status" />
+                    สถานะ
+                  </dt>
                   <dd>{PAYMENT_STATUS_LABEL[historySlip.status] || historySlip.status}</dd>
                 </div>
                 <div>
-                  <dt>วันที่</dt>
+                  <dt>
+                    <SlipFieldIcon name="date" />
+                    วันที่
+                  </dt>
                   <dd>{formatDateTime(historySlip.created_at)}</dd>
                 </div>
               </dl>
             </div>
 
             <footer className="payment-slip-footer">
-              <button type="button" className="staff-action-btn is-ghost" onClick={() => setHistorySlipClosing(true)}>
-                ปิด
-              </button>
+              <SlipDownloadButton url={historySlip.slip_path} fileName={`slip-${historyRoom ? `room-${historyRoom.room_number}-` : ''}${historySlip.id ?? 'payment'}`} />
             </footer>
           </section>
         </div>
+      )}
+
+      {historySlip && historySlipViewerOpen && createPortal(
+        <PhotoLightbox
+          photos={[{ name: 'สลิปโอนเงิน', url: historySlip.slip_path }]}
+          initialIndex={0}
+          title="สลิปโอนเงิน"
+          subtitle={historyRoom ? `ห้อง ${historyRoom.room_number} · ${historySlip.tenantName || ''}` : historySlip.tenantName}
+          label="สลิปโอนเงิน"
+          onClose={() => setHistorySlipViewerOpen(false)}
+        />,
+        document.body,
       )}
 
       {historyRoom && (
@@ -9686,7 +9733,7 @@ function StaffMain() {
 
                 <div className="collect-tenant">
                   <span className="collect-avatar" aria-hidden="true">
-                    {(collectRoom.tenant?.first_name || '?').trim().charAt(0)}
+                    <PersonIcon size={20} />
                   </span>
                   <div className="collect-tenant-text">
                     <strong>{tenantName}</strong>

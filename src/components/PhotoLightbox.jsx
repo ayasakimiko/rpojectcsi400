@@ -1,6 +1,7 @@
 import { UploadImage } from './UploadMedia.jsx'
 import { useEffect, useRef, useState } from 'react'
 import './PhotoLightbox.css'
+import { downloadUploadFile } from '../utils/uploadFiles.js'
 
 const PHOTO_ZOOM_MAX = 5
 const PHOTO_ZOOM_STEP = 0.5
@@ -17,6 +18,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, title, subtitl
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [downloadState, setDownloadState] = useState('idle')
   const dragRef = useRef(null)
   const dragMovedRef = useRef(false)
 
@@ -100,6 +102,21 @@ export default function PhotoLightbox({ photos, initialIndex = 0, title, subtitl
   const photo = photos[index]
   if (!photo) return null
 
+  const downloadPhoto = async () => {
+    setDownloadState('busy')
+    try {
+      const baseName = String(photo.name || title || 'photo')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, '-')
+      const hasExtension = /\.[a-z0-9]+$/i.test(baseName)
+      await downloadUploadFile(photo.url, count > 1 && !hasExtension ? `${baseName}-${index + 1}` : baseName)
+      setDownloadState('idle')
+    } catch {
+      setDownloadState('failed')
+    }
+  }
+
   return (
     <div
       className={`photo-viewer${closing ? ' is-closing' : ''}`}
@@ -130,6 +147,22 @@ export default function PhotoLightbox({ photos, initialIndex = 0, title, subtitl
             </svg>
           </button>
         </div>
+        <button
+          type="button"
+          className={`photo-viewer-download${downloadState === 'failed' ? ' is-failed' : ''}`}
+          onClick={downloadPhoto}
+          disabled={downloadState === 'busy'}
+          aria-label="บันทึกรูป"
+          title={downloadState === 'failed' ? 'บันทึกไม่สำเร็จ ลองอีกครั้ง' : 'บันทึกรูป'}
+        >
+          {downloadState === 'busy' ? (
+            <span className="photo-viewer-spinner" aria-hidden="true" />
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+            </svg>
+          )}
+        </button>
         <button type="button" className="photo-viewer-close" onClick={() => setClosing(true)} aria-label="ปิด">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18" />
