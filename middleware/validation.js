@@ -222,11 +222,24 @@ export function validateRegisterInput(body) {
   return null;
 }
 
+export const EXPENSE_PAYMENT_METHODS = new Set(["cash", "transfer", "card", "other"]);
+export const EXPENSE_MAX_PHOTOS = 6;
+
+const isBlank = (value) => value === undefined || value === null || value === "";
+
 const EXPENSE_FIELD_VALIDATORS = {
   category: (value) => validateText(value, "หมวดหมู่รายจ่าย", { maxLength: 50 }),
   description: (value) => validateText(value, "คำอธิบาย", { maxLength: 255, required: false }),
   amount: (value) => (isValidMoney(value, { allowZero: false }) ? null : "จำนวนเงินไม่ถูกต้อง"),
   expense_date: (value) => (isValidDateString(value) ? null : "วันที่ไม่ถูกต้อง"),
+  vendor: (value) => validateText(value, "ผู้รับเงิน/ร้านค้า", { maxLength: 120, required: false }),
+  payment_method: (value) =>
+    isBlank(value) || EXPENSE_PAYMENT_METHODS.has(value) ? null : "วิธีชำระเงินไม่ถูกต้อง",
+  receipt_number: (value) => validateText(value, "เลขที่ใบเสร็จ", { maxLength: 60, required: false }),
+  room_number: (value) =>
+    isBlank(value) || (Number.isInteger(Number(value)) && Number(value) >= 100 && Number(value) <= 999)
+      ? null
+      : "เลขห้องไม่ถูกต้อง",
 };
 
 export function validateExpenseInput(body, { partial }) {

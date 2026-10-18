@@ -103,9 +103,7 @@ router.get("/overview", async (req, res) => {
     const incomeDateClause = dateConditions.length
       ? `AND ${dateConditions.map((c) => `payment_date ${c}`).join(" AND ")}`
       : "";
-    const expenseDateClause = dateConditions.length
-      ? `WHERE ${dateConditions.map((c) => `expense_date ${c}`).join(" AND ")}`
-      : "";
+    const expenseDateClause = `WHERE ${["deleted_at IS NULL", ...dateConditions.map((c) => `expense_date ${c}`)].join(" AND ")}`;
     const overduePaymentClause = dateConditions.length
       ? `AND ${dateConditions.map((c) => `p.payment_date ${c}`).join(" AND ")}`
       : "";
@@ -348,7 +346,7 @@ router.get("/trends", async (req, res) => {
       const [expenseRows] = await pool.query(
         `SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS period, COALESCE(SUM(amount), 0) AS total
          FROM Expense
-         WHERE expense_date >= ? AND expense_date <= ?
+         WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
          GROUP BY period`,
         [fromKey, toKey],
       );
@@ -397,7 +395,7 @@ router.get("/trends", async (req, res) => {
     const [expenseRows] = await pool.query(
       `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
        FROM Expense
-       WHERE expense_date >= ? AND expense_date <= ?
+       WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
        GROUP BY period`,
       [queryFromKey, queryToKey],
     );
