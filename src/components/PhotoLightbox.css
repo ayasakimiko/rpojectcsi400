@@ -359,3 +359,55 @@
     opacity: 0;
   }
 }
+
+.photo-viewer-download {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #c9dcfb;
+  border-radius: 9px;
+  padding: 0;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.18);
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.photo-viewer-download:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eaf2ff;
+}
+
+.photo-viewer-download:disabled {
+  cursor: progress;
+}
+
+.photo-viewer-download.is-failed {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.photo-viewer-download:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.35);
+  outline-offset: 2px;
+}
+
+.photo-viewer-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: photo-viewer-spin 0.7s linear infinite;
+}
+
+@keyframes photo-viewer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

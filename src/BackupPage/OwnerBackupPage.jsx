@@ -648,7 +648,7 @@ function OwnerBackupPage() {
 
         {successMessage && (
           <Modal title="สำเร็จ" onClose={() => setSuccessMessage('')} variant="confirm">
-            {(requestClose) => (
+            {() => (
               <div className="owner-confirm-body">
                 <div className="owner-confirm-icon is-success">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -656,11 +656,6 @@ function OwnerBackupPage() {
                   </svg>
                 </div>
                 <p className="owner-confirm-message">{successMessage}</p>
-                <div className="owner-form-actions">
-                  <button type="button" className="owner-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
               </div>
             )}
           </Modal>
