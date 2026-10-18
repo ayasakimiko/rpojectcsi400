@@ -2243,7 +2243,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'form' && (
         <Modal title="ลงทะเบียนรถและผู้มาติดต่อ" onClose={() => setView(null)}>
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-rv">
               <div className="dashboard-rv-top">
                 <p className="dashboard-rv-intro">ส่งข้อมูลให้เจ้าหน้าที่ตรวจสอบและอนุมัติ</p>
@@ -2387,6 +2387,9 @@ function ResidentVisitRequestRow() {
 
                 {error && <p className="dashboard-form-error">{error}</p>}
                 <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                    ยกเลิก
+                  </button>
                   <button type="submit" className="dashboard-action-btn is-primary" disabled={busy}>
                     {busy ? 'กำลังส่ง...' : 'ส่งคำขอ'}
                   </button>
@@ -2407,7 +2410,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'success' && submitted && (
         <Modal title="ส่งคำขอแล้ว" onClose={() => setView(null)} variant="success">
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-confirm-body">
               <div className="dashboard-confirm-icon is-success">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2428,6 +2431,9 @@ function ResidentVisitRequestRow() {
                 </div>
               </div>
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-primary" onClick={openHistory}>
                   ดูคำขอของฉัน
                 </button>
@@ -2438,7 +2444,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'history' && (
         <Modal title="คำขอของฉัน" onClose={() => setView(null)} onBack={() => setView('form')}>
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-rv">
               <DashboardFilterPanel
                 segments={RESIDENT_VISIT_FILTERS.map((filter) => ({
@@ -2503,6 +2509,9 @@ function ResidentVisitRequestRow() {
                 )}
               </section>
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-primary" onClick={() => setView('form')}>
                   ลงทะเบียนใหม่
                 </button>
@@ -2513,7 +2522,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'detail' && detailItem && (
         <Modal title="รายละเอียดคำขอ" onClose={() => setView(null)} onBack={() => setView('history')}>
-          {() => {
+          {(requestClose) => {
             const reviewer = detailItem.admin_reviewed_by_name || detailItem.reviewed_by_name
             const reviewedAt = detailItem.admin_reviewed_at || detailItem.reviewed_at
             const fields =
@@ -2629,6 +2638,9 @@ function ResidentVisitRequestRow() {
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={() => setView('history')}>
                     กลับไปที่ประวัติ
+                  </button>
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    ปิด
                   </button>
                 </div>
               </div>
@@ -2814,7 +2826,7 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
   return (
     <>
       <Modal title={detail.title} onClose={onClose} onBack={onBack}>
-        {() => (
+        {(requestClose) => (
           <div className="dashboard-rv">
             <div className={`dashboard-rv-detail-hero is-${detail.heroStatus}${kind === 'safety' && request.severity ? ` is-severity-${request.severity}` : ''}`}>
               <span className={`dashboard-rv-history-icon ${detail.iconClass}`}>{detail.icon}</span>
@@ -2867,6 +2879,7 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
 
             <div className="dashboard-form-actions">
               {onBack && <button type="button" className="dashboard-action-btn is-ghost" onClick={onBack}>{backLabel}</button>}
+              <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>ปิด</button>
             </div>
           </div>
         )}
@@ -3099,7 +3112,7 @@ function SafetyIncidentReportRow() {
 
       {view === 'success' && (
         <Modal title="ส่งรายงานแล้ว" onClose={() => setView(null)} variant="success">
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-confirm-body">
               <div className="dashboard-confirm-icon is-success">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -3134,6 +3147,9 @@ function SafetyIncidentReportRow() {
                 </div>
               )}
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-primary" onClick={openHistory}>
                   ดูประวัติการแจ้งเหตุ
                 </button>
@@ -3145,7 +3161,7 @@ function SafetyIncidentReportRow() {
 
       {view === 'history' && (
         <Modal title="ประวัติการแจ้งเหตุ" onClose={() => setView(null)} onBack={() => setView('form')}>
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-rv">
               <DashboardFilterPanel
                 segments={SAFETY_FILTERS.map((filter) => ({
@@ -3235,6 +3251,9 @@ function SafetyIncidentReportRow() {
                 )}
               </section>
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-danger" onClick={() => setView('form')}>
                   แจ้งเหตุใหม่
                 </button>
@@ -3513,7 +3532,7 @@ function CustomerParkingTab({ onCountChange }) {
 
       {detail && (
         <Modal title="รายละเอียดรถ" onClose={() => setDetail(null)}>
-          {() => {
+          {(requestClose) => {
             const phase = getParkingPhase(detail, now)
             const approver = detail.admin_reviewed_by_name || detail.reviewed_by_name
             const approvedAt = detail.admin_reviewed_at || detail.reviewed_at
@@ -3609,6 +3628,11 @@ function CustomerParkingTab({ onCountChange }) {
                   ].filter(Boolean)}
                 />
 
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
               </div>
             )
           }}
@@ -5301,7 +5325,7 @@ function CustomerDashbord() {
 
             {notifDetail && (
               <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
-                {() => (
+                {(requestClose) => (
                   <div className="dashboard-confirm-body">
                     <div className={`dashboard-confirm-icon is-${notifDetail.tone}`}>
                       <svg
@@ -5353,6 +5377,11 @@ function CustomerDashbord() {
                         {formatDateTime(notifDetail.date)}
                       </p>
                     )}
+                    <div className="dashboard-form-actions">
+                      <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                        ปิด
+                      </button>
+                    </div>
                   </div>
                 )}
               </Modal>
@@ -5720,7 +5749,7 @@ function CustomerDashbord() {
           const photos = parcel.photos || []
           return (
             <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetailId(null)} variant="parcel">
-              {() => (
+              {(requestClose) => (
                 <div className="dashboard-confirm-body dashboard-status-body dashboard-parcel-detail">
                   <div className={`dashboard-status-hero ${isPending ? 'is-pending' : 'is-success'}`}>
                     <div className="dashboard-confirm-icon">
@@ -5813,6 +5842,9 @@ function CustomerDashbord() {
                     )}
                   </div>
                   <div className="dashboard-form-actions">
+                    <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                      ปิด
+                    </button>
                     {isPending && (
                       <button
                         type="button"
