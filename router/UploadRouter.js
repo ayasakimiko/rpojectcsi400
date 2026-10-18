@@ -5,7 +5,8 @@ import { authenticate, STAFF_ROLES } from "../middleware/authMiddleware.js";
 import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
 
 const ROLE_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
-const FOLDERS = new Set(["announcements", "incidents", "maintenance", "move-out-inspections", "parcels", "payment-slips", "vehicles"]);
+const FOLDERS = new Set(["announcements", "expenses", "incidents", "maintenance", "move-out-inspections", "parcels", "payment-slips", "vehicles"]);
+const STAFF_ONLY_FOLDERS = new Set(["expenses", "move-out-inspections"]);
 const IMAGE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp)$/i;
 const NOT_FOUND = "ไม่พบรูปภาพนี้";
 
@@ -39,7 +40,7 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
       if (!user || user.is_suspended) {
         return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
       }
-      if (folder === "move-out-inspections" && !STAFF_ROLES.has(role)) {
+      if (STAFF_ONLY_FOLDERS.has(folder) && !STAFF_ROLES.has(role)) {
         return res.status(403).json({ message: "ไม่ได้รับอนุญาต" });
       }
 
