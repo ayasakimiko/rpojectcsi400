@@ -261,7 +261,6 @@ CREATE TABLE IF NOT EXISTS ParcelPhoto (
 
     FOREIGN KEY (parcel_id) REFERENCES Parcel(id) ON DELETE CASCADE
 );
--- Upgrade existing tables without replacing existing records.
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
@@ -389,7 +388,6 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
--- Backfill existing records for room transfers and parcel ownership.
 
 UPDATE TenantRequest tr
      JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id

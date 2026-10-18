@@ -16,7 +16,6 @@ function readSessionUser() {
     const user = JSON.parse(sessionStorage.getItem('user') || 'null')
     if (user && USER_ROLES.has(user.role)) return user
   } catch {
-    // An incomplete saved session should return to login, not crash the page.
   }
   for (const key of ['token', 'user', 'justLoggedIn', 'apiBackend']) sessionStorage.removeItem(key)
   sessionStorage.setItem('apiBackendNotice', 'ข้อมูลการเข้าสู่ระบบไม่สมบูรณ์ กรุณาเข้าสู่ระบบใหม่')

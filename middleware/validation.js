@@ -363,7 +363,6 @@ export function parseUtilityBillInput(body = {}) {
 }
 
 const MAX_PHOTOS = 6;
-// 5 MB of binary is ~6.7M characters once base64-encoded
 const MAX_PHOTO_DATA_URL_LENGTH = 7_000_000;
 const PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 

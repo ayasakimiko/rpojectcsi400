@@ -12,6 +12,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import StepTimeline from '../components/StepTimeline.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 const WAITING_UI_STATUSES = {
@@ -1638,6 +1639,7 @@ function buildStaffSafetyNotif(incident) {
     urgent,
     date: incident.created_at,
     preview: incident.description,
+    previewLabel: 'รายละเอียดเหตุการณ์',
     kind: 'safety',
   }
 }
@@ -1652,6 +1654,7 @@ function buildStaffVisitNotif(request) {
     tone: 'pending',
     date: request.created_at,
     preview: isVehicle ? request.vehicle_plate : request.guest_name,
+    previewLabel: isVehicle ? 'ทะเบียนรถ' : 'ผู้มาพัก',
     kind: 'visit',
   }
 }
@@ -1665,6 +1668,7 @@ function buildStaffSlipNotif(payment) {
     tone: 'info',
     date: payment.payment_date,
     preview: `${payment.first_name} ${payment.last_name} · ฿${Number(payment.amount || 0).toLocaleString('th-TH')}`,
+    previewLabel: 'ผู้โอน · ยอดเงิน',
     kind: 'slip',
   }
 }
@@ -2304,27 +2308,16 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
               )}
             </section>
 
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
-              <ol className="staff-req-steps">
-                <li className="is-done">
-                  <span className="staff-req-step-dot" />
-                  <div>
-                    <p>
-                บันทึกพัสดุเข้าห้อง โดย <span className="staff-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
-              </p>
-                    <small>{formatDateTime(parcel.created_at)}</small>
-                  </div>
-                </li>
-                <li className={received ? 'is-done is-success' : ''}>
-                  <span className="staff-req-step-dot" />
-                  <div>
-                    <p>ผู้เช่ารับพัสดุ</p>
-                    <small>{received ? formatDateTime(parcel.received_at) : 'ยังไม่ได้รับ'}</small>
-                  </div>
-                </li>
-              </ol>
-            </section>
+            <StepTimeline
+              title="ความคืบหน้า"
+              actorClassName="staff-actor"
+              steps={[
+                { label: 'บันทึกพัสดุเข้าห้อง', meta: formatDateTime(parcel.created_at), by: parcel.staff_name || 'เจ้าหน้าที่', state: 'done' },
+                received
+                  ? { label: 'ผู้เช่ารับพัสดุแล้ว', meta: formatDateTime(parcel.received_at), state: 'done', tone: 'success' }
+                  : { label: 'รอผู้เช่ารับพัสดุ', meta: 'ยังไม่ได้รับ', state: 'current' },
+              ]}
+            />
           </div>
 
           <div className="staff-transfer-footer">
@@ -2606,26 +2599,21 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
               />
             )}
 
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
-              <ol className="staff-req-steps">
-                {steps.map((step) => (
-                  <li
-                    key={step.key}
-                    className={`${step.done ? 'is-done' : ''}${step.tone ? ` is-${step.tone}` : ''}`}
-                  >
-                    <span className="staff-req-step-dot" />
-                    <div>
-                      <p>
-                        {step.label}
-                        {step.by && <span className="staff-actor"> {step.by}</span>}
-                      </p>
-                      <small>{step.done && step.date ? formatDateTime(step.date) : step.done ? '' : 'ยังไม่ถึงขั้นตอนนี้'}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            <StepTimeline
+              title="ความคืบหน้า"
+              actorClassName="staff-actor"
+              steps={steps.map((step, index) => {
+                const firstOpen = steps.findIndex((item) => !item.done)
+                const open = ['pending', 'in_progress'].includes(request.status)
+                return {
+                  label: step.label.replace(/โดย$/, '').trim() || step.label,
+                  by: step.done ? step.by : null,
+                  meta: step.done ? (step.date ? formatDateTime(step.date) : '') : index === firstOpen && open ? 'กำลังดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้',
+                  state: step.done ? 'done' : index === firstOpen && open ? 'current' : 'pending',
+                  tone: step.done ? step.tone : undefined,
+                }
+              })}
+            />
           </div>
 
           <div className="staff-transfer-footer">
@@ -3859,43 +3847,7 @@ function StaffRange({ start, end, openEnded = false }) {
 }
 
 function StaffDetailTimeline({ steps }) {
-  return (
-    <section className="staff-rv-timeline-card" aria-label="ขั้นตอนการดำเนินการ">
-      <h4 className="staff-rv-timeline-title">ขั้นตอนการดำเนินการ</h4>
-      <ol className="staff-rv-timeline">
-        {steps.map((step, index) => (
-          <li
-            key={step.label}
-            className={[
-              `is-${step.state}`,
-              step.tone ? `is-${step.tone}` : '',
-              step.state === 'done' && steps[index + 1]?.state === 'done' ? 'is-line-done' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <span className="staff-rv-timeline-dot" aria-hidden="true">
-              {step.state === 'done' && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                  {step.tone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
-                </svg>
-              )}
-            </span>
-            <strong>{step.label}</strong>
-            <small>
-              {step.meta}
-              {step.by && (
-                <>
-                  {' · '}
-                  <span className="staff-rv-timeline-by">โดย {step.by}</span>
-                </>
-              )}
-            </small>
-          </li>
-        ))}
-      </ol>
-    </section>
-  )
+  return <StepTimeline steps={steps} actorClassName="staff-actor" />
 }
 
 function getStaffVisitKind(item) {
@@ -5634,7 +5586,6 @@ function StaffMain() {
   const [collectSubmitting, setCollectSubmitting] = useState(false)
   const [collectError, setCollectError] = useState('')
 
-  const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
   const [tabFocus, setTabFocus] = useState(null)
@@ -6666,7 +6617,7 @@ function StaffMain() {
   }
 
   const openDueDetail = (room) => {
-    setDueDetailRoom(room)
+    openCollect(room)
   }
 
   const openCollect = (room) => {
@@ -7302,7 +7253,12 @@ function StaffMain() {
                                 <time className="staff-notif-item-date">{formatDateTime(notif.date)}</time>
                               </span>
                               <span className="staff-notif-item-status">{notif.label}</span>
-                              {notif.preview && <span className="staff-notif-item-preview">{notif.preview}</span>}
+                              {notif.preview && (
+                                <span className="staff-notif-item-preview">
+                                  {notif.previewLabel && <span className="staff-notif-item-preview-label">{notif.previewLabel}</span>}
+                                  <span className="staff-notif-item-preview-text">{notif.preview}</span>
+                                </span>
+                              )}
                             </span>
                           </button>
                         ))}
@@ -9701,151 +9657,111 @@ function StaffMain() {
           onClose={() => setCollectRoom(null)}
           variant="confirm"
         >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-money">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันการเก็บเงินค่าเช่า</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{collectRoom.room_number}</strong>
+          {(requestClose) => {
+            const due = collectRoom.currentDue
+            const tenantName = collectRoom.tenant ? `${collectRoom.tenant.first_name} ${collectRoom.tenant.last_name}` : 'ไม่มีผู้เช่า'
+            const items = due?.items?.length ? due.items : due ? [{ type: 'rent', label: 'ค่าเช่า', amount: due.amount }] : []
+            const status = due?.status || 'due'
+            const isOverdue = status === 'overdue'
+            return (
+              <div className="staff-confirm-body collect-body">
+                <div className={`staff-confirm-icon ${isOverdue ? 'is-warning' : 'is-money'}`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    {isOverdue ? (
+                      <>
+                        <path d="M12 9v4M12 17h.01" />
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                      </>
+                    ) : (
+                      <>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
+                      </>
+                    )}
+                  </svg>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {collectRoom.tenant ? `${collectRoom.tenant.first_name} ${collectRoom.tenant.last_name}` : '-'}
-                  </strong>
-                </div>
-              </div>
-              {collectRoom.currentDue && (
-                <>
-                  {collectRoom.currentDue.items?.length > 1 && (
-                    <div className="staff-confirm-details">
-                      {collectRoom.currentDue.items.map((item, index) => (
-                        <div className="staff-confirm-detail-row" key={item.id ?? `${item.type}-${index}`}>
-                          <span>{item.label}</span>
-                          <strong>฿{formatCurrency(item.amount)}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="staff-confirm-amount-block">
-                    <p className="staff-confirm-amount-label">ยอดที่ต้องชำระ</p>
-                    <p className="staff-confirm-amount">
-                      <span className="staff-confirm-amount-symbol">฿</span>
-                      {formatCurrency(collectRoom.currentDue.amount)}
-                    </p>
+                <p className="staff-confirm-message">
+                  {isOverdue ? 'ห้องนี้มียอดค้างชำระ ตรวจสอบยอดก่อนบันทึกการรับเงิน' : 'ตรวจสอบยอดก่อนบันทึกการรับเงิน'}
+                </p>
+
+                <div className="collect-tenant">
+                  <span className="collect-avatar" aria-hidden="true">
+                    {(collectRoom.tenant?.first_name || '?').trim().charAt(0)}
+                  </span>
+                  <div className="collect-tenant-text">
+                    <strong>{tenantName}</strong>
+                    <small>
+                      {due?.periodStart && due?.periodEnd
+                        ? `รอบ ${formatDate(due.periodStart)} – ${formatDate(due.periodEnd)}`
+                        : 'ค่าเช่าเดือนนี้'}
+                    </small>
                   </div>
-                </>
-              )}
-              {collectError && <p className="staff-form-error">{collectError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={collectSubmitting}
-                  onClick={handleCollectPayment}
-                >
-                  {collectSubmitting ? 'กำลังบันทึก...' : 'ยืนยันเก็บเงิน'}
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {dueDetailRoom && (
-        <Modal
-          title={`รายการค้างชำระ - ห้อง ${dueDetailRoom.room_number}`}
-          onClose={() => setDueDetailRoom(null)}
-          variant="confirm"
-        >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{dueDetailRoom.room_number}</strong>
+                  <span className="collect-room">ห้อง {collectRoom.room_number}</span>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {dueDetailRoom.tenant
-                      ? `${dueDetailRoom.tenant.first_name} ${dueDetailRoom.tenant.last_name}`
-                      : '-'}
-                  </strong>
-                </div>
-              </div>
 
-              {dueDetailRoom.currentDue?.items?.length > 0 && (
-                <div className="staff-confirm-details">
-                  {dueDetailRoom.currentDue.items.map((item, index) => (
-                    <div className="staff-confirm-detail-row" key={item.id ?? `${item.type}-${index}`}>
-                      <span>{item.label}</span>
-                      <strong>฿{formatCurrency(item.amount)}</strong>
+                {due && (
+                  <div className={`collect-receipt is-${dueBadgeClass(status)}`}>
+                    <div className="collect-receipt-head">
+                      <span>รายการที่ต้องชำระ</span>
+                      <span className={`collect-status is-${dueBadgeClass(status)}`}>{DUE_STATUS_LABEL[status] || status}</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <ul className="collect-receipt-items">
+                      {items.map((item, index) => (
+                        <li key={item.id ?? `${item.type}-${index}`} className={`is-${item.type || 'other'}`}>
+                          <span className="collect-item-label">
+                            <span className="collect-item-dot" aria-hidden="true" />
+                            {item.label}
+                          </span>
+                          <strong>฿{formatCurrency(item.amount)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                    {(Number(due.depositApplied) > 0 || Number(due.overdueMonths) > 0 || due.lumpSumMonths) && (
+                      <div className="collect-receipt-notes">
+                        {Number(due.overdueMonths) > 0 && <span className="is-late">ค้างชำระ {due.overdueMonths} เดือน</span>}
+                        {due.lumpSumMonths && <span>จ่ายล่วงหน้า {due.lumpSumMonths} เดือน</span>}
+                        {Number(due.depositApplied) > 0 && <span>หักเงินประกันแล้ว ฿{formatCurrency(due.depositApplied)}</span>}
+                      </div>
+                    )}
+                    <div className="collect-receipt-total">
+                      <span>ยอดที่ต้องชำระ</span>
+                      <strong>
+                        <small>฿</small>
+                        {formatCurrency(due.amount)}
+                      </strong>
+                    </div>
+                    {due.dueDate && <p className="collect-receipt-due">ครบกำหนดชำระ {formatDate(due.dueDate)}</p>}
+                  </div>
+                )}
 
-              {dueDetailRoom.currentDue && (
-                <div className="staff-confirm-amount-block">
-                  <p className="staff-confirm-amount-label">ยอดค้างชำระรวม</p>
-                  <p className="staff-confirm-amount">
-                    <span className="staff-confirm-amount-symbol">฿</span>
-                    {formatCurrency(dueDetailRoom.currentDue.amount)}
-                  </p>
-                </div>
-              )}
-
-              <div className="staff-due-detail-actions">
                 <button
                   type="button"
-                  className="staff-form-link-btn"
+                  className="collect-history-link"
                   onClick={() => {
-                    const room = dueDetailRoom
-                    setDueDetailRoom(null)
+                    const room = collectRoom
+                    setCollectRoom(null)
                     openHistory(room)
                   }}
                 >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                    <path d="M3 3v5h5M12 7v5l3 2" />
+                  </svg>
                   ดูประวัติการจ่ายเงิน
                 </button>
 
+                {collectError && <p className="staff-form-error">{collectError}</p>}
                 <div className="staff-form-actions">
                   <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
+                    ยกเลิก
                   </button>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-primary"
-                    onClick={() => {
-                      const room = dueDetailRoom
-                      setDueDetailRoom(null)
-                      openCollect(room)
-                    }}
-                  >
-                    เก็บเงิน
+                  <button type="button" className="staff-action-btn is-primary" disabled={collectSubmitting} onClick={handleCollectPayment}>
+                    {collectSubmitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          }}
         </Modal>
       )}
 

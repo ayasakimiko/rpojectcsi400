@@ -10,6 +10,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import StepTimeline from '../components/StepTimeline.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1220,82 +1221,40 @@ function AdminRequestTimeline({ kind, request }) {
 function AdminRequestProgress({ request }) {
   const rejected = request.status === 'rejected'
   const finished = ['approved', 'rejected'].includes(request.status)
-  const steps = [
-    { key: 'sent', title: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, state: 'done' },
+  const raw = [
+    { label: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, state: 'done' },
     {
-      key: 'accepted',
-      title: 'เจ้าหน้าที่รับเรื่อง',
+      label: 'เจ้าหน้าที่รับเรื่อง',
       by: request.accepted_by_name,
       date: request.accepted_at,
       state: request.accepted_at || finished ? 'done' : 'current',
     },
     {
-      key: 'result',
-      title: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
+      label: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
       by: request.completed_by_name,
       date: request.completed_at,
-      state: finished ? (rejected ? 'rejected' : 'done') : request.accepted_at ? 'current' : 'upcoming',
+      state: finished ? 'done' : request.accepted_at ? 'current' : 'pending',
+      tone: finished ? (rejected ? 'danger' : 'success') : undefined,
     },
   ]
+  const steps = raw.map((step, index) => {
+    const previous = raw[index - 1]
+    const gapMs = previous?.date && step.date ? new Date(step.date) - new Date(previous.date) : null
+    return {
+      ...step,
+      meta: step.date ? formatDateTime(step.date) : step.state === 'current' ? 'กำลังรอดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้',
+      by: step.date ? step.by : null,
+      extra: gapMs !== null && gapMs >= 0 ? `+ ${formatRemaining(gapMs)}` : null,
+    }
+  })
   const totalMs = finished && request.completed_at ? new Date(request.completed_at) - new Date(request.created_at) : null
-
-  return (
-    <div className="admin-progress">
-      <div className="admin-progress-head">
-        <h4>ขั้นตอนการดำเนินการ</h4>
-        {totalMs !== null && totalMs >= 0 ? (
-          <span className={`admin-progress-total${rejected ? ' is-rejected' : ''}`}>ใช้เวลาทั้งหมด {formatRemaining(totalMs)}</span>
-        ) : (
-          <span className="admin-progress-total is-waiting">กำลังดำเนินการ</span>
-        )}
-      </div>
-      <ol className="admin-progress-steps">
-        {steps.map((step, index) => {
-          const previous = steps[index - 1]
-          const gapMs = previous?.date && step.date ? new Date(step.date) - new Date(previous.date) : null
-          return (
-            <li key={step.key} className={`admin-progress-step is-${step.state}`}>
-              <span className="admin-progress-marker" aria-hidden="true">
-                {step.state === 'done' ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : step.state === 'rejected' ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 6 6 18M6 6l12 12" />
-                  </svg>
-                ) : step.state === 'current' ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="8" />
-                    <polyline points="12 8 12 12 14.5 13.5" />
-                  </svg>
-                ) : (
-                  <span>{index + 1}</span>
-                )}
-              </span>
-              <div className="admin-progress-body">
-                {gapMs !== null && gapMs >= 0 && <span className="admin-progress-gap">+ {formatRemaining(gapMs)}</span>}
-                <strong>{step.title}</strong>
-                {step.date ? (
-                  <small>
-                    {formatDateTime(step.date)}
-                    {step.by && (
-                      <>
-                        {' · '}
-                        <span className="admin-actor-inline">{step.by}</span>
-                      </>
-                    )}
-                  </small>
-                ) : (
-                  <small>{step.state === 'current' ? 'กำลังรอดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้'}</small>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ol>
-    </div>
-  )
+  const aside =
+    totalMs !== null && totalMs >= 0 ? (
+      <span className={`admin-progress-total${rejected ? ' is-rejected' : ''}`}>ใช้เวลาทั้งหมด {formatRemaining(totalMs)}</span>
+    ) : (
+      <span className="admin-progress-total is-waiting">กำลังดำเนินการ</span>
+    )
+  return <StepTimeline steps={steps} aside={aside} actorClassName="admin-actor-inline" />
 }
 
 function useExpandedRows() {
@@ -1848,28 +1807,7 @@ function AdminVehicleRequestsTab({ onCountChange }) {
                     </section>
                   )}
 
-                  <section className="admin-incident-timeline">
-                    <h4>ประวัติการดำเนินการ</h4>
-                    <ol>
-                      {steps.map((step) => (
-                        <li key={step.label} className={`is-${step.state}${step.tone ? ` is-${step.tone}` : ''}`}>
-                          <span className="admin-incident-timeline-dot" aria-hidden="true" />
-                          <div>
-                            <strong>{step.label}</strong>
-                            <small>
-                              {step.meta}
-                              {step.by && (
-                                <>
-                                  {' · '}
-                                  <span className="admin-actor-inline">{step.by}</span>
-                                </>
-                              )}
-                            </small>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                  </section>
+                  <StepTimeline title="ประวัติการดำเนินการ" steps={steps} actorClassName="admin-actor-inline" />
 
                   {message && <p className="admin-safety-message" role="status">{message}</p>}
                 </div>
@@ -2220,29 +2158,7 @@ function AdminSafetyIncidentsTab({ onCountChange }) {
                   </section>
                 )}
 
-                <section className="admin-incident-timeline">
-                  <h4>ประวัติการดำเนินการ</h4>
-                  <ol>
-                    {steps.map((step) => (
-                      <li key={step.label} className={`is-${step.state}${step.tone ? ` is-${step.tone}` : ''}`}>
-                        <span className="admin-incident-timeline-dot" aria-hidden="true" />
-                        <div>
-                          <strong>{step.label}</strong>
-                          <small>
-                            {step.meta}
-                            {step.by && (
-                              <>
-                                {' · '}
-                                <span className="admin-actor-inline">{step.by}</span>
-                              </>
-                            )}
-                          </small>
-                          {step.note && <p>{step.note}</p>}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
+                <StepTimeline title="ประวัติการดำเนินการ" steps={steps} actorClassName="admin-actor-inline" />
 
                 {detail.status === 'pending' && (
                   <section className="admin-incident-review">
