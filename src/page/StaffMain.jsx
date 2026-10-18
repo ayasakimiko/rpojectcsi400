@@ -1,4 +1,5 @@
-import { UploadImage, UploadLink } from '../components/UploadMedia.jsx'
+import { UploadImage } from '../components/UploadMedia.jsx'
+import { downloadUploadFile } from '../utils/uploadFiles.js'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { createPortal } from 'react-dom'
@@ -276,7 +277,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
   )
 }
 
-function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
+function WaitingListDetails({ item, now, vacantRooms = [], onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
   const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
   const waitingNow = now
   const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
@@ -398,9 +399,6 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
       <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
 
       <div className="waiting-ui-form-actions waiting-detail-actions">
-        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
-          ปิด
-        </button>
         <button
           type="button"
           className="waiting-ui-action-btn is-primary"
@@ -2214,7 +2212,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
   const tenantName = parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
   return (
     <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="parcel-detail">
-      {(requestClose) => (
+      {() => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-transfer-hero">
@@ -2320,13 +2318,6 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
             />
           </div>
 
-          <div className="staff-transfer-footer">
-            <div className="staff-form-actions">
-              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                ปิด
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </Modal>
@@ -2374,7 +2365,7 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
       onClose={onClose}
       variant={isMove ? 'transfer-detail' : 'transfer'}
     >
-      {(requestClose) => (
+      {() => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-req-detail-head">
@@ -2616,13 +2607,6 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
             />
           </div>
 
-          <div className="staff-transfer-footer">
-            <div className="staff-form-actions">
-              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                ปิด
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </Modal>
@@ -3188,6 +3172,61 @@ function useListFocus() {
   return { page, setPage, focusedId, focusItem, resolvePage }
 }
 
+const SLIP_FIELD_ICON_PATHS = {
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
+  phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />,
+  list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
+  date: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+      <path d="M16 3v3M8 3v3M3 10h18" />
+    </>
+  ),
+  status: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.5 2.5 4.5-5" />
+    </>
+  ),
+}
+
+function SlipDownloadButton({ url, fileName }) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const download = async () => {
+    setBusy(true)
+    setFailed(false)
+    try {
+      await downloadUploadFile(url, fileName)
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button type="button" className={`payment-slip-download${failed ? ' is-failed' : ''}`} onClick={download} disabled={busy}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+      </svg>
+      {busy ? 'กำลังบันทึก...' : failed ? 'บันทึกไม่สำเร็จ ลองอีกครั้ง' : 'บันทึกรูปสลิป'}
+    </button>
+  )
+}
+
+function SlipFieldIcon({ name }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SLIP_FIELD_ICON_PATHS[name]}
+    </svg>
+  )
+}
+
 function StaffPaymentReview({ onCountChange, focusId }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -3196,6 +3235,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const [confirmReview, setConfirmReview] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [slipViewerOpen, setSlipViewerOpen] = useState(false)
   const [previewClosing, setPreviewClosing] = useState(false)
   const { setPage, focusItem, resolvePage } = useListFocus()
 
@@ -3260,11 +3300,11 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   useEffect(() => {
     if (!preview) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !confirmReview) setPreviewClosing(true)
+      if (event.key === 'Escape' && !confirmReview && !slipViewerOpen) setPreviewClosing(true)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [preview, confirmReview])
+  }, [preview, confirmReview, slipViewerOpen])
 
   const hasPreview = Boolean(preview)
   useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
@@ -3275,6 +3315,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const openSlip = (payment) => {
     setError('')
     setPreviewClosing(false)
+    setSlipViewerOpen(false)
     setPreview({ payment, url: payment.slip_path })
   }
 
@@ -3505,7 +3546,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
           onClose={() => setNotice(null)}
           variant="confirm"
         >
-          {(requestClose) => (
+          {() => (
             <div className="staff-confirm-body">
               <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
                 <svg
@@ -3528,11 +3569,6 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                 </svg>
               </div>
               <StaffNoticeMessage message={notice.message} type={notice.type} />
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
             </div>
           )}
         </Modal>
@@ -3553,6 +3589,12 @@ function StaffPaymentReview({ onCountChange, focusId }) {
           >
             <header className="payment-slip-header">
               <div className="payment-slip-heading">
+                <span className="payment-slip-heading-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+                    <path d="M9 7h6M9 11h6M9 15h4" />
+                  </svg>
+                </span>
                 <h3 id="payment-slip-title">สลิปโอนเงิน</h3>
                 <span className="payment-slip-room">ห้อง {preview.payment.room_number}</span>
               </div>
@@ -3576,9 +3618,9 @@ function StaffPaymentReview({ onCountChange, focusId }) {
 
             <div className="payment-slip-body">
               <div className="payment-slip-image-frame">
-                <UploadLink href={preview.url} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                <button type="button" className="payment-slip-image-btn" onClick={() => setSlipViewerOpen(true)} title="คลิกเพื่อดูรูปขนาดเต็ม">
                   <UploadImage src={preview.url} alt={`สลิปชำระเงินห้อง ${preview.payment.room_number}`} />
-                </UploadLink>
+                </button>
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
@@ -3594,17 +3636,26 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                   </dd>
                 </div>
                 <div>
-                  <dt>ผู้เช่า</dt>
+                  <dt>
+                    <SlipFieldIcon name="user" />
+                    ผู้เช่า
+                  </dt>
                   <dd>
                     {preview.payment.first_name} {preview.payment.last_name}
                   </dd>
                 </div>
                 <div>
-                  <dt>เบอร์โทร</dt>
+                  <dt>
+                    <SlipFieldIcon name="phone" />
+                    เบอร์โทร
+                  </dt>
                   <dd>{preview.payment.phone || '-'}</dd>
                 </div>
                 <div>
-                  <dt>รายการ</dt>
+                  <dt>
+                    <SlipFieldIcon name="list" />
+                    รายการ
+                  </dt>
                   <dd>
                     {String(preview.payment.payment_types || '')
                       .split(',')
@@ -3613,7 +3664,10 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                   </dd>
                 </div>
                 <div>
-                  <dt>วันที่ส่ง</dt>
+                  <dt>
+                    <SlipFieldIcon name="date" />
+                    วันที่ส่ง
+                  </dt>
                   <dd>
                     {new Date(preview.payment.payment_date).toLocaleDateString('th-TH', {
                       year: 'numeric',
@@ -3626,9 +3680,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
             </div>
 
             <footer className="payment-slip-footer">
-              <button type="button" className="staff-action-btn is-ghost" onClick={closeSlip}>
-                ปิด
-              </button>
+              <SlipDownloadButton url={preview.url} fileName={`slip-room-${preview.payment.room_number}-${preview.payment.id}`} />
               <button
                 type="button"
                 className="staff-action-btn is-danger"
@@ -3648,6 +3700,18 @@ function StaffPaymentReview({ onCountChange, focusId }) {
             </footer>
           </section>
         </div>
+      )}
+
+      {preview && slipViewerOpen && createPortal(
+        <PhotoLightbox
+          photos={[{ name: `สลิปห้อง ${preview.payment.room_number}`, url: preview.url }]}
+          initialIndex={0}
+          title="สลิปโอนเงิน"
+          subtitle={`ห้อง ${preview.payment.room_number} · ${preview.payment.first_name} ${preview.payment.last_name}`}
+          label="สลิปโอนเงิน"
+          onClose={() => setSlipViewerOpen(false)}
+        />,
+        document.body,
       )}
     </section>
   )
@@ -4269,7 +4333,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
 
       {detail && (
         <Modal title="รายละเอียดคำขอรถ" onClose={() => setDetail(null)} variant="detail">
-          {(requestClose) => {
+          {() => {
             const info = getStaffVisitPhase(detail, now)
             const canManage = ['pending', 'approved'].includes(detail.status) && detail.request_type === 'vehicle'
             const reviewer = detail.admin_reviewed_by_name || detail.reviewed_by_name
@@ -4395,9 +4459,6 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                       </>
                     ) : (
                       <>
-                        <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                          ปิด
-                        </button>
                         {canManage && (
                           <button type="button" className="staff-action-btn is-primary" onClick={() => openEdit(detail)}>
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4744,7 +4805,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
 
       {notice && (
         <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
-          {(requestClose) => (
+          {() => (
             <div className="staff-confirm-body">
               <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4752,11 +4813,6 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                 </svg>
               </div>
               <StaffNoticeMessage message={notice.message} type={notice.type} />
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
             </div>
           )}
         </Modal>
@@ -5411,7 +5467,7 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
 
       {notice && (
         <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
-          {(requestClose) => (
+          {() => (
             <div className="staff-confirm-body">
               <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -5419,11 +5475,6 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
                 </svg>
               </div>
               <StaffNoticeMessage message={notice.message} type={notice.type} />
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
             </div>
           )}
         </Modal>
@@ -5575,6 +5626,7 @@ function StaffMain() {
   const [historyRoom, setHistoryRoom] = useState(null)
   const [historySlip, setHistorySlip] = useState(null)
   const [historySlipClosing, setHistorySlipClosing] = useState(false)
+  const [historySlipViewerOpen, setHistorySlipViewerOpen] = useState(false)
   const [historyData, setHistoryData] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState('')
@@ -6579,7 +6631,7 @@ function StaffMain() {
   }
 
   useEffect(() => {
-    if (!historySlip) return undefined
+    if (!historySlip || historySlipViewerOpen) return undefined
     const handleKeyDown = (event) => {
       if (event.key !== 'Escape') return
       event.stopImmediatePropagation()
@@ -6587,13 +6639,14 @@ function StaffMain() {
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [historySlip])
+  }, [historySlip, historySlipViewerOpen])
 
   useEffect(() => {
     if (!historySlipClosing) return undefined
     const timer = setTimeout(() => {
       setHistorySlip(null)
       setHistorySlipClosing(false)
+      setHistorySlipViewerOpen(false)
     }, 160)
     return () => clearTimeout(timer)
   }, [historySlipClosing])
@@ -7320,7 +7373,7 @@ function StaffMain() {
 
         {notifDetail && (
           <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
-            {(requestClose) => (
+            {() => (
               <div className="staff-confirm-body">
                 <div className={`staff-confirm-icon is-${notifDetail.tone}`}>
                   <svg
@@ -7362,11 +7415,6 @@ function StaffMain() {
                   </div>
                 )}
                 <StaffRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
               </div>
             )}
           </Modal>
@@ -7374,7 +7422,7 @@ function StaffMain() {
 
         {actionSuccess && (
           <Modal title="สำเร็จ" onClose={() => setActionSuccess('')} variant="confirm">
-            {(requestClose) => (
+            {() => (
               <div className="staff-confirm-body">
                 <div className="staff-confirm-icon is-success">
                   <svg
@@ -7390,11 +7438,6 @@ function StaffMain() {
                   </svg>
                 </div>
                 <StaffNoticeMessage message={actionSuccess} />
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
               </div>
             )}
           </Modal>
@@ -9425,6 +9468,12 @@ function StaffMain() {
           >
             <header className="payment-slip-header">
               <div className="payment-slip-heading">
+                <span className="payment-slip-heading-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+                    <path d="M9 7h6M9 11h6M9 15h4" />
+                  </svg>
+                </span>
                 <h3 id="history-slip-title">สลิปโอนเงิน</h3>
                 {historyRoom && <span className="payment-slip-room">ห้อง {historyRoom.room_number}</span>}
               </div>
@@ -9453,9 +9502,9 @@ function StaffMain() {
 
             <div className="payment-slip-body">
               <div className="payment-slip-image-frame">
-                <UploadLink href={historySlip.slip_path} target="_blank" rel="noreferrer" title="คลิกเพื่อดูรูปขนาดเต็ม">
+                <button type="button" className="payment-slip-image-btn" onClick={() => setHistorySlipViewerOpen(true)} title="คลิกเพื่อดูรูปขนาดเต็ม">
                   <UploadImage src={historySlip.slip_path} alt="สลิปโอนเงิน" />
-                </UploadLink>
+                </button>
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
@@ -9465,31 +9514,53 @@ function StaffMain() {
                   <dd>฿{formatCurrency(historySlip.amount)}</dd>
                 </div>
                 <div>
-                  <dt>ผู้เช่า</dt>
+                  <dt>
+                    <SlipFieldIcon name="user" />
+                    ผู้เช่า
+                  </dt>
                   <dd>{historySlip.tenantName}</dd>
                 </div>
                 <div>
-                  <dt>รายการ</dt>
+                  <dt>
+                    <SlipFieldIcon name="list" />
+                    รายการ
+                  </dt>
                   <dd>{PAYMENT_TYPE_LABEL[historySlip.type] || 'ค่าเช่าห้อง'}</dd>
                 </div>
                 <div>
-                  <dt>สถานะ</dt>
+                  <dt>
+                    <SlipFieldIcon name="status" />
+                    สถานะ
+                  </dt>
                   <dd>{PAYMENT_STATUS_LABEL[historySlip.status] || historySlip.status}</dd>
                 </div>
                 <div>
-                  <dt>วันที่</dt>
+                  <dt>
+                    <SlipFieldIcon name="date" />
+                    วันที่
+                  </dt>
                   <dd>{formatDateTime(historySlip.created_at)}</dd>
                 </div>
               </dl>
             </div>
 
             <footer className="payment-slip-footer">
-              <button type="button" className="staff-action-btn is-ghost" onClick={() => setHistorySlipClosing(true)}>
-                ปิด
-              </button>
+              <SlipDownloadButton url={historySlip.slip_path} fileName={`slip-${historyRoom ? `room-${historyRoom.room_number}-` : ''}${historySlip.id ?? 'payment'}`} />
             </footer>
           </section>
         </div>
+      )}
+
+      {historySlip && historySlipViewerOpen && createPortal(
+        <PhotoLightbox
+          photos={[{ name: 'สลิปโอนเงิน', url: historySlip.slip_path }]}
+          initialIndex={0}
+          title="สลิปโอนเงิน"
+          subtitle={historyRoom ? `ห้อง ${historyRoom.room_number} · ${historySlip.tenantName || ''}` : historySlip.tenantName}
+          label="สลิปโอนเงิน"
+          onClose={() => setHistorySlipViewerOpen(false)}
+        />,
+        document.body,
       )}
 
       {historyRoom && (
@@ -10190,7 +10261,7 @@ function StaffMain() {
 
       {maintenanceDetail && (
         <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="detail">
-          {(requestClose) => (
+          {() => (
             <div className="staff-confirm-body">
               <div className="staff-confirm-details">
                 <div className="staff-confirm-detail-row">
@@ -10254,11 +10325,6 @@ function StaffMain() {
                   </div>
                 </div>
               )}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
             </div>
           )}
         </Modal>

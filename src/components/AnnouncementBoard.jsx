@@ -767,11 +767,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 )}
               </div>
             </div>
-            <div className="announcement-form-actions">
-              <button type="button" className="announcement-board-cancel" onClick={closeDetail}>
-                ปิด
-              </button>
-            </div>
           </section>
         </div>
       )}
@@ -1126,11 +1121,16 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
           }}
         >
           <section
-            className="announcement-dialog announcement-confirm"
+            className="announcement-dialog announcement-confirm announcement-result"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="announcement-result-title"
           >
+            <button type="button" className="announcement-dialog-close announcement-result-close" onClick={closeResult} aria-label="ปิด" autoFocus>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                <path d="m18 6-12 12M6 6l12 12" />
+              </svg>
+            </button>
             <div className="announcement-confirm-icon is-success">
               <svg
                 width="24"
@@ -1151,11 +1151,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
             <div className="announcement-confirm-detail">
               <span>หัวข้อ</span>
               <strong>{result.title}</strong>
-            </div>
-            <div className="announcement-form-actions">
-              <button type="button" className="announcement-board-submit" onClick={closeResult} autoFocus>
-                ปิด
-              </button>
             </div>
           </section>
         </div>

@@ -632,6 +632,36 @@
   background: currentColor;
 }
 
+.admin-notif-item-preview {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 2px;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.admin-notif-item-preview-label {
+  color: #9aabbd;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.admin-notif-item-preview-text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #33506f;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 .admin-confirm-message-status {
   display: inline-block;
   font-size: 15px;

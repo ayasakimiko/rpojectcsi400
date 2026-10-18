@@ -373,7 +373,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
   )
 }
 
-function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
+function WaitingListDetails({ item, now, vacantRooms = [], onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
   const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
   const waitingNow = now
   const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
@@ -497,9 +497,6 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
       </div>
 
       <footer className="waiting-ui-form-actions waiting-detail-actions">
-        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
-          ปิด
-        </button>
         <button
           type="button"
           className="waiting-ui-action-btn is-primary"
@@ -877,6 +874,8 @@ function buildAnnouncementNotif(item) {
     label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
     tone: item.tone === 'warning' ? 'pending' : 'info',
     date: item.created_at,
+    preview: item.message,
+    previewLabel: 'รายละเอียดประกาศ',
     details: [
       { label: 'รายละเอียด', value: item.message },
       { label: 'ประกาศโดย', value: <span className="admin-actor-inline">{item.author || 'เจ้าหน้าที่'}</span> },
@@ -1125,6 +1124,8 @@ function buildAdminTenantNotifs(request) {
       title: REQUEST_TYPE_LABEL[request.type] || request.type,
       ...info,
       date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      preview: request.note || [request.first_name, request.last_name].filter(Boolean).join(' '),
+      previewLabel: request.note ? 'หมายเหตุ' : 'ผู้เช่า',
       details: [
         { label: 'ห้อง', value: request.room_number },
         { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
@@ -1145,6 +1146,8 @@ function buildAdminMaintenanceNotifs(request) {
       title: 'แจ้งซ่อม',
       ...info,
       date: request.status === 'in_progress' ? request.accepted_at || request.created_at : request.created_at,
+      preview: request.description || MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ',
+      previewLabel: request.description ? 'รายละเอียดการแจ้งซ่อม' : 'ประเภทการแจ้งซ่อม',
       details: [
         { label: 'ห้อง', value: request.room_number },
         { label: 'ผู้เช่า', value: `${request.first_name} ${request.last_name}` },
@@ -1167,6 +1170,8 @@ function buildAdminStaffNotifs(member) {
       label: 'เพิ่มพนักงานใหม่เข้าระบบ',
       tone: 'info',
       date: member.created_at,
+      preview: [member.first_name, member.last_name].filter(Boolean).join(' '),
+      previewLabel: 'ชื่อพนักงาน',
       details: [
         { label: 'ชื่อ-นามสกุล', value: `${member.first_name} ${member.last_name}` },
         { label: 'เบอร์โทร', value: member.phone },
@@ -3581,6 +3586,12 @@ function AdminBackupPage() {
                                 <time className="admin-notif-item-date">{formatDateTime(notif.date)}</time>
                               </span>
                               <span className="admin-notif-item-status">{notif.label}</span>
+                              {notif.preview && (
+                                <span className="admin-notif-item-preview">
+                                  <span className="admin-notif-item-preview-label">{notif.previewLabel}</span>
+                                  <span className="admin-notif-item-preview-text">{notif.preview}</span>
+                                </span>
+                              )}
                             </span>
                           </button>
                         ))}
@@ -3646,7 +3657,7 @@ function AdminBackupPage() {
 
         {successMessage && (
           <Modal title="สำเร็จ" onClose={() => setSuccessMessage('')} variant="confirm">
-            {(requestClose) => (
+            {() => (
               <div className="admin-confirm-body">
                 <div className="admin-confirm-icon is-success">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -3654,11 +3665,6 @@ function AdminBackupPage() {
                   </svg>
                 </div>
                 <p className="admin-confirm-message">{successMessage}</p>
-                <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
               </div>
             )}
           </Modal>

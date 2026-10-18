@@ -561,6 +561,18 @@
   background: #fee2e2;
 }
 
+.announcement-result {
+  position: relative;
+}
+
+.announcement-result > .announcement-result-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+}
+
 .announcement-board-form {
   display: grid;
   gap: 12px;
