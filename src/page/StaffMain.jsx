@@ -2042,12 +2042,24 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
                 <p className="staff-confirm-note">ตรวจสอบข้อมูลผู้เช่าก่อนกดรับเรื่อง</p>
               </div>
             </div>
-            <div className="staff-req-detail-room is-moveout">
-              <span>ห้อง</span>
-              <strong>{request.room_number}</strong>
-              <em>
-                {request.first_name} {request.last_name}
-              </em>
+            <div className="staff-req-detail-room is-summary">
+              <span className="staff-req-detail-room-icon">
+                <DoorIcon size={22} />
+              </span>
+              <div className="staff-req-detail-room-identity">
+                <small>ห้องที่แจ้งย้ายออก</small>
+                <strong>{request.room_number}</strong>
+              </div>
+              <div className="staff-req-detail-room-tenant">
+                <small>ผู้เช่า</small>
+                <span>{[request.first_name, request.last_name].filter(Boolean).join(' ') || '-'}</span>
+                {request.phone && (
+                  <em className="staff-req-detail-room-phone">
+                    <WaitingDetailIcon type="phone" size={13} />
+                    {request.phone}
+                  </em>
+                )}
+              </div>
             </div>
           </div>
 
@@ -2275,10 +2287,24 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                 {received ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
               </span>
             </div>
-            <div className="staff-req-detail-room">
-              <span>ห้อง</span>
-              <strong>{parcel.room_number}</strong>
-              <em>{tenantName}</em>
+            <div className="staff-req-detail-room is-summary">
+              <span className="staff-req-detail-room-icon">
+                <PackageIcon size={22} strokeWidth={2} />
+              </span>
+              <div className="staff-req-detail-room-identity">
+                <small>ห้อง</small>
+                <strong>{parcel.room_number}</strong>
+              </div>
+              <div className="staff-req-detail-room-tenant">
+                <small>ผู้รับ</small>
+                <span>{tenantName}</span>
+                {parcel.phone && (
+                  <em className="staff-req-detail-room-phone">
+                    <WaitingDetailIcon type="phone" size={13} />
+                    {parcel.phone}
+                  </em>
+                )}
+              </div>
             </div>
           </div>
 
@@ -3143,13 +3169,9 @@ const SUMMARY_ICON_PATHS = {
   ),
 }
 
-function StaffSummaryTile({ icon, label, value, hint, tone, alert = false, onClick }) {
+function StaffSummaryTile({ icon, label, value, hint, tone, alert = false }) {
   return (
-    <button
-      type="button"
-      className={`staff-summary-tile is-${tone}${value === 0 ? ' is-zero' : ''}${alert ? ' is-alert' : ''}`}
-      onClick={onClick}
-    >
+    <div className={`staff-summary-tile is-${tone}${value === 0 ? ' is-zero' : ''}${alert ? ' is-alert' : ''}`}>
       <span className="staff-summary-tile-icon">
         <SummaryIcon type={icon} />
       </span>
@@ -3158,10 +3180,7 @@ function StaffSummaryTile({ icon, label, value, hint, tone, alert = false, onCli
         <strong className="staff-summary-tile-value">{value}</strong>
         {hint && <small className="staff-summary-tile-hint">{hint}</small>}
       </span>
-      <svg className="staff-summary-tile-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="m9 6 6 6-6 6" />
-      </svg>
-    </button>
+    </div>
   )
 }
 
@@ -7154,6 +7173,13 @@ function StaffMain() {
 
   const waitingQueueCount = waitingList.filter((item) => item.status === 'waiting' || item.status === 'contacted').length
   const pendingParcelCount = parcels.filter((parcel) => parcel.status === 'pending').length
+  const todayParcelKey = new Date().toDateString()
+  const parcelsArrivedToday = parcels.filter((parcel) => new Date(parcel.created_at).toDateString() === todayParcelKey).length
+  const parcelsPickedToday = parcels.filter((parcel) => parcel.received_at && new Date(parcel.received_at).toDateString() === todayParcelKey).length
+  const roomsWithPendingParcels = new Set(parcels.filter((parcel) => parcel.status === 'pending').map((parcel) => parcel.room_number)).size
+  const oldestPendingParcelDays = parcels
+    .filter((parcel) => parcel.status === 'pending')
+    .reduce((max, parcel) => Math.max(max, Math.floor((Date.now() - new Date(parcel.created_at).getTime()) / 86400000)), 0)
   const pendingMaintenanceCount = maintenanceRequests.filter((request) => request.status === 'pending').length
 
   const openSummaryTarget = (tab, roomFilter, section) => {
@@ -7504,7 +7530,35 @@ function StaffMain() {
     },
     parcels: {
       title: 'พัสดุ',
-      tiles: [{ key: 'parcel', icon: 'parcel', tone: 'teal', label: 'พัสดุรอรับ', value: pendingParcelCount, onClick: () => openSummaryTarget('parcels') }],
+      tiles: [
+        {
+          key: 'parcel',
+          icon: 'parcel',
+          tone: 'amber',
+          label: 'พัสดุรอผู้เช่ารับ',
+          value: pendingParcelCount,
+          hint: oldestPendingParcelDays > 0 ? `ค้างนานสุด ${oldestPendingParcelDays} วัน` : pendingParcelCount > 0 ? 'มาถึงวันนี้' : null,
+          onClick: () => openSummaryTarget('parcels'),
+        },
+        {
+          key: 'today',
+          icon: 'parcel',
+          tone: 'blue',
+          label: 'รับเข้าวันนี้',
+          value: parcelsArrivedToday,
+          hint: `ทั้งหมด ${parcels.length} รายการ`,
+          onClick: () => openSummaryTarget('parcels'),
+        },
+        { key: 'picked', icon: 'vacant', tone: 'green', label: 'ผู้เช่ารับไปวันนี้', value: parcelsPickedToday, onClick: () => openSummaryTarget('parcels') },
+        {
+          key: 'rooms',
+          icon: 'total',
+          tone: 'violet',
+          label: 'ห้องที่มีพัสดุรอ',
+          value: roomsWithPendingParcels,
+          onClick: () => openSummaryTarget('parcels'),
+        },
+      ],
     },
     'waiting-list': {
       title: 'รายชื่อรอห้องว่าง',
@@ -8454,32 +8508,31 @@ function StaffMain() {
               </div>
             </div>
             <div className="table-responsive parcel-table-wrap">
-              <table className="parcel-table">
+              <table className="parcel-table parcel-ui-table">
                 <thead>
                   <tr>
-                    <th>ห้อง / ผู้เช่า</th>
+                    <th>ห้อง / ผู้รับ</th>
                     <th>ผู้ส่ง / รายละเอียด</th>
                     <th>เลขพัสดุ</th>
                     <th>รูป</th>
                     <th>สถานะ</th>
-                    <th>วันที่บันทึก / รับ</th>
-                    <th>บันทึกโดย</th>
-                    <th aria-label="รายละเอียด" />
+                    <th>บันทึก</th>
+                    <th aria-label="การดำเนินการ" />
                   </tr>
                 </thead>
                 <tbody>
                   {parcelsLoading ? (
-                    <tr><td className="parcel-empty" colSpan={8}>กำลังโหลดรายการพัสดุ...</td></tr>
+                    <tr><td className="parcel-empty" colSpan={7}>กำลังโหลดรายการพัสดุ...</td></tr>
                   ) : parcelsError ? (
                     <tr>
-                      <td className="parcel-empty" colSpan={8}>
+                      <td className="parcel-empty" colSpan={7}>
                         {parcelsError}{' '}
                         <button type="button" className="parcel-action-btn is-ghost" onClick={loadParcels}>ลองใหม่</button>
                       </td>
                     </tr>
                   ) : filteredParcels.length === 0 ? (
                     <tr>
-                      <td className="parcel-empty" colSpan={8}>
+                      <td className="parcel-empty" colSpan={7}>
                         <span className="parcel-empty-icon"><PackageIcon size={28} strokeWidth={1.8} /></span>
                         {parcels.length ? 'ไม่พบรายการพัสดุตามเงื่อนไข' : 'ยังไม่มีรายการพัสดุ'}
                       </td>
@@ -8496,19 +8549,26 @@ function StaffMain() {
                         }}
                       >
                         <td>
-                          <div className="parcel-room-cell">
+                          <div className="parcel-ui-who">
                             <span className="parcel-room-badge">{parcel.room_number}</span>
-                            <div>
-                              <span className="parcel-primary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</span>
-                              <small className="parcel-secondary">{parcel.phone || '-'}</small>
+                            <div className="parcel-ui-stack">
+                              <strong>{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</strong>
+                              <small>
+                                <WaitingDetailIcon type="phone" size={12} />
+                                {parcel.phone || '-'}
+                              </small>
                             </div>
                           </div>
                         </td>
                         <td>
-                          <span className="parcel-primary">{parcel.sender_name}</span>
-                          <small className="parcel-secondary">{parcel.description || '-'}</small>
+                          <div className="parcel-ui-stack">
+                            <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
+                            <small className="parcel-ui-desc">{parcel.description || 'ไม่มีรายละเอียด'}</small>
+                          </div>
                         </td>
-                        <td>{parcel.tracking_number ? <span className="parcel-tracking">{parcel.tracking_number}</span> : <span className="parcel-muted">-</span>}</td>
+                        <td>
+                          {parcel.tracking_number ? <span className="parcel-ui-tracking">{parcel.tracking_number}</span> : <span className="parcel-ui-none">-</span>}
+                        </td>
                         <td>
                           {parcel.photos?.length ? (
                             <button
@@ -8523,18 +8583,32 @@ function StaffMain() {
                               <UploadImage src={parcel.photos[0].url} alt="" />
                               {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                             </button>
-                          ) : <span className="parcel-muted">-</span>}
-                        </td>
-                        <td><span className={`parcel-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>{parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span></td>
-                        <td>
-                          <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
-                          <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
+                          ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
                         </td>
                         <td>
-                          <span className="staff-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                          <div className="parcel-ui-stack">
+                            <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
+                              <span className="parcel-ui-status-dot" aria-hidden="true" />
+                              {parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+                            </span>
+                            {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
+                          </div>
                         </td>
                         <td>
-                          <span className="parcel-detail-link">ดูรายละเอียด</span>
+                          <div className="parcel-ui-stack">
+                            <strong className="parcel-ui-date">{formatDateTime(parcel.created_at)}</strong>
+                            <small>
+                              โดย <span className="parcel-ui-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                            </small>
+                          </div>
+                        </td>
+                        <td className="parcel-ui-action">
+                          <span className="parcel-ui-open">
+                            ดูรายละเอียด
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="m9 6 6 6-6 6" />
+                            </svg>
+                          </span>
                         </td>
                       </tr>
                     ))
