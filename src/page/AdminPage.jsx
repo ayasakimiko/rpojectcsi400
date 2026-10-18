@@ -1004,6 +1004,105 @@ function Modal({ title, onClose, children, variant }) {
   )
 }
 
+const SUMMARY_ICON_PATHS = {
+  announce: (
+    <>
+      <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1Z" />
+      <path d="M16 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  total: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  booked: (
+    <>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  vacant: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12.5l2.3 2.3L15.5 9.5" />
+    </>
+  ),
+  due: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
+    </>
+  ),
+  queue: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5" />
+    </>
+  ),
+  slip: (
+    <>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </>
+  ),
+  maintenance: (
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4Z" />
+  ),
+  request: (
+    <>
+      <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" />
+    </>
+  ),
+  parcel: (
+    <>
+      <path d="M21 8 12 3 3 8v8l9 5 9-5Z" />
+      <path d="M3 8l9 5 9-5M12 13v8" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8" />
+      <rect x="3" y="10" width="18" height="8" rx="2" />
+      <path d="M7 14h.01M17 14h.01M5 18v2M19 18v2" />
+    </>
+  ),
+  carPending: (
+    <>
+      <path d="M14.5 13H3.8a1 1 0 0 0-.8.4V19h12v-5.6a1 1 0 0 0-.5-.4Z" />
+      <path d="m3 13 1.4-3.3A1.5 1.5 0 0 1 5.8 9h6.4" />
+      <path d="M6 16h.01M12 16h.01M4 19v2M14 19v2" />
+      <circle cx="18" cy="7" r="4" />
+      <path d="M18 5v2l1.3 1" />
+    </>
+  ),
+  safety: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="M12 8v4M12 16h.01" />
+    </>
+  ),
+}
+
+function SummaryIcon({ type }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SUMMARY_ICON_PATHS[type]}
+    </svg>
+  )
+}
+
 function Pagination({ page, totalPages, onChange }) {
   if (totalPages <= 1) return null
   return (
@@ -4643,6 +4742,7 @@ function AdminBackupPage() {
   const [parcelSaveConfirm, setParcelSaveConfirm] = useState(false)
   const [parcelFormOpen, setParcelFormOpen] = useState(false)
   const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
+  const [parcelDetail, setParcelDetail] = useState(null)
   const [parcelSearch, setParcelSearch] = useState('')
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
   const [parcelPage, setParcelPage] = useState(1)
@@ -5627,10 +5727,7 @@ function AdminBackupPage() {
     setRevealedStaffIdCards(new Set())
   }, [currentStaffPage, activeTab])
 
-  const [expandedStaffRows, toggleStaffRow, resetStaffRows] = useExpandedRows()
-  useEffect(() => {
-    resetStaffRows()
-  }, [currentStaffPage, activeTab])
+  const [staffDetail, setStaffDetail] = useState(null)
 
   const [customers, setCustomers] = useState([])
   const [customersLoading, setCustomersLoading] = useState(true)
@@ -5990,32 +6087,48 @@ function AdminBackupPage() {
     setAnnouncementFocus(null)
   }
   const pendingParcelCount = parcels.filter((parcel) => parcel.status !== 'received').length
+  const todayParcelKey = new Date().toDateString()
+  const parcelsArrivedToday = parcels.filter((parcel) => new Date(parcel.created_at).toDateString() === todayParcelKey).length
+  const parcelsPickedToday = parcels.filter((parcel) => parcel.received_at && new Date(parcel.received_at).toDateString() === todayParcelKey).length
+  const roomsWithPendingParcels = new Set(parcels.filter((parcel) => parcel.status !== 'received').map((parcel) => parcel.room_number)).size
+  const oldestPendingParcelDays = parcels
+    .filter((parcel) => parcel.status !== 'received')
+    .reduce((max, parcel) => Math.max(max, Math.floor((Date.now() - new Date(parcel.created_at).getTime()) / 86400000)), 0)
   const waitingQueueCount = waitingList.filter((item) => (WAITING_UI_STATUSES[item.status] ? item.status : 'waiting') === 'waiting').length
   const scheduledAnnouncementCount = announcements.filter((item) => item.expires_at).length
   const warningAnnouncementCount = announcements.filter((item) => item.tone === 'warning').length
   const newAnnouncementCount = announcements.filter((item) => Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000).length
   const summaryByGroup = {
     residents: [
-      { key: 'rooms', icon: 'home', tone: 'blue', label: 'ห้องทั้งหมด', value: summary.totalRooms, onClick: () => goToTab('rooms') },
-      { key: 'vacant', icon: 'check', tone: 'green', label: 'ห้องว่าง', value: summary.vacantRooms, hint: `มีผู้เช่า ${summary.totalRooms - summary.vacantRooms} ห้อง`, onClick: () => goToTab('rooms') },
-      { key: 'customers', icon: 'user', tone: 'amber', label: 'ลูกค้าที่ใช้งานอยู่', value: summary.activeCustomers, onClick: () => goToTab('customers') },
-      { key: 'waiting', icon: 'clock', tone: 'violet', label: 'คิวรอห้องว่าง', value: waitingQueueCount, onClick: () => goToTab('waiting-list') },
+      { key: 'rooms', icon: 'total', tone: 'blue', label: 'ห้องทั้งหมด', value: summary.totalRooms, onClick: () => goToTab('rooms') },
+      { key: 'vacant', icon: 'vacant', tone: 'green', label: 'ห้องว่าง', value: summary.vacantRooms, hint: `มีผู้เช่า ${summary.totalRooms - summary.vacantRooms} ห้อง`, onClick: () => goToTab('rooms') },
+      { key: 'customers', icon: 'booked', tone: 'amber', label: 'ลูกค้าที่ใช้งานอยู่', value: summary.activeCustomers, onClick: () => goToTab('customers') },
+      { key: 'waiting', icon: 'queue', tone: 'violet', label: 'คิวรอห้องว่าง', value: waitingQueueCount, onClick: () => goToTab('waiting-list') },
     ],
     services: [
-      { key: 'requests', icon: 'note', tone: 'indigo', label: 'คำขอผู้เช่ารอดำเนินการ', value: serviceCounts.requestPending, onClick: () => goToTab('requests') },
-      { key: 'maintenance', icon: 'wrench', tone: 'amber', label: 'แจ้งซ่อมรอรับเรื่อง', value: serviceCounts.maintenancePending, onClick: () => goToTab('maintenance') },
-      { key: 'vehicle', icon: 'clipboard', tone: 'blue', label: 'คำขอรถรอพิจารณา', value: pendingVehicleCount, onClick: () => goToTab('vehicle-requests') },
-      { key: 'safety', icon: 'alert', tone: 'red', label: 'เหตุรอรับเรื่อง', value: pendingSafetyCount, alert: pendingSafetyCount > 0, onClick: () => goToTab('safety') },
+      { key: 'requests', icon: 'request', tone: 'indigo', label: 'คำขอผู้เช่ารอดำเนินการ', value: serviceCounts.requestPending, onClick: () => goToTab('requests') },
+      { key: 'maintenance', icon: 'maintenance', tone: 'amber', label: 'แจ้งซ่อมรอรับเรื่อง', value: serviceCounts.maintenancePending, onClick: () => goToTab('maintenance') },
+      { key: 'vehicle', icon: 'carPending', tone: 'blue', label: 'คำขอรถรอพิจารณา', value: pendingVehicleCount, onClick: () => goToTab('vehicle-requests') },
+      { key: 'safety', icon: 'safety', tone: 'red', label: 'เหตุรอรับเรื่อง', value: pendingSafetyCount, alert: pendingSafetyCount > 0, onClick: () => goToTab('safety') },
     ],
     parcels: [
-      { key: 'all', icon: 'box', tone: 'blue', label: 'พัสดุทั้งหมด', value: parcels.length, onClick: () => goToTab('parcels') },
-      { key: 'pending', icon: 'clock', tone: 'amber', label: 'รอผู้เช่ารับ', value: pendingParcelCount, onClick: () => goToTab('parcels') },
-      { key: 'received', icon: 'check', tone: 'green', label: 'รับแล้ว', value: parcels.length - pendingParcelCount, onClick: () => goToTab('parcels') },
+      {
+        key: 'pending',
+        icon: 'parcel',
+        tone: 'amber',
+        label: 'พัสดุรอผู้เช่ารับ',
+        value: pendingParcelCount,
+        hint: oldestPendingParcelDays > 0 ? `ค้างนานสุด ${oldestPendingParcelDays} วัน` : pendingParcelCount > 0 ? 'มาถึงวันนี้' : null,
+        onClick: () => goToTab('parcels'),
+      },
+      { key: 'today', icon: 'parcel', tone: 'blue', label: 'รับเข้าวันนี้', value: parcelsArrivedToday, hint: `ทั้งหมด ${parcels.length} รายการ`, onClick: () => goToTab('parcels') },
+      { key: 'picked', icon: 'vacant', tone: 'green', label: 'ผู้เช่ารับไปวันนี้', value: parcelsPickedToday, onClick: () => goToTab('parcels') },
+      { key: 'rooms', icon: 'total', tone: 'violet', label: 'ห้องที่มีพัสดุรอ', value: roomsWithPendingParcels, onClick: () => goToTab('parcels') },
     ],
     announcements: [
-      { key: 'all', icon: 'note', tone: 'blue', label: 'ประกาศทั้งหมด', value: announcements.length, onClick: () => goToTab('announcements') },
-      { key: 'warning', icon: 'alert', tone: 'amber', label: 'ประกาศแจ้งเตือน', value: warningAnnouncementCount, onClick: () => goToTab('announcements') },
-      { key: 'info', icon: 'note', tone: 'indigo', label: 'ประกาศทั่วไป', value: announcements.length - warningAnnouncementCount, onClick: () => goToTab('announcements') },
+      { key: 'all', icon: 'announce', tone: 'blue', label: 'ประกาศทั้งหมด', value: announcements.length, onClick: () => goToTab('announcements') },
+      { key: 'warning', icon: 'announce', tone: 'amber', label: 'ประกาศแจ้งเตือน', value: warningAnnouncementCount, onClick: () => goToTab('announcements') },
+      { key: 'info', icon: 'announce', tone: 'indigo', label: 'ประกาศทั่วไป', value: announcements.length - warningAnnouncementCount, onClick: () => goToTab('announcements') },
       {
         key: 'scheduled',
         icon: 'clock',
@@ -6027,24 +6140,24 @@ function AdminBackupPage() {
       },
     ],
     staff: [
-      { key: 'all', icon: 'user', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
-      { key: 'active', icon: 'check', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
+      { key: 'all', icon: 'queue', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
+      { key: 'active', icon: 'vacant', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
       { key: 'suspended', icon: 'x', tone: 'red', label: 'ระงับการใช้งาน', value: staffList.length - summary.activeStaff, onClick: () => goToTab('staff') },
     ],
     finance: [
       {
         key: 'amount',
-        icon: 'wallet',
+        icon: 'due',
         tone: 'blue',
         label: 'ยอดรวมรายจ่าย',
         value: `฿${formatCurrency(expenseSummary.totalAmount)}`,
         hint: expenseFiltersActive ? 'ตามตัวกรองที่เลือก' : 'ทุกรายการ',
         onClick: () => goToTab('expenses'),
       },
-      { key: 'count', icon: 'receipt', tone: 'slate', label: 'จำนวนรายการ', value: expensesTotal, onClick: () => goToTab('expenses') },
+      { key: 'count', icon: 'total', tone: 'slate', label: 'จำนวนรายการ', value: expensesTotal, onClick: () => goToTab('expenses') },
       {
         key: 'top',
-        icon: 'note',
+        icon: 'request',
         tone: 'amber',
         label: 'หมวดที่ใช้จ่ายมากที่สุด',
         value: expenseSummary.byCategory[0]?.category || '-',
@@ -6186,7 +6299,7 @@ function AdminBackupPage() {
     const { tab, id } = target
     if (tab === 'requests' && requestLogs.items.some((item) => item.id === id)) toggleRequestRow(id)
     else if (tab === 'maintenance' && maintenanceLogs.items.some((item) => item.id === id)) toggleMaintenanceRow(id)
-    else if (tab === 'staff' && staffList.some((member) => member.id === id)) toggleStaffRow(id)
+    else if (tab === 'staff' && staffList.some((member) => member.id === id)) setStaffDetail(staffList.find((member) => member.id === id))
     notifTargetRef.current = null
   }, [notifTargetReady, activeTab, requestLogs.items, maintenanceLogs.items, staffList])
 
@@ -6378,24 +6491,19 @@ function AdminBackupPage() {
 
         <div className={`admin-summary-grid is-${activeSummaryTiles.length}`}>
           {activeSummaryTiles.map((tile) => (
-            <button
-              type="button"
+            <div
               key={tile.key}
               className={`admin-summary-card is-${tile.tone}${tile.value === 0 ? ' is-zero' : ''}${tile.alert ? ' is-alert' : ''}`}
-              onClick={tile.onClick}
             >
               <span className="admin-summary-icon">
-                <RoomDetailIcon type={tile.icon} size={20} />
+                {SUMMARY_ICON_PATHS[tile.icon] ? <SummaryIcon type={tile.icon} /> : <RoomDetailIcon type={tile.icon} size={20} />}
               </span>
               <span className="admin-summary-text">
                 <span className="admin-summary-label">{tile.label}</span>
                 <strong className="admin-summary-value">{tile.value}</strong>
                 {tile.hint && <small className="admin-summary-hint">{tile.hint}</small>}
               </span>
-              <svg className="admin-summary-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m9 6 6 6-6 6" />
-              </svg>
-            </button>
+            </div>
           ))}
         </div>
 
@@ -6470,9 +6578,9 @@ function AdminBackupPage() {
             </div>
             <div className="parcel-toolbar">
               <div className="parcel-search-field">
-                <label className="parcel-label" htmlFor="admin-parcel-search">ค้นหา</label>
+                <label className="parcel-label" htmlFor="parcel-ui-search">ค้นหา</label>
                 <input
-                  id="admin-parcel-search"
+                  id="parcel-ui-search"
                   className="parcel-control"
                   type="search"
                   placeholder="เลขห้อง, ชื่อผู้เช่า, เลขพัสดุ..."
@@ -6484,9 +6592,9 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="parcel-filter-field">
-                <label className="parcel-label" htmlFor="admin-parcel-status">สถานะ</label>
+                <label className="parcel-label" htmlFor="parcel-ui-status">สถานะ</label>
                 <select
-                  id="admin-parcel-status"
+                  id="parcel-ui-status"
                   className="parcel-control"
                   value={parcelStatusFilter}
                   onChange={(event) => {
@@ -6501,16 +6609,16 @@ function AdminBackupPage() {
               </div>
             </div>
             <div className="table-responsive parcel-table-wrap">
-              <table className="parcel-table">
+              <table className="parcel-table parcel-ui-table">
                 <thead>
                   <tr>
-                    <th>ห้อง / ผู้เช่า</th>
+                    <th>ห้อง / ผู้รับ</th>
                     <th>ผู้ส่ง / รายละเอียด</th>
                     <th>เลขพัสดุ</th>
                     <th>รูป</th>
                     <th>สถานะ</th>
-                    <th>วันที่บันทึก / รับ</th>
-                    <th>บันทึกโดย</th>
+                    <th>บันทึก</th>
+                    <th aria-label="การดำเนินการ" />
                   </tr>
                 </thead>
                 <tbody>
@@ -6531,28 +6639,44 @@ function AdminBackupPage() {
                       </td>
                     </tr>
                   ) : pagedParcels.map((parcel) => (
-                    <tr key={parcel.id}>
+                    <tr
+                      key={parcel.id}
+                      className="parcel-row-clickable"
+                      tabIndex={0}
+                      onClick={() => setParcelDetail(parcel)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') setParcelDetail(parcel)
+                      }}
+                    >
                       <td>
-                        <div className="parcel-room-cell">
+                        <div className="parcel-ui-who">
                           <span className="parcel-room-badge">{parcel.room_number}</span>
-                          <div>
-                            <span className="parcel-primary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</span>
-                            <small className="parcel-secondary">{parcel.phone || '-'}</small>
+                          <div className="parcel-ui-stack">
+                            <strong>{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</strong>
+                            <small>
+                              <RoomDetailIcon type="phone" size={12} />
+                              {parcel.phone || '-'}
+                            </small>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className="parcel-primary">{parcel.sender_name}</span>
-                        <small className="parcel-secondary">{parcel.description || '-'}</small>
+                        <div className="parcel-ui-stack">
+                          <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
+                          <small className="parcel-ui-desc">{parcel.description || 'ไม่มีรายละเอียด'}</small>
+                        </div>
                       </td>
-                      <td>{parcel.tracking_number ? <span className="parcel-tracking">{parcel.tracking_number}</span> : <span className="parcel-muted">-</span>}</td>
+                      <td>
+                        {parcel.tracking_number ? <span className="parcel-ui-tracking">{parcel.tracking_number}</span> : <span className="parcel-ui-none">-</span>}
+                      </td>
                       <td>
                         {parcel.photos?.length ? (
                           <button
                             type="button"
                             className="parcel-thumb"
                             aria-label={`ดูรูปพัสดุห้อง ${parcel.room_number}`}
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation()
                               setParcelPhotoPreview(parcel)
                               setPhotoPreview(0)
                             }}
@@ -6560,16 +6684,33 @@ function AdminBackupPage() {
                             <UploadImage src={parcel.photos[0].url} alt="" />
                             {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                           </button>
-                        ) : <span className="parcel-muted">-</span>}
-                      </td>
-                      <td><span className={`parcel-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>{parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span></td>
-                      <td>
-                        <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
-                        <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
+                        ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
                       </td>
                       <td>
-                            <ActorName name={parcel.staff_name || 'เจ้าหน้าที่'} />
-                          </td>
+                        <div className="parcel-ui-stack">
+                          <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
+                            <span className="parcel-ui-status-dot" aria-hidden="true" />
+                            {parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+                          </span>
+                          {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="parcel-ui-stack">
+                          <strong className="parcel-ui-date">{formatDateTime(parcel.created_at)}</strong>
+                          <small>
+                            โดย <span className="parcel-ui-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                          </small>
+                        </div>
+                      </td>
+                      <td className="parcel-ui-action">
+                        <span className="parcel-ui-open">
+                          ดูรายละเอียด
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="m9 6 6 6-6 6" />
+                          </svg>
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -6744,10 +6885,10 @@ function AdminBackupPage() {
             {staffError && <div className="alert alert-danger">{staffError}</div>}
 
             <div className="table-responsive">
-              <table className="table admin-table">
+              <table className="table admin-table admin-staff-table">
                 <thead>
                   <tr>
-                    <th>ชื่อ-นามสกุล</th>
+                    <th>พนักงาน</th>
                     <th className="admin-col-optional">บัตรประชาชน</th>
                     <th>เบอร์โทร</th>
                     <th className="admin-col-optional">อายุ</th>
@@ -6770,82 +6911,73 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     paginatedStaff.map((member) => (
-                      <Fragment key={member.id}>
-                        <tr>
-                          <td className="admin-strong-cell">
-                            {member.first_name} {member.last_name}
-                          </td>
-                          <td className="admin-col-optional">
+                      <tr
+                        key={member.id}
+                        className={`admin-staff-row${member.is_suspended ? ' is-suspended' : ''}`}
+                        tabIndex={0}
+                        onClick={() => setStaffDetail(member)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') setStaffDetail(member)
+                        }}
+                      >
+                        <td>
+                          <div className="admin-staff-person">
+                            <span className="admin-staff-avatar" aria-hidden="true">
+                              <RoomDetailIcon type="user" size={18} />
+                            </span>
+                            <div className="admin-staff-name">
+                              <strong>
+                                {member.first_name} {member.last_name}
+                              </strong>
+                              <small>เริ่มงาน {member.created_at ? formatDate(member.created_at) : '-'}</small>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="admin-col-optional">
+                          <button
+                            type="button"
+                            className="admin-idcard-toggle"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleStaffIdCardReveal(member.id)
+                            }}
+                          >
+                            {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                          </button>
+                        </td>
+                        <td>
+                          <span className="admin-staff-phone">
+                            <RoomDetailIcon type="phone" size={14} />
+                            {member.phone || '-'}
+                          </span>
+                        </td>
+                        <td className="admin-col-optional">
+                          <span className="admin-staff-age">{member.age ? `${member.age} ปี` : '-'}</span>
+                        </td>
+                        <td>
+                          <span className={`admin-staff-status${member.is_suspended ? ' is-suspended' : ' is-active'}`}>
+                            <span className="admin-staff-status-dot" aria-hidden="true" />
+                            {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                          </span>
+                        </td>
+                        <td className="admin-col-optional">
+                          <div className="admin-row-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                            <button type="button" className="admin-action-btn is-view" onClick={() => setStaffDetail(member)}>
+                              ดูรายละเอียด
+                            </button>
+                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
+                              แก้ไข
+                            </button>
                             <button
                               type="button"
-                              className="admin-idcard-toggle"
-                              onClick={() => toggleStaffIdCardReveal(member.id)}
+                              className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                              onClick={() => setStaffSuspendConfirm(member)}
                             >
-                              {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                              {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
                             </button>
-                          </td>
-                          <td>{member.phone}</td>
-                          <td className="admin-col-optional">{member.age}</td>
-                          <td>
-                            <span className={`admin-badge status-${member.is_suspended ? 'suspended' : 'active'}`}>
-                              {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
-                            </span>
-                          </td>
-                          <td className="admin-col-optional">
-                            <div className="admin-row-actions">
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
-                                แก้ไข
-                              </button>
-                              <button
-                                type="button"
-                                className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
-                                onClick={() => setStaffSuspendConfirm(member)}
-                              >
-                                {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
-                              </button>
-                              <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
-                                ลบ
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        <ExpandToggleRow open={expandedStaffRows.has(member.id)} colSpan={6} onClick={() => toggleStaffRow(member.id)} />
-                        <DetailRow
-                          open={expandedStaffRows.has(member.id)}
-                          colSpan={6}
-                          fields={[
-                            {
-                              label: 'บัตรประชาชน',
-                              value: (
-                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleStaffIdCardReveal(member.id)}>
-                                  {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
-                                </button>
-                              ),
-                            },
-                            { label: 'อายุ', value: member.age },
-                            {
-                              label: 'การดำเนินการ',
-                              value: (
-                                <div className="admin-row-actions">
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
-                                    แก้ไข
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
-                                    onClick={() => setStaffSuspendConfirm(member)}
-                                  >
-                                    {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
-                                  </button>
-                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
-                                    ลบ
-                                  </button>
-                                </div>
-                              ),
-                            },
-                          ]}
-                        />
-                      </Fragment>
+                          </div>
+                        </td>
+                      </tr>
                     ))
                   )}
                 </tbody>
@@ -8235,6 +8367,210 @@ function AdminBackupPage() {
         </Modal>
       )}
 
+      {staffDetail && (
+        <Modal title="รายละเอียดพนักงาน" onClose={() => setStaffDetail(null)} variant="expense">
+          {(requestClose) => {
+            const member = staffList.find((item) => item.id === staffDetail.id) || staffDetail
+            const runAfterClose = (action) => {
+              requestClose()
+              action(member)
+            }
+            return (
+              <div className="exp-ui-body">
+                <div className="exp-ui-top">
+                  <div className="admin-staff-hero">
+                    <span className="admin-staff-avatar is-large" aria-hidden="true">
+                      <RoomDetailIcon type="user" size={26} />
+                    </span>
+                    <div className="admin-staff-hero-text">
+                      <small>พนักงาน</small>
+                      <strong>
+                        {member.first_name} {member.last_name}
+                      </strong>
+                    </div>
+                    <span className={`admin-staff-status${member.is_suspended ? ' is-suspended' : ' is-active'}`}>
+                      <span className="admin-staff-status-dot" aria-hidden="true" />
+                      {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                    </span>
+                  </div>
+                </div>
+                <div className="exp-ui-scroll">
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">ข้อมูลพนักงาน</h4>
+                    <dl className="exp-ui-facts is-columns">
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="phone" size={15} />
+                          เบอร์โทร
+                        </dt>
+                        <dd>{member.phone ? <a className="admin-staff-tel" href={`tel:${member.phone}`}>{member.phone}</a> : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="user" size={15} />
+                          อายุ
+                        </dt>
+                        <dd>{member.age ? `${member.age} ปี` : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="note" size={15} />
+                          บัตรประชาชน
+                        </dt>
+                        <dd>
+                          <button type="button" className="admin-idcard-toggle" onClick={() => toggleStaffIdCardReveal(member.id)}>
+                            {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                          </button>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="calendar" size={15} />
+                          เริ่มงานเมื่อ
+                        </dt>
+                        <dd>{member.created_at ? formatDate(member.created_at) : '-'}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                </div>
+                <div className="exp-ui-footer-bar">
+                  <div className="exp-ui-modal-actions">
+                    <button type="button" className="admin-action-btn is-danger" onClick={() => runAfterClose(setStaffDeleteConfirm)}>
+                      ลบ
+                    </button>
+                    <button
+                      type="button"
+                      className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                      onClick={() => runAfterClose(setStaffSuspendConfirm)}
+                    >
+                      {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                    </button>
+                    <button type="button" className="admin-action-btn is-primary" onClick={() => runAfterClose(openEditStaff)}>
+                      แก้ไข
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {parcelDetail && (
+        <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetail(null)} variant="expense">
+          {(requestClose) => {
+            const received = parcelDetail.status === 'received'
+            const photos = parcelDetail.photos || []
+            const tenantName = parcelDetail.first_name ? `${parcelDetail.first_name} ${parcelDetail.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
+            return (
+              <div className="exp-ui-body">
+                <div className="exp-ui-top">
+                  <div className="exp-ui-detail-head">
+                    <span className={`parcel-status${received ? ' is-received' : ' is-pending'}`}>{received ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span>
+                    <span className="exp-ui-detail-date">
+                      <RoomDetailIcon type="calendar" size={16} />
+                      <span>
+                        <small>บันทึกเมื่อ</small>
+                        <strong>{formatDateTime(parcelDetail.created_at)}</strong>
+                      </span>
+                    </span>
+                  </div>
+                  <div className="exp-ui-summary">
+                    <span className="exp-ui-summary-icon">
+                      <PackageIcon size={30} strokeWidth={2} />
+                    </span>
+                    <div className="exp-ui-summary-amount">
+                      <small>ห้อง</small>
+                      <strong>{parcelDetail.room_number}</strong>
+                    </div>
+                    <div className="exp-ui-summary-vendor">
+                      <small>ผู้รับ</small>
+                      <span>{tenantName}</span>
+                      {parcelDetail.phone && (
+                        <em>
+                          <RoomDetailIcon type="phone" size={13} />
+                          {parcelDetail.phone}
+                        </em>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="exp-ui-scroll">
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">ข้อมูลพัสดุ</h4>
+                    <dl className="exp-ui-facts is-columns">
+                      {[
+                        { key: 'sender', icon: 'user', label: 'ผู้ส่ง', value: parcelDetail.sender_name || 'พัสดุทั่วไป' },
+                        { key: 'tracking', icon: 'receipt', label: 'เลขพัสดุ', value: parcelDetail.tracking_number || '-' },
+                        { key: 'by', icon: 'user', label: 'บันทึกโดย', value: parcelDetail.staff_name || 'เจ้าหน้าที่' },
+                        { key: 'received', icon: 'clock', label: 'วันที่รับ', value: received ? formatDateTime(parcelDetail.received_at) : 'ยังไม่ได้รับ' },
+                      ].map((fact) => (
+                        <div key={fact.key}>
+                          <dt>
+                            <RoomDetailIcon type={fact.icon} size={15} />
+                            {fact.label}
+                          </dt>
+                          <dd>{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {parcelDetail.description && (
+                      <div className="exp-ui-note">
+                        <span>รายละเอียด</span>
+                        <p>{parcelDetail.description}</p>
+                      </div>
+                    )}
+                  </section>
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">
+                      รูปพัสดุ
+                      <small className="exp-ui-counter">{photos.length} รูป</small>
+                    </h4>
+                    {photos.length > 0 ? (
+                      <div className="exp-ui-gallery-thumbs is-wrap">
+                        {photos.map((photo, index) => (
+                          <button
+                            key={photo.url}
+                            type="button"
+                            className="exp-ui-gallery-thumb is-large"
+                            aria-label={`ดูรูปพัสดุ ${index + 1}`}
+                            onClick={() => {
+                              setParcelPhotoPreview(parcelDetail)
+                              setPhotoPreview(index)
+                            }}
+                          >
+                            <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="exp-ui-muted">ไม่มีรูปพัสดุ</p>
+                    )}
+                  </section>
+                  <StepTimeline
+                    title="ความคืบหน้า"
+                    actorClassName="admin-actor-inline"
+                    steps={[
+                      { label: 'บันทึกพัสดุเข้าห้อง', meta: formatDateTime(parcelDetail.created_at), by: parcelDetail.staff_name || 'เจ้าหน้าที่', state: 'done' },
+                      received
+                        ? { label: 'ผู้เช่ารับพัสดุแล้ว', meta: formatDateTime(parcelDetail.received_at), state: 'done', tone: 'success' }
+                        : { label: 'รอผู้เช่ารับพัสดุ', meta: 'ยังไม่ได้รับ', state: 'current' },
+                    ]}
+                  />
+                </div>
+                <div className="exp-ui-footer-bar">
+                  <div className="exp-ui-modal-actions">
+                    <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                      ปิด
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
       {previewSource && photoPreview !== null && previewPhotos[photoPreview] && (
         <PhotoLightbox
           photos={previewPhotos}
@@ -9142,13 +9478,13 @@ function AdminBackupPage() {
             <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
             <div className="row g-3">
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-room">
+                <label className="form-label" htmlFor="parcel-ui-room">
                   ห้อง / ผู้เช่า <span className="text-danger">*</span>
                 </label>
                 <div className="input-group">
                   <span className="input-group-text"><DoorIcon /></span>
                   <select
-                    id="admin-parcel-room"
+                    id="parcel-ui-room"
                     className="form-select"
                     required
                     value={parcelForm.room_number}
@@ -9166,11 +9502,11 @@ function AdminBackupPage() {
                 </div>
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
+                <label className="form-label" htmlFor="parcel-ui-sender">บริษัทขนส่ง / ผู้ส่ง</label>
                 <div className="input-group">
                   <span className="input-group-text"><TruckIcon /></span>
                   <input
-                    id="admin-parcel-sender"
+                    id="parcel-ui-sender"
                     className="form-control"
                     type="text"
                     maxLength={100}
@@ -9181,13 +9517,13 @@ function AdminBackupPage() {
                 </div>
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-tracking">
+                <label className="form-label" htmlFor="parcel-ui-tracking">
                   เลขพัสดุ <small>(ไม่บังคับ)</small>
                 </label>
                 <div className="input-group">
                   <span className="input-group-text"><HashIcon /></span>
                   <input
-                    id="admin-parcel-tracking"
+                    id="parcel-ui-tracking"
                     className="form-control"
                     type="text"
                     maxLength={100}
@@ -9198,13 +9534,13 @@ function AdminBackupPage() {
                 </div>
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-description">
+                <label className="form-label" htmlFor="parcel-ui-description">
                   รายละเอียด <small>(ไม่บังคับ)</small>
                 </label>
                 <div className="input-group">
                   <span className="input-group-text"><NoteIcon /></span>
                   <input
-                    id="admin-parcel-description"
+                    id="parcel-ui-description"
                     className="form-control"
                     type="text"
                     maxLength={255}
@@ -9217,7 +9553,7 @@ function AdminBackupPage() {
               <div className="col-12">
                 <div className="parcel-photo-section">
                   <ParcelPhotoPicker
-                    id="admin-parcel-photos"
+                    id="parcel-ui-photos"
                     required
                     files={parcelPhotos}
                     onChange={setParcelPhotos}

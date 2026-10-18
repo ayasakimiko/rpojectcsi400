@@ -739,3 +739,187 @@
 .parcel-row-clickable:hover .parcel-detail-link {
   text-decoration: underline;
 }
+
+.parcel-ui-table tbody tr.parcel-row-clickable {
+  transition: background 0.15s ease;
+}
+
+.parcel-ui-table tbody tr.parcel-row-clickable:hover > td {
+  background: #f6f9ff;
+}
+
+.parcel-ui-table td {
+  vertical-align: middle;
+}
+
+.parcel-ui-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.parcel-ui-who .parcel-room-badge {
+  min-width: 52px;
+  height: 40px;
+  font-size: 15px;
+}
+
+.parcel-ui-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.parcel-ui-stack strong {
+  max-width: 240px;
+  overflow: hidden;
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parcel-ui-stack small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #7f94ab;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.parcel-ui-stack small svg {
+  color: #60a5fa;
+}
+
+.parcel-ui-desc {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parcel-ui-tracking {
+  padding: 2px 8px;
+  border: 1px solid #dbe4f3;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #33506f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.parcel-ui-none {
+  color: #a0b2c4;
+  font-weight: 600;
+}
+
+.parcel-ui-tracking {
+  white-space: nowrap;
+}
+
+.parcel-ui-nophoto {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px dashed #cfe0f5;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #a0b2c4;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.parcel-ui-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.parcel-ui-status.is-received {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.parcel-ui-status.is-pending {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.parcel-ui-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.parcel-ui-status.is-pending .parcel-ui-status-dot {
+  animation: parcel-ui-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes parcel-ui-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(217, 119, 6, 0);
+  }
+}
+
+.parcel-ui-date {
+  font-variant-numeric: tabular-nums;
+}
+
+.parcel-ui-actor {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.parcel-ui-action {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.parcel-ui-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.parcel-ui-open svg {
+  transition: transform 0.15s ease;
+}
+
+.parcel-ui-table tbody tr.parcel-row-clickable:hover .parcel-ui-open {
+  text-decoration: underline;
+}
+
+.parcel-ui-table tbody tr.parcel-row-clickable:hover .parcel-ui-open svg {
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parcel-ui-status.is-pending .parcel-ui-status-dot {
+    animation: none;
+  }
+}
