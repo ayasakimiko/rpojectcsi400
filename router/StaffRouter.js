@@ -24,6 +24,7 @@ import {
 } from "./CustomerDashboardRouter.js";
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 
 const router = Router();
 const VEHICLE_MAX_PHOTOS = 6;
@@ -37,6 +38,26 @@ router.use("/announcements", announcementRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.post("/safety-incidents", createSafetyIncident);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
+router.patch("/safety-incidents/:id/cancel", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสรายงานไม่ถูกต้อง" });
+    const reason = String(req.body?.reason ?? "").trim();
+    if (reason.length > 500) return res.status(400).json({ message: "เหตุผลการยกเลิกต้องไม่เกิน 500 ตัวอักษร" });
+    const pool = getPool();
+    const staffName = await getActingStaffName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE SafetyIncident SET status = 'cancelled', cancelled_by_name = ?, cancelled_at = NOW(), cancel_reason = ?
+       WHERE id = ? AND status = 'pending'`,
+      [staffName || req.user.role, reason || null, id],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบหรือยกเลิกไปแล้ว" });
+    return res.json({ message: "ยกเลิกรายงานเหตุแล้ว" });
+  } catch (error) {
+    console.error("Cancel safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถยกเลิกรายงานเหตุได้" });
+  }
+});
 
 router.get("/me", async (req, res) => {
   try {
@@ -287,7 +308,6 @@ router.get("/move-out-inspections/:id", async (req, res) => {
   }
 });
 
-// Room-transfer inspections are completed by Staff; other reports retain Admin review.
 router.patch("/move-out-inspections/:id", async (req, res) => {
   try {
     const inspectionId = Number(req.params.id);
@@ -1271,19 +1291,7 @@ router.post("/maintenance/:id/:action", async (req, res) => {
   }
 });
 
-router.get("/resident-visit-requests", async (_req, res) => {
-  try {
-    const [requests] = await getPool().query(
-      `SELECT r.*, c.first_name, c.last_name, c.phone AS customer_phone
-       FROM ResidentVisitRequest r LEFT JOIN Customer c ON c.id = r.customer_id
-       ORDER BY (r.status = 'pending' AND r.is_special = FALSE) DESC, r.created_at DESC`,
-    );
-    return res.json({ requests: withVehiclePhotos(requests) });
-  } catch (error) {
-    console.error("Fetch resident visit requests error:", error);
-    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอได้" });
-  }
-});
+router.get("/resident-visit-requests", listResidentVisitRequests);
 
 router.post("/resident-visit-requests", async (req, res) => {
   let savedPhotos = [];
@@ -1448,23 +1456,6 @@ router.delete("/resident-visit-requests/:id", async (req, res) => {
   }
 });
 
-router.post("/resident-visit-requests/:id/:decision", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const status = req.params.decision === "approve" ? "approved" : req.params.decision === "reject" ? "rejected" : null;
-    if (!isPositiveId(id) || !status) return res.status(400).json({ message: "ข้อมูลคำขอไม่ถูกต้อง" });
-    const pool = getPool();
-    const staffName = await getActingStaffName(pool, req.user);
-    const [result] = await pool.query(
-      `UPDATE ResidentVisitRequest SET status = ?, reviewed_by_name = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending' AND is_special = FALSE`,
-      [status, staffName, id],
-    );
-    if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการแล้ว" });
-    return res.json({ message: status === "approved" ? "อนุมัติคำขอแล้ว" : "ปฏิเสธคำขอแล้ว" });
-  } catch (error) {
-    console.error("Review resident visit request error:", error);
-    return res.status(500).json({ message: "ไม่สามารถบันทึกผลได้" });
-  }
-});
+router.post("/resident-visit-requests/:id/:decision", createResidentVisitReview(getActingStaffName));
 
 export default router;

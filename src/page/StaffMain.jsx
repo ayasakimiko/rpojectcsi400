@@ -12,7 +12,607 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import StepTimeline from '../components/StepTimeline.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+
+const WAITING_UI_STATUSES = {
+  waiting: { label: 'รอห้องว่าง', tone: 'warning' },
+  contacted: { label: 'ติดต่อแล้ว', tone: 'info' },
+  reserved: { label: 'จองแล้ว', tone: 'success' },
+  closed: { label: 'ปิดรายการ', tone: 'muted' },
+}
+
+const WAITING_UI_ROOM_PREFERENCES = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
+
+function splitWaitingPreferences(value) {
+  return String(value || '').split('|').map((item) => item.trim()).filter(Boolean)
+}
+
+function waitingDayKey(value) {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function waitingDateFromKey(value) {
+  return value ? new Date(`${value.slice(0, 10)}T00:00:00`) : undefined
+}
+
+function formatWaitingDate(value) {
+  if (!value) return '-'
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? waitingDateFromKey(value) : new Date(value)
+  return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function formatWaitingDateTime(value) {
+  return value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '-'
+}
+
+function waitingDaysSince(value, now) {
+  if (!value) return 0
+  const elapsed = now - new Date(value).getTime()
+  return Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 86400000)) : 0
+}
+
+function describeWaitingMoveIn(value, now) {
+  const today = new Date(now)
+  const diff = Math.round((waitingDateFromKey(value).getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000)
+  if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
+  if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
+  return { text: `อีก ${diff} วัน`, tone: diff <= 7 ? 'soon' : 'later' }
+}
+
+function waitingNameInitial(name) {
+  return String(name || '').trim().replace(/^[เแโใไ]/, '').charAt(0).toUpperCase() || '?'
+}
+
+function getWaitingMoveInPresets(now) {
+  const today = new Date(now)
+  return [
+    { label: 'สัปดาห์หน้า', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)) },
+    { label: 'ต้นเดือนหน้า', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth() + 1, 1)) },
+    { label: 'อีก 1 เดือน', value: waitingDayKey(new Date(today.getFullYear(), today.getMonth() + 1, today.getDate())) },
+  ]
+}
+
+function groupWaitingEntries(items) {
+  return items.reduce((groups, item) => {
+    const key = waitingDayKey(item.created_at)
+    const previous = groups[groups.length - 1]
+    if (previous?.key === key) previous.items.push(item)
+    else groups.push({ key, date: new Date(item.created_at), items: [item] })
+    return groups
+  }, [])
+}
+
+function WaitingDetailIcon({ type, size = 16 }) {
+  const paths = {
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
+    copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[type]}
+    </svg>
+  )
+}
+
+function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusChange, statusBusyId = null }) {
+  const waitingNow = now
+  const waitingToday = new Date(now)
+  const waitingTodayKey = waitingDayKey(now)
+  const waitingYesterdayKey = waitingDayKey(new Date(waitingToday.getFullYear(), waitingToday.getMonth(), waitingToday.getDate() - 1))
+  const waitingDayGroups = groupWaitingEntries(items)
+  return (
+    <div className="waiting-timeline">
+      {waitingDayGroups.map((group) => {
+        const relativeDay =
+          group.key === waitingTodayKey ? 'วันนี้' : group.key === waitingYesterdayKey ? 'เมื่อวาน' : null
+        const weekday = group.date.toLocaleDateString('th-TH', { weekday: 'long' })
+        return (
+          <section className="waiting-day" key={group.key}>
+            <header className="waiting-day-head">
+              <div className="waiting-day-date">
+                <strong>{group.date.getDate()}</strong>
+                <small>{group.date.toLocaleDateString('th-TH', { month: 'short' })}</small>
+              </div>
+              <div className="waiting-day-card">
+                <div className="waiting-day-text">
+                  <strong>{relativeDay || weekday}</strong>
+                  <span>
+                    {relativeDay ? `${weekday} ` : ''}
+                    {group.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+                <span className="waiting-day-count">{group.items.length} รายชื่อ</span>
+              </div>
+            </header>
+            <div className="waiting-day-items">
+              {group.items.map((item) => {
+                const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+                const preferences = splitWaitingPreferences(item.room_preference)
+                const days = waitingDaysSince(item.created_at, waitingNow)
+                return (
+                  <div className={`waiting-day-item is-${WAITING_UI_STATUSES[status].tone}`} key={item.id}>
+                    <span className="waiting-day-dot" aria-hidden="true" />
+                    <article className={`waiting-card is-${WAITING_UI_STATUSES[status].tone}`}>
+                      <div className="waiting-card-top">
+                        <span className="waiting-avatar" aria-hidden="true">
+                          {waitingNameInitial(item.full_name)}
+                        </span>
+                        <div className="waiting-card-id">
+                          <div className="waiting-card-head">
+                            <strong>{item.full_name}</strong>
+                            <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
+                              {WAITING_UI_STATUSES[status].label}
+                            </span>
+                          </div>
+                          <a className="waiting-card-phone" href={`tel:${item.phone}`}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />
+                            </svg>
+                            {item.phone}
+                          </a>
+                        </div>
+                        <div className={`waiting-card-days${days >= 30 ? ' is-long' : ''}${days === 0 ? ' is-new' : ''}`}>
+                          <strong>{days === 0 ? 'ใหม่' : days}</strong>
+                          <span>{days === 0 ? 'แจ้งวันนี้' : 'วันที่รอ'}</span>
+                        </div>
+                      </div>
+                      <div className="waiting-card-body">
+                        {onStatusChange && (
+                          <label className="waiting-status-control">
+                            <span>จัดการสถานะ</span>
+                            <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)} aria-label={`สถานะของ ${item.full_name}`}>
+                              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        {item.desired_move_in_date && (
+                          <span className={`waiting-movein is-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}`}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 10.5 12 3l9 7.5" />
+                              <path d="M5 9.5V21h14V9.5" />
+                            </svg>
+                            อยากเข้าอยู่ {formatWaitingDate(item.desired_move_in_date)}
+                            <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>
+                          </span>
+                        )}
+                        <div className="waiting-tags">
+                          {preferences.length > 0 ? (
+                            preferences.map((preference) => <span key={preference}>{preference}</span>)
+                          ) : (
+                            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
+                          )}
+                        </div>
+                        {item.note && (
+                          <div className="waiting-card-note">
+                            <span className="waiting-card-note-icon" aria-hidden="true">
+                              <NoteIcon size={17} strokeWidth={1.8} />
+                            </span>
+                            <div className="waiting-card-note-content">
+                              <span className="waiting-card-note-label">หมายเหตุ</span>
+                              <p>{item.note}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="waiting-card-foot">
+                        <div className="waiting-card-meta">
+                          <span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+                              <path d="M16 3v3M8 3v3M3 10h18" />
+                            </svg>
+                            {formatWaitingDate(item.created_at)}
+                          </span>
+                          <span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="8" r="4" />
+                              <path d="M4 21a8 8 0 0 1 16 0" />
+                            </svg>
+                            <span className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</span>
+                          </span>
+                        </div>
+                        <div className="waiting-card-actions">
+                          <button
+                            type="button"
+                            className="waiting-icon-btn is-view"
+                            onClick={() => onDetail(item)}
+                            aria-label={`ดูรายละเอียด ${item.full_name}`}
+                            title="ดูรายละเอียด"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="waiting-icon-btn"
+                            onClick={() => onEdit(item)}
+                            aria-label={`แก้ไขข้อมูล ${item.full_name}`}
+                            title="แก้ไข"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="waiting-icon-btn is-danger"
+                            onClick={() => {
+                              onDelete(item)
+                            }}
+                            aria-label={`ลบรายชื่อ ${item.full_name}`}
+                            title="ลบ"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                            </svg>
+                          </button>
+                          <button type="button" className="waiting-detail-btn" onClick={() => onDetail(item)}>
+                            ดูรายละเอียด
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M9 18l6-6-6-6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
+  const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
+  const waitingNow = now
+  const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+  const preferences = splitWaitingPreferences(item.room_preference)
+  const days = waitingDaysSince(item.created_at, now)
+  const formatCurrency = (value) => Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <div className="waiting-detail">
+      <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
+        <span className="waiting-avatar is-large" aria-hidden="true">
+          {waitingNameInitial(item.full_name)}
+        </span>
+        <div className="waiting-detail-name">
+          <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
+          <strong>{item.full_name}</strong>
+        </div>
+        <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
+          {WAITING_UI_STATUSES[status].label}
+        </span>
+      </div>
+
+      <div className="waiting-detail-contact">
+        <div className="waiting-detail-phone">
+          <span>เบอร์ติดต่อ</span>
+          <strong>{item.phone}</strong>
+        </div>
+        <div className="waiting-detail-contact-actions">
+          <a className="waiting-ui-action-btn is-primary" href={`tel:${item.phone}`}>
+            <WaitingDetailIcon type="phone" />
+            โทรติดต่อ
+          </a>
+          <button
+            type="button"
+            className="waiting-ui-action-btn is-ghost"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(item.phone)
+                setWaitingPhoneCopied(item.id)
+              } catch {
+                setWaitingPhoneCopied(null)
+              }
+            }}
+          >
+            {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
+            {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
+          </button>
+        </div>
+      </div>
+
+
+      {actionError && <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">{actionError}</p>}
+      {onStatusChange && (
+        <label className="waiting-status-control is-detail">
+          <span>จัดการสถานะรายชื่อ</span>
+          <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)}>
+            {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
+          </select>
+        </label>
+      )}
+      <dl className="waiting-detail-stats">
+        <div className={days >= 30 ? 'is-long' : ''}>
+          <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
+          <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
+        </div>
+        <div>
+          <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
+          <dd>{formatWaitingDateTime(item.created_at)}</dd>
+        </div>
+        <div>
+          <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
+          <dd className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</dd>
+        </div>
+        <div className={item.desired_move_in_date ? `is-movein-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
+          <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
+          <dd>
+            {item.desired_move_in_date
+              ? formatWaitingDate(item.desired_move_in_date)
+              : 'ไม่ระบุ'}
+          </dd>
+          {item.desired_move_in_date && <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
+        </div>
+      </dl>
+
+      <section className="waiting-detail-section">
+        <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
+        <div className="waiting-tags">
+          {preferences.length > 0 ? (
+            preferences.map((preference) => <span key={preference}>{preference}</span>)
+          ) : (
+            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
+          )}
+        </div>
+      </section>
+
+      <section className="waiting-detail-section is-note">
+        <h4><NoteIcon size={17} />หมายเหตุ</h4>
+        <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
+      </section>
+
+      <section className="waiting-detail-section is-vacancies">
+        <h4>
+          <DoorIcon size={17} />
+          ห้องว่างตอนนี้ <span className="waiting-ui-count-pill">{vacantRooms.length}</span>
+        </h4>
+        {vacantRooms.length > 0 ? (
+          <div className="waiting-vacant-rooms">
+            {vacantRooms.map((room) => (
+              <span key={room.room_number}>
+                <strong>ห้อง {room.room_number}</strong>
+                {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
+        )}
+      </section>
+
+      <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
+
+      <div className="waiting-ui-form-actions waiting-detail-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ปิด
+        </button>
+        <button
+          type="button"
+          className="waiting-ui-action-btn is-primary"
+          onClick={() => {
+            onEdit(item)
+          }}
+        >
+          <WaitingDetailIcon type="edit" />
+          แก้ไขข้อมูล
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WaitingListForm({ value, fieldErrors = {}, error = '', busy = false, editing = false, now, onChange, onSubmit, onClose, idPrefix = 'waiting' }) {
+  const waitingListForm = value
+  const waitingListFieldErrors = fieldErrors
+  const waitingListError = error
+  const waitingListSubmitting = busy
+  const waitingListEditing = editing
+  const waitingNow = now
+  const waitingFormTodayKey = waitingDayKey(now)
+  const waitingMoveInPresets = getWaitingMoveInPresets(now)
+  const waitingListPreferences = splitWaitingPreferences(value.room_preference)
+  const updateWaitingListField = onChange
+  const toggleRoomPreference = (chip) => {
+    const next = waitingListPreferences.includes(chip) ? waitingListPreferences.filter(item => item !== chip) : [...waitingListPreferences, chip]
+    const text = next.join(' | ')
+    if (text.length <= 100) onChange('room_preference', text)
+  }
+  return (
+    <form
+      className="waiting-form"
+      onSubmit={(event) => onSubmit(event)}
+      noValidate
+    >
+      <div className="waiting-form-intro">
+        <span className="waiting-form-intro-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M19 8v6M22 11h-6" />
+          </svg>
+        </span>
+        <div>
+          <strong>{waitingListEditing ? 'แก้ไขข้อมูลผู้สนใจ' : 'บันทึกผู้สนใจเช่าห้อง'}</strong>
+          <p>เก็บข้อมูลไว้ติดต่อกลับเมื่อมีห้องว่างตรงกับความต้องการ</p>
+        </div>
+      </div>
+
+      {waitingListError && (
+        <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">
+          {waitingListError}
+        </p>
+      )}
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>1</span>
+          ข้อมูลติดต่อ
+        </h4>
+        <div className="waiting-form-grid">
+          <div className="waiting-ui-form-field">
+            <label className="waiting-ui-form-label" htmlFor={`${idPrefix}-full-name`}>
+              ชื่อผู้สนใจ <span className="waiting-ui-form-required">*</span>
+            </label>
+            <input
+              id={`${idPrefix}-full-name`}
+              className={`waiting-ui-form-input${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
+              maxLength={255}
+              autoFocus
+              autoComplete="off"
+              placeholder="ชื่อ-นามสกุล"
+              value={waitingListForm.full_name}
+              onChange={(event) => updateWaitingListField('full_name', event.target.value)}
+            />
+            {waitingListFieldErrors.full_name && (
+              <span className="waiting-ui-form-field-error">{waitingListFieldErrors.full_name}</span>
+            )}
+          </div>
+          <div className="waiting-ui-form-field">
+            <label className="waiting-ui-form-label" htmlFor={`${idPrefix}-phone`}>
+              เบอร์โทรศัพท์ <span className="waiting-ui-form-required">*</span>
+            </label>
+            <input
+              id={`${idPrefix}-phone`}
+              className={`waiting-ui-form-input${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
+              type="tel"
+              inputMode="tel"
+              maxLength={20}
+              autoComplete="off"
+              placeholder="เช่น 0812345678"
+              value={waitingListForm.phone}
+              onChange={(event) => updateWaitingListField('phone', event.target.value)}
+            />
+            {waitingListFieldErrors.phone && (
+              <span className="waiting-ui-form-field-error">{waitingListFieldErrors.phone}</span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>2</span>
+          วันที่ต้องการเข้าอยู่ <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+        </h4>
+        <div className="waiting-form-movein">
+          <ThaiDatePicker
+            className={`waiting-ui-form-input waiting-form-date${waitingListFieldErrors.desired_move_in_date ? ' is-invalid' : ''}`}
+            placeholder="เลือกวันที่ต้องการเข้าอยู่"
+            value={waitingListForm.desired_move_in_date}
+            minDate={waitingDateFromKey(waitingFormTodayKey)}
+            isClearable
+            portalId="waiting-date-portal"
+            onChange={(value) => updateWaitingListField('desired_move_in_date', value)}
+          />
+          <div className="waiting-form-chips" role="group" aria-label="เลือกวันเข้าอยู่แบบเร็ว">
+            {waitingMoveInPresets.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className={`waiting-form-chip${waitingListForm.desired_move_in_date === preset.value ? ' is-active' : ''}`}
+                aria-pressed={waitingListForm.desired_move_in_date === preset.value}
+                onClick={() =>
+                  updateWaitingListField(
+                    'desired_move_in_date',
+                    waitingListForm.desired_move_in_date === preset.value ? '' : preset.value,
+                  )
+                }
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {waitingListForm.desired_move_in_date && (
+          <p className="waiting-form-hint">
+            เข้าอยู่ {formatWaitingDate(waitingListForm.desired_move_in_date)} ·{' '}
+            {describeWaitingMoveIn(waitingListForm.desired_move_in_date, waitingNow).text}
+          </p>
+        )}
+        {waitingListFieldErrors.desired_move_in_date && (
+          <span className="waiting-ui-form-field-error">{waitingListFieldErrors.desired_move_in_date}</span>
+        )}
+      </section>
+
+      <section className="waiting-form-section">
+        <h4 className="waiting-form-section-title">
+          <span>3</span>
+          ประเภทห้องที่สนใจ <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+        </h4>
+        <div className="waiting-form-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
+          {WAITING_UI_ROOM_PREFERENCES.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              className={`waiting-form-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
+              aria-pressed={waitingListPreferences.includes(chip)}
+              onClick={() => toggleRoomPreference(chip)}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+        <input
+          id={`${idPrefix}-room-preference`}
+          className="waiting-ui-form-input"
+          maxLength={100}
+          autoComplete="off"
+          aria-label="ประเภทห้องที่สนใจ"
+          placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
+          value={waitingListForm.room_preference}
+          onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
+        />
+      </section>
+
+      <section className="waiting-form-section">
+        <div className="waiting-ui-form-label-row">
+          <h4 className="waiting-form-section-title">
+            <span>4</span>
+            <label htmlFor={`${idPrefix}-note`}>หมายเหตุ</label> <span className="waiting-ui-form-optional">(ไม่บังคับ)</span>
+          </h4>
+          <span className="waiting-ui-form-counter">{waitingListForm.note.length}/500</span>
+        </div>
+        <textarea
+          id={`${idPrefix}-note`}
+          className="waiting-ui-form-input waiting-ui-form-textarea"
+          rows={3}
+          maxLength={500}
+          placeholder="เช่น จำนวนผู้พัก งบประมาณ หรือเวลาที่สะดวกให้ติดต่อ"
+          value={waitingListForm.note}
+          onChange={(event) => updateWaitingListField('note', event.target.value)}
+        />
+      </section>
+
+      <div className="waiting-ui-form-actions">
+        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+          ยกเลิก
+        </button>
+        <button type="submit" className="waiting-ui-action-btn is-primary" disabled={waitingListSubmitting}>
+          {waitingListSubmitting
+            ? 'กำลังบันทึก...'
+            : waitingListEditing
+              ? 'บันทึกการแก้ไข'
+              : 'บันทึกรายชื่อ'}
+        </button>
+      </div>
+    </form>
+  )
+}
 
 const MOVE_OUT_CHECKLIST = [
   { key: 'walls', label: 'ผนังและสี (รอยแตก คราบ สีลอก)' },
@@ -555,6 +1155,31 @@ function NotifKindIcon({ kind }) {
       </svg>
     )
   }
+  if (kind === 'safety') {
+    return (
+      <svg {...props}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+    )
+  }
+  if (kind === 'visit') {
+    return (
+      <svg {...props}>
+        <path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17" />
+        <circle cx="7.5" cy="17.5" r="1.5" />
+        <circle cx="16.5" cy="17.5" r="1.5" />
+      </svg>
+    )
+  }
+  if (kind === 'slip') {
+    return (
+      <svg {...props}>
+        <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+        <path d="M9 7h6M9 11h6M9 15h4" />
+      </svg>
+    )
+  }
   if (kind === 'staff') {
     return (
       <svg {...props}>
@@ -641,7 +1266,10 @@ function Modal({ title, onClose, children, variant }) {
             </svg>
           </button>
         </div>
-        <div className="staff-modal-body">{typeof children === 'function' ? children(requestClose) : children}</div>
+        <div className="staff-modal-body">
+          {variant === 'confirm' && <h3 className="staff-modal-alert-title">{title}</h3>}
+          {typeof children === 'function' ? children(requestClose) : children}
+        </div>
       </div>
     </div>
   )
@@ -725,7 +1353,6 @@ const STAFF_TABS = [
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
 ]
 
-const ROOM_PREFERENCE_CHIPS = ['ห้องแอร์', 'มี Wi-Fi', 'มีตู้เย็น', 'เตียงเดี่ยว', 'เตียงคู่']
 const WAITING_LIST_STATUS = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
   contacted: { label: 'ติดต่อแล้ว', tone: 'info' },
@@ -736,18 +1363,6 @@ const WAITING_LIST_SORTS = [
   { value: 'newest', label: 'แจ้งล่าสุดก่อน' },
   { value: 'oldest', label: 'รอนานสุดก่อน' },
 ]
-
-function splitRoomPreferences(value) {
-  return (value || '')
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function waitingInitial(name) {
-  const trimmed = (name || '').trim().replace(/^[เแโใไ]/, '')
-  return trimmed.charAt(0).toUpperCase() || '?'
-}
 
 function dayKeyToDate(key) {
   return key ? new Date(`${key}T00:00:00`) : undefined
@@ -828,20 +1443,6 @@ function localDayKey(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function describeMoveIn(dayKey, now) {
-  const today = new Date(now)
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
-  const diff = Math.round((dayKeyToDate(dayKey).getTime() - startOfToday) / (24 * 60 * 60 * 1000))
-  if (diff < 0) return { text: `เลยกำหนด ${-diff} วัน`, tone: 'late' }
-  if (diff === 0) return { text: 'วันนี้', tone: 'soon' }
-  if (diff <= 7) return { text: `อีก ${diff} วัน`, tone: 'soon' }
-  return { text: `อีก ${diff} วัน`, tone: 'later' }
-}
-
-function daysSince(value, now) {
-  if (!value) return 0
-  return Math.max(0, Math.floor((now - new Date(value).getTime()) / (24 * 60 * 60 * 1000)))
-}
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const REQUEST_PREVIEW_COUNT = 3
@@ -1025,6 +1626,51 @@ function buildStaffMaintenanceNotifs(request) {
       request,
     },
   ]
+}
+
+function buildStaffSafetyNotif(incident) {
+  const urgent = incident.severity === 'urgent'
+  return {
+    key: `safety-${incident.id}`,
+    targetId: incident.id,
+    title: `แจ้งเหตุ${SAFETY_INCIDENT_TYPE_LABEL[incident.incident_type] || ''}`,
+    label: urgent ? 'เหตุด่วน รอรับเรื่อง' : 'มีการแจ้งเหตุ รอรับเรื่อง',
+    tone: urgent ? 'danger' : 'pending',
+    urgent,
+    date: incident.created_at,
+    preview: incident.description,
+    previewLabel: 'รายละเอียดเหตุการณ์',
+    kind: 'safety',
+  }
+}
+
+function buildStaffVisitNotif(request) {
+  const isVehicle = request.request_type === 'vehicle'
+  return {
+    key: `visit-${request.id}`,
+    targetId: request.id,
+    title: `${isVehicle ? 'คำขอรถ' : 'คำขอผู้มาพัก'}${request.room_number ? ` ห้อง ${request.room_number}` : ''}`,
+    label: 'รออนุมัติ',
+    tone: 'pending',
+    date: request.created_at,
+    preview: isVehicle ? request.vehicle_plate : request.guest_name,
+    previewLabel: isVehicle ? 'ทะเบียนรถ' : 'ผู้มาพัก',
+    kind: 'visit',
+  }
+}
+
+function buildStaffSlipNotif(payment) {
+  return {
+    key: `slip-${payment.booking_id}-${payment.slip_path}`,
+    targetId: payment.id,
+    title: `สลิปโอนเงิน ห้อง ${payment.room_number}`,
+    label: 'สลิปรอตรวจสอบ',
+    tone: 'info',
+    date: payment.payment_date,
+    preview: `${payment.first_name} ${payment.last_name} · ฿${Number(payment.amount || 0).toLocaleString('th-TH')}`,
+    previewLabel: 'ผู้โอน · ยอดเงิน',
+    kind: 'slip',
+  }
 }
 
 function getStaffRequestTimeline(kind, request) {
@@ -1662,27 +2308,16 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
               )}
             </section>
 
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
-              <ol className="staff-req-steps">
-                <li className="is-done">
-                  <span className="staff-req-step-dot" />
-                  <div>
-                    <p>
-                บันทึกพัสดุเข้าห้อง โดย <span className="staff-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
-              </p>
-                    <small>{formatDateTime(parcel.created_at)}</small>
-                  </div>
-                </li>
-                <li className={received ? 'is-done is-success' : ''}>
-                  <span className="staff-req-step-dot" />
-                  <div>
-                    <p>ผู้เช่ารับพัสดุ</p>
-                    <small>{received ? formatDateTime(parcel.received_at) : 'ยังไม่ได้รับ'}</small>
-                  </div>
-                </li>
-              </ol>
-            </section>
+            <StepTimeline
+              title="ความคืบหน้า"
+              actorClassName="staff-actor"
+              steps={[
+                { label: 'บันทึกพัสดุเข้าห้อง', meta: formatDateTime(parcel.created_at), by: parcel.staff_name || 'เจ้าหน้าที่', state: 'done' },
+                received
+                  ? { label: 'ผู้เช่ารับพัสดุแล้ว', meta: formatDateTime(parcel.received_at), state: 'done', tone: 'success' }
+                  : { label: 'รอผู้เช่ารับพัสดุ', meta: 'ยังไม่ได้รับ', state: 'current' },
+              ]}
+            />
           </div>
 
           <div className="staff-transfer-footer">
@@ -1964,26 +2599,21 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
               />
             )}
 
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">ความคืบหน้า</h4>
-              <ol className="staff-req-steps">
-                {steps.map((step) => (
-                  <li
-                    key={step.key}
-                    className={`${step.done ? 'is-done' : ''}${step.tone ? ` is-${step.tone}` : ''}`}
-                  >
-                    <span className="staff-req-step-dot" />
-                    <div>
-                      <p>
-                        {step.label}
-                        {step.by && <span className="staff-actor"> {step.by}</span>}
-                      </p>
-                      <small>{step.done && step.date ? formatDateTime(step.date) : step.done ? '' : 'ยังไม่ถึงขั้นตอนนี้'}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            <StepTimeline
+              title="ความคืบหน้า"
+              actorClassName="staff-actor"
+              steps={steps.map((step, index) => {
+                const firstOpen = steps.findIndex((item) => !item.done)
+                const open = ['pending', 'in_progress'].includes(request.status)
+                return {
+                  label: step.label.replace(/โดย$/, '').trim() || step.label,
+                  by: step.done ? step.by : null,
+                  meta: step.done ? (step.date ? formatDateTime(step.date) : '') : index === firstOpen && open ? 'กำลังดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้',
+                  state: step.done ? 'done' : index === firstOpen && open ? 'current' : 'pending',
+                  tone: step.done ? step.tone : undefined,
+                }
+              })}
+            />
           </div>
 
           <div className="staff-transfer-footer">
@@ -2512,7 +3142,53 @@ function StaffPagination({ page, total, onChange }) {
   )
 }
 
-function StaffPaymentReview({ onCountChange }) {
+function flashHighlight(element, className) {
+  element.classList.remove(className, 'is-fading')
+  void element.offsetWidth
+  element.classList.add(className, 'is-fading')
+  element.addEventListener(
+    'animationend',
+    () => element.classList.remove(className, 'is-fading'),
+    { once: true },
+  )
+}
+
+function useListFocus() {
+  const [page, setPageState] = useState(1)
+  const [focusedId, setFocusedId] = useState(null)
+  const [pinned, setPinned] = useState(false)
+  const scrollPendingRef = useRef(false)
+
+  const setPage = useCallback((value) => {
+    setPinned(false)
+    setPageState(value)
+  }, [])
+
+  const focusItem = useCallback((id) => {
+    setFocusedId(id)
+    setPinned(true)
+    scrollPendingRef.current = true
+  }, [])
+
+  useEffect(() => {
+    if (!scrollPendingRef.current || focusedId == null) return
+    const element = document.querySelector(`[data-staff-focus="${focusedId}"]`)
+    if (!element) return
+    scrollPendingRef.current = false
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    flashHighlight(element, 'staff-focus-row')
+  })
+
+  const resolvePage = (list) => {
+    if (!pinned || focusedId == null) return page
+    const index = list.findIndex((item) => item.id === focusedId)
+    return index < 0 ? page : Math.floor(index / STAFF_LIST_PAGE_SIZE) + 1
+  }
+
+  return { page, setPage, focusedId, focusItem, resolvePage }
+}
+
+function StaffPaymentReview({ onCountChange, focusId }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2521,7 +3197,7 @@ function StaffPaymentReview({ onCountChange }) {
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
   const [previewClosing, setPreviewClosing] = useState(false)
-  const [page, setPage] = useState(1)
+  const { setPage, focusItem, resolvePage } = useListFocus()
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -2554,6 +3230,11 @@ function StaffPaymentReview({ onCountChange }) {
           setPayments(data.payments || [])
           onCountChange?.((data.payments || []).length)
           setError('')
+          const target = focusId ? (data.payments || []).find((payment) => payment.id === focusId) : null
+          if (target) {
+            focusItem(target.id)
+            setPreview({ payment: target, url: target.slip_path })
+          }
         }
       })
       .catch((err) => {
@@ -2588,7 +3269,7 @@ function StaffPaymentReview({ onCountChange }) {
   const hasPreview = Boolean(preview)
   useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
 
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
+  const currentPage = Math.min(resolvePage(payments), Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
   const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
   const openSlip = (payment) => {
@@ -2655,7 +3336,7 @@ function StaffPaymentReview({ onCountChange }) {
             </thead>
             <tbody>
               {pagePayments.map((payment) => (
-                <tr key={payment.id}>
+                <tr key={payment.id} data-staff-focus={payment.id}>
                   <td>{payment.room_number}</td>
                   <td>
                     {payment.first_name} {payment.last_name}
@@ -2846,7 +3527,7 @@ function StaffPaymentReview({ onCountChange }) {
                   )}
                 </svg>
               </div>
-              <p className="staff-confirm-message">{notice.message}</p>
+              <StaffNoticeMessage message={notice.message} type={notice.type} />
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                   ปิด
@@ -3001,6 +3682,29 @@ const RESIDENT_VISIT_VIEWS = {
   },
 }
 
+const STAFF_IC_TONE = { warning: 'pending', info: 'pending', success: 'reviewed', danger: 'rejected', muted: 'cancelled' }
+
+function StaffEmptyPhotoIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  )
+}
+
+function StaffVisitRange({ item }) {
+  const openEnded = !item.end_at
+  return (
+    <span className="staff-ic-range">
+      <span>{formatStaffDateTime(item.start_at)}</span>
+      <span className="staff-ic-range-divider" aria-hidden="true">|</span>
+      <span className={openEnded ? 'is-open' : undefined}>{openEnded ? 'ไม่จำกัดเวลา' : formatStaffDateTime(item.end_at)}</span>
+    </span>
+  )
+}
+
 function getStaffVisitPhase(item, now) {
   if (item.status !== 'approved') return { key: item.status, ...(RESIDENT_VISIT_STATUS[item.status] || RESIDENT_VISIT_STATUS.pending) }
   if (!item.end_at) return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
@@ -3082,6 +3786,26 @@ function StaffCarIcon() {
   )
 }
 
+function StaffNoticeMessage({ message, type = 'success' }) {
+  const [main, ...points] = String(message || '')
+    .split(/\s+·\s+|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return (
+    <div className={`staff-confirm-message-card is-${type}`}>
+      <span className="staff-confirm-message-label">{type === 'success' ? 'ผลการดำเนินการ' : 'สาเหตุ'}</span>
+      <p className="staff-confirm-message">{main || (type === 'success' ? 'ดำเนินการสำเร็จ' : 'เกิดข้อผิดพลาด')}</p>
+      {points.length > 0 && (
+        <ul className="staff-confirm-message-points">
+          {points.map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function StaffShieldIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -3122,53 +3846,8 @@ function StaffRange({ start, end, openEnded = false }) {
   )
 }
 
-function StaffInfoCell({ label, wide = false, children }) {
-  return (
-    <span className={`staff-rv-cell${wide ? ' is-wide' : ''}`}>
-      <span className="staff-rv-cell-label">{label}</span>
-      <span className="staff-rv-cell-value">{children}</span>
-    </span>
-  )
-}
-
 function StaffDetailTimeline({ steps }) {
-  return (
-    <section className="staff-rv-timeline-card" aria-label="ขั้นตอนการดำเนินการ">
-      <h4 className="staff-rv-timeline-title">ขั้นตอนการดำเนินการ</h4>
-      <ol className="staff-rv-timeline">
-        {steps.map((step, index) => (
-          <li
-            key={step.label}
-            className={[
-              `is-${step.state}`,
-              step.tone ? `is-${step.tone}` : '',
-              step.state === 'done' && steps[index + 1]?.state === 'done' ? 'is-line-done' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <span className="staff-rv-timeline-dot" aria-hidden="true">
-              {step.state === 'done' && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                  {step.tone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
-                </svg>
-              )}
-            </span>
-            <strong>{step.label}</strong>
-            <small>
-              {step.meta}
-              {step.by && (
-                <>
-                  {' · '}
-                  <span className="staff-rv-timeline-by">โดย {step.by}</span>
-                </>
-              )}
-            </small>
-          </li>
-        ))}
-      </ol>
-    </section>
-  )
+  return <StepTimeline steps={steps} actorClassName="staff-actor" />
 }
 
 function getStaffVisitKind(item) {
@@ -3192,13 +3871,14 @@ function getStaffVisitTitle(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || '-' : item.guest_name || '-'
 }
 
-function StaffResidentVisitsTab({ rooms, onCountChange }) {
+function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
+  const pendingFocusRef = useRef(focusId)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('main')
   const [status, setStatus] = useState(RESIDENT_VISIT_VIEWS.main.defaultFilter)
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const { setPage, focusItem, resolvePage } = useListFocus()
   const [detail, setDetail] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -3221,11 +3901,19 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
       .then(({ data }) => {
         const requests = data.requests || []
         setItems(requests)
-        onCountChange?.(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+        onCountChange?.(requests.filter((item) => item.status === 'pending').length)
+        if (pendingFocusRef.current) {
+          const target = requests.find((item) => item.id === pendingFocusRef.current)
+          pendingFocusRef.current = null
+          if (target) {
+            focusItem(target.id)
+            setDetail(target)
+          }
+        }
       })
       .catch((error) => setNotice({ type: 'error', message: error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ' }))
       .finally(() => setLoading(false))
-  }, [onCountChange])
+  }, [onCountChange, focusItem])
 
   useEffect(() => {
     load()
@@ -3266,9 +3954,9 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
     setStatus(RESIDENT_VISIT_VIEWS[next].defaultFilter)
     setPage(1)
   }
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
+  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
   const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
-  const pendingCount = items.filter((item) => item.status === 'pending' && !item.is_special).length
+  const pendingCount = items.filter((item) => item.status === 'pending').length
   const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
 
   const openCreate = () => {
@@ -3462,90 +4150,114 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
           </span>
         </div>
       ) : (
-        <ul className="staff-rv-list">
+        <ul className="staff-rv-list staff-ic-grid">
           {pageItems.map((item) => {
             const info = getStaffVisitPhase(item, now)
-            const canReview = item.status === 'pending' && !item.is_special
+            const tone = STAFF_IC_TONE[info.tone] || 'pending'
+            const canReview = item.status === 'pending'
             const canCancelParking = info.key === 'parked' && item.request_type === 'vehicle'
+            const photos = item.vehicle_photos || []
+            const reviewer = item.reviewed_by_name || item.admin_reviewed_by_name
             return (
-              <li key={item.id} className={`staff-rv-entry is-${info.tone}`}>
-                <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
-                  <span className="staff-rv-entry-head">
-                    <span className={`staff-rv-icon is-${getStaffVisitKind(item)}`}>
+              <li key={item.id} data-staff-focus={item.id} className={`staff-ic-card staff-ic-visit-card is-${tone}`}>
+                <button type="button" className="staff-ic-main" onClick={() => setDetail(item)}>
+                  <span className="staff-ic-head">
+                    <span className="staff-ic-icon">
                       <StaffCarIcon />
                     </span>
-                    <span className="staff-rv-entry-title">
+                    <span className="staff-ic-title">
                       <strong>{getStaffVisitTitle(item)}</strong>
-                      <small>{item.vehicle_model || 'ไม่ระบุรุ่น'}</small>
+                      <small>ส่งคำขอ {formatStaffDateTime(item.created_at)}</small>
                     </span>
-                    <span className={`staff-badge status-${info.badge}`}>
-                      {item.is_special && item.status === 'pending' ? 'รอ Admin' : info.label}
+                    <span className={`staff-ic-status is-${tone}`}>{info.label}</span>
+                  </span>
+                  <span className="staff-ic-info">
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ประเภท</span>
+                      <span className="staff-ic-value">{getStaffVisitOwner(item)}</span>
+                    </span>
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ห้อง</span>
+                      <span className="staff-ic-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="staff-ic-cell is-wide">
+                      <span className="staff-ic-label">ผู้ขอ</span>
+                      <span className="staff-ic-value">
+                        <span className="staff-ic-name">
+                          {item.customer_id ? `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-' : item.guest_name || '-'}
+                        </span>
+                        <span className={`staff-ic-role is-${item.customer_id ? 'customer' : 'external'}`}>
+                          {item.customer_id ? 'ผู้เช่า' : 'บุคคลภายนอก'}
+                        </span>
+                      </span>
                     </span>
                   </span>
-                  <span className="staff-rv-entry-grid">
-                    <StaffInfoCell label="ห้อง">{item.room_number ? `ห้อง ${item.room_number}` : 'บุคคลภายนอก'}</StaffInfoCell>
-                    <StaffInfoCell label="ประเภท">
-                      <span className={`staff-rv-owner is-${getStaffVisitKind(item)}`}>{getStaffVisitOwner(item)}</span>
-                    </StaffInfoCell>
-                    <StaffInfoCell label="ช่วงเวลา" wide>
-                      <StaffRange start={item.start_at} end={item.end_at} openEnded={item.request_type === 'vehicle'} />
-                    </StaffInfoCell>
-                    {item.customer_id ? (
+                  <span className="staff-ic-section staff-ic-visit-section">
+                    <span className="staff-ic-label">ช่วงเวลา{item.vehicle_model ? ` · ${item.vehicle_model}` : ''}</span>
+                    <span className="staff-ic-desc">
+                      <StaffVisitRange item={item} />
+                    </span>
+                  </span>
+                </button>
+                <div className="staff-ic-photos">
+                  <span className="staff-ic-label">{photos.length > 0 ? `รูปรถ · ${photos.length} รูป` : 'รูปรถ'}</span>
+                  {photos.length > 0 ? (
+                    <span className="staff-ic-photo-row">
+                      {photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-ic-photo"
+                          onClick={() => setLightbox({ photos, index, plate: getStaffVisitTitle(item) })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="staff-ic-photo-empty">
+                      <StaffEmptyPhotoIcon />
+                      ไม่มีรูปรถ
+                    </span>
+                  )}
+                </div>
+                <div className="staff-ic-foot">
+                  <span className="staff-ic-result">
+                    {item.status === 'pending' ? (
+                      'ยังไม่มีผู้อนุมัติ'
+                    ) : item.status === 'cancelled' ? (
                       <>
-                        <StaffInfoCell label="ผู้เช่า">
-                          {`${item.first_name || ''} ${item.last_name || ''}`.trim() || '-'}
-                        </StaffInfoCell>
-                        <StaffInfoCell label="เบอร์โทรผู้เช่า">{item.customer_phone || '-'}</StaffInfoCell>
+                        ยกเลิกโดย <span className="staff-actor">{item.cancelled_by_name || item.updated_by_name || '-'}</span>
                       </>
                     ) : (
                       <>
-                        <StaffInfoCell label="ผู้ขอจอด">{item.guest_name || '-'}</StaffInfoCell>
-                        <StaffInfoCell label="เบอร์โทรผู้ขอจอด">{item.guest_phone || '-'}</StaffInfoCell>
+                        {item.status === 'rejected' ? 'ปฏิเสธโดย' : 'อนุมัติโดย'} <span className="staff-actor">{reviewer || '-'}</span>
                       </>
                     )}
-                    {item.customer_id && item.guest_name && (
-                      <>
-                        <StaffInfoCell label="ผู้มาเยี่ยม">{item.guest_name}</StaffInfoCell>
-                        <StaffInfoCell label="เบอร์โทรผู้มาเยี่ยม">{item.guest_phone || '-'}</StaffInfoCell>
-                      </>
-                    )}
-                    {item.status !== 'pending' && (item.admin_reviewed_by_name || item.reviewed_by_name) && (
-                      <StaffInfoCell label={item.status === 'rejected' ? 'ปฏิเสธโดย' : 'อนุมัติโดย'}>
-                        <span className="staff-actor">{item.admin_reviewed_by_name || item.reviewed_by_name}</span>
-                      </StaffInfoCell>
-                    )}
                   </span>
-                </button>
-                <div className="staff-rv-entry-foot">
-                  <span className="staff-rv-entry-extra">
-                    <span className="staff-rv-photo-count">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
-                        <circle cx="12" cy="13" r="3.5" />
-                      </svg>
-                      {item.vehicle_photos?.length ? `${item.vehicle_photos.length} รูป` : 'ไม่มีรูป'}
-                    </span>
-                    {item.note && <span className="staff-rv-entry-note">หมายเหตุ: {item.note}</span>}
-                  </span>
-                  <span className="staff-rv-entry-actions">
+                  <span className="staff-ic-actions">
                     {canCancelParking && (
-                      <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'cancel' })}>
+                      <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'cancel' })}>
                         ยกเลิกรายการ
                       </button>
                     )}
                     {canReview && (
                       <>
-                        <button type="button" className="staff-rv-pill is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'reject' })}>
+                        <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'reject' })}>
                           ปฏิเสธ
                         </button>
-                        <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => setConfirm({ item, decision: 'approve' })}>
+                        <button type="button" className="staff-ic-btn is-primary" disabled={busy} onClick={() => setConfirm({ item, decision: 'approve' })}>
                           อนุมัติ
                         </button>
                       </>
                     )}
-                    <button type="button" className="staff-rv-entry-more" onClick={() => setDetail(item)}>
-                      ดูรายละเอียด <span aria-hidden="true">›</span>
-                    </button>
+                    {!canReview && (
+                      <button type="button" className="staff-ic-btn" onClick={() => setDetail(item)}>
+                        ดูรายละเอียด <span aria-hidden="true">›</span>
+                      </button>
+                    )}
                   </span>
                 </div>
               </li>
@@ -3666,7 +4378,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
                     </div>
                   )}
                   <div className="staff-rv-detail-primary">
-                    {detail.status === 'pending' && !detail.is_special ? (
+                    {detail.status === 'pending' ? (
                       <>
                         <button type="button" className="staff-action-btn is-danger" onClick={() => setConfirm({ item: detail, decision: 'reject' })}>
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4039,7 +4751,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange }) {
                   {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
                 </svg>
               </div>
-              <p className="staff-confirm-message">{notice.message}</p>
+              <StaffNoticeMessage message={notice.message} type={notice.type} />
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                   ปิด
@@ -4066,16 +4778,18 @@ const SAFETY_REPORTER_ROLE_LABEL = { Customer: 'ผู้เช่า', Staff: '
 const SAFETY_STATUS = {
   pending: { label: 'รอตรวจสอบ', badge: 'pending', tone: 'warning' },
   reviewed: { label: 'ตรวจสอบแล้ว', badge: 'reviewed', tone: 'success' },
+  cancelled: { label: 'ยกเลิกแล้ว', badge: 'cancelled', tone: 'muted' },
 }
 const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '', photos: [] }
 const STAFF_SAFETY_MAX_PHOTOS = 4
 
-function StaffSafetyTab({ rooms, onCountChange }) {
+function StaffSafetyTab({ rooms, onCountChange, focusId }) {
+  const pendingFocusRef = useRef(focusId)
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const { setPage, focusItem, resolvePage } = useListFocus()
   const [detail, setDetail] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_SAFETY_FORM)
@@ -4085,6 +4799,8 @@ function StaffSafetyTab({ rooms, onCountChange }) {
   const [reviewTarget, setReviewTarget] = useState(null)
   const [reviewNote, setReviewNote] = useState('')
   const [lightbox, setLightbox] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
 
   const load = useCallback(() => {
     return axios
@@ -4093,10 +4809,18 @@ function StaffSafetyTab({ rooms, onCountChange }) {
         const list = data.incidents || []
         setIncidents(list)
         onCountChange?.(list.filter((item) => item.status === 'pending').length)
+        if (pendingFocusRef.current) {
+          const target = list.find((item) => item.id === pendingFocusRef.current)
+          pendingFocusRef.current = null
+          if (target) {
+            focusItem(target.id)
+            setDetail(target)
+          }
+        }
       })
       .catch((error) => setNotice({ type: 'error', message: error.response?.data?.message || 'โหลดรายการแจ้งเหตุไม่สำเร็จ' }))
       .finally(() => setLoading(false))
-  }, [onCountChange])
+  }, [onCountChange, focusItem])
 
   useEffect(() => {
     load()
@@ -4121,7 +4845,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
       )
     : incidents
   const filtered = status === 'all' ? searched : searched.filter((item) => item.status === status)
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
+  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
   const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
 
   const pendingCount = incidents.filter((item) => item.status === 'pending').length
@@ -4146,6 +4870,31 @@ function StaffSafetyTab({ rooms, onCountChange }) {
     } catch (error) {
       requestClose()
       setNotice({ type: 'error', message: error.response?.data?.message || 'บันทึกผลไม่สำเร็จ' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openCancel = (item) => {
+    setCancelReason('')
+    setCancelTarget(item)
+  }
+
+  const submitCancel = async (requestClose) => {
+    setBusy(true)
+    try {
+      const { data } = await axios.patch(
+        `/api/staff/safety-incidents/${cancelTarget.id}/cancel`,
+        { reason: cancelReason },
+        { headers: staffAuthHeaders() },
+      )
+      requestClose()
+      setDetail(null)
+      setNotice({ type: 'success', message: data.message || 'ยกเลิกรายงานเหตุแล้ว' })
+      await load()
+    } catch (error) {
+      requestClose()
+      setNotice({ type: 'error', message: error.response?.data?.message || 'ยกเลิกไม่สำเร็จ' })
     } finally {
       setBusy(false)
     }
@@ -4246,72 +4995,109 @@ function StaffSafetyTab({ rooms, onCountChange }) {
           <span>{incidents.length ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ' : 'กด "+ แจ้งเหตุ" เมื่อพบเหตุฉุกเฉินหรือปัญหาความปลอดภัย'}</span>
         </div>
       ) : (
-        <ul className="staff-rv-list">
+        <ul className="staff-rv-list staff-ic-grid">
           {pageItems.map((item) => {
             const info = SAFETY_STATUS[item.status] || SAFETY_STATUS.pending
+            const tone = STAFF_IC_TONE[info.tone] || 'pending'
+            const photos = item.photos || []
+            const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type
             return (
-              <li key={item.id} className={`staff-rv-entry is-${info.tone}`}>
-                <button type="button" className="staff-rv-entry-main" onClick={() => setDetail(item)}>
-                  <span className="staff-rv-entry-head">
-                    <span className={`staff-rv-icon is-safety${item.severity === 'urgent' ? ' is-urgent' : ''}`}>
+              <li
+                key={item.id}
+                data-staff-focus={item.id}
+                className={`staff-ic-card staff-ic-safety-card is-${tone}${item.severity === 'urgent' ? ' is-urgent' : ''}`}
+              >
+                <button type="button" className="staff-ic-main" onClick={() => setDetail(item)}>
+                  <span className="staff-ic-head">
+                    <span className="staff-ic-icon">
                       <StaffShieldIcon />
                     </span>
-                    <span className="staff-rv-entry-title">
-                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
+                    <span className="staff-ic-title">
+                      <strong>{typeLabel}</strong>
                       <small>แจ้งเมื่อ {formatStaffDateTime(item.created_at)}</small>
                     </span>
-                    <span className={`staff-badge status-${info.badge}`}>{info.label}</span>
+                    <span className={`staff-ic-status is-${tone}`}>{info.label}</span>
                   </span>
-                  <span className="staff-rv-entry-grid">
-                    <StaffInfoCell label="ระดับ">
-                      <span className={`staff-rv-level is-${item.severity}`}>
+                  <span className="staff-ic-info">
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ระดับ</span>
+                      <span className={`staff-ic-level is-${item.severity}`}>
                         <span aria-hidden="true" />
                         {SAFETY_SEVERITY_LABEL[item.severity] || item.severity}
                       </span>
-                    </StaffInfoCell>
-                    <StaffInfoCell label="ห้อง">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุห้อง'}</StaffInfoCell>
-                    <StaffInfoCell label="ผู้แจ้ง">
-                      {item.reporter_name}
-                      <small>{SAFETY_REPORTER_ROLE_LABEL[item.reporter_role] || item.reporter_role}</small>
-                    </StaffInfoCell>
-                    {item.status === 'reviewed' && item.reviewed_by_name && (
-                      <StaffInfoCell label="ตรวจโดย">
-                        <span className="staff-actor">{item.reviewed_by_name}</span>
-                      </StaffInfoCell>
-                    )}
+                    </span>
+                    <span className="staff-ic-cell">
+                      <span className="staff-ic-label">ห้อง</span>
+                      <span className="staff-ic-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="staff-ic-cell is-wide">
+                      <span className="staff-ic-label">ผู้แจ้ง</span>
+                      <span className="staff-ic-value">
+                        <span className="staff-ic-name">{item.reporter_name}</span>
+                        <span className={`staff-ic-role is-${String(item.reporter_role || '').toLowerCase()}`}>
+                          {SAFETY_REPORTER_ROLE_LABEL[item.reporter_role] || item.reporter_role}
+                        </span>
+                      </span>
+                    </span>
                   </span>
-                  <span className="staff-rv-entry-desc-block">
-                    <span className="staff-rv-entry-desc-label">รายละเอียดเหตุการณ์</span>
-                    <span className="staff-rv-entry-desc">{item.description}</span>
+                  <span className="staff-ic-section">
+                    <span className="staff-ic-label">รายละเอียดเหตุการณ์</span>
+                    <span className="staff-ic-desc">{item.description}</span>
                   </span>
-                  {item.photos?.length > 0 && (
-                    <span className="staff-safety-photo-chip">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="m21 15-5-5L5 21" />
-                      </svg>
-                      รูปประกอบ {item.photos.length} รูป
+                </button>
+                <div className="staff-ic-photos">
+                  <span className="staff-ic-label">{photos.length > 0 ? `รูปประกอบ · ${photos.length} รูป` : 'รูปประกอบ'}</span>
+                  {photos.length > 0 ? (
+                    <span className="staff-ic-photo-row">
+                      {photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="staff-ic-photo"
+                          onClick={() => setLightbox({ photos, index, title: typeLabel })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
+                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="staff-ic-photo-empty">
+                      <StaffEmptyPhotoIcon />
+                      ไม่มีรูปประกอบ
                     </span>
                   )}
-                </button>
-                <div className="staff-rv-entry-foot">
-                  <span className="staff-rv-entry-extra">
-                    {item.status === 'reviewed' && item.review_note ? (
-                      <span className="staff-rv-entry-note">ผลตรวจ: {item.review_note}</span>
+                </div>
+                <div className="staff-ic-foot">
+                  <span className="staff-ic-result">
+                    {item.status === 'reviewed' ? (
+                      <>
+                        ตรวจโดย <span className="staff-actor">{item.reviewed_by_name || '-'}</span>
+                      </>
+                    ) : item.status === 'cancelled' ? (
+                      <>
+                        ยกเลิกโดย <span className="staff-actor">{item.cancelled_by_name || '-'}</span>
+                      </>
                     ) : (
-                      <span className="staff-rv-entry-note">{item.status === 'pending' ? 'ยังไม่มีผู้รับเรื่อง' : 'ไม่มีบันทึกผล'}</span>
+                      'ยังไม่มีผู้รับเรื่อง'
                     )}
                   </span>
-                  <span className="staff-rv-entry-actions">
-                    {item.status === 'pending' && (
-                      <button type="button" className="staff-rv-pill is-primary" disabled={busy} onClick={() => openReview(item)}>
-                        รับเรื่อง
+                  <span className="staff-ic-actions">
+                    {item.status === 'pending' ? (
+                      <>
+                        <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => openCancel(item)}>
+                          ยกเลิก
+                        </button>
+                        <button type="button" className="staff-ic-btn is-primary" disabled={busy} onClick={() => openReview(item)}>
+                          รับเรื่อง
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="staff-ic-btn" onClick={() => setDetail(item)}>
+                        ดูรายละเอียด <span aria-hidden="true">›</span>
                       </button>
                     )}
-                    <button type="button" className="staff-rv-entry-more" onClick={() => setDetail(item)}>
-                      ดูรายละเอียด <span aria-hidden="true">›</span>
-                    </button>
                   </span>
                 </div>
               </li>
@@ -4323,7 +5109,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
 
       {detail && (
         <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setDetail(null)} variant="detail">
-          {(requestClose) => {
+          {() => {
             const info = SAFETY_STATUS[detail.status] || SAFETY_STATUS.pending
             return (
               <div className="staff-rv-detail">
@@ -4362,6 +5148,12 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                       <dd>{detail.review_note || '-'}</dd>
                     </div>
                   )}
+                  {detail.status === 'cancelled' && (
+                    <div className="is-wide">
+                      <dt>เหตุผลที่ยกเลิก</dt>
+                      <dd>{detail.cancel_reason || '-'}</dd>
+                    </div>
+                  )}
                 </dl>
                 {detail.photos?.length > 0 && (
                   <section className="staff-rv-photos" aria-label="รูปประกอบการแจ้งเหตุ">
@@ -4384,28 +5176,47 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                 <StaffDetailTimeline
                   steps={[
                     { label: 'แจ้งเหตุ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
-                    {
-                      label: detail.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอรับเรื่อง',
-                      meta:
-                        detail.status === 'reviewed'
-                          ? formatStaffDateTime(detail.reviewed_at)
-                          : 'กำลังรอ',
-                      by: detail.status === 'reviewed' ? detail.reviewed_by_name : null,
-                      state: detail.status === 'reviewed' ? 'done' : 'current',
-                      tone: detail.status === 'reviewed' ? 'success' : undefined,
-                    },
+                    detail.status === 'cancelled'
+                      ? {
+                          label: 'ยกเลิกแล้ว',
+                          meta: formatStaffDateTime(detail.cancelled_at),
+                          by: detail.cancelled_by_name,
+                          state: 'done',
+                          tone: 'danger',
+                        }
+                      : {
+                          label: detail.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอรับเรื่อง',
+                          meta:
+                            detail.status === 'reviewed'
+                              ? formatStaffDateTime(detail.reviewed_at)
+                              : 'กำลังรอ',
+                          by: detail.status === 'reviewed' ? detail.reviewed_by_name : null,
+                          state: detail.status === 'reviewed' ? 'done' : 'current',
+                          tone: detail.status === 'reviewed' ? 'success' : undefined,
+                        },
                   ]}
                 />
-                <div className="staff-form-actions">
-                  <button type="button" className={`staff-action-btn ${detail.status === 'pending' ? 'is-ghost' : 'is-primary'}`} onClick={requestClose}>
-                    ปิด
-                  </button>
-                  {detail.status === 'pending' && (
-                    <button type="button" className="staff-action-btn is-primary" onClick={() => openReview(detail)}>
-                      รับเรื่อง / บันทึกผล
+                {detail.status === 'pending' && (
+                  <div className={`staff-form-actions staff-safety-detail-actions${detail.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                    <button type="button" className="staff-safety-cancel-btn" onClick={() => openCancel(detail)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="m15 9-6 6M9 9l6 6" />
+                      </svg>
+                      ยกเลิกรายงาน
                     </button>
-                  )}
-                </div>
+                    <button type="button" className="staff-safety-review-btn" onClick={() => openReview(detail)}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        {detail.severity === 'urgent' ? (
+                          <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
+                        ) : (
+                          <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        )}
+                      </svg>
+                      {detail.severity === 'urgent' ? 'รับเรื่องด่วน' : 'รับเรื่อง / บันทึกผล'}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           }}
@@ -4446,6 +5257,47 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                 </button>
                 <button type="button" className="staff-action-btn is-primary" disabled={busy} onClick={() => submitReview(requestClose)}>
                   {busy ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจสอบแล้ว'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {cancelTarget && (
+        <Modal title="ยกเลิกรายงานเหตุ" onClose={() => setCancelTarget(null)} variant="waiting-form">
+          {(requestClose) => (
+            <div className="staff-rv-form">
+              <div className="staff-rv-review-summary">
+                <span className={`staff-rv-icon is-safety${cancelTarget.severity === 'urgent' ? ' is-urgent' : ''}`}>
+                  <StaffShieldIcon />
+                </span>
+                <div className="staff-rv-text">
+                  <strong>{SAFETY_INCIDENT_TYPE_LABEL[cancelTarget.incident_type] || cancelTarget.incident_type}</strong>
+                  <span className="staff-rv-desc">{cancelTarget.description}</span>
+                </div>
+              </div>
+              <div className="staff-form-field">
+                <label className="staff-form-label" htmlFor="staff-safety-cancel-reason">
+                  เหตุผลที่ยกเลิก (ถ้ามี)
+                </label>
+                <textarea
+                  id="staff-safety-cancel-reason"
+                  className="staff-form-input"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="เช่น แจ้งซ้ำ, แจ้งผิด, ตรวจแล้วไม่พบเหตุ"
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                />
+                <span className="staff-rv-hint">{cancelReason.length}/500 · ผู้แจ้งจะเห็นว่ารายงานถูกยกเลิกพร้อมเหตุผลนี้</span>
+              </div>
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
+                  กลับ
+                </button>
+                <button type="button" className="staff-action-btn is-danger" disabled={busy} onClick={() => submitCancel(requestClose)}>
+                  {busy ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิกรายงาน'}
                 </button>
               </div>
             </div>
@@ -4566,7 +5418,7 @@ function StaffSafetyTab({ rooms, onCountChange }) {
                   {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
                 </svg>
               </div>
-              <p className="staff-confirm-message">{notice.message}</p>
+              <StaffNoticeMessage message={notice.message} type={notice.type} />
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                   ปิด
@@ -4652,7 +5504,6 @@ function StaffMain() {
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListSort, setWaitingListSort] = useState('newest')
   const [waitingListDetail, setWaitingListDetail] = useState(null)
-  const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
   const [waitingNow] = useState(() => Date.now())
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
@@ -4735,15 +5586,25 @@ function StaffMain() {
   const [collectSubmitting, setCollectSubmitting] = useState(false)
   const [collectError, setCollectError] = useState('')
 
-  const [dueDetailRoom, setDueDetailRoom] = useState(null)
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
+  const [tabFocus, setTabFocus] = useState(null)
+  const [seenTabKeys, setSeenTabKeys] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(getNotificationStorageKey('staff-tabs')) || '[]'))
+    } catch {
+      return new Set()
+    }
+  })
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
   const [pendingVisitCount, setPendingVisitCount] = useState(0)
   const [parkedVehicleCount, setParkedVehicleCount] = useState(0)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [urgentSafetyCount, setUrgentSafetyCount] = useState(0)
+  const [pendingSafetyIncidents, setPendingSafetyIncidents] = useState([])
+  const [pendingVisitRequests, setPendingVisitRequests] = useState([])
+  const [pendingSlips, setPendingSlips] = useState([])
 
   useEffect(() => {
     let cancelled = false
@@ -4755,7 +5616,8 @@ function StaffMain() {
           if (cancelled) return
           const requests = data.requests || []
           const now = Date.now()
-          setPendingVisitCount(requests.filter((item) => item.status === 'pending' && !item.is_special).length)
+          setPendingVisitCount(requests.filter((item) => item.status === 'pending').length)
+          setPendingVisitRequests(requests.filter((item) => item.status === 'pending'))
           setParkedVehicleCount(
             requests.filter(
               (item) =>
@@ -4774,6 +5636,7 @@ function StaffMain() {
           const pending = (data.incidents || []).filter((item) => item.status === 'pending')
           setPendingSafetyCount(pending.length)
           setUrgentSafetyCount(pending.filter((item) => item.severity === 'urgent').length)
+          setPendingSafetyIncidents(pending)
         })
         .catch(() => {})
     }
@@ -4913,7 +5776,10 @@ function StaffMain() {
   const loadPendingSlipCount = () => {
     return axios
       .get('/api/staff/payment-verifications', { headers: authHeaders() })
-      .then(({ data }) => setPendingSlipCount((data.payments || []).length))
+      .then(({ data }) => {
+        setPendingSlipCount((data.payments || []).length)
+        setPendingSlips(data.payments || [])
+      })
       .catch(() => {})
   }
 
@@ -4971,36 +5837,6 @@ function StaffMain() {
   const updateWaitingListField = (field, value) => {
     setWaitingListForm((form) => ({ ...form, [field]: value }))
     setWaitingListFieldErrors((errors) => ({ ...errors, [field]: undefined }))
-  }
-
-  const waitingFormToday = new Date(waitingNow)
-  const waitingFormTodayKey = localDayKey(waitingFormToday)
-  const waitingMoveInPresets = [
-    {
-      label: 'สัปดาห์หน้า',
-      value: localDayKey(new Date(waitingFormToday.getFullYear(), waitingFormToday.getMonth(), waitingFormToday.getDate() + 7)),
-    },
-    {
-      label: 'ต้นเดือนหน้า',
-      value: localDayKey(new Date(waitingFormToday.getFullYear(), waitingFormToday.getMonth() + 1, 1)),
-    },
-    {
-      label: 'อีก 1 เดือน',
-      value: localDayKey(new Date(waitingFormToday.getFullYear(), waitingFormToday.getMonth() + 1, waitingFormToday.getDate())),
-    },
-  ]
-
-  const waitingListPreferences = waitingListForm.room_preference
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-  const toggleRoomPreference = (chip) => {
-    const next = waitingListPreferences.includes(chip)
-      ? waitingListPreferences.filter((item) => item !== chip)
-      : [...waitingListPreferences, chip]
-    const text = next.join(' | ')
-    if (text.length <= 100) updateWaitingListField('room_preference', text)
   }
 
   const submitWaitingListEntry = async (event, requestClose) => {
@@ -5781,7 +6617,7 @@ function StaffMain() {
   }
 
   const openDueDetail = (room) => {
-    setDueDetailRoom(room)
+    openCollect(room)
   }
 
   const openCollect = (room) => {
@@ -5846,13 +6682,41 @@ function StaffMain() {
 
   const notifications = useMemo(() => {
     return [
+      ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
+      ...pendingVisitRequests.map(buildStaffVisitNotif),
+      ...pendingSlips.map(buildStaffSlipNotif),
       ...tenantRequests.flatMap(buildStaffTenantNotifs),
       ...maintenanceRequests.flatMap(buildStaffMaintenanceNotifs),
       ...announcements.map(buildAnnouncementNotif),
-    ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [tenantRequests, maintenanceRequests, announcements])
+    ].sort((a, b) => Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)) || new Date(b.date) - new Date(a.date))
+  }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements])
 
   const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
+
+  const tabItemKeys = {
+    'payment-review': pendingSlips.map(buildStaffSlipNotif).map((item) => item.key),
+    'resident-visits': pendingVisitRequests.map(buildStaffVisitNotif).map((item) => item.key),
+    safety: pendingSafetyIncidents.map(buildStaffSafetyNotif).map((item) => item.key),
+  }
+
+  const newTabItemCount = (tab) =>
+    staffTab === tab ? 0 : (tabItemKeys[tab] || []).filter((key) => !seenTabKeys.has(key)).length
+
+  const goToStaffTab = (tab) => {
+    const visited = [...(tabItemKeys[staffTab] || []), ...(tabItemKeys[tab] || [])]
+    if (visited.some((key) => !seenTabKeys.has(key))) {
+      const current = new Set(Object.values(tabItemKeys).flat())
+      const next = new Set([...[...seenTabKeys].filter((key) => current.has(key)), ...visited])
+      setSeenTabKeys(next)
+      try {
+        localStorage.setItem(getNotificationStorageKey('staff-tabs'), JSON.stringify([...next]))
+      } catch (error) {
+        console.warn('Could not save seen tab items', error)
+      }
+    }
+    setTabFocus(null)
+    setStaffTab(tab)
+  }
 
   const markNotificationsRead = () => {
     setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
@@ -5908,18 +6772,6 @@ function StaffMain() {
     (currentWaitingListPage - 1) * STAFF_LIST_PAGE_SIZE,
     currentWaitingListPage * STAFF_LIST_PAGE_SIZE,
   )
-  const waitingToday = new Date(waitingNow)
-  const waitingTodayKey = localDayKey(waitingToday)
-  const waitingYesterdayKey = localDayKey(
-    new Date(waitingToday.getFullYear(), waitingToday.getMonth(), waitingToday.getDate() - 1),
-  )
-  const waitingDayGroups = waitingListPageItems.reduce((groups, item) => {
-    const key = localDayKey(item.created_at)
-    const last = groups[groups.length - 1]
-    if (last && last.key === key) last.items.push(item)
-    else groups.push({ key, date: new Date(item.created_at), items: [item] })
-    return groups
-  }, [])
   const inspectionKindCounts = moveOutInspections.reduce((counts, inspection) => {
     const kind = inspectionKindOf(inspection)
     counts[kind] = (counts[kind] || 0) + 1
@@ -5985,7 +6837,7 @@ function StaffMain() {
   const financeTaskCount = summary.dueCount + pendingSlipCount + maintenanceRequests.length + tenantRequests.length
 
   const openSummaryTarget = (tab, roomFilter) => {
-    setStaffTab(tab)
+    goToStaffTab(tab)
     setAnnouncementFocus(null)
     if (roomFilter) {
       setStatusFilter(roomFilter)
@@ -6371,11 +7223,18 @@ function StaffMain() {
                             onClick={() => {
                               closeNotifPanel()
                               if (notif.kind === 'announcement') {
-                                setStaffTab('announcements')
+                                goToStaffTab('announcements')
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
-                              setStaffTab('home')
+                              const targetTab = { safety: 'safety', visit: 'resident-visits', slip: 'payment-review' }[notif.kind]
+                              if (targetTab) {
+                                goToStaffTab(targetTab)
+                                setTabFocus({ tab: targetTab, id: notif.targetId, nonce: Date.now() })
+                                setAnnouncementFocus(null)
+                                return
+                              }
+                              goToStaffTab('home')
                               setAnnouncementFocus(null)
                               if (notif.kind === 'tenant') setTenantRequestDetail(notif.request)
                               else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
@@ -6394,6 +7253,12 @@ function StaffMain() {
                                 <time className="staff-notif-item-date">{formatDateTime(notif.date)}</time>
                               </span>
                               <span className="staff-notif-item-status">{notif.label}</span>
+                              {notif.preview && (
+                                <span className="staff-notif-item-preview">
+                                  {notif.previewLabel && <span className="staff-notif-item-preview-label">{notif.previewLabel}</span>}
+                                  <span className="staff-notif-item-preview-text">{notif.preview}</span>
+                                </span>
+                              )}
                             </span>
                           </button>
                         ))}
@@ -6524,7 +7389,7 @@ function StaffMain() {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <p className="staff-confirm-message">{actionSuccess}</p>
+                <StaffNoticeMessage message={actionSuccess} />
                 <div className="staff-form-actions">
                   <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
                     ปิด
@@ -6537,117 +7402,10 @@ function StaffMain() {
 
         {waitingListDetail && (() => {
           const item = waitingList.find((entry) => entry.id === waitingListDetail.id) || waitingListDetail
-          const status = WAITING_LIST_STATUS[item.status] ? item.status : 'waiting'
-          const preferences = splitRoomPreferences(item.room_preference)
-          const days = daysSince(item.created_at, waitingNow)
           return (
             <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingListDetail(null)} variant="detail">
               {(requestClose) => (
-                <div className="waiting-detail">
-                  <div className={`waiting-detail-hero is-${WAITING_LIST_STATUS[status].tone}`}>
-                    <span className="waiting-avatar is-large" aria-hidden="true">
-                      {waitingInitial(item.full_name)}
-                    </span>
-                    <div className="waiting-detail-name">
-                      <strong>{item.full_name}</strong>
-                      <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
-                        {WAITING_LIST_STATUS[status].label}
-                      </span>
-                    </div>
-                    <div className="waiting-detail-contact">
-                      <a className="staff-action-btn is-primary" href={`tel:${item.phone}`}>
-                        โทร {item.phone}
-                      </a>
-                      <button
-                        type="button"
-                        className="staff-action-btn is-ghost"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(item.phone).then(
-                            () => setWaitingPhoneCopied(item.id),
-                            () => setWaitingPhoneCopied(null),
-                          )
-                        }}
-                      >
-                        {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว ✓' : 'คัดลอกเบอร์'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="waiting-detail-stats">
-                    <div className={days >= 30 ? 'is-long' : ''}>
-                      <span>ระยะเวลาที่รอ</span>
-                      <strong>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</strong>
-                    </div>
-                    <div>
-                      <span>วันที่แจ้ง</span>
-                      <strong>{formatDateTime(item.created_at)}</strong>
-                    </div>
-                    <div>
-                      <span>บันทึกโดย</span>
-                      <strong className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</strong>
-                    </div>
-                    <div className={item.desired_move_in_date ? `is-movein-${describeMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
-                      <span>ต้องการเข้าอยู่</span>
-                      <strong>
-                        {item.desired_move_in_date
-                          ? `${formatDateOnly(item.desired_move_in_date)} · ${describeMoveIn(item.desired_move_in_date, waitingNow).text}`
-                          : 'ไม่ระบุ'}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <section className="waiting-detail-section">
-                    <h4>ประเภทห้องที่สนใจ</h4>
-                    <div className="waiting-tags">
-                      {preferences.length > 0 ? (
-                        preferences.map((preference) => <span key={preference}>{preference}</span>)
-                      ) : (
-                        <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="waiting-detail-section">
-                    <h4>หมายเหตุ</h4>
-                    <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
-                  </section>
-
-                  <section className="waiting-detail-section">
-                    <h4>
-                      ห้องว่างตอนนี้ <span className="staff-count-pill">{vacantRooms.length}</span>
-                    </h4>
-                    {vacantRooms.length > 0 ? (
-                      <div className="waiting-vacant-rooms">
-                        {vacantRooms.map((room) => (
-                          <span key={room.room_number}>
-                            <strong>ห้อง {room.room_number}</strong>
-                            {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
-                    )}
-                  </section>
-
-                  <p className="waiting-detail-hint">สถานะของรายชื่อนี้จัดการโดย Admin</p>
-
-                  <div className="staff-form-actions waiting-detail-actions">
-                    <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                      ปิด
-                    </button>
-                    <button
-                      type="button"
-                      className="staff-action-btn is-primary"
-                      onClick={() => {
-                        setWaitingListDetail(null)
-                        openWaitingListModal(item)
-                      }}
-                    >
-                      แก้ไขข้อมูล
-                    </button>
-                  </div>
-                </div>
+                <WaitingListDetails item={item} now={waitingNow} vacantRooms={vacantRooms} onClose={requestClose} onEdit={(entry) => { setWaitingListDetail(null); openWaitingListModal(entry) }} />
               )}
             </Modal>
           )
@@ -6726,184 +7484,7 @@ function StaffMain() {
             variant="waiting-form"
           >
             {(requestClose) => (
-              <form
-                className="waiting-form"
-                onSubmit={(event) => submitWaitingListEntry(event, requestClose)}
-                noValidate
-              >
-                <div className="waiting-form-intro">
-                  <span className="waiting-form-intro-icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M19 8v6M22 11h-6" />
-                    </svg>
-                  </span>
-                  <div>
-                    <strong>{waitingListEditing ? 'แก้ไขข้อมูลผู้สนใจ' : 'บันทึกผู้สนใจเช่าห้อง'}</strong>
-                    <p>เก็บข้อมูลไว้ติดต่อกลับเมื่อมีห้องว่างตรงกับความต้องการ</p>
-                  </div>
-                </div>
-
-                {waitingListError && (
-                  <p className="staff-form-error staff-form-error-block" role="alert">
-                    {waitingListError}
-                  </p>
-                )}
-
-                <section className="waiting-form-section">
-                  <h4 className="waiting-form-section-title">
-                    <span>1</span>
-                    ข้อมูลติดต่อ
-                  </h4>
-                  <div className="waiting-form-grid">
-                    <div className="staff-form-field">
-                      <label className="staff-form-label" htmlFor="waiting-full-name">
-                        ชื่อผู้สนใจ <span className="staff-form-required">*</span>
-                      </label>
-                      <input
-                        id="waiting-full-name"
-                        className={`staff-form-input${waitingListFieldErrors.full_name ? ' is-invalid' : ''}`}
-                        maxLength={255}
-                        autoFocus
-                        autoComplete="off"
-                        placeholder="ชื่อ-นามสกุล"
-                        value={waitingListForm.full_name}
-                        onChange={(event) => updateWaitingListField('full_name', event.target.value)}
-                      />
-                      {waitingListFieldErrors.full_name && (
-                        <span className="staff-form-field-error">{waitingListFieldErrors.full_name}</span>
-                      )}
-                    </div>
-                    <div className="staff-form-field">
-                      <label className="staff-form-label" htmlFor="waiting-phone">
-                        เบอร์โทรศัพท์ <span className="staff-form-required">*</span>
-                      </label>
-                      <input
-                        id="waiting-phone"
-                        className={`staff-form-input${waitingListFieldErrors.phone ? ' is-invalid' : ''}`}
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={20}
-                        autoComplete="off"
-                        placeholder="เช่น 0812345678"
-                        value={waitingListForm.phone}
-                        onChange={(event) => updateWaitingListField('phone', event.target.value)}
-                      />
-                      {waitingListFieldErrors.phone && (
-                        <span className="staff-form-field-error">{waitingListFieldErrors.phone}</span>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="waiting-form-section">
-                  <h4 className="waiting-form-section-title">
-                    <span>2</span>
-                    วันที่ต้องการเข้าอยู่ <span className="staff-form-optional">(ไม่บังคับ)</span>
-                  </h4>
-                  <div className="waiting-form-movein">
-                    <ThaiDatePicker
-                      className={`staff-form-input waiting-form-date${waitingListFieldErrors.desired_move_in_date ? ' is-invalid' : ''}`}
-                      placeholder="เลือกวันที่ต้องการเข้าอยู่"
-                      value={waitingListForm.desired_move_in_date}
-                      minDate={dayKeyToDate(waitingFormTodayKey)}
-                      isClearable
-                      portalId="staff-date-portal"
-                      onChange={(value) => updateWaitingListField('desired_move_in_date', value)}
-                    />
-                    <div className="waiting-form-chips" role="group" aria-label="เลือกวันเข้าอยู่แบบเร็ว">
-                      {waitingMoveInPresets.map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          className={`waiting-form-chip${waitingListForm.desired_move_in_date === preset.value ? ' is-active' : ''}`}
-                          aria-pressed={waitingListForm.desired_move_in_date === preset.value}
-                          onClick={() =>
-                            updateWaitingListField(
-                              'desired_move_in_date',
-                              waitingListForm.desired_move_in_date === preset.value ? '' : preset.value,
-                            )
-                          }
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {waitingListForm.desired_move_in_date && (
-                    <p className="waiting-form-hint">
-                      เข้าอยู่ {formatDateOnly(waitingListForm.desired_move_in_date)} ·{' '}
-                      {describeMoveIn(waitingListForm.desired_move_in_date, waitingNow).text}
-                    </p>
-                  )}
-                  {waitingListFieldErrors.desired_move_in_date && (
-                    <span className="staff-form-field-error">{waitingListFieldErrors.desired_move_in_date}</span>
-                  )}
-                </section>
-
-                <section className="waiting-form-section">
-                  <h4 className="waiting-form-section-title">
-                    <span>3</span>
-                    ประเภทห้องที่สนใจ <span className="staff-form-optional">(ไม่บังคับ)</span>
-                  </h4>
-                  <div className="waiting-form-chips" role="group" aria-label="เลือกประเภทห้องแบบเร็ว">
-                    {ROOM_PREFERENCE_CHIPS.map((chip) => (
-                      <button
-                        key={chip}
-                        type="button"
-                        className={`waiting-form-chip${waitingListPreferences.includes(chip) ? ' is-active' : ''}`}
-                        aria-pressed={waitingListPreferences.includes(chip)}
-                        onClick={() => toggleRoomPreference(chip)}
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    id="waiting-room-preference"
-                    className="staff-form-input"
-                    maxLength={100}
-                    autoComplete="off"
-                    aria-label="ประเภทห้องที่สนใจ"
-                    placeholder="หรือพิมพ์เอง เช่น งบไม่เกิน 4,000 บาท"
-                    value={waitingListForm.room_preference}
-                    onChange={(event) => updateWaitingListField('room_preference', event.target.value)}
-                  />
-                </section>
-
-                <section className="waiting-form-section">
-                  <div className="staff-form-label-row">
-                    <h4 className="waiting-form-section-title">
-                      <span>4</span>
-                      <label htmlFor="waiting-note">หมายเหตุ</label> <span className="staff-form-optional">(ไม่บังคับ)</span>
-                    </h4>
-                    <span className="staff-form-counter">{waitingListForm.note.length}/500</span>
-                  </div>
-                  <textarea
-                    id="waiting-note"
-                    className="staff-form-input staff-form-textarea"
-                    rows={3}
-                    maxLength={500}
-                    placeholder="เช่น จำนวนผู้พัก งบประมาณ หรือเวลาที่สะดวกให้ติดต่อ"
-                    value={waitingListForm.note}
-                    onChange={(event) => updateWaitingListField('note', event.target.value)}
-                  />
-                </section>
-
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ยกเลิก
-                  </button>
-                  <button type="submit" className="staff-action-btn is-primary" disabled={waitingListSubmitting}>
-                    {waitingListSubmitting
-                      ? 'กำลังบันทึก...'
-                      : waitingListEditing
-                        ? 'บันทึกการแก้ไข'
-                        : 'บันทึกรายชื่อ'}
-                  </button>
-                </div>
-              </form>
+              <WaitingListForm value={waitingListForm} fieldErrors={waitingListFieldErrors} error={waitingListError} busy={waitingListSubmitting} editing={Boolean(waitingListEditing)} now={waitingNow} onChange={updateWaitingListField} onSubmit={(event) => submitWaitingListEntry(event, requestClose)} onClose={requestClose} idPrefix="staff-waiting" />
             )}
           </Modal>
         )}
@@ -7268,24 +7849,14 @@ function StaffMain() {
                 type="button"
                 className={`nav-link staff-tab-link${staffTab === tab.key ? ' active' : ''}`}
                 onClick={() => {
-                  setStaffTab(tab.key)
+                  goToStaffTab(tab.key)
                   setAnnouncementFocus(null)
                 }}
               >
                 {tab.label}
-                {tab.key === 'payment-review' && pendingSlipCount > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${pendingSlipCount} รายการรอตรวจ`}>
-                    {pendingSlipCount}
-                  </span>
-                )}
-                {tab.key === 'resident-visits' && pendingVisitCount > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${pendingVisitCount} คำขอรออนุมัติ`}>
-                    {pendingVisitCount}
-                  </span>
-                )}
-                {tab.key === 'safety' && pendingSafetyCount > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${pendingSafetyCount} รายงานรอรับเรื่อง`}>
-                    {pendingSafetyCount}
+                {newTabItemCount(tab.key) > 0 && (
+                  <span className="staff-tab-badge" aria-label={`${newTabItemCount(tab.key)} รายการใหม่`}>
+                    {newTabItemCount(tab.key)}
                   </span>
                 )}
               </button>
@@ -7293,11 +7864,31 @@ function StaffMain() {
           ))}
         </ul>
 
-        {staffTab === 'payment-review' && <StaffPaymentReview onCountChange={setPendingSlipCount} />}
+        {staffTab === 'payment-review' && (
+          <StaffPaymentReview
+            key={tabFocus?.tab === 'payment-review' ? tabFocus.nonce : 'payment-review'}
+            onCountChange={setPendingSlipCount}
+            focusId={tabFocus?.tab === 'payment-review' ? tabFocus.id : null}
+          />
+        )}
 
-        {staffTab === 'resident-visits' && <StaffResidentVisitsTab rooms={rooms} onCountChange={setPendingVisitCount} />}
+        {staffTab === 'resident-visits' && (
+          <StaffResidentVisitsTab
+            key={tabFocus?.tab === 'resident-visits' ? tabFocus.nonce : 'resident-visits'}
+            rooms={rooms}
+            onCountChange={setPendingVisitCount}
+            focusId={tabFocus?.tab === 'resident-visits' ? tabFocus.id : null}
+          />
+        )}
 
-        {staffTab === 'safety' && <StaffSafetyTab rooms={rooms} onCountChange={setPendingSafetyCount} />}
+        {staffTab === 'safety' && (
+          <StaffSafetyTab
+            key={tabFocus?.tab === 'safety' ? tabFocus.nonce : 'safety'}
+            rooms={rooms}
+            onCountChange={setPendingSafetyCount}
+            focusId={tabFocus?.tab === 'safety' ? tabFocus.id : null}
+          />
+        )}
 
         {staffTab === 'announcements' && (
           <AnnouncementBoard
@@ -7534,147 +8125,7 @@ function StaffMain() {
                   <span>{waitingList.length ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะ' : 'กด "+ เพิ่มผู้สนใจ" เพื่อบันทึกรายชื่อแรก'}</span>
                 </div>
               ) : (
-                <div className="waiting-timeline">
-                  {waitingDayGroups.map((group) => {
-                    const relativeDay =
-                      group.key === waitingTodayKey ? 'วันนี้' : group.key === waitingYesterdayKey ? 'เมื่อวาน' : null
-                    const weekday = group.date.toLocaleDateString('th-TH', { weekday: 'long' })
-                    return (
-                      <section className="waiting-day" key={group.key}>
-                        <header className="waiting-day-head">
-                          <div className="waiting-day-date">
-                            <strong>{group.date.getDate()}</strong>
-                            <small>{group.date.toLocaleDateString('th-TH', { month: 'short' })}</small>
-                          </div>
-                          <div className="waiting-day-card">
-                            <div className="waiting-day-text">
-                              <strong>{relativeDay || weekday}</strong>
-                              <span>
-                                {relativeDay ? `${weekday} ` : ''}
-                                {group.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
-                              </span>
-                            </div>
-                            <span className="waiting-day-count">{group.items.length} รายชื่อ</span>
-                          </div>
-                        </header>
-                        <div className="waiting-day-items">
-                          {group.items.map((item) => {
-                            const status = WAITING_LIST_STATUS[item.status] ? item.status : 'waiting'
-                            const preferences = splitRoomPreferences(item.room_preference)
-                            const days = daysSince(item.created_at, waitingNow)
-                            return (
-                              <div className={`waiting-day-item is-${WAITING_LIST_STATUS[status].tone}`} key={item.id}>
-                                <span className="waiting-day-dot" aria-hidden="true" />
-                                <article className={`waiting-card is-${WAITING_LIST_STATUS[status].tone}`}>
-                                  <div className="waiting-card-top">
-                                    <span className="waiting-avatar" aria-hidden="true">
-                                      {waitingInitial(item.full_name)}
-                                    </span>
-                                    <div className="waiting-card-id">
-                                      <div className="waiting-card-head">
-                                        <strong>{item.full_name}</strong>
-                                        <span className={`waiting-status is-${WAITING_LIST_STATUS[status].tone}`}>
-                                          {WAITING_LIST_STATUS[status].label}
-                                        </span>
-                                      </div>
-                                      <a className="waiting-card-phone" href={`tel:${item.phone}`}>
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />
-                                        </svg>
-                                        {item.phone}
-                                      </a>
-                                    </div>
-                                    <div className={`waiting-card-days${days >= 30 ? ' is-long' : ''}${days === 0 ? ' is-new' : ''}`}>
-                                      <strong>{days === 0 ? 'ใหม่' : days}</strong>
-                                      <span>{days === 0 ? 'แจ้งวันนี้' : 'วันที่รอ'}</span>
-                                    </div>
-                                  </div>
-                                  <div className="waiting-card-body">
-                                    {item.desired_move_in_date && (
-                                      <span className={`waiting-movein is-${describeMoveIn(item.desired_move_in_date, waitingNow).tone}`}>
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M3 10.5 12 3l9 7.5" />
-                                          <path d="M5 9.5V21h14V9.5" />
-                                        </svg>
-                                        อยากเข้าอยู่ {formatDateOnly(item.desired_move_in_date)}
-                                        <small>{describeMoveIn(item.desired_move_in_date, waitingNow).text}</small>
-                                      </span>
-                                    )}
-                                    <div className="waiting-tags">
-                                      {preferences.length > 0 ? (
-                                        preferences.map((preference) => <span key={preference}>{preference}</span>)
-                                      ) : (
-                                        <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-                                      )}
-                                    </div>
-                                    {item.note && (
-                                      <p className="waiting-card-note">
-                                        <span>หมายเหตุ</span>
-                                        {item.note}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="waiting-card-foot">
-                                    <div className="waiting-card-meta">
-                                      <span>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
-                                          <path d="M16 3v3M8 3v3M3 10h18" />
-                                        </svg>
-                                        {formatDate(item.created_at)}
-                                      </span>
-                                      <span>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <circle cx="12" cy="8" r="4" />
-                                          <path d="M4 21a8 8 0 0 1 16 0" />
-                                        </svg>
-                                        <span className={item.submitted_by_name ? 'staff-actor' : ''}>{item.submitted_by_name || '-'}</span>
-                                      </span>
-                                    </div>
-                                    <div className="waiting-card-actions">
-                                      <button
-                                        type="button"
-                                        className="waiting-icon-btn"
-                                        onClick={() => openWaitingListModal(item)}
-                                        aria-label={`แก้ไขข้อมูล ${item.full_name}`}
-                                        title="แก้ไข"
-                                      >
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M12 20h9" />
-                                          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="waiting-icon-btn is-danger"
-                                        onClick={() => {
-                                          setWaitingListDeleteError('')
-                                          setWaitingListDelete(item)
-                                        }}
-                                        aria-label={`ลบรายชื่อ ${item.full_name}`}
-                                        title="ลบ"
-                                      >
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                                        </svg>
-                                      </button>
-                                      <button type="button" className="waiting-detail-btn" onClick={() => setWaitingListDetail(item)}>
-                                        ดูรายละเอียด
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M9 18l6-6-6-6" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </div>
-                                </article>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </section>
-                    )
-                  })}
-                </div>
+                <WaitingListTimeline items={waitingListPageItems} now={waitingNow} onDetail={setWaitingListDetail} onEdit={openWaitingListModal} onDelete={(item) => { setWaitingListDeleteError(''); setWaitingListDelete(item) }} />
               )}
             </div>
             <StaffPagination page={currentWaitingListPage} total={filteredWaitingList.length} onChange={setWaitingListPage} />
@@ -9206,151 +9657,111 @@ function StaffMain() {
           onClose={() => setCollectRoom(null)}
           variant="confirm"
         >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-money">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันการเก็บเงินค่าเช่า</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{collectRoom.room_number}</strong>
+          {(requestClose) => {
+            const due = collectRoom.currentDue
+            const tenantName = collectRoom.tenant ? `${collectRoom.tenant.first_name} ${collectRoom.tenant.last_name}` : 'ไม่มีผู้เช่า'
+            const items = due?.items?.length ? due.items : due ? [{ type: 'rent', label: 'ค่าเช่า', amount: due.amount }] : []
+            const status = due?.status || 'due'
+            const isOverdue = status === 'overdue'
+            return (
+              <div className="staff-confirm-body collect-body">
+                <div className={`staff-confirm-icon ${isOverdue ? 'is-warning' : 'is-money'}`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    {isOverdue ? (
+                      <>
+                        <path d="M12 9v4M12 17h.01" />
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                      </>
+                    ) : (
+                      <>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
+                      </>
+                    )}
+                  </svg>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {collectRoom.tenant ? `${collectRoom.tenant.first_name} ${collectRoom.tenant.last_name}` : '-'}
-                  </strong>
-                </div>
-              </div>
-              {collectRoom.currentDue && (
-                <>
-                  {collectRoom.currentDue.items?.length > 1 && (
-                    <div className="staff-confirm-details">
-                      {collectRoom.currentDue.items.map((item, index) => (
-                        <div className="staff-confirm-detail-row" key={item.id ?? `${item.type}-${index}`}>
-                          <span>{item.label}</span>
-                          <strong>฿{formatCurrency(item.amount)}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="staff-confirm-amount-block">
-                    <p className="staff-confirm-amount-label">ยอดที่ต้องชำระ</p>
-                    <p className="staff-confirm-amount">
-                      <span className="staff-confirm-amount-symbol">฿</span>
-                      {formatCurrency(collectRoom.currentDue.amount)}
-                    </p>
+                <p className="staff-confirm-message">
+                  {isOverdue ? 'ห้องนี้มียอดค้างชำระ ตรวจสอบยอดก่อนบันทึกการรับเงิน' : 'ตรวจสอบยอดก่อนบันทึกการรับเงิน'}
+                </p>
+
+                <div className="collect-tenant">
+                  <span className="collect-avatar" aria-hidden="true">
+                    {(collectRoom.tenant?.first_name || '?').trim().charAt(0)}
+                  </span>
+                  <div className="collect-tenant-text">
+                    <strong>{tenantName}</strong>
+                    <small>
+                      {due?.periodStart && due?.periodEnd
+                        ? `รอบ ${formatDate(due.periodStart)} – ${formatDate(due.periodEnd)}`
+                        : 'ค่าเช่าเดือนนี้'}
+                    </small>
                   </div>
-                </>
-              )}
-              {collectError && <p className="staff-form-error">{collectError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={collectSubmitting}
-                  onClick={handleCollectPayment}
-                >
-                  {collectSubmitting ? 'กำลังบันทึก...' : 'ยืนยันเก็บเงิน'}
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {dueDetailRoom && (
-        <Modal
-          title={`รายการค้างชำระ - ห้อง ${dueDetailRoom.room_number}`}
-          onClose={() => setDueDetailRoom(null)}
-          variant="confirm"
-        >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{dueDetailRoom.room_number}</strong>
+                  <span className="collect-room">ห้อง {collectRoom.room_number}</span>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {dueDetailRoom.tenant
-                      ? `${dueDetailRoom.tenant.first_name} ${dueDetailRoom.tenant.last_name}`
-                      : '-'}
-                  </strong>
-                </div>
-              </div>
 
-              {dueDetailRoom.currentDue?.items?.length > 0 && (
-                <div className="staff-confirm-details">
-                  {dueDetailRoom.currentDue.items.map((item, index) => (
-                    <div className="staff-confirm-detail-row" key={item.id ?? `${item.type}-${index}`}>
-                      <span>{item.label}</span>
-                      <strong>฿{formatCurrency(item.amount)}</strong>
+                {due && (
+                  <div className={`collect-receipt is-${dueBadgeClass(status)}`}>
+                    <div className="collect-receipt-head">
+                      <span>รายการที่ต้องชำระ</span>
+                      <span className={`collect-status is-${dueBadgeClass(status)}`}>{DUE_STATUS_LABEL[status] || status}</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <ul className="collect-receipt-items">
+                      {items.map((item, index) => (
+                        <li key={item.id ?? `${item.type}-${index}`} className={`is-${item.type || 'other'}`}>
+                          <span className="collect-item-label">
+                            <span className="collect-item-dot" aria-hidden="true" />
+                            {item.label}
+                          </span>
+                          <strong>฿{formatCurrency(item.amount)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                    {(Number(due.depositApplied) > 0 || Number(due.overdueMonths) > 0 || due.lumpSumMonths) && (
+                      <div className="collect-receipt-notes">
+                        {Number(due.overdueMonths) > 0 && <span className="is-late">ค้างชำระ {due.overdueMonths} เดือน</span>}
+                        {due.lumpSumMonths && <span>จ่ายล่วงหน้า {due.lumpSumMonths} เดือน</span>}
+                        {Number(due.depositApplied) > 0 && <span>หักเงินประกันแล้ว ฿{formatCurrency(due.depositApplied)}</span>}
+                      </div>
+                    )}
+                    <div className="collect-receipt-total">
+                      <span>ยอดที่ต้องชำระ</span>
+                      <strong>
+                        <small>฿</small>
+                        {formatCurrency(due.amount)}
+                      </strong>
+                    </div>
+                    {due.dueDate && <p className="collect-receipt-due">ครบกำหนดชำระ {formatDate(due.dueDate)}</p>}
+                  </div>
+                )}
 
-              {dueDetailRoom.currentDue && (
-                <div className="staff-confirm-amount-block">
-                  <p className="staff-confirm-amount-label">ยอดค้างชำระรวม</p>
-                  <p className="staff-confirm-amount">
-                    <span className="staff-confirm-amount-symbol">฿</span>
-                    {formatCurrency(dueDetailRoom.currentDue.amount)}
-                  </p>
-                </div>
-              )}
-
-              <div className="staff-due-detail-actions">
                 <button
                   type="button"
-                  className="staff-form-link-btn"
+                  className="collect-history-link"
                   onClick={() => {
-                    const room = dueDetailRoom
-                    setDueDetailRoom(null)
+                    const room = collectRoom
+                    setCollectRoom(null)
                     openHistory(room)
                   }}
                 >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                    <path d="M3 3v5h5M12 7v5l3 2" />
+                  </svg>
                   ดูประวัติการจ่ายเงิน
                 </button>
 
+                {collectError && <p className="staff-form-error">{collectError}</p>}
                 <div className="staff-form-actions">
                   <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
+                    ยกเลิก
                   </button>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-primary"
-                    onClick={() => {
-                      const room = dueDetailRoom
-                      setDueDetailRoom(null)
-                      openCollect(room)
-                    }}
-                  >
-                    เก็บเงิน
+                  <button type="button" className="staff-action-btn is-primary" disabled={collectSubmitting} onClick={handleCollectPayment}>
+                    {collectSubmitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          }}
         </Modal>
       )}
 

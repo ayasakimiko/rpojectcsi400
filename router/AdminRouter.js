@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole } from "../middleware/authMiddleware.js";
 import { getActingAdminName } from "../middleware/accounts.js";
+import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
   hasField,
   isPositiveId,
@@ -44,7 +45,7 @@ export async function listSafetyIncidents(_req, res) {
   try {
     const [incidents] = await getPool().query(
       `SELECT id, reporter_role, reporter_name, room_number, incident_type, severity, description, photos,
-              status, reviewed_by_name, reviewed_at, review_note, created_at
+              status, reviewed_by_name, reviewed_at, review_note, cancelled_by_name, cancelled_at, cancel_reason, created_at
        FROM SafetyIncident ORDER BY (status = 'pending') DESC, created_at DESC`,
     );
     return res.json({ incidents: withIncidentPhotos(incidents) });
@@ -70,7 +71,7 @@ export async function reviewSafetyIncident(req, res) {
       "UPDATE SafetyIncident SET status = 'reviewed', reviewed_by_name = ?, reviewed_at = NOW(), review_note = ? WHERE id = ? AND status = 'pending'",
       [reviewerName, note || null, id],
     );
-    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบแล้ว" });
+    if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบหรือยกเลิกไปแล้ว" });
     return res.json({ message: "บันทึกผลตรวจสอบแล้ว" });
   } catch (error) {
     console.error("Review safety incident error:", error);
@@ -81,38 +82,8 @@ export async function reviewSafetyIncident(req, res) {
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
-router.get("/resident-visit-requests/special", async (_req, res) => {
-  try {
-    const [requests] = await getPool().query(
-      `SELECT r.*, c.first_name, c.last_name, c.phone AS customer_phone
-       FROM ResidentVisitRequest r JOIN Customer c ON c.id = r.customer_id
-       WHERE r.is_special = TRUE AND r.status = 'pending' ORDER BY r.created_at ASC`,
-    );
-    return res.json({ requests });
-  } catch (error) {
-    console.error("Fetch special resident requests error:", error);
-    return res.status(500).json({ message: "ไม่สามารถโหลดคำขอพิเศษได้" });
-  }
-});
-
-router.post("/resident-visit-requests/:id/special-review", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const status = req.body?.decision === "approve" ? "approved" : req.body?.decision === "reject" ? "rejected" : null;
-    if (!isPositiveId(id) || !status) return res.status(400).json({ message: "ข้อมูลคำขอไม่ถูกต้อง" });
-    const pool = getPool();
-    const adminName = await getActingAdminName(pool, req.user);
-    const [result] = await pool.query(
-      `UPDATE ResidentVisitRequest SET status = ?, admin_reviewed_by_name = ?, admin_reviewed_at = NOW() WHERE id = ? AND is_special = TRUE AND status = 'pending'`,
-      [status, adminName, id],
-    );
-    if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการแล้ว" });
-    return res.json({ message: status === "approved" ? "อนุมัติกรณีพิเศษแล้ว" : "ปฏิเสธกรณีพิเศษแล้ว" });
-  } catch (error) {
-    console.error("Review special resident request error:", error);
-    return res.status(500).json({ message: "ไม่สามารถบันทึกผลได้" });
-  }
-});
+router.get("/resident-visit-requests", listResidentVisitRequests);
+router.post("/resident-visit-requests/:id/:decision", createResidentVisitReview(getActingAdminName));
 
 router.get("/waiting-list", async (_req, res) => {
   try {
@@ -776,9 +747,16 @@ router.get("/logs/requests", async (req, res) => {
     const [requests] = await pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
               tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
-              tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone
+              tr.room_number, tr.target_room_number, tr.move_reason,
+              DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
+              c.first_name, c.last_name, c.phone, c.deposit_amount,
+              sr.price AS source_room_price, tg.price AS target_room_price,
+              moi.id AS inspection_id, moi.status AS inspection_status
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
+       LEFT JOIN Room sr ON sr.room_number = tr.room_number
+       LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
+       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
        ${whereClause}
        ORDER BY tr.created_at DESC
        LIMIT ? OFFSET ?`,

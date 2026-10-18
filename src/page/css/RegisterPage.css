@@ -8,7 +8,6 @@
   }
 }
 
-/* Hide the number input's up/down spinner arrows (e.g. อายุ). */
 .auth-page input[type='number']::-webkit-inner-spin-button,
 .auth-page input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;

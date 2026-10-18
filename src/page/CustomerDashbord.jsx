@@ -1,4 +1,5 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
+import StepTimeline from '../components/StepTimeline.jsx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
@@ -555,6 +556,17 @@ function NotifKindIcon({ kind, paymentType }) {
   )
 }
 
+function flashHighlight(element, className) {
+  element.classList.remove(className, 'is-fading')
+  void element.offsetWidth
+  element.classList.add(className, 'is-fading')
+  element.addEventListener(
+    'animationend',
+    () => element.classList.remove(className, 'is-fading'),
+    { once: true },
+  )
+}
+
 function Modal({ title, onClose, children, variant, onBack }) {
   const [isClosing, setIsClosing] = useState(false)
 
@@ -886,29 +898,125 @@ function formatRentDiff(from, to) {
   }
 }
 
+const FIELD_ICON_PATHS = {
+  room: (
+    <>
+      <path d="M3 21h18" />
+      <path d="M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17" />
+      <circle cx="15" cy="12" r="1" />
+    </>
+  ),
+  reason: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  date: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+      <path d="M16 3v3M8 3v3M3 10h18" />
+    </>
+  ),
+  note: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </>
+  ),
+  zap: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />,
+  water: <path d="M12 2.7s-6 6.4-6 11.3a6 6 0 0 0 12 0c0-4.9-6-11.3-6-11.3z" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 16v-4M12 8h.01" />
+    </>
+  ),
+  up: <path d="M7 17 17 7M9 7h8v8" />,
+  down: <path d="M7 7l10 10M17 9v8H9" />,
+}
+
+function FieldIcon({ name, size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {FIELD_ICON_PATHS[name]}
+    </svg>
+  )
+}
+
+function FieldLabel({ htmlFor, required = false, children }) {
+  return (
+    <label htmlFor={htmlFor} className="dashboard-field-label">
+      {children}
+      {required && <span className="dashboard-required">*</span>}
+    </label>
+  )
+}
+
 function MoveRoomPreview({ currentRoom, targetRoom }) {
   if (!targetRoom) return null
   const rentDiff = formatRentDiff(currentRoom?.price, targetRoom.price)
   const amenities = AMENITIES.filter((amenity) => targetRoom[amenity.key])
   return (
     <div className="dashboard-move-preview">
-      <div className="dashboard-move-preview-head">
-        <div>
-          <span className="dashboard-move-preview-label">ห้องที่เลือก</span>
-          <strong className="dashboard-move-preview-room">ห้อง {targetRoom.room_number}</strong>
+      <div className="dashboard-move-route">
+        <div className="dashboard-move-route-room is-from">
+          <span className="dashboard-move-route-label">
+            <FieldIcon name="room" size={15} />
+            <small>ห้องปัจจุบัน</small>
+          </span>
+          <strong>{currentRoom?.room_number ?? '-'}</strong>
+          <div className="dashboard-move-preview-price">
+            <small>ค่าเช่ารายเดือน</small>
+            <strong>{currentRoom?.price != null ? `฿${formatCurrency(currentRoom.price)}` : '-'}</strong>
+            <span>/เดือน</span>
+          </div>
         </div>
-        <div className="dashboard-move-preview-price">
-          <strong>฿{formatCurrency(targetRoom.price)}</strong>
-          <span>/เดือน</span>
+        <span className="dashboard-move-route-arrow" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </span>
+        <div className="dashboard-move-route-room is-to">
+          <span className="dashboard-move-route-label">
+            <FieldIcon name="room" size={15} />
+            <small>ห้องใหม่</small>
+          </span>
+          <strong>{targetRoom.room_number}</strong>
+          <div className="dashboard-move-preview-price">
+            <small>ค่าเช่ารายเดือน</small>
+            <strong>฿{formatCurrency(targetRoom.price)}</strong>
+            <span>/เดือน</span>
+          </div>
         </div>
       </div>
-      {rentDiff && <span className={`dashboard-move-diff is-${rentDiff.tone}`}>{rentDiff.label} จากห้องปัจจุบัน</span>}
+      {rentDiff && (
+        <span className={`dashboard-move-diff is-${rentDiff.tone}`}>
+          {rentDiff.tone !== 'same' && <FieldIcon name={rentDiff.tone === 'up' ? 'up' : 'down'} size={13} />}
+          {rentDiff.label} จากห้องปัจจุบัน
+        </span>
+      )}
       <div className="dashboard-move-preview-tags">
-        <span>ไฟ ฿{formatCurrency(targetRoom.electricity_unit_price)}/หน่วย</span>
-        <span>น้ำ ฿{formatCurrency(targetRoom.water_price)}/เดือน</span>
-        {Number(targetRoom.bed) > 0 && <span>เตียง {targetRoom.bed}</span>}
+        <span className="is-electric">
+          <FieldIcon name="zap" size={13} />
+          ไฟ ฿{formatCurrency(targetRoom.electricity_unit_price)}/หน่วย
+        </span>
+        <span className="is-water">
+          <FieldIcon name="water" size={13} />
+          น้ำ ฿{formatCurrency(targetRoom.water_price)}/เดือน
+        </span>
+        {Number(targetRoom.bed) > 0 && (
+          <span>
+            <AmenityIcon name="bed" />
+            เตียง {targetRoom.bed}
+          </span>
+        )}
         {amenities.map((amenity) => (
-          <span key={amenity.key}>{amenity.label}</span>
+          <span key={amenity.key} className={`is-${amenity.color}`}>
+            <AmenityIcon name={amenity.key} />
+            {amenity.label}
+          </span>
         ))}
       </div>
     </div>
@@ -1228,6 +1336,12 @@ function getRequestTimeline(kind, request) {
   }
   if (kind === 'safety') {
     const isReviewed = request.status === 'reviewed'
+    if (request.status === 'cancelled') {
+      return [
+        { label: 'แจ้งเหตุ', date: request.created_at, done: true },
+        { label: 'ยกเลิกแล้ว', date: request.cancelled_at || request.created_at, done: true, by: request.cancelled_by_name },
+      ]
+    }
     return [
       { label: 'แจ้งเหตุ', date: request.created_at, done: true },
       {
@@ -1297,11 +1411,23 @@ function getRequestSubject(kind, request) {
   return { title: `คำขอ${TENANT_REQUEST_TYPE_LABEL[kind] || ''}${target}`, meta }
 }
 
+const FINISHED_PROGRESS_VISIBLE_MS = 5 * 60 * 1000
+
 function RequestTimelineDropdown({ kind, request }) {
   const [open, setOpen] = useState(false)
-  const [showDetail, setShowDetail] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(timer)
+  }, [])
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
+  const inProgress = ['pending', 'in_progress'].includes(request.status)
+  if (!inProgress) {
+    const finishedAt = new Date(timeline[timeline.length - 1].date || request.completed_at || request.reviewed_at || 0).getTime()
+    const justFinished = Number.isFinite(finishedAt) && finishedAt > 0 && now - finishedAt <= FINISHED_PROGRESS_VISIBLE_MS
+    if (!justFinished) return null
+  }
   const subject = getRequestSubject(kind, request)
 
   const doneCount = timeline.filter((step) => step.done).length
@@ -1349,22 +1475,9 @@ function RequestTimelineDropdown({ kind, request }) {
               <strong>{subject.title}</strong>
               <span>{subject.meta}</span>
             </span>
-            <button type="button" className="dashboard-progress-panel-link" onClick={() => setShowDetail(true)}>
-              ดูแบบละเอียด
-              <span aria-hidden="true">›</span>
-            </button>
           </div>
           <RequestTimeline kind={kind} request={request} compact />
         </div>
-      )}
-      {showDetail && (
-        <RequestDetailModal
-          kind={kind}
-          request={request}
-          onClose={() => setShowDetail(false)}
-          onBack={() => setShowDetail(false)}
-          backLabel="กลับไปที่ความคืบหน้า"
-        />
       )}
     </div>
   )
@@ -1855,46 +1968,7 @@ function formatVisitPoint(value) {
 }
 
 function DetailTimeline({ steps }) {
-  return (
-    <section className="dashboard-rv-timeline-card" aria-labelledby="rv-timeline-title">
-      <h4 id="rv-timeline-title" className="dashboard-rv-timeline-title">
-        ขั้นตอนการดำเนินการ
-      </h4>
-      <ol className="dashboard-rv-timeline">
-        {steps.map((step, index) => {
-          const next = steps[index + 1]
-          const classes = [
-            `is-${step.state}`,
-            step.tone ? `is-${step.tone}` : '',
-            step.state === 'done' && next?.state === 'done' ? 'is-line-done' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-          return (
-            <li key={step.label} className={classes}>
-              <span className="dashboard-rv-timeline-dot" aria-hidden="true">
-                {step.state === 'done' && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                    {step.tone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
-                  </svg>
-                )}
-              </span>
-              <strong>{step.label}</strong>
-              <small>
-                {step.meta}
-                {step.by && (
-                  <>
-                    {' · '}
-                    <span className="dashboard-rv-timeline-by">โดย {step.by}</span>
-                  </>
-                )}
-              </small>
-            </li>
-          )
-        })}
-      </ol>
-    </section>
-  )
+  return <StepTimeline steps={steps} actorClassName="dashboard-actor" />
 }
 
 function RoomChip({ room }) {
@@ -2125,23 +2199,46 @@ function ResidentVisitRequestRow() {
       <div className="dashboard-request-info">
         <p className="dashboard-request-title">ลงทะเบียนรถและผู้มาติดต่อ</p>
         <p className="dashboard-request-desc">
-          {pendingCount > 0 ? `มีคำขอรออนุมัติ ${pendingCount} รายการ` : 'ลงทะเบียนรถของคุณหรือรถครอบครัวที่มาเยี่ยม'}
+          {pendingCount > 0 ? (
+            <>
+              <span className="dashboard-request-desc-status">
+                รออนุมัติ <strong>{pendingCount} รายการ</strong>
+                <span className="dashboard-request-desc-limit">จากสูงสุด {CUSTOMER_OPEN_REPORT_LIMIT} รายการ</span>
+              </span>
+              {pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT && (
+                <small className="dashboard-request-desc-hint">รอเจ้าหน้าที่พิจารณาก่อนส่งคำขอเพิ่ม</small>
+              )}
+            </>
+          ) : 'ลงทะเบียนรถของคุณหรือรถครอบครัวที่มาเยี่ยม'}
         </p>
       </div>
-      <button type="button" className="dashboard-action-btn is-primary" onClick={openModal}>
+      <button
+        type="button"
+        className="dashboard-action-btn is-primary"
+        onClick={openModal}
+        disabled={pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT}
+        title={pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT ? `ส่งได้สูงสุด ${CUSTOMER_OPEN_REPORT_LIMIT} รายการที่รออนุมัติ` : undefined}
+      >
         ลงทะเบียน
       </button>
-      {latestItem && <RequestTimelineDropdown kind="resident_visit" request={latestItem} />}
+      {latestItem && (
+        <RequestTimelineDropdown kind="resident_visit" request={items.find((item) => item.status === 'pending') || latestItem} />
+      )}
       {latestItem && (
         <button
           type="button"
           className="dashboard-maintenance-more"
           onClick={() => {
-            setDetailId(latestItem.id)
+            const activeItem = items.find((item) => item.status === 'pending')
+            if (!activeItem) {
+              openHistory()
+              return
+            }
+            setDetailId(activeItem.id)
             setView('detail')
           }}
         >
-          ดูรายละเอียด
+          {items.some((item) => item.status === 'pending') ? 'ดูรายละเอียด' : 'ดูประวัติ'}
         </button>
       )}
       {view === 'form' && (
@@ -2393,7 +2490,6 @@ function ResidentVisitRequestRow() {
                           <span className="dashboard-rv-history-text">
                             <strong>
                               {getVisitTitle(item)}
-                              {item.is_special ? <em>กรณีพิเศษ</em> : null}
                             </strong>
                             <span className="dashboard-rv-meta">
                               <span className={`dashboard-rv-type-chip is-${getVisitKind(item)}`}>
@@ -2486,12 +2582,6 @@ function ResidentVisitRequestRow() {
                     <dt>หมายเหตุ</dt>
                     <dd>{detailItem.note || '-'}</dd>
                   </div>
-                  {detailItem.is_special ? (
-                    <div>
-                      <dt>เหตุผลกรณีพิเศษ</dt>
-                      <dd>{detailItem.special_reason || '-'}</dd>
-                    </div>
-                  ) : null}
                 </dl>
 
                 {detailItem.vehicle_photos?.length > 0 && (
@@ -2547,7 +2637,7 @@ function ResidentVisitRequestRow() {
 
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={() => setView('history')}>
-                    กลับไปที่รายการ
+                    กลับไปที่ประวัติ
                   </button>
                   <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
                     ปิด
@@ -2574,14 +2664,16 @@ const SAFETY_SEVERITY_RESULT = {
   urgent: { label: 'ด่วน', hint: 'เจ้าหน้าที่จะได้รับแจ้งเป็นเรื่องเร่งด่วน' },
   normal: { label: 'ทั่วไป', hint: 'เจ้าหน้าที่จะตรวจสอบตามลำดับ' },
 }
-const SAFETY_STATUS_LABEL = { pending: 'รอตรวจสอบ', reviewed: 'ตรวจสอบแล้ว' }
-const SAFETY_STATUS_BADGE = { pending: 'pending', reviewed: 'paid' }
+const SAFETY_STATUS_LABEL = { pending: 'รอตรวจสอบ', reviewed: 'ตรวจสอบแล้ว', cancelled: 'ยกเลิกแล้ว' }
+const SAFETY_STATUS_BADGE = { pending: 'pending', reviewed: 'paid', cancelled: 'cancelled' }
 const SAFETY_FILTERS = [
   { key: 'all', label: 'ทั้งหมด' },
   { key: 'pending', label: 'รอตรวจสอบ', tone: 'warning' },
   { key: 'reviewed', label: 'ตรวจสอบแล้ว', tone: 'success' },
+  { key: 'cancelled', label: 'ยกเลิกแล้ว', tone: 'muted' },
 ]
 const SAFETY_DESCRIPTION_MAX = 1000
+const CUSTOMER_OPEN_REPORT_LIMIT = 10
 const SAFETY_MAX_PHOTOS = 4
 const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', photos: [] }
 
@@ -2614,7 +2706,7 @@ function getRequestDetail(kind, request) {
     iconClass = `is-safety is-${request.severity}`
     statusLabel = SAFETY_STATUS_LABEL[request.status]
     badge = SAFETY_STATUS_BADGE[request.status] || 'pending'
-    heroStatus = request.status === 'reviewed' ? 'approved' : 'pending'
+    heroStatus = request.status === 'reviewed' ? 'approved' : request.status === 'cancelled' ? 'cancelled' : 'pending'
     const severity = SAFETY_SEVERITY_RESULT[request.severity]?.label || request.severity
     meta = (
       <span className={`dashboard-safety-level-chip is-${request.severity}`}>
@@ -2637,6 +2729,9 @@ function getRequestDetail(kind, request) {
     if (request.status === 'reviewed') {
       fields.push(['ตรวจสอบโดย', request.reviewed_by_name], ['ผลการตรวจสอบ', request.review_note])
     }
+    if (request.status === 'cancelled') {
+      fields.push(['ยกเลิกโดย', request.cancelled_by_name], ['เหตุผลที่ยกเลิก', request.cancel_reason])
+    }
     photos = request.photos || []
   } else if (kind === 'resident_visit') {
     title = 'รายละเอียดคำขอรถ / ผู้มาติดต่อ'
@@ -2658,7 +2753,6 @@ function getRequestDetail(kind, request) {
       ['วันที่ส่งคำขอ', formatVisitDateTime(request.created_at)],
       ['หมายเหตุ', request.note],
     )
-    if (request.is_special) fields.push(['เหตุผลกรณีพิเศษ', request.special_reason])
     photos = request.vehicle_photos || []
   } else if (kind === 'maintenance') {
     title = 'รายละเอียดการแจ้งซ่อม'
@@ -2700,6 +2794,17 @@ function getRequestDetail(kind, request) {
   return { title, heading, icon, iconClass, meta, statusLabel, badge, heroStatus, fields, photos }
 }
 
+const DETAIL_LONG_FIELDS = new Set([
+  'รายละเอียดเหตุการณ์',
+  'รายละเอียดปัญหา',
+  'หมายเหตุ',
+  'ผลการตรวจสอบ',
+  'เหตุผลที่ยกเลิก',
+  'เหตุผล/รายละเอียดการย้ายออก',
+  'เหตุผลกรณีพิเศษ',
+])
+const DETAIL_ACTOR_FIELDS = new Set(['ตรวจสอบโดย', 'ยกเลิกโดย'])
+
 function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'กลับไปที่รายการ' }) {
   const [photoIndex, setPhotoIndex] = useState(null)
   const detail = getRequestDetail(kind, request)
@@ -2723,7 +2828,7 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
       <Modal title={detail.title} onClose={onClose} onBack={onBack}>
         {(requestClose) => (
           <div className="dashboard-rv">
-            <div className={`dashboard-rv-detail-hero is-${detail.heroStatus}`}>
+            <div className={`dashboard-rv-detail-hero is-${detail.heroStatus}${kind === 'safety' && request.severity ? ` is-severity-${request.severity}` : ''}`}>
               <span className={`dashboard-rv-history-icon ${detail.iconClass}`}>{detail.icon}</span>
               <div className="dashboard-rv-history-text">
                 <strong>{detail.heading}</strong>
@@ -2735,18 +2840,31 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
               <span className={`dashboard-badge status-${detail.badge}`}>{detail.statusLabel || request.status}</span>
             </div>
 
-            <dl className="dashboard-rv-detail">
-              {detail.fields.map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd className={label === 'ตรวจสอบโดย' ? 'dashboard-actor' : undefined}>{value || '-'}</dd>
-                </div>
-              ))}
-            </dl>
+            <section className="dashboard-detail-section" aria-label="ข้อมูลคำขอ">
+              <h4 className="dashboard-detail-section-title">ข้อมูลคำขอ</h4>
+              <dl className="dashboard-detail-grid">
+                {detail.fields
+                  .filter(([label]) => !DETAIL_LONG_FIELDS.has(label))
+                  .map(([label, value]) => (
+                    <div key={label} className="dashboard-detail-field">
+                      <dt>{label}</dt>
+                      <dd className={DETAIL_ACTOR_FIELDS.has(label) && value ? 'dashboard-actor' : undefined}>{value || '-'}</dd>
+                    </div>
+                  ))}
+              </dl>
+              {detail.fields
+                .filter(([label]) => DETAIL_LONG_FIELDS.has(label))
+                .map(([label, value]) => (
+                  <div key={label} className={`dashboard-detail-note${value ? '' : ' is-empty'}`}>
+                    <span>{label}</span>
+                    <p>{value || '-'}</p>
+                  </div>
+                ))}
+            </section>
 
             {detail.photos.length > 0 && (
-              <section className="dashboard-rv-photos" aria-label="รูปประกอบคำขอ">
-                <h4 className="dashboard-rv-timeline-title">รูปประกอบ ({detail.photos.length})</h4>
+              <section className="dashboard-rv-photos dashboard-detail-section" aria-label="รูปประกอบคำขอ">
+                <h4 className="dashboard-detail-section-title">รูปประกอบ · {detail.photos.length} รูป</h4>
                 <div className="dashboard-rv-photo-grid">
                   {detail.photos.map((photo, index) => (
                     <button key={`${photo.url}-${index}`} type="button" className="dashboard-rv-photo" onClick={() => setPhotoIndex(index)} aria-label={`ดูรูปที่ ${index + 1}`}>
@@ -2859,23 +2977,46 @@ function SafetyIncidentReportRow() {
       <div className="dashboard-request-info">
         <p className="dashboard-request-title">รายงานเหตุฉุกเฉิน / ความปลอดภัย</p>
         <p className="dashboard-request-desc">
-          {pendingCount > 0 ? `มีรายงานรอตรวจสอบ ${pendingCount} รายการ` : 'แจ้งเหตุให้เจ้าหน้าที่ตรวจสอบโดยเร็ว'}
+          {pendingCount > 0 ? (
+            <>
+              <span className="dashboard-request-desc-status">
+                รอตรวจสอบ <strong>{pendingCount} รายการ</strong>
+                <span className="dashboard-request-desc-limit">จากสูงสุด {CUSTOMER_OPEN_REPORT_LIMIT} รายการ</span>
+              </span>
+              {pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT && (
+                <small className="dashboard-request-desc-hint">รอเจ้าหน้าที่ตรวจสอบก่อนแจ้งเหตุเพิ่ม</small>
+              )}
+            </>
+          ) : 'แจ้งเหตุให้เจ้าหน้าที่ตรวจสอบโดยเร็ว'}
         </p>
       </div>
-      <button type="button" className="dashboard-action-btn is-danger" onClick={openModal}>
+      <button
+        type="button"
+        className="dashboard-action-btn is-danger"
+        onClick={openModal}
+        disabled={pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT}
+        title={pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT ? `แจ้งได้สูงสุด ${CUSTOMER_OPEN_REPORT_LIMIT} รายการที่รอตรวจสอบ` : undefined}
+      >
         แจ้งเหตุ
       </button>
-      {latestIncident && <RequestTimelineDropdown kind="safety" request={latestIncident} />}
+      {latestIncident && (
+        <RequestTimelineDropdown kind="safety" request={incidents.find((item) => item.status === 'pending') || latestIncident} />
+      )}
       {latestIncident && (
         <button
           type="button"
           className="dashboard-maintenance-more"
           onClick={() => {
-            setDetailId(latestIncident.id)
+            const activeIncident = incidents.find((item) => item.status === 'pending')
+            if (!activeIncident) {
+              openHistory()
+              return
+            }
+            setDetailId(activeIncident.id)
             setView('detail')
           }}
         >
-          ดูรายละเอียด
+          {incidents.some((item) => item.status === 'pending') ? 'ดูรายละเอียด' : 'ดูประวัติ'}
         </button>
       )}
 
@@ -2980,11 +3121,30 @@ function SafetyIncidentReportRow() {
               </div>
               <p className="dashboard-confirm-message">ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว</p>
               {SAFETY_SEVERITY_RESULT[sentSeverity] && (
-                <p className={`dashboard-safety-result is-${sentSeverity}`}>
-                  <span>ระบบจัดระดับเป็น</span>
-                  <strong>{SAFETY_SEVERITY_RESULT[sentSeverity].label}</strong>
-                  <small>{SAFETY_SEVERITY_RESULT[sentSeverity].hint}</small>
-                </p>
+                <div className={`dashboard-safety-result is-${sentSeverity}`}>
+                  <div className="dashboard-safety-result-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      {sentSeverity === 'urgent' ? (
+                        <>
+                          <path d="M10.3 4.5 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z" />
+                          <path d="M12 9v4M12 17h.01" />
+                        </>
+                      ) : (
+                        <>
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 11v6M12 7h.01" />
+                        </>
+                      )}
+                    </svg>
+                  </div>
+                  <div className="dashboard-safety-result-content">
+                    <div className="dashboard-safety-result-heading">
+                      <span>ระบบจัดระดับเป็น</span>
+                      <strong>{SAFETY_SEVERITY_RESULT[sentSeverity].label}</strong>
+                    </div>
+                    <small>{SAFETY_SEVERITY_RESULT[sentSeverity].hint}</small>
+                  </div>
+                </div>
               )}
               <div className="dashboard-form-actions">
                 <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
@@ -3109,6 +3269,7 @@ function SafetyIncidentReportRow() {
           request={detailItem}
           onClose={() => setView(null)}
           onBack={() => setView('history')}
+          backLabel="กลับไปที่ประวัติ"
         />
       )}
     </div>
@@ -3641,14 +3802,32 @@ function CustomerDashbord() {
   }, [])
 
   const [customerTab, setCustomerTab] = useState('home')
-  const [activeVehicleCount, setActiveVehicleCount] = useState(0)
+  const [activeVehicleIds, setActiveVehicleIds] = useState([])
+  const [tabSeenVersion, setTabSeenVersion] = useState(0)
+  const tabSeenStorageKey = data?.customer?.id ? `customer_tab_seen_${data.customer.id}` : null
+  const seenTabKeys = useMemo(() => {
+    if (!tabSeenStorageKey || tabSeenVersion < 0) return new Set()
+    try {
+      const stored = JSON.parse(localStorage.getItem(tabSeenStorageKey) || '[]')
+      return new Set(Array.isArray(stored) ? stored : [])
+    } catch {
+      return new Set()
+    }
+  }, [tabSeenStorageKey, tabSeenVersion])
+  const customerTabKeys = {
+    vehicles: activeVehicleIds.map((id) => `vehicle-${id}`),
+    parcels: (data?.parcels || []).filter((parcel) => parcel.status === 'pending').map((parcel) => `parcel-${parcel.id}`),
+  }
+  const newCustomerTabCount = (key) =>
+    customerTab === key ? 0 : (customerTabKeys[key] || []).filter((itemKey) => !seenTabKeys.has(itemKey)).length
 
   useEffect(() => {
     let cancelled = false
     axios
       .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
       .then(({ data }) => {
-        if (!cancelled) setActiveVehicleCount((data.vehicles || []).length)
+        if (cancelled) return
+        setActiveVehicleIds((data.vehicles || []).map((vehicle) => vehicle.id))
       })
       .catch(() => {})
     return () => {
@@ -3671,6 +3850,15 @@ function CustomerDashbord() {
     }
   }, [notifSeenStorageKey, notifSeenVersion])
   const [notifPage, setNotifPage] = useState(1)
+  const scrollFocusRef = useRef(null)
+  useEffect(() => {
+    if (!scrollFocusRef.current) return
+    const element = document.querySelector(`[data-customer-focus="${scrollFocusRef.current}"]`)
+    if (!element) return
+    scrollFocusRef.current = null
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    flashHighlight(element, 'dashboard-focus-highlight')
+  })
   const notifListRef = useRef(null)
   const [notifDetail, setNotifDetail] = useState(null)
   const [parcelReceiveId, setParcelReceiveId] = useState(null)
@@ -3706,6 +3894,7 @@ function CustomerDashbord() {
   }, [notifOpen])
 
   const [successPopup, setSuccessPopup] = useState(null)
+  const [blockedRequestPopup, setBlockedRequestPopup] = useState(null)
   const [profileForm, setProfileForm] = useState({ phone: '', current_password: '', new_password: '', confirm_password: '' })
   const [profileSubmitting, setProfileSubmitting] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -3959,7 +4148,6 @@ function CustomerDashbord() {
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -3970,7 +4158,6 @@ function CustomerDashbord() {
     if (upcoming.length === 0) return undefined
     const timer = setTimeout(loadDashboard, Math.min(Math.min(...upcoming) + 1000, 2147483647))
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data])
 
   const handleLogout = () => {
@@ -4024,6 +4211,17 @@ function CustomerDashbord() {
   }
 
   const selectCustomerTab = (key) => {
+    const visited = [...(customerTabKeys[customerTab] || []), ...(customerTabKeys[key] || [])]
+    if (tabSeenStorageKey && visited.some((itemKey) => !seenTabKeys.has(itemKey))) {
+      const current = new Set(Object.values(customerTabKeys).flat())
+      const next = [...new Set([...[...seenTabKeys].filter((itemKey) => current.has(itemKey)), ...visited])]
+      try {
+        localStorage.setItem(tabSeenStorageKey, JSON.stringify(next))
+        setTabSeenVersion((version) => version + 1)
+      } catch (error) {
+        console.warn('Could not save seen tab items', error)
+      }
+    }
     if (key === 'profile') resetProfileForm()
     setAnnouncementFocus(null)
     setCustomerTab(key)
@@ -4125,7 +4323,13 @@ function CustomerDashbord() {
       setSuccessPopup(result.message || 'ส่งคำขอสำเร็จ')
       await loadDashboard()
     } catch (err) {
-      setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (err.response?.data?.code === 'TENANT_REQUEST_ACTIVE') {
+        setBlockedRequestPopup({ message: err.response.data.message, type: activeRequestType })
+        setActiveRequestType(null)
+        loadDashboard()
+      } else {
+        setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      }
     } finally {
       setRequestSubmitting(false)
     }
@@ -5005,14 +5209,37 @@ function CustomerDashbord() {
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
                                 return
                               }
-                              selectCustomerTab('home')
                               if (notif.kind === 'parcel') {
+                                selectCustomerTab('parcels')
+                                let index = filteredParcels.findIndex((parcel) => parcel.id === notif.parcel.id)
+                                if (index < 0) {
+                                  resetParcelFilters()
+                                  index = parcels.findIndex((parcel) => parcel.id === notif.parcel.id)
+                                }
+                                setParcelPage(Math.floor(Math.max(index, 0) / PARCEL_PAGE_SIZE) + 1)
                                 setParcelReceiveError('')
                                 setParcelDetailId(notif.parcel.id)
-                              } else if (notif.kind === 'maintenance') setMaintenanceDetail(notif.request)
-                              else if (notif.kind === 'tenant')
+                                scrollFocusRef.current = `parcel-${notif.parcel.id}`
+                                return
+                              }
+                              selectCustomerTab('home')
+                              if (notif.kind === 'maintenance') {
+                                let index = filteredMaintenanceRequests.findIndex((item) => item.id === notif.request.id)
+                                if (index < 0) {
+                                  setMaintenanceSearch('')
+                                  setMaintenanceStatusFilter('all')
+                                  index = maintenanceRequests.findIndex((item) => item.id === notif.request.id)
+                                }
+                                setMaintenancePage(Math.floor(Math.max(index, 0) / MAINTENANCE_PAGE_SIZE) + 1)
+                                setMaintenanceDetail(notif.request)
+                                scrollFocusRef.current = `maintenance-${notif.request.id}`
+                              } else if (notif.kind === 'tenant') {
                                 setStatusPopup({ kind: notif.request.type, status: notif.request.status, request: notif.request })
-                              else setNotifDetail(notif)
+                                scrollFocusRef.current = `tenant-${notif.request.type}`
+                              } else {
+                                setNotifDetail(notif)
+                                if (notif.kind === 'utility') scrollFocusRef.current = 'due'
+                              }
                             }}
                           >
                             <span className="dashboard-notif-item-icon">
@@ -5168,7 +5395,7 @@ function CustomerDashbord() {
 
         {maintenanceDetail && (
           <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="pinned">
-            {(requestClose) => (
+            {() => (
               <div className="dashboard-maintenance-detail">
                 <div className="dashboard-modal-scroll">
                 <StatusAlert content={MAINTENANCE_STATUS_POPUP_CONTENT[maintenanceDetail.status]} />
@@ -5222,11 +5449,6 @@ function CustomerDashbord() {
                     </div>
                   </div>
                 )}
-                </div>
-                <div className="dashboard-form-actions">
-                  <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
-                  </button>
                 </div>
               </div>
             )}
@@ -5410,12 +5632,11 @@ function CustomerDashbord() {
                         <ul className="dashboard-request-log-list">
                           {visibleRequests.map(({ request, number }) => {
                             const sentAt = new Date(request.created_at)
-                            const isCurrent = request.id === statusPopup.request?.id
                             return (
                               <li key={request.id}>
                                 <button
                                   type="button"
-                                  className={`dashboard-request-log-entry${isCurrent ? ' is-current' : ''}`}
+                                  className="dashboard-request-log-entry"
                                   onClick={() => selectRequest(request)}
                                 >
                                   <span className="dashboard-request-log-entry-date" aria-hidden="true">
@@ -5714,6 +5935,64 @@ function CustomerDashbord() {
           </Modal>
         )}
 
+        {blockedRequestPopup && (
+          <Modal title="ยังมีคำขอที่รอดำเนินการ" onClose={() => setBlockedRequestPopup(null)} variant="confirm">
+            {(requestClose) => {
+              const openRequests = tenantRequests.filter((request) => ['pending', 'in_progress'].includes(request.status))
+              const sameTypeRequests = openRequests.filter((request) => request.type === blockedRequestPopup.type)
+              const activeRequests = sameTypeRequests.length > 0 ? sameTypeRequests : openRequests
+              return (
+                <div className="dashboard-confirm-body">
+                  <div className="dashboard-confirm-icon is-pending">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <polyline points="12 7 12 12 15 14" />
+                    </svg>
+                  </div>
+                  <p className="dashboard-confirm-message">{blockedRequestPopup.message}</p>
+                  <div className="dashboard-blocked-list">
+                    <span className="dashboard-blocked-label">
+                      {sameTypeRequests.length > 0 ? `คำขอ${TENANT_REQUEST_TYPE_LABEL[blockedRequestPopup.type] || ''}ที่กำลังดำเนินการอยู่` : 'คำขอที่กำลังดำเนินการอยู่'}
+                    </span>
+                    {activeRequests.length === 0 ? (
+                      <span className="dashboard-blocked-empty">ไม่พบรายการ กรุณารีเฟรชหน้าอีกครั้ง</span>
+                    ) : (
+                      activeRequests.map((request) => (
+                        <button
+                          key={request.id}
+                          type="button"
+                          className="dashboard-blocked-item"
+                          onClick={() => {
+                            requestClose()
+                            setStatusPopup({ kind: request.type, status: request.status, request })
+                          }}
+                        >
+                          <span className="dashboard-blocked-item-text">
+                            <strong>
+                              คำขอ{TENANT_REQUEST_TYPE_LABEL[request.type] || request.type}
+                              {request.type === 'move_room' && request.target_room_number ? ` → ห้อง ${request.target_room_number}` : ''}
+                            </strong>
+                            <small>ส่งเมื่อ {formatVisitDateTime(request.created_at)}</small>
+                          </span>
+                          <span className={`dashboard-badge status-${tenantRequestBadgeClass(request.status)}`}>
+                            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+                          </span>
+                          <span className="dashboard-blocked-item-chevron" aria-hidden="true">›</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="dashboard-form-actions">
+                    <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                      เข้าใจแล้ว
+                    </button>
+                  </div>
+                </div>
+              )
+            }}
+          </Modal>
+        )}
+
         {successPopup && (
           <Modal title="สำเร็จ" onClose={() => setSuccessPopup(null)} variant="success">
             {(requestClose) => (
@@ -5763,14 +6042,12 @@ function CustomerDashbord() {
                 onClick={() => selectCustomerTab(tab.key)}
               >
                 {tab.label}
-                {tab.key === 'vehicles' && activeVehicleCount > 0 && (
-                  <span className="dashboard-parcel-tab-count is-info" aria-label={`${activeVehicleCount} คันที่อนุมัติ`}>
-                    {activeVehicleCount}
-                  </span>
-                )}
-                {tab.key === 'parcels' && pendingParcels.length > 0 && (
-                  <span className="dashboard-parcel-tab-count" aria-label={`${pendingParcels.length} รายการรอรับ`}>
-                    {pendingParcels.length}
+                {newCustomerTabCount(tab.key) > 0 && (
+                  <span
+                    className={`dashboard-parcel-tab-count${tab.key === 'vehicles' ? ' is-info' : ''}`}
+                    aria-label={`${newCustomerTabCount(tab.key)} รายการใหม่`}
+                  >
+                    {newCustomerTabCount(tab.key)}
                   </span>
                 )}
               </button>
@@ -5952,6 +6229,7 @@ function CustomerDashbord() {
                             <article className={`dashboard-parcel-item${isPending ? ' is-pending' : ' is-received'}`} key={parcel.id}>
                               <span className="dashboard-parcel-dot" aria-hidden="true" />
                             <div
+                              data-customer-focus={`parcel-${parcel.id}`}
                               className="dashboard-parcel-entry is-clickable"
                               role="button"
                               tabIndex={0}
@@ -5978,7 +6256,12 @@ function CustomerDashbord() {
                                     </span>
                                   </div>
 
-                                  {parcel.description && <p className="dashboard-parcel-desc">{parcel.description}</p>}
+                                  {parcel.description && (
+                                    <p className="dashboard-parcel-desc">
+                                      <span className="dashboard-parcel-desc-label">รายละเอียด</span>
+                                      {parcel.description}
+                                    </p>
+                                  )}
 
                                   <div className="dashboard-parcel-meta">
                                     <span>
@@ -6223,7 +6506,7 @@ function CustomerDashbord() {
           </div>
         )}
 
-        {customerTab === 'vehicles' && <CustomerParkingTab onCountChange={setActiveVehicleCount} />}
+        {customerTab === 'vehicles' && <CustomerParkingTab />}
 
         {customerTab === 'rental-history' && (
           <section className="dashboard-card dashboard-rental-history-card">
@@ -6380,7 +6663,7 @@ function CustomerDashbord() {
                               </span>
                             )}
                           </h3>
-                          <div className="dashboard-due-box">
+                          <div className="dashboard-due-box" data-customer-focus="due">
                             <span className="dashboard-due-amount">฿{formatCurrency(currentDue.amount)}</span>
                             <span className={`dashboard-badge status-${dueBadgeClass(currentDue.status)}`}>
                               {DUE_STATUS_LABEL[currentDue.status] || currentDue.status}
@@ -6533,7 +6816,7 @@ function CustomerDashbord() {
                     <h2>แจ้งปัญหาต่างๆ</h2>
                     <div className="dashboard-request-list">
                       {room?.is_booked && (
-                        <div className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
+                        <div data-customer-focus="tenant-renew" className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
                           <div className="dashboard-request-info">
                             <p className="dashboard-request-title">ต่อสัญญา</p>
                             <p className="dashboard-request-desc">
@@ -6565,12 +6848,12 @@ function CustomerDashbord() {
                               className="dashboard-maintenance-more"
                               onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest, showLog: isRequestSettled(renewRequest) })}
                             >
-                              {isRequestSettled(renewRequest) ? 'ประวัติ' : 'ดูรายละเอียด'}
+                              {isRequestSettled(renewRequest) ? 'ดูประวัติ' : 'ดูรายละเอียด'}
                             </button>
                           )}
                         </div>
                       )}
-                      <div className={`dashboard-request-row${moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] ? ' has-detail-link' : ''}`}>
+                      <div data-customer-focus="tenant-moveout" className={`dashboard-request-row${moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">แจ้งย้ายออก</p>
                           <p className="dashboard-request-desc">
@@ -6602,11 +6885,11 @@ function CustomerDashbord() {
                             className="dashboard-maintenance-more"
                             onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest, showLog: isRequestSettled(moveoutRequest) })}
                           >
-                            {isRequestSettled(moveoutRequest) ? 'ประวัติ' : 'ดูรายละเอียด'}
+                            {isRequestSettled(moveoutRequest) ? 'ดูประวัติ' : 'ดูรายละเอียด'}
                           </button>
                         )}
                       </div>
-                      <div className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
+                      <div data-customer-focus="tenant-move_room" className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">ย้ายห้อง</p>
                           <p className="dashboard-request-desc">
@@ -6641,7 +6924,7 @@ function CustomerDashbord() {
                             className="dashboard-maintenance-more"
                             onClick={() => setStatusPopup({ kind: 'move_room', status: moveRoomRequest.status, request: moveRoomRequest, showLog: isRequestSettled(moveRoomRequest) })}
                           >
-                            {isRequestSettled(moveRoomRequest) ? 'ประวัติ' : 'ดูรายละเอียด'}
+                            {isRequestSettled(moveRoomRequest) ? 'ดูประวัติ' : 'ดูรายละเอียด'}
                           </button>
                         )}
                       </div>
@@ -6689,7 +6972,9 @@ function CustomerDashbord() {
                             )}
                             {activeRequestType === 'move_room' && (
                               <>
-                                <label htmlFor="target-room-number">ห้องที่ต้องการย้ายไป</label>
+                                <FieldLabel htmlFor="target-room-number" required>
+                                  ห้องที่ต้องการย้ายไป
+                                </FieldLabel>
                                 <select
                                   id="target-room-number"
                                   value={targetRoomNumber}
@@ -6715,9 +7000,9 @@ function CustomerDashbord() {
                                     (availableRoom) => String(availableRoom.room_number) === targetRoomNumber,
                                   )}
                                 />
-                                <label htmlFor="move-room-reason">
-                                  เหตุผลที่ต้องการย้าย <span className="dashboard-required">*</span>
-                                </label>
+                                <FieldLabel htmlFor="move-room-reason" required>
+                                  เหตุผลที่ต้องการย้าย
+                                </FieldLabel>
                                 <select
                                   id="move-room-reason"
                                   value={moveReason}
@@ -6734,9 +7019,9 @@ function CustomerDashbord() {
                                     </option>
                                   ))}
                                 </select>
-                                <label>
-                                  วันที่ต้องการย้าย <span className="dashboard-required">*</span>
-                                </label>
+                                <FieldLabel required>
+                                  วันที่ต้องการย้าย
+                                </FieldLabel>
                                 <ThaiDatePicker
                                   className="dashboard-date-input"
                                   value={preferredMoveDate}
@@ -6748,8 +7033,11 @@ function CustomerDashbord() {
                                   maxDate={moveDateRange.max}
                                 />
                                 <p className="dashboard-move-hint">
+                                  <FieldIcon name="info" size={16} />
+                                  <span>
                                   สัญญาเช่าเดิม{room?.rental_end_date ? ` (สิ้นสุด ${formatDate(room.rental_end_date)})` : ''} จะย้ายไปใช้กับห้องใหม่
                                   และเจ้าหน้าที่จะตรวจสภาพห้องปัจจุบันก่อนอนุมัติ
+                                  </span>
                                 </p>
                               </>
                             )}
@@ -6935,6 +7223,7 @@ function CustomerDashbord() {
                       {paginatedMaintenanceRequests.map((item) => (
                         <div
                           key={item.id}
+                          data-customer-focus={`maintenance-${item.id}`}
                           className={`dashboard-maintenance-item is-${maintenanceBadgeClass(item.status)} cat-${MAINTENANCE_CATEGORY_LABEL[item.category] ? item.category : 'other'}`}
                         >
                           {item.photos?.length > 0 ? (

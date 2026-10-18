@@ -28,6 +28,7 @@ import { attachParcelPhotos } from "./ParcelRouter.js";
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
 const SAFETY_INCIDENT_MAX_PHOTOS = 4;
+const CUSTOMER_OPEN_REPORT_LIMIT = 10;
 const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
 const URGENT_INCIDENT_KEYWORDS = [
@@ -120,6 +121,15 @@ export async function createSafetyIncident(req, res) {
     );
     const user = users[0];
     if (!user) return res.status(404).json({ message: "ไม่พบข้อมูลผู้รายงาน" });
+    if (isCustomer) {
+      const [[{ openCount }]] = await pool.query(
+        "SELECT COUNT(*) AS openCount FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? AND status = 'pending'",
+        [req.user.id],
+      );
+      if (openCount >= CUSTOMER_OPEN_REPORT_LIMIT) {
+        return res.status(409).json({ message: `มีรายงานเหตุที่รอตรวจสอบครบ ${CUSTOMER_OPEN_REPORT_LIMIT} รายการแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบก่อนแจ้งเพิ่ม` });
+      }
+    }
     const name = `${user.first_name} ${user.last_name}`.trim();
     const requestedRoom = Number(roomNumber);
     const safeRoom = isCustomer ? user.room_number : Number.isInteger(requestedRoom) && requestedRoom > 0 ? requestedRoom : null;
@@ -663,14 +673,7 @@ router.post("/requests", async (req, res) => {
     );
     if (activeRequests.some((request) => request.type === type)) {
       await connection.rollback();
-      return res.status(409).json({ message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
-    }
-    if (
-      (type === "move_room" && activeRequests.some((request) => request.type !== "move_room"))
-      || (type !== "move_room" && activeRequests.some((request) => request.type === "move_room"))
-    ) {
-      await connection.rollback();
-      return res.status(409).json({ message: "กรุณารอให้คำขอเกี่ยวกับการเปลี่ยนห้องดำเนินการเสร็จก่อน" });
+      return res.status(409).json({ code: "TENANT_REQUEST_ACTIVE", message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
     }
 
     if (type === "move_room") {
@@ -800,6 +803,13 @@ router.post("/resident-visit-requests", async (req, res) => {
     const pool = getPool();
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     if (!customers[0]?.room_number) return res.status(400).json({ message: "ไม่พบห้องพักที่ผูกกับบัญชีนี้" });
+    const [[{ openCount }]] = await pool.query(
+      "SELECT COUNT(*) AS openCount FROM ResidentVisitRequest WHERE customer_id = ? AND status = 'pending'",
+      [req.user.id],
+    );
+    if (openCount >= CUSTOMER_OPEN_REPORT_LIMIT) {
+      return res.status(409).json({ message: `มีคำขอที่รออนุมัติครบ ${CUSTOMER_OPEN_REPORT_LIMIT} รายการแล้ว กรุณารอเจ้าหน้าที่พิจารณาก่อนส่งเพิ่ม` });
+    }
     if (requestType === "vehicle" && (await isPlateRegisteredByOther(pool, req.user.id, vehiclePlate))) {
       return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
     }
@@ -834,7 +844,8 @@ router.post("/resident-visit-requests", async (req, res) => {
 router.get("/safety-incidents", async (req, res) => {
   try {
     const [incidents] = await getPool().query(
-      `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note, created_at
+      `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note,
+              cancelled_by_name, cancelled_at, cancel_reason, created_at
        FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? ORDER BY created_at DESC`,
       [req.user.id],
     );

@@ -1,4 +1,3 @@
-# Logs
 logs
 *.log
 npm-debug.log*
@@ -15,7 +14,6 @@ BackupPage
 .env
 uploads
 
-# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea

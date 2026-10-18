@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { API_ORIGIN, LOCAL_API_ORIGIN } from '../config/api.js'
+
+const RELEASE_DELAY_MS = 30000
+const blobCache = new Map()
 
 function getUploadApiPath(value) {
   if (typeof value !== 'string' || !value) return null
@@ -21,56 +24,110 @@ function getUploadApiPath(value) {
   }
 }
 
-// Kept with both media components so pages only import this file.
-function useUploadUrl(source) {
+function fetchBlobUrl(apiPath, token) {
+  return new Promise((resolve, reject) => {
+    let retries = 0
+    const load = () => {
+      if (sessionStorage.getItem('token') !== token) {
+        reject(new Error('Session changed'))
+        return
+      }
+      axios
+        .get(apiPath, { responseType: 'blob', headers: { Authorization: `Bearer ${token}` } })
+        .then(({ data }) => resolve(URL.createObjectURL(data)))
+        .catch((error) => {
+          const temporaryFailure = !error.response || [502, 503, 504].includes(error.response.status)
+          if (temporaryFailure && retries < 3) {
+            setTimeout(load, 2000 * 2 ** retries)
+            retries += 1
+            return
+          }
+          reject(error)
+        })
+    }
+    load()
+  })
+}
+
+function acquireBlobUrl(apiPath, token) {
+  const key = `${token}|${apiPath}`
+  let entry = blobCache.get(key)
+  if (!entry) {
+    entry = { refs: 0, url: null, releaseTimer: null, promise: null }
+    entry.promise = fetchBlobUrl(apiPath, token).then(
+      (url) => {
+        entry.url = url
+        return url
+      },
+      (error) => {
+        blobCache.delete(key)
+        throw error
+      },
+    )
+    blobCache.set(key, entry)
+  }
+  entry.refs += 1
+  clearTimeout(entry.releaseTimer)
+  return { key, promise: entry.promise }
+}
+
+function releaseBlobUrl(key) {
+  const entry = blobCache.get(key)
+  if (!entry) return
+  entry.refs = Math.max(0, entry.refs - 1)
+  if (entry.refs > 0) return
+  clearTimeout(entry.releaseTimer)
+  entry.releaseTimer = setTimeout(() => {
+    if (entry.refs > 0 || blobCache.get(key) !== entry) return
+    blobCache.delete(key)
+    if (entry.url) URL.revokeObjectURL(entry.url)
+  }, RELEASE_DELAY_MS)
+}
+
+function useUploadUrl(source, { lazy = false, nodeRef = null } = {}) {
   const apiPath = getUploadApiPath(source)
   const token = apiPath ? sessionStorage.getItem('token') : null
   const resource = useMemo(() => ({ apiPath, token }), [apiPath, token])
   const [loaded, setLoaded] = useState(null)
+  const [visible, setVisible] = useState(() => !lazy || typeof IntersectionObserver === 'undefined')
 
   useEffect(() => {
-    if (!apiPath || !token) return
-    const controller = new AbortController()
-    let objectUrl
-    let retryTimer
-    let retries = 0
+    if (visible || !nodeRef?.current) return undefined
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        observer.disconnect()
+        setVisible(true)
+      },
+      { rootMargin: '300px' },
+    )
+    observer.observe(nodeRef.current)
+    return () => observer.disconnect()
+  }, [visible, nodeRef])
 
-    const load = () => {
-      if (controller.signal.aborted || sessionStorage.getItem('token') !== token) return
-      axios.get(apiPath, {
-        responseType: 'blob',
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      }).then(({ data }) => {
-        if (controller.signal.aborted || sessionStorage.getItem('token') !== token) return
-        objectUrl = URL.createObjectURL(data)
-        setLoaded({ resource, url: objectUrl })
-      }).catch((error) => {
-        if (controller.signal.aborted || axios.isCancel(error) || sessionStorage.getItem('token') !== token) return
-        const temporaryFailure = !error.response || [502, 503, 504].includes(error.response.status)
-        if (temporaryFailure && retries < 3) {
-          retryTimer = setTimeout(load, 2000 * (2 ** retries))
-          retries += 1
-        }
-        // Missing or unauthorized files never switch to another server's copy.
+  useEffect(() => {
+    if (!apiPath || !token || !visible) return undefined
+    let active = true
+    const { key, promise } = acquireBlobUrl(apiPath, token)
+    promise
+      .then((url) => {
+        if (active) setLoaded({ resource, url })
       })
-    }
-
-    load()
+      .catch(() => {})
     return () => {
-      controller.abort()
-      clearTimeout(retryTimer)
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      active = false
+      releaseBlobUrl(key)
     }
-  }, [apiPath, token, resource])
+  }, [apiPath, token, resource, visible])
 
   if (!apiPath) return source || undefined
   return loaded?.resource === resource ? loaded.url : undefined
 }
 
-export function UploadImage({ src, alt = '', ...props }) {
-  const url = useUploadUrl(src)
-  return <img {...props} src={url} alt={alt} />
+export function UploadImage({ src, alt = '', loading, ...props }) {
+  const nodeRef = useRef(null)
+  const url = useUploadUrl(src, { lazy: loading === 'lazy', nodeRef })
+  return <img {...props} ref={nodeRef} loading={loading} src={url} alt={alt} />
 }
 
 export function UploadLink({ href, children, ...props }) {

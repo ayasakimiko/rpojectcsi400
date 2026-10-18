@@ -1,0 +1,245 @@
+.step-timeline {
+  container-type: inline-size;
+  border: 1px solid #e6f0fd;
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  background: linear-gradient(180deg, #fbfdff, #fff);
+}
+
+.step-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.step-timeline-head h4 {
+  margin: 0;
+  color: #33506f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.step-timeline-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-timeline-item {
+  --step-color: #cbd5e1;
+  --step-line: #e2e8f0;
+  position: relative;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 18px;
+}
+
+.step-timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.step-timeline-item.is-done {
+  --step-color: #2563eb;
+}
+
+.step-timeline-item.is-done.is-success {
+  --step-color: #16a34a;
+}
+
+.step-timeline-item.is-done.is-danger {
+  --step-color: #dc2626;
+}
+
+.step-timeline-item.is-current {
+  --step-color: #f59e0b;
+}
+
+.step-timeline-item.is-line-done {
+  --step-line: linear-gradient(180deg, #2563eb, #93c5fd);
+}
+
+.step-timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 34px;
+  bottom: 4px;
+  left: 15px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--step-line);
+}
+
+.step-timeline-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 2px solid var(--step-color);
+  border-radius: 50%;
+  background: #fff;
+  color: #94a3b8;
+}
+
+.step-timeline-marker svg {
+  width: 15px;
+  height: 15px;
+}
+
+.step-timeline-number {
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.step-timeline-item.is-done .step-timeline-marker {
+  background: var(--step-color);
+  color: #fff;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--step-color) 35%, transparent);
+}
+
+.step-timeline-item.is-current .step-timeline-marker {
+  background: #fffbeb;
+  color: #d97706;
+  box-shadow: 0 0 0 5px #fef3c7;
+  animation: step-timeline-pulse 2s ease-in-out infinite;
+}
+
+@keyframes step-timeline-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 5px #fef3c7;
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(254, 243, 199, 0.45);
+  }
+}
+
+.step-timeline-body {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding-top: 5px;
+}
+
+.step-timeline-body strong {
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.step-timeline-item.is-pending .step-timeline-body strong {
+  color: #94a3b8;
+}
+
+.step-timeline-item.is-done.is-success .step-timeline-body strong {
+  color: #15803d;
+}
+
+.step-timeline-item.is-done.is-danger .step-timeline-body strong {
+  color: #b42318;
+}
+
+.step-timeline-item.is-current .step-timeline-body strong {
+  color: #b45309;
+}
+
+.step-timeline-body small {
+  color: #8aa0b6;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.step-timeline-by {
+  color: #2563eb;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.step-timeline-by::before {
+  content: 'โดย ';
+  color: #8aa0b6;
+  font-weight: 500;
+}
+
+.step-timeline-extra {
+  margin-top: 3px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.step-timeline-note {
+  margin: 4px 0 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #f8fbff;
+  color: #33506f;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+@container (min-width: 480px) {
+  .step-timeline-list {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .step-timeline-item {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 0 6px;
+    text-align: center;
+  }
+
+  .step-timeline-item:not(:last-child)::after {
+    top: 15px;
+    right: calc(-50% + 22px);
+    bottom: auto;
+    left: calc(50% + 22px);
+    width: auto;
+    height: 3px;
+    background: var(--step-line);
+  }
+
+  .step-timeline-item.is-line-done {
+    --step-line: linear-gradient(90deg, #2563eb, #93c5fd);
+  }
+
+  .step-timeline-marker {
+    width: 34px;
+    height: 34px;
+  }
+
+  .step-timeline-body {
+    align-items: center;
+    padding-top: 0;
+  }
+
+  .step-timeline-note {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-timeline-item.is-current .step-timeline-marker {
+    animation: none;
+  }
+}
