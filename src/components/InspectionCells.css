@@ -28,10 +28,10 @@
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  border: 1px solid #dce9fb;
-  border-radius: 8px;
-  background: #f5f9ff;
-  color: #1d4ed8;
+  border: 1px solid #e3ecf7;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #33506f;
   font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -39,9 +39,9 @@
 }
 
 .insp-room-pill.is-target {
-  border-color: #e4dcfd;
-  background: #f5f3ff;
-  color: #7c3aed;
+  border-color: #dce9fb;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .insp-room small {
@@ -234,15 +234,14 @@
 }
 
 .insp-status-action.is-confirm {
-  --act-tone: #ffffff;
-  --act-soft: #10b981;
-  --act-border: #10b981;
-  box-shadow: 0 4px 10px -6px rgba(16, 185, 129, 0.7);
+  --act-tone: #287458;
+  --act-soft: #e4f5ec;
+  --act-border: #c8e6d6;
 }
 
 .insp-status-action.is-confirm:hover {
-  --act-soft: #059669;
-  --act-border: #059669;
+  --act-soft: #d9f0e3;
+  --act-border: #b7dcc8;
 }
 
 .insp-status-action.is-follow {
@@ -257,14 +256,14 @@
 }
 
 .insp-status-action.is-cancel {
-  --act-tone: #4a6582;
-  --act-soft: #ffffff;
-  --act-border: #dce5f0;
+  --act-tone: #b42318;
+  --act-soft: #fff1f2;
+  --act-border: #f4d3d6;
 }
 
 .insp-status-action.is-cancel:hover {
-  --act-soft: #f3f6fa;
-  --act-border: #c5d3e3;
+  --act-soft: #ffe4e6;
+  --act-border: #efbfc5;
 }
 
 .insp-status-action:active {
@@ -384,14 +383,15 @@ tr:hover .insp-actions-hint svg {
 }
 
 .insp-status-action.is-edit {
-  --act-tone: #1d4ed8;
-  --act-soft: #eff6ff;
-  --act-border: #bfdbfe;
+  --act-tone: #52708e;
+  --act-soft: #ffffff;
+  --act-border: #e3ecf7;
 }
 
 .insp-status-action.is-edit:hover {
-  --act-soft: #dbeafe;
-  --act-border: #93c5fd;
+  --act-tone: #2563eb;
+  --act-soft: #f8fbff;
+  --act-border: #dce9fb;
 }
 
 .insp-status-action:disabled {

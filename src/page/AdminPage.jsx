@@ -12,6 +12,7 @@ import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusI
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
+import compressImageFile from '../utils/compressImageFile.js'
 import {
   InspectionDateCell,
   InspectionInspectorCell,
@@ -985,7 +986,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${variant === 'expense' ? ' admin-modal-expense' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
@@ -1000,6 +1001,105 @@ function Modal({ title, onClose, children, variant }) {
         <div className="admin-modal-body">{typeof children === 'function' ? children(requestClose) : children}</div>
       </div>
     </div>
+  )
+}
+
+const SUMMARY_ICON_PATHS = {
+  announce: (
+    <>
+      <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1Z" />
+      <path d="M16 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  total: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  booked: (
+    <>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  vacant: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12.5l2.3 2.3L15.5 9.5" />
+    </>
+  ),
+  due: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 1.7-2.5.6-2.5 1.8 1.1 2 2.5 2 2.5-.8 2.5-2" />
+    </>
+  ),
+  queue: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5" />
+    </>
+  ),
+  slip: (
+    <>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </>
+  ),
+  maintenance: (
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4Z" />
+  ),
+  request: (
+    <>
+      <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" />
+    </>
+  ),
+  parcel: (
+    <>
+      <path d="M21 8 12 3 3 8v8l9 5 9-5Z" />
+      <path d="M3 8l9 5 9-5M12 13v8" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8" />
+      <rect x="3" y="10" width="18" height="8" rx="2" />
+      <path d="M7 14h.01M17 14h.01M5 18v2M19 18v2" />
+    </>
+  ),
+  carPending: (
+    <>
+      <path d="M14.5 13H3.8a1 1 0 0 0-.8.4V19h12v-5.6a1 1 0 0 0-.5-.4Z" />
+      <path d="m3 13 1.4-3.3A1.5 1.5 0 0 1 5.8 9h6.4" />
+      <path d="M6 16h.01M12 16h.01M4 19v2M14 19v2" />
+      <circle cx="18" cy="7" r="4" />
+      <path d="M18 5v2l1.3 1" />
+    </>
+  ),
+  safety: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="M12 8v4M12 16h.01" />
+    </>
+  ),
+}
+
+function SummaryIcon({ type }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SUMMARY_ICON_PATHS[type]}
+    </svg>
   )
 }
 
@@ -1020,7 +1120,7 @@ function Pagination({ page, totalPages, onChange }) {
   )
 }
 
-const ROWS_PER_PAGE = 10
+const ROWS_PER_PAGE = 15
 
 const TABS = [
   { key: 'rooms', label: 'ห้องพัก' },
@@ -3756,7 +3856,23 @@ const emptyStaffForm = { idcard: '', password: '', phone: '', first_name: '', la
 
 const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '' }
 
-const emptyExpenseForm = { category: '', description: '', amount: '', expense_date: '' }
+const emptyExpenseForm = {
+  category: '',
+  description: '',
+  amount: '',
+  expense_date: '',
+  vendor: '',
+  payment_method: '',
+  receipt_number: '',
+  room_number: '',
+  keptPhotos: [],
+  newPhotos: [],
+}
+const EMPTY_EXPENSE_FILTERS = { search: '', category: '', from: '', to: '' }
+const EXPENSES_PAGE_SIZE = 9
+const EXPENSE_MAX_PHOTOS = 6
+const EXPENSE_CATEGORY_PRESETS = ['ค่าน้ำ', 'ค่าไฟ', 'ซ่อมบำรุง', 'ทำความสะอาด', 'วัสดุอุปกรณ์', 'อินเทอร์เน็ต', 'เงินเดือน', 'อื่นๆ']
+const EXPENSE_PAYMENT_METHOD_LABEL = { cash: 'เงินสด', transfer: 'โอนเงิน', card: 'บัตร', other: 'อื่นๆ' }
 const emptyWaitingListForm = { full_name: '', phone: '', room_preference: '', note: '', desired_move_in_date: '' }
 const INSPECTION_PHOTO_PREVIEW_COUNT = 4
 const INSPECTION_GALLERY_PAGE_SIZE = 8
@@ -4579,6 +4695,7 @@ function AdminBackupPage() {
   const [lastTabByGroup, setLastTabByGroup] = useState({})
   const [pendingVehicleCount, setPendingVehicleCount] = useState(0)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
+  const [serviceCounts, setServiceCounts] = useState({ requestPending: 0, maintenancePending: 0 })
   const tabBadges = { 'vehicle-requests': pendingVehicleCount, safety: pendingSafetyCount }
 
   useEffect(() => {
@@ -4625,6 +4742,7 @@ function AdminBackupPage() {
   const [parcelSaveConfirm, setParcelSaveConfirm] = useState(false)
   const [parcelFormOpen, setParcelFormOpen] = useState(false)
   const [parcelPhotoPreview, setParcelPhotoPreview] = useState(null)
+  const [parcelDetail, setParcelDetail] = useState(null)
   const [parcelSearch, setParcelSearch] = useState('')
   const [parcelStatusFilter, setParcelStatusFilter] = useState('all')
   const [parcelPage, setParcelPage] = useState(1)
@@ -4724,19 +4842,45 @@ function AdminBackupPage() {
   const [expensesError, setExpensesError] = useState('')
   const [expensesPage, setExpensesPage] = useState(1)
   const [expensesTotalPages, setExpensesTotalPages] = useState(1)
+  const [expensesTotal, setExpensesTotal] = useState(0)
   const [expenseModal, setExpenseModal] = useState(null)
   const [expenseForm, setExpenseForm] = useState(emptyExpenseForm)
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
   const [expenseFormError, setExpenseFormError] = useState('')
+  const [expensePhotoError, setExpensePhotoError] = useState('')
+  const [expenseExtraOpen, setExpenseExtraOpen] = useState(false)
+  const [expenseDelete, setExpenseDelete] = useState(null)
+  const [expenseDeleting, setExpenseDeleting] = useState(false)
+  const [expenseDeleteError, setExpenseDeleteError] = useState('')
+  const [expenseFilters, setExpenseFilters] = useState(EMPTY_EXPENSE_FILTERS)
+  const expenseFiltersRef = useRef(EMPTY_EXPENSE_FILTERS)
+  const expenseSearchTimerRef = useRef(null)
+  const [expenseSummary, setExpenseSummary] = useState({ totalAmount: 0, byCategory: [] })
+  const [expenseDetail, setExpenseDetail] = useState(null)
+  const [expenseDetailPhotoIndex, setExpenseDetailPhotoIndex] = useState(0)
+  const [expensePhotoPreview, setExpensePhotoPreview] = useState(null)
 
   const loadExpenses = (page = 1) => {
+    const filters = expenseFiltersRef.current
     setExpensesLoading(true)
     return axios
-      .get('/api/admin/expenses', { headers: authHeaders(), params: { page } })
+      .get('/api/admin/expenses', {
+        headers: authHeaders(),
+        params: {
+          page,
+          pageSize: EXPENSES_PAGE_SIZE,
+          search: filters.search.trim() || undefined,
+          category: filters.category || undefined,
+          from: filters.from || undefined,
+          to: filters.to || undefined,
+        },
+      })
       .then(({ data }) => {
         setExpenses(data.expenses)
         setExpensesPage(data.page)
-        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20))))
+        setExpensesTotal(data.total || 0)
+        setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || EXPENSES_PAGE_SIZE))))
+        setExpenseSummary({ totalAmount: Number(data.totalAmount) || 0, byCategory: data.byCategory || [] })
         setExpensesError('')
       })
       .catch((err) => {
@@ -4746,20 +4890,51 @@ function AdminBackupPage() {
       .finally(() => setExpensesLoading(false))
   }
 
+  const updateExpenseFilters = (patch, { debounce = false } = {}) => {
+    const next = { ...expenseFiltersRef.current, ...patch }
+    expenseFiltersRef.current = next
+    setExpenseFilters(next)
+    clearTimeout(expenseSearchTimerRef.current)
+    if (debounce) {
+      expenseSearchTimerRef.current = setTimeout(() => loadExpenses(1), 350)
+    } else {
+      loadExpenses(1)
+    }
+  }
+
+  const expenseFiltersActive = Boolean(
+    expenseFilters.search.trim() || expenseFilters.category || expenseFilters.from || expenseFilters.to,
+  )
+
+  const openExpenseDetail = (expense) => {
+    setExpenseDetailPhotoIndex(0)
+    setExpenseDetail(expense)
+  }
+
   const openCreateExpense = () => {
     setExpenseForm({ ...emptyExpenseForm, expense_date: getTodayInputDate() })
+    setExpenseExtraOpen(false)
     setExpenseFormError('')
+    setExpensePhotoError('')
     setExpenseModal({ mode: 'create' })
   }
 
   const openEditExpense = (expense) => {
     setExpenseForm({
+      ...emptyExpenseForm,
       category: expense.category || '',
       description: expense.description || '',
       amount: String(expense.amount ?? ''),
       expense_date: (expense.expense_date || '').slice(0, 10),
+      vendor: expense.vendor || '',
+      payment_method: expense.payment_method || '',
+      receipt_number: expense.receipt_number || '',
+      room_number: expense.room_number ? String(expense.room_number) : '',
+      keptPhotos: expense.photos || [],
     })
+    setExpenseExtraOpen(Boolean(expense.vendor || expense.payment_method || expense.receipt_number || expense.room_number))
     setExpenseFormError('')
+    setExpensePhotoError('')
     setExpenseModal({ mode: 'edit', expense })
   }
 
@@ -5096,24 +5271,24 @@ function AdminBackupPage() {
     }
   }
 
-  const removeExpense = async (expense) => {
-    if (!window.confirm(`ลบรายจ่าย "${expense.category}" ฿${Number(expense.amount).toLocaleString('th-TH')} หรือไม่?`)) return
+  const confirmDeleteExpense = async (requestClose) => {
+    setExpenseDeleting(true)
+    setExpenseDeleteError('')
     try {
-      const { data } = await axios.delete(`/api/admin/expenses/${expense.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/admin/expenses/${expenseDelete.id}`, { headers: authHeaders() })
       setSuccessMessage(data.message || 'ลบรายจ่ายสำเร็จ')
+      requestClose()
       loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
     } catch (err) {
       if (handleUnauthorized(err)) return
-      setExpensesError(err.response?.data?.message || 'ลบรายจ่ายไม่สำเร็จ')
+      setExpenseDeleteError(err.response?.data?.message || 'ลบรายจ่ายไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (err.response?.status === 404) loadExpenses(expensesPage)
+    } finally {
+      setExpenseDeleting(false)
     }
   }
 
-  const handleExpenseFormChange = (event) => {
-    const { name, value } = event.target
-    setExpenseForm((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const submitExpenseForm = (event, requestClose) => {
+  const submitExpenseForm = async (event, requestClose) => {
     event.preventDefault()
     if (!expenseForm.category.trim()) {
       setExpenseFormError('กรุณาระบุหมวดหมู่รายจ่าย')
@@ -5128,31 +5303,45 @@ function AdminBackupPage() {
       setExpenseFormError('กรุณาระบุวันที่')
       return
     }
+    if (!expenseForm.description.trim()) {
+      setExpenseFormError('กรุณากรอกรายละเอียดรายจ่าย')
+      return
+    }
+    if (expenseForm.keptPhotos.length + expenseForm.newPhotos.length === 0) {
+      setExpenseFormError('กรุณาแนบรูปใบเสร็จหรือหลักฐานอย่างน้อย 1 รูป')
+      return
+    }
 
     setExpenseSubmitting(true)
     setExpenseFormError('')
-    const payload = {
-      category: expenseForm.category.trim(),
-      description: expenseForm.description.trim() || null,
-      amount: amountValue,
-      expense_date: expenseForm.expense_date,
+    try {
+      const photos = (await Promise.all(expenseForm.newPhotos.map((file) => compressImageFile(file)))).map(({ name, dataUrl }) => ({ name, dataUrl }))
+      const payload = {
+        category: expenseForm.category.trim(),
+        description: expenseForm.description.trim() || null,
+        amount: amountValue,
+        expense_date: expenseForm.expense_date,
+        vendor: expenseForm.vendor.trim() || null,
+        payment_method: expenseForm.payment_method || null,
+        receipt_number: expenseForm.receipt_number.trim() || null,
+        room_number: expenseForm.room_number || null,
+        photos,
+        keep_photos: expenseForm.keptPhotos.map((photo) => photo.url),
+      }
+      if (expenseModal.mode === 'create') {
+        await axios.post('/api/admin/expenses', payload, { headers: authHeaders() })
+      } else {
+        await axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+      }
+      setSuccessMessage(expenseModal.mode === 'create' ? 'บันทึกรายจ่ายสำเร็จ' : 'แก้ไขรายจ่ายสำเร็จ')
+      requestClose()
+      loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      setExpenseFormError(err.response?.data?.message || err.message || 'ไม่สามารถบันทึกรายจ่ายได้')
+    } finally {
+      setExpenseSubmitting(false)
     }
-    const request =
-      expenseModal.mode === 'create'
-        ? axios.post('/api/admin/expenses', payload, { headers: authHeaders() })
-        : axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
-
-    request
-      .then(() => {
-        setSuccessMessage(expenseModal.mode === 'create' ? 'บันทึกรายจ่ายสำเร็จ' : 'แก้ไขรายจ่ายสำเร็จ')
-        requestClose()
-        loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
-      })
-      .catch((err) => {
-        if (handleUnauthorized(err)) return
-        setExpenseFormError(err.response?.data?.message || 'ไม่สามารถบันทึกรายจ่ายได้')
-      })
-      .finally(() => setExpenseSubmitting(false))
   }
 
 
@@ -5538,10 +5727,7 @@ function AdminBackupPage() {
     setRevealedStaffIdCards(new Set())
   }, [currentStaffPage, activeTab])
 
-  const [expandedStaffRows, toggleStaffRow, resetStaffRows] = useExpandedRows()
-  useEffect(() => {
-    resetStaffRows()
-  }, [currentStaffPage, activeTab])
+  const [staffDetail, setStaffDetail] = useState(null)
 
   const [customers, setCustomers] = useState([])
   const [customersLoading, setCustomersLoading] = useState(true)
@@ -5783,6 +5969,14 @@ function AdminBackupPage() {
 
   const loadNotifSources = () => {
     axios
+      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { page: 1, status: 'pending' } })
+      .then(({ data }) => setServiceCounts((current) => ({ ...current, requestPending: data.total || 0 })))
+      .catch(() => {})
+    axios
+      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { page: 1, status: 'pending' } })
+      .then(({ data }) => setServiceCounts((current) => ({ ...current, maintenancePending: data.total || 0 })))
+      .catch(() => {})
+    axios
       .get('/api/admin/logs/requests', { headers: authHeaders(), params: { page: 1 } })
       .then(({ data }) => setNotifTenantItems(data.requests))
       .catch((err) => handleUnauthorized(err))
@@ -5886,6 +6080,93 @@ function AdminBackupPage() {
     const activeCustomers = customers.filter((customer) => !customer.is_suspended).length
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
+
+  const goToTab = (tabKey) => {
+    setActiveTab(tabKey)
+    setLastTabByGroup((current) => ({ ...current, [TAB_GROUP_OF[tabKey]]: tabKey }))
+    setAnnouncementFocus(null)
+  }
+  const pendingParcelCount = parcels.filter((parcel) => parcel.status !== 'received').length
+  const todayParcelKey = new Date().toDateString()
+  const parcelsArrivedToday = parcels.filter((parcel) => new Date(parcel.created_at).toDateString() === todayParcelKey).length
+  const parcelsPickedToday = parcels.filter((parcel) => parcel.received_at && new Date(parcel.received_at).toDateString() === todayParcelKey).length
+  const roomsWithPendingParcels = new Set(parcels.filter((parcel) => parcel.status !== 'received').map((parcel) => parcel.room_number)).size
+  const oldestPendingParcelDays = parcels
+    .filter((parcel) => parcel.status !== 'received')
+    .reduce((max, parcel) => Math.max(max, Math.floor((Date.now() - new Date(parcel.created_at).getTime()) / 86400000)), 0)
+  const waitingQueueCount = waitingList.filter((item) => (WAITING_UI_STATUSES[item.status] ? item.status : 'waiting') === 'waiting').length
+  const scheduledAnnouncementCount = announcements.filter((item) => item.expires_at).length
+  const warningAnnouncementCount = announcements.filter((item) => item.tone === 'warning').length
+  const newAnnouncementCount = announcements.filter((item) => Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000).length
+  const summaryByGroup = {
+    residents: [
+      { key: 'rooms', icon: 'total', tone: 'blue', label: 'ห้องทั้งหมด', value: summary.totalRooms, onClick: () => goToTab('rooms') },
+      { key: 'vacant', icon: 'vacant', tone: 'green', label: 'ห้องว่าง', value: summary.vacantRooms, hint: `มีผู้เช่า ${summary.totalRooms - summary.vacantRooms} ห้อง`, onClick: () => goToTab('rooms') },
+      { key: 'customers', icon: 'booked', tone: 'amber', label: 'ลูกค้าที่ใช้งานอยู่', value: summary.activeCustomers, onClick: () => goToTab('customers') },
+      { key: 'waiting', icon: 'queue', tone: 'violet', label: 'คิวรอห้องว่าง', value: waitingQueueCount, onClick: () => goToTab('waiting-list') },
+    ],
+    services: [
+      { key: 'requests', icon: 'request', tone: 'indigo', label: 'คำขอผู้เช่ารอดำเนินการ', value: serviceCounts.requestPending, onClick: () => goToTab('requests') },
+      { key: 'maintenance', icon: 'maintenance', tone: 'amber', label: 'แจ้งซ่อมรอรับเรื่อง', value: serviceCounts.maintenancePending, onClick: () => goToTab('maintenance') },
+      { key: 'vehicle', icon: 'carPending', tone: 'blue', label: 'คำขอรถรอพิจารณา', value: pendingVehicleCount, onClick: () => goToTab('vehicle-requests') },
+      { key: 'safety', icon: 'safety', tone: 'red', label: 'เหตุรอรับเรื่อง', value: pendingSafetyCount, alert: pendingSafetyCount > 0, onClick: () => goToTab('safety') },
+    ],
+    parcels: [
+      {
+        key: 'pending',
+        icon: 'parcel',
+        tone: 'amber',
+        label: 'พัสดุรอผู้เช่ารับ',
+        value: pendingParcelCount,
+        hint: oldestPendingParcelDays > 0 ? `ค้างนานสุด ${oldestPendingParcelDays} วัน` : pendingParcelCount > 0 ? 'มาถึงวันนี้' : null,
+        onClick: () => goToTab('parcels'),
+      },
+      { key: 'today', icon: 'parcel', tone: 'blue', label: 'รับเข้าวันนี้', value: parcelsArrivedToday, hint: `ทั้งหมด ${parcels.length} รายการ`, onClick: () => goToTab('parcels') },
+      { key: 'picked', icon: 'vacant', tone: 'green', label: 'ผู้เช่ารับไปวันนี้', value: parcelsPickedToday, onClick: () => goToTab('parcels') },
+      { key: 'rooms', icon: 'total', tone: 'violet', label: 'ห้องที่มีพัสดุรอ', value: roomsWithPendingParcels, onClick: () => goToTab('parcels') },
+    ],
+    announcements: [
+      { key: 'all', icon: 'announce', tone: 'blue', label: 'ประกาศทั้งหมด', value: announcements.length, onClick: () => goToTab('announcements') },
+      { key: 'warning', icon: 'announce', tone: 'amber', label: 'ประกาศแจ้งเตือน', value: warningAnnouncementCount, onClick: () => goToTab('announcements') },
+      { key: 'info', icon: 'announce', tone: 'indigo', label: 'ประกาศทั่วไป', value: announcements.length - warningAnnouncementCount, onClick: () => goToTab('announcements') },
+      {
+        key: 'scheduled',
+        icon: 'clock',
+        tone: 'slate',
+        label: 'กำหนดลบอัตโนมัติ',
+        value: scheduledAnnouncementCount,
+        hint: newAnnouncementCount > 0 ? `ใหม่ใน 24 ชม. ${newAnnouncementCount} รายการ` : null,
+        onClick: () => goToTab('announcements'),
+      },
+    ],
+    staff: [
+      { key: 'all', icon: 'queue', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
+      { key: 'active', icon: 'vacant', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
+      { key: 'suspended', icon: 'x', tone: 'red', label: 'ระงับการใช้งาน', value: staffList.length - summary.activeStaff, onClick: () => goToTab('staff') },
+    ],
+    finance: [
+      {
+        key: 'amount',
+        icon: 'due',
+        tone: 'blue',
+        label: 'ยอดรวมรายจ่าย',
+        value: `฿${formatCurrency(expenseSummary.totalAmount)}`,
+        hint: expenseFiltersActive ? 'ตามตัวกรองที่เลือก' : 'ทุกรายการ',
+        onClick: () => goToTab('expenses'),
+      },
+      { key: 'count', icon: 'total', tone: 'slate', label: 'จำนวนรายการ', value: expensesTotal, onClick: () => goToTab('expenses') },
+      {
+        key: 'top',
+        icon: 'request',
+        tone: 'amber',
+        label: 'หมวดที่ใช้จ่ายมากที่สุด',
+        value: expenseSummary.byCategory[0]?.category || '-',
+        hint: expenseSummary.byCategory[0] ? `฿${formatCurrency(expenseSummary.byCategory[0].total)}` : null,
+        onClick: () => goToTab('expenses'),
+      },
+    ],
+  }
+  const activeSummaryTiles = summaryByGroup[TAB_GROUP_OF[activeTab]] || summaryByGroup.residents
 
   const inspectionKindCounts = moveOutInspections.reduce((counts, inspection) => {
     const kind = inspectionKindOf(inspection)
@@ -6018,7 +6299,7 @@ function AdminBackupPage() {
     const { tab, id } = target
     if (tab === 'requests' && requestLogs.items.some((item) => item.id === id)) toggleRequestRow(id)
     else if (tab === 'maintenance' && maintenanceLogs.items.some((item) => item.id === id)) toggleMaintenanceRow(id)
-    else if (tab === 'staff' && staffList.some((member) => member.id === id)) toggleStaffRow(id)
+    else if (tab === 'staff' && staffList.some((member) => member.id === id)) setStaffDetail(staffList.find((member) => member.id === id))
     notifTargetRef.current = null
   }, [notifTargetReady, activeTab, requestLogs.items, maintenanceLogs.items, staffList])
 
@@ -6208,57 +6489,22 @@ function AdminBackupPage() {
           </Modal>
         )}
 
-        <div className="admin-summary-grid">
-          <div className="admin-summary-card">
-            <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 10.5 12 3l9 7.5" />
-                <path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9" />
-              </svg>
+        <div className={`admin-summary-grid is-${activeSummaryTiles.length}`}>
+          {activeSummaryTiles.map((tile) => (
+            <div
+              key={tile.key}
+              className={`admin-summary-card is-${tile.tone}${tile.value === 0 ? ' is-zero' : ''}${tile.alert ? ' is-alert' : ''}`}
+            >
+              <span className="admin-summary-icon">
+                {SUMMARY_ICON_PATHS[tile.icon] ? <SummaryIcon type={tile.icon} /> : <RoomDetailIcon type={tile.icon} size={20} />}
+              </span>
+              <span className="admin-summary-text">
+                <span className="admin-summary-label">{tile.label}</span>
+                <strong className="admin-summary-value">{tile.value}</strong>
+                {tile.hint && <small className="admin-summary-hint">{tile.hint}</small>}
+              </span>
             </div>
-            <div className="admin-summary-text">
-              <span className="admin-summary-label">ห้องทั้งหมด</span>
-              <span className="admin-summary-value">{summary.totalRooms}</span>
-            </div>
-          </div>
-          <div className="admin-summary-card is-vacant">
-            <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <polyline points="8 12.5 11 15.5 16 9.5" />
-              </svg>
-            </div>
-            <div className="admin-summary-text">
-              <span className="admin-summary-label">ห้องว่าง</span>
-              <span className="admin-summary-value">{summary.vacantRooms}</span>
-            </div>
-          </div>
-          <div className="admin-summary-card is-staff">
-            <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="8" r="3.3" />
-                <path d="M5.5 20c0-3.9 2.9-7 6.5-7s6.5 3.1 6.5 7" />
-              </svg>
-            </div>
-            <div className="admin-summary-text">
-              <span className="admin-summary-label">พนักงานที่ใช้งานอยู่</span>
-              <span className="admin-summary-value">{summary.activeStaff}</span>
-            </div>
-          </div>
-          <div className="admin-summary-card is-customer">
-            <div className="admin-summary-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="9" cy="8.5" r="3" />
-                <path d="M3.5 20c0-3.3 2.5-6 5.5-6s5.5 2.7 5.5 6" />
-                <path d="M15 4.3a3 3 0 0 1 0 5.7" />
-                <path d="M16.5 14c2 .4 3.5 2.7 3.5 6" />
-              </svg>
-            </div>
-            <div className="admin-summary-text">
-              <span className="admin-summary-label">ลูกค้าที่ใช้งานอยู่</span>
-              <span className="admin-summary-value">{summary.activeCustomers}</span>
-            </div>
-          </div>
+          ))}
         </div>
 
         <ul className="nav nav-tabs admin-tabs">
@@ -6332,9 +6578,9 @@ function AdminBackupPage() {
             </div>
             <div className="parcel-toolbar">
               <div className="parcel-search-field">
-                <label className="parcel-label" htmlFor="admin-parcel-search">ค้นหา</label>
+                <label className="parcel-label" htmlFor="parcel-ui-search">ค้นหา</label>
                 <input
-                  id="admin-parcel-search"
+                  id="parcel-ui-search"
                   className="parcel-control"
                   type="search"
                   placeholder="เลขห้อง, ชื่อผู้เช่า, เลขพัสดุ..."
@@ -6346,9 +6592,9 @@ function AdminBackupPage() {
                 />
               </div>
               <div className="parcel-filter-field">
-                <label className="parcel-label" htmlFor="admin-parcel-status">สถานะ</label>
+                <label className="parcel-label" htmlFor="parcel-ui-status">สถานะ</label>
                 <select
-                  id="admin-parcel-status"
+                  id="parcel-ui-status"
                   className="parcel-control"
                   value={parcelStatusFilter}
                   onChange={(event) => {
@@ -6363,16 +6609,16 @@ function AdminBackupPage() {
               </div>
             </div>
             <div className="table-responsive parcel-table-wrap">
-              <table className="parcel-table">
+              <table className="parcel-table parcel-ui-table">
                 <thead>
                   <tr>
-                    <th>ห้อง / ผู้เช่า</th>
+                    <th>ห้อง / ผู้รับ</th>
                     <th>ผู้ส่ง / รายละเอียด</th>
                     <th>เลขพัสดุ</th>
                     <th>รูป</th>
                     <th>สถานะ</th>
-                    <th>วันที่บันทึก / รับ</th>
-                    <th>บันทึกโดย</th>
+                    <th>บันทึก</th>
+                    <th aria-label="การดำเนินการ" />
                   </tr>
                 </thead>
                 <tbody>
@@ -6393,28 +6639,44 @@ function AdminBackupPage() {
                       </td>
                     </tr>
                   ) : pagedParcels.map((parcel) => (
-                    <tr key={parcel.id}>
+                    <tr
+                      key={parcel.id}
+                      className="parcel-row-clickable"
+                      tabIndex={0}
+                      onClick={() => setParcelDetail(parcel)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') setParcelDetail(parcel)
+                      }}
+                    >
                       <td>
-                        <div className="parcel-room-cell">
+                        <div className="parcel-ui-who">
                           <span className="parcel-room-badge">{parcel.room_number}</span>
-                          <div>
-                            <span className="parcel-primary">{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</span>
-                            <small className="parcel-secondary">{parcel.phone || '-'}</small>
+                          <div className="parcel-ui-stack">
+                            <strong>{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</strong>
+                            <small>
+                              <RoomDetailIcon type="phone" size={12} />
+                              {parcel.phone || '-'}
+                            </small>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className="parcel-primary">{parcel.sender_name}</span>
-                        <small className="parcel-secondary">{parcel.description || '-'}</small>
+                        <div className="parcel-ui-stack">
+                          <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
+                          <small className="parcel-ui-desc">{parcel.description || 'ไม่มีรายละเอียด'}</small>
+                        </div>
                       </td>
-                      <td>{parcel.tracking_number ? <span className="parcel-tracking">{parcel.tracking_number}</span> : <span className="parcel-muted">-</span>}</td>
+                      <td>
+                        {parcel.tracking_number ? <span className="parcel-ui-tracking">{parcel.tracking_number}</span> : <span className="parcel-ui-none">-</span>}
+                      </td>
                       <td>
                         {parcel.photos?.length ? (
                           <button
                             type="button"
                             className="parcel-thumb"
                             aria-label={`ดูรูปพัสดุห้อง ${parcel.room_number}`}
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation()
                               setParcelPhotoPreview(parcel)
                               setPhotoPreview(0)
                             }}
@@ -6422,16 +6684,33 @@ function AdminBackupPage() {
                             <UploadImage src={parcel.photos[0].url} alt="" />
                             {parcel.photos.length > 1 && <span>+{parcel.photos.length - 1}</span>}
                           </button>
-                        ) : <span className="parcel-muted">-</span>}
-                      </td>
-                      <td><span className={`parcel-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>{parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span></td>
-                      <td>
-                        <span className="parcel-primary">{formatDateTime(parcel.created_at)}</span>
-                        <small className="parcel-secondary">{parcel.received_at ? `รับ ${formatDateTime(parcel.received_at)}` : 'ยังไม่รับ'}</small>
+                        ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
                       </td>
                       <td>
-                            <ActorName name={parcel.staff_name || 'เจ้าหน้าที่'} />
-                          </td>
+                        <div className="parcel-ui-stack">
+                          <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
+                            <span className="parcel-ui-status-dot" aria-hidden="true" />
+                            {parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+                          </span>
+                          {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="parcel-ui-stack">
+                          <strong className="parcel-ui-date">{formatDateTime(parcel.created_at)}</strong>
+                          <small>
+                            โดย <span className="parcel-ui-actor">{parcel.staff_name || 'เจ้าหน้าที่'}</span>
+                          </small>
+                        </div>
+                      </td>
+                      <td className="parcel-ui-action">
+                        <span className="parcel-ui-open">
+                          ดูรายละเอียด
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="m9 6 6 6-6 6" />
+                          </svg>
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -6606,10 +6885,10 @@ function AdminBackupPage() {
             {staffError && <div className="alert alert-danger">{staffError}</div>}
 
             <div className="table-responsive">
-              <table className="table admin-table">
+              <table className="table admin-table admin-staff-table">
                 <thead>
                   <tr>
-                    <th>ชื่อ-นามสกุล</th>
+                    <th>พนักงาน</th>
                     <th className="admin-col-optional">บัตรประชาชน</th>
                     <th>เบอร์โทร</th>
                     <th className="admin-col-optional">อายุ</th>
@@ -6632,82 +6911,73 @@ function AdminBackupPage() {
                     </tr>
                   ) : (
                     paginatedStaff.map((member) => (
-                      <Fragment key={member.id}>
-                        <tr>
-                          <td className="admin-strong-cell">
-                            {member.first_name} {member.last_name}
-                          </td>
-                          <td className="admin-col-optional">
+                      <tr
+                        key={member.id}
+                        className={`admin-staff-row${member.is_suspended ? ' is-suspended' : ''}`}
+                        tabIndex={0}
+                        onClick={() => setStaffDetail(member)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') setStaffDetail(member)
+                        }}
+                      >
+                        <td>
+                          <div className="admin-staff-person">
+                            <span className="admin-staff-avatar" aria-hidden="true">
+                              <RoomDetailIcon type="user" size={18} />
+                            </span>
+                            <div className="admin-staff-name">
+                              <strong>
+                                {member.first_name} {member.last_name}
+                              </strong>
+                              <small>เริ่มงาน {member.created_at ? formatDate(member.created_at) : '-'}</small>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="admin-col-optional">
+                          <button
+                            type="button"
+                            className="admin-idcard-toggle"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleStaffIdCardReveal(member.id)
+                            }}
+                          >
+                            {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                          </button>
+                        </td>
+                        <td>
+                          <span className="admin-staff-phone">
+                            <RoomDetailIcon type="phone" size={14} />
+                            {member.phone || '-'}
+                          </span>
+                        </td>
+                        <td className="admin-col-optional">
+                          <span className="admin-staff-age">{member.age ? `${member.age} ปี` : '-'}</span>
+                        </td>
+                        <td>
+                          <span className={`admin-staff-status${member.is_suspended ? ' is-suspended' : ' is-active'}`}>
+                            <span className="admin-staff-status-dot" aria-hidden="true" />
+                            {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                          </span>
+                        </td>
+                        <td className="admin-col-optional">
+                          <div className="admin-row-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                            <button type="button" className="admin-action-btn is-view" onClick={() => setStaffDetail(member)}>
+                              ดูรายละเอียด
+                            </button>
+                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
+                              แก้ไข
+                            </button>
                             <button
                               type="button"
-                              className="admin-idcard-toggle"
-                              onClick={() => toggleStaffIdCardReveal(member.id)}
+                              className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                              onClick={() => setStaffSuspendConfirm(member)}
                             >
-                              {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                              {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
                             </button>
-                          </td>
-                          <td>{member.phone}</td>
-                          <td className="admin-col-optional">{member.age}</td>
-                          <td>
-                            <span className={`admin-badge status-${member.is_suspended ? 'suspended' : 'active'}`}>
-                              {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
-                            </span>
-                          </td>
-                          <td className="admin-col-optional">
-                            <div className="admin-row-actions">
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
-                                แก้ไข
-                              </button>
-                              <button
-                                type="button"
-                                className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
-                                onClick={() => setStaffSuspendConfirm(member)}
-                              >
-                                {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
-                              </button>
-                              <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
-                                ลบ
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        <ExpandToggleRow open={expandedStaffRows.has(member.id)} colSpan={6} onClick={() => toggleStaffRow(member.id)} />
-                        <DetailRow
-                          open={expandedStaffRows.has(member.id)}
-                          colSpan={6}
-                          fields={[
-                            {
-                              label: 'บัตรประชาชน',
-                              value: (
-                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleStaffIdCardReveal(member.id)}>
-                                  {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
-                                </button>
-                              ),
-                            },
-                            { label: 'อายุ', value: member.age },
-                            {
-                              label: 'การดำเนินการ',
-                              value: (
-                                <div className="admin-row-actions">
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditStaff(member)}>
-                                    แก้ไข
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
-                                    onClick={() => setStaffSuspendConfirm(member)}
-                                  >
-                                    {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
-                                  </button>
-                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setStaffDeleteConfirm(member)}>
-                                    ลบ
-                                  </button>
-                                </div>
-                              ),
-                            },
-                          ]}
-                        />
-                      </Fragment>
+                          </div>
+                        </td>
+                      </tr>
                     ))
                   )}
                 </tbody>
@@ -7460,68 +7730,185 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'expenses' && (
-          <div className="admin-card">
+          <div className="admin-card exp-ui-card">
             <div className="admin-card-header">
-              <h2>รายจ่าย</h2>
+              <h2>
+                รายจ่าย
+                {expensesTotal > 0 && <span className="exp-ui-count">{expensesTotal}</span>}
+              </h2>
               <button type="button" className="admin-action-btn is-primary" onClick={openCreateExpense}>
                 + บันทึกรายจ่าย
               </button>
             </div>
 
-            {expensesError && <div className="alert alert-danger">{expensesError}</div>}
-
-            <div className="table-responsive">
-              <table className="table admin-table">
-                <thead>
-                  <tr>
-                    <th>วันที่</th>
-                    <th>หมวดหมู่</th>
-                    <th className="admin-col-optional">รายละเอียด</th>
-                    <th className="admin-col-optional">บันทึกโดย</th>
-                    <th>จำนวนเงิน</th>
-                    <th>จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expensesLoading ? (
-                    <tr>
-                      <td colSpan={6} className="admin-empty">
-                        กำลังโหลดข้อมูล...
-                      </td>
-                    </tr>
-                  ) : expenses.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="admin-empty">
-                        ยังไม่มีรายการรายจ่าย
-                      </td>
-                    </tr>
-                  ) : (
-                    expenses.map((expense) => (
-                      <tr key={expense.id}>
-                        <td>{formatDate(expense.expense_date)}</td>
-                        <td className="admin-strong-cell">{expense.category}</td>
-                        <td className="admin-col-optional">{expense.description || '-'}</td>
-                        <td className="admin-col-optional">
-                          <ActorName name={expense.recorded_by_name} />
-                        </td>
-                        <td>฿{Number(expense.amount).toLocaleString('th-TH')}</td>
-                        <td>
-                          <div className="admin-row-actions">
-                            <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditExpense(expense)}>
-                              แก้ไข
-                            </button>
-                            <button type="button" className="admin-action-btn is-danger" onClick={() => removeExpense(expense)}>
-                              ลบ
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="exp-ui-filters">
+              <div className="exp-ui-filter-row">
+                <label className="exp-ui-search">
+                  <RoomDetailIcon type="search" size={16} />
+                  <input
+                    type="search"
+                    value={expenseFilters.search}
+                    onChange={(event) => updateExpenseFilters({ search: event.target.value }, { debounce: true })}
+                    placeholder="ค้นหาหมวดหมู่ รายละเอียด ร้านค้า เลขใบเสร็จ หรือเลขห้อง"
+                    aria-label="ค้นหา"
+                  />
+                </label>
+                <select
+                  className="exp-ui-select"
+                  value={expenseFilters.category}
+                  onChange={(event) => updateExpenseFilters({ category: event.target.value })}
+                  aria-label="หมวดหมู่"
+                >
+                  <option value="">ทุกหมวดหมู่</option>
+                  {expenseSummary.byCategory.map((item) => (
+                    <option key={item.category} value={item.category}>
+                      {item.category} ({item.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="exp-ui-date-range">
+                <span className="exp-ui-date-label">
+                  <RoomDetailIcon type="calendar" size={14} />
+                  ช่วงวันที่
+                </span>
+                <div className="exp-ui-date-inputs">
+                  <ThaiDatePicker
+                    className="exp-ui-select exp-ui-date-input"
+                    placeholder="ตั้งแต่วันที่"
+                    value={expenseFilters.from}
+                    isClearable
+                    onChange={(value) => updateExpenseFilters({ from: value || '' })}
+                  />
+                  <span className="exp-ui-date-sep" aria-hidden="true">ถึง</span>
+                  <ThaiDatePicker
+                    className="exp-ui-select exp-ui-date-input"
+                    placeholder="ถึงวันที่"
+                    value={expenseFilters.to}
+                    isClearable
+                    onChange={(value) => updateExpenseFilters({ to: value || '' })}
+                  />
+                </div>
+              </div>
+              {expenseFiltersActive && (
+                <div className="exp-ui-result">
+                  <span>พบ {expensesTotal} รายการ</span>
+                  <button type="button" className="exp-ui-clear" onClick={() => updateExpenseFilters(EMPTY_EXPENSE_FILTERS)}>
+                    ล้างตัวกรอง
+                  </button>
+                </div>
+              )}
             </div>
-            <Pagination page={expensesPage} totalPages={expensesTotalPages} onChange={(page) => loadExpenses(page)} />
+
+            <div className="exp-ui-list">
+            {expensesError ? (
+              <div className="exp-ui-empty">
+                <p className="exp-ui-error">{expensesError}</p>
+                <button type="button" className="admin-action-btn is-ghost" disabled={expensesLoading} onClick={() => loadExpenses(expensesPage)}>
+                  ลองใหม่
+                </button>
+              </div>
+            ) : expensesLoading ? (
+              <p className="exp-ui-empty">กำลังโหลดข้อมูล...</p>
+            ) : expenses.length === 0 ? (
+              <p className="exp-ui-empty">{expenseFiltersActive ? 'ไม่พบรายจ่ายที่ตรงกับเงื่อนไข' : 'ยังไม่มีรายการรายจ่าย'}</p>
+            ) : (
+              <div className="exp-ui-grid">
+                {expenses.map((expense) => (
+                  <article key={expense.id} className="exp-ui-item">
+                    <div className="exp-ui-item-head">
+                      <span className="exp-ui-avatar" aria-hidden="true">
+                        <RoomDetailIcon type="receipt" size={18} />
+                      </span>
+                      <div className="exp-ui-identity">
+                        <strong title={expense.description || expense.category}>{expense.description || expense.category}</strong>
+                        <span className="exp-ui-category">{expense.category}</span>
+                      </div>
+                      <span className="exp-ui-date">{formatDate(expense.expense_date)}</span>
+                    </div>
+                    <div className="exp-ui-amount-row">
+                      <div className="exp-ui-amount">
+                        <small>จำนวนเงิน</small>
+                        <strong>฿{formatCurrency(expense.amount)}</strong>
+                      </div>
+                    </div>
+                    <dl className="exp-ui-facts is-columns">
+                      {[
+                        { key: 'vendor', icon: 'user', label: 'ผู้รับเงิน', value: expense.vendor || 'ไม่ระบุ' },
+                        { key: 'payment', icon: 'wallet', label: 'ชำระโดย', value: EXPENSE_PAYMENT_METHOD_LABEL[expense.payment_method] || 'ไม่ระบุ' },
+                        { key: 'receipt', icon: 'receipt', label: 'เลขใบเสร็จ', value: expense.receipt_number || 'ไม่ระบุ' },
+                        { key: 'room', icon: 'door', label: 'ห้องที่เกี่ยวข้อง', value: expense.room_number ? `ห้อง ${expense.room_number}` : 'ไม่ระบุ' },
+                      ].map((fact) => (
+                        <div key={fact.key}>
+                          <dt>
+                            <RoomDetailIcon type={fact.icon} size={15} />
+                            {fact.label}
+                          </dt>
+                          <dd>{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {expense.photos?.length > 0 && (
+                      <div className="exp-ui-thumbs-block">
+                        <span className="exp-ui-thumbs-title">รูปหลักฐาน · {expense.photos.length} รูป</span>
+                        <button
+                          type="button"
+                          className="exp-ui-thumbs"
+                          aria-label={`ดูรูปหลักฐานทั้งหมด ${expense.photos.length} รูป`}
+                          onClick={() => openExpenseDetail(expense)}
+                        >
+                          {expense.photos.slice(0, 4).map((photo, index) => (
+                            <span key={photo.url} className="exp-ui-thumb">
+                              <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                              {index === 3 && expense.photos.length > 4 && (
+                                <span className="exp-ui-thumb-more">+{expense.photos.length - 4}</span>
+                              )}
+                            </span>
+                          ))}
+                        </button>
+                      </div>
+                    )}
+                    <div className="exp-ui-footer">
+                      <div className="exp-ui-recorder">
+                        <span className="exp-ui-dot" aria-hidden="true" />
+                        <span>
+                          บันทึกโดย <strong>{expense.recorded_by_name || '-'}</strong>
+                        </span>
+                        <time dateTime={expense.created_at}>{formatDateTime(expense.created_at)}</time>
+                      </div>
+                      <div className="exp-ui-actions">
+                        <button type="button" className="exp-ui-link" onClick={() => openExpenseDetail(expense)}>
+                          ดูรายละเอียด
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-action-btn is-danger"
+                          onClick={() => {
+                            setExpenseDeleteError('')
+                            setExpenseDelete(expense)
+                          }}
+                        >
+                          ลบ
+                        </button>
+                        <button type="button" className="admin-action-btn is-primary" onClick={() => openEditExpense(expense)}>
+                          แก้ไข
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+            </div>
+
+            <div className="exp-ui-pagination">
+              <span>
+                {expensesTotal > 0
+                  ? `แสดง ${(expensesPage - 1) * EXPENSES_PAGE_SIZE + 1}-${Math.min(expensesPage * EXPENSES_PAGE_SIZE, expensesTotal)} จาก ${expensesTotal} รายการ`
+                  : '0 รายการ'}
+              </span>
+              <Pagination page={expensesPage} totalPages={expensesTotalPages} onChange={(page) => loadExpenses(page)} />
+            </div>
           </div>
         )}
 
@@ -7980,6 +8367,210 @@ function AdminBackupPage() {
         </Modal>
       )}
 
+      {staffDetail && (
+        <Modal title="รายละเอียดพนักงาน" onClose={() => setStaffDetail(null)} variant="expense">
+          {(requestClose) => {
+            const member = staffList.find((item) => item.id === staffDetail.id) || staffDetail
+            const runAfterClose = (action) => {
+              requestClose()
+              action(member)
+            }
+            return (
+              <div className="exp-ui-body">
+                <div className="exp-ui-top">
+                  <div className="admin-staff-hero">
+                    <span className="admin-staff-avatar is-large" aria-hidden="true">
+                      <RoomDetailIcon type="user" size={26} />
+                    </span>
+                    <div className="admin-staff-hero-text">
+                      <small>พนักงาน</small>
+                      <strong>
+                        {member.first_name} {member.last_name}
+                      </strong>
+                    </div>
+                    <span className={`admin-staff-status${member.is_suspended ? ' is-suspended' : ' is-active'}`}>
+                      <span className="admin-staff-status-dot" aria-hidden="true" />
+                      {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                    </span>
+                  </div>
+                </div>
+                <div className="exp-ui-scroll">
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">ข้อมูลพนักงาน</h4>
+                    <dl className="exp-ui-facts is-columns">
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="phone" size={15} />
+                          เบอร์โทร
+                        </dt>
+                        <dd>{member.phone ? <a className="admin-staff-tel" href={`tel:${member.phone}`}>{member.phone}</a> : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="user" size={15} />
+                          อายุ
+                        </dt>
+                        <dd>{member.age ? `${member.age} ปี` : '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="note" size={15} />
+                          บัตรประชาชน
+                        </dt>
+                        <dd>
+                          <button type="button" className="admin-idcard-toggle" onClick={() => toggleStaffIdCardReveal(member.id)}>
+                            {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
+                          </button>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <RoomDetailIcon type="calendar" size={15} />
+                          เริ่มงานเมื่อ
+                        </dt>
+                        <dd>{member.created_at ? formatDate(member.created_at) : '-'}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                </div>
+                <div className="exp-ui-footer-bar">
+                  <div className="exp-ui-modal-actions">
+                    <button type="button" className="admin-action-btn is-danger" onClick={() => runAfterClose(setStaffDeleteConfirm)}>
+                      ลบ
+                    </button>
+                    <button
+                      type="button"
+                      className={`admin-action-btn ${member.is_suspended ? 'is-success' : 'is-warning'}`}
+                      onClick={() => runAfterClose(setStaffSuspendConfirm)}
+                    >
+                      {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
+                    </button>
+                    <button type="button" className="admin-action-btn is-primary" onClick={() => runAfterClose(openEditStaff)}>
+                      แก้ไข
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {parcelDetail && (
+        <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetail(null)} variant="expense">
+          {(requestClose) => {
+            const received = parcelDetail.status === 'received'
+            const photos = parcelDetail.photos || []
+            const tenantName = parcelDetail.first_name ? `${parcelDetail.first_name} ${parcelDetail.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
+            return (
+              <div className="exp-ui-body">
+                <div className="exp-ui-top">
+                  <div className="exp-ui-detail-head">
+                    <span className={`parcel-status${received ? ' is-received' : ' is-pending'}`}>{received ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span>
+                    <span className="exp-ui-detail-date">
+                      <RoomDetailIcon type="calendar" size={16} />
+                      <span>
+                        <small>บันทึกเมื่อ</small>
+                        <strong>{formatDateTime(parcelDetail.created_at)}</strong>
+                      </span>
+                    </span>
+                  </div>
+                  <div className="exp-ui-summary">
+                    <span className="exp-ui-summary-icon">
+                      <PackageIcon size={30} strokeWidth={2} />
+                    </span>
+                    <div className="exp-ui-summary-amount">
+                      <small>ห้อง</small>
+                      <strong>{parcelDetail.room_number}</strong>
+                    </div>
+                    <div className="exp-ui-summary-vendor">
+                      <small>ผู้รับ</small>
+                      <span>{tenantName}</span>
+                      {parcelDetail.phone && (
+                        <em>
+                          <RoomDetailIcon type="phone" size={13} />
+                          {parcelDetail.phone}
+                        </em>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="exp-ui-scroll">
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">ข้อมูลพัสดุ</h4>
+                    <dl className="exp-ui-facts is-columns">
+                      {[
+                        { key: 'sender', icon: 'user', label: 'ผู้ส่ง', value: parcelDetail.sender_name || 'พัสดุทั่วไป' },
+                        { key: 'tracking', icon: 'receipt', label: 'เลขพัสดุ', value: parcelDetail.tracking_number || '-' },
+                        { key: 'by', icon: 'user', label: 'บันทึกโดย', value: parcelDetail.staff_name || 'เจ้าหน้าที่' },
+                        { key: 'received', icon: 'clock', label: 'วันที่รับ', value: received ? formatDateTime(parcelDetail.received_at) : 'ยังไม่ได้รับ' },
+                      ].map((fact) => (
+                        <div key={fact.key}>
+                          <dt>
+                            <RoomDetailIcon type={fact.icon} size={15} />
+                            {fact.label}
+                          </dt>
+                          <dd>{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {parcelDetail.description && (
+                      <div className="exp-ui-note">
+                        <span>รายละเอียด</span>
+                        <p>{parcelDetail.description}</p>
+                      </div>
+                    )}
+                  </section>
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">
+                      รูปพัสดุ
+                      <small className="exp-ui-counter">{photos.length} รูป</small>
+                    </h4>
+                    {photos.length > 0 ? (
+                      <div className="exp-ui-gallery-thumbs is-wrap">
+                        {photos.map((photo, index) => (
+                          <button
+                            key={photo.url}
+                            type="button"
+                            className="exp-ui-gallery-thumb is-large"
+                            aria-label={`ดูรูปพัสดุ ${index + 1}`}
+                            onClick={() => {
+                              setParcelPhotoPreview(parcelDetail)
+                              setPhotoPreview(index)
+                            }}
+                          >
+                            <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="exp-ui-muted">ไม่มีรูปพัสดุ</p>
+                    )}
+                  </section>
+                  <StepTimeline
+                    title="ความคืบหน้า"
+                    actorClassName="admin-actor-inline"
+                    steps={[
+                      { label: 'บันทึกพัสดุเข้าห้อง', meta: formatDateTime(parcelDetail.created_at), by: parcelDetail.staff_name || 'เจ้าหน้าที่', state: 'done' },
+                      received
+                        ? { label: 'ผู้เช่ารับพัสดุแล้ว', meta: formatDateTime(parcelDetail.received_at), state: 'done', tone: 'success' }
+                        : { label: 'รอผู้เช่ารับพัสดุ', meta: 'ยังไม่ได้รับ', state: 'current' },
+                    ]}
+                  />
+                </div>
+                <div className="exp-ui-footer-bar">
+                  <div className="exp-ui-modal-actions">
+                    <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                      ปิด
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          }}
+        </Modal>
+      )}
+
       {previewSource && photoPreview !== null && previewPhotos[photoPreview] && (
         <PhotoLightbox
           photos={previewPhotos}
@@ -8174,52 +8765,447 @@ function AdminBackupPage() {
         </Modal>
       )}
 
-      {expenseModal && (
-        <Modal title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'} onClose={() => setExpenseModal(null)}>
+      {expenseDelete && (
+        <Modal title="ยืนยันการลบรายจ่าย" onClose={() => setExpenseDelete(null)} variant="confirm">
           {(requestClose) => (
-            <form onSubmit={(event) => submitExpenseForm(event, requestClose)} noValidate>
-              {expenseFormError && <div className="alert alert-danger py-2 px-3">{expenseFormError}</div>}
-              <div className="row g-3">
-                <div className="col-12">
-                  <label className="form-label">หมวดหมู่</label>
-                  <input
-                    type="text"
-                    name="category"
-                    className="form-control"
-                    value={expenseForm.category}
-                    onChange={handleExpenseFormChange}
-                    placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซ่อมบำรุง"
-                    required
-                  />
+            <div className="exp-ui-confirm">
+              <span className="exp-ui-confirm-icon">
+                <RoomDetailIcon type="alert" size={26} />
+              </span>
+              <p className="exp-ui-confirm-message">ลบรายจ่ายนี้ออกจากระบบ?</p>
+              <dl className="exp-ui-confirm-details">
+                <div>
+                  <dt>วันที่</dt>
+                  <dd>{formatDate(expenseDelete.expense_date)}</dd>
                 </div>
-                <div className="col-12">
-                  <label className="form-label">รายละเอียด (ไม่บังคับ)</label>
-                  <input type="text" name="description" className="form-control" value={expenseForm.description} onChange={handleExpenseFormChange} />
+                <div>
+                  <dt>หมวดหมู่</dt>
+                  <dd>{expenseDelete.category}</dd>
                 </div>
-                <div className="col-12">
-                  <label className="form-label">จำนวนเงิน (บาท)</label>
-                  <div className="admin-input-group">
-                    <span className="admin-input-affix">฿</span>
-                    <input type="number" step="0.01" min="0" name="amount" className="form-control" value={expenseForm.amount} onChange={handleExpenseFormChange} required />
-                  </div>
+                <div>
+                  <dt>จำนวนเงิน</dt>
+                  <dd>฿{formatCurrency(expenseDelete.amount)}</dd>
                 </div>
-                <div className="col-12">
-                  <label className="form-label" htmlFor="admin-expense-date">วันที่</label>
-                  <ThaiDatePicker
-                    id="admin-expense-date"
-                    value={expenseForm.expense_date}
-                    onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
-                  />
-                </div>
-              </div>
-              <div className="admin-form-actions">
-                <button type="submit" className="admin-action-btn is-primary" disabled={expenseSubmitting}>
-                  {expenseSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+              </dl>
+              {expenseDeleteError && (
+                <p className="exp-ui-error" role="alert">
+                  {expenseDeleteError}
+                </p>
+              )}
+              <div className="exp-ui-modal-actions">
+                <button type="button" className="admin-action-btn is-ghost" disabled={expenseDeleting} onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button type="button" className="admin-action-btn is-danger" disabled={expenseDeleting} onClick={() => confirmDeleteExpense(requestClose)}>
+                  {expenseDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </Modal>
+      )}
+
+      {expenseModal && (
+        <Modal
+          title={expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'แก้ไขรายจ่าย'}
+          onClose={() => setExpenseModal(null)}
+          variant="expense"
+        >
+          {(requestClose) => {
+            const setField = (field) => (event) => setExpenseForm((prev) => ({ ...prev, [field]: event.target.value }))
+            const photoCount = expenseForm.keptPhotos.length + expenseForm.newPhotos.length
+            const expenseExtraFilled = ['vendor', 'payment_method', 'receipt_number', 'room_number'].filter(
+              (field) => String(expenseForm[field]).trim(),
+            ).length
+            return (
+              <form className="exp-ui-body" onSubmit={(event) => submitExpenseForm(event, requestClose)} noValidate>
+                <div className="exp-ui-scroll">
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">ข้อมูลรายจ่าย</h4>
+                    <div className="exp-ui-form-grid">
+                      <div className="exp-ui-field is-full">
+                        <label className="exp-ui-label" htmlFor="admin-expense-category">
+                          หมวดหมู่ <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          id="admin-expense-category"
+                          type="text"
+                          className="exp-ui-input"
+                          placeholder="พิมพ์เอง หรือเลือกจากด้านล่าง"
+                          maxLength={50}
+                          value={expenseForm.category}
+                          onChange={setField('category')}
+                        />
+                        <div className="exp-ui-chips" role="group" aria-label="หมวดหมู่ที่ใช้บ่อย">
+                          {EXPENSE_CATEGORY_PRESETS.map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              className={`exp-ui-chip${expenseForm.category.trim() === preset ? ' is-active' : ''}`}
+                              onClick={() => setExpenseForm((prev) => ({ ...prev, category: preset }))}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="exp-ui-field">
+                        <label className="exp-ui-label" htmlFor="admin-expense-amount">
+                          จำนวนเงิน (บาท) <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          id="admin-expense-amount"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="exp-ui-input"
+                          value={expenseForm.amount}
+                          onChange={setField('amount')}
+                        />
+                      </div>
+                      <div className="exp-ui-field">
+                        <label className="exp-ui-label" htmlFor="admin-expense-date">
+                          วันที่จ่าย <span className="text-danger">*</span>
+                        </label>
+                        <ThaiDatePicker
+                          id="admin-expense-date"
+                          className="exp-ui-input"
+                          value={expenseForm.expense_date}
+                          onChange={(date) => setExpenseForm((prev) => ({ ...prev, expense_date: date }))}
+                        />
+                      </div>
+                      <div className="exp-ui-field is-full">
+                        <label className="exp-ui-label" htmlFor="admin-expense-description">
+                          รายละเอียด <span className="text-danger">*</span>
+                        </label>
+                        <textarea
+                          id="admin-expense-description"
+                          className="exp-ui-input exp-ui-textarea"
+                          rows={3}
+                          maxLength={255}
+                          placeholder="อธิบายรายจ่ายนี้ เช่น ซื้ออะไร ซ่อมจุดไหน"
+                          value={expenseForm.description}
+                          onChange={setField('description')}
+                        />
+                        <small className="exp-ui-counter">{expenseForm.description.length}/255</small>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={`exp-ui-section exp-ui-collapsible${expenseExtraOpen ? ' is-open' : ''}`}>
+                    <button
+                      type="button"
+                      className="exp-ui-collapse-toggle"
+                      aria-expanded={expenseExtraOpen}
+                      aria-controls="admin-expense-extra-fields"
+                      onClick={() => setExpenseExtraOpen((open) => !open)}
+                    >
+                      <span className="exp-ui-section-title">
+                        รายละเอียดเพิ่มเติม
+                        <small className="exp-ui-optional">ไม่บังคับ</small>
+                      </span>
+                      {!expenseExtraOpen && expenseExtraFilled > 0 && (
+                        <span className="exp-ui-filled">กรอกแล้ว {expenseExtraFilled} ช่อง</span>
+                      )}
+                      <svg className="exp-ui-collapse-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    <div className="exp-ui-form-grid" id="admin-expense-extra-fields" hidden={!expenseExtraOpen}>
+                      <div className="exp-ui-field">
+                        <label className="exp-ui-label" htmlFor="admin-expense-vendor">
+                          ผู้รับเงิน / ร้านค้า
+                        </label>
+                        <input
+                          id="admin-expense-vendor"
+                          type="text"
+                          className="exp-ui-input"
+                          placeholder="เช่น การไฟฟ้า, ร้านวัสดุ"
+                          maxLength={120}
+                          value={expenseForm.vendor}
+                          onChange={setField('vendor')}
+                        />
+                      </div>
+                      <div className="exp-ui-field">
+                        <label className="exp-ui-label" htmlFor="admin-expense-payment">
+                          วิธีชำระเงิน
+                        </label>
+                        <select id="admin-expense-payment" className="exp-ui-input" value={expenseForm.payment_method} onChange={setField('payment_method')}>
+                          <option value="">ไม่ระบุ</option>
+                          {Object.entries(EXPENSE_PAYMENT_METHOD_LABEL).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="exp-ui-field">
+                        <label className="exp-ui-label" htmlFor="admin-expense-receipt">
+                          เลขที่ใบเสร็จ / อ้างอิง
+                        </label>
+                        <input
+                          id="admin-expense-receipt"
+                          type="text"
+                          className="exp-ui-input"
+                          maxLength={60}
+                          value={expenseForm.receipt_number}
+                          onChange={setField('receipt_number')}
+                        />
+                      </div>
+                      <div className="exp-ui-field">
+                        <label className="exp-ui-label" htmlFor="admin-expense-room">
+                          ห้องที่เกี่ยวข้อง
+                        </label>
+                        <select id="admin-expense-room" className="exp-ui-input" value={expenseForm.room_number} onChange={setField('room_number')}>
+                          <option value="">ไม่เกี่ยวกับห้องใด</option>
+                          {[...rooms]
+                            .sort((a, b) => a.room_number - b.room_number)
+                            .map((room) => (
+                              <option key={room.room_number} value={String(room.room_number)}>
+                                ห้อง {room.room_number}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">
+                      รูปใบเสร็จ / หลักฐาน <span className="text-danger">*</span>
+                      <small className="exp-ui-counter">
+                        {photoCount}/{EXPENSE_MAX_PHOTOS} รูป · JPG, PNG, WebP ไม่เกิน 5 MB
+                      </small>
+                    </h4>
+                    {expenseForm.keptPhotos.length > 0 && (
+                      <div className="exp-ui-kept-photos">
+                        {expenseForm.keptPhotos.map((photo, index) => (
+                          <figure key={photo.url} className="exp-ui-kept-photo">
+                            <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                            <button
+                              type="button"
+                              className="parcel-photo-remove"
+                              aria-label={`นำรูปที่ ${index + 1} ออก`}
+                              onClick={() =>
+                                setExpenseForm((prev) => ({
+                                  ...prev,
+                                  keptPhotos: prev.keptPhotos.filter((item) => item.url !== photo.url),
+                                }))
+                              }
+                            >
+                              ลบ
+                            </button>
+                          </figure>
+                        ))}
+                      </div>
+                    )}
+                    <ParcelPhotoPicker
+                      id="admin-expense-photos"
+                      files={expenseForm.newPhotos}
+                      onChange={(files) => setExpenseForm((prev) => ({ ...prev, newPhotos: files }))}
+                      error={expensePhotoError}
+                      onError={setExpensePhotoError}
+                      heading={false}
+                      maxPhotos={Math.max(0, EXPENSE_MAX_PHOTOS - expenseForm.keptPhotos.length)}
+                    />
+                  </section>
+                </div>
+
+                <div className="exp-ui-footer-bar">
+                  {expenseFormError && <p className="exp-ui-error">{expenseFormError}</p>}
+                  <div className="exp-ui-modal-actions">
+                    <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                      ยกเลิก
+                    </button>
+                    <button type="submit" className="admin-action-btn is-primary" disabled={expenseSubmitting}>
+                      {expenseSubmitting ? 'กำลังบันทึก...' : expenseModal.mode === 'create' ? 'บันทึกรายจ่าย' : 'บันทึกการแก้ไข'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )
+          }}
+        </Modal>
+      )}
+
+      {expenseDetail && (
+        <Modal title="รายละเอียดรายจ่าย" onClose={() => setExpenseDetail(null)} variant="expense">
+          {(requestClose) => (
+            <div className="exp-ui-body">
+              <div className="exp-ui-top">
+                <div className="exp-ui-detail-head">
+                  <span className="exp-ui-category">{expenseDetail.category}</span>
+                  {expenseDetail.payment_method && (
+                    <span className="exp-ui-method">{EXPENSE_PAYMENT_METHOD_LABEL[expenseDetail.payment_method]}</span>
+                  )}
+                  <span className="exp-ui-detail-date">
+                    <RoomDetailIcon type="calendar" size={16} />
+                    <span>
+                      <small>วันที่จ่าย</small>
+                      <strong>{formatDate(expenseDetail.expense_date)}</strong>
+                    </span>
+                  </span>
+                </div>
+                <div className="exp-ui-summary">
+                  <span className="exp-ui-summary-icon">
+                    <RoomDetailIcon type="wallet" size={30} />
+                  </span>
+                  <div className="exp-ui-summary-amount">
+                    <small>จำนวนเงิน</small>
+                    <strong>฿{formatCurrency(expenseDetail.amount)}</strong>
+                  </div>
+                  <div className="exp-ui-summary-vendor">
+                    <small>ผู้รับเงิน / ร้านค้า</small>
+                    <span>{expenseDetail.vendor || '-'}</span>
+                    {expenseDetail.receipt_number && (
+                      <em>
+                        <RoomDetailIcon type="receipt" size={13} />
+                        ใบเสร็จ {expenseDetail.receipt_number}
+                      </em>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="exp-ui-scroll">
+                <div className="exp-ui-detail-layout">
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">ข้อมูลรายจ่าย</h4>
+                    <dl className="exp-ui-facts is-columns">
+                      {[
+                        { key: 'date', icon: 'calendar', label: 'วันที่จ่าย', value: formatDate(expenseDetail.expense_date) },
+                        { key: 'payment', icon: 'wallet', label: 'ชำระโดย', value: EXPENSE_PAYMENT_METHOD_LABEL[expenseDetail.payment_method] || 'ไม่ระบุ' },
+                        { key: 'room', icon: 'door', label: 'ห้องที่เกี่ยวข้อง', value: expenseDetail.room_number ? `ห้อง ${expenseDetail.room_number}` : 'ไม่เกี่ยวกับห้องใด' },
+                        { key: 'by', icon: 'user', label: 'บันทึกโดย', value: expenseDetail.recorded_by_name || '-' },
+                        { key: 'created', icon: 'clock', label: 'บันทึกเมื่อ', value: formatDateTime(expenseDetail.created_at) },
+                      ].map((fact) => (
+                        <div key={fact.key}>
+                          <dt>
+                            <RoomDetailIcon type={fact.icon} size={15} />
+                            {fact.label}
+                          </dt>
+                          <dd>{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className="exp-ui-note">
+                      <span>รายละเอียด</span>
+                      <p>{expenseDetail.description || '-'}</p>
+                    </div>
+                  </section>
+                  <section className="exp-ui-section">
+                    <h4 className="exp-ui-section-title">
+                      รูปใบเสร็จ / หลักฐาน
+                      {expenseDetail.photos?.length > 0 && (
+                        <small className="exp-ui-counter">
+                          {expenseDetail.photos.length > 4 ? `${expenseDetail.photos.length} รูป` : `${Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1) + 1}/${expenseDetail.photos.length}`}
+                        </small>
+                      )}
+                    </h4>
+                    {expenseDetail.photos?.length > 4 ? (
+                      <div className="exp-ui-gallery-grid">
+                        {expenseDetail.photos.slice(0, 4).map((photo, index) => (
+                          <button
+                            key={photo.url}
+                            type="button"
+                            className="exp-ui-gallery-tile"
+                            aria-label={`ดูรูปที่ ${index + 1}`}
+                            onClick={() => setExpensePhotoPreview({ index })}
+                          >
+                            <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                            {index === 3 && <span className="exp-ui-gallery-more">+{expenseDetail.photos.length - 4}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    ) : expenseDetail.photos?.length > 0 ? (
+                      (() => {
+                        const activeIndex = Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1)
+                        const activePhoto = expenseDetail.photos[activeIndex]
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              className="exp-ui-gallery-main"
+                              title="คลิกเพื่อดูรูปขนาดเต็ม"
+                              onClick={() => setExpensePhotoPreview({ index: activeIndex })}
+                            >
+                              <UploadImage src={activePhoto.url} alt={activePhoto.name || `รูปที่ ${activeIndex + 1}`} />
+                              <span className="exp-ui-gallery-zoom">ดูรูปขนาดเต็ม</span>
+                            </button>
+                            {expenseDetail.photos.length > 1 && (
+                              <div className="exp-ui-gallery-thumbs">
+                                {expenseDetail.photos.map((photo, index) => (
+                                  <button
+                                    key={photo.url}
+                                    type="button"
+                                    className={`exp-ui-gallery-thumb${index === activeIndex ? ' is-active' : ''}`}
+                                    aria-label={`ดูรูปที่ ${index + 1}`}
+                                    onClick={() => setExpenseDetailPhotoIndex(index)}
+                                  >
+                                    <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()
+                    ) : (
+                      <div className="exp-ui-gallery-empty">
+                        <RoomDetailIcon type="receipt" size={28} />
+                        <span>ยังไม่มีรูปใบเสร็จหรือหลักฐาน</span>
+                        <button
+                          type="button"
+                          className="exp-ui-link"
+                          onClick={() => {
+                            const target = expenseDetail
+                            requestClose()
+                            openEditExpense(target)
+                          }}
+                        >
+                          แนบรูปเพิ่ม
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </div>
+              <div className="exp-ui-footer-bar">
+                <div className="exp-ui-modal-actions">
+                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
+                    ปิด
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-action-btn is-primary"
+                    onClick={() => {
+                      const target = expenseDetail
+                      requestClose()
+                      openEditExpense(target)
+                    }}
+                  >
+                    แก้ไข
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {expenseDetail && expensePhotoPreview && (
+        <PhotoLightbox
+          photos={(expenseDetail.photos || []).map((photo, index) => ({
+            name: photo.name || `รูปที่ ${index + 1}`,
+            url: photo.url,
+          }))}
+          initialIndex={expensePhotoPreview.index}
+          title={`รายจ่าย ${expenseDetail.category}`}
+          subtitle={`฿${formatCurrency(expenseDetail.amount)} · ${formatDate(expenseDetail.expense_date)}`}
+          label="รูปรายจ่าย"
+          onClose={() => setExpensePhotoPreview(null)}
+        />
       )}
 
       {roomDetail && (
@@ -8492,13 +9478,13 @@ function AdminBackupPage() {
             <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
             <div className="row g-3">
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-room">
+                <label className="form-label" htmlFor="parcel-ui-room">
                   ห้อง / ผู้เช่า <span className="text-danger">*</span>
                 </label>
                 <div className="input-group">
                   <span className="input-group-text"><DoorIcon /></span>
                   <select
-                    id="admin-parcel-room"
+                    id="parcel-ui-room"
                     className="form-select"
                     required
                     value={parcelForm.room_number}
@@ -8516,11 +9502,11 @@ function AdminBackupPage() {
                 </div>
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
+                <label className="form-label" htmlFor="parcel-ui-sender">บริษัทขนส่ง / ผู้ส่ง</label>
                 <div className="input-group">
                   <span className="input-group-text"><TruckIcon /></span>
                   <input
-                    id="admin-parcel-sender"
+                    id="parcel-ui-sender"
                     className="form-control"
                     type="text"
                     maxLength={100}
@@ -8531,13 +9517,13 @@ function AdminBackupPage() {
                 </div>
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-tracking">
+                <label className="form-label" htmlFor="parcel-ui-tracking">
                   เลขพัสดุ <small>(ไม่บังคับ)</small>
                 </label>
                 <div className="input-group">
                   <span className="input-group-text"><HashIcon /></span>
                   <input
-                    id="admin-parcel-tracking"
+                    id="parcel-ui-tracking"
                     className="form-control"
                     type="text"
                     maxLength={100}
@@ -8548,13 +9534,13 @@ function AdminBackupPage() {
                 </div>
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="admin-parcel-description">
+                <label className="form-label" htmlFor="parcel-ui-description">
                   รายละเอียด <small>(ไม่บังคับ)</small>
                 </label>
                 <div className="input-group">
                   <span className="input-group-text"><NoteIcon /></span>
                   <input
-                    id="admin-parcel-description"
+                    id="parcel-ui-description"
                     className="form-control"
                     type="text"
                     maxLength={255}
@@ -8567,7 +9553,7 @@ function AdminBackupPage() {
               <div className="col-12">
                 <div className="parcel-photo-section">
                   <ParcelPhotoPicker
-                    id="admin-parcel-photos"
+                    id="parcel-ui-photos"
                     required
                     files={parcelPhotos}
                     onChange={setParcelPhotos}
