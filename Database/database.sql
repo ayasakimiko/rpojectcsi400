@@ -624,6 +624,26 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'deleted_at'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL AFTER created_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'deleted_by_name'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `deleted_by_name` VARCHAR(255) NULL AFTER deleted_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND INDEX_NAME = 'idx_announcement_expires'),
     'SELECT 1',

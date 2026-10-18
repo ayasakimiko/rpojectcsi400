@@ -62,15 +62,6 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid #dce9fb;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f1f7ff 0%, #fbfdff 100%);
-}
-
-.announcement-detail-body.is-warning .announcement-detail-heading {
-  border-color: #fde7b0;
-  background: linear-gradient(135deg, #fff8e6 0%, #fffdf6 100%);
 }
 
 .announcement-detail-icon {
@@ -103,9 +94,9 @@
 .announcement-detail-heading h4 {
   min-width: 0;
   margin: 0;
-  color: #0f2b52;
+  color: #333333;
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -118,6 +109,14 @@
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.announcement-detail-body.is-info .announcement-detail-label {
+  color: #8fa8c5;
+}
+
+.announcement-detail-body.is-warning .announcement-detail-label {
+  color: #c1a573;
 }
 
 .announcement-detail-label em {
@@ -145,15 +144,11 @@
   background: #fffbf0;
 }
 
-.announcement-detail-body.is-warning .announcement-detail-note .announcement-detail-label {
-  color: #c08a3e;
-}
-
 .announcement-detail-message {
   margin: 0;
-  color: #1e3a5f;
-  font-size: 14.5px;
-  font-weight: 500;
+  color: #000000;
+  font-size: 15px;
+  font-weight: 600;
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -235,7 +230,6 @@
 @media (max-width: 480px) {
   .announcement-detail-heading {
     gap: 12px;
-    padding: 12px 14px;
   }
 
   .announcement-detail-icon {
@@ -1570,6 +1564,12 @@
   flex: 0 0 auto;
   padding: 16px 20px 14px;
   background: #fff;
+}
+
+.announcement-detail > .announcement-dialog-header h3 {
+  color: #000000;
+  font-size: 20px;
+  font-weight: 800;
 }
 
 .announcement-detail > .announcement-detail-body {

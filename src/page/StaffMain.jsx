@@ -100,6 +100,7 @@ function WaitingDetailIcon({ type, size = 16 }) {
     edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
     wallet: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
+    photo: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></>,
     tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5Z" />,
   }
   return (
@@ -1290,7 +1291,7 @@ function localDayKey(value) {
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const TENANT_GRID_COUNT = 9
-const ROOMS_PER_PAGE = 5
+const ROOMS_PER_PAGE = 12
 const STAFF_LIST_PAGE_SIZE = 10
 const EXPENSES_PAGE_SIZE = 9
 
@@ -1886,9 +1887,9 @@ function MoveoutRequestBody({ request }) {
   )
 }
 
-function TenantRequestDetails({ details }) {
+function TenantRequestDetails({ details, columns = false }) {
   return (
-    <dl className="staff-req-details">
+    <dl className={`staff-req-details${columns ? ' is-columns' : ''}`}>
       {details.map((detail) => (
         <div key={detail.key} className="staff-req-detail">
           <dt>
@@ -3052,6 +3053,18 @@ function MoveRoomApprovalModal({ request, sourceRoom, error, processing, onConfi
 }
 
 const SUMMARY_ICON_PATHS = {
+  announce: (
+    <>
+      <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1Z" />
+      <path d="M16 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   total: (
     <>
       <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -3145,6 +3158,9 @@ function StaffSummaryTile({ icon, label, value, hint, tone, alert = false, onCli
         <strong className="staff-summary-tile-value">{value}</strong>
         {hint && <small className="staff-summary-tile-hint">{hint}</small>}
       </span>
+      <svg className="staff-summary-tile-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m9 6 6 6-6 6" />
+      </svg>
     </button>
   )
 }
@@ -7406,6 +7422,9 @@ function StaffMain() {
     )
   }
 
+  const announcementWarningCount = announcements.filter((item) => item.tone === 'warning').length
+  const announcementScheduledCount = announcements.filter((item) => item.expires_at).length
+  const announcementNewCount = announcements.filter((item) => Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000).length
   const safetyTile = {
     key: 'safety',
     icon: 'safety',
@@ -7506,6 +7525,23 @@ function StaffMain() {
       tiles: [
         { key: 'car', icon: 'car', tone: 'blue', label: 'รถที่จอดอยู่', value: parkedVehicleCount, onClick: () => openSummaryTarget('resident-visits') },
         { key: 'carPending', icon: 'carPending', tone: 'amber', label: 'คำขอรถรออนุมัติ', value: pendingVisitCount, onClick: () => openSummaryTarget('resident-visits') },
+      ],
+    },
+    announcements: {
+      title: 'ประกาศจากหอพัก',
+      tiles: [
+        { key: 'all', icon: 'announce', tone: 'blue', label: 'ประกาศทั้งหมด', value: announcements.length, onClick: () => openSummaryTarget('announcements') },
+        { key: 'warning', icon: 'announce', tone: 'amber', label: 'ประกาศแจ้งเตือน', value: announcementWarningCount, onClick: () => openSummaryTarget('announcements') },
+        { key: 'info', icon: 'announce', tone: 'indigo', label: 'ประกาศทั่วไป', value: announcements.length - announcementWarningCount, onClick: () => openSummaryTarget('announcements') },
+        {
+          key: 'scheduled',
+          icon: 'clock',
+          tone: 'slate',
+          label: 'กำหนดลบอัตโนมัติ',
+          value: announcementScheduledCount,
+          hint: announcementNewCount > 0 ? `ใหม่ใน 24 ชม. ${announcementNewCount} รายการ` : null,
+          onClick: () => openSummaryTarget('announcements'),
+        },
       ],
     },
     safety: {
@@ -9377,28 +9413,35 @@ function StaffMain() {
                             <small>จำนวนเงิน</small>
                             <strong>฿{formatCurrency(expense.amount)}</strong>
                           </div>
-                          {expense.payment_method && (
-                            <span className="staff-req-route-check is-info">{EXPENSE_PAYMENT_METHOD_LABEL[expense.payment_method]}</span>
-                          )}
                         </div>
                         <TenantRequestDetails
+                          columns
                           details={[
-                            { key: 'vendor', icon: 'user', label: 'ผู้รับเงิน', value: expense.vendor || '-' },
-                            { key: 'receipt', icon: 'copy', label: 'เลขใบเสร็จ', value: expense.receipt_number || '-' },
-                            { key: 'room', icon: 'info', label: 'ห้อง', value: expense.room_number ? `ห้อง ${expense.room_number}` : '-' },
+                            { key: 'vendor', icon: 'user', label: 'ผู้รับเงิน', value: expense.vendor || 'ไม่ระบุ' },
+                            { key: 'payment', icon: 'wallet', label: 'ชำระโดย', value: EXPENSE_PAYMENT_METHOD_LABEL[expense.payment_method] || 'ไม่ระบุ' },
+                            { key: 'receipt', icon: 'copy', label: 'เลขใบเสร็จ', value: expense.receipt_number || 'ไม่ระบุ' },
+                            { key: 'room', icon: 'info', label: 'ห้องที่เกี่ยวข้อง', value: expense.room_number ? `ห้อง ${expense.room_number}` : 'ไม่ระบุ' },
                           ]}
                         />
                         {expense.photos?.length > 0 && (
-                          <button
-                            type="button"
-                            className="staff-expense-thumbs"
-                            onClick={() => openExpenseDetail(expense)}
-                          >
-                            {expense.photos.slice(0, 3).map((photo, index) => (
-                              <UploadImage key={photo.url} src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
-                            ))}
-                            <span>{expense.photos.length} รูป</span>
-                          </button>
+                          <div className="staff-expense-thumbs-block">
+                            <span className="staff-expense-thumbs-title">รูปหลักฐาน · {expense.photos.length} รูป</span>
+                            <button
+                              type="button"
+                              className="staff-expense-thumbs"
+                              aria-label={`ดูรูปหลักฐานทั้งหมด ${expense.photos.length} รูป`}
+                              onClick={() => openExpenseDetail(expense)}
+                            >
+                              {expense.photos.slice(0, 4).map((photo, index) => (
+                                <span key={photo.url} className="staff-expense-thumb">
+                                  <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                                  {index === 3 && expense.photos.length > 4 && (
+                                    <span className="staff-expense-thumb-more">+{expense.photos.length - 4}</span>
+                                  )}
+                                </span>
+                              ))}
+                            </button>
+                          </div>
                         )}
                         <TenantRequestCardFooter
                           steps={[{ key: 'created', label: 'บันทึกโดย', by: expense.recorded_by_name || '-', date: expense.created_at, tone: 'info' }]}
@@ -9800,16 +9843,48 @@ function StaffMain() {
               </div>
               <div className="staff-transfer-scroll">
                 <div className="staff-expense-detail-layout">
+                <section className="staff-transfer-section">
+                  <h4 className="staff-transfer-section-title">ข้อมูลรายจ่าย</h4>
+                  <TenantRequestDetails
+                    columns
+                    details={[
+                      { key: 'date', icon: 'calendar', label: 'วันที่จ่าย', value: formatDate(expenseDetail.expense_date) },
+                      { key: 'payment', icon: 'wallet', label: 'ชำระโดย', value: EXPENSE_PAYMENT_METHOD_LABEL[expenseDetail.payment_method] || 'ไม่ระบุ' },
+                      { key: 'room', icon: 'info', label: 'ห้องที่เกี่ยวข้อง', value: expenseDetail.room_number ? `ห้อง ${expenseDetail.room_number}` : 'ไม่เกี่ยวกับห้องใด' },
+                      { key: 'by', icon: 'user', label: 'บันทึกโดย', value: expenseDetail.recorded_by_name || '-' },
+                      { key: 'created', icon: 'clock', label: 'บันทึกเมื่อ', value: `${formatDateTime(expenseDetail.created_at)} น.` },
+                    ]}
+                  />
+                  <div className="staff-req-note">
+                    <span className="staff-req-note-label">รายละเอียด</span>
+                    <p className="is-full">{expenseDetail.description || '-'}</p>
+                  </div>
+                </section>
                 <section className="staff-transfer-section staff-expense-gallery">
                   <h4 className="staff-transfer-section-title">
                     รูปใบเสร็จ / หลักฐาน
                     {expenseDetail.photos?.length > 0 && (
                       <small className="staff-expense-counter">
-                        {Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1) + 1}/{expenseDetail.photos.length}
+                        {expenseDetail.photos.length > 4 ? `${expenseDetail.photos.length} รูป` : `${Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1) + 1}/${expenseDetail.photos.length}`}
                       </small>
                     )}
                   </h4>
-                  {expenseDetail.photos?.length > 0 ? (
+                  {expenseDetail.photos?.length > 4 ? (
+                    <div className="staff-expense-gallery-grid">
+                      {expenseDetail.photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={photo.url}
+                          type="button"
+                          className="staff-expense-gallery-tile"
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                          onClick={() => setExpensePhotoPreview({ index })}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} />
+                          {index === 3 && <span className="staff-expense-gallery-more">+{expenseDetail.photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  ) : expenseDetail.photos?.length > 0 ? (
                     (() => {
                       const activeIndex = Math.min(expenseDetailPhotoIndex, expenseDetail.photos.length - 1)
                       const activePhoto = expenseDetail.photos[activeIndex]
@@ -9859,22 +9934,6 @@ function StaffMain() {
                       </button>
                     </div>
                   )}
-                </section>
-                <section className="staff-transfer-section">
-                  <h4 className="staff-transfer-section-title">ข้อมูลรายจ่าย</h4>
-                  <TenantRequestDetails
-                    details={[
-                      { key: 'date', icon: 'calendar', label: 'วันที่จ่าย', value: formatDate(expenseDetail.expense_date) },
-                      { key: 'payment', icon: 'wallet', label: 'ชำระโดย', value: EXPENSE_PAYMENT_METHOD_LABEL[expenseDetail.payment_method] || 'ไม่ระบุ' },
-                      { key: 'room', icon: 'info', label: 'ห้องที่เกี่ยวข้อง', value: expenseDetail.room_number ? `ห้อง ${expenseDetail.room_number}` : 'ไม่เกี่ยวกับห้องใด' },
-                      { key: 'by', icon: 'user', label: 'บันทึกโดย', value: expenseDetail.recorded_by_name || '-' },
-                      { key: 'created', icon: 'clock', label: 'บันทึกเมื่อ', value: `${formatDateTime(expenseDetail.created_at)} น.` },
-                    ]}
-                  />
-                  <div className="staff-req-note">
-                    <span className="staff-req-note-label">รายละเอียด</span>
-                    <p className="is-full">{expenseDetail.description || '-'}</p>
-                  </div>
                 </section>
                 </div>
               </div>
