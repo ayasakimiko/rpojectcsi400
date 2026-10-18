@@ -1959,7 +1959,7 @@ function PaymentDetail({ payment, roomNumber, onSlip }) {
   )
 }
 
-function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHistory }) {
+function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHistory, onSelectPayment }) {
   const [now] = useState(() => Date.now())
   const data = detail?.room ? { ...room, ...detail.room } : room
   const tenant = detail ? detail.tenant : room.customer_id ? { first_name: room.first_name, last_name: room.last_name, phone: room.phone } : null
@@ -2172,7 +2172,20 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                     {detail.payments.map((payment) => {
                       const tone = payment.status === 'paid' ? 'is-success' : payment.status === 'overdue' ? 'is-danger' : 'is-warning'
                       return (
-                        <li key={payment.id} className={tone}>
+                        <li
+                          key={payment.id}
+                          className={`${tone} is-clickable`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`ดูรายละเอียดการชำระ ฿${formatCurrency(payment.amount)}`}
+                          onClick={() => onSelectPayment(payment)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              onSelectPayment(payment)
+                            }
+                          }}
+                        >
                           <RoomDetailDateTile value={payment.payment_date} />
                           <div className="room-detail-row-main">
                             <strong className="room-detail-row-title is-money">฿{formatCurrency(payment.amount)}</strong>
@@ -2183,6 +2196,11 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                           </div>
                           <span className={`admin-badge status-${PAYMENT_BADGE_CLASS[payment.status] || 'pending'}`}>
                             {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
+                          </span>
+                          <span className="room-detail-row-chevron" aria-hidden="true">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M9 18l6-6-6-6" />
+                            </svg>
                           </span>
                         </li>
                       )
@@ -3348,7 +3366,7 @@ function AdminBackupPage() {
     setSlipPreview({
       url: payment.slip_path,
       name: `สลิปโอนเงิน ${formatDate(payment.payment_date)}`,
-      subtitle: `${customer.first_name} ${customer.last_name} · ฿${formatCurrency(payment.amount)} · ${PAYMENT_TYPE_LABEL[payment.type] || payment.type}`,
+      subtitle: `${[customer?.first_name, customer?.last_name].filter(Boolean).join(' ') || payment.tenantName || '-'} · ฿${formatCurrency(payment.amount)} · ${PAYMENT_TYPE_LABEL[payment.type] || payment.type}`,
     })
     setPhotoPreview(0)
   }
@@ -6274,7 +6292,14 @@ function AdminBackupPage() {
       )}
 
       {roomDetail && (
-        <Modal title={`รายละเอียดห้อง ${roomDetail.room.room_number}`} onClose={() => setRoomDetail(null)} variant="room-detail">
+        <Modal
+          title={`รายละเอียดห้อง ${roomDetail.room.room_number}`}
+          onClose={() => {
+            setPaymentDetail(null)
+            setRoomDetail(null)
+          }}
+          variant="room-detail"
+        >
           {(requestClose) => (
             <RoomDetails
               room={roomDetail.room}
@@ -6283,6 +6308,15 @@ function AdminBackupPage() {
               error={roomDetail.error}
               onRetry={() => openRoomDetail(roomDetail.room)}
               onOpenHistory={() => openRoomHistory(roomDetail.room)}
+              onSelectPayment={(payment) => {
+                const tenant = roomDetail.data?.tenant
+                setPaymentDetail({
+                  ...payment,
+                  roomNumber: roomDetail.room.room_number,
+                  tenant: tenant ? { first_name: tenant.first_name, last_name: tenant.last_name } : null,
+                  tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : '',
+                })
+              }}
               onEdit={() => {
                 const room = roomDetail.data?.room ? { ...roomDetail.room, ...roomDetail.data.room } : roomDetail.room
                 requestClose()
@@ -6310,14 +6344,14 @@ function AdminBackupPage() {
             error={roomHistory.error}
             onRetry={() => openRoomHistory(roomHistory.room)}
             onSlip={openSlipPreview}
-            onSelect={setPaymentDetail}
+            onSelect={(payment) => setPaymentDetail({ ...payment, roomNumber: roomHistory.room.room_number })}
           />
         </Modal>
       )}
 
-      {paymentDetail && roomHistory && (
+      {paymentDetail && (
         <Modal title={`รายละเอียดการชำระเงิน #${paymentDetail.id}`} onClose={() => setPaymentDetail(null)} variant="payment-detail">
-          <PaymentDetail payment={paymentDetail} roomNumber={roomHistory.room.room_number} onSlip={openSlipPreview} />
+          <PaymentDetail payment={paymentDetail} roomNumber={paymentDetail.roomNumber} onSlip={openSlipPreview} />
         </Modal>
       )}
 

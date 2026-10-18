@@ -342,7 +342,7 @@ router.get("/rooms/:room_number/detail", async (req, res) => {
     const currentBooking = tenant ? history.find((booking) => booking.customer_id === tenant.id) : null;
     if (currentBooking) {
       [payments] = await pool.query(
-        `SELECT id, amount, payment_date, status, type, note
+        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
          FROM Payment WHERE booking_id = ?
          ORDER BY payment_date DESC, created_at DESC LIMIT 6`,
         [currentBooking.booking_id],
