@@ -1,0 +1,411 @@
+.insp-table > tbody > tr > td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  vertical-align: middle;
+  transition: background 0.12s ease;
+}
+
+.insp-table > tbody > tr:hover > td {
+  background: #f7faff;
+}
+
+.insp-room {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.insp-room-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #93a9c2;
+}
+
+.insp-room-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid #dce9fb;
+  border-radius: 8px;
+  background: #f5f9ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.insp-room-pill.is-target {
+  border-color: #e4dcfd;
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.insp-room small {
+  color: #8aa0b6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.insp-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.insp-person-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.insp-person > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.insp-person strong {
+  overflow: hidden;
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp-person span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b859e;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.insp-person span svg {
+  color: #93a9c2;
+}
+
+.insp-date {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.insp-date strong {
+  color: #0f2b52;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.insp-date span {
+  color: #8aa0b6;
+  font-size: 11.5px;
+}
+
+.insp-photos {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid #dce9fb;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.insp-photos.is-empty {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.insp-inspector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.insp-inspector svg {
+  flex-shrink: 0;
+  color: #93a9c2;
+}
+
+.insp-muted {
+  color: #a3b5c9;
+}
+
+.insp-status-badge {
+  --st-tone: #b45309;
+  --st-soft: #fffbeb;
+  --st-border: #fde68a;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--st-border);
+  border-radius: 999px;
+  background: var(--st-soft);
+  color: var(--st-tone);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.insp-status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.insp-status-badge.is-reviewed {
+  --st-tone: #047857;
+  --st-soft: #ecfdf5;
+  --st-border: #a7f3d0;
+}
+
+.insp-status-badge.is-follow_up {
+  --st-tone: #b42318;
+  --st-soft: #fef2f2;
+  --st-border: #fecaca;
+}
+
+.insp-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.insp-actions-row {
+  display: flex;
+  gap: 6px;
+}
+
+.insp-actions-row > button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.insp-status-action {
+  --act-tone: #047857;
+  --act-soft: #ecfdf5;
+  --act-border: #a7f3d0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--act-border);
+  border-radius: 10px;
+  background: var(--act-soft);
+  color: var(--act-tone);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.insp-status-action.is-confirm {
+  --act-tone: #ffffff;
+  --act-soft: #10b981;
+  --act-border: #10b981;
+  box-shadow: 0 4px 10px -6px rgba(16, 185, 129, 0.7);
+}
+
+.insp-status-action.is-confirm:hover {
+  --act-soft: #059669;
+  --act-border: #059669;
+}
+
+.insp-status-action.is-follow {
+  --act-tone: #c2410c;
+  --act-soft: #fff7ed;
+  --act-border: #fed7aa;
+}
+
+.insp-status-action.is-follow:hover {
+  --act-soft: #ffedd5;
+  --act-border: #fdba74;
+}
+
+.insp-status-action.is-cancel {
+  --act-tone: #4a6582;
+  --act-soft: #ffffff;
+  --act-border: #dce5f0;
+}
+
+.insp-status-action.is-cancel:hover {
+  --act-soft: #f3f6fa;
+  --act-border: #c5d3e3;
+}
+
+.insp-status-action:active {
+  transform: scale(0.97);
+}
+
+.insp-status-action.is-large {
+  min-height: 38px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.insp-actions-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 700;
+  transition: color 0.15s ease;
+}
+
+.insp-actions-hint svg {
+  transition: transform 0.15s ease;
+}
+
+tr:hover .insp-actions-hint,
+tr:focus-visible .insp-actions-hint {
+  color: #2563eb;
+}
+
+tr:hover .insp-actions-hint svg {
+  transform: translateX(2px);
+}
+
+.insp-table > tbody > tr > td.admin-inspection-actions,
+.insp-table > tbody > tr > td.insp-actions-cell {
+  position: relative;
+  padding: 24px 24px 24px 14px;
+}
+
+.insp-table .insp-actions {
+  display: block;
+  width: 100%;
+}
+
+.insp-table .insp-actions-row {
+  width: 100%;
+}
+
+.insp-table .insp-actions-row > .insp-status-action {
+  flex: 1 1 0;
+  min-height: 32px;
+}
+
+.insp-table .insp-actions-hint {
+  position: absolute;
+  right: 24px;
+  bottom: 1px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.insp-table .insp-actions-hint:only-child {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12px;
+}
+
+.insp-table > tbody > tr.insp-row-clickable {
+  cursor: pointer;
+  outline: none;
+}
+
+.insp-table > tbody > tr.insp-row-clickable:focus-visible > td {
+  background: #f5f9ff;
+}
+
+.insp-table > tbody > tr.insp-row-clickable:focus-visible > td:first-child {
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.insp-table .insp-actions-cell .insp-actions-row > button {
+  flex: 1 1 0;
+  min-height: 32px;
+}
+
+.insp-table > tbody > tr > td.admin-inspection-actions,
+.insp-table > tbody > tr > td.insp-actions-cell {
+  padding: 12px 18px 12px 14px;
+}
+
+.insp-table .insp-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.insp-table .insp-actions-row {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.insp-table .insp-actions-hint,
+.insp-table .insp-actions-hint:only-child {
+  position: static;
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.insp-status-action.is-edit {
+  --act-tone: #1d4ed8;
+  --act-soft: #eff6ff;
+  --act-border: #bfdbfe;
+}
+
+.insp-status-action.is-edit:hover {
+  --act-soft: #dbeafe;
+  --act-border: #93c5fd;
+}
+
+.insp-status-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.insp-status-action.is-delete {
+  --act-tone: #b42318;
+  --act-soft: #ffffff;
+  --act-border: #fecaca;
+}
+
+.insp-status-action.is-delete:hover {
+  --act-soft: #fef2f2;
+  --act-border: #fca5a5;
+}

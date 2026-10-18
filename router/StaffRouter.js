@@ -269,6 +269,7 @@ router.get("/move-out-inspections", async (_req, res) => {
               JSON_LENGTH(moi.photos) AS photo_count, moi.status, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       WHERE moi.hidden_at IS NULL
        ORDER BY moi.created_at DESC, moi.id DESC`,
     );
     return res.json({
@@ -289,10 +290,12 @@ router.get("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, moi.tenant_name, moi.tenant_phone,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number, moi.tenant_name, moi.tenant_phone,
               moi.checklist, moi.damage_note, moi.photos, moi.status, moi.inspected_by_name,
               moi.reviewed_at, moi.updated_at, moi.created_at
-       FROM MoveOutInspection moi WHERE moi.id = ?`,
+       FROM MoveOutInspection moi
+       LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       WHERE moi.id = ? AND moi.hidden_at IS NULL`,
       [inspectionId],
     );
     const inspection = rows[0];
@@ -316,7 +319,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
@@ -365,12 +368,17 @@ router.delete("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
-    await pool.query(`DELETE FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
-    await deletePublicImages(JSON.parse(rows[0].photos).map((photo) => photo.url));
+    const staffName = await getActingStaffName(pool, req.user);
+    await pool.query(
+      `UPDATE MoveOutInspection
+       SET hidden_at = NOW(), hidden_by_name = ?, hidden_tenant_request_id = tenant_request_id, tenant_request_id = NULL
+       WHERE id = ? AND hidden_at IS NULL`,
+      [staffName, inspectionId],
+    );
     return res.json({ message: "ลบผลตรวจห้องสำเร็จ" });
   } catch (error) {
     console.error("Delete move-out inspection error:", error);

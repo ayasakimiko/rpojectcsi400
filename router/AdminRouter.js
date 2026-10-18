@@ -10,6 +10,8 @@ import {
   isValidMoney,
   MOVE_OUT_INSPECTION_STATUSES,
   normalizePersonUpdate,
+  parseMoveOutInspectionInput,
+  parseMoveOutInspectionUpdate,
   parsePage,
   parseSearch,
   parseWaitingListInput,
@@ -17,9 +19,10 @@ import {
   validatePersonUpdateInput,
   validateRoomFields,
 } from "../middleware/validation.js";
-import { deletePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
+import { deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
 
 const router = Router();
 
@@ -175,6 +178,7 @@ router.get("/move-out-inspections", async (_req, res) => {
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       WHERE moi.hidden_at IS NULL
        ORDER BY moi.created_at DESC, moi.id DESC`,
     );
     return res.json({
@@ -182,6 +186,140 @@ router.get("/move-out-inspections", async (_req, res) => {
     });
   } catch (error) {
     console.error("Fetch move-out inspections error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-out-inspections/move-room-candidates", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [requests] = await pool.query(
+      `SELECT tr.id, tr.room_number, tr.target_room_number, tr.status, tr.created_at, tr.preferred_move_date,
+              c.first_name, c.last_name, c.phone
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+       WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND moi.id IS NULL
+       ORDER BY tr.created_at ASC, tr.id ASC`,
+    );
+    return res.json({ requests });
+  } catch (error) {
+    console.error("Fetch move-room inspection candidates error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/move-out-inspections", async (req, res) => {
+  let photos = [];
+  let connection;
+  try {
+    const { error, value } = parseMoveOutInspectionInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    const tenantRequestId = Number(req.body?.tenant_request_id);
+    if (!isPositiveId(tenantRequestId)) {
+      return res.status(400).json({ message: "กรุณาเลือกคำขอย้ายห้องที่ต้องการตรวจ" });
+    }
+
+    const pool = getPool();
+    const adminName = await getActingAdminName(pool, req.user);
+    photos = await savePublicImages("move-out-inspections", value.photos);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [requestRows] = await connection.query(
+      `SELECT tr.id, tr.room_number, tr.type, tr.status, c.first_name, c.last_name, c.phone
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       WHERE tr.id = ? FOR UPDATE`,
+      [tenantRequestId],
+    );
+    const tenantRequest = requestRows[0];
+    if (
+      !tenantRequest
+      || tenantRequest.type !== "move_room"
+      || !["pending", "in_progress"].includes(tenantRequest.status)
+      || tenantRequest.room_number !== value.roomNumber
+    ) {
+      await connection.rollback();
+      await deletePublicImages(photos.map((photo) => photo.url));
+      return res.status(409).json({ message: "ไม่พบคำขอย้ายห้องที่ตรงกับห้องที่ตรวจ" });
+    }
+    const [existing] = await connection.query(`SELECT id FROM MoveOutInspection WHERE tenant_request_id = ?`, [tenantRequestId]);
+    if (existing.length > 0) {
+      await connection.rollback();
+      await deletePublicImages(photos.map((photo) => photo.url));
+      return res.status(409).json({ message: "มีผลตรวจสำหรับคำขอนี้แล้ว กรุณาแก้ไขผลตรวจเดิม" });
+    }
+
+    const [result] = await connection.query(
+      `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, photos, inspected_by_name, status, reviewed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reviewed', NOW())`,
+      [
+        value.roomNumber,
+        tenantRequestId,
+        `${tenantRequest.first_name} ${tenantRequest.last_name}`,
+        tenantRequest.phone || null,
+        JSON.stringify(value.checklist),
+        value.damageNote,
+        JSON.stringify(photos),
+        adminName,
+      ],
+    );
+    await connection.query(
+      `UPDATE TenantRequest
+       SET status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END,
+           accepted_at = COALESCE(accepted_at, NOW()),
+           accepted_by_name = COALESCE(accepted_by_name, ?)
+       WHERE id = ?`,
+      [adminName, tenantRequestId],
+    );
+    await connection.commit();
+    return res.status(201).json({ message: "บันทึกผลตรวจห้องสำเร็จ", inspectionId: result.insertId });
+  } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
+    await deletePublicImages(photos.map((photo) => photo.url));
+    console.error("Admin create move-room inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
+  }
+});
+
+router.put("/move-out-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    const existingPhotos = JSON.parse(rows[0].photos);
+    const { error, value } = parseMoveOutInspectionUpdate(req.body ?? {}, existingPhotos);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const savedPhotos = await savePublicImages("move-out-inspections", value.newPhotos);
+    try {
+      await pool.query(
+        `UPDATE MoveOutInspection SET checklist = ?, damage_note = ?, photos = ?, updated_at = NOW() WHERE id = ?`,
+        [JSON.stringify(value.checklist), value.damageNote, JSON.stringify([...value.keptPhotos, ...savedPhotos]), inspectionId],
+      );
+    } catch (updateError) {
+      await deletePublicImages(savedPhotos.map((photo) => photo.url));
+      throw updateError;
+    }
+    const keptUrls = new Set(value.keptPhotos.map((photo) => photo.url));
+    await deletePublicImages(existingPhotos.filter((photo) => !keptUrls.has(photo.url)).map((photo) => photo.url));
+    return res.json({ message: "แก้ไขผลตรวจห้องสำเร็จ" });
+  } catch (error) {
+    console.error("Admin update move-out inspection error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
@@ -200,7 +338,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
-       WHERE moi.id = ?`,
+       WHERE moi.id = ? AND moi.hidden_at IS NULL`,
       [inspectionId],
     );
     const inspection = rows[0];
@@ -228,7 +366,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [inspections] = await pool.query(`SELECT tenant_request_id FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    const [inspections] = await pool.query(`SELECT tenant_request_id FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
     if (!inspections[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
@@ -257,12 +395,17 @@ router.delete("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
+    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
-    await pool.query(`DELETE FROM MoveOutInspection WHERE id = ?`, [inspectionId]);
-    await deletePublicImages(JSON.parse(rows[0].photos).map((photo) => photo.url));
+    const adminName = await getActingAdminName(pool, req.user);
+    await pool.query(
+      `UPDATE MoveOutInspection
+       SET hidden_at = NOW(), hidden_by_name = ?, hidden_tenant_request_id = tenant_request_id, tenant_request_id = NULL
+       WHERE id = ? AND hidden_at IS NULL`,
+      [adminName, inspectionId],
+    );
     return res.json({ message: "ลบผลตรวจห้องสำเร็จ" });
   } catch (error) {
     console.error("Delete move-out inspection error:", error);
@@ -292,6 +435,261 @@ router.get("/rooms", async (req, res) => {
     return res.json({ rooms });
   } catch (error) {
     console.error("Admin fetch rooms error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/rooms/:room_number/detail", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [roomRows] = await pool.query(
+      `SELECT id, room_number, is_booked, price,
+         air_conditioner, wifi, refrigerator, bed, bathroom, cctv,
+         electricity_unit_price, water_price,
+         rental_duration_months, rental_start_date, rental_end_date,
+         prepaid_until, pending_lump_sum_months, created_at
+       FROM Room WHERE room_number = ?`,
+      [roomNumberValue],
+    );
+    const room = roomRows[0];
+    if (!room) {
+      return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    }
+
+    const [tenantRows] = await pool.query(
+      `SELECT id, first_name, last_name, phone, age, deposit_amount, created_at
+       FROM Customer
+       WHERE room_number = ? AND is_suspended = FALSE
+       ORDER BY id DESC LIMIT 1`,
+      [roomNumberValue],
+    );
+    const tenant = tenantRows[0] ?? null;
+
+    const [history] = await pool.query(
+      `SELECT b.id AS booking_id, b.created_at, b.rental_start_date, b.rental_end_date,
+         c.id AS customer_id, c.first_name, c.last_name, c.phone
+       FROM Booking b
+       JOIN Customer c ON c.id = b.customer_id
+       WHERE b.room_id = ?
+       ORDER BY b.created_at DESC, b.id DESC
+       LIMIT 6`,
+      [room.id],
+    );
+
+    let payments = [];
+    const currentBooking = tenant ? history.find((booking) => booking.customer_id === tenant.id) : null;
+    if (currentBooking) {
+      [payments] = await pool.query(
+        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
+         FROM Payment WHERE booking_id = ?
+         ORDER BY payment_date DESC, created_at DESC LIMIT 6`,
+        [currentBooking.booking_id],
+      );
+    }
+
+    const [maintenanceCounts] = await pool.query(
+      `SELECT status, COUNT(*) AS count FROM MaintenanceRequest WHERE room_number = ? GROUP BY status`,
+      [roomNumberValue],
+    );
+    const [maintenance] = await pool.query(
+      `SELECT id, category, description, status, created_at, completed_at
+       FROM MaintenanceRequest WHERE room_number = ?
+       ORDER BY created_at DESC LIMIT 5`,
+      [roomNumberValue],
+    );
+
+    const [parcelRows] = await pool.query(
+      `SELECT
+         SUM(status = 'pending') AS pending,
+         COUNT(*) AS total
+       FROM Parcel WHERE room_number = ?`,
+      [roomNumberValue],
+    );
+
+    const [inspectionRows] = await pool.query(
+      `SELECT id, tenant_name, status, inspected_by_name, created_at
+       FROM MoveOutInspection WHERE room_number = ? AND hidden_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [roomNumberValue],
+    );
+
+    return res.json({
+      room,
+      tenant,
+      payments,
+      history,
+      maintenance,
+      maintenanceCounts: Object.fromEntries(maintenanceCounts.map((row) => [row.status, Number(row.count)])),
+      parcels: { pending: Number(parcelRows[0]?.pending ?? 0), total: Number(parcelRows[0]?.total ?? 0) },
+      lastInspection: inspectionRows[0] ?? null,
+    });
+  } catch (error) {
+    console.error("Admin fetch room detail error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/rooms/:room_number/maintenance", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [requests] = await pool.query(
+      `SELECT mr.id, mr.description, mr.category, mr.contact_phone, mr.preferred_time, mr.status, mr.created_at,
+              mr.accepted_at, mr.accepted_by_name, mr.completed_at, mr.completed_by_name,
+              mr.room_number, mr.customer_id, c.first_name, c.last_name, c.phone
+       FROM MaintenanceRequest mr
+       JOIN Customer c ON c.id = mr.customer_id
+       WHERE mr.room_number = ?
+       ORDER BY mr.created_at DESC, mr.id DESC`,
+      [roomNumberValue],
+    );
+
+    return res.json({ requests: await attachMaintenancePhotos(pool, requests) });
+  } catch (error) {
+    console.error("Admin fetch room maintenance error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/rooms/:room_number/tenants", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [roomRows] = await pool.query(`SELECT id FROM Room WHERE room_number = ?`, [roomNumberValue]);
+    if (!roomRows[0]) {
+      return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    }
+
+    const [bookings] = await pool.query(
+      `SELECT b.id AS booking_id, b.created_at, b.rental_start_date, b.rental_end_date,
+         c.id AS customer_id, c.first_name, c.last_name, c.phone, c.age, c.deposit_amount,
+         c.is_suspended, c.room_number AS current_room_number, c.created_at AS registered_at
+       FROM Booking b
+       JOIN Customer c ON c.id = b.customer_id
+       WHERE b.room_id = ?
+       ORDER BY b.created_at DESC, b.id DESC`,
+      [roomRows[0].id],
+    );
+
+    if (bookings.length === 0) {
+      return res.json({ tenants: [] });
+    }
+
+    const bookingIds = bookings.map((booking) => booking.booking_id);
+    const customerIds = [...new Set(bookings.map((booking) => booking.customer_id))];
+
+    const [paymentRows] = await pool.query(
+      `SELECT booking_id, status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total, MAX(payment_date) AS last_date
+       FROM Payment WHERE booking_id IN (?)
+       GROUP BY booking_id, status`,
+      [bookingIds],
+    );
+
+    const [maintenanceRows] = await pool.query(
+      `SELECT customer_id, COUNT(*) AS total, SUM(status IN ('pending', 'in_progress')) AS open_count
+       FROM MaintenanceRequest
+       WHERE room_number = ? AND customer_id IN (?)
+       GROUP BY customer_id`,
+      [roomNumberValue, customerIds],
+    );
+
+    const [requestRows] = await pool.query(
+      `SELECT tr.id, tr.customer_id, tr.type, tr.status, tr.target_room_number, tr.preferred_move_date,
+         tr.created_at, tr.completed_at, mi.status AS inspection_status
+       FROM TenantRequest tr
+       LEFT JOIN MoveOutInspection mi ON mi.tenant_request_id = tr.id
+       WHERE tr.room_number = ? AND tr.customer_id IN (?) AND tr.type IN ('moveout', 'move_room')
+       ORDER BY tr.created_at DESC, tr.id DESC`,
+      [roomNumberValue, customerIds],
+    );
+
+    const latestBookingByCustomer = new Map();
+    for (const booking of bookings) {
+      if (!latestBookingByCustomer.has(booking.customer_id)) latestBookingByCustomer.set(booking.customer_id, booking.booking_id);
+    }
+
+    const tenants = bookings.map((booking) => {
+      const payments = { paid: { count: 0, total: 0 }, pending: { count: 0, total: 0 }, overdue: { count: 0, total: 0 } };
+      let lastPaymentDate = null;
+      for (const row of paymentRows) {
+        if (row.booking_id !== booking.booking_id) continue;
+        if (payments[row.status]) payments[row.status] = { count: Number(row.count), total: Number(row.total) };
+        if (row.last_date && (!lastPaymentDate || new Date(row.last_date) > new Date(lastPaymentDate))) lastPaymentDate = row.last_date;
+      }
+      const maintenance = maintenanceRows.find((row) => row.customer_id === booking.customer_id);
+      const lastRequest = requestRows.find((row) => row.customer_id === booking.customer_id) || null;
+      const isCurrent =
+        !booking.is_suspended &&
+        booking.current_room_number === roomNumberValue &&
+        latestBookingByCustomer.get(booking.customer_id) === booking.booking_id;
+
+      return {
+        ...booking,
+        is_current: isCurrent,
+        payments,
+        last_payment_date: lastPaymentDate,
+        maintenance: { total: Number(maintenance?.total ?? 0), open: Number(maintenance?.open_count ?? 0) },
+        last_request: lastRequest,
+      };
+    });
+
+    return res.json({ tenants });
+  } catch (error) {
+    console.error("Admin fetch room tenants error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/rooms/:room_number/history", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [bookings] = await pool.query(
+      `SELECT b.id AS booking_id, b.created_at, cu.id AS customer_id, cu.first_name, cu.last_name
+       FROM Booking b
+       JOIN Room r ON r.id = b.room_id
+       JOIN Customer cu ON cu.id = b.customer_id
+       WHERE r.room_number = ?
+       ORDER BY b.created_at DESC`,
+      [roomNumberValue],
+    );
+
+    const bookingIds = bookings.map((booking) => booking.booking_id);
+    let payments = [];
+    if (bookingIds.length > 0) {
+      [payments] = await pool.query(
+        `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
+         FROM Payment WHERE booking_id IN (?)
+         ORDER BY payment_date DESC, created_at DESC`,
+        [bookingIds],
+      );
+    }
+
+    const rentalHistory = bookings.map((booking) => ({
+      ...booking,
+      payments: payments.filter((payment) => payment.booking_id === booking.booking_id),
+    }));
+
+    return res.json({ rentalHistory });
+  } catch (error) {
+    console.error("Admin fetch room history error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
@@ -616,7 +1014,11 @@ router.get("/customers/:id", async (req, res) => {
     }
 
     const [bookings] = await pool.query(
-      `SELECT id AS booking_id, room_id, created_at FROM Booking WHERE customer_id = ? ORDER BY created_at DESC`,
+      `SELECT b.id AS booking_id, b.room_id, r.room_number, b.created_at, b.rental_start_date, b.rental_end_date
+       FROM Booking b
+       LEFT JOIN Room r ON r.id = b.room_id
+       WHERE b.customer_id = ?
+       ORDER BY b.created_at DESC, b.id DESC`,
       [customerId],
     );
 
@@ -810,7 +1212,7 @@ router.get("/logs/maintenance", async (req, res) => {
       [...params, LOG_PAGE_SIZE, offset],
     );
 
-    return res.json({ requests, total, page, pageSize: LOG_PAGE_SIZE });
+    return res.json({ requests: await attachMaintenancePhotos(pool, requests), total, page, pageSize: LOG_PAGE_SIZE });
   } catch (error) {
     console.error("Admin fetch maintenance request log error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -855,6 +1257,84 @@ router.get("/logs/moveouts", async (req, res) => {
     return res.json({ moveouts, total, page, pageSize: LOG_PAGE_SIZE });
   } catch (error) {
     console.error("Admin fetch moveout log error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/moveouts/:id", async (req, res) => {
+  try {
+    const requestId = Number(req.params.id);
+    if (!isPositiveId(requestId)) {
+      return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT tr.id, tr.note, tr.status, tr.created_at, tr.accepted_at, tr.accepted_by_name,
+              tr.completed_at, tr.completed_by_name, tr.move_in_date, tr.preferred_move_date, tr.move_reason,
+              tr.room_number, tr.customer_id,
+              c.idcard, c.first_name, c.last_name, c.phone, c.age, c.deposit_amount, c.created_at AS registered_at,
+              r.price AS room_price
+       FROM TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id
+       LEFT JOIN Room r ON r.room_number = tr.room_number
+       WHERE tr.id = ? AND tr.type = 'moveout'`,
+      [requestId],
+    );
+    const moveout = rows[0];
+    if (!moveout) {
+      return res.status(404).json({ message: "ไม่พบข้อมูลการย้ายออก" });
+    }
+
+    const [inspectionRows] = await pool.query(
+      `SELECT id, status, damage_note, inspected_by_name, created_at, checklist, JSON_LENGTH(photos) AS photo_count
+       FROM MoveOutInspection
+       WHERE room_number = ? AND tenant_request_id IS NULL AND hidden_at IS NULL AND tenant_name = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [moveout.room_number, `${moveout.first_name} ${moveout.last_name}`],
+    );
+    const inspection = inspectionRows[0] ? { ...inspectionRows[0], checklist: JSON.parse(inspectionRows[0].checklist) } : null;
+
+    const [paymentRows] = await pool.query(
+      `SELECT p.status, COUNT(*) AS count, COALESCE(SUM(p.amount), 0) AS total
+       FROM Payment p
+       JOIN Booking b ON b.id = p.booking_id
+       JOIN Room r ON r.id = b.room_id
+       WHERE b.customer_id = ? AND r.room_number = ?
+       GROUP BY p.status`,
+      [moveout.customer_id, moveout.room_number],
+    );
+    const payments = { paid: { count: 0, total: 0 }, pending: { count: 0, total: 0 }, overdue: { count: 0, total: 0 } };
+    for (const row of paymentRows) {
+      if (payments[row.status]) payments[row.status] = { count: Number(row.count), total: Number(row.total) };
+    }
+
+    const [paymentList] = await pool.query(
+      `SELECT p.id, p.booking_id, p.amount, p.payment_date, p.status, p.type, p.note, p.slip_path, p.created_at
+       FROM Payment p
+       JOIN Booking b ON b.id = p.booking_id
+       JOIN Room r ON r.id = b.room_id
+       WHERE b.customer_id = ? AND r.room_number = ?
+       ORDER BY p.payment_date DESC, p.created_at DESC, p.id DESC`,
+      [moveout.customer_id, moveout.room_number],
+    );
+
+    const [maintenanceRows] = await pool.query(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(status IN ('pending', 'in_progress')), 0) AS open_count
+       FROM MaintenanceRequest WHERE customer_id = ? AND room_number = ?`,
+      [moveout.customer_id, moveout.room_number],
+    );
+
+    return res.json({
+      moveout,
+      inspection,
+      payments,
+      paymentList,
+      maintenance: { total: Number(maintenanceRows[0]?.total ?? 0), open: Number(maintenanceRows[0]?.open_count ?? 0) },
+    });
+  } catch (error) {
+    console.error("Admin fetch moveout detail error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

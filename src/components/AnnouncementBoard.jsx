@@ -19,6 +19,9 @@ const EMPTY_FORM = {
   expYear: '',
   expHour: '23',
   expMinute: '59',
+  popupMode: 'none',
+  popupValue: '1',
+  popupUnit: 'hour',
   keptPhotos: [],
   newPhotos: [],
 }
@@ -66,6 +69,24 @@ const AFTER_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => index)
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => pad2(index))
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => pad2(index))
 const TONE_LABEL = { info: 'ทั่วไป', warning: 'แจ้งเตือน' }
+const POPUP_UNITS = [
+  { key: 'minute', label: 'นาที', minutes: 1 },
+  { key: 'hour', label: 'ชั่วโมง', minutes: 60 },
+  { key: 'day', label: 'วัน', minutes: 1440 },
+]
+const MAX_POPUP_MINUTES = 365 * 1440
+
+function buildPopup(form) {
+  if (form.tone !== 'warning') return { kind: 'none' }
+  if (form.popupMode === 'keep') return { kind: 'keep' }
+  if (form.popupMode !== 'duration') return { kind: 'none' }
+  const value = Number(form.popupValue)
+  if (!Number.isInteger(value) || value < 1) return { error: 'กรุณาระบุระยะเวลาแสดง popup เป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป' }
+  const unit = POPUP_UNITS.find((item) => item.key === form.popupUnit) || POPUP_UNITS[1]
+  const minutes = value * unit.minutes
+  if (minutes > MAX_POPUP_MINUTES) return { error: 'ระยะเวลาแสดง popup ต้องไม่เกิน 365 วัน' }
+  return { kind: 'duration', minutes }
+}
 
 const VARIANT_CLASSES = {
   staff: {
@@ -387,6 +408,8 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       expYear: year,
       expHour: hour,
       expMinute: minute,
+      popupMode: item.tone === 'warning' && item.popup_until ? 'keep' : 'none',
+      popupUntil: item.popup_until || '',
       keptPhotos: item.photos || [],
     })
     setError('')
@@ -423,6 +446,21 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     return { tone: 'is-set', text: `จะลบประกาศอัตโนมัติเมื่อ ${formatExpiryDate(built.expiresAt)}` }
   })()
 
+  const popupPreview = (() => {
+    if (form.popupMode === 'keep') {
+      return { tone: 'is-set', text: `popup จะแสดงจนถึง ${formatExpiryDate(form.popupUntil)} ตามที่ตั้งไว้เดิม` }
+    }
+    if (form.popupMode !== 'duration') {
+      return { tone: 'is-none', text: 'popup จะเด้งทุกครั้งที่ผู้เช่าเข้าสู่ระบบ จนกว่าจะกดรับทราบ' }
+    }
+    const built = buildPopup(form)
+    if (built.error) return { tone: 'is-error', text: built.error }
+    return {
+      tone: 'is-set',
+      text: `popup จะเด้งเป็นเวลา ${formatDuration(built.minutes)} นับจากตอนกดยืนยัน หลังจากนั้นจะแสดงเฉพาะในกระดานประกาศ`,
+    }
+  })()
+
   const submitAnnouncement = (event) => {
     event.preventDefault()
     if (!form.title.trim() || !form.message.trim()) {
@@ -434,16 +472,23 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       setError(expiry.error)
       return
     }
+    const popup = buildPopup(form)
+    if (popup.error) {
+      setError(popup.error)
+      return
+    }
     setError('')
-    openConfirm({ kind: editingId ? 'edit' : 'publish', title: form.title.trim(), expiry })
+    openConfirm({ kind: editingId ? 'edit' : 'publish', title: form.title.trim(), expiry, popup })
   }
 
   const publishAnnouncement = async () => {
     setSubmitting(true)
-    const { expiry } = confirm
+    const { expiry, popup } = confirm
     const payload = { title: form.title.trim(), message: form.message.trim(), tone: form.tone }
     if (expiry.kind === 'after') payload.expires_in_minutes = expiry.minutes
     else payload.expires_at = expiry.kind === 'at' ? expiry.expiresAt : ''
+    if (popup?.kind === 'duration') payload.popup_in_minutes = popup.minutes
+    else if (popup?.kind !== 'keep') payload.popup_in_minutes = ''
     if (editingId) payload.keep_photos = form.keptPhotos.map((photo) => photo.url)
     try {
       payload.photos = await Promise.all(form.newPhotos.map((file) => compressImageFile(file)))
@@ -765,6 +810,26 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                     </span>
                   </div>
                 )}
+                {canManage && detail.tone === 'warning' && (
+                  <div className="announcement-detail-meta-item is-wide">
+                    <span className="announcement-detail-meta-icon is-muted" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                      </svg>
+                    </span>
+                    <span className="announcement-detail-meta-text">
+                      <small>แสดง popup หน้าผู้เช่า</small>
+                      <strong>
+                        {!detail.popup_until
+                          ? 'จนกว่าจะกดรับทราบ'
+                          : detail.popup_active
+                            ? `ถึง ${formatExpiryDate(detail.popup_until)}`
+                            : `หมดเวลาแล้ว (${formatExpiryDate(detail.popup_until)})`}
+                      </strong>
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="announcement-form-actions">
@@ -835,6 +900,59 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                   </select>
                 </label>
               </div>
+              {form.tone === 'warning' && (
+                <div className="announcement-expiry announcement-popup-field" role="group" aria-labelledby="announcement-popup-label">
+                  <span id="announcement-popup-label">ระยะเวลาแสดง popup หน้าผู้เช่า</span>
+                  <div className="announcement-expiry-modes" role="radiogroup" aria-labelledby="announcement-popup-label">
+                    {[
+                      ...(form.popupUntil ? [{ key: 'keep', label: 'คงเดิม' }] : []),
+                      { key: 'none', label: 'จนกว่าจะกดรับทราบ' },
+                      { key: 'duration', label: 'กำหนดระยะเวลา' },
+                    ].map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={form.popupMode === mode.key}
+                        className={`announcement-expiry-mode${form.popupMode === mode.key ? ' is-active' : ''}`}
+                        onClick={() => {
+                          setError('')
+                          setForm((current) => ({ ...current, popupMode: mode.key }))
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                  {form.popupMode === 'duration' && (
+                    <div className="announcement-expiry-row is-after">
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        aria-label="จำนวน"
+                        value={form.popupValue}
+                        onChange={(event) => setForm((current) => ({ ...current, popupValue: event.target.value.replace(/[^\d]/g, '') }))}
+                      />
+                      <select
+                        aria-label="หน่วยเวลา"
+                        value={form.popupUnit}
+                        onChange={(event) => setForm((current) => ({ ...current, popupUnit: event.target.value }))}
+                      >
+                        {POPUP_UNITS.map((unit) => (
+                          <option key={unit.key} value={unit.key}>
+                            {unit.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <p className={`announcement-expiry-summary ${popupPreview.tone}`} aria-live="polite">
+                    {popupPreview.text}
+                  </p>
+                </div>
+              )}
               <label>
                 รายละเอียด
                 <textarea
@@ -1094,6 +1212,18 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
               <div className="announcement-confirm-detail">
                 <span>ลบอัตโนมัติ</span>
                 <strong>{describeExpiry(confirm.expiry)}</strong>
+              </div>
+            )}
+            {confirm.kind !== 'delete' && form.tone === 'warning' && confirm.popup && (
+              <div className="announcement-confirm-detail">
+                <span>แสดง popup</span>
+                <strong>
+                  {confirm.popup.kind === 'duration'
+                    ? `${formatDuration(confirm.popup.minutes)} นับจากตอนกดยืนยัน`
+                    : confirm.popup.kind === 'keep'
+                      ? `จนถึง ${formatExpiryDate(form.popupUntil)}`
+                      : 'จนกว่าจะกดรับทราบ'}
+                </strong>
               </div>
             )}
             <div className="announcement-form-actions">
