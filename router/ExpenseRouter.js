@@ -77,7 +77,7 @@ router.get("/", async (req, res) => {
       ? requestedPageSize
       : EXPENSE_LOG_PAGE_SIZE;
 
-    const conditions = [];
+    const conditions = ["deleted_at IS NULL"];
     const params = [];
     if (typeof req.query.from === "string" && req.query.from) {
       conditions.push(`expense_date >= ?`);
@@ -199,7 +199,7 @@ router.put("/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM Expense WHERE id = ?`, [expenseId]);
+    const [rows] = await pool.query(`SELECT photos FROM Expense WHERE id = ? AND deleted_at IS NULL`, [expenseId]);
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบรายการรายจ่ายนี้" });
     }
@@ -232,7 +232,7 @@ router.put("/:id", async (req, res) => {
       values.push(serializePhotos([...keptPhotos, ...savedPhotos]));
     }
     try {
-      await pool.query(`UPDATE Expense SET ${columns.join(", ")} WHERE id = ?`, [...values, expenseId]);
+      await pool.query(`UPDATE Expense SET ${columns.join(", ")} WHERE id = ? AND deleted_at IS NULL`, [...values, expenseId]);
     } catch (updateError) {
       await deletePublicImages(photoUrls(savedPhotos));
       throw updateError;
@@ -261,12 +261,14 @@ router.delete("/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM Expense WHERE id = ?`, [expenseId]);
-    const [result] = await pool.query(`DELETE FROM Expense WHERE id = ?`, [expenseId]);
+    const deletedByName = await getRecorderName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE Expense SET deleted_at = CURRENT_TIMESTAMP, deleted_by_name = ? WHERE id = ? AND deleted_at IS NULL`,
+      [deletedByName, expenseId],
+    );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "ไม่พบรายการรายจ่ายนี้" });
     }
-    await deletePublicImages(photoUrls(parseStoredPhotos(rows[0]?.photos)));
 
     return res.json({ message: "ลบรายจ่ายสำเร็จ" });
   } catch (error) {
