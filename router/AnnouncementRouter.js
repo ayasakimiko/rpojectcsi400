@@ -22,6 +22,13 @@ function expiryValue(value) {
     : { sql: "?", param: value.expiresAt };
 }
 
+function popupValue(value) {
+  if (value.popupInMinutes === undefined) return null;
+  return value.popupInMinutes === null
+    ? { sql: "NULL", params: [] }
+    : { sql: "DATE_ADD(NOW(), INTERVAL ? MINUTE)", params: [value.popupInMinutes] };
+}
+
 function parsePhotos(raw) {
   try {
     const list = JSON.parse(raw || "[]");
@@ -44,10 +51,17 @@ export async function listAnnouncements(pool) {
   }
   const [announcements] = await pool.query(
     `SELECT id, title, message, tone, author_name AS author, DATE_FORMAT(expires_at, '%Y-%m-%dT%H:%i') AS expires_at,
-            UNIX_TIMESTAMP(expires_at) AS expires_epoch, photos, created_at
+            UNIX_TIMESTAMP(expires_at) AS expires_epoch,
+            DATE_FORMAT(popup_until, '%Y-%m-%dT%H:%i') AS popup_until, UNIX_TIMESTAMP(popup_until) AS popup_epoch,
+            (popup_until IS NULL OR popup_until > NOW()) AS popup_active,
+            photos, created_at
      FROM Announcement ORDER BY created_at DESC, id DESC LIMIT 50`,
   );
-  return announcements.map((announcement) => ({ ...announcement, photos: parsePhotos(announcement.photos) }));
+  return announcements.map((announcement) => ({
+    ...announcement,
+    popup_active: Boolean(announcement.popup_active),
+    photos: parsePhotos(announcement.photos),
+  }));
 }
 
 async function checkFutureExpiry(pool, value) {
@@ -80,11 +94,13 @@ router.post("/", async (req, res) => {
 
     const authorName = await getAuthorName(pool, req.user);
     const expiry = expiryValue(value);
+    const popup = popupValue(value) || { sql: "NULL", params: [] };
     const savedPhotos = await savePublicImages(PHOTO_FOLDER, value.newPhotos);
     try {
       const [result] = await pool.query(
-        `INSERT INTO Announcement (title, message, tone, author_name, expires_at, photos) VALUES (?, ?, ?, ?, ${expiry.sql}, ?)`,
-        [value.title, value.message, value.tone, authorName, expiry.param, serializePhotos(savedPhotos)],
+        `INSERT INTO Announcement (title, message, tone, author_name, expires_at, popup_until, photos)
+         VALUES (?, ?, ?, ?, ${expiry.sql}, ${popup.sql}, ?)`,
+        [value.title, value.message, value.tone, authorName, expiry.param, ...popup.params, serializePhotos(savedPhotos)],
       );
       return res.status(201).json({ message: "เผยแพร่ประกาศสำเร็จ", announcementId: result.insertId });
     } catch (insertError) {
@@ -120,16 +136,18 @@ router.patch("/:id", async (req, res) => {
     }
 
     const expiry = expiryValue(value);
+    const popup = popupValue(value);
     const savedPhotos = await savePublicImages(PHOTO_FOLDER, value.newPhotos);
     let result;
     try {
       [result] = await pool.query(
-        `UPDATE Announcement SET title = ?, message = ?, tone = ?, expires_at = ${expiry.sql}, photos = ? WHERE id = ?`,
+        `UPDATE Announcement SET title = ?, message = ?, tone = ?, expires_at = ${expiry.sql}${popup ? `, popup_until = ${popup.sql}` : ""}, photos = ? WHERE id = ?`,
         [
           value.title,
           value.message,
           value.tone,
           expiry.param,
+          ...(popup ? popup.params : []),
           serializePhotos([...value.keptPhotos, ...savedPhotos]),
           announcementId,
         ],

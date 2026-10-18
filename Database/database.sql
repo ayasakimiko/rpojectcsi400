@@ -284,6 +284,16 @@ DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND COLUMN_NAME = 'popup_until'),
+    'SELECT 1',
+    'ALTER TABLE `Announcement` ADD COLUMN `popup_until` DATETIME NULL AFTER expires_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'WaitingList' AND COLUMN_NAME = 'desired_move_in_date'),
     'SELECT 1',
     'ALTER TABLE `WaitingList` ADD COLUMN `desired_move_in_date` DATE NULL AFTER note'
