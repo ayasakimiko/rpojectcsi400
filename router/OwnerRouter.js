@@ -601,8 +601,6 @@ router.get("/logs/payments", async (req, res) => {
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // Combines real Payment rows with one synthetic "ค่าห้อง" (room fee) row per
-    // currently booked tenant, reflecting room price minus deposit at query time.
     const combinedQuery = `
       SELECT CONCAT('payment-', p.id) AS id, p.amount, p.payment_date, p.status, p.type, p.note, p.created_at,
              c.id AS customer_id, c.first_name, c.last_name, c.room_number, c.deposit_amount,
@@ -692,8 +690,6 @@ router.get("/logs/occupancy", async (req, res) => {
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // Combines Booking rows (move-in, permanent history) with approved "moveout"
-    // TenantRequest rows (move-out) into one chronological tenancy log.
     const combinedQuery = `
       SELECT CONCAT('movein-', b.id) AS id, b.created_at AS event_date, 'move_in' AS event_type,
              r.room_number, c.first_name, c.last_name, c.phone, NULL AS note
