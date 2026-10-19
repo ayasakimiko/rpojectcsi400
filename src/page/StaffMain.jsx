@@ -11494,18 +11494,22 @@ function StaffMain() {
       {parcelFormOpen && (
         <Modal title="บันทึกพัสดุใหม่" onClose={() => setParcelFormOpen(false)}>
           {(requestClose) => (
-          <form className="parcel-form is-modal" onSubmit={requestParcelSave}>
-            <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
-            <div className="row g-3">
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="staff-parcel-room">
-                  ห้อง / ผู้เช่า <span className="text-danger">*</span>
-                </label>
-                <div className="input-group">
-                  <span className="input-group-text"><DoorIcon /></span>
+          <form className="staff-sec-form" onSubmit={requestParcelSave}>
+            <section className="staff-sec">
+              <header>
+                <span className="staff-sec-icon"><DoorIcon /></span>
+                <div>
+                  <strong>ผู้รับพัสดุ <span className="text-danger">*</span></strong>
+                  <small>เลือกห้องที่มีผู้เช่าอยู่ ระบบจะแจ้งเตือนผู้เช่าห้องนั้น</small>
+                </div>
+              </header>
+              <label className="staff-sec-field" htmlFor="staff-parcel-room">
+                <span>ห้อง / ผู้เช่า</span>
+                <div className="staff-sec-input">
+                  <i><DoorIcon /></i>
                   <select
                     id="staff-parcel-room"
-                    className="form-select"
+                    className="form-select form-control"
                     required
                     value={parcelForm.room_number}
                     onChange={(event) => setParcelForm((prev) => ({ ...prev, room_number: event.target.value }))}
@@ -11520,45 +11524,53 @@ function StaffMain() {
                       ))}
                   </select>
                 </div>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="staff-parcel-sender">บริษัทขนส่ง / ผู้ส่ง</label>
-                <div className="input-group">
-                  <span className="input-group-text"><TruckIcon /></span>
-                  <input
-                    id="staff-parcel-sender"
-                    className="form-control"
-                    type="text"
-                    maxLength={100}
-                    placeholder="เช่น ไปรษณีย์ไทย, Kerry"
-                    value={parcelForm.sender_name}
-                    onChange={(event) => setParcelForm((prev) => ({ ...prev, sender_name: event.target.value }))}
-                  />
+              </label>
+            </section>
+
+            <section className="staff-sec">
+              <header>
+                <span className="staff-sec-icon"><PackageIcon /></span>
+                <div>
+                  <strong>ข้อมูลพัสดุ</strong>
+                  <small>ไม่บังคับ แต่ช่วยให้ผู้เช่าระบุพัสดุได้ง่ายขึ้น</small>
                 </div>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="staff-parcel-tracking">
-                  เลขพัสดุ <small>(ไม่บังคับ)</small>
+              </header>
+              <div className="staff-sec-grid">
+                <label className="staff-sec-field" htmlFor="staff-parcel-sender">
+                  <span>บริษัทขนส่ง / ผู้ส่ง</span>
+                  <div className="staff-sec-input">
+                    <i><TruckIcon /></i>
+                    <input
+                      id="staff-parcel-sender"
+                      className="form-control"
+                      type="text"
+                      maxLength={100}
+                      placeholder="เช่น ไปรษณีย์ไทย, Kerry"
+                      value={parcelForm.sender_name}
+                      onChange={(event) => setParcelForm((prev) => ({ ...prev, sender_name: event.target.value }))}
+                    />
+                  </div>
                 </label>
-                <div className="input-group">
-                  <span className="input-group-text"><HashIcon /></span>
-                  <input
-                    id="staff-parcel-tracking"
-                    className="form-control"
-                    type="text"
-                    maxLength={100}
-                    placeholder="เช่น TH1234567890"
-                    value={parcelForm.tracking_number}
-                    onChange={(event) => setParcelForm((prev) => ({ ...prev, tracking_number: event.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="staff-parcel-description">
-                  รายละเอียด <small>(ไม่บังคับ)</small>
+                <label className="staff-sec-field" htmlFor="staff-parcel-tracking">
+                  <span>เลขพัสดุ</span>
+                  <div className="staff-sec-input">
+                    <i><HashIcon /></i>
+                    <input
+                      id="staff-parcel-tracking"
+                      className="form-control"
+                      type="text"
+                      maxLength={100}
+                      placeholder="เช่น TH1234567890"
+                      value={parcelForm.tracking_number}
+                      onChange={(event) => setParcelForm((prev) => ({ ...prev, tracking_number: event.target.value }))}
+                    />
+                  </div>
                 </label>
-                <div className="input-group">
-                  <span className="input-group-text"><NoteIcon /></span>
+              </div>
+              <label className="staff-sec-field" htmlFor="staff-parcel-description">
+                <span>รายละเอียด</span>
+                <div className="staff-sec-input">
+                  <i><NoteIcon /></i>
                   <input
                     id="staff-parcel-description"
                     className="form-control"
@@ -11569,32 +11581,33 @@ function StaffMain() {
                     onChange={(event) => setParcelForm((prev) => ({ ...prev, description: event.target.value }))}
                   />
                 </div>
+              </label>
+            </section>
+
+            <section className="staff-sec">
+              <div className="parcel-photo-section">
+                <ParcelPhotoPicker
+                  id="staff-parcel-photos"
+                  required
+                  files={parcelPhotos}
+                  onChange={setParcelPhotos}
+                  error={parcelPhotoError}
+                  onError={setParcelPhotoError}
+                />
               </div>
-              <div className="col-12">
-                <div className="parcel-photo-section">
-                  <ParcelPhotoPicker
-                    id="staff-parcel-photos"
-                    required
-                    files={parcelPhotos}
-                    onChange={setParcelPhotos}
-                    error={parcelPhotoError}
-                    onError={setParcelPhotoError}
-                  />
-                </div>
-              </div>
-            </div>
+            </section>
+
             {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
-            <div className="parcel-form-actions">
-              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
+            <div className="staff-sec-actions">
+              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>
                 ยกเลิก
               </button>
               <button
                 type="submit"
-                className="parcel-action-btn is-primary"
+                className="staff-action-btn is-primary"
                 disabled={parcelSubmitting || parcelPhotos.length === 0}
                 title={parcelPhotos.length === 0 ? 'แนบรูปพัสดุก่อนบันทึก' : undefined}
               >
-                <CheckIcon />
                 {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
               </button>
             </div>

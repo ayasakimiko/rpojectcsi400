@@ -199,6 +199,7 @@ function WaitingDetailIcon({ type, size = 16 }) {
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
     wallet: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
     idcard: <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M6 16a3 3 0 0 1 6 0M15 10h3M15 14h3" /></>,
+    lock: <><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
     tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
   }
   return (
@@ -9475,14 +9476,20 @@ function AdminBackupPage() {
       {roomModal && (
         <Modal title={roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : `แก้ไขห้อง ${roomModal.room.room_number}`} onClose={() => setRoomModal(null)}>
           {(requestClose) => (
-          <form onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
+          <form className="admin-room-form" onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
             {roomFormError && <div className="alert alert-danger py-2 px-3">{roomFormError}</div>}
 
-            <div className="admin-form-section">
-              <p className="admin-form-section-title">ข้อมูลห้องพัก</p>
-              <div className="row g-3">
-                <div className="col-6">
-                  <label className="form-label">เลขห้อง</label>
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><RoomDetailIcon type="home" size={16} /></span>
+                <div>
+                  <strong>ข้อมูลห้องพัก</strong>
+                  <small>{roomModal.mode === 'edit' ? 'เลขห้องแก้ไขไม่ได้หลังสร้างแล้ว' : 'เลขห้อง 3 หลัก เช่น 101'}</small>
+                </div>
+              </header>
+              <div className="admin-room-form-grid is-2">
+                <label className="admin-room-field">
+                  <span>เลขห้อง</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -9496,51 +9503,82 @@ function AdminBackupPage() {
                     placeholder="เช่น 101"
                     required
                   />
-                </div>
-                <div className="col-6">
-                  <label className="form-label">ราคา/เดือน (บาท)</label>
-                  <div className="admin-input-group">
-                    <span className="admin-input-affix">฿</span>
-                    <input type="number" name="price" className="form-control" value={roomForm.price} onChange={handleRoomFormChange} required />
+                </label>
+                <label className="admin-room-field">
+                  <span>จำนวนเตียง</span>
+                  <div className="admin-room-input">
+                    <input type="number" min="0" max="99" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
+                    <em>เตียง</em>
                   </div>
-                </div>
-                <div className="col-4">
-                  <label className="form-label">จำนวนเตียง</label>
-                  <input type="number" min="0" max="99" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
-                </div>
-                <div className="col-4">
-                  <label className="form-label">ค่าไฟ/หน่วย</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="99.99"
-                    name="electricity_unit_price"
-                    className="form-control"
-                    value={roomForm.electricity_unit_price}
-                    onChange={handleRoomFormChange}
-                  />
-                </div>
-                <div className="col-4">
-                  <label className="form-label">ค่าน้ำ/เดือน</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="999.99"
-                    name="water_price"
-                    className="form-control"
-                    value={roomForm.water_price}
-                    onChange={handleRoomFormChange}
-                  />
-                </div>
+                </label>
               </div>
-            </div>
+            </section>
 
-            <div className="admin-form-divider" />
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><RoomDetailIcon type="wallet" size={16} /></span>
+                <div>
+                  <strong>ค่าใช้จ่าย</strong>
+                  <small>ราคาค่าเช่าและอัตราค่าน้ำ-ค่าไฟของห้องนี้</small>
+                </div>
+              </header>
+              <div className="admin-room-form-grid is-3">
+                <label className="admin-room-field">
+                  <span>ค่าเช่า</span>
+                  <div className="admin-room-input has-prefix">
+                    <b>฿</b>
+                    <input type="number" name="price" className="form-control" value={roomForm.price} onChange={handleRoomFormChange} required />
+                    <em>/เดือน</em>
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>ค่าไฟ</span>
+                  <div className="admin-room-input has-prefix">
+                    <b>฿</b>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="99.99"
+                      name="electricity_unit_price"
+                      className="form-control"
+                      value={roomForm.electricity_unit_price}
+                      onChange={handleRoomFormChange}
+                    />
+                    <em>/หน่วย</em>
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>ค่าน้ำ</span>
+                  <div className="admin-room-input has-prefix">
+                    <b>฿</b>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="999.99"
+                      name="water_price"
+                      className="form-control"
+                      value={roomForm.water_price}
+                      onChange={handleRoomFormChange}
+                    />
+                    <em>/เดือน</em>
+                  </div>
+                </label>
+              </div>
+            </section>
 
-            <div className="admin-form-section">
-              <p className="admin-form-section-title">สิ่งอำนวยความสะดวก</p>
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><RoomDetailIcon type="sparkle" size={16} /></span>
+                <div>
+                  <strong>สิ่งอำนวยความสะดวก</strong>
+                  <small>กดเพื่อเลือกหรือยกเลิก</small>
+                </div>
+                <span className="admin-room-form-count">
+                  เลือกแล้ว {['air_conditioner', 'wifi', 'refrigerator', 'bathroom', 'cctv'].filter((field) => roomForm[field]).length}/5
+                </span>
+              </header>
               <div className="admin-toggle-grid">
                 {[
                   [
@@ -9592,15 +9630,23 @@ function AdminBackupPage() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       {icon}
                     </svg>
-                    {label}
+                    <span className="admin-room-chip-label">{label}</span>
+                    <span className="admin-room-chip-check" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12.5 10 17l9-10" />
+                      </svg>
+                    </span>
                   </label>
                 ))}
               </div>
-            </div>
+            </section>
 
-            <div className="admin-form-actions">
+            <div className="admin-room-form-actions">
+              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={roomSubmitting}>
+                ยกเลิก
+              </button>
               <button type="submit" className="admin-action-btn is-primary" disabled={roomSubmitting}>
-                {roomSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                {roomSubmitting ? 'กำลังบันทึก...' : roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : 'บันทึกการแก้ไข'}
               </button>
             </div>
           </form>
@@ -9634,19 +9680,23 @@ function AdminBackupPage() {
 
       {parcelFormOpen && (
         <Modal title="บันทึกพัสดุใหม่" onClose={() => setParcelFormOpen(false)}>
-          {() => (
-          <form className="parcel-form is-modal" onSubmit={requestParcelSave}>
-            <p className="parcel-form-hint"><span className="text-danger">*</span> จำเป็นต้องกรอก</p>
-            <div className="row g-3">
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="parcel-ui-room">
-                  ห้อง / ผู้เช่า <span className="text-danger">*</span>
-                </label>
-                <div className="input-group">
-                  <span className="input-group-text"><DoorIcon /></span>
+          {(requestClose) => (
+          <form className="admin-room-form" onSubmit={requestParcelSave}>
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><DoorIcon /></span>
+                <div>
+                  <strong>ผู้รับพัสดุ <span className="text-danger">*</span></strong>
+                  <small>เลือกห้องที่มีผู้เช่าอยู่ ระบบจะแจ้งเตือนผู้เช่าห้องนั้น</small>
+                </div>
+              </header>
+              <label className="admin-room-field" htmlFor="parcel-ui-room">
+                <span>ห้อง / ผู้เช่า</span>
+                <div className="admin-room-input has-icon">
+                  <i><DoorIcon /></i>
                   <select
                     id="parcel-ui-room"
-                    className="form-select"
+                    className="form-select form-control"
                     required
                     value={parcelForm.room_number}
                     onChange={(event) => setParcelForm((form) => ({ ...form, room_number: event.target.value }))}
@@ -9661,45 +9711,53 @@ function AdminBackupPage() {
                       ))}
                   </select>
                 </div>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="parcel-ui-sender">บริษัทขนส่ง / ผู้ส่ง</label>
-                <div className="input-group">
-                  <span className="input-group-text"><TruckIcon /></span>
-                  <input
-                    id="parcel-ui-sender"
-                    className="form-control"
-                    type="text"
-                    maxLength={100}
-                    placeholder="เช่น ไปรษณีย์ไทย, Kerry"
-                    value={parcelForm.sender_name}
-                    onChange={(event) => setParcelForm((form) => ({ ...form, sender_name: event.target.value }))}
-                  />
+              </label>
+            </section>
+
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><PackageIcon /></span>
+                <div>
+                  <strong>ข้อมูลพัสดุ</strong>
+                  <small>ไม่บังคับ แต่ช่วยให้ผู้เช่าระบุพัสดุได้ง่ายขึ้น</small>
                 </div>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="parcel-ui-tracking">
-                  เลขพัสดุ <small>(ไม่บังคับ)</small>
+              </header>
+              <div className="admin-room-form-grid is-2">
+                <label className="admin-room-field" htmlFor="parcel-ui-sender">
+                  <span>บริษัทขนส่ง / ผู้ส่ง</span>
+                  <div className="admin-room-input has-icon">
+                    <i><TruckIcon /></i>
+                    <input
+                      id="parcel-ui-sender"
+                      className="form-control"
+                      type="text"
+                      maxLength={100}
+                      placeholder="เช่น ไปรษณีย์ไทย, Kerry"
+                      value={parcelForm.sender_name}
+                      onChange={(event) => setParcelForm((form) => ({ ...form, sender_name: event.target.value }))}
+                    />
+                  </div>
                 </label>
-                <div className="input-group">
-                  <span className="input-group-text"><HashIcon /></span>
-                  <input
-                    id="parcel-ui-tracking"
-                    className="form-control"
-                    type="text"
-                    maxLength={100}
-                    placeholder="เช่น TH1234567890"
-                    value={parcelForm.tracking_number}
-                    onChange={(event) => setParcelForm((form) => ({ ...form, tracking_number: event.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="parcel-ui-description">
-                  รายละเอียด <small>(ไม่บังคับ)</small>
+                <label className="admin-room-field" htmlFor="parcel-ui-tracking">
+                  <span>เลขพัสดุ</span>
+                  <div className="admin-room-input has-icon">
+                    <i><HashIcon /></i>
+                    <input
+                      id="parcel-ui-tracking"
+                      className="form-control"
+                      type="text"
+                      maxLength={100}
+                      placeholder="เช่น TH1234567890"
+                      value={parcelForm.tracking_number}
+                      onChange={(event) => setParcelForm((form) => ({ ...form, tracking_number: event.target.value }))}
+                    />
+                  </div>
                 </label>
-                <div className="input-group">
-                  <span className="input-group-text"><NoteIcon /></span>
+              </div>
+              <label className="admin-room-field" htmlFor="parcel-ui-description">
+                <span>รายละเอียด</span>
+                <div className="admin-room-input has-icon">
+                  <i><NoteIcon /></i>
                   <input
                     id="parcel-ui-description"
                     className="form-control"
@@ -9710,29 +9768,33 @@ function AdminBackupPage() {
                     onChange={(event) => setParcelForm((form) => ({ ...form, description: event.target.value }))}
                   />
                 </div>
+              </label>
+            </section>
+
+            <section className="admin-room-form-section">
+              <div className="parcel-photo-section">
+                <ParcelPhotoPicker
+                  id="parcel-ui-photos"
+                  required
+                  files={parcelPhotos}
+                  onChange={setParcelPhotos}
+                  error={parcelPhotoError}
+                  onError={setParcelPhotoError}
+                />
               </div>
-              <div className="col-12">
-                <div className="parcel-photo-section">
-                  <ParcelPhotoPicker
-                    id="parcel-ui-photos"
-                    required
-                    files={parcelPhotos}
-                    onChange={setParcelPhotos}
-                    error={parcelPhotoError}
-                    onError={setParcelPhotoError}
-                  />
-                </div>
-              </div>
-            </div>
+            </section>
+
             {parcelFormError && <div className="parcel-form-error" role="alert">{parcelFormError}</div>}
-            <div className="parcel-form-actions">
+            <div className="admin-room-form-actions">
+              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>
+                ยกเลิก
+              </button>
               <button
                 type="submit"
-                className="parcel-action-btn is-primary"
+                className="admin-action-btn is-primary"
                 disabled={parcelSubmitting || parcelPhotos.length === 0}
                 title={parcelPhotos.length === 0 ? 'แนบรูปพัสดุก่อนบันทึก' : undefined}
               >
-                <CheckIcon />
                 {parcelSubmitting ? 'กำลังบันทึก...' : 'บันทึกพัสดุและแจ้งผู้เช่า'}
               </button>
             </div>
@@ -9787,53 +9849,91 @@ function AdminBackupPage() {
       {staffModal && (
         <Modal title={staffModal.mode === 'create' ? 'เพิ่มพนักงาน' : 'แก้ไขข้อมูลพนักงาน'} onClose={() => setStaffModal(null)}>
           {(requestClose) => (
-          <form onSubmit={(event) => submitStaffForm(event, requestClose)} noValidate>
+          <form className="admin-room-form" onSubmit={(event) => submitStaffForm(event, requestClose)} noValidate>
             {staffFormError && <div className="alert alert-danger py-2 px-3">{staffFormError}</div>}
-            <div className="row g-3">
-              <div className="col-12">
-                <label className="form-label">เลขบัตรประชาชน</label>
-                <input
-                  type="text"
-                  name="idcard"
-                  className="form-control"
-                  value={staffForm.idcard}
-                  onChange={handleStaffFormChange}
-                  disabled={staffModal.mode === 'edit'}
-                  maxLength={13}
-                  required
-                />
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><WaitingDetailIcon type="lock" size={16} /></span>
+                <div>
+                  <strong>บัญชีเข้าสู่ระบบ</strong>
+                  <small>{staffModal.mode === 'create' ? 'พนักงานใช้เลขบัตรประชาชนและรหัสผ่านนี้เข้าสู่ระบบ' : 'เลขบัตรแก้ไขไม่ได้ · เว้นรหัสผ่านว่างถ้าไม่ต้องการเปลี่ยน'}</small>
+                </div>
+              </header>
+              <div className="admin-room-form-grid is-2">
+                <label className="admin-room-field">
+                  <span>เลขบัตรประชาชน</span>
+                  <div className="admin-room-input has-icon">
+                    <i><WaitingDetailIcon type="idcard" size={16} /></i>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      name="idcard"
+                      className="form-control"
+                      value={staffForm.idcard}
+                      onChange={handleStaffFormChange}
+                      disabled={staffModal.mode === 'edit'}
+                      maxLength={13}
+                      placeholder="13 หลัก"
+                      required
+                    />
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>{staffModal.mode === 'create' ? 'รหัสผ่าน' : 'รหัสผ่านใหม่'}</span>
+                  <div className="admin-room-input has-icon">
+                    <i><WaitingDetailIcon type="lock" size={16} /></i>
+                    <input
+                      type="password"
+                      name="password"
+                      className="form-control"
+                      value={staffForm.password}
+                      onChange={handleStaffFormChange}
+                      placeholder={staffModal.mode === 'create' ? '' : 'เว้นว่างถ้าไม่เปลี่ยน'}
+                      required={staffModal.mode === 'create'}
+                    />
+                  </div>
+                </label>
               </div>
-              <div className="col-12">
-                <label className="form-label">{staffModal.mode === 'create' ? 'รหัสผ่าน' : 'รหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)'}</label>
-                <input
-                  type="password"
-                  name="password"
-                  className="form-control"
-                  value={staffForm.password}
-                  onChange={handleStaffFormChange}
-                  required={staffModal.mode === 'create'}
-                />
+            </section>
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><RoomDetailIcon type="user" size={16} /></span>
+                <div>
+                  <strong>ข้อมูลส่วนตัว</strong>
+                  <small>ชื่อและช่องทางติดต่อของพนักงาน</small>
+                </div>
+              </header>
+              <div className="admin-room-form-grid is-2">
+                <label className="admin-room-field">
+                  <span>ชื่อ</span>
+                  <input type="text" name="first_name" className="form-control" value={staffForm.first_name} onChange={handleStaffFormChange} required />
+                </label>
+                <label className="admin-room-field">
+                  <span>นามสกุล</span>
+                  <input type="text" name="last_name" className="form-control" value={staffForm.last_name} onChange={handleStaffFormChange} required />
+                </label>
+                <label className="admin-room-field">
+                  <span>เบอร์โทรศัพท์</span>
+                  <div className="admin-room-input has-icon">
+                    <i><RoomDetailIcon type="phone" size={14} /></i>
+                    <input type="text" inputMode="tel" name="phone" className="form-control" value={staffForm.phone} onChange={handleStaffFormChange} required />
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>อายุ</span>
+                  <div className="admin-room-input">
+                    <input type="number" name="age" className="form-control" value={staffForm.age} onChange={handleStaffFormChange} required />
+                    <em>ปี</em>
+                  </div>
+                </label>
               </div>
-              <div className="col-6">
-                <label className="form-label">ชื่อ</label>
-                <input type="text" name="first_name" className="form-control" value={staffForm.first_name} onChange={handleStaffFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">นามสกุล</label>
-                <input type="text" name="last_name" className="form-control" value={staffForm.last_name} onChange={handleStaffFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">เบอร์โทรศัพท์</label>
-                <input type="text" name="phone" className="form-control" value={staffForm.phone} onChange={handleStaffFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">อายุ</label>
-                <input type="number" name="age" className="form-control" value={staffForm.age} onChange={handleStaffFormChange} required />
-              </div>
-            </div>
-            <div className="admin-form-actions">
+            </section>
+            <div className="admin-room-form-actions">
+              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={staffSubmitting}>
+                ยกเลิก
+              </button>
               <button type="submit" className="admin-action-btn is-primary" disabled={staffSubmitting}>
-                {staffSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                {staffSubmitting ? 'กำลังบันทึก...' : staffModal.mode === 'create' ? 'เพิ่มพนักงาน' : 'บันทึกการแก้ไข'}
               </button>
             </div>
           </form>
@@ -9902,33 +10002,64 @@ function AdminBackupPage() {
       {customerModal && (
         <Modal title={`แก้ไขข้อมูลลูกค้า - ${customerModal.first_name} ${customerModal.last_name}`} onClose={() => setCustomerModal(null)}>
           {(requestClose) => (
-          <form onSubmit={(event) => submitCustomerForm(event, requestClose)} noValidate>
+          <form className="admin-room-form" onSubmit={(event) => submitCustomerForm(event, requestClose)} noValidate>
             {customerFormError && <div className="alert alert-danger py-2 px-3">{customerFormError}</div>}
-            <div className="row g-3">
-              <div className="col-6">
-                <label className="form-label">ชื่อ</label>
-                <input type="text" name="first_name" className="form-control" value={customerForm.first_name} onChange={handleCustomerFormChange} required />
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><RoomDetailIcon type="user" size={16} /></span>
+                <div>
+                  <strong>ข้อมูลส่วนตัว</strong>
+                  <small>ชื่อและช่องทางติดต่อของผู้เช่า</small>
+                </div>
+              </header>
+              <div className="admin-room-form-grid is-2">
+                <label className="admin-room-field">
+                  <span>ชื่อ</span>
+                  <input type="text" name="first_name" className="form-control" value={customerForm.first_name} onChange={handleCustomerFormChange} required />
+                </label>
+                <label className="admin-room-field">
+                  <span>นามสกุล</span>
+                  <input type="text" name="last_name" className="form-control" value={customerForm.last_name} onChange={handleCustomerFormChange} required />
+                </label>
+                <label className="admin-room-field">
+                  <span>เบอร์โทรศัพท์</span>
+                  <div className="admin-room-input has-icon">
+                    <i><RoomDetailIcon type="phone" size={14} /></i>
+                    <input type="text" inputMode="tel" name="phone" className="form-control" value={customerForm.phone} onChange={handleCustomerFormChange} required />
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>อายุ</span>
+                  <div className="admin-room-input">
+                    <input type="number" name="age" className="form-control" value={customerForm.age} onChange={handleCustomerFormChange} required />
+                    <em>ปี</em>
+                  </div>
+                </label>
               </div>
-              <div className="col-6">
-                <label className="form-label">นามสกุล</label>
-                <input type="text" name="last_name" className="form-control" value={customerForm.last_name} onChange={handleCustomerFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">เบอร์โทรศัพท์</label>
-                <input type="text" name="phone" className="form-control" value={customerForm.phone} onChange={handleCustomerFormChange} required />
-              </div>
-              <div className="col-6">
-                <label className="form-label">อายุ</label>
-                <input type="number" name="age" className="form-control" value={customerForm.age} onChange={handleCustomerFormChange} required />
-              </div>
-              <div className="col-12">
-                <label className="form-label">เงินมัดจำ (บาท)</label>
-                <input type="number" name="deposit_amount" className="form-control" value={customerForm.deposit_amount} onChange={handleCustomerFormChange} />
-              </div>
-            </div>
-            <div className="admin-form-actions">
+            </section>
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><RoomDetailIcon type="wallet" size={16} /></span>
+                <div>
+                  <strong>เงินมัดจำ</strong>
+                  <small>ยอดเงินมัดจำที่ผู้เช่าวางไว้</small>
+                </div>
+              </header>
+              <label className="admin-room-field">
+                <span>จำนวนเงินมัดจำ</span>
+                <div className="admin-room-input has-prefix">
+                  <b>฿</b>
+                  <input type="number" name="deposit_amount" className="form-control" value={customerForm.deposit_amount} onChange={handleCustomerFormChange} />
+                  <em>บาท</em>
+                </div>
+              </label>
+            </section>
+            <div className="admin-room-form-actions">
+              <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={customerSubmitting}>
+                ยกเลิก
+              </button>
               <button type="submit" className="admin-action-btn is-primary" disabled={customerSubmitting}>
-                {customerSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}
+                {customerSubmitting ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
               </button>
             </div>
           </form>
