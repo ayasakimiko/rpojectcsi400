@@ -3,7 +3,6 @@ import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { DormInfoMenu } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -15,85 +14,8 @@ import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
-
-const formatNumber = (value) => Number(value || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 })
-const dateParts = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
-})
-
-function dateKey(value) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const parts = Object.fromEntries(dateParts.formatToParts(date).map((part) => [part.type, part.value]))
-  return `${parts.year}-${parts.month}-${parts.day}`
-}
-
-function startDateKey(endDate, days) {
-  const date = new Date(`${endDate}T00:00:00Z`)
-  if (Number.isNaN(date.getTime())) return ''
-  date.setUTCDate(date.getUTCDate() - days + 1)
-  return date.toISOString().slice(0, 10)
-}
-
-function CustomerUtilityUsage({ rentalHistory = [] }) {
-  const [days, setDays] = useState(30)
-  const [today] = useState(() => dateKey(Date.now()))
-  const [endDate, setEndDate] = useState(today)
-  const chartData = useMemo(() => {
-    const periods = new Map()
-    const startDate = startDateKey(endDate, days)
-    for (const booking of rentalHistory) {
-      for (const payment of booking.payments || []) {
-        if (payment.status !== 'paid' || !['water', 'electricity'].includes(payment.type)) continue
-        const date = dateKey(payment.payment_date)
-        if (!date || date < startDate || date > endDate) continue
-        const row = periods.get(date) || { date, water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 }
-        row[payment.type] += Number(payment.amount || 0)
-        const unitField = payment.type === 'water' ? 'water_units' : 'electricity_units'
-        const units = payment[unitField] ?? payment.note?.match(/([\d.]+)\s*หน่วย/)?.[1]
-        if (units !== null && units !== undefined && Number.isFinite(Number(units))) {
-          row[payment.type === 'water' ? 'waterUnits' : 'electricityUnits'] += Number(units)
-        }
-        periods.set(date, row)
-      }
-    }
-    return [...periods.values()].sort((a, b) => a.date.localeCompare(b.date))
-  }, [rentalHistory, days, endDate])
-
-  return (
-    <section className="dashboard-utility-usage" aria-label="ประวัติการใช้น้ำค่าไฟ">
-      <div className="dashboard-utility-usage-header">
-        <div><h3>ประวัติค่าน้ำ–ค่าไฟที่ชำระแล้ว</h3><p>เปรียบเทียบยอดชำระและจำนวนหน่วยจากประวัติการเช่าทุกห้อง</p></div>
-        <div className="dashboard-utility-usage-filters">
-          <div role="group" aria-label="เลือกช่วงวันที่ของกราฟ">
-            {[30, 7, 3].map((count) => (
-              <button key={count} type="button" className={days === count ? 'is-active' : ''} aria-pressed={days === count} onClick={() => setDays(count)}>{count} วัน</button>
-            ))}
-          </div>
-          <label>วันที่สิ้นสุด <input type="date" value={endDate} max={today} onChange={(event) => setEndDate(event.target.value)} /></label>
-        </div>
-      </div>
-      {chartData.length ? (
-        <div className="dashboard-utility-usage-chart">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="amount" tick={{ fontSize: 11 }} tickFormatter={formatNumber} />
-              <YAxis yAxisId="units" orientation="right" tick={{ fontSize: 11 }} tickFormatter={formatNumber} />
-              <Tooltip formatter={(value, name) => [name.includes('หน่วย') ? `${formatNumber(value)} หน่วย` : `฿${formatNumber(value)}`, name]} />
-              <Legend />
-              <Line yAxisId="amount" type="monotone" dataKey="water" name="ค่าน้ำ" stroke="#0891b2" strokeWidth={2} />
-              <Line yAxisId="amount" type="monotone" dataKey="electricity" name="ค่าไฟ" stroke="#d97706" strokeWidth={2} />
-              <Line yAxisId="units" type="monotone" dataKey="waterUnits" name="หน่วยน้ำ" stroke="#16a34a" strokeWidth={2} />
-              <Line yAxisId="units" type="monotone" dataKey="electricityUnits" name="หน่วยไฟ" stroke="#7c3aed" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      ) : <p className="dashboard-utility-usage-empty">ยังไม่มีรายการค่าน้ำหรือค่าไฟที่ชำระในช่วงนี้</p>}
-    </section>
-  )
-}
+import PromptPayQr from '../components/PromptPayQr.jsx'
+import { formatPromptPayId, isValidPromptPayId } from '../utils/promptpay.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -664,7 +586,7 @@ function Modal({ title, onClose, children, variant, onBack }) {
       }}
     >
       <div
-        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${variant === 'payment' ? ' dashboard-modal-payment' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dashboard-modal-header">
@@ -830,68 +752,6 @@ function ReceiptTemplate({ receiptRequest, customer }) {
         </div>
       </div>
     </div>
-  )
-}
-
-const FAKE_QR_SIZE = 21
-
-function isInFinderPattern(row, col, size) {
-  const corners = [
-    [0, 0],
-    [0, size - 7],
-    [size - 7, 0],
-  ]
-  return corners.some(([r, c]) => row >= r && row < r + 7 && col >= c && col < c + 7)
-}
-
-function finderModuleOn(row, col, size) {
-  const corners = [
-    [0, 0],
-    [0, size - 7],
-    [size - 7, 0],
-  ]
-  for (const [r0, c0] of corners) {
-    if (row >= r0 && row < r0 + 7 && col >= c0 && col < c0 + 7) {
-      const localRow = row - r0
-      const localCol = col - c0
-      const ring = localRow === 0 || localRow === 6 || localCol === 0 || localCol === 6
-      const core = localRow >= 2 && localRow <= 4 && localCol >= 2 && localCol <= 4
-      return ring || core
-    }
-  }
-  return false
-}
-
-function pseudoRandomModuleOn(row, col) {
-  const value = Math.sin(row * 12.9898 + col * 78.233) * 43758.5453
-  return value - Math.floor(value) > 0.55
-}
-
-function FakeQrCode() {
-  const modules = []
-  for (let row = 0; row < FAKE_QR_SIZE; row++) {
-    for (let col = 0; col < FAKE_QR_SIZE; col++) {
-      const on = isInFinderPattern(row, col, FAKE_QR_SIZE)
-        ? finderModuleOn(row, col, FAKE_QR_SIZE)
-        : pseudoRandomModuleOn(row, col)
-      if (on) modules.push(`${row}-${col}`)
-    }
-  }
-
-  return (
-    <svg
-      viewBox={`0 0 ${FAKE_QR_SIZE} ${FAKE_QR_SIZE}`}
-      className="dashboard-fake-qr"
-      shapeRendering="crispEdges"
-      role="img"
-      aria-label="QR สำหรับสแกนชำระเงิน"
-    >
-      <rect width={FAKE_QR_SIZE} height={FAKE_QR_SIZE} fill="#fff" />
-      {modules.map((key) => {
-        const [row, col] = key.split('-').map(Number)
-        return <rect key={key} x={col} y={row} width={1} height={1} fill="#0f2b52" />
-      })}
-    </svg>
   )
 }
 
@@ -4190,6 +4050,9 @@ function CustomerDashbord() {
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentError, setPaymentError] = useState('')
   const [paymentSlip, setPaymentSlip] = useState(null)
+  const [paymentMethod, setPaymentMethod] = useState('promptpay')
+  const [paymentChannels, setPaymentChannels] = useState(null)
+  const [paymentCopied, setPaymentCopied] = useState(false)
   const [showDueBreakdown, setShowDueBreakdown] = useState(true)
 
   const [activeRequestType, setActiveRequestType] = useState(null)
@@ -4456,20 +4319,46 @@ function CustomerDashbord() {
   const openPaymentForm = () => {
     setPaymentError('')
     setPaymentSlip(null)
+    setPaymentCopied(false)
     setShowPaymentForm(true)
+    axios
+      .get('/api/customer/payment-channels', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+      .then(({ data: result }) => {
+        const channels = result.channels || {}
+        setPaymentChannels(channels)
+        const hasPromptPay = isValidPromptPayId(channels.promptpay_id)
+        const hasBank = Boolean(channels.bank_name && channels.bank_account_no)
+        setPaymentMethod(hasPromptPay || !hasBank ? 'promptpay' : 'bank')
+      })
+      .catch(() => setPaymentChannels({}))
+  }
+
+  const copyBankAccount = async (accountNo) => {
+    try {
+      await navigator.clipboard.writeText(String(accountNo).replace(/[^\d]/g, ''))
+      setPaymentCopied(true)
+      window.setTimeout(() => setPaymentCopied(false), 1800)
+    } catch {
+      setPaymentCopied(false)
+    }
   }
 
   const handleConfirmPayment = async (event) => {
     event.preventDefault()
     const token = sessionStorage.getItem('token')
+    if (!paymentMethod) {
+      setPaymentError('กรุณาเลือกช่องทางการชำระเงิน')
+      return
+    }
     if (!paymentSlip) {
-      setPaymentError('กรุณาแนบสลิปโอนเงิน')
+      setPaymentError('กรุณาแนบสลิปโอนเงินก่อนส่ง')
       return
     }
     setPaymentSubmitting(true)
     setPaymentError('')
     try {
       const formData = new FormData()
+      formData.append('payment_method', paymentMethod)
       formData.append('slip', paymentSlip)
       const { data: result } = await axios.post(
         '/api/customer/payments/confirm',
@@ -5736,14 +5625,6 @@ function CustomerDashbord() {
           </div>
         </div>
 
-        <div className="dorm-menu-bar">
-          <DormInfoMenu
-            apiBase="/api/customer/dorm-info"
-            requireAck={needsDormInfoAck}
-            onAcknowledge={acknowledgeDormInfo}
-          />
-        </div>
-
         {maintenanceDetail && (
           <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="pinned">
             {() => (
@@ -6419,7 +6300,7 @@ function CustomerDashbord() {
 
         <DashboardReminders reminders={reminders} />
 
-        <ul className="nav nav-tabs dashboard-tabs">
+        <ul className="nav nav-tabs dashboard-tabs mb-0">
           {CUSTOMER_TABS.map((tab) => (
             <li className="nav-item" key={tab.key}>
               <button
@@ -6440,6 +6321,13 @@ function CustomerDashbord() {
             </li>
           ))}
         </ul>
+        <div className="dorm-menu-bar">
+          <DormInfoMenu
+            apiBase="/api/customer/dorm-info"
+            requireAck={needsDormInfoAck}
+            onAcknowledge={acknowledgeDormInfo}
+          />
+        </div>
 
         {customerTab === 'parcels' && (
           <section
@@ -6916,7 +6804,6 @@ function CustomerDashbord() {
             <div className="dashboard-card-header">
               <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
             </div>
-            <CustomerUtilityUsage rentalHistory={rentalHistory} />
             {filteredRentalHistory.length > 0 && (
               <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
                 {filteredRentalHistory.map((entry, index) => {
@@ -7053,7 +6940,7 @@ function CustomerDashbord() {
                         </div>
                         <div className="dashboard-utility-rate is-water">
                           <span>ค่าน้ำ</span>
-                          <strong>{formatCurrency(room.water_unit_price)} บาท/หน่วย · เหมา {formatCurrency(room.water_price)} บาท/เดือน</strong>
+                          <strong>{formatCurrency(room.water_price)}/เดือน</strong>
                         </div>
                       </div>
 
@@ -7134,20 +7021,108 @@ function CustomerDashbord() {
                             )}
                           </div>
                           {showPaymentForm && (
-                            <Modal title="ชำระเงินและแนบสลิป" onClose={() => setShowPaymentForm(false)} variant="confirm">
+                            <Modal title="ชำระเงินและแนบสลิป" onClose={() => setShowPaymentForm(false)} variant="payment">
                               {(requestClose) => (
-                                <form className="dashboard-inline-form" onSubmit={handleConfirmPayment}>
-                                  <div className="dashboard-qr-box">
-                                    <span className="dashboard-qr-badge">PromptPay</span>
-                                    <FakeQrCode />
-                                    <p className="dashboard-qr-amount">฿{formatCurrency(currentDue.amount)}</p>
-                                    <p className="dashboard-qr-hint">
-                                      {currentDue.lumpSumMonths
-                                        ? `ยอดรวมค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน — สแกนผ่านแอปธนาคารเพื่อชำระเงิน`
-                                        : 'สแกนผ่านแอปธนาคารเพื่อชำระเงิน'}
-                                    </p>
+                                <form className="dashboard-inline-form dashboard-pay-form" onSubmit={handleConfirmPayment}>
+                                  <div className="dashboard-pay-layout">
+                                  <div className="dashboard-pay-left">
+                                  {(() => {
+                                    const channels = paymentChannels || {}
+                                    const hasPromptPay = isValidPromptPayId(channels.promptpay_id)
+                                    const hasBank = Boolean(channels.bank_name && channels.bank_account_no)
+                                    return (
+                                      <>
+                                        <div className="dashboard-pay-amount">
+                                          <span>ยอดที่ต้องชำระ</span>
+                                          <strong>฿{formatCurrency(currentDue.amount)}</strong>
+                                          {currentDue.lumpSumMonths ? <small>ค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน</small> : null}
+                                        </div>
+
+                                        <span className="slip-field-label">เลือกช่องทางการชำระเงิน</span>
+                                        <div className="dashboard-pay-methods" role="radiogroup" aria-label="ช่องทางการชำระเงิน">
+                                          {[
+                                            { key: 'promptpay', label: 'PromptPay', hint: 'สแกน QR จากแอปธนาคาร', available: hasPromptPay },
+                                            { key: 'bank', label: 'โอนเข้าบัญชี', hint: 'โอนผ่านเลขบัญชีธนาคาร', available: hasBank },
+                                          ].map((method) => (
+                                            <button
+                                              key={method.key}
+                                              type="button"
+                                              role="radio"
+                                              aria-checked={paymentMethod === method.key}
+                                              className={`dashboard-pay-method${paymentMethod === method.key ? ' is-active' : ''}`}
+                                              disabled={paymentChannels !== null && !method.available}
+                                              onClick={() => {
+                                                setPaymentMethod(method.key)
+                                                setPaymentError('')
+                                              }}
+                                            >
+                                              <span className="dashboard-pay-method-icon" aria-hidden="true">
+                                                {method.key === 'promptpay' ? (
+                                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                                                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                                                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                                                    <path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h3v-3" />
+                                                  </svg>
+                                                ) : (
+                                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M3 10 12 4l9 6" />
+                                                    <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" />
+                                                  </svg>
+                                                )}
+                                              </span>
+                                              <span className="dashboard-pay-method-text">
+                                                <strong>{method.label}</strong>
+                                                <small>{paymentChannels !== null && !method.available ? 'หอพักยังไม่ได้ตั้งค่า' : method.hint}</small>
+                                              </span>
+                                            </button>
+                                          ))}
+                                        </div>
+
+                                        {paymentChannels === null ? (
+                                          <div className="dashboard-pay-panel is-loading">กำลังโหลดช่องทางชำระเงิน...</div>
+                                        ) : paymentMethod === 'promptpay' ? (
+                                          hasPromptPay ? (
+                                            <div className="dashboard-pay-panel is-promptpay">
+                                              <span className="dashboard-qr-badge">PromptPay</span>
+                                              <PromptPayQr promptPayId={channels.promptpay_id} amount={currentDue.amount} size={172} className="dashboard-pay-qr" />
+                                              <p className="dashboard-pay-panel-id">{formatPromptPayId(channels.promptpay_id)}</p>
+                                              <p className="dashboard-pay-panel-owner">ชำระผ่าน PromptPay</p>
+                                              <p className="dashboard-qr-hint">สแกนผ่านแอปธนาคาร ยอดเงินจะถูกใส่ให้อัตโนมัติ</p>
+                                            </div>
+                                          ) : (
+                                            <div className="dashboard-pay-panel is-empty">หอพักยังไม่ได้ตั้งค่า PromptPay กรุณาเลือกโอนเข้าบัญชีหรือติดต่อเจ้าหน้าที่</div>
+                                          )
+                                        ) : hasBank ? (
+                                          <div className="dashboard-pay-panel is-bank">
+                                            <div className="dashboard-pay-bank-row">
+                                              <span>ธนาคาร</span>
+                                              <strong>{channels.bank_name}</strong>
+                                            </div>
+                                            <div className="dashboard-pay-bank-row">
+                                              <span>เลขบัญชี</span>
+                                              <strong className="is-account">{channels.bank_account_no}</strong>
+                                              <button type="button" className="dashboard-pay-copy" onClick={() => copyBankAccount(channels.bank_account_no)}>
+                                                {paymentCopied ? 'คัดลอกแล้ว ✓' : 'คัดลอก'}
+                                              </button>
+                                            </div>
+                                            {channels.dorm_name && (
+                                              <div className="dashboard-pay-bank-row">
+                                                <span>ชื่อบัญชี</span>
+                                                <strong>{channels.dorm_name}</strong>
+                                              </div>
+                                            )}
+                                            <p className="dashboard-qr-hint">โอนยอด ฿{formatCurrency(currentDue.amount)} แล้วแนบสลิปด้านล่าง</p>
+                                          </div>
+                                        ) : (
+                                          <div className="dashboard-pay-panel is-empty">หอพักยังไม่ได้ตั้งค่าบัญชีธนาคาร กรุณาเลือก PromptPay หรือติดต่อเจ้าหน้าที่</div>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
                                   </div>
-                                  <span className="slip-field-label">แนบสลิปโอนเงิน</span>
+                                  <div className="dashboard-pay-right">
+                                  <span className="slip-field-label">แนบสลิปโอนเงิน <em className="dashboard-pay-required">จำเป็น</em></span>
                                   <SlipDropZone
                                     id="payment-slip-file"
                                     file={paymentSlip}
@@ -7155,12 +7130,14 @@ function CustomerDashbord() {
                                     onError={setPaymentError}
                                   />
                                   {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
+                                  </div>
+                                  </div>
                                   <div className="dashboard-form-actions">
                                     <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                                       ยกเลิก
                                     </button>
-                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting}>
-                                      {paymentSubmitting ? 'กำลังส่งสลิป...' : 'ส่งสลิปรอตรวจสอบ'}
+                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting || !paymentSlip}>
+                                      {paymentSubmitting ? 'กำลังส่งสลิป...' : paymentSlip ? 'ส่งสลิปรอตรวจสอบ' : 'แนบสลิปก่อนส่ง'}
                                     </button>
                                   </div>
                                 </form>

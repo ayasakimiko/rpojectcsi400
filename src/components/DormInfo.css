@@ -1,206 +1,720 @@
-.dorm-info-panel {
-  margin: 20px 0 24px;
-  padding: 22px;
-  border: 1px solid #dbeafe;
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.08);
+.dorm-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+  align-items: start;
+  gap: 20px;
+  margin: 0 0 20px;
 }
 
-.dorm-info-header {
+.dorm-settings-editor,
+.dorm-settings-preview {
+  min-width: 0;
+  border: 1px solid #e3ecf8;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.06);
+}
+
+.dorm-settings-editor {
+  overflow: hidden;
+}
+
+.dorm-settings-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.dorm-settings-main > .owner-payment-settings.dorm-settings-editor {
+  margin: 0;
+}
+
+.dorm-settings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid #eef3f9;
+  background: linear-gradient(135deg, #ffffff 40%, #eff6ff);
+}
+
+.dorm-settings-head-icon {
+  display: grid;
+  flex: 0 0 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #c9dcfb;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.dorm-settings-head-text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.dorm-settings-head-text h2 {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.dorm-settings-head-text p {
+  margin: 3px 0 0;
+  color: #6b859e;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.dorm-settings-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dorm-settings-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dorm-settings-status.is-saved {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.dorm-settings-status.is-draft {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.dorm-settings-alert {
+  margin: 14px 20px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dorm-settings-alert.is-success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.dorm-settings-alert.is-error {
+  border: 1px solid #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.dorm-settings-loading {
+  padding: 48px 20px;
+  color: #6b859e;
+  font-size: 14px;
+  text-align: center;
+}
+
+.dorm-settings-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 18px 20px 0;
+  border: 0;
+}
+
+.dorm-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border: 1px solid #e8eff9;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.dorm-settings-group-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
 }
 
-.dorm-info-eyebrow {
-  margin: 0 0 4px;
+.dorm-settings-group-head svg {
   color: #2563eb;
-  font-size: 12px;
+}
+
+.dorm-settings-count {
+  margin-left: auto;
+  padding: 1px 10px;
+  border: 1px solid #c9dcfb;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #2563eb;
+  font-size: 11.5px;
   font-weight: 700;
 }
 
-.dorm-info-header h2 {
+.dorm-settings-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dorm-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dorm-settings-field label {
+  margin: 0;
+  color: #4b6a88;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.dorm-settings-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.dorm-settings-field input,
+.dorm-settings-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d6e3f3;
+  border-radius: 11px;
+  background: #fff;
+  color: #0f2b52;
+  font: inherit;
+  font-size: 14px;
+  transition: border-color 0.08s ease, box-shadow 0.08s ease;
+}
+
+.dorm-settings-field input {
+  height: 42px;
+}
+
+.dorm-settings-field textarea {
+  min-height: 190px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.dorm-settings-field input:focus,
+.dorm-settings-field textarea:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+  outline: none;
+}
+
+.dorm-settings-field input::placeholder,
+.dorm-settings-field textarea::placeholder {
+  color: #b4c2d2;
+}
+
+.dorm-settings-input-icon {
+  position: relative;
+}
+
+.dorm-settings-input-icon > svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: #93a8bf;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.dorm-settings-input-icon input {
+  padding-left: 36px;
+}
+
+.dorm-settings-input-icon:focus-within > svg {
+  color: #2563eb;
+}
+
+.dorm-settings-hint {
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dorm-settings-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 2px -20px 0;
+  padding: 14px 20px 16px;
+  border-top: 1px solid #eef3f9;
+  background: #fcfdff;
+}
+
+.dorm-settings-actions.is-dirty {
+  background: #fffaf3;
+}
+
+.dorm-settings-actions-note {
+  flex: 1 1 auto;
+  color: #8aa0b6;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dorm-settings-actions.is-dirty .dorm-settings-actions-note {
+  color: #c2410c;
+}
+
+.dorm-settings-btn {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.08s ease, border-color 0.08s ease, box-shadow 0.08s ease;
+}
+
+.dorm-settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dorm-settings-btn.is-ghost {
+  border-color: #dce6f3;
+  background: #fff;
+  color: #4b6a88;
+}
+
+.dorm-settings-btn.is-ghost:hover:not(:disabled) {
+  background: #f4f8fd;
+}
+
+.dorm-settings-btn.is-primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.22);
+}
+
+.dorm-settings-btn.is-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.dorm-settings-btn:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.dorm-settings-preview {
+  position: sticky;
+  top: 16px;
+  padding: 14px;
+  background: #f8fbff;
+}
+
+.dorm-settings-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #4b6a88;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dorm-settings-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dorm-settings-preview-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e3ecf8;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.dorm-settings-preview-title > svg {
+  flex-shrink: 0;
+  color: #2563eb;
+}
+
+.dorm-settings-preview-title span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dorm-settings-preview-title strong {
+  color: #0f2b52;
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.dorm-settings-preview-title small {
+  overflow: hidden;
+  color: #6b859e;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dorm-settings-preview .dorm-menu-card {
+  padding: 14px 16px;
+}
+
+.dorm-settings-preview .dorm-menu-rules {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 1100px) {
+  .dorm-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dorm-settings-preview {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .dorm-settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dorm-settings-actions .dorm-settings-btn {
+    flex: 1 1 0;
+  }
+
+  .dorm-settings-actions-note {
+    flex-basis: 100%;
+  }
+}
+
+.dorm-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  margin: 0;
+  padding: 2px 4px 2px 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: #c3d7f2 transparent;
+}
+
+.dorm-rule-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #fff;
+  transition: border-color 0.08s ease, box-shadow 0.08s ease;
+}
+
+.dorm-rule-item:focus-within {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+.dorm-rule-no {
+  display: grid;
+  flex: 0 0 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #c9dcfb;
+  border-radius: 9px;
+  background: #eef5ff;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.dorm-rule-item input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: #0f2b52;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.dorm-rule-item input::placeholder {
+  color: #b4c2d2;
+}
+
+.dorm-rule-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  opacity: 0.55;
+  transition: opacity 0.08s ease;
+}
+
+.dorm-rule-item:hover .dorm-rule-actions,
+.dorm-rule-item:focus-within .dorm-rule-actions {
+  opacity: 1;
+}
+
+.dorm-rule-actions button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b859e;
+  cursor: pointer;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+
+.dorm-rule-actions button:hover:not(:disabled) {
+  background: #eef5ff;
+  color: #2563eb;
+}
+
+.dorm-rule-actions button.is-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.dorm-rule-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.dorm-rule-actions button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.dorm-rule-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 42px;
+  border: 1.5px dashed #bfd6f6;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #2563eb;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.08s ease, border-color 0.08s ease;
+}
+
+.dorm-rule-add:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #eef5ff;
+}
+
+.dorm-rule-add:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.dorm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 30, 61, 0.5);
+  backdrop-filter: blur(2px);
+  animation: dorm-menu-fade-in 0.1s ease-out both;
+}
+
+.dorm-dialog {
+  --dialog-tone: #2563eb;
+  display: flex;
+  flex-direction: column;
+  width: min(440px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid #e3ecf8;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 43, 82, 0.28);
+  animation: dorm-menu-pop-in 0.12s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.dorm-dialog.is-success {
+  --dialog-tone: #16a34a;
+}
+
+.dorm-dialog-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 24px 18px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dialog-tone) 7%, #ffffff) 0%, #ffffff 70%);
+  text-align: center;
+}
+
+.dorm-dialog-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 4px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--dialog-tone) 30%, #ffffff);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dialog-tone) 12%, #ffffff);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--dialog-tone) 6%, transparent);
+  color: var(--dialog-tone);
+}
+
+.dorm-dialog-body h3 {
   margin: 0;
   color: #0f2b52;
   font-size: 18px;
   font-weight: 800;
 }
 
-.dorm-info-status {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.dorm-info-status.is-preview-draft {
-  background: #fff7ed;
-  color: #c2410c;
-}
-
-.dorm-info-status.is-preview-saved {
-  background: #ecfdf3;
-  color: #027a48;
-}
-
-.dorm-info-refresh {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid #bfdbfe;
-  border-radius: 9px;
-  background: #f8fbff;
-  color: #1d4ed8;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.dorm-info-refresh:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.dorm-info-note,
-.dorm-info-error {
-  margin: -6px 0 14px;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.dorm-info-error {
-  color: #b42318;
-}
-
-.dorm-info-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(180px, 1fr));
-  gap: 12px;
-}
-
-.dorm-info-item {
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid #e6f0fd;
-  border-radius: 14px;
-  background: #f8fbff;
-}
-
-.dorm-info-item h3 {
-  margin: 0 0 10px;
-  color: #33506f;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.dorm-info-item p {
+.dorm-dialog-body p {
   margin: 0;
-  color: #526b85;
-  font-size: 13px;
-  line-height: 1.7;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
+  color: #5b7491;
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
-.dorm-info-item .dorm-info-value {
-  color: #0f2b52;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.dorm-info-contact-list {
+.dorm-dialog-details {
   display: grid;
-  gap: 8px;
-}
-
-.dorm-info-contact-list p {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 4px 12px;
-}
-
-.dorm-info-contact-list a {
-  color: #2563eb;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.dorm-info-contact-list a:hover {
-  text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-  .dorm-info-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.dorm-info-form {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.dorm-info-form .is-wide { grid-column: 1 / -1; }
-.dorm-info-field { display: grid; gap: 7px; min-width: 0; }
-.dorm-info-field label { color: #33506f; font-size: 13px; font-weight: 700; }
-.dorm-info-field input,
-.dorm-info-field textarea {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
+  margin: 8px 0 0;
+  overflow: hidden;
+  border: 1px solid #e8eff9;
+  border-radius: 12px;
   background: #fff;
+  text-align: left;
+}
+
+.dorm-dialog-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eef3f9;
+}
+
+.dorm-dialog-details > div:nth-child(odd) {
+  border-right: 1px solid #eef3f9;
+}
+
+.dorm-dialog-details > div:nth-last-child(-n + 2):nth-child(odd),
+.dorm-dialog-details > div:last-child {
+  border-bottom: 0;
+}
+
+.dorm-dialog-details > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+
+.dorm-dialog-details dt {
+  color: #6b859e;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.dorm-dialog-details dd {
+  margin: 0;
+  overflow: hidden;
   color: #0f2b52;
-  font: inherit;
   font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.dorm-info-field textarea { resize: vertical; }
-.dorm-info-field input:focus-visible,
-.dorm-info-field textarea:focus-visible,
-.dorm-info-panel button:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
-.dorm-info-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-.dorm-info-save {
-  min-height: 38px;
-  padding: 8px 16px;
-  border: 1px solid #2563eb;
-  border-radius: 9px;
-  background: #2563eb;
-  color: #fff;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
+
+.dorm-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid #eef3f9;
+  background: #fcfdff;
 }
-.dorm-info-save:hover:not(:disabled) { background: #1d4ed8; }
-.dorm-info-save:disabled { opacity: .6; cursor: default; }
-.dorm-info-success { color: #027a48; font-size: 14px; }
-@media (max-width: 768px) {
-  .dorm-info-form { grid-template-columns: minmax(0, 1fr); }
+
+.dorm-dialog-actions.is-single {
+  grid-template-columns: 1fr;
+}
+
+.dorm-dialog-actions .dorm-settings-btn {
+  min-height: 42px;
+}
+
+.dorm-dialog.is-success .dorm-settings-btn.is-primary {
+  border-color: #16a34a;
+  background: #16a34a;
+  box-shadow: 0 6px 14px rgba(22, 163, 74, 0.22);
+}
+
+.dorm-dialog.is-success .dorm-settings-btn.is-primary:hover:not(:disabled) {
+  background: #15803d;
 }
 
 .dorm-menu-bar {
   display: flex;
-}
-
-.staff-header + .dorm-menu-bar,
-.admin-header + .dorm-menu-bar {
-  margin-top: -12px;
-}
-
-.dashboard-header + .dorm-menu-bar {
-  margin: -16px 0 20px;
+  justify-content: flex-end;
+  margin: 12px 0;
 }
 
 .dorm-menu-btn {
@@ -249,8 +763,9 @@
 }
 
 .dorm-menu-modal {
-  width: min(760px, 100%);
-  height: min(800px, 92vh);
+  width: min(720px, 100%);
+  height: auto;
+  max-height: min(800px, 92vh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -346,7 +861,7 @@
 }
 
 .dorm-menu-body {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 22px 26px;
@@ -458,22 +973,6 @@
   font-weight: 800;
 }
 
-.dorm-menu-time {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 14px 12px;
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: #f5f9ff;
-  color: #1d4ed8;
-  font-size: 28px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
 .dorm-menu-contacts {
   display: grid;
   gap: 8px;
@@ -537,8 +1036,11 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 140px;
-  padding: 24px 16px;
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  min-height: clamp(88px, 15vh, 140px);
+  padding: clamp(12px, 2vh, 24px) 16px;
   border: 1px dashed #dce9fb;
   border-radius: 12px;
   background: #fbfdff;
@@ -546,6 +1048,7 @@
   font-size: 13px;
   font-weight: 600;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .dorm-menu-error {
@@ -696,7 +1199,8 @@
   }
 
   .dorm-menu-modal {
-    height: 92vh;
+    height: auto;
+    max-height: 92vh;
     border-radius: 18px;
   }
 

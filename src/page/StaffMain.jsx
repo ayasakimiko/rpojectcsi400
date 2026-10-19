@@ -1090,7 +1090,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -7986,10 +7986,6 @@ function StaffMain() {
           </div>
         </div>
 
-        <div className="dorm-menu-bar">
-          <DormInfoMenu apiBase="/api/staff/dorm-info" />
-        </div>
-
         {notifDetail && (
           <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
             {(requestClose) => (
@@ -8542,7 +8538,7 @@ function StaffMain() {
           </section>
         )}
 
-        <ul className="nav nav-tabs staff-tabs">
+        <ul className="nav nav-tabs staff-tabs mb-0">
           {STAFF_TABS.map((tab) => (
             <li className="nav-item" key={tab.key}>
               <button
@@ -8563,6 +8559,9 @@ function StaffMain() {
             </li>
           ))}
         </ul>
+        <div className="dorm-menu-bar">
+          <DormInfoMenu apiBase="/api/staff/dorm-info" />
+        </div>
 
         {staffTab === 'home' && (
           <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
@@ -10996,9 +10995,9 @@ function StaffMain() {
 
       {utilityRoom && (
         <Modal
-          title={`ส่งค่าน้ำ-ค่าไฟ - ห้อง ${utilityRoom.room_number}`}
+          title={`ส่งค่าน้ำ-ค่าไฟ · ห้อง ${utilityRoom.room_number}`}
           onClose={() => setUtilityRoom(null)}
-          variant="confirm"
+          variant="utility"
         >
           {(requestClose) => {
             const unitPrice = Number(utilityRoom.electricity_unit_price) || 0
@@ -11020,119 +11019,137 @@ function StaffMain() {
               ? Number.isFinite(waterUnits) && waterUnits > 0 ? Math.round(waterUnits * waterUnitPrice * 100) / 100 : 0
               : Number.isFinite(directWaterAmount) && directWaterAmount > 0 ? directWaterAmount : 0
             const total = electricityAmount + (Number.isFinite(waterAmount) && waterAmount > 0 ? waterAmount : 0)
+            const canSubmit = total > 0 && !utilitySubmitting
+            const tenantName = utilityRoom.tenant ? `${utilityRoom.tenant.first_name} ${utilityRoom.tenant.last_name}` : 'ไม่มีผู้เช่า'
+            const sections = [
+              {
+                key: 'electricity',
+                tone: 'amber',
+                title: 'ค่าไฟฟ้า',
+                rate: unitPrice > 0 ? `฿${formatCurrency(unitPrice)} / หน่วย` : 'ยังไม่กำหนดราคาต่อหน่วย',
+                icon: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />,
+                isUnits: isUnitsMode,
+                setMode: (mode) => setUtilityForm((prev) => ({ ...prev, electricity_mode: mode })),
+                value: isUnitsMode ? utilityForm.electricity_units : utilityForm.electricity_amount,
+                setValue: (value) => setUtilityForm((prev) => (isUnitsMode ? { ...prev, electricity_units: value } : { ...prev, electricity_amount: value })),
+                amount: electricityAmount,
+                warning: isUnitsMode && unitPrice <= 0 ? 'กรุณากำหนดราคาไฟต่อหน่วยก่อน หรือเลือก "ระบุยอดเงิน"' : '',
+                inputId: 'utility-electricity-input',
+              },
+              {
+                key: 'water',
+                tone: 'sky',
+                title: 'ค่าน้ำ',
+                rate: waterUnitPrice > 0 ? `฿${formatCurrency(waterUnitPrice)} / หน่วย` : 'ยังไม่กำหนดราคาต่อหน่วย',
+                icon: <path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11Z" />,
+                isUnits: isWaterUnitsMode,
+                setMode: (mode) => setUtilityForm((prev) => ({ ...prev, water_mode: mode })),
+                value: isWaterUnitsMode ? utilityForm.water_units : utilityForm.water_amount,
+                setValue: (value) => setUtilityForm((prev) => (isWaterUnitsMode ? { ...prev, water_units: value } : { ...prev, water_amount: value })),
+                amount: waterAmount,
+                warning: isWaterUnitsMode && waterUnitPrice <= 0 ? 'กรุณากำหนดราคาน้ำต่อหน่วยก่อน หรือเลือก "ระบุยอดเงิน"' : '',
+                inputId: 'utility-water-input',
+              },
+            ]
             return (
-              <div className="staff-confirm-body">
-                <div className="staff-confirm-details">
-                  <div className="staff-confirm-detail-row">
-                    <span>ห้อง</span>
+              <form
+                className="staff-utility"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (canSubmit) handleSendUtilityBill()
+                }}
+              >
+                <div className="staff-utility-hero">
+                  <span className="staff-utility-room">
+                    <small>ห้อง</small>
                     <strong>{utilityRoom.room_number}</strong>
+                  </span>
+                  <div className="staff-utility-hero-text">
+                    <small>ผู้เช่า</small>
+                    <strong>{tenantName}</strong>
                   </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>ผู้เช่า</span>
-                    <strong>
-                      {utilityRoom.tenant ? `${utilityRoom.tenant.first_name} ${utilityRoom.tenant.last_name}` : '-'}
-                    </strong>
+                  <div className="staff-utility-rates">
+                    <span className="is-amber">ไฟ {unitPrice > 0 ? `฿${formatCurrency(unitPrice)}` : '-'}/หน่วย</span>
+                    <span className="is-sky">น้ำ {waterUnitPrice > 0 ? `฿${formatCurrency(waterUnitPrice)}` : '-'}/หน่วย</span>
                   </div>
                 </div>
 
-                <div className="staff-form-field">
-                  <div className="staff-form-label-row">
-                    <label className="staff-form-label" htmlFor="utility-electricity-input">
-                      {isUnitsMode ? `ค่าไฟฟ้า (บาท/หน่วย ฿${formatCurrency(unitPrice)})` : 'ค่าไฟฟ้า (บาท)'}
-                    </label>
-                    <div className="staff-form-mode-switch">
-                      <button
-                        type="button"
-                        className={`staff-form-mode-btn${isUnitsMode ? ' is-active' : ''}`}
-                        onClick={() => setUtilityForm((prev) => ({ ...prev, electricity_mode: 'units' }))}
-                      >
-                        คิดตามหน่วย
-                      </button>
-                      <button
-                        type="button"
-                        className={`staff-form-mode-btn${!isUnitsMode ? ' is-active' : ''}`}
-                        onClick={() => setUtilityForm((prev) => ({ ...prev, electricity_mode: 'amount' }))}
-                      >
-                        ราคาปกติ
-                      </button>
-                    </div>
-                  </div>
-                  {isUnitsMode ? (
-                    <input
-                      id="utility-electricity-input"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      className="staff-form-input no-spinner"
-                      placeholder="เช่น 50 (หน่วย)"
-                      value={utilityForm.electricity_units}
-                      onChange={(event) =>
-                        setUtilityForm((prev) => ({ ...prev, electricity_units: event.target.value }))
-                      }
-                    />
-                  ) : (
-                    <input
-                      id="utility-electricity-input"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      className="staff-form-input no-spinner"
-                      placeholder="เช่น 400 (บาท)"
-                      value={utilityForm.electricity_amount}
-                      onChange={(event) =>
-                        setUtilityForm((prev) => ({ ...prev, electricity_amount: event.target.value }))
-                      }
-                    />
-                  )}
-                  {isUnitsMode && electricityAmount > 0 && (
-                    <span className="staff-form-hint">คิดเป็น ฿{formatCurrency(electricityAmount)}</span>
-                  )}
+                <div className="staff-utility-grid">
+                  {sections.map((section, index) => (
+                    <section key={section.key} className={`staff-utility-card is-${section.tone}`}>
+                      <div className="staff-utility-card-head">
+                        <span className="staff-utility-card-icon" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            {section.icon}
+                          </svg>
+                        </span>
+                        <div>
+                          <strong>{section.title}</strong>
+                          <small>{section.rate}</small>
+                        </div>
+                      </div>
+
+                      <div className="staff-utility-switch" role="group" aria-label={`วิธีคิด${section.title}`}>
+                        <button type="button" className={section.isUnits ? 'is-active' : ''} aria-pressed={section.isUnits} onClick={() => section.setMode('units')}>
+                          ตามหน่วย
+                        </button>
+                        <button type="button" className={!section.isUnits ? 'is-active' : ''} aria-pressed={!section.isUnits} onClick={() => section.setMode('amount')}>
+                          ระบุยอดเงิน
+                        </button>
+                      </div>
+
+                      <label className="staff-utility-input" htmlFor={section.inputId}>
+                        {!section.isUnits && <span className="staff-utility-input-prefix">฿</span>}
+                        <input
+                          id={section.inputId}
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          className="no-spinner"
+                          placeholder={section.isUnits ? 'จำนวนหน่วยที่ใช้' : 'ยอดเงิน'}
+                          value={section.value}
+                          autoFocus={index === 0}
+                          onChange={(event) => section.setValue(event.target.value)}
+                        />
+                        <span className="staff-utility-input-suffix">{section.isUnits ? 'หน่วย' : 'บาท'}</span>
+                      </label>
+
+                      <div className="staff-utility-card-foot">
+                        {section.warning ? (
+                          <span className="staff-utility-warning">{section.warning}</span>
+                        ) : (
+                          <>
+                            <span>{section.isUnits ? 'คิดเป็น' : 'ยอดที่จะเรียกเก็บ'}</span>
+                            <strong>฿{formatCurrency(section.amount)}</strong>
+                          </>
+                        )}
+                      </div>
+                    </section>
+                  ))}
                 </div>
 
-                <div className="staff-form-field">
-                  <label className="staff-form-label" htmlFor="utility-water-input">
-                    {isWaterUnitsMode ? `ค่าน้ำ (฿${formatCurrency(waterUnitPrice)}/หน่วย)` : 'ค่าน้ำ (บาท)'}
-                  </label>
-                  <div className="staff-form-mode-switch" role="group" aria-label="วิธีคิดค่าน้ำ">
-                    <button type="button" className={`staff-form-mode-btn${isWaterUnitsMode ? ' is-active' : ''}`} onClick={() => setUtilityForm((prev) => ({ ...prev, water_mode: 'units' }))}>ตามหน่วย</button>
-                    <button type="button" className={`staff-form-mode-btn${!isWaterUnitsMode ? ' is-active' : ''}`} onClick={() => setUtilityForm((prev) => ({ ...prev, water_mode: 'amount' }))}>ระบุยอดเงิน</button>
+                <div className={`staff-utility-total${total > 0 ? ' has-total' : ''}`}>
+                  <div className="staff-utility-total-lines">
+                    <span>ค่าไฟฟ้า <strong>฿{formatCurrency(electricityAmount)}</strong></span>
+                    <span>ค่าน้ำ <strong>฿{formatCurrency(waterAmount)}</strong></span>
                   </div>
-                  {isWaterUnitsMode ? (
-                    <input id="utility-water-input" type="number" inputMode="decimal" min="0" step="0.01" className="staff-form-input no-spinner" placeholder="จำนวนหน่วยน้ำ" value={utilityForm.water_units} onChange={(event) => setUtilityForm((prev) => ({ ...prev, water_units: event.target.value }))} />
-                  ) : (
-                    <input id="utility-water-input" type="number" inputMode="decimal" min="0" step="0.01" className="staff-form-input no-spinner" placeholder="ยอดค่าน้ำ" value={utilityForm.water_amount} onChange={(event) => setUtilityForm((prev) => ({ ...prev, water_amount: event.target.value }))} />
-                  )}
-                  {isWaterUnitsMode && waterAmount > 0 && <span className="staff-form-hint">คิดเป็น ฿{formatCurrency(waterAmount)}</span>}
-                  {isWaterUnitsMode && waterUnitPrice <= 0 && <span className="staff-form-hint">กรุณากำหนดราคาน้ำต่อหน่วยก่อนส่งบิล</span>}
+                  <div className="staff-utility-total-sum">
+                    <small>ยอดรวมที่จะส่งให้ผู้เช่า</small>
+                    <strong>฿{formatCurrency(total)}</strong>
+                  </div>
                 </div>
-
-                {total > 0 && (
-                  <div className="staff-confirm-amount-block">
-                    <p className="staff-confirm-amount-label">ยอดรวมที่จะส่งให้ลูกค้า</p>
-                    <p className="staff-confirm-amount">
-                      <span className="staff-confirm-amount-symbol">฿</span>
-                      {formatCurrency(total)}
-                    </p>
-                  </div>
-                )}
 
                 {utilityError && <p className="staff-form-error">{utilityError}</p>}
-                <div className="staff-form-actions">
+                <div className="staff-form-actions staff-utility-actions">
                   <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                     ยกเลิก
                   </button>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-primary"
-                    disabled={utilitySubmitting}
-                    onClick={handleSendUtilityBill}
-                  >
-                    {utilitySubmitting ? 'กำลังส่ง...' : 'ส่งบิล'}
+                  <button type="submit" className="staff-action-btn is-primary" disabled={!canSubmit}>
+                    {utilitySubmitting ? 'กำลังส่ง...' : total > 0 ? `ส่งบิล ฿${formatCurrency(total)}` : 'กรอกยอดก่อนส่งบิล'}
                   </button>
                 </div>
-              </div>
+              </form>
             )
           }}
         </Modal>

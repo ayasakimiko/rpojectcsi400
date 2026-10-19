@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import { DormInfoSettings } from '../components/DormInfo'
+import { DormInfoSettings, SettingsDialog } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
@@ -9,6 +9,8 @@ import './css/OwnerPage.css'
 import './css/StaffPage.css'
 import { StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
+import PromptPayQr from '../components/PromptPayQr.jsx'
+import { formatPromptPayId, isValidPromptPayId, normalizePromptPayId } from '../utils/promptpay.js'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
@@ -23,61 +25,208 @@ function OwnerPaymentSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
+  const [qrPreviewId, setQrPreviewId] = useState('')
+  const [qrError, setQrError] = useState('')
+  const [dialog, setDialog] = useState(null)
+  const [successText, setSuccessText] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
     axios.get('/api/owner/payment-settings', { headers: headers(), signal: controller.signal })
-      .then(({ data }) => { setSaved(data.settings); setDraft(data.settings) })
+      .then(({ data }) => {
+        setSaved(data.settings)
+        setDraft(data.settings)
+        if (isValidPromptPayId(data.settings?.promptpay_id)) setQrPreviewId(data.settings.promptpay_id)
+      })
       .catch((error) => { if (!axios.isCancel(error)) setMessage({ error: true, text: error.response?.data?.message || 'โหลดข้อมูลรับโอนไม่สำเร็จ' }) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [])
 
   const change = (event) => {
-    setDraft({ ...draft, [event.target.name]: event.target.value })
+    const { name, value } = event.target
+    setDraft({ ...draft, [name]: name === 'promptpay_id' ? normalizePromptPayId(value).slice(0, 13) : value })
     setMessage(null)
+    if (name === 'promptpay_id') setQrError('')
   }
-  const save = async (event) => {
+  const generateQr = () => {
+    if (!isValidPromptPayId(draft?.promptpay_id)) {
+      setQrPreviewId('')
+      setQrError('หมายเลข PromptPay ต้องเป็นเบอร์มือถือ 10 หลัก (ขึ้นต้นด้วย 0) หรือเลขบัตรประชาชน 13 หลัก')
+      return
+    }
+    setQrError('')
+    setQrPreviewId(draft.promptpay_id)
+  }
+  const save = (event) => {
     event.preventDefault()
     if (!draft || saving) return
+    if (draft.promptpay_id && !isValidPromptPayId(draft.promptpay_id)) {
+      setQrError('หมายเลข PromptPay ไม่ถูกต้อง')
+      return
+    }
+    setMessage(null)
+    setDialog('confirm')
+  }
+  const confirmSave = async () => {
     setSaving(true)
     setMessage(null)
     try {
       const { data } = await axios.put('/api/owner/payment-settings', draft, { headers: headers() })
       setSaved(data.settings)
       setDraft(data.settings)
-      setMessage({ error: false, text: data.message })
+      setQrPreviewId(isValidPromptPayId(data.settings?.promptpay_id) ? data.settings.promptpay_id : '')
+      setSuccessText(data.message || 'บันทึกข้อมูลรับโอนเรียบร้อยแล้ว')
+      setDialog('success')
     } catch (error) {
+      setDialog(null)
       setMessage({ error: true, text: error.response?.data?.message || 'บันทึกข้อมูลรับโอนไม่สำเร็จ' })
     } finally {
       setSaving(false)
     }
   }
   const changed = draft && Object.keys(EMPTY).some((field) => draft[field] !== saved?.[field])
+  const qrMatchesDraft = qrPreviewId && qrPreviewId === draft?.promptpay_id
+  const qrIsSaved = qrPreviewId && qrPreviewId === saved?.promptpay_id && !changed
   return (
-    <section className="owner-payment-settings owner-panel" aria-labelledby={`${id}-title`}>
-      <div className="owner-panel-header">
-        <div><h3 id={`${id}-title`}>ช่องทางรับโอน</h3><p>กำหนดหมายเลข PromptPay และบัญชีธนาคารของหอพัก</p></div>
+    <section className="owner-payment-settings dorm-settings-editor" aria-labelledby={`${id}-title`}>
+      <div className="dorm-settings-head">
+        <span className="dorm-settings-head-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20M6 15h4" />
+          </svg>
+        </span>
+        <div className="dorm-settings-head-text">
+          <h2 id={`${id}-title`}>ช่องทางรับโอน</h2>
+          <p>ผู้เช่าจะเลือกจ่ายผ่าน PromptPay หรือโอนเข้าบัญชีได้ และต้องแนบสลิปทุกครั้ง</p>
+        </div>
+        {draft && (
+          <span className={`dorm-settings-status ${changed ? 'is-draft' : 'is-saved'}`}>
+            {changed ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกล่าสุดแล้ว'}
+          </span>
+        )}
       </div>
-      {loading && <p role="status">กำลังโหลดข้อมูล...</p>}
-      {message && <p className={message.error ? 'owner-payment-error' : 'owner-payment-success'} role={message.error ? 'alert' : 'status'}>{message.text}</p>}
+      {loading && <div className="dorm-settings-loading" role="status">กำลังโหลดข้อมูล...</div>}
+      {message && (
+        <p className={`dorm-settings-alert ${message.error ? 'is-error' : 'is-success'}`} role={message.error ? 'alert' : 'status'}>
+          {message.text}
+        </p>
+      )}
       {!loading && draft && (
-        <form onSubmit={save} className="owner-payment-form">
-          <label htmlFor={`${id}-promptpay`}>หมายเลข PromptPay
-            <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={draft.promptpay_id} onChange={change} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก" />
-          </label>
-          <label htmlFor={`${id}-bank`}>ชื่อธนาคาร
-            <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={draft.bank_name} onChange={change} placeholder="ชื่อธนาคาร" />
-          </label>
-          <label htmlFor={`${id}-account`}>เลขบัญชี
-            <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={draft.bank_account_no} onChange={change} placeholder="เลขบัญชีธนาคาร" />
-          </label>
-          <div className="owner-payment-actions">
-            <button type="button" disabled={!changed || saving} onClick={() => { setDraft(saved); setMessage(null) }}>ยกเลิกการแก้ไข</button>
-            <button type="submit" disabled={!changed || saving}>{saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลรับโอน'}</button>
-          </div>
+        <form onSubmit={save} className="dorm-settings-form">
+          <fieldset disabled={saving}>
+            <div className="dorm-settings-group">
+              <div className="dorm-settings-group-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h3v-3" />
+                </svg>
+                <span>PromptPay</span>
+              </div>
+              <div className="owner-pp-row">
+                <div className="dorm-settings-field">
+                  <label htmlFor={`${id}-promptpay`}>หมายเลข PromptPay</label>
+                  <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={draft.promptpay_id} onChange={change} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก" />
+                  {qrError ? <small className="owner-pp-error">{qrError}</small> : <small className="dorm-settings-hint">ใส่เฉพาะตัวเลข แล้วกดสร้าง QR Code เพื่อตรวจสอบก่อนบันทึก</small>}
+                </div>
+                <button type="button" className="dorm-settings-btn is-ghost owner-pp-generate" onClick={generateQr} disabled={!draft.promptpay_id}>
+                  สร้าง QR Code
+                </button>
+              </div>
+              <div className={`owner-pp-preview${qrMatchesDraft ? '' : ' is-empty'}`}>
+                {qrMatchesDraft ? (
+                  <>
+                    <PromptPayQr promptPayId={qrPreviewId} size={168} className="owner-pp-qr" />
+                    <div className="owner-pp-preview-text">
+                      <span className="owner-pp-badge">PromptPay</span>
+                      <strong>{formatPromptPayId(qrPreviewId)}</strong>
+                      <small>
+                        {qrIsSaved
+                          ? 'QR นี้กำลังใช้งานในหน้าชำระเงินของผู้เช่า (ใส่ยอดเงินให้อัตโนมัติ)'
+                          : 'ตัวอย่าง QR — กดบันทึกข้อมูลรับโอนเพื่อให้ผู้เช่าใช้ QR นี้'}
+                      </small>
+                    </div>
+                  </>
+                ) : (
+                  <span>ยังไม่ได้สร้าง QR Code สำหรับหมายเลขนี้</span>
+                )}
+              </div>
+            </div>
+
+            <div className="dorm-settings-group">
+              <div className="dorm-settings-group-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 10 12 4l9 6" />
+                  <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" />
+                </svg>
+                <span>บัญชีธนาคาร</span>
+              </div>
+              <div className="dorm-settings-row">
+                <div className="dorm-settings-field">
+                  <label htmlFor={`${id}-bank`}>ชื่อธนาคาร</label>
+                  <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={draft.bank_name} onChange={change} placeholder="เช่น กสิกรไทย" />
+                </div>
+                <div className="dorm-settings-field">
+                  <label htmlFor={`${id}-account`}>เลขบัญชี</label>
+                  <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={draft.bank_account_no} onChange={change} placeholder="เช่น 123-4-56789-0" />
+                </div>
+              </div>
+            </div>
+
+            <div className={`dorm-settings-actions${changed ? ' is-dirty' : ''}`}>
+              <span className="dorm-settings-actions-note">
+                {saving ? 'กำลังบันทึกข้อมูล...' : changed ? 'แก้ไขแล้ว ยังไม่ได้บันทึก' : 'ไม่มีการเปลี่ยนแปลง'}
+              </span>
+              <button
+                type="button"
+                className="dorm-settings-btn is-ghost"
+                disabled={!changed || saving}
+                onClick={() => {
+                  setDraft(saved)
+                  setMessage(null)
+                  setQrError('')
+                  setQrPreviewId(isValidPromptPayId(saved?.promptpay_id) ? saved.promptpay_id : '')
+                }}
+              >
+                ยกเลิกการแก้ไข
+              </button>
+              <button type="submit" className="dorm-settings-btn is-primary" disabled={!changed || saving}>
+                {saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลรับโอน'}
+              </button>
+            </div>
+          </fieldset>
         </form>
       )}
+      <SettingsDialog
+        open={dialog === 'confirm'}
+        tone="primary"
+        icon="bank"
+        title="ยืนยันการบันทึกช่องทางรับโอน"
+        message="ผู้เช่าจะใช้ข้อมูลชุดนี้ในหน้าชำระเงินทันทีหลังบันทึก"
+        details={[
+          ['PromptPay', draft?.promptpay_id ? formatPromptPayId(draft.promptpay_id) : 'ไม่ระบุ'],
+          ['ธนาคาร', draft?.bank_name || 'ไม่ระบุ'],
+          ['เลขบัญชี', draft?.bank_account_no || 'ไม่ระบุ'],
+        ]}
+        confirmLabel={saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
+        busy={saving}
+        onConfirm={confirmSave}
+        onCancel={() => setDialog(null)}
+      />
+      <SettingsDialog
+        open={dialog === 'success'}
+        tone="success"
+        icon="check"
+        title="บันทึกสำเร็จ"
+        message={successText}
+        confirmLabel="ตกลง"
+        onConfirm={() => setDialog(null)}
+        onCancel={() => setDialog(null)}
+        hideCancel
+      />
     </section>
   )
 }
@@ -262,6 +411,12 @@ const OWNER_LIST_ICON_PATHS = {
   phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
   check: <><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 10" /></>,
+  note: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>,
+  grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /></>,
+  moveIn: <><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /></>,
+  moveOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></>,
+  trendUp: <><path d="m3 17 6-6 4 4 8-8" /><path d="M14 7h7v7" /></>,
+  trendDown: <><path d="m3 7 6 6 4-4 8 8" /><path d="M14 17h7v-7" /></>,
 }
 
 function OwnerListIcon({ name, size = 16 }) {
@@ -707,6 +862,7 @@ function OwnerMain() {
   const [occupancyTrend, setOccupancyTrend] = useState({ trends: [], granularity: 'month' })
   const [isOccupancyTrendLoading, setIsOccupancyTrendLoading] = useState(false)
   const [occupancyPeriodDetail, setOccupancyPeriodDetail] = useState(null)
+  const [periodDetailFilter, setPeriodDetailFilter] = useState('all')
   const [expenseCategoryPage, setExpenseCategoryPage] = useState(1)
   const [staffList, setStaffList] = useState([])
   const [utilities, setUtilities] = useState({ summary: {}, rooms: [] })
@@ -1360,12 +1516,19 @@ function OwnerMain() {
     setOccupancyLogs(data)
   }
 
+  const openPeriodLogRoom = (log) => {
+    if (!log.room_number) return
+    const room = (roomStatus.rooms || []).find((item) => Number(item.room_number) === Number(log.room_number))
+    handleRoomClick(room || { room_number: log.room_number })
+  }
+
   const openOccupancyPeriodDetail = async (item) => {
     const isDaily = occupancyTrend.granularity === 'day'
     const from = isDaily ? item.period : `${item.period}-01`
     const endDate = isDaily ? new Date(`${item.period}T00:00:00`) : new Date(`${item.period}-01T00:00:00`)
     if (!isDaily) endDate.setMonth(endDate.getMonth() + 1, 0)
     const to = isDaily ? item.period : `${item.period}-${String(endDate.getDate()).padStart(2, '0')}`
+    setPeriodDetailFilter('all')
     setOccupancyPeriodDetail({ item, logs: [], loading: true })
     try {
       const params = { from, to, page: 1 }
@@ -1930,8 +2093,9 @@ function OwnerMain() {
 
         {activeTab === 'dorm-info' && (
           <>
-            <DormInfoSettings apiBase="/api/owner/dorm-info" />
-            <OwnerPaymentSettings />
+            <DormInfoSettings apiBase="/api/owner/dorm-info">
+              <OwnerPaymentSettings />
+            </DormInfoSettings>
           </>
         )}
 
@@ -2229,72 +2393,116 @@ function OwnerMain() {
 
         {!isLoading && activeTab === 'rooms' && roomsSection === 'occupancy' && (
           <>
-            <section className="owner-panel">
-              <div className="owner-panel-header">
-                <div>
-                  <h3>เปรียบเทียบจำนวนผู้เข้าพัก</h3>
-                  <p className="owner-occupancy-panel-caption">
-                    แนวโน้มห้องที่มีผู้พัก ห้องว่าง และอัตราการเข้าพักแยกตาม{occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="owner-finance-chart-legend">
-                {OCCUPANCY_TREND_SERIES.map((series) => (
-                  <span key={series.key}>
-                    <i className="owner-chart-tooltip-dot" style={{ background: series.color }} />
-                    {series.label}
-                  </span>
-                ))}
-              </div>
-
-              {occupancyTrendChartData.length ? (
-                <>
-                <div className={`owner-linecard-chart owner-finance-trend-chart ${isOccupancyTrendLoading ? 'is-loading' : ''}`}>
-                  <ResponsiveContainer width="100%" height={280}>
-                    {occupancyTrendChartData.length >= 2 ? (
-                      <LineChart data={occupancyTrendChartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
-                        <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={36} />
-                        <Tooltip content={<OccupancyTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
-                        <Line animationDuration={350} type="monotone" dataKey="occupied" name="มีผู้เช่า" stroke={ROOM_OCCUPANCY_COLORS.occupied} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                        <Line animationDuration={350} type="monotone" dataKey="vacant" name="ว่าง" stroke={ROOM_OCCUPANCY_COLORS.vacant} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                      </LineChart>
-                    ) : (
-                      <BarChart data={occupancyTrendChartData} barGap={4} barCategoryGap="40%">
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
-                        <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={36} />
-                        <Tooltip content={<OccupancyTrendTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
-                        <Bar animationDuration={350} dataKey="occupied" name="มีผู้เช่า" fill={ROOM_OCCUPANCY_COLORS.occupied} radius={[4, 4, 0, 0]} maxBarSize={48} />
-                        <Bar animationDuration={350} dataKey="vacant" name="ว่าง" fill={ROOM_OCCUPANCY_COLORS.vacant} radius={[4, 4, 0, 0]} maxBarSize={48} />
-                      </BarChart>
-                    )}
-                  </ResponsiveContainer>
-                </div>
-
-                <section className="owner-occupancy-movement">
-                  <div className="owner-occupancy-movement-heading">
-                    <div>
-                      <h4>เปรียบเทียบการย้ายเข้า–ออก</h4>
-                      <p>จำนวนรายการเข้าอยู่และย้ายออกในแต่ละ{occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}</p>
+            {occupancyTrendChartData.length ? (
+              <>
+                <section className="owner-panel owner-oc-panel is-blue">
+                  <div className="owner-oc-head">
+                    <span className="owner-oc-head-icon" aria-hidden="true">
+                      <StatIcon name="rooms" />
+                    </span>
+                    <div className="owner-oc-head-text">
+                      <h3>แนวโน้มการเข้าพัก</h3>
+                      <p>ห้องที่มีผู้พักเทียบกับห้องว่าง แยกราย{occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}</p>
                     </div>
-                    <div className="owner-finance-chart-legend">
-                      {OCCUPANCY_MOVEMENT_SERIES.map((series) => (
+                    <div className="owner-oc-legend">
+                      {OCCUPANCY_TREND_SERIES.map((series) => (
                         <span key={series.key}>
-                          <i className="owner-chart-tooltip-dot" style={{ background: series.color }} />
+                          <i style={{ background: series.color }} />
                           {series.label}
                         </span>
                       ))}
                     </div>
-                    <div className="owner-occupancy-movement-totals">
-                      <span className="is-move-in">ย้ายเข้ารวม <strong>{occupancyTrendSummary.moveIns}</strong> รายการ</span>
-                      <span className="is-move-out">ย้ายออกรวม <strong>{occupancyTrendSummary.moveOuts}</strong> รายการ</span>
+                  </div>
+
+                  <div className="owner-oc-chips">
+                    {[
+                      { key: 'occupied', tone: 'blue', icon: <OwnerListIcon name="user" size={22} />, label: 'ผู้พัก ณ ช่วงล่าสุด', value: occupancyTrendSummary.currentOccupied },
+                      { key: 'vacant', tone: 'green', icon: <OwnerListIcon name="door" size={22} />, label: 'ห้องว่าง ณ ช่วงล่าสุด', value: occupancyTrendSummary.currentVacant },
+                      {
+                        key: 'change',
+                        tone: occupancyTrendSummary.occupiedChange < 0 ? 'red' : 'violet',
+                        icon: <StatIcon name="profit" />,
+                        label: 'เปลี่ยนแปลงจากช่วงแรก',
+                        value: `${occupancyTrendSummary.occupiedChange > 0 ? '+' : ''}${occupancyTrendSummary.occupiedChange}`,
+                      },
+                      { key: 'capacity', tone: 'slate', icon: <StatIcon name="rooms" />, label: 'ความจุ ณ ช่วงล่าสุด', value: occupancyTrendSummary.totalRooms },
+                    ].map((chip) => (
+                      <div key={chip.key} className={`owner-oc-chip is-${chip.tone}`}>
+                        <span className="owner-oc-chip-icon" aria-hidden="true">{chip.icon}</span>
+                        <span className="owner-oc-chip-text">
+                          <small>{chip.label}</small>
+                          <strong>
+                            {chip.value} <em>ห้อง</em>
+                          </strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={`owner-oc-chart${isOccupancyTrendLoading ? ' is-loading' : ''}`}>
+                    <ResponsiveContainer width="100%" height={280}>
+                      {occupancyTrendChartData.length >= 2 ? (
+                        <LineChart data={occupancyTrendChartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                          <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={36} />
+                          <Tooltip content={<OccupancyTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
+                          <Line animationDuration={350} type="monotone" dataKey="occupied" name="มีผู้เช่า" stroke={ROOM_OCCUPANCY_COLORS.occupied} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                          <Line animationDuration={350} type="monotone" dataKey="vacant" name="ว่าง" stroke={ROOM_OCCUPANCY_COLORS.vacant} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                        </LineChart>
+                      ) : (
+                        <BarChart data={occupancyTrendChartData} barGap={4} barCategoryGap="40%">
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                          <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={36} />
+                          <Tooltip content={<OccupancyTrendTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
+                          <Bar animationDuration={350} dataKey="occupied" name="มีผู้เช่า" fill={ROOM_OCCUPANCY_COLORS.occupied} radius={[6, 6, 0, 0]} maxBarSize={48} />
+                          <Bar animationDuration={350} dataKey="vacant" name="ว่าง" fill={ROOM_OCCUPANCY_COLORS.vacant} radius={[6, 6, 0, 0]} maxBarSize={48} />
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+
+                <section className="owner-panel owner-oc-panel is-green">
+                  <div className="owner-oc-head">
+                    <span className="owner-oc-head-icon" aria-hidden="true">
+                      <StatIcon name="income" />
+                    </span>
+                    <div className="owner-oc-head-text">
+                      <h3>การย้ายเข้า–ออก</h3>
+                      <p>จำนวนการเข้าอยู่และย้ายออกในแต่ละ{occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}</p>
+                    </div>
+                    <div className="owner-oc-totals">
+                      <span className="is-in">
+                        <small>ย้ายเข้า</small>
+                        <strong>{occupancyTrendSummary.moveIns}</strong>
+                      </span>
+                      <span className="is-out">
+                        <small>ย้ายออก</small>
+                        <strong>{occupancyTrendSummary.moveOuts}</strong>
+                      </span>
+                      <span className={occupancyTrendSummary.moveIns - occupancyTrendSummary.moveOuts < 0 ? 'is-down' : 'is-up'}>
+                        <small>สุทธิ</small>
+                        <strong>
+                          {occupancyTrendSummary.moveIns - occupancyTrendSummary.moveOuts > 0 ? '+' : ''}
+                          {occupancyTrendSummary.moveIns - occupancyTrendSummary.moveOuts}
+                        </strong>
+                      </span>
                     </div>
                   </div>
-                  <div className="owner-occupancy-movement-chart">
-                    <ResponsiveContainer width="100%" height={220}>
+
+                  <div className="owner-oc-legend is-inline">
+                    {OCCUPANCY_MOVEMENT_SERIES.map((series) => (
+                      <span key={series.key}>
+                        <i style={{ background: series.color }} />
+                        {series.label}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="owner-oc-chart">
+                    <ResponsiveContainer width="100%" height={230}>
                       {occupancyTrendChartData.length >= 2 ? (
                         <LineChart data={occupancyTrendChartData}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
@@ -2310,58 +2518,40 @@ function OwnerMain() {
                           <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
                           <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={32} />
                           <Tooltip content={<OccupancyMovementTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
-                          <Bar animationDuration={350} dataKey="moveIns" name="ย้ายเข้า" fill="#0f9d58" radius={[4, 4, 0, 0]} maxBarSize={34} />
-                          <Bar animationDuration={350} dataKey="moveOuts" name="ย้ายออก" fill="#d97706" radius={[4, 4, 0, 0]} maxBarSize={34} />
+                          <Bar animationDuration={350} dataKey="moveIns" name="ย้ายเข้า" fill="#0f9d58" radius={[6, 6, 0, 0]} maxBarSize={34} />
+                          <Bar animationDuration={350} dataKey="moveOuts" name="ย้ายออก" fill="#d97706" radius={[6, 6, 0, 0]} maxBarSize={34} />
                         </BarChart>
                       )}
                     </ResponsiveContainer>
                   </div>
                 </section>
 
-                <div className="owner-occupancy-highlights">
-                  <div className="owner-occupancy-highlight occupied">
-                    <span className="owner-occupancy-highlight-icon"><StatIcon name="rooms" /></span>
-                    <div>
-                      <span>ผู้พัก ณ ช่วงล่าสุด</span>
-                      <strong>{occupancyTrendSummary.currentOccupied} <small>ห้อง</small></strong>
+                <section className="owner-panel owner-oc-panel is-violet">
+                  <div className="owner-oc-head">
+                    <span className="owner-oc-head-icon" aria-hidden="true">
+                      <StatIcon name="margin" />
+                    </span>
+                    <div className="owner-oc-head-text">
+                      <h3>รายละเอียดตามช่วงเวลา</h3>
+                      <p>คลิกที่แถวเพื่อดูรายชื่อผู้ย้ายเข้า–ออกของช่วงนั้น</p>
                     </div>
-                  </div>
-                  <div className="owner-occupancy-highlight vacant">
-                    <span className="owner-occupancy-highlight-icon"><StatIcon name="rooms" /></span>
-                    <div>
-                      <span>ห้องว่าง ณ ช่วงล่าสุด</span>
-                      <strong>{occupancyTrendSummary.currentVacant} <small>ห้อง</small></strong>
-                    </div>
-                  </div>
-                  <div className={`owner-occupancy-highlight ${occupancyTrendSummary.occupiedChange < 0 ? 'decline' : 'growth'}`}>
-                    <span className="owner-occupancy-highlight-icon"><StatIcon name="profit" /></span>
-                    <div>
-                      <span>เปลี่ยนแปลงจากช่วงแรก</span>
-                      <strong>
-                        {occupancyTrendSummary.occupiedChange > 0 ? '+' : ''}
-                        {occupancyTrendSummary.occupiedChange} <small>ห้อง</small>
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="owner-occupancy-highlight capacity">
-                    <span className="owner-occupancy-highlight-icon"><StatIcon name="margin" /></span>
-                    <div>
-                      <span>ความจุ ณ ช่วงล่าสุด</span>
-                      <strong>{occupancyTrendSummary.totalRooms} <small>ห้อง</small></strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="owner-occupancy-detail">
-                  <div className="owner-occupancy-detail-heading">
-                    <div>
-                      <h4>รายละเอียดผู้เข้าพักตามช่วงเวลา</h4>
-                      <p>เปรียบเทียบห้องที่มีผู้พัก อัตราเข้าพัก และรายการย้ายเข้า–ออกในแต่ละช่วง</p>
-                    </div>
-                    <span>{occupancyTrendSummary.periodCount} {occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
+                    <span className="owner-oc-count">
+                      {occupancyTrendSummary.periodCount} {occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}
+                    </span>
                   </div>
                   <div className="owner-table-wrap owner-occupancy-detail-table-wrap">
-                    <table className="owner-table owner-occupancy-detail-table">
+                    <table className="owner-table owner-occupancy-detail-table owner-oc-table">
+                      <colgroup>
+                        <col className="is-period" />
+                        <col />
+                        <col />
+                        <col />
+                        <col />
+                        <col />
+                        <col />
+                        <col />
+                        <col className="is-arrow" />
+                      </colgroup>
                       <thead>
                         <tr>
                           <th>ช่วงเวลา</th>
@@ -2372,6 +2562,7 @@ function OwnerMain() {
                           <th>ย้ายออก</th>
                           <th>อัตราเข้าพัก</th>
                           <th>เปลี่ยนจากช่วงก่อน</th>
+                          <th aria-hidden="true" />
                         </tr>
                       </thead>
                       <tbody>
@@ -2389,46 +2580,64 @@ function OwnerMain() {
                               }
                             }}
                           >
-                            <td><strong>{item.periodLabel}</strong></td>
-                            <td className="owner-occupancy-occupied-cell">{item.occupied} ห้อง</td>
-                            <td className="owner-occupancy-vacant-cell">{item.vacant} ห้อง</td>
-                            <td>{item.total} ห้อง</td>
-                            <td className="owner-occupancy-move-in-cell">{item.moveIns} รายการ</td>
-                            <td className="owner-occupancy-move-out-cell">{item.moveOuts} รายการ</td>
                             <td>
-                              <div className="owner-occupancy-rate-cell">
-                                <div className="owner-occupancy-rate-track" aria-label={`อัตราการเข้าพัก ${item.occupancyRate.toFixed(1)} เปอร์เซ็นต์`}>
-                                  <span style={{ width: `${Math.min(100, item.occupancyRate)}%` }} />
-                                </div>
-                                <strong>{item.occupancyRate.toFixed(1)}%</strong>
-                              </div>
+                              <span className="owner-oc-period">
+                                <OwnerListIcon name="calendar" size={14} />
+                                {item.periodLabel}
+                              </span>
                             </td>
-                            <td className={
-                              item.change === null
-                                ? ''
-                                : item.change > 0
-                                  ? 'owner-occupancy-change-cell is-up'
-                                  : item.change < 0
-                                    ? 'owner-occupancy-change-cell is-down'
-                                    : 'owner-occupancy-change-cell is-steady'
-                            }>
-                              {item.change === null
-                                ? '—'
-                                : item.change > 0
-                                  ? `+${item.change} ห้อง`
-                                  : `${item.change} ห้อง`}
+                            {[
+                              { key: 'occupied', tone: 'blue', icon: 'user', value: item.occupied, unit: 'ห้อง' },
+                              { key: 'vacant', tone: 'green', icon: 'door', value: item.vacant, unit: 'ห้อง' },
+                              { key: 'total', tone: 'slate', icon: 'grid', value: item.total, unit: 'ห้อง' },
+                              { key: 'in', tone: 'teal', icon: 'moveIn', value: item.moveIns, unit: 'ครั้ง' },
+                              { key: 'out', tone: 'orange', icon: 'moveOut', value: item.moveOuts, unit: 'ครั้ง' },
+                            ].map((cell) => (
+                              <td key={cell.key}>
+                                <span className={`owner-oc-cell is-${cell.tone}${cell.value ? '' : ' is-zero'}`}>
+                                  <OwnerListIcon name={cell.icon} size={15} />
+                                  <strong>{cell.value}</strong>
+                                  <small>{cell.unit}</small>
+                                </span>
+                              </td>
+                            ))}
+                            <td>
+                              {item.total > 0 ? (
+                                <span className={`owner-oc-rate ${item.occupancyRate >= 80 ? 'is-high' : item.occupancyRate >= 50 ? 'is-mid' : 'is-low'}`}>
+                                  {item.occupancyRate.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="owner-oc-dash">–</span>
+                              )}
+                            </td>
+                            <td>
+                              {item.change ? (
+                                <span className={`owner-oc-cell is-${item.change > 0 ? 'blue' : 'red'}`}>
+                                  <OwnerListIcon name={item.change > 0 ? 'trendUp' : 'trendDown'} size={15} />
+                                  <strong>{item.change > 0 ? `+${item.change}` : item.change}</strong>
+                                  <small>ห้อง</small>
+                                </span>
+                              ) : (
+                                <span className="owner-oc-dash">–</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className="owner-oc-row-more">
+                                ดูเพิ่มเติม <span className="owner-oc-row-arrow" aria-hidden="true">›</span>
+                              </span>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
-                </>
-              ) : (
-                <div className="owner-empty">ยังไม่มีข้อมูลแนวโน้มย้อนหลัง</div>
-              )}
-            </section>
+                </section>
+              </>
+            ) : (
+              <section className="owner-panel owner-oc-panel is-blue">
+                <div className="owner-ov-list-empty owner-oc-empty">ยังไม่มีข้อมูลแนวโน้มในช่วงวันที่ที่เลือก</div>
+              </section>
+            )}
           </>
         )}
 
@@ -3298,55 +3507,148 @@ function OwnerMain() {
           </>
         )}
 
-        {occupancyPeriodDetail && (
-          <div className="owner-modal-backdrop" role="presentation" onClick={() => setOccupancyPeriodDetail(null)}>
-            <section className="owner-modal owner-occupancy-period-modal" role="dialog" aria-modal="true" aria-labelledby="owner-occupancy-period-title" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-modal-header">
-                <div>
-                  <h3 id="owner-occupancy-period-title">รายละเอียดผู้เข้าพัก · {occupancyPeriodDetail.item.periodLabel}</h3>
-                  <p className="owner-modal-subtext">ดูรายการย้ายเข้าและย้ายออกในช่วงเวลานี้</p>
-                </div>
-                <button type="button" className="owner-modal-close" onClick={() => setOccupancyPeriodDetail(null)} aria-label="ปิดรายละเอียด">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div className="owner-modal-body owner-occupancy-period-body">
-                <div className="owner-occupancy-period-summary">
-                  <div><span>ผู้พักอาศัย</span><strong>{occupancyPeriodDetail.item.occupied} ห้อง</strong></div>
-                  <div><span>ห้องว่าง</span><strong>{occupancyPeriodDetail.item.vacant} ห้อง</strong></div>
-                  <div><span>ย้ายเข้า</span><strong className="is-in">{occupancyPeriodDetail.item.moveIns} รายการ</strong></div>
-                  <div><span>ย้ายออก</span><strong className="is-out">{occupancyPeriodDetail.item.moveOuts} รายการ</strong></div>
-                </div>
-                {occupancyPeriodDetail.loading ? (
-                  <div className="owner-occupancy-period-state">กำลังโหลดรายละเอียด...</div>
-                ) : occupancyPeriodDetail.logs.length ? (
-                  <div className="owner-table-wrap">
-                    <table className="owner-table owner-occupancy-period-table">
-                      <thead><tr><th>วันที่</th><th>รายการ</th><th>ห้อง</th><th>ผู้เช่า</th><th>เบอร์โทร</th><th>หมายเหตุ</th></tr></thead>
-                      <tbody>
-                        {occupancyPeriodDetail.logs.map((log) => (
-                          <tr key={log.id}>
-                            <td>{formatDate(log.event_date)}</td>
-                            <td><span className={`owner-occupancy-event-badge ${log.event_type === 'move_in' ? 'is-in' : 'is-out'}`}>{log.event_type === 'move_in' ? 'ย้ายเข้า' : 'ย้ายออก'}</span></td>
-                            <td>{log.room_number || '-'}</td>
-                            <td>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || '-'}</td>
-                            <td>{log.phone || '-'}</td>
-                            <td>{log.note || '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+        {occupancyPeriodDetail && (() => {
+          const detailItem = occupancyPeriodDetail.item
+          const detailLogs = occupancyPeriodDetail.logs || []
+          const visibleLogs = periodDetailFilter === 'all' ? detailLogs : detailLogs.filter((log) => log.event_type === periodDetailFilter)
+          const summaryChips = [
+            { key: 'occupied', tone: 'blue', icon: 'user', label: 'มีผู้พัก', value: detailItem.occupied, unit: 'ห้อง' },
+            { key: 'vacant', tone: 'green', icon: 'door', label: 'ห้องว่าง', value: detailItem.vacant, unit: 'ห้อง' },
+            { key: 'in', tone: 'teal', icon: 'moveIn', label: 'ย้ายเข้า', value: detailItem.moveIns, unit: 'ครั้ง' },
+            { key: 'out', tone: 'orange', icon: 'moveOut', label: 'ย้ายออก', value: detailItem.moveOuts, unit: 'ครั้ง' },
+          ]
+          const filterChips = [
+            { key: 'all', label: 'ทั้งหมด', count: detailLogs.length },
+            { key: 'move_in', label: 'ย้ายเข้า', count: detailLogs.filter((log) => log.event_type === 'move_in').length },
+            { key: 'move_out', label: 'ย้ายออก', count: detailLogs.filter((log) => log.event_type === 'move_out').length },
+          ]
+          return (
+            <div className="owner-modal-backdrop" role="presentation" onClick={() => setOccupancyPeriodDetail(null)}>
+              <section className="owner-modal owner-pdx-modal" role="dialog" aria-modal="true" aria-labelledby="owner-occupancy-period-title" onClick={(event) => event.stopPropagation()}>
+                <div className="owner-modal-header">
+                  <span className="owner-modal-header-icon" aria-hidden="true">
+                    <OwnerListIcon name="calendar" size={18} />
+                  </span>
+                  <div>
+                    <h3 id="owner-occupancy-period-title">รายละเอียดผู้เข้าพัก · {detailItem.periodLabel}</h3>
+                    <p className="owner-modal-subtext">รายการย้ายเข้าและย้ายออกในช่วงเวลานี้</p>
                   </div>
-                ) : (
-                  <div className="owner-occupancy-period-state">ไม่มีรายการย้ายเข้า–ออกในช่วงเวลานี้</div>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
+                  <button type="button" className="owner-modal-close" onClick={() => setOccupancyPeriodDetail(null)} aria-label="ปิดรายละเอียด">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="owner-pdx-top">
+                  <div className="owner-pdx-summary">
+                    {summaryChips.map((chip) => (
+                      <div key={chip.key} className={`owner-oc-chip is-${chip.tone}`}>
+                        <span className="owner-oc-chip-icon" aria-hidden="true">
+                          <OwnerListIcon name={chip.icon} size={22} />
+                        </span>
+                        <span className="owner-oc-chip-text">
+                          <small>{chip.label}</small>
+                          <strong>
+                            {chip.value} <em>{chip.unit}</em>
+                          </strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="owner-pdx-filters" role="group" aria-label="กรองประเภทรายการ">
+                    {filterChips.map((chip) => (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        className={`owner-roomlist-filter${periodDetailFilter === chip.key ? ' active' : ''}`}
+                        aria-pressed={periodDetailFilter === chip.key}
+                        onClick={() => setPeriodDetailFilter(chip.key)}
+                      >
+                        {chip.label}
+                        <span>{chip.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="owner-modal-body owner-pdx-body">
+                  {occupancyPeriodDetail.loading ? (
+                    <div className="owner-ov-list-empty owner-pdx-state">กำลังโหลดรายละเอียด...</div>
+                  ) : visibleLogs.length ? (
+                    <div className="owner-pdx-list">
+                      {visibleLogs.map((log) => {
+                        const isIn = log.event_type === 'move_in'
+                        const name = `${log.first_name || ''} ${log.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'
+                        const eventDate = log.event_date ? new Date(log.event_date) : null
+                        return (
+                          <article
+                            key={log.id}
+                            className={`owner-pdx-item ${isIn ? 'is-in' : 'is-out'}`}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`ดูรายละเอียดห้อง ${log.room_number || ''} ของ ${name}`}
+                            onClick={() => openPeriodLogRoom(log)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                openPeriodLogRoom(log)
+                              }
+                            }}
+                          >
+                            <div className="owner-pdx-item-row">
+                              <span className="owner-pdx-item-icon" aria-hidden="true">
+                                <OwnerListIcon name={isIn ? 'moveIn' : 'moveOut'} size={18} />
+                              </span>
+                              <div className="owner-pdx-item-main">
+                                <div className="owner-pdx-item-top">
+                                  <strong>{name}</strong>
+                                  <span className="owner-pdx-item-type">{isIn ? 'ย้ายเข้า' : 'ย้ายออก'}</span>
+                                </div>
+                                <div className="owner-pdx-item-meta">
+                                  <span>
+                                    <OwnerListIcon name="door" size={13} />
+                                    ห้อง {log.room_number || '-'}
+                                  </span>
+                                  <span>
+                                    <OwnerListIcon name="phone" size={13} />
+                                    {log.phone || 'ไม่มีเบอร์'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="owner-pdx-item-date">
+                                {eventDate && !Number.isNaN(eventDate.getTime()) ? (
+                                  <>
+                                    <strong>{eventDate.getDate()}</strong>
+                                    <small>{eventDate.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' })}</small>
+                                  </>
+                                ) : (
+                                  <small>ไม่ระบุวันที่</small>
+                                )}
+                              </div>
+                              <span className="owner-pdx-item-chevron" aria-hidden="true">›</span>
+                            </div>
+                            {log.note && (
+                              <div className="owner-pdx-item-note">
+                                <OwnerListIcon name="note" size={15} />
+                                <p>{log.note}</p>
+                              </div>
+                            )}
+                          </article>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="owner-ov-list-empty owner-pdx-state">
+                      {detailLogs.length ? 'ไม่มีรายการประเภทนี้ในช่วงเวลานี้' : 'ไม่มีรายการย้ายเข้า–ออกในช่วงเวลานี้'}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          )
+        })()}
 
         {viewingPaymentSlip && (
           <div className="payment-slip-overlay" role="presentation" onClick={closePaymentSlip}>

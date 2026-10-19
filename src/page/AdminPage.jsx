@@ -7132,16 +7132,6 @@ function AdminBackupPage() {
           </div>
         </div>
 
-        <div className="dorm-menu-bar">
-          <DormInfoMenu
-            apiBase="/api/admin/dorm-info"
-            onManage={() => {
-              setActiveTab('dorm-info')
-              setAnnouncementFocus(null)
-            }}
-          />
-        </div>
-
         {pageError && (
           <div className="alert alert-danger admin-alert" role="alert">
             {pageError}
@@ -7188,7 +7178,7 @@ function AdminBackupPage() {
             ))}
           </div>
         )}
-        <ul className="nav nav-tabs admin-tabs">
+        <ul className="nav nav-tabs admin-tabs mb-0">
           {TAB_GROUPS.map((group) => (
             <li className="nav-item" key={group.key}>
               <button
@@ -7205,6 +7195,15 @@ function AdminBackupPage() {
             </li>
           ))}
         </ul>
+        <div className="dorm-menu-bar">
+          <DormInfoMenu
+            apiBase="/api/admin/dorm-info"
+            onManage={() => {
+              setActiveTab('dorm-info')
+              setAnnouncementFocus(null)
+            }}
+          />
+        </div>
 
         {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
           <ul

@@ -1,0 +1,24 @@
+.promptpay-qr {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  box-sizing: content-box;
+  padding: 8px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.promptpay-qr img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.promptpay-qr-loading {
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}

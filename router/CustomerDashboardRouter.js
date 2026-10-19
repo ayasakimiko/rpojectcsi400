@@ -491,10 +491,39 @@ router.get("/me", async (req, res) => {
 });
 
 // รับสลิปและสร้างรายการชำระเงินเพื่อรอเจ้าหน้าที่ตรวจสอบ
+const PAYMENT_METHOD_LABELS = { promptpay: "ผ่าน PromptPay", bank: "โอนเข้าบัญชีธนาคาร" };
+
+router.get("/payment-channels", async (_req, res) => {
+  try {
+    res.set("Cache-Control", "private, no-store");
+    const [rows] = await getPool().query(
+      "SELECT dorm_name, promptpay_id, bank_name, bank_account_no FROM DormConfig WHERE id = 1",
+    );
+    const config = rows[0] || {};
+    return res.json({
+      channels: {
+        dorm_name: config.dorm_name || "",
+        promptpay_id: config.promptpay_id || "",
+        bank_name: config.bank_name || "",
+        bank_account_no: config.bank_account_no || "",
+      },
+    });
+  } catch (error) {
+    console.error("Fetch payment channels error:", error.code);
+    return res.status(500).json({ message: "ไม่สามารถโหลดช่องทางชำระเงินได้" });
+  }
+});
+
 router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
   let connection;
   try {
     if (!req.file) return res.status(400).json({ message: "กรุณาแนบสลิปการโอนเงิน" });
+    const paymentMethod = req.body?.payment_method;
+    if (!PAYMENT_METHOD_LABELS[paymentMethod]) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: "กรุณาเลือกช่องทางการชำระเงิน" });
+    }
+    const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod];
     const pool = getPool();
 
     const [customerRows] = await pool.query(
@@ -545,8 +574,8 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
 
     if (currentDue.rentAmount > 0) {
       const note = currentDue.lumpSumMonths
-        ? `รอตรวจสอบสลิป - ค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน`
-        : "รอตรวจสอบสลิปค่าเช่า";
+        ? `รอตรวจสอบสลิป - ค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน · ${methodLabel}`
+        : `รอตรวจสอบสลิปค่าเช่า · ${methodLabel}`;
 
       await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'pending', 'rent', ?, ?)`,
@@ -557,8 +586,8 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
     if (utilityPaymentIds.length > 0) {
       await connection.query(
-        `UPDATE Payment SET slip_path = ?, note = CONCAT(COALESCE(note, ''), ' (รอตรวจสอบสลิป)') WHERE id IN (?) AND status = 'pending'`,
-        [slipPath, utilityPaymentIds],
+        `UPDATE Payment SET slip_path = ?, note = LEFT(CONCAT(COALESCE(note, ''), ' (รอตรวจสอบสลิป · ', ?, ')'), 255) WHERE id IN (?) AND status = 'pending'`,
+        [slipPath, methodLabel, utilityPaymentIds],
       );
     }
 

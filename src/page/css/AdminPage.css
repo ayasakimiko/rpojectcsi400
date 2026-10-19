@@ -76,6 +76,15 @@
   gap: 20px;
 }
 
+.admin-container > .dorm-menu-bar {
+  margin-block: -4px;
+}
+
+.admin-container > .admin-subtabs {
+  margin-top: -12px;
+  padding-top: 0;
+}
+
 .admin-header {
   display: flex;
   align-items: center;

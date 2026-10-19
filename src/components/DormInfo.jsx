@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import axios from 'axios'
 import './DormInfo.css'
@@ -13,13 +13,6 @@ function hasDormInfoChanges(current, saved) {
 
 function dormInfoHeaders() {
   return { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-}
-
-function formatThaiTime(value) {
-  if (!value) return ''
-  const match = /^(\d{1,2}):(\d{2})/.exec(value)
-  if (!match) return value
-  return `${match[1].padStart(2, '0')}:${match[2]} น.`
 }
 
 function useDormInfo(apiBase) {
@@ -53,90 +46,71 @@ function useDormInfo(apiBase) {
   return { config, setConfig, loading, error, reload }
 }
 
-function Contact({ label, phone }) {
-  const dialablePhone = phone?.replace(/[^\d+]/g, '')
-  return (
-    <p>
-      <span>{label}</span>
-      {phone ? <a href={`tel:${dialablePhone}`}>{phone}</a> : <span>ยังไม่ได้ระบุ</span>}
-    </p>
-  )
-}
-
-function DormInfoPanel({ config, mode = 'published', onRefresh, refreshing = false, error = '' }) {
-  const titleId = useId()
-  const isPreview = mode !== 'published'
-  return (
-    <section className="dorm-info-panel" aria-labelledby={titleId} aria-busy={refreshing}>
-      <div className="dorm-info-header">
-        <div>
-          <p className="dorm-info-eyebrow">{config?.dorm_name || 'ข้อมูลหอพัก'}</p>
-          <h2 id={titleId}>กฎระเบียบและเบอร์ติดต่อ</h2>
-        </div>
-        {isPreview ? (
-          <span className={`dorm-info-status is-${mode}`}>
-            {mode === 'preview-draft' ? 'ตัวอย่างก่อนบันทึก' : 'ข้อมูลที่บันทึกแล้ว'}
-          </span>
-        ) : (
-          <button type="button" className="dorm-info-refresh" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? 'กำลังอัปเดต...' : 'อัปเดตข้อมูลล่าสุด'}
-          </button>
-        )}
-      </div>
-      {isPreview && (
-        <p className="dorm-info-note">
-          {mode === 'preview-draft'
-            ? 'ตัวอย่างนี้เปลี่ยนตามข้อมูลด้านบน ผู้เช่าจะเห็นหลังจากกดบันทึกสำเร็จ'
-            : 'ข้อมูลนี้บันทึกแล้ว และแสดงให้ผู้เช่ากับเจ้าหน้าที่เห็น'}
-        </p>
-      )}
-      {error && <p className="dorm-info-error" role="alert">{error}</p>}
-      {!config && refreshing ? <p role="status">กำลังโหลดข้อมูล...</p> : config && (
-        <div className="dorm-info-grid">
-          <div className="dorm-info-item dorm-info-rules">
-            <h3>กฎระเบียบหอพัก</h3>
-            <p>{config.dorm_rules?.trim() || 'ยังไม่ได้ระบุกฎระเบียบหอพัก'}</p>
-          </div>
-          <div className="dorm-info-item">
-            <h3>เวลาปิดประตู</h3>
-            <p className="dorm-info-value">{formatThaiTime(config.gate_close_time) || 'ยังไม่ได้ระบุ'}</p>
-          </div>
-          <div className="dorm-info-item">
-            <h3>เบอร์ติดต่อฉุกเฉิน</h3>
-            <div className="dorm-info-contact-list">
-              <Contact label="ผู้ดูแลหอพัก" phone={config.caretaker_phone} />
-              <Contact label="ช่าง" phone={config.technician_phone} />
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
-  )
-}
-
-export function DormInfoSettings({ apiBase }) {
+export function DormInfoSettings({ apiBase, children = null }) {
   const { config, setConfig, loading, error, reload } = useDormInfo(apiBase)
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
+  const [dialog, setDialog] = useState(null)
+  const [successMessage, setSuccessMessage] = useState('')
   const formId = useId()
   const form = draft || config
   const changed = hasDormInfoChanges(form, config)
+  const previewRules = (form?.dorm_rules || '').split(/\r?\n/).map((rule) => rule.trim()).filter(Boolean)
+  const ruleLines = (form?.dorm_rules || '').split(/\r?\n/)
+  const pendingRuleFocusRef = useRef(null)
   const update = (event) => {
     setDraft({ ...form, [event.target.name]: event.target.value })
     setNotice(null)
   }
-  const save = async (event) => {
+  const setRuleLines = (lines, focusIndex = null) => {
+    pendingRuleFocusRef.current = focusIndex
+    setDraft({ ...form, dorm_rules: lines.join('\n') })
+    setNotice(null)
+  }
+  const updateRule = (index, value) => setRuleLines(ruleLines.map((line, lineIndex) => (lineIndex === index ? value : line)))
+  const addRule = (afterIndex = ruleLines.length - 1) => {
+    const next = [...ruleLines]
+    next.splice(afterIndex + 1, 0, '')
+    setRuleLines(next, afterIndex + 1)
+  }
+  const removeRule = (index) => {
+    const next = ruleLines.filter((_, lineIndex) => lineIndex !== index)
+    setRuleLines(next.length ? next : [''], Math.max(0, Math.min(index, next.length - 1)))
+  }
+  const moveRule = (index, offset) => {
+    const target = index + offset
+    if (target < 0 || target >= ruleLines.length) return
+    const next = [...ruleLines]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setRuleLines(next, target)
+  }
+
+  useEffect(() => {
+    if (pendingRuleFocusRef.current === null) return
+    document.getElementById(`${formId}-rule-${pendingRuleFocusRef.current}`)?.focus()
+    pendingRuleFocusRef.current = null
+  })
+
+  const save = (event) => {
     event.preventDefault()
     if (!form || saving || !changed) return
+    setNotice(null)
+    setDialog('confirm')
+  }
+
+  const confirmSave = async () => {
     setSaving(true)
     setNotice(null)
     try {
-      const { data } = await axios.put(apiBase, form, { headers: dormInfoHeaders() })
+      const payload = { ...form, dorm_rules: ruleLines.map((line) => line.trim()).filter(Boolean).join('\n') }
+      const { data } = await axios.put(apiBase, payload, { headers: dormInfoHeaders() })
       setConfig(data.config)
       setDraft(null)
-      setNotice({ type: 'success', message: data.message })
+      setSuccessMessage(data.message || 'บันทึกกฎระเบียบและเบอร์ติดต่อเรียบร้อยแล้ว')
+      setDialog('success')
     } catch (saveError) {
+      setDialog(null)
       setNotice({ type: 'error', message: saveError.response?.data?.message || 'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง' })
     } finally {
       setSaving(false)
@@ -144,51 +118,212 @@ export function DormInfoSettings({ apiBase }) {
   }
 
   return (
-    <div className="dorm-info-settings">
-      <section className="dorm-info-panel" aria-labelledby={`${formId}-title`}>
-        <div className="dorm-info-header">
-          <div>
-            <p className="dorm-info-eyebrow">ข้อมูลหอพัก</p>
+    <div className="dorm-settings">
+      <div className="dorm-settings-main">
+      <section className="dorm-settings-editor" aria-labelledby={`${formId}-title`}>
+        <div className="dorm-settings-head">
+          <span className="dorm-settings-head-icon" aria-hidden="true">
+            <Icon name="book" size={20} />
+          </span>
+          <div className="dorm-settings-head-text">
             <h2 id={`${formId}-title`}>จัดการกฎระเบียบและเบอร์ติดต่อ</h2>
+            <p>เมื่อบันทึกสำเร็จ ผู้เช่าและเจ้าหน้าที่จะเห็นข้อมูลชุดเดียวกันทันที</p>
           </div>
+          {form && (
+            <span className={`dorm-settings-status ${changed ? 'is-draft' : 'is-saved'}`}>
+              {changed ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกล่าสุดแล้ว'}
+            </span>
+          )}
         </div>
-        <p className="dorm-info-note">เมื่อบันทึกสำเร็จ ผู้เช่าและเจ้าหน้าที่จะเห็นข้อมูลชุดเดียวกัน</p>
-        {error && <p className="dorm-info-error" role="alert">{error}</p>}
-        {loading && <p role="status">กำลังโหลดข้อมูล...</p>}
-        {!loading && !config && <button type="button" className="dorm-info-refresh" onClick={reload}>ลองใหม่</button>}
-        {notice && <p className={`dorm-info-${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.message}</p>}
+
+        {error && <p className="dorm-settings-alert is-error" role="alert">{error}</p>}
+        {notice && (
+          <p className={`dorm-settings-alert is-${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
+            {notice.message}
+          </p>
+        )}
+        {loading && !form && <div className="dorm-settings-loading" role="status">กำลังโหลดข้อมูล...</div>}
+        {!loading && !config && (
+          <button type="button" className="dorm-settings-btn is-ghost" onClick={reload}>ลองใหม่</button>
+        )}
+
         {form && (
-          <form onSubmit={save}>
-            <fieldset disabled={saving || loading} className="dorm-info-form">
-              <div className="dorm-info-field is-wide">
-                <label htmlFor={`${formId}-name`}>ชื่อหอพัก</label>
-                <input id={`${formId}-name`} name="dorm_name" value={form.dorm_name} onChange={update} maxLength={255} required />
+          <form onSubmit={save} className="dorm-settings-form">
+            <fieldset disabled={saving || loading}>
+              <div className="dorm-settings-group">
+                <div className="dorm-settings-group-head">
+                  <Icon name="book" size={16} />
+                  <span>ข้อมูลทั่วไป</span>
+                </div>
+                <div className="dorm-settings-field">
+                  <label htmlFor={`${formId}-name`}>ชื่อหอพัก</label>
+                  <input id={`${formId}-name`} name="dorm_name" value={form.dorm_name} onChange={update} maxLength={255} required placeholder="ชื่อหอพัก" />
+                </div>
               </div>
-              <div className="dorm-info-field is-wide">
-                <label htmlFor={`${formId}-rules`}>กฎระเบียบหอพัก</label>
-                <textarea id={`${formId}-rules`} name="dorm_rules" value={form.dorm_rules} onChange={update} rows={7} maxLength={10000} placeholder="ระบุกฎระเบียบหอพัก แยกแต่ละข้อด้วยการขึ้นบรรทัดใหม่" />
+
+              <div className="dorm-settings-group">
+                <div className="dorm-settings-group-head">
+                  <Icon name="rules" size={16} />
+                  <span>กฎระเบียบหอพัก</span>
+                  <span className="dorm-settings-count">{previewRules.length} ข้อ</span>
+                </div>
+                <ol className="dorm-rule-list">
+                  {ruleLines.map((line, index) => (
+                    <li key={index} className="dorm-rule-item">
+                      <span className="dorm-rule-no" aria-hidden="true">{index + 1}</span>
+                      <label htmlFor={`${formId}-rule-${index}`} className="dorm-settings-sr">กฎข้อที่ {index + 1}</label>
+                      <input
+                        id={`${formId}-rule-${index}`}
+                        value={line}
+                        maxLength={500}
+                        placeholder={index === 0 ? 'เช่น ห้ามส่งเสียงดังหลัง 22:00 น.' : 'พิมพ์กฎข้อนี้'}
+                        onChange={(event) => updateRule(index, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            addRule(index)
+                          } else if (event.key === 'Backspace' && !line && ruleLines.length > 1) {
+                            event.preventDefault()
+                            removeRule(index)
+                          }
+                        }}
+                      />
+                      <span className="dorm-rule-actions">
+                        <button type="button" onClick={() => moveRule(index, -1)} disabled={index === 0} aria-label={`เลื่อนกฎข้อที่ ${index + 1} ขึ้น`} title="เลื่อนขึ้น">
+                          <Icon name="up" size={14} strokeWidth={2.4} />
+                        </button>
+                        <button type="button" onClick={() => moveRule(index, 1)} disabled={index === ruleLines.length - 1} aria-label={`เลื่อนกฎข้อที่ ${index + 1} ลง`} title="เลื่อนลง">
+                          <Icon name="down" size={14} strokeWidth={2.4} />
+                        </button>
+                        <button type="button" className="is-danger" onClick={() => removeRule(index)} aria-label={`ลบกฎข้อที่ ${index + 1}`} title="ลบข้อนี้">
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <button type="button" className="dorm-rule-add" onClick={() => addRule()}>
+                  <Icon name="plus" size={16} strokeWidth={2.4} />
+                  เพิ่มข้อ
+                </button>
+                <small className="dorm-settings-hint">กด Enter เพื่อเพิ่มข้อถัดไป · ข้อที่เว้นว่างจะไม่ถูกบันทึก</small>
               </div>
-              <div className="dorm-info-field">
-                <label htmlFor={`${formId}-time`}>เวลาปิดประตู</label>
-                <input id={`${formId}-time`} type="time" name="gate_close_time" value={form.gate_close_time} onChange={update} />
+
+              <div className="dorm-settings-group">
+                <div className="dorm-settings-group-head">
+                  <Icon name="phone" size={16} />
+                  <span>เบอร์ติดต่อฉุกเฉิน</span>
+                </div>
+                <div className="dorm-settings-row">
+                  <div className="dorm-settings-field">
+                    <label htmlFor={`${formId}-caretaker`}>ผู้ดูแลหอพัก</label>
+                    <div className="dorm-settings-input-icon">
+                      <Icon name="phone" size={16} />
+                      <input id={`${formId}-caretaker`} type="tel" name="caretaker_phone" value={form.caretaker_phone} onChange={update} maxLength={20} placeholder="เช่น 0812345678" />
+                    </div>
+                  </div>
+                  <div className="dorm-settings-field">
+                    <label htmlFor={`${formId}-technician`}>ช่าง</label>
+                    <div className="dorm-settings-input-icon">
+                      <Icon name="wrench" size={16} />
+                      <input id={`${formId}-technician`} type="tel" name="technician_phone" value={form.technician_phone} onChange={update} maxLength={20} placeholder="เช่น 02-123-4567" />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="dorm-info-field">
-                <label htmlFor={`${formId}-caretaker`}>เบอร์ผู้ดูแลหอพัก</label>
-                <input id={`${formId}-caretaker`} type="tel" name="caretaker_phone" value={form.caretaker_phone} onChange={update} maxLength={20} placeholder="เช่น 0812345678" />
-              </div>
-              <div className="dorm-info-field">
-                <label htmlFor={`${formId}-technician`}>เบอร์ช่าง</label>
-                <input id={`${formId}-technician`} type="tel" name="technician_phone" value={form.technician_phone} onChange={update} maxLength={20} placeholder="เช่น 02-123-4567" />
-              </div>
-              <div className="dorm-info-actions is-wide">
-                <button type="button" className="dorm-info-refresh" disabled={!changed} onClick={() => { setDraft(null); setNotice(null) }}>ยกเลิกการแก้ไข</button>
-                <button type="submit" className="dorm-info-save" disabled={!changed}>{saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</button>
+
+              <div className={`dorm-settings-actions${changed ? ' is-dirty' : ''}`}>
+                <span className="dorm-settings-actions-note">
+                  {saving ? 'กำลังบันทึกข้อมูล...' : changed ? 'แก้ไขแล้ว ยังไม่ได้บันทึก' : 'ไม่มีการเปลี่ยนแปลง'}
+                </span>
+                <button type="button" className="dorm-settings-btn is-ghost" disabled={!changed} onClick={() => { setDraft(null); setNotice(null) }}>
+                  ยกเลิกการแก้ไข
+                </button>
+                <button type="submit" className="dorm-settings-btn is-primary" disabled={!changed}>
+                  {saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                </button>
               </div>
             </fieldset>
           </form>
         )}
       </section>
-      {form && <DormInfoPanel config={form} mode={changed ? 'preview-draft' : 'preview-saved'} />}
+      {children}
+      </div>
+
+      <SettingsDialog
+        open={dialog === 'confirm'}
+        tone="primary"
+        icon="rules"
+        title="ยืนยันการบันทึกข้อมูล"
+        message="ผู้เช่าและเจ้าหน้าที่จะเห็นกฎระเบียบและเบอร์ติดต่อชุดใหม่ทันทีหลังบันทึก"
+        details={[
+          ['ชื่อหอพัก', form?.dorm_name || '-'],
+          ['กฎระเบียบ', `${previewRules.length} ข้อ`],
+          ['ผู้ดูแลหอพัก', form?.caretaker_phone || 'ไม่ระบุ'],
+          ['ช่าง', form?.technician_phone || 'ไม่ระบุ'],
+        ]}
+        confirmLabel={saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
+        busy={saving}
+        onConfirm={confirmSave}
+        onCancel={() => setDialog(null)}
+      />
+      <SettingsDialog
+        open={dialog === 'success'}
+        tone="success"
+        icon="check"
+        title="บันทึกสำเร็จ"
+        message={successMessage}
+        confirmLabel="ตกลง"
+        onConfirm={() => setDialog(null)}
+        onCancel={() => setDialog(null)}
+        hideCancel
+      />
+
+      {form && (
+        <aside className="dorm-settings-preview" aria-label="ตัวอย่างที่ผู้เช่าเห็น">
+          <div className="dorm-settings-preview-head">
+            <span>ตัวอย่างที่ผู้เช่าเห็น</span>
+            <span className={`dorm-settings-status ${changed ? 'is-draft' : 'is-saved'}`}>{changed ? 'ตัวอย่างก่อนบันทึก' : 'ข้อมูลปัจจุบัน'}</span>
+          </div>
+          <div className="dorm-settings-preview-card">
+            <div className="dorm-settings-preview-title">
+              <Icon name="book" size={18} />
+              <span>
+                <strong>กฎระเบียบและเบอร์ติดต่อ</strong>
+                <small>{form.dorm_name || 'ชื่อหอพัก'}</small>
+              </span>
+            </div>
+
+            <section className="dorm-menu-card">
+              <h3>
+                <Icon name="rules" size={18} />
+                กฎระเบียบหอพัก
+                {previewRules.length > 0 && <span className="dorm-menu-count">{previewRules.length} ข้อ</span>}
+              </h3>
+              {previewRules.length > 0 ? (
+                <ol className="dorm-menu-rules">
+                  {previewRules.map((rule, index) => (
+                    <li key={`${index}-${rule}`}>
+                      <span className="dorm-menu-rule-no">{index + 1}</span>
+                      <span>{rule}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <EmptyState icon="rules" text="ยังไม่ได้ระบุกฎระเบียบหอพัก" />
+              )}
+            </section>
+
+            <section className="dorm-menu-card">
+              <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>
+              <div className="dorm-menu-contacts">
+                <ContactRow icon="phone" label="ผู้ดูแลหอพัก" phone={form.caretaker_phone} />
+                <ContactRow icon="wrench" label="ช่าง" phone={form.technician_phone} />
+              </div>
+            </section>
+          </div>
+        </aside>
+      )}
     </div>
   )
 }
@@ -227,6 +362,28 @@ const ICONS = {
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </>
   ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  up: <path d="m6 15 6-6 6 6" />,
+  down: <path d="m6 9 6 6 6-6" />,
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M6 6l1 14h10l1-14" />
+    </>
+  ),
+  check: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12.5 2.8 2.8L16 10" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="M3 10 12 4l9 6" />
+      <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" />
+    </>
+  ),
   close: (
     <>
       <path d="M18 6 6 18" />
@@ -253,6 +410,77 @@ function ContactRow({ icon, label, phone }) {
         {phone ? <a className="dorm-menu-row-value" href={`tel:${dialablePhone}`}>{phone}</a> : <span className="dorm-menu-row-empty">ยังไม่ได้ระบุ</span>}
       </span>
     </div>
+  )
+}
+
+export function SettingsDialog({
+  open,
+  tone = 'primary',
+  icon = 'rules',
+  title,
+  message,
+  details = [],
+  confirmLabel = 'ยืนยัน',
+  cancelLabel = 'ยกเลิก',
+  busy = false,
+  hideCancel = false,
+  onConfirm,
+  onCancel,
+}) {
+  const titleId = useId()
+  useEffect(() => {
+    if (!open) return undefined
+    const unlock = lockBodyScroll()
+    const handleKey = (event) => {
+      if (event.key === 'Escape' && !busy) onCancel?.()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      unlock()
+    }
+  }, [open, busy, onCancel])
+
+  if (!open) return null
+  return createPortal(
+    <div className="dorm-dialog-overlay" role="presentation" onClick={() => !busy && onCancel?.()}>
+      <section
+        className={`dorm-dialog is-${tone}`}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="dorm-dialog-body">
+          <span className="dorm-dialog-icon" aria-hidden="true">
+            <Icon name={icon} size={26} strokeWidth={2.2} />
+          </span>
+          <h3 id={titleId}>{title}</h3>
+          {message && <p>{message}</p>}
+          {details.length > 0 && (
+            <dl className="dorm-dialog-details">
+              {details.map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+        <div className={`dorm-dialog-actions${hideCancel ? ' is-single' : ''}`}>
+          {!hideCancel && (
+            <button type="button" className="dorm-settings-btn is-ghost" onClick={onCancel} disabled={busy}>
+              {cancelLabel}
+            </button>
+          )}
+          <button type="button" className="dorm-settings-btn is-primary" onClick={onConfirm} disabled={busy} autoFocus>
+            {confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body,
   )
 }
 
@@ -389,15 +617,6 @@ export function DormInfoMenu({ apiBase, onManage, requireAck = false, onAcknowle
                       </ol>
                     ) : (
                       <EmptyState icon="rules" text="ยังไม่ได้ระบุกฎระเบียบหอพัก" />
-                    )}
-                  </section>
-
-                  <section className="dorm-menu-card">
-                    <h3><Icon name="clock" size={18} />เวลาปิดประตู</h3>
-                    {config.gate_close_time ? (
-                      <p className="dorm-menu-time">{formatThaiTime(config.gate_close_time)}</p>
-                    ) : (
-                      <EmptyState icon="clock" text="ยังไม่ได้ระบุเวลาปิดประตู" />
                     )}
                   </section>
 
