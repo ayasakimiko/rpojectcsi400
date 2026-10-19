@@ -2272,16 +2272,31 @@
 .dashboard-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  top: 11px;
-  left: calc(50% + 15px);
-  right: calc(-50% + 15px);
+  top: 17px;
+  left: calc(50% + 22px);
+  right: calc(-50% + 22px);
   height: 2px;
   border-radius: 2px;
   background: #d8e2ee;
 }
 
 .dashboard-step.is-line-done::after {
-  background: #93c5fd;
+  background: linear-gradient(90deg, #93c5fd, #60a5fa);
+}
+
+.dashboard-step-gap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: 0 6px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #6b859e;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .dashboard-step.is-success {
@@ -2293,40 +2308,44 @@
 }
 
 .dashboard-step-dot {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-bottom: 6px;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 8px;
   border-radius: 50%;
   border: 2px solid #cbd5e1;
   background: #ffffff;
-  color: #ffffff;
+  color: #94a3b8;
 }
 
 .dashboard-step-dot svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
+}
+
+.dashboard-step-number {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .dashboard-step.is-done .dashboard-step-dot {
   border-color: var(--step-color);
   background: var(--step-color);
+  color: #ffffff;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--step-color) 28%, transparent);
 }
 
 .dashboard-step.is-current .dashboard-step-dot {
   border-color: #f59e0b;
+  background: #fffbeb;
+  color: #d97706;
   box-shadow: 0 0 0 4px #fef3c7;
   animation: dashboard-step-pulse 1.6s ease-in-out infinite;
-}
-
-.dashboard-step.is-current .dashboard-step-dot::after {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f59e0b;
 }
 
 @keyframes dashboard-step-pulse {
@@ -2409,22 +2428,40 @@
   font-weight: 600;
 }
 
-.dashboard-step-duration {
-  margin: 4px 0 0;
-  font-size: 10.5px;
+.dashboard-progress-total {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 12px auto 2px;
+  padding: 4px 12px;
+  border: 1px solid #dce9fb;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #4a6582;
+  font-size: 12px;
   font-weight: 600;
-  color: #2563eb;
-  white-space: nowrap;
 }
 
-.dashboard-progress-total {
-  margin: 10px 0 0;
-  padding-top: 8px;
-  border-top: 1px dashed #cbd5e1;
-  font-size: 12px;
-  font-weight: 700;
-  color: #0f2b52;
-  text-align: center;
+.dashboard-progress-total svg {
+  width: 13px;
+  height: 13px;
+  color: #6093d4;
+}
+
+.dashboard-progress-total strong {
+  color: #1d4ed8;
+}
+
+.dashboard-progress-total.is-waiting {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.dashboard-progress-total.is-waiting svg {
+  color: #d97706;
 }
 
 .dashboard-request-row {
@@ -2534,30 +2571,30 @@
 }
 
 .dashboard-progress.is-compact .dashboard-step-dot {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   margin-bottom: 4px;
+  box-shadow: none;
 }
 
 .dashboard-progress.is-compact .dashboard-step-dot svg {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
+}
+
+.dashboard-progress.is-compact .dashboard-step-number {
+  font-size: 10px;
 }
 
 .dashboard-progress.is-compact .dashboard-step:not(:last-child)::after {
-  top: 8px;
-  left: calc(50% + 12px);
-  right: calc(-50% + 12px);
+  top: 10px;
+  left: calc(50% + 14px);
+  right: calc(-50% + 14px);
 }
 
 .dashboard-progress.is-compact .dashboard-step.is-current .dashboard-step-dot {
   box-shadow: 0 0 0 3px #fef3c7;
   animation: none;
-}
-
-.dashboard-progress.is-compact .dashboard-step.is-current .dashboard-step-dot::after {
-  width: 6px;
-  height: 6px;
 }
 
 .dashboard-progress.is-compact .dashboard-step-label {
@@ -2637,7 +2674,7 @@
   .dashboard-progress:not(.is-compact) .dashboard-stepper.is-many .dashboard-step {
     display: grid;
     flex: 0 0 auto;
-    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-columns: 36px minmax(0, 1fr);
     align-items: start;
     column-gap: 12px;
     padding: 0 0 14px;
@@ -2669,12 +2706,16 @@
   }
 
   .dashboard-progress:not(.is-compact) .dashboard-stepper.is-many .dashboard-step:not(:last-child)::after {
-    top: 28px;
+    top: 40px;
     bottom: 2px;
-    left: 11px;
+    left: 17px;
     right: auto;
     width: 2px;
     height: auto;
+  }
+
+  .dashboard-progress:not(.is-compact) .dashboard-stepper.is-many .dashboard-step-gap {
+    display: none;
   }
 }
 
@@ -4377,7 +4418,7 @@
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
-
+
 .dashboard-parcel-desc-label {
   display: block;
   margin-bottom: 2px;
