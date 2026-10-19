@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS Customer (
     age INT UNSIGNED NOT NULL,
     room_number INT UNSIGNED,
     deposit_amount DECIMAL(10,2),
+    dorm_info_acknowledged_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (room_number) REFERENCES Room(room_number) ON UPDATE CASCADE
@@ -732,3 +733,57 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- กฎระเบียบและเบอร์ติดต่อที่ Admin/Owner เผยแพร่ให้ผู้เช่าและ Staff
+CREATE TABLE IF NOT EXISTS DormConfig (
+    id INT PRIMARY KEY DEFAULT 1,
+    dorm_name VARCHAR(255) NOT NULL DEFAULT 'หอพักใจ',
+    dorm_rules TEXT NULL,
+    gate_close_time VARCHAR(5) NULL,
+    caretaker_phone VARCHAR(20) NULL,
+    technician_phone VARCHAR(20) NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- รองรับฐานข้อมูล DormConfig เดิม โดยเก็บข้อมูลที่บันทึกไว้
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'gate_close_time'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `gate_close_time` VARCHAR(5) NULL'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'caretaker_phone'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `caretaker_phone` VARCHAR(20) NULL'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'technician_phone'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `technician_phone` VARCHAR(20) NULL'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Customer' AND COLUMN_NAME = 'dorm_info_acknowledged_at'),
+    'SELECT 1',
+    'ALTER TABLE `Customer` ADD COLUMN `dorm_info_acknowledged_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP AFTER deposit_amount'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+ALTER TABLE `Customer` ALTER COLUMN `dorm_info_acknowledged_at` SET DEFAULT NULL;

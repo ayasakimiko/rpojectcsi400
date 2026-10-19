@@ -22,12 +22,14 @@ import {
 import { deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
 
 // ตั้งค่า Router ตรวจสอบสิทธิ์ผู้ดูแล และเชื่อมส่วนรายจ่ายกับประกาศ
 const router = Router();
 
 router.use(authenticate, requireAdminRole, createRequireActiveAccount(getPool));
+router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
 

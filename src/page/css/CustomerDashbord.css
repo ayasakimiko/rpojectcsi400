@@ -2031,6 +2031,18 @@
   line-height: 1.45;
 }
 
+.dashboard-reminder-highlight {
+  padding: 0;
+  background: none;
+  color: var(--item-tone);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dashboard-reminder.is-warning .dashboard-reminder-highlight {
+  color: #b45309;
+}
+
 .dashboard-reminder-tag {
   flex: 0 0 auto;
   padding: 2px 10px;

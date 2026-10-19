@@ -1,4 +1,5 @@
 import { Router } from "express";
+import dormInfoRouter from "./DormInfoRouter.js";
 import bcrypt from "bcryptjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -163,6 +164,19 @@ export async function createSafetyIncident(req, res) {
 
 // ตรวจสอบสิทธิ์ผู้เช่าและจัดการข้อมูลโปรไฟล์กับการเปลี่ยนรหัสผ่าน
 router.use(authenticate, requireCustomerRole, requireActiveCustomer);
+router.post("/dorm-info/acknowledge", async (req, res) => {
+  try {
+    await getPool().query(
+      `UPDATE Customer SET dorm_info_acknowledged_at = COALESCE(dorm_info_acknowledged_at, NOW()) WHERE id = ?`,
+      [req.user.id],
+    );
+    return res.json({ message: "รับทราบกฎระเบียบและเบอร์ติดต่อแล้ว" });
+  } catch (error) {
+    console.error("Acknowledge dorm information error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+router.use("/dorm-info", dormInfoRouter);
 
 router.patch("/profile", async (req, res) => {
   try {
@@ -351,7 +365,8 @@ router.get("/me", async (req, res) => {
     const pool = getPool();
 
     const [customerRows] = await pool.query(
-      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount, created_at AS registered_at
+      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount, created_at AS registered_at,
+              dorm_info_acknowledged_at IS NOT NULL AS dorm_info_acknowledged
        FROM Customer WHERE id = ?`,
       [req.user.id],
     );
@@ -360,7 +375,7 @@ router.get("/me", async (req, res) => {
     if (!customerRow) {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
-    const customer = customerRow;
+    const customer = { ...customerRow, dorm_info_acknowledged: Boolean(customerRow.dorm_info_acknowledged) };
     const depositAmount = customerRow.deposit_amount;
 
     const [

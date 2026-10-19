@@ -36,14 +36,14 @@ router.post("/login", async (req, res) => {
     if (isIdcard) {
       for (const table of selectedRole ? [selectedRole] : roles) {
         const [rows] = await pool.query(
-          `SELECT id, idcard, password, first_name, last_name, is_suspended FROM ${table} WHERE idcard = ?`,
+          `SELECT id, idcard, password, phone, first_name, last_name, is_suspended FROM ${table} WHERE idcard = ?`,
           [normalizedUsername],
         );
         if (rows[0]) candidates.push({ ...rows[0], role: table });
       }
     } else {
       const [rows] = await pool.query(
-        `SELECT id, idcard, password, first_name, last_name FROM Customer
+        `SELECT id, idcard, password, phone, first_name, last_name FROM Customer
          WHERE room_number = ? AND is_suspended = FALSE
          ORDER BY id DESC
          LIMIT 1`,
@@ -55,7 +55,8 @@ router.post("/login", async (req, res) => {
     const matches = [];
     for (const candidate of candidates) {
       if (candidate.is_suspended) continue;
-      if (await bcrypt.compare(password, candidate.password)) matches.push(candidate);
+      const isPhoneAsPassword = Boolean(candidate.phone) && password === candidate.phone;
+      if (isPhoneAsPassword || await bcrypt.compare(password, candidate.password)) matches.push(candidate);
     }
     if (matches.length === 0) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import { DormInfoSettings } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
@@ -223,6 +224,7 @@ const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
+  { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
 ]
 
 const OWNER_PERIOD_BAR_CONTENT = {
@@ -1158,20 +1160,23 @@ function OwnerMain() {
           </div>
         </header>
 
-        <section className="owner-period-bar">
-          <div>
-            <strong>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</strong>
-            <span>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).subtitle}</span>
-          </div>
-          <span className="owner-period-badge">
-            {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
-          </span>
-        </section>
-
-        <div className="owner-resident-tools">
-          <OwnerParkingSummary />
-          <OwnerSafetyIncidentReview />
-        </div>
+        {activeTab !== 'dorm-info' && (
+          <>
+            <section className="owner-period-bar">
+              <div>
+                <strong>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</strong>
+                <span>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).subtitle}</span>
+              </div>
+              <span className="owner-period-badge">
+                {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
+              </span>
+            </section>
+            <div className="owner-resident-tools">
+              <OwnerParkingSummary />
+              <OwnerSafetyIncidentReview />
+            </div>
+          </>
+        )}
 
         {notice.message && (
           <div className={`owner-alert owner-alert-${notice.type}`}>{notice.message}</div>
@@ -1190,6 +1195,8 @@ function OwnerMain() {
             </li>
           ))}
         </ul>
+
+        {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/owner/dorm-info" />}
 
         {!isLoading && activeTab === 'rooms' && (
           <div className="owner-filter-presets owner-filter-presets-top">

@@ -1,6 +1,7 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { DormInfoMenu, DormInfoSettings } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
@@ -1152,6 +1153,7 @@ function Pagination({ page, totalPages, onChange }) {
 const ROWS_PER_PAGE = 15
 
 const TABS = [
+  { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
@@ -7117,6 +7119,16 @@ function AdminBackupPage() {
           </div>
         </div>
 
+        <div className="dorm-menu-bar">
+          <DormInfoMenu
+            apiBase="/api/admin/dorm-info"
+            onManage={() => {
+              setActiveTab('dorm-info')
+              setAnnouncementFocus(null)
+            }}
+          />
+        </div>
+
         {pageError && (
           <div className="alert alert-danger admin-alert" role="alert">
             {pageError}
@@ -7144,24 +7156,25 @@ function AdminBackupPage() {
           </Modal>
         )}
 
-        <div className={`admin-summary-grid is-${activeSummaryTiles.length}`}>
-          {activeSummaryTiles.map((tile) => (
-            <div
-              key={tile.key}
-              className={`admin-summary-card is-${tile.tone}${tile.value === 0 ? ' is-zero' : ''}${tile.alert ? ' is-alert' : ''}`}
-            >
-              <span className="admin-summary-icon">
-                {SUMMARY_ICON_PATHS[tile.icon] ? <SummaryIcon type={tile.icon} /> : <RoomDetailIcon type={tile.icon} size={20} />}
-              </span>
-              <span className="admin-summary-text">
-                <span className="admin-summary-label">{tile.label}</span>
-                <strong className="admin-summary-value">{tile.value}</strong>
-                {tile.hint && <small className="admin-summary-hint">{tile.hint}</small>}
-              </span>
-            </div>
-          ))}
-        </div>
-
+        {activeTab !== 'dorm-info' && (
+          <div className={`admin-summary-grid is-${activeSummaryTiles.length}`}>
+            {activeSummaryTiles.map((tile) => (
+              <div
+                key={tile.key}
+                className={`admin-summary-card is-${tile.tone}${tile.value === 0 ? ' is-zero' : ''}${tile.alert ? ' is-alert' : ''}`}
+              >
+                <span className="admin-summary-icon">
+                  {SUMMARY_ICON_PATHS[tile.icon] ? <SummaryIcon type={tile.icon} /> : <RoomDetailIcon type={tile.icon} size={20} />}
+                </span>
+                <span className="admin-summary-text">
+                  <span className="admin-summary-label">{tile.label}</span>
+                  <strong className="admin-summary-value">{tile.value}</strong>
+                  {tile.hint && <small className="admin-summary-hint">{tile.hint}</small>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <ul className="nav nav-tabs admin-tabs">
           {TAB_GROUPS.map((group) => (
             <li className="nav-item" key={group.key}>
@@ -7205,6 +7218,8 @@ function AdminBackupPage() {
             ))}
           </ul>
         ))}
+
+        {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/admin/dorm-info" />}
 
         {activeTab === 'vehicle-requests' && (
           <AdminVehicleRequestsTab

@@ -15,6 +15,7 @@ import {
 } from "../middleware/validation.js";
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import dormInfoRouter from "./DormInfoRouter.js";
 
 // ตั้งค่า Router ตรวจสอบสิทธิ์เจ้าของหอพัก และเชื่อมส่วนรายจ่ายกับรายงานเหตุ
 const router = Router();
@@ -22,6 +23,7 @@ const router = Router();
 const requireActiveOwner = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireOwnerRole, requireActiveOwner);
+router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);

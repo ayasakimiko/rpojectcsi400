@@ -2,6 +2,7 @@ import { UploadImage } from '../components/UploadMedia.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { DormInfoMenu } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -1631,7 +1632,11 @@ function DashboardReminders({ reminders }) {
               </span>
               <span className="dashboard-reminder-text">
                 <strong>{reminder.title}</strong>
-                <span>{reminder.text}</span>
+                <span>
+                  {reminder.text}
+                  {reminder.highlight && <mark className="dashboard-reminder-highlight">{reminder.highlight}</mark>}
+                  {reminder.suffix}
+                </span>
               </span>
               <span className="dashboard-reminder-tag">{reminder.type === 'danger' ? 'ด่วน' : 'แจ้งเตือน'}</span>
             </li>
@@ -3963,6 +3968,14 @@ function CustomerDashbord() {
     setAcknowledgedAnnouncementIds((ids) => new Set(ids).add(announcementId))
   }
 
+  const [dormInfoAcknowledged, setDormInfoAcknowledged] = useState(false)
+  const acknowledgeDormInfo = async () => {
+    await axios.post('/api/customer/dorm-info/acknowledge', null, {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    })
+    setDormInfoAcknowledged(true)
+  }
+
   const [, tickCountdown] = useState(0)
   const [popupNow, setPopupNow] = useState(() => Date.now())
   useEffect(() => {
@@ -4679,6 +4692,7 @@ function CustomerDashbord() {
     announcements = [],
     parcels = [],
   } = data
+  const needsDormInfoAck = customer?.dorm_info_acknowledged === false && !dormInfoAcknowledged
   const pendingAlerts = announcements.filter(
     (item) =>
       item.tone === 'warning' &&
@@ -5257,7 +5271,8 @@ function CustomerDashbord() {
         type: 'warning',
         kind: 'contract',
         title: 'สัญญาเช่าใกล้หมดอายุ',
-        text: `สัญญาเช่าห้อง ${room.room_number} จะหมดอายุในอีก ${formatRemaining(msLeft)}`,
+        text: `สัญญาเช่าห้อง ${room.room_number} จะหมดอายุในอีก `,
+        highlight: formatRemaining(msLeft),
       })
     }
   }
@@ -5267,14 +5282,17 @@ function CustomerDashbord() {
         type: 'danger',
         kind: 'payment',
         title: 'ค้างชำระค่าเช่า',
-        text: `เลยกำหนดชำระงวดนี้แล้ว (ครบกำหนดวันที่ ${formatDate(currentDue.dueDate)}) กรุณาชำระโดยเร็ว`,
+        text: 'เลยกำหนดชำระงวดนี้แล้ว ครบกำหนดวันที่ ',
+        highlight: formatDate(currentDue.dueDate),
+        suffix: ' กรุณาชำระโดยเร็ว',
       })
     } else if (currentDue.status === 'due') {
       reminders.push({
         type: 'warning',
         kind: 'payment',
         title: 'ถึงกำหนดชำระค่าเช่า',
-        text: `กรุณาชำระค่าเช่างวดนี้ภายในวันที่ ${formatDate(currentDue.dueDate)}`,
+        text: 'กรุณาชำระค่าเช่างวดนี้ภายในวันที่ ',
+        highlight: formatDate(currentDue.dueDate),
       })
     }
   }
@@ -5614,6 +5632,14 @@ function CustomerDashbord() {
               ออกจากระบบ
             </button>
           </div>
+        </div>
+
+        <div className="dorm-menu-bar">
+          <DormInfoMenu
+            apiBase="/api/customer/dorm-info"
+            requireAck={needsDormInfoAck}
+            onAcknowledge={acknowledgeDormInfo}
+          />
         </div>
 
         {maintenanceDetail && (
@@ -7613,7 +7639,7 @@ function CustomerDashbord() {
         )}
       </div>
 
-      {pendingAlerts.length > 0 && (
+      {!needsDormInfoAck && pendingAlerts.length > 0 && (
         <AnnouncementAlertPopup
           key={pendingAlerts[0].id}
           announcement={pendingAlerts[0]}

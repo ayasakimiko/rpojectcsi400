@@ -15,6 +15,7 @@ import {
 } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
+import dormInfoRouter from "./DormInfoRouter.js";
 import {
   attachMaintenancePhotos,
   computeCurrentDue,
@@ -33,6 +34,7 @@ const VEHICLE_MAX_PHOTOS = 6;
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
 router.use(authenticate, requireStaffRole, requireActiveStaff);
+router.use("/dorm-info", dormInfoRouter);
 
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);

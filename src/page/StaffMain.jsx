@@ -2,6 +2,7 @@ import { UploadImage } from '../components/UploadMedia.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { DormInfoMenu } from '../components/DormInfo'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -7956,6 +7957,10 @@ function StaffMain() {
               ออกจากระบบ
             </button>
           </div>
+        </div>
+
+        <div className="dorm-menu-bar">
+          <DormInfoMenu apiBase="/api/staff/dorm-info" />
         </div>
 
         {notifDetail && (
