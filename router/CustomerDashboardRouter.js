@@ -760,7 +760,13 @@ router.get("/parked-vehicles", async (req, res) => {
 
 router.get("/resident-visit-requests", async (req, res) => {
   try {
-    const [requests] = await getPool().query("SELECT * FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC", [req.user.id]);
+    const [requests] = await getPool().query(
+      `SELECT id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone,
+              start_at, end_at, note, status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at,
+              updated_by_name, updated_at, cancelled_by_name, cancelled_at, created_at
+       FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+      [req.user.id],
+    );
     return res.json({ requests: withVehiclePhotos(requests) });
   } catch (error) {
     console.error("Fetch resident visit requests error:", error);

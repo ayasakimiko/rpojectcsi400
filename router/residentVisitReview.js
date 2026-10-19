@@ -5,7 +5,11 @@ import { parseStoredPhotos } from "../middleware/publicUploads.js";
 export async function listResidentVisitRequests(_req, res) {
   try {
     const [requests] = await getPool().query(
-      `SELECT r.*, c.first_name, c.last_name, c.phone AS customer_phone
+      `SELECT r.id, r.customer_id, r.room_number, r.request_type, r.vehicle_plate, r.vehicle_model, r.vehicle_photos,
+              r.guest_name, r.guest_phone, r.start_at, r.end_at, r.note, r.status, r.reviewed_by_name, r.reviewed_at,
+              r.admin_reviewed_by_name, r.admin_reviewed_at, r.updated_by_name, r.updated_at,
+              r.cancelled_by_name, r.cancelled_at, r.created_at,
+              c.first_name, c.last_name, c.phone AS customer_phone
        FROM ResidentVisitRequest r LEFT JOIN Customer c ON c.id = r.customer_id
        ORDER BY (r.status = 'pending') DESC, r.created_at DESC`,
     );

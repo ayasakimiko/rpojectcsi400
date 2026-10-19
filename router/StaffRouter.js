@@ -836,14 +836,11 @@ router.get("/requests", async (req, res) => {
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
               moi.id AS inspection_id, moi.status AS inspection_status, moi.reviewed_at AS inspection_reviewed_at,
               moi.updated_at AS inspection_updated_at,
-              sr.price AS source_room_price, sr.electricity_unit_price AS source_room_electricity_unit_price,
-              sr.water_price AS source_room_water_price, sr.rental_start_date AS source_rental_start_date,
-              sr.rental_end_date AS source_rental_end_date, sr.prepaid_until AS source_prepaid_until,
+              sr.price AS source_room_price, sr.rental_end_date AS source_rental_end_date,
+              sr.prepaid_until AS source_prepaid_until,
               tg.price AS target_room_price, tg.is_booked AS target_room_is_booked,
               tg.electricity_unit_price AS target_room_electricity_unit_price, tg.water_price AS target_room_water_price,
-              tg.air_conditioner AS target_room_air_conditioner, tg.wifi AS target_room_wifi,
-              tg.refrigerator AS target_room_refrigerator, tg.bed AS target_room_bed,
-              tg.bathroom AS target_room_bathroom, tg.cctv AS target_room_cctv
+              tg.bed AS target_room_bed
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
        LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
@@ -1386,7 +1383,10 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query("SELECT * FROM ResidentVisitRequest WHERE id = ?", [id]);
+    const [rows] = await pool.query(
+      "SELECT id, customer_id, request_type, status, vehicle_plate, vehicle_photos, guest_name FROM ResidentVisitRequest WHERE id = ?",
+      [id],
+    );
     const current = withVehiclePhotos(rows)[0];
     if (!current) return res.status(404).json({ message: "ไม่พบคำขอนี้" });
     if (current.request_type !== "vehicle") return res.status(400).json({ message: "แก้ไขได้เฉพาะคำขอรถ" });

@@ -1014,7 +1014,7 @@ router.get("/customers/:id", async (req, res) => {
     }
 
     const [bookings] = await pool.query(
-      `SELECT b.id AS booking_id, b.room_id, r.room_number, b.created_at, b.rental_start_date, b.rental_end_date
+      `SELECT b.id AS booking_id, r.room_number, b.created_at, b.rental_start_date, b.rental_end_date
        FROM Booking b
        LEFT JOIN Room r ON r.id = b.room_id
        WHERE b.customer_id = ?

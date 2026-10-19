@@ -911,6 +911,31 @@ function NotifKindIcon({ kind }) {
       </svg>
     )
   }
+  if (kind === 'safety') {
+    return (
+      <svg {...props}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+    )
+  }
+  if (kind === 'visit') {
+    return (
+      <svg {...props}>
+        <path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17" />
+        <circle cx="7.5" cy="17.5" r="1.5" />
+        <circle cx="16.5" cy="17.5" r="1.5" />
+      </svg>
+    )
+  }
+  if (kind === 'inspection') {
+    return (
+      <svg {...props}>
+        <rect x="5" y="4" width="14" height="17" rx="2" />
+        <path d="M9 4V3h6v1M9 12l2 2 4-4" />
+      </svg>
+    )
+  }
   return (
     <svg {...props}>
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
@@ -1430,6 +1455,32 @@ function ExpandToggleButton({ open, onClick }) {
   )
 }
 
+function flashHighlight(element, className) {
+  element.classList.remove(className, 'is-fading')
+  void element.offsetWidth
+  element.classList.add(className, 'is-fading')
+  element.addEventListener('animationend', () => element.classList.remove(className, 'is-fading'), { once: true })
+}
+
+function useFocusScroll() {
+  const pendingRef = useRef(null)
+  const [, setNonce] = useState(0)
+
+  useEffect(() => {
+    if (pendingRef.current == null) return
+    const element = document.querySelector(`[data-admin-focus="${pendingRef.current}"]`)
+    if (!element) return
+    pendingRef.current = null
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    flashHighlight(element, 'admin-focus-flash')
+  })
+
+  return useCallback((key) => {
+    pendingRef.current = key
+    setNonce((value) => value + 1)
+  }, [])
+}
+
 function ExpandToggleRow({ open, colSpan, onClick }) {
   return (
     <tr className="admin-toggle-row">
@@ -1466,9 +1517,8 @@ function AmenitiesList({ room }) {
   if (amenities.length === 0) return '-'
   return (
     <div className="admin-amenities-list">
-      {amenities.map((amenity, index) => (
+      {amenities.map((amenity) => (
         <span key={amenity} className="admin-amenity-item">
-          {index > 0 && <span className="admin-amenity-divider" aria-hidden="true" />}
           {amenity}
         </span>
       ))}
@@ -3906,7 +3956,7 @@ const SAFETY_FILTERS = [
   { key: 'all', label: 'ทั้งหมด' },
 ]
 const SAFETY_ROLE_LABEL = { Customer: 'ผู้เช่า', Staff: 'เจ้าหน้าที่', Admin: 'Admin', Owner: 'Owner' }
-const SAFETY_PAGE_SIZE = 9
+const SAFETY_PAGE_SIZE = 12
 
 function formatIncidentTime(value) {
   return value ? `${new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })} น.` : '-'
@@ -3934,7 +3984,7 @@ const VISIT_FILTERS = [
   { key: 'cancelled', label: 'ยกเลิกแล้ว' },
   { key: 'all', label: 'ทั้งหมด' },
 ]
-const VISIT_PAGE_SIZE = 9
+const VISIT_PAGE_SIZE = 12
 
 function VisitCarIcon({ size = 18 }) {
   return (
@@ -3950,6 +4000,58 @@ function getVisitHeading(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || 'ไม่ระบุทะเบียน' : item.guest_name || 'ผู้มาพัก'
 }
 
+function buildAdminSafetyNotifs(item) {
+  if (item.status !== 'pending') return []
+  const urgent = item.severity === 'urgent'
+  return [
+    {
+      key: `safety-${item.id}-pending`,
+      title: `แจ้งเหตุ: ${SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}`,
+      label: urgent ? 'แจ้งเหตุด่วน รอตรวจสอบ' : 'แจ้งเหตุใหม่ รอตรวจสอบ',
+      tone: urgent ? 'danger' : 'pending',
+      date: item.created_at,
+      preview: item.description || item.reporter_name,
+      previewLabel: item.description ? 'รายละเอียดเหตุการณ์' : 'ผู้แจ้ง',
+      kind: 'safety',
+      request: item,
+    },
+  ]
+}
+
+function buildAdminVisitNotifs(item) {
+  if (item.status !== 'pending') return []
+  return [
+    {
+      key: `visit-${item.id}-pending`,
+      title: RESIDENT_VISIT_TYPE_LABEL[item.request_type] || 'คำขอผู้เช่า',
+      label: 'คำขอใหม่ รออนุมัติ',
+      tone: 'pending',
+      date: item.created_at,
+      preview: `${getVisitHeading(item)}${item.room_number ? ` · ห้อง ${item.room_number}` : ''}`,
+      previewLabel: item.request_type === 'vehicle' ? 'ทะเบียนรถ' : 'ผู้มาพัก',
+      kind: 'visit',
+      request: item,
+    },
+  ]
+}
+
+function buildAdminInspectionNotifs(inspection) {
+  if (inspection.tenant_request_id || (inspection.status || 'pending') !== 'pending') return []
+  return [
+    {
+      key: `inspection-${inspection.id}-pending`,
+      title: `ผลตรวจห้องย้ายออก ห้อง ${inspection.room_number}`,
+      label: MOVE_OUT_INSPECTION_STATUS.pending,
+      tone: summarizeInspection(inspection.checklist).tone === 'danger' ? 'danger' : 'pending',
+      date: inspection.created_at,
+      preview: inspection.damage_note || inspection.tenant_name,
+      previewLabel: inspection.damage_note ? 'รายละเอียดที่พบ' : 'ผู้เช่า',
+      kind: 'inspection',
+      request: inspection,
+    },
+  ]
+}
+
 function VisitRange({ item }) {
   return (
     <span className="admin-visit-range">
@@ -3960,7 +4062,9 @@ function VisitRange({ item }) {
   )
 }
 
-function AdminVehicleRequestsTab({ onCountChange }) {
+function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
+  const pendingFocusRef = useRef(focusId)
+  const requestFocus = useFocusScroll()
   const [lightbox, setLightbox] = useState(null)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -3980,10 +4084,22 @@ function AdminVehicleRequestsTab({ onCountChange }) {
           const list = data.requests || []
           setItems(list)
           onCountChange?.(list.filter((item) => item.status === 'pending').length)
+          if (pendingFocusRef.current != null) {
+            const sorted = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            const index = sorted.findIndex((item) => item.id === pendingFocusRef.current)
+            pendingFocusRef.current = null
+            if (index >= 0) {
+              setFilter('all')
+              setSearch('')
+              setPage(Math.floor(index / VISIT_PAGE_SIZE) + 1)
+              setDetailId(sorted[index].id)
+              requestFocus(`visit-${sorted[index].id}`)
+            }
+          }
         })
         .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ'))
         .finally(() => setLoading(false)),
-    [headers, onCountChange],
+    [headers, onCountChange, requestFocus],
   )
 
   useEffect(() => {
@@ -4099,7 +4215,7 @@ function AdminVehicleRequestsTab({ onCountChange }) {
             const photos = item.vehicle_photos || []
             const isVehicle = item.request_type === 'vehicle'
             return (
-              <article key={item.id} className={`admin-incident-card admin-visit-card is-${status.tone}`}>
+              <article key={item.id} data-admin-focus={`visit-${item.id}`} className={`admin-incident-card admin-visit-card is-${status.tone}`}>
                 <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
                   <span className="admin-incident-head">
                     <span className="admin-incident-icon">
@@ -4327,7 +4443,9 @@ function AdminVehicleRequestsTab({ onCountChange }) {
   )
 }
 
-function AdminSafetyIncidentsTab({ onCountChange }) {
+function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
+  const pendingFocusRef = useRef(focusId)
+  const requestFocus = useFocusScroll()
   const [lightbox, setLightbox] = useState(null)
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -4348,10 +4466,23 @@ function AdminSafetyIncidentsTab({ onCountChange }) {
           const list = data.incidents || []
           setIncidents(list)
           onCountChange?.(list.filter((item) => item.status === 'pending').length)
+          if (pendingFocusRef.current != null) {
+            const sorted = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            const index = sorted.findIndex((item) => item.id === pendingFocusRef.current)
+            pendingFocusRef.current = null
+            if (index >= 0) {
+              setFilter('all')
+              setSearch('')
+              setPage(Math.floor(index / SAFETY_PAGE_SIZE) + 1)
+              setNote('')
+              setDetailId(sorted[index].id)
+              requestFocus(`safety-${sorted[index].id}`)
+            }
+          }
         })
         .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ'))
         .finally(() => setLoading(false)),
-    [headers, onCountChange],
+    [headers, onCountChange, requestFocus],
   )
 
   useEffect(() => {
@@ -4467,7 +4598,7 @@ function AdminSafetyIncidentsTab({ onCountChange }) {
             const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type
             const photos = item.photos || []
             return (
-              <article key={item.id} className={`admin-incident-card is-${status.tone} is-${item.severity}`}>
+              <article key={item.id} data-admin-focus={`safety-${item.id}`} className={`admin-incident-card is-${status.tone} is-${item.severity}`}>
                 <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
                   <span className="admin-incident-head">
                     <span className="admin-incident-icon">
@@ -4695,8 +4826,43 @@ function AdminBackupPage() {
   const [lastTabByGroup, setLastTabByGroup] = useState({})
   const [pendingVehicleCount, setPendingVehicleCount] = useState(0)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
+  const [tabFocus, setTabFocus] = useState(null)
+  const requestRowFocus = useFocusScroll()
+  useEffect(() => {
+    if (tabFocus && activeTab !== tabFocus.tab) setTabFocus(null)
+  }, [activeTab, tabFocus])
+  const [notifVisitItems, setNotifVisitItems] = useState([])
+  const [notifSafetyItems, setNotifSafetyItems] = useState([])
   const [serviceCounts, setServiceCounts] = useState({ requestPending: 0, maintenancePending: 0 })
-  const tabBadges = { 'vehicle-requests': pendingVehicleCount, safety: pendingSafetyCount }
+  const [seenTabItems, setSeenTabItems] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(getNotificationStorageKey('admin-tabs')) || '{}')
+    } catch {
+      return {}
+    }
+  })
+  const pendingTabIds = useMemo(
+    () => ({
+      'vehicle-requests': notifVisitItems.filter((item) => item.status === 'pending').map((item) => item.id),
+      safety: notifSafetyItems.filter((item) => item.status === 'pending').map((item) => item.id),
+    }),
+    [notifVisitItems, notifSafetyItems],
+  )
+  const tabBadges = Object.fromEntries(
+    Object.entries(pendingTabIds).map(([tab, ids]) => [tab, ids.filter((id) => !(seenTabItems[tab] || []).includes(id)).length]),
+  )
+
+  useEffect(() => {
+    const ids = pendingTabIds[activeTab]
+    if (!ids || ids.every((id) => (seenTabItems[activeTab] || []).includes(id))) return
+    const next = { ...seenTabItems, [activeTab]: ids }
+    setSeenTabItems(next)
+    try {
+      localStorage.setItem(getNotificationStorageKey('admin-tabs'), JSON.stringify(next))
+    } catch {
+      return
+    }
+  }, [activeTab, pendingTabIds, seenTabItems])
 
   useEffect(() => {
     let cancelled = false
@@ -4705,21 +4871,29 @@ function AdminBackupPage() {
       axios
         .get('/api/admin/resident-visit-requests', { headers })
         .then(({ data }) => {
-          if (!cancelled) setPendingVehicleCount((data.requests || []).filter((item) => item.status === 'pending').length)
+          if (cancelled) return
+          const list = data.requests || []
+          setNotifVisitItems(list)
+          setPendingVehicleCount(list.filter((item) => item.status === 'pending').length)
         })
         .catch(() => {})
       axios
         .get('/api/admin/safety-incidents', { headers })
         .then(({ data }) => {
-          if (!cancelled) setPendingSafetyCount((data.incidents || []).filter((item) => item.status === 'pending').length)
+          if (cancelled) return
+          const list = data.incidents || []
+          setNotifSafetyItems(list)
+          setPendingSafetyCount(list.filter((item) => item.status === 'pending').length)
         })
         .catch(() => {})
     }
+    window.addEventListener('focus', loadReviewCounts)
     loadReviewCounts()
     const interval = setInterval(loadReviewCounts, 60000)
     return () => {
       cancelled = true
       clearInterval(interval)
+      window.removeEventListener('focus', loadReviewCounts)
     }
   }, [])
   const [announcementFocus, setAnnouncementFocus] = useState(null)
@@ -6222,10 +6396,13 @@ function AdminBackupPage() {
     return [
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
       ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
+      ...notifSafetyItems.flatMap(buildAdminSafetyNotifs),
+      ...notifVisitItems.flatMap(buildAdminVisitNotifs),
+      ...moveOutInspections.flatMap(buildAdminInspectionNotifs),
       ...staffList.flatMap(buildAdminStaffNotifs),
       ...announcements.map(buildAnnouncementNotif),
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [notifTenantItems, notifMaintenanceItems, staffList, announcements])
+  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements])
 
   const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
 
@@ -6270,9 +6447,26 @@ function AdminBackupPage() {
       return
     }
     setAnnouncementFocus(null)
+    if (notif.kind === 'safety' || notif.kind === 'visit') {
+      const tab = notif.kind === 'safety' ? 'safety' : 'vehicle-requests'
+      setTabFocus({ tab, id: notif.request.id, nonce: Date.now() })
+      setActiveTab(tab)
+      return
+    }
+    if (notif.kind === 'inspection') {
+      setInspectionKind('all')
+      setInspectionSearch('')
+      setInspectionResultFilter('all')
+      setInspectionStatusFilter('all')
+      setActiveTab('move-out-inspections')
+      requestRowFocus(`inspection-${notif.request.id}`)
+      openInspectionDetail(notif.request)
+      return
+    }
     if (notif.kind === 'staff') {
+      const index = staffList.findIndex((member) => member.id === notif.request.id)
       setStaffSearch('')
-      setStaffPage(1)
+      setStaffPage(index >= 0 ? Math.floor(index / ROWS_PER_PAGE) + 1 : 1)
       setActiveTab('staff')
       notifTargetRef.current = { tab: 'staff', id: notif.request.id }
       setNotifTargetReady((count) => count + 1)
@@ -6297,9 +6491,14 @@ function AdminBackupPage() {
     const target = notifTargetRef.current
     if (!target || activeTab !== target.tab) return
     const { tab, id } = target
-    if (tab === 'requests' && requestLogs.items.some((item) => item.id === id)) toggleRequestRow(id)
-    else if (tab === 'maintenance' && maintenanceLogs.items.some((item) => item.id === id)) toggleMaintenanceRow(id)
-    else if (tab === 'staff' && staffList.some((member) => member.id === id)) setStaffDetail(staffList.find((member) => member.id === id))
+    const source = tab === 'requests' ? requestLogs.items : tab === 'maintenance' ? maintenanceLogs.items : staffList
+    const item = source.find((entry) => entry.id === id)
+    if (item) {
+      if (tab === 'requests') setRequestDetail(item)
+      else if (tab === 'maintenance') setMaintenanceDetail(item)
+      else setStaffDetail(item)
+      requestRowFocus(`${tab}-${id}`)
+    }
     notifTargetRef.current = null
   }, [notifTargetReady, activeTab, requestLogs.items, maintenanceLogs.items, staffList])
 
@@ -6551,9 +6750,21 @@ function AdminBackupPage() {
           </ul>
         ))}
 
-        {activeTab === 'vehicle-requests' && <AdminVehicleRequestsTab onCountChange={setPendingVehicleCount} />}
+        {activeTab === 'vehicle-requests' && (
+          <AdminVehicleRequestsTab
+            key={tabFocus?.tab === 'vehicle-requests' ? tabFocus.nonce : 'vehicle-requests'}
+            onCountChange={setPendingVehicleCount}
+            focusId={tabFocus?.tab === 'vehicle-requests' ? tabFocus.id : null}
+          />
+        )}
 
-        {activeTab === 'safety' && <AdminSafetyIncidentsTab onCountChange={setPendingSafetyCount} />}
+        {activeTab === 'safety' && (
+          <AdminSafetyIncidentsTab
+            key={tabFocus?.tab === 'safety' ? tabFocus.nonce : 'safety'}
+            onCountChange={setPendingSafetyCount}
+            focusId={tabFocus?.tab === 'safety' ? tabFocus.id : null}
+          />
+        )}
 
         {activeTab === 'announcements' && (
           <AnnouncementBoard
@@ -6787,19 +6998,34 @@ function AdminBackupPage() {
                         <tr>
                           <td className="admin-strong-cell">
                             <button type="button" className="room-number-link" onClick={() => openRoomDetail(room)} title="ดูรายละเอียดห้อง">
+                              <RoomDetailIcon type="home" size={13} />
                               {room.room_number}
                             </button>
                           </td>
                           <td>
-                            <span className={`admin-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
+                            <span className={`admin-badge has-dot status-${room.is_booked ? 'booked' : 'vacant'}`}>
                               {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
                             </span>
                           </td>
-                          <td className="admin-price-cell">฿{formatCurrency(room.price)}</td>
+                          <td className="admin-price-cell">
+                            ฿{formatCurrency(room.price)}
+                            <span className="admin-price-unit">/เดือน</span>
+                          </td>
                           <td className="admin-col-optional admin-amenities-cell">
                             <AmenitiesList room={room} />
                           </td>
-                          <td>{room.customer_id ? `${room.first_name} ${room.last_name}` : '-'}</td>
+                          <td>
+                            {room.customer_id ? (
+                              <span className="admin-room-tenant">
+                                <span className="admin-room-tenant-avatar" aria-hidden="true">
+                                  <RoomDetailIcon type="user" size={14} />
+                                </span>
+                                {room.first_name} {room.last_name}
+                              </span>
+                            ) : (
+                              <span className="admin-room-tenant is-empty">ยังไม่มีผู้เช่า</span>
+                            )}
+                          </td>
                           <td className="admin-col-optional">
                             <div className="admin-row-actions">
                               <button type="button" className="admin-action-btn is-view" onClick={() => openRoomDetail(room)}>
@@ -6913,6 +7139,7 @@ function AdminBackupPage() {
                     paginatedStaff.map((member) => (
                       <tr
                         key={member.id}
+                        data-admin-focus={`staff-${member.id}`}
                         className={`admin-staff-row${member.is_suspended ? ' is-suspended' : ''}`}
                         tabIndex={0}
                         onClick={() => setStaffDetail(member)}
@@ -7273,6 +7500,7 @@ function AdminBackupPage() {
                       <Fragment key={request.id}>
                         <tr
                           className="moveout-row"
+                          data-admin-focus={`requests-${request.id}`}
                           tabIndex={0}
                           aria-label={`ดูรายละเอียดคำขอ${REQUEST_TYPE_LABEL[request.type] || ''} ห้อง ${request.room_number}`}
                           onClick={() => setRequestDetail(request)}
@@ -7421,6 +7649,7 @@ function AdminBackupPage() {
                     <th>รายการแจ้งซ่อม</th>
                     <th>ห้อง</th>
                     <th>ผู้แจ้ง</th>
+                    <th>รูปประกอบ</th>
                     <th>สถานะ</th>
                     <th className="admin-col-optional">รับเรื่องโดย</th>
                     <th className="admin-col-optional">เสร็จสิ้นโดย</th>
@@ -7430,13 +7659,13 @@ function AdminBackupPage() {
                 <tbody>
                   {maintenanceLogsLoading ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : maintenanceLogs.items.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         ไม่พบประวัติแจ้งซ่อม
                       </td>
                     </tr>
@@ -7447,6 +7676,7 @@ function AdminBackupPage() {
                       <Fragment key={request.id}>
                         <tr
                           className="moveout-row"
+                          data-admin-focus={`maintenance-${request.id}`}
                           tabIndex={0}
                           aria-label={`ดูรายละเอียดแจ้งซ่อม ห้อง ${request.room_number}`}
                           onClick={() => setMaintenanceDetail(request)}
@@ -7488,6 +7718,22 @@ function AdminBackupPage() {
                             </div>
                           </td>
                           <td>
+                            {request.photos?.length ? (
+                              <button
+                                type="button"
+                                className="parcel-thumb"
+                                aria-label={`ดูรูปแจ้งซ่อมห้อง ${request.room_number} ${request.photos.length} รูป`}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  openMaintenancePhotos(request)
+                                }}
+                              >
+                                <UploadImage src={request.photos[0].url} alt="" />
+                                {request.photos.length > 1 && <span>+{request.photos.length - 1}</span>}
+                              </button>
+                            ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
+                          </td>
+                          <td>
                             <span className={`admin-badge status-${request.status}`}>
                               {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
                             </span>
@@ -7509,12 +7755,12 @@ function AdminBackupPage() {
                         </tr>
                         <ExpandToggleRow
                           open={expandedMaintenanceRows.has(request.id)}
-                          colSpan={7}
+                          colSpan={8}
                           onClick={() => toggleMaintenanceRow(request.id)}
                         />
                         <DetailRow
                           open={expandedMaintenanceRows.has(request.id)}
-                          colSpan={7}
+                          colSpan={8}
                           fields={[
                             { label: 'หมวดหมู่', value: <MaintenanceCategoryBadge category={request.category} /> },
                             { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
@@ -8040,6 +8286,7 @@ function AdminBackupPage() {
                       return (
                         <tr
                           key={inspection.id}
+                          data-admin-focus={`inspection-${inspection.id}`}
                           className="moveout-row"
                           tabIndex={0}
                           aria-label={`ดูผลตรวจห้อง ${inspection.room_number}`}
@@ -8200,10 +8447,6 @@ function AdminBackupPage() {
                     )}
                     {!isMoveRoom && (
                       <div className="idt-footer-right">
-                        <span className="idt-footer-label">
-                          สถานะตอนนี้
-                          <span className={`insp-status-badge is-${status}`}>{MOVE_OUT_INSPECTION_STATUS[status]}</span>
-                        </span>
                         <div className="idt-footer-actions">
                           <InspectionStatusActions
                             status={status}

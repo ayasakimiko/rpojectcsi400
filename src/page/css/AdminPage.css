@@ -773,11 +773,8 @@
 .admin-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 14px;
-}
-
-.admin-summary-grid.is-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .admin-summary-card {
@@ -790,6 +787,7 @@
   align-items: center;
   gap: 14px;
   min-width: 0;
+  min-height: 96px;
   overflow: hidden;
   padding: 16px 18px;
   border: 1px solid #e6f0fd;
@@ -1507,20 +1505,78 @@
 }
 
 .admin-table tbody td {
-  color: #0f2b52;
-  padding: 12px 16px;
+  color: #1e3a5f;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  padding: 14px 18px;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
   border: none;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid #edf2f9;
   background: #fff;
-  transition: background 0.1s ease;
+  transition: background-color 0.15s ease;
+}
+
+.admin-table tbody td:first-child {
+  padding-left: 22px;
+}
+
+.admin-table tbody td:last-child {
+  padding-right: 22px;
+}
+
+.admin-table thead th:first-child {
+  padding-left: 22px;
+}
+
+.admin-table thead th:last-child {
+  padding-right: 22px;
 }
 
 .admin-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.admin-table tbody tr:hover td {
-  background: #f8fbff;
+.admin-table tbody tr:not(.admin-toggle-row):not(.admin-detail-row):hover > td {
+  background: #f5f9ff;
+}
+
+.admin-table tbody tr:not(.admin-toggle-row):not(.admin-detail-row):hover > td:first-child {
+  background: linear-gradient(#60a5fa, #60a5fa) left center / 3px 100% no-repeat, #f5f9ff;
+}
+
+.admin-table tbody tr:not(.admin-toggle-row):not(.admin-detail-row):hover > td.admin-empty:first-child {
+  background: #fff;
+}
+
+tr.admin-focus-flash.is-fading > td {
+  animation: admin-focus-row-fade 3s ease-out forwards;
+}
+
+.admin-focus-flash.is-fading:not(tr) {
+  animation: admin-focus-card-fade 3s ease-out forwards;
+}
+
+@keyframes admin-focus-row-fade {
+  0%,
+  30% {
+    background: #dbeafe;
+  }
+  100% {
+    background: #fff;
+  }
+}
+
+@keyframes admin-focus-card-fade {
+  0%,
+  30% {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35), 0 10px 24px rgba(37, 99, 235, 0.14);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
 }
 
 .admin-strong-cell {
@@ -1616,7 +1672,7 @@
 }
 
 .admin-amenities-cell {
-  max-width: 220px;
+  max-width: 280px;
   white-space: normal;
 }
 
@@ -1624,24 +1680,68 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  row-gap: 4px;
+  gap: 5px;
 }
 
 .admin-amenity-item {
   display: inline-flex;
   align-items: center;
+  padding: 2px 9px;
+  border: 1px solid #dce9fb;
+  border-radius: 999px;
+  background: #f5f9ff;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.admin-amenity-divider {
-  display: inline-block;
-  width: 1px;
-  height: 12px;
-  margin: 0 8px;
-  background: #c7d5e8;
+.admin-price-unit {
+  margin-left: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #8a9cba;
+}
+
+.admin-room-tenant {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #0f2b52;
+  white-space: nowrap;
+}
+
+.admin-room-tenant-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid #dce9fb;
+  border-radius: 50%;
+  background: #eef6ff;
+  color: #2563eb;
+}
+
+.admin-room-tenant.is-empty {
+  padding: 3px 10px;
+  border: 1px dashed #c7d5e8;
+  border-radius: 999px;
+  background: #fafcff;
+  color: #8a9cba;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-badge.has-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 
@@ -2285,9 +2385,8 @@
 
 
 @media (max-width: 900px) {
-  .admin-summary-grid,
-  .admin-summary-grid.is-3 {
-    grid-template-columns: repeat(2, 1fr);
+  .admin-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2414,12 +2513,12 @@
   .admin-page {
     padding: 20px 10px 36px;
   }
-  .admin-summary-grid,
-  .admin-summary-grid.is-3 {
-    grid-template-columns: 1fr 1fr;
+  .admin-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
   .admin-summary-card {
+    min-height: 80px;
     padding: 12px 14px;
     gap: 10px;
   }
@@ -6610,7 +6709,9 @@
 .room-number-link {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 14px;
   border: 1px solid #dce9fb;
   border-radius: 8px;
   background: #f5f9ff;
