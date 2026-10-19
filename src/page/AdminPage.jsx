@@ -1904,7 +1904,6 @@ function AmenitiesList({ room }) {
     room.wifi && 'ไวไฟ',
     room.refrigerator && 'ตู้เย็น',
     room.bathroom && 'ห้องน้ำในตัว',
-    room.cctv && 'CCTV',
   ].filter(Boolean)
   if (amenities.length === 0) return '-'
   return (
@@ -1923,7 +1922,6 @@ const ROOM_AMENITIES = [
   { key: 'wifi', label: 'ไวไฟ' },
   { key: 'refrigerator', label: 'ตู้เย็น' },
   { key: 'bathroom', label: 'ห้องน้ำในตัว' },
-  { key: 'cctv', label: 'กล้อง CCTV' },
 ]
 
 function RoomDetailIcon({ type, size = 16 }) {
@@ -9743,7 +9741,7 @@ function AdminBackupPage() {
                   <small>กดเพื่อเลือกหรือยกเลิก</small>
                 </div>
                 <span className="admin-room-form-count">
-                  เลือกแล้ว {['air_conditioner', 'wifi', 'refrigerator', 'bathroom', 'cctv'].filter((field) => roomForm[field]).length}/5
+                  เลือกแล้ว {['air_conditioner', 'wifi', 'refrigerator', 'bathroom'].filter((field) => roomForm[field]).length}/4
                 </span>
               </header>
               <div className="admin-toggle-grid">
@@ -9780,15 +9778,6 @@ function AdminBackupPage() {
                       <path d="M4 12h16v3a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-3Z" />
                       <path d="M7 12V6a2.5 2.5 0 0 1 4.6-1.4" />
                       <line x1="3" y1="12" x2="21" y2="12" />
-                    </g>,
-                  ],
-                  [
-                    'cctv',
-                    'กล้องวงจรปิด',
-                    <g key="cctv">
-                      <rect x="2.5" y="8" width="12" height="8" rx="2" />
-                      <path d="M14.5 10.5 21 8v8l-6.5-2.5" />
-                      <line x1="6" y1="16" x2="5" y2="19" />
                     </g>,
                   ],
                 ].map(([field, label, icon]) => (

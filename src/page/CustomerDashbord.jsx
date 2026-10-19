@@ -401,7 +401,6 @@ const AMENITIES = [
   { key: 'wifi', label: 'ไวไฟ', color: 'purple' },
   { key: 'refrigerator', label: 'ตู้เย็น', color: 'teal' },
   { key: 'bathroom', label: 'ห้องน้ำในตัว', color: 'amber' },
-  { key: 'cctv', label: 'กล้องวงจรปิด', color: 'red' },
 ]
 
 const AMENITY_ICON_PATHS = {
@@ -425,12 +424,6 @@ const AMENITY_ICON_PATHS = {
     </>
   ),
   bathroom: <path d="M12 2.69 17.66 8.35a8 8 0 1 1-11.31 0z" />,
-  cctv: (
-    <>
-      <path d="M23 7l-7 5 7 5V7z" />
-      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-    </>
-  ),
   bed: (
     <>
       <path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6" />
