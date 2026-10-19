@@ -10,6 +10,23 @@
   box-sizing: border-box;
 }
 
+.owner-settings-card,
+.owner-settings-body,
+.owner-settings-body form {
+  min-width: 0;
+}
+
+.owner-settings-body {
+  overflow: visible;
+  overscroll-behavior: auto;
+  touch-action: pan-y;
+}
+
+.owner-settings-row {
+  margin-right: 0;
+  margin-left: 0;
+}
+
 .owner-page input[type='number'] {
   appearance: textfield;
   -moz-appearance: textfield;

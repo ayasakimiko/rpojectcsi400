@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
+import DormInfoPanel from '../components/DormInfoPanel.jsx'
+import { hasDormInfoChanges, mergeDormConfig } from '../utils/dormInfo.js'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
@@ -239,6 +241,7 @@ const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
+  { key: 'settings', label: 'ตั้งค่าหอพัก' },
 ]
 
 const OWNER_PERIOD_BAR_CONTENT = {
@@ -502,6 +505,89 @@ function OwnerSafetyIncidentReview() {
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
+  const [dormConfig, setDormConfig] = useState({
+    dorm_name: 'หอพัก',
+    promptpay_id: '',
+    bank_account_no: '',
+    bank_name: '',
+    dorm_rules: '',
+    caretaker_phone: '',
+  })
+  const [savedDormConfig, setSavedDormConfig] = useState(null)
+  const getDormRules = () => (dormConfig?.dorm_rules
+    ? dormConfig.dorm_rules.split(/\r?\n/).map((rule) => rule.replace(/^\s*\d+[.)]\s*/, ''))
+    : [''])
+  const formatDormRules = (rules) => {
+    let ruleNumber = 0
+    return rules.map((rule) => {
+      if (!rule.trim()) return ''
+      ruleNumber += 1
+      return `${ruleNumber}. ${rule.trim()}`
+    }).join('\n')
+  }
+  const updateDormRule = (index, value) => {
+    const rules = getDormRules()
+    rules[index] = value
+    setDormConfig({ ...dormConfig, dorm_rules: formatDormRules(rules) })
+  }
+  const addDormRule = () => {
+    setDormConfig({ ...dormConfig, dorm_rules: formatDormRules([...getDormRules(), '']) })
+  }
+  const removeDormRule = (index) => {
+    const rules = getDormRules()
+    rules.splice(index, 1)
+    setDormConfig({ ...dormConfig, dorm_rules: formatDormRules(rules) })
+  }
+  const [configLoading, setConfigLoading] = useState(false)
+  const [configSubmitting, setConfigSubmitting] = useState(false)
+  const [configError, setConfigError] = useState('')
+  const [configSuccess, setConfigSuccess] = useState('')
+
+  const loadDormConfig = useCallback(() => {
+    setConfigLoading(true)
+    axios.get('/api/owner/config', { headers: getAuthHeaders() })
+      .then(({ data }) => {
+        setDormConfig((current) => mergeDormConfig(current, data.config))
+        setSavedDormConfig((current) => mergeDormConfig(current, data.config))
+      })
+      .catch(() => setNotice({ type: 'danger', message: 'ไม่สามารถโหลดข้อมูลตั้งค่าได้' }))
+      .finally(() => setConfigLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'settings') loadDormConfig()
+  }, [activeTab, loadDormConfig])
+
+  const handleSaveConfig = async (event) => {
+    event.preventDefault()
+    setConfigError('')
+    setConfigSuccess('')
+    const promptpayId = dormConfig.promptpay_id?.trim()
+    if (!promptpayId) {
+      setConfigError('กรุณาระบุหมายเลข PromptPay')
+      return
+    }
+
+    setConfigSubmitting(true)
+    try {
+      const { data } = await axios.put('/api/owner/config', {
+        ...dormConfig,
+        promptpay_id: promptpayId,
+      }, { headers: getAuthHeaders() })
+      if (data.config) {
+        setDormConfig((current) => mergeDormConfig(current, data.config))
+        setSavedDormConfig((current) => mergeDormConfig(current, data.config))
+      } else {
+        loadDormConfig()
+      }
+      setConfigSuccess(data.message || 'บันทึกการตั้งค่าหอพักเรียบร้อยแล้ว')
+    } catch (error) {
+      setConfigError(error.response?.data?.message || 'บันทึกการตั้งค่าไม่สำเร็จ')
+    } finally {
+      setConfigSubmitting(false)
+    }
+  }
+
   const [overview, setOverview] = useState({ rooms: {}, finance: {} })
   const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, vacantRooms: [], rooms: [] })
   const [incomeSummary, setIncomeSummary] = useState({ totalIncome: 0, byType: [] })
@@ -1280,6 +1366,124 @@ function OwnerMain() {
             </li>
           ))}
         </ul>
+
+        {!isLoading && activeTab === 'settings' && (
+          <div className="admin-card owner-settings-card">
+            <div className="admin-card-header">
+              <h2>ตั้งค่าข้อมูลหอพัก</h2>
+            </div>
+            {configError && <p className="alert alert-danger admin-alert" role="alert">{configError}</p>}
+            {configSuccess && <p className="alert alert-success" role="status">{configSuccess}</p>}
+
+            {configLoading ? (
+              <p className="admin-empty">กำลังโหลดข้อมูลการตั้งค่า...</p>
+            ) : (
+              <div className="admin-modal-body owner-settings-body" style={{ padding: 0 }}>
+                <form onSubmit={handleSaveConfig} noValidate>
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">ข้อมูลพื้นฐานและช่องทางการเงิน</p>
+                    <div className="row g-3 owner-settings-row">
+                      <div className="col-12 col-md-6">
+                        <label className="form-label">หมายเลข PromptPay (เบอร์มือถือ หรือ เลขบัตร ปชช.)</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="เช่น 0812345678 หรือ 1100200000000"
+                          value={dormConfig.promptpay_id || ''}
+                          onChange={(event) => setDormConfig({ ...dormConfig, promptpay_id: event.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">ชื่อธนาคาร</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="เช่น ธนาคารกสิกรไทย"
+                          value={dormConfig.bank_name || ''}
+                          onChange={(event) => setDormConfig({ ...dormConfig, bank_name: event.target.value })}
+                        />
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">เลขที่บัญชีธนาคาร</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="เช่น 123-4-56789-0"
+                          value={dormConfig.bank_account_no || ''}
+                          onChange={(event) => setDormConfig({ ...dormConfig, bank_account_no: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="admin-form-divider" />
+
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">กฎระเบียบและข้อตกลง</p>
+                    <div className="d-flex flex-column gap-2">
+                      {getDormRules().map((rule, index) => (
+                        <div className="d-flex align-items-center gap-2" key={index}>
+                          <span className="text-muted">{index + 1}.</span>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={rule}
+                            onChange={(event) => updateDormRule(index, event.target.value)}
+                            placeholder={`กฎข้อที่ ${index + 1}`}
+                            aria-label={`กฎข้อที่ ${index + 1}`}
+                          />
+                          <button
+                            type="button"
+                            className="admin-action-btn is-ghost"
+                            onClick={() => removeDormRule(index)}
+                            aria-label={`ลบข้อ ${index + 1}`}
+                          >
+                            ลบ
+                          </button>
+                        </div>
+                      ))}
+                      <div>
+                        <button type="button" className="admin-action-btn is-ghost" onClick={addDormRule}>
+                          + เพิ่มกฎ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="admin-form-divider" />
+
+                  <div className="admin-form-section">
+                    <p className="admin-form-section-title">เบอร์ติดต่อ</p>
+                    <div className="row g-3 owner-settings-row">
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">เบอร์ผู้ดูแลหอพัก</label>
+                        <input
+                          type="tel"
+                          maxLength="20"
+                          className="form-control"
+                          value={dormConfig.caretaker_phone || ''}
+                          onChange={(event) => setDormConfig({ ...dormConfig, caretaker_phone: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <DormInfoPanel
+                    config={dormConfig}
+                    mode={hasDormInfoChanges(dormConfig, savedDormConfig) ? 'preview-draft' : 'preview-saved'}
+                  />
+
+                  <div className="d-flex justify-content-end mt-4">
+                    <button type="submit" className="admin-action-btn is-primary" disabled={configSubmitting}>
+                      {configSubmitting ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
 
         {!isLoading && activeTab === 'rooms' && (
           <div className="owner-filter-presets-toolbar owner-filter-presets-top">

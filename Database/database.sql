@@ -33,6 +33,21 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+CREATE TABLE IF NOT EXISTS DormConfig (
+    id INT PRIMARY KEY DEFAULT 1,
+    dorm_name VARCHAR(255) NOT NULL DEFAULT 'หอพัก',
+    promptpay_id VARCHAR(50) NOT NULL DEFAULT '',
+    bank_name VARCHAR(100) DEFAULT NULL,
+    bank_account_no VARCHAR(50) DEFAULT NULL,
+    dorm_rules TEXT,
+    caretaker_phone VARCHAR(20) DEFAULT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO DormConfig (id, dorm_name, promptpay_id)
+VALUES (1, 'หอพัก', '')
+ON DUPLICATE KEY UPDATE id = 1;
+
 SET @water_unit_price_needs_default = (
     SELECT COUNT(*) > 0
     FROM information_schema.COLUMNS

@@ -70,6 +70,58 @@ function getSelectedMonthRange(query) {
   return { from, toExclusive };
 }
 
+router.get("/config", async (_req, res) => {
+  try {
+    const [rows] = await getPool().query(
+      "SELECT dorm_name, promptpay_id, bank_name, bank_account_no, dorm_rules, caretaker_phone, updated_at FROM DormConfig WHERE id = 1",
+    );
+    return res.json({
+      config: rows[0] || {
+        dorm_name: "หอพัก",
+        promptpay_id: "",
+        bank_name: "",
+        bank_account_no: "",
+        dorm_rules: "",
+        caretaker_phone: "",
+      },
+    });
+  } catch (error) {
+    console.error("Fetch dorm settings error:", error);
+    return res.status(500).json({ message: "Could not load dorm settings." });
+  }
+});
+
+router.put("/config", async (req, res) => {
+  try {
+    const { promptpay_id, bank_name, bank_account_no, dorm_rules, caretaker_phone } = req.body ?? {};
+    const promptpay = typeof promptpay_id === "string" ? promptpay_id.trim() : "";
+    const caretaker = caretaker_phone == null ? "" : String(caretaker_phone).trim();
+
+    if (!promptpay) return res.status(400).json({ message: "Enter the PromptPay number." });
+    if (
+      [bank_name, bank_account_no, dorm_rules].some((value) => value != null && typeof value !== "string") ||
+      promptpay.length > 50 ||
+      (caretaker && (caretaker.length > 20 || !/^[0-9+()\-\s]*$/.test(caretaker)))
+    ) {
+      return res.status(400).json({ message: "Check the dorm settings and contact number." });
+    }
+
+    await getPool().query(
+      `INSERT INTO DormConfig (id, dorm_name, promptpay_id, bank_name, bank_account_no, dorm_rules, caretaker_phone)
+       VALUES (1, 'หอพัก', ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE promptpay_id = VALUES(promptpay_id), bank_name = VALUES(bank_name), bank_account_no = VALUES(bank_account_no), dorm_rules = VALUES(dorm_rules), caretaker_phone = VALUES(caretaker_phone)`,
+      [promptpay, bank_name?.trim() || null, bank_account_no?.trim() || null, dorm_rules?.trim() || null, caretaker || null],
+    );
+    const [rows] = await getPool().query(
+      "SELECT dorm_name, promptpay_id, bank_name, bank_account_no, dorm_rules, caretaker_phone, updated_at FROM DormConfig WHERE id = 1",
+    );
+    return res.json({ message: "Dorm settings saved.", config: rows[0] });
+  } catch (error) {
+    console.error("Update dorm settings error:", error);
+    return res.status(500).json({ message: "Could not save dorm settings." });
+  }
+});
+
 router.get("/overview", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
