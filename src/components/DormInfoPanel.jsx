@@ -1,12 +1,5 @@
 import './DormInfoPanel.css'
 
-function formatThaiTime(value) {
-  if (!value) return ''
-  const match = /^(\d{1,2}):(\d{2})/.exec(value)
-  if (!match) return value
-  return `${match[1].padStart(2, '0')}:${match[2]} น.`
-}
-
 function Contact({ label, phone }) {
   const dialablePhone = phone?.replace(/[^\d+]/g, '')
 
@@ -61,15 +54,11 @@ function DormInfoPanel({
           <h3>กฎระเบียบหอพัก</h3>
           <p>{config?.dorm_rules?.trim() || 'ยังไม่ได้ระบุกฎระเบียบหอพัก'}</p>
         </div>
-        <div className="dorm-info-item">
-          <h3>เวลาปิดประตู</h3>
-          <p className="dorm-info-value">{formatThaiTime(config?.gate_close_time) || 'ยังไม่ได้ระบุ'}</p>
-        </div>
+
         <div className="dorm-info-item">
           <h3>เบอร์ติดต่อฉุกเฉิน</h3>
           <div className="dorm-info-contact-list">
             <Contact label="ผู้ดูแลหอพัก" phone={config?.caretaker_phone} />
-            <Contact label="ช่าง" phone={config?.technician_phone} />
           </div>
         </div>
       </div>

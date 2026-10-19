@@ -510,11 +510,11 @@ function OwnerMain() {
   const [activeTab, setActiveTab] = useState('rooms')
 
   const [dormConfig, setDormConfig] = useState({
-    dorm_name: 'หอพักใจ',
+    dorm_name: 'หอพัก',
     promptpay_id: '',
     bank_account_no: '',
     bank_name: '',
-    bank_account_name: 'หอพักใจ',
+    bank_account_name: 'หอพัก',
     billing_due_day: 5,
     grace_period_days: 3,
     late_fee_per_day: 50,
@@ -524,6 +524,29 @@ function OwnerMain() {
     technician_phone: '02-000-0001',
   })
   const [savedDormConfig, setSavedDormConfig] = useState(null)
+  const getDormRules = () => (dormConfig?.dorm_rules ? dormConfig.dorm_rules.split(/\r?\n/).map((rule) => rule.replace(/^\s*\d+[.)]\s*/, '')) : [''])
+  const formatDormRules = (rules) => {
+    let ruleNumber = 0
+    return rules.map((rule) => {
+      if (!rule.trim()) return ''
+      ruleNumber += 1
+      return `${ruleNumber}. ${rule.trim()}`
+    }).join('\n')
+  }
+  const updateDormRule = (index, value) => {
+    const rules = getDormRules()
+    rules[index] = value
+    setDormConfig({ ...dormConfig, dorm_rules: formatDormRules(rules) })
+  }
+  const addDormRule = () => {
+    setDormConfig({ ...dormConfig, dorm_rules: formatDormRules([...getDormRules(), '']) })
+  }
+  const removeDormRule = (index) => {
+    const rules = getDormRules()
+    rules.splice(index, 1)
+    setDormConfig({ ...dormConfig, dorm_rules: formatDormRules(rules) })
+  }
+
   const [configLoading, setConfigLoading] = useState(false)
   const [configSubmitting, setConfigSubmitting] = useState(false)
   const [configError, setConfigError] = useState('')
@@ -3707,12 +3730,8 @@ function OwnerMain() {
         {!isLoading && activeTab === 'settings' && (
           <div className="admin-card">
             <div className="admin-card-header">
-              <h2>ตั้งค่าข้อมูลหอพักใจ</h2>
+              <h2>ตั้งค่าข้อมูลหอพัก</h2>
             </div>
-            <p className="waiting-list-storage-note mb-4">
-              ข้อมูลที่ตั้งค่าตรงนี้จะมีผลต่อการคำนวณบิล, การแสดง PromptPay
-              สแกนจ่าย และกฎระเบียบของหอพัก
-            </p>
 
             {configLoading ? (
               <p className="admin-empty">กำลังโหลดข้อมูลการตั้งค่า...</p>
@@ -3724,21 +3743,6 @@ function OwnerMain() {
                       ข้อมูลพื้นฐานและช่องทางการเงิน
                     </p>
                     <div className="row g-3">
-                      <div className="col-12 col-md-6">
-                        <label className="form-label">ชื่อหอพัก</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={dormConfig?.dorm_name || ''}
-                          onChange={(e) =>
-                            setDormConfig({
-                              ...dormConfig,
-                              dorm_name: e.target.value,
-                            })
-                          }
-                          required
-                        />
-                      </div>
 
                       <div className="col-12 col-md-6">
                         <label className="form-label">
@@ -3791,91 +3795,7 @@ function OwnerMain() {
                         />
                       </div>
 
-                      <div className="col-12 col-md-4">
-                        <label className="form-label">
-                          ชื่อบัญชีผู้รับเงิน
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={dormConfig?.bank_account_name || ''}
-                          onChange={(e) =>
-                            setDormConfig({
-                              ...dormConfig,
-                              bank_account_name: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="admin-form-divider" />
-
-                  <div className="admin-form-section">
-                    <p className="admin-form-section-title">
-                      รอบบิลและเงื่อนไขค่าปรับ
-                    </p>
-                    <div className="row g-3">
-                      <div className="col-12 col-md-4">
-                        <label className="form-label">
-                          วันครบกำหนดชำระของเดือน (วันที่)
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
-                          className="form-control"
-                          value={dormConfig?.billing_due_day || ''}
-                          onChange={(e) =>
-                            setDormConfig({
-                              ...dormConfig,
-                              billing_due_day: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label">
-                          ระยะเวลาผ่อนผัน (วัน)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="30"
-                          className="form-control"
-                          value={dormConfig?.grace_period_days || ''}
-                          onChange={(e) =>
-                            setDormConfig({
-                              ...dormConfig,
-                              grace_period_days: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label">
-                          อัตราค่าปรับจ่ายช้า (บาท/วัน)
-                        </label>
-                        <div className="admin-input-group">
-                          <span className="admin-input-affix">฿</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            className="form-control"
-                            value={dormConfig?.late_fee_per_day || ''}
-                            onChange={(e) =>
-                              setDormConfig({
-                                ...dormConfig,
-                                late_fee_per_day: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
                     </div>
                   </div>
 
@@ -3885,38 +3805,43 @@ function OwnerMain() {
                     <p className="admin-form-section-title">
                       กฎระเบียบและข้อตกลง
                     </p>
-                    <div className="row g-3">
-                      <div className="col-12">
-                        <textarea
-                          className="form-control"
-                          rows="5"
-                          placeholder="ระบุกฎระเบียบ เช่น เวลาปิดประตู, การใช้เสียง, ข้อห้ามต่างๆ..."
-                          value={dormConfig?.dorm_rules || ''}
-                          onChange={(e) =>
-                            setDormConfig({
-                              ...dormConfig,
-                              dorm_rules: e.target.value,
-                            })
-                          }
-                        />
+                    <div className="d-flex flex-column gap-2">
+                      {getDormRules().map((rule, index) => (
+                        <div className="d-flex align-items-center gap-2" key={index}>
+                          <span className="text-muted">{index + 1}.</span>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={rule}
+                            onChange={(event) => updateDormRule(index, event.target.value)}
+                            placeholder={"กฎข้อที่ " + (index + 1)}
+                            aria-label={"กฎข้อที่ " + (index + 1)}
+                          />
+                          <button
+                            type="button"
+                            className="admin-action-btn is-ghost"
+                            onClick={() => removeDormRule(index)}
+                            aria-label={"ลบ" + ' ' + (index + 1)}
+                          >
+                            ลบ
+                          </button>
+                        </div>
+                      ))}
+                      <div>
+                        <button type="button" className="admin-action-btn is-ghost" onClick={addDormRule}>
+                          + เพิ่มกฎ
+                        </button>
                       </div>
                     </div>
+
                   </div>
 
                   <div className="admin-form-divider" />
 
                   <div className="admin-form-section">
-                    <p className="admin-form-section-title">เวลาปิดประตูและเบอร์ติดต่อ</p>
+                    <p className="admin-form-section-title">เบอร์ติดต่อ</p>
                     <div className="row g-3">
-                      <div className="col-md-4">
-                        <label className="form-label">เวลาปิดประตู</label>
-                        <input
-                          type="time"
-                          className="form-control"
-                          value={dormConfig?.gate_close_time || ''}
-                          onChange={(e) => setDormConfig({ ...dormConfig, gate_close_time: e.target.value })}
-                        />
-                      </div>
+
                       <div className="col-md-4">
                         <label className="form-label">เบอร์ผู้ดูแลหอพัก</label>
                         <input
@@ -3927,16 +3852,7 @@ function OwnerMain() {
                           onChange={(e) => setDormConfig({ ...dormConfig, caretaker_phone: e.target.value })}
                         />
                       </div>
-                      <div className="col-md-4">
-                        <label className="form-label">เบอร์ช่าง</label>
-                        <input
-                          type="tel"
-                          maxLength="20"
-                          className="form-control"
-                          value={dormConfig?.technician_phone || ''}
-                          onChange={(e) => setDormConfig({ ...dormConfig, technician_phone: e.target.value })}
-                        />
-                      </div>
+
                     </div>
                   </div>
 

@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
-import DormInfoPanel from '../components/DormInfoPanel.jsx'
 import { createWaitingListEntry, readWaitingList, subscribeWaitingList } from '../utils/waitingList.js'
 import { printMonthlyInvoices } from '../utils/printMonthlyInvoices.js'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
@@ -418,9 +417,6 @@ function StaffMain() {
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [dormInfo, setDormInfo] = useState(null)
-  const [dormInfoError, setDormInfoError] = useState('')
-  const [dormInfoRefreshing, setDormInfoRefreshing] = useState(true)
 
   const [, tickExpiry] = useState(0)
   useEffect(() => {
@@ -521,29 +517,6 @@ function StaffMain() {
   const [maintenanceHistoryStatusFilter, setMaintenanceHistoryStatusFilter] = useState('all')
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
-  const fetchDormInfo = () =>
-    axios
-      .get('/api/staff/dorm-info', { headers: authHeaders() })
-      .then(({ data }) => {
-        setDormInfo(data.config)
-        setDormInfoError('')
-      })
-      .catch((err) => {
-        if (err.response?.status === 401 || err.response?.status === 403) {
-          sessionStorage.removeItem('token')
-          sessionStorage.removeItem('user')
-          navigate('/login', { replace: true })
-          return
-        }
-        setDormInfoError(err.response?.data?.message || 'ไม่สามารถโหลดกฎระเบียบและเบอร์ติดต่อได้')
-      })
-      .finally(() => setDormInfoRefreshing(false))
-
-  const loadDormInfo = () => {
-    setDormInfoRefreshing(true)
-    return fetchDormInfo()
-  }
 
   const submitWaitingListEntry = (event, requestClose) => {
     event.preventDefault()
@@ -820,7 +793,6 @@ function StaffMain() {
     loadRooms().finally(() => {
       if (isMounted) setLoading(false)
     })
-    fetchDormInfo()
     loadRequests().finally(() => {
       if (isMounted) setRequestsLoading(false)
     })
@@ -1825,14 +1797,6 @@ function StaffMain() {
         </div>
 
         <AnnouncementBoard canManage author={staffUser ? `${staffUser.first_name || ''} ${staffUser.last_name || ''}`.trim() || 'เจ้าหน้าที่' : 'เจ้าหน้าที่'} />
-
-        <DormInfoPanel
-          config={dormInfo}
-          onRefresh={loadDormInfo}
-          refreshing={dormInfoRefreshing}
-          error={dormInfoError}
-        />
-
         <div className="staff-card meter-entry-card">
           <div className="staff-card-header">
             <div><h2>จดมิเตอร์ทุกห้อง</h2><p className="waiting-list-storage-note">กรอกเลขน้ำและไฟรวมในตารางเดียว แล้วเทียบกับรอบก่อน</p></div>
