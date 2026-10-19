@@ -104,7 +104,12 @@ export default function InspectionDetail({
                 )}
               </div>
             </div>
-            {statusLabel && <span className={`insp-status-badge is-${statusTone || 'pending'}`}>{statusLabel}</span>}
+            {statusLabel && (
+              <div className="idt-hero-status">
+                <span className="idt-hero-status-label">สถานะตอนนี้</span>
+                <span className={`insp-status-badge is-${statusTone || 'pending'}`}>{statusLabel}</span>
+              </div>
+            )}
           </div>
           <dl className="idt-meta">
             <div>

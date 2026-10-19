@@ -1293,7 +1293,8 @@ const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 const TENANT_GRID_COUNT = 9
 const ROOMS_PER_PAGE = 12
 const STAFF_LIST_PAGE_SIZE = 10
-const EXPENSES_PAGE_SIZE = 9
+const STAFF_CARD_PAGE_SIZE = 12
+const EXPENSES_PAGE_SIZE = 12
 
 const EMPTY_EXPENSE_FORM = {
   category: '',
@@ -3204,14 +3205,14 @@ function SummaryIcon({ type }) {
 
 const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ' }
 
-function StaffPagination({ page, total, onChange }) {
-  if (total <= STAFF_LIST_PAGE_SIZE) return null
-  const totalPages = Math.ceil(total / STAFF_LIST_PAGE_SIZE)
+function StaffPagination({ page, total, onChange, pageSize = STAFF_LIST_PAGE_SIZE }) {
+  if (total <= pageSize) return null
+  const totalPages = Math.ceil(total / pageSize)
   const current = Math.min(page, totalPages)
   return (
     <div className="staff-pagination">
       <span className="staff-pagination-info">
-        แสดง {(current - 1) * STAFF_LIST_PAGE_SIZE + 1}-{Math.min(current * STAFF_LIST_PAGE_SIZE, total)} จาก {total}{' '}
+        แสดง {(current - 1) * pageSize + 1}-{Math.min(current * pageSize, total)} จาก {total}{' '}
         รายการ
       </span>
       <div className="staff-pagination-controls">
@@ -3250,7 +3251,7 @@ function flashHighlight(element, className) {
   )
 }
 
-function useListFocus() {
+function useListFocus(pageSize = STAFF_LIST_PAGE_SIZE) {
   const [page, setPageState] = useState(1)
   const [focusedId, setFocusedId] = useState(null)
   const [pinned, setPinned] = useState(false)
@@ -3279,7 +3280,7 @@ function useListFocus() {
   const resolvePage = (list) => {
     if (!pinned || focusedId == null) return page
     const index = list.findIndex((item) => item.id === focusedId)
-    return index < 0 ? page : Math.floor(index / STAFF_LIST_PAGE_SIZE) + 1
+    return index < 0 ? page : Math.floor(index / pageSize) + 1
   }
 
   return { page, setPage, focusedId, focusItem, resolvePage }
@@ -4060,7 +4061,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
   const [view, setView] = useState('main')
   const [status, setStatus] = useState(RESIDENT_VISIT_VIEWS.main.defaultFilter)
   const [search, setSearch] = useState('')
-  const { setPage, focusItem, resolvePage } = useListFocus()
+  const { setPage, focusItem, resolvePage } = useListFocus(STAFF_CARD_PAGE_SIZE)
   const [detail, setDetail] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -4136,8 +4137,8 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
     setStatus(RESIDENT_VISIT_VIEWS[next].defaultFilter)
     setPage(1)
   }
-  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
-  const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
+  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_CARD_PAGE_SIZE)))
+  const pageItems = filtered.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
   const pendingCount = items.filter((item) => item.status === 'pending').length
   const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
 
@@ -4447,7 +4448,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
           })}
         </ul>
       )}
-      <StaffPagination page={currentPage} total={filtered.length} onChange={setPage} />
+      <StaffPagination page={currentPage} total={filtered.length} onChange={setPage} pageSize={STAFF_CARD_PAGE_SIZE} />
 
       {detail && (
         <Modal title="รายละเอียดคำขอรถ" onClose={() => setDetail(null)} variant="detail">
@@ -4971,7 +4972,7 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
-  const { setPage, focusItem, resolvePage } = useListFocus()
+  const { setPage, focusItem, resolvePage } = useListFocus(STAFF_CARD_PAGE_SIZE)
   const [detail, setDetail] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_SAFETY_FORM)
@@ -5027,8 +5028,8 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
       )
     : incidents
   const filtered = status === 'all' ? searched : searched.filter((item) => item.status === status)
-  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_LIST_PAGE_SIZE)))
-  const pageItems = filtered.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
+  const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_CARD_PAGE_SIZE)))
+  const pageItems = filtered.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
 
   const pendingCount = incidents.filter((item) => item.status === 'pending').length
 
@@ -5287,7 +5288,7 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
           })}
         </ul>
       )}
-      <StaffPagination page={currentPage} total={filtered.length} onChange={setPage} />
+      <StaffPagination page={currentPage} total={filtered.length} onChange={setPage} pageSize={STAFF_CARD_PAGE_SIZE} />
 
       {detail && (
         <Modal title="รายละเอียดการแจ้งเหตุ" onClose={() => setDetail(null)} variant="detail">
@@ -6868,6 +6869,28 @@ function StaffMain() {
             <p>{request.description}</p>
           </div>
         )}
+        {request.photos?.length > 0 && (
+          <div className="staff-req-note">
+            <span className="staff-req-note-label">รูปประกอบ · {request.photos.length} รูป</span>
+            <div className="staff-request-photos">
+              {request.photos.slice(0, 4).map((photo, index) => (
+                <button
+                  key={`${photo.url}-${index}`}
+                  type="button"
+                  className="parcel-thumb"
+                  aria-label={`ดูรูปแจ้งซ่อมห้อง ${request.room_number} รูปที่ ${index + 1}`}
+                  onClick={() => {
+                    setMaintenanceDetail(request)
+                    setMaintenancePhotoPreview({ index })
+                  }}
+                >
+                  <UploadImage src={photo.url} alt="" />
+                  {index === 3 && request.photos.length > 4 && <span>+{request.photos.length - 4}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <TenantRequestCardFooter steps={[{ key: 'created', label: 'แจ้งซ่อม', date: request.created_at, tone: 'info' }]}>
           <button type="button" className="staff-text-link" onClick={() => setMaintenanceDetail(request)}>
             ดูรายละเอียด
@@ -7239,6 +7262,39 @@ function StaffMain() {
     })
     return counts
   }, [tenantRequests])
+
+  const sectionItemKeys = useMemo(() => {
+    const keys = { renew: [], moveout: [], move_room: [], maintenance: maintenanceRequests.map((request) => `maintenance-${request.id}`) }
+    tenantRequests.forEach((request) => {
+      if (keys[request.type]) keys[request.type].push(`tenant-${request.id}`)
+    })
+    return keys
+  }, [tenantRequests, maintenanceRequests])
+
+  const [seenSectionKeys, setSeenSectionKeys] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(getNotificationStorageKey('staff-sections')) || '[]'))
+    } catch {
+      return new Set()
+    }
+  })
+
+  const newSectionItemCount = (section) =>
+    staffTab === 'home' && homeSection === section ? 0 : (sectionItemKeys[section] || []).filter((key) => !seenSectionKeys.has(key)).length
+
+  useEffect(() => {
+    if (staffTab !== 'home') return
+    const visible = sectionItemKeys[homeSection] || []
+    if (visible.every((key) => seenSectionKeys.has(key))) return
+    const current = new Set(Object.values(sectionItemKeys).flat())
+    const next = new Set([...[...seenSectionKeys].filter((key) => current.has(key)), ...visible])
+    setSeenSectionKeys(next)
+    try {
+      localStorage.setItem(getNotificationStorageKey('staff-sections'), JSON.stringify([...next]))
+    } catch (error) {
+      console.warn('Could not save seen section items', error)
+    }
+  }, [staffTab, homeSection, sectionItemKeys, seenSectionKeys])
 
   const filteredTenantRequests = useMemo(() => {
     const list = tenantRequests.filter((request) => {
@@ -8411,7 +8467,7 @@ function StaffMain() {
         {staffTab === 'home' && (
           <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
             {HOME_SECTIONS.map((section) => {
-              const count = section.key === 'maintenance' ? maintenanceRequests.length : tenantTypeCounts[section.key] ?? 0
+              const count = newSectionItemCount(section.key)
               return (
                 <li className="nav-item" key={section.key}>
                   <button
@@ -8420,7 +8476,7 @@ function StaffMain() {
                     onClick={() => setHomeSection(section.key)}
                   >
                     {section.label}
-                    {count > 0 && <span className="staff-subtab-badge">{count}</span>}
+                    {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการใหม่`}>{count}</span>}
                   </button>
                 </li>
               )
@@ -10359,6 +10415,25 @@ function StaffMain() {
                         {request.contact_phone && <span>โทร {request.contact_phone}</span>}
                       </div>
                       <p className="staff-request-note">{request.description}</p>
+                      {request.photos?.length > 0 && (
+                        <div className="staff-request-photos">
+                          {request.photos.slice(0, 4).map((photo, index) => (
+                            <button
+                              key={`${photo.url}-${index}`}
+                              type="button"
+                              className="parcel-thumb"
+                              aria-label={`ดูรูปแจ้งซ่อมห้อง ${request.room_number} รูปที่ ${index + 1}`}
+                              onClick={() => {
+                                setMaintenanceDetail(request)
+                                setMaintenancePhotoPreview({ index })
+                              }}
+                            >
+                              <UploadImage src={photo.url} alt="" />
+                              {index === 3 && request.photos.length > 4 && <span>+{request.photos.length - 4}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="staff-request-timeline">
                         <p className="staff-request-date is-reported">
                           <span className="staff-request-date-label">แจ้งซ่อม</span>

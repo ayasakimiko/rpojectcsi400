@@ -9,10 +9,8 @@ const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const JWT_EXPIRES_IN = "7d";
 
-function toPublicUser(row) {
-  const publicUser = { ...row };
-  delete publicUser.password;
-  return publicUser;
+function toPublicUser({ id, role, idcard, first_name, last_name }) {
+  return { id, role, idcard, first_name, last_name };
 }
 
 router.post("/login", async (req, res) => {
@@ -35,14 +33,17 @@ router.post("/login", async (req, res) => {
     const candidates = [];
     if (isIdcard) {
       for (const table of selectedRole ? [selectedRole] : roles) {
-        const [rows] = await pool.query(`SELECT * FROM ${table} WHERE idcard = ?`, [normalizedUsername]);
+        const [rows] = await pool.query(
+          `SELECT id, idcard, password, phone, first_name, last_name, is_suspended FROM ${table} WHERE idcard = ?`,
+          [normalizedUsername],
+        );
         if (rows[0]) candidates.push({ ...rows[0], role: table });
       }
     } else {
       const [rows] = await pool.query(
-        `SELECT c.* FROM Customer c
-         WHERE c.room_number = ? AND c.is_suspended = FALSE
-         ORDER BY c.id DESC
+        `SELECT id, idcard, password, phone, first_name, last_name FROM Customer
+         WHERE room_number = ? AND is_suspended = FALSE
+         ORDER BY id DESC
          LIMIT 1`,
         [normalizedUsername],
       );

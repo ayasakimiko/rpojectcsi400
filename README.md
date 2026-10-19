@@ -11,7 +11,7 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 
 ## สถาปัตยกรรม Backend
 
-`server.js` เป็น **API Gateway** — รับ request ทั้งหมดที่ `/api/*` บน port เดียว (4000) แล้ว proxy ต่อไปยัง microservice ที่ถูก role ตาม path prefix (ด้วย `http-proxy-middleware`) โดยแต่ละ service มี Express app + DB connection + CORS ของตัวเอง แยกรันคนละ process/container:
+`server.js` เป็น **API Gateway** — รับ request ทั้งหมดที่ `/api/*` บน port เดียว (4000) แล้ว proxy ต่อไปยัง microservice ที่ถูก role ตาม path prefix (เขียนด้วย `node:http` ล้วน ไม่ใช้ Express เพื่อลดหน่วยความจำ) โดยแต่ละ service มี Express app + DB connection + CORS ของตัวเอง แยกรันคนละ process/container:
 
 | Path prefix | Microservice | Port |
 |---|---|---|
