@@ -255,6 +255,32 @@ function StatIcon({ name }) {
   )
 }
 
+const OWNER_LIST_ICON_PATHS = {
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  door: <><path d="M4 21h16" /><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17" /><path d="M14 12h.01" /></>,
+  tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
+  phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 10" /></>,
+}
+
+function OwnerListIcon({ name, size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {OWNER_LIST_ICON_PATHS[name]}
+    </svg>
+  )
+}
+
+function compareNewest(field) {
+  return (a, b) => {
+    const timeA = a[field] ? new Date(a[field]).getTime() : -Infinity
+    const timeB = b[field] ? new Date(b[field]).getTime() : -Infinity
+    if (timeA !== timeB) return timeB - timeA
+    return a.room_number - b.room_number
+  }
+}
+
 function OwnerStatTile({ icon, label, value, hint, tone }) {
   return (
     <div className={`staff-summary-tile is-${OWNER_TILE_TONES[tone] || 'blue'}`}>
@@ -640,6 +666,19 @@ function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
   return [display, isClosing]
 }
 
+const DATE_DEPENDENT_GROUPS = ['overview', 'roomsOverview', 'roomsOccupancy', 'roomsLogs', 'finance']
+
+function getNeededDataGroups(tab, roomsSection) {
+  if (tab === 'rooms') {
+    const sectionGroup = { overview: 'roomsOverview', occupancy: 'roomsOccupancy', logs: 'roomsLogs' }[roomsSection] || 'roomsOverview'
+    return ['roomStatus', 'overview', sectionGroup]
+  }
+  if (tab === 'finance') return ['overview', 'finance']
+  if (tab === 'staff') return ['staff']
+  if (tab === 'parking' || tab === 'safety') return ['roomStatus']
+  return []
+}
+
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
@@ -660,7 +699,7 @@ function OwnerMain() {
   })
   const [freshNotificationKeys, setFreshNotificationKeys] = useState(() => new Set())
   const [overview, setOverview] = useState({ rooms: {}, finance: {} })
-  const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, vacantRooms: [], rooms: [] })
+  const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, rooms: [] })
   const [incomeSummary, setIncomeSummary] = useState({ totalIncome: 0, byType: [] })
   const [expenses, setExpenses] = useState({ expenses: [], byCategory: [], total: 0, totalAmount: 0, page: 1, pageSize: 10 })
   const [financeTrends, setFinanceTrends] = useState({ trends: [], granularity: 'month' })
@@ -687,7 +726,9 @@ function OwnerMain() {
   const [paymentFilter, setPaymentFilter] = useState({ from: '', to: '' })
   const [paymentLogFilter, setPaymentLogFilter] = useState({ search: '', from: '', to: '', onlyOverdue: false })
   const [notice, setNotice] = useState({ type: '', message: '' })
-  const [isLoading, setIsLoading] = useState(true)
+  const [loadedDataGroups, setLoadedDataGroups] = useState(() => new Set())
+  const dataGroupsLoadedRef = useRef(new Set())
+  const dataGroupsInflightRef = useRef(new Set())
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [staffErrors, setStaffErrors] = useState({})
@@ -698,6 +739,7 @@ function OwnerMain() {
   const [roomDetail, setRoomDetail] = useState(null)
   const [isRoomDetailLoading, setIsRoomDetailLoading] = useState(false)
   const [roomListFilter, setRoomListFilter] = useState(null)
+  const [roomListSearch, setRoomListSearch] = useState('')
   const [roomDetailOpenedAt, setRoomDetailOpenedAt] = useState(0)
   const [roomPaymentDetail, setRoomPaymentDetail] = useState(null)
   const [roomMapFilter, setRoomMapFilter] = useState('all')
@@ -731,12 +773,16 @@ function OwnerMain() {
 
   useEffect(() => {
     loadAnnouncements()
-    const interval = setInterval(loadAnnouncements, 30000)
-    const refresh = () => loadAnnouncements()
-    window.addEventListener('focus', refresh)
+    const interval = setInterval(() => {
+      if (!document.hidden) loadAnnouncements()
+    }, 60000)
+    const refresh = () => {
+      if (!document.hidden) loadAnnouncements()
+    }
+    document.addEventListener('visibilitychange', refresh)
     return () => {
       clearInterval(interval)
-      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
     }
   }, [loadAnnouncements])
 
@@ -900,7 +946,7 @@ function OwnerMain() {
   )
 
   const currentOccupants = useMemo(
-    () => (roomStatus.rooms || []).filter((room) => room.customer_id).sort((a, b) => a.room_number - b.room_number),
+    () => (roomStatus.rooms || []).filter((room) => room.customer_id).sort(compareNewest('rental_start_date')),
     [roomStatus],
   )
   const occupantsTotalPages = Math.max(1, Math.ceil(currentOccupants.length / SUMMARY_PAGE_SIZE))
@@ -910,7 +956,7 @@ function OwnerMain() {
   }, [currentOccupants, occupantsPage])
 
   const vacantRoomsList = useMemo(
-    () => (roomStatus.vacantRooms || []).slice().sort((a, b) => a.room_number - b.room_number),
+    () => (roomStatus.rooms || []).filter((room) => room.status === 'vacant').sort(compareNewest('vacated_at')),
     [roomStatus],
   )
   const vacantRoomsTotalPages = Math.max(1, Math.ceil(vacantRoomsList.length / SUMMARY_PAGE_SIZE))
@@ -920,7 +966,7 @@ function OwnerMain() {
   }, [vacantRoomsList, vacantRoomsPage])
 
   const maintenanceRoomsList = useMemo(
-    () => (roomStatus.rooms || []).filter((room) => room.status === 'maintenance').sort((a, b) => a.room_number - b.room_number),
+    () => (roomStatus.rooms || []).filter((room) => room.status === 'maintenance').sort(compareNewest('maintenance_since')),
     [roomStatus],
   )
   const maintenanceRoomsTotalPages = Math.max(1, Math.ceil(maintenanceRoomsList.length / SUMMARY_PAGE_SIZE))
@@ -948,6 +994,22 @@ function OwnerMain() {
     if (displayRoomListFilter === 'all') return roomStatus.rooms || []
     return []
   }, [displayRoomListFilter, roomStatus.rooms])
+
+  const roomListKeyword = roomListSearch.trim().toLowerCase()
+  const visibleRoomListItems = roomListKeyword
+    ? roomListItems.filter((room) =>
+        [String(room.room_number), `${room.first_name || ''} ${room.last_name || ''}`, room.phone, ROOM_STATUS_LABELS[room.status]]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(roomListKeyword),
+      )
+    : roomListItems
+
+  const openRoomList = (filterKey) => {
+    setRoomListSearch('')
+    setRoomListFilter(filterKey)
+  }
 
   const sortedRooms = useMemo(
     () => (roomStatus.rooms || []).slice().sort((a, b) => a.room_number - b.room_number),
@@ -1238,25 +1300,7 @@ function OwnerMain() {
         onlyOverdue: nextFilters.onlyOverdue ? 'true' : undefined,
       },
     })
-    const roomNumbers = [...new Set((data.payments || []).map((payment) => payment.room_number).filter(Boolean))]
-    const histories = await Promise.all(roomNumbers.map((roomNumber) =>
-      axios.get(`/api/staff/rooms/${roomNumber}/history`, { headers: getAuthHeaders() }).catch(() => null),
-    ))
-    const historicalSlips = new Map()
-    histories.forEach((response) => {
-      response?.data?.rentalHistory?.forEach((booking) => {
-        booking.payments?.forEach((payment) => {
-          if (payment.slip_path) historicalSlips.set(String(payment.id), payment.slip_path)
-        })
-      })
-    })
-    setPaymentLogs({
-      ...data,
-      payments: (data.payments || []).map((payment) => {
-        const paymentId = String(payment.id || '').replace(/^payment-/, '')
-        return { ...payment, slip_path: payment.slip_path || historicalSlips.get(paymentId) || null }
-      }),
-    })
+    setPaymentLogs({ ...data, payments: data.payments || [] })
   }
 
   const loadPendingSlipReviews = async () => {
@@ -1363,21 +1407,44 @@ function OwnerMain() {
     }
   }
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        setIsLoading(true)
-        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadExpenses(1), loadTrends(), loadOccupancyTrend(), loadStaff(), loadPaymentLogs(1), loadPendingSlipReviews(), loadOccupancyLogs(1)])
-      } catch (error) {
-        const message = error.response?.data?.message || 'ไม่สามารถโหลดข้อมูลหอพักได้'
-        setMessage('danger', message)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const getGroupLoaders = (filters) => ({
+    roomStatus: () => loadRoomStatus(),
+    overview: () => loadOverview(filters),
+    roomsOverview: () => loadOccupancySummary(filters),
+    roomsOccupancy: () => loadOccupancyTrend(filters),
+    roomsLogs: () => loadOccupancyLogs(1, { from: filters.from, to: filters.to }),
+    finance: () => Promise.all([loadIncome(filters), loadExpenses(1, filters), loadTrends(filters), loadPaymentLogs(1), loadPendingSlipReviews()]),
+    staff: () => loadStaff(),
+  })
 
-    fetchAll()
-  }, [])
+  const ensureDataGroups = (groups, { force = false, filters = paymentFilter } = {}) => {
+    const loaders = getGroupLoaders(filters)
+    groups.forEach((group) => {
+      if (!loaders[group] || dataGroupsInflightRef.current.has(group)) return
+      if (!force && dataGroupsLoadedRef.current.has(group)) return
+      dataGroupsInflightRef.current.add(group)
+      loaders[group]()
+        .then(() => {
+          dataGroupsLoadedRef.current.add(group)
+          setLoadedDataGroups(new Set(dataGroupsLoadedRef.current))
+        })
+        .catch((error) => {
+          dataGroupsLoadedRef.current.add(group)
+          setLoadedDataGroups(new Set(dataGroupsLoadedRef.current))
+          setMessage('danger', error.response?.data?.message || 'ไม่สามารถโหลดข้อมูลหอพักได้')
+        })
+        .finally(() => {
+          dataGroupsInflightRef.current.delete(group)
+        })
+    })
+  }
+
+  const neededDataGroups = getNeededDataGroups(activeTab, roomsSection)
+  const isLoading = neededDataGroups.some((group) => !loadedDataGroups.has(group))
+
+  useEffect(() => {
+    ensureDataGroups(getNeededDataGroups(activeTab, roomsSection))
+  }, [activeTab, roomsSection])
 
   useEffect(() => {
     if (activeTab !== 'utilities') return
@@ -1416,22 +1483,13 @@ function OwnerMain() {
     }
   }
 
-  const handlePaymentRangeChange = async (field, value) => {
+  const handlePaymentRangeChange = (field, value) => {
     const nextFilters = { ...paymentFilter, [field]: value || '' }
     setPaymentFilter(nextFilters)
-    try {
-      await Promise.all([
-        loadIncome(nextFilters),
-        loadOverview(nextFilters),
-        loadOccupancySummary(nextFilters),
-        loadExpenses(1, nextFilters),
-        loadOccupancyLogs(1, { from: nextFilters.from, to: nextFilters.to }),
-        loadTrends(nextFilters),
-        loadOccupancyTrend(nextFilters),
-      ])
-    } catch (error) {
-      setMessage('danger', error.response?.data?.message || 'ไม่สามารถกรองข้อมูลการเงินได้')
-    }
+    const visibleGroups = getNeededDataGroups(activeTab, roomsSection).filter((group) => DATE_DEPENDENT_GROUPS.includes(group))
+    DATE_DEPENDENT_GROUPS.filter((group) => !visibleGroups.includes(group)).forEach((group) => dataGroupsLoadedRef.current.delete(group))
+    setLoadedDataGroups(new Set(dataGroupsLoadedRef.current))
+    ensureDataGroups(visibleGroups, { force: true, filters: nextFilters })
   }
 
   const handleOccupancyFilterChange = async (field, value) => {
@@ -1564,7 +1622,7 @@ function OwnerMain() {
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
   const notifications = announcements.map(buildOwnerAnnouncementNotification)
   const newNotifications = notifications.filter((item) => !seenNotificationKeys.includes(item.key))
-  const notificationPageSize = 5
+  const notificationPageSize = 30
   const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))
   const notificationPage = Math.min(notifPage, notificationPages)
   const visibleNotifications = notifications.slice((notificationPage - 1) * notificationPageSize, notificationPage * notificationPageSize)
@@ -1575,7 +1633,35 @@ function OwnerMain() {
     localStorage.setItem(getOwnerNotificationStorageKey(), JSON.stringify(keys))
   }
   const ownerSummaryTiles = {
-    rooms: statCards.map((card) => ({ key: card.label, icon: card.icon, label: card.label, value: card.value, hint: card.subtitle, tone: card.tone })),
+    rooms: roomsSection === 'occupancy'
+      ? [
+          { key: 'occupants', tone: 'blue', icon: 'rooms', label: 'ผู้เข้าพักปัจจุบัน', value: `${currentOccupants.length} คน`, hint: 'ผู้เช่าที่พักอยู่ตอนนี้' },
+          { key: 'avg-rate', tone: 'purple', icon: 'margin', label: 'อัตราเข้าพักเฉลี่ย', value: `${occupancyTrendSummary.avgRate.toFixed(1)}%`, hint: `เฉลี่ยจาก ${occupancyTrendSummary.periodCount} ช่วงเวลา` },
+          { key: 'peak', tone: 'orange', icon: 'profit', label: 'ผู้พักสูงสุด', value: `${occupancyTrendSummary.peakOccupied} ห้อง`, hint: `อัตราสูงสุด ${occupancyTrendSummary.peakRate.toFixed(1)}%` },
+          {
+            key: 'net-move',
+            tone: occupancyTrendSummary.moveIns - occupancyTrendSummary.moveOuts < 0 ? 'red' : 'green',
+            icon: 'income',
+            label: 'ย้ายเข้า – ย้ายออก',
+            value: `${occupancyTrendSummary.moveIns} / ${occupancyTrendSummary.moveOuts}`,
+            hint: `สุทธิ ${occupancyTrendSummary.moveIns - occupancyTrendSummary.moveOuts >= 0 ? '+' : ''}${occupancyTrendSummary.moveIns - occupancyTrendSummary.moveOuts} ในช่วงที่เลือก`,
+          },
+        ]
+      : roomsSection === 'logs'
+        ? [
+            { key: 'log-total', tone: 'blue', icon: 'rooms', label: 'รายการทั้งหมด', value: `${(occupancyLogs.summary?.moveIns || 0) + (occupancyLogs.summary?.moveOuts || 0)} รายการ`, hint: 'ตามช่วงวันที่และคำค้นหา' },
+            { key: 'log-in', tone: 'green', icon: 'income', label: 'ย้ายเข้า', value: `${occupancyLogs.summary?.moveIns || 0} ครั้ง`, hint: 'การจองห้องใหม่' },
+            { key: 'log-out', tone: 'orange', icon: 'expense', label: 'ย้ายออก', value: `${occupancyLogs.summary?.moveOuts || 0} ครั้ง`, hint: 'คำขอย้ายออกที่อนุมัติแล้ว' },
+            {
+              key: 'log-net',
+              tone: (occupancyLogs.summary?.moveIns || 0) - (occupancyLogs.summary?.moveOuts || 0) < 0 ? 'red' : 'purple',
+              icon: 'margin',
+              label: 'ผลต่างสุทธิ',
+              value: `${(occupancyLogs.summary?.moveIns || 0) - (occupancyLogs.summary?.moveOuts || 0) >= 0 ? '+' : ''}${(occupancyLogs.summary?.moveIns || 0) - (occupancyLogs.summary?.moveOuts || 0)}`,
+              hint: 'ย้ายเข้าหักย้ายออก',
+            },
+          ]
+        : statCards.map((card) => ({ key: card.label, icon: card.icon, label: card.label, value: card.value, hint: card.subtitle, tone: card.tone })),
     finance: [
       { key: 'income', tone: 'blue', icon: 'income', label: 'รายรับรวม', value: formatSignedCurrency(totalIncome), hint: 'รวมรายการชำระเงินที่สำเร็จตามช่วงที่เลือก' },
       { key: 'expense', tone: 'orange', icon: 'expense', label: 'รายจ่ายรวม', value: formatSignedCurrency(totalExpense), hint: 'รวมรายจ่ายทั้งหมดตามช่วงที่เลือก' },
@@ -1867,7 +1953,7 @@ function OwnerMain() {
                   <h3>ภาพรวมห้องพัก</h3>
                   <p className="owner-ov-caption">สถานะห้องทั้งหมด {roomOccupancyStats.total} ห้อง ณ ปัจจุบัน</p>
                 </div>
-                <button type="button" className="owner-ov-link" onClick={() => setRoomListFilter('all')}>
+                <button type="button" className="owner-ov-link" onClick={() => openRoomList('all')}>
                   ดูห้องทั้งหมด
                   <span aria-hidden="true">›</span>
                 </button>
@@ -1902,7 +1988,7 @@ function OwnerMain() {
                 <ul className="owner-ov-status-list">
                   {roomStatusBreakdown.map((item) => (
                     <li key={item.key}>
-                      <button type="button" className="owner-ov-status" style={{ '--ov-tone': item.color }} onClick={() => setRoomListFilter(item.filter)}>
+                      <button type="button" className="owner-ov-status" style={{ '--ov-tone': item.color }} onClick={() => openRoomList(item.filter)}>
                         <span className="owner-ov-status-dot" aria-hidden="true" />
                         <span className="owner-ov-status-text">
                           <span className="owner-ov-status-label">{item.label}</span>
@@ -2021,6 +2107,8 @@ function OwnerMain() {
                 {
                   key: 'occupied',
                   title: 'ผู้เข้าพักปัจจุบัน',
+                  caption: 'เข้าพักล่าสุดอยู่บนสุด',
+                  icon: 'user',
                   unit: 'คน',
                   total: currentOccupants.length,
                   items: paginatedOccupants,
@@ -2031,10 +2119,13 @@ function OwnerMain() {
                   primary: (room) => `${room.first_name || ''} ${room.last_name || ''}`.trim() || 'ไม่ระบุชื่อ',
                   secondary: (room) => `เข้าพัก ${formatDate(room.rental_start_date)}`,
                   side: (room) => room.phone || '-',
+                  alert: (room) => (room.status === 'overdue' ? 'ค้างชำระ' : null),
                 },
                 {
                   key: 'vacant',
                   title: 'ห้องว่าง',
+                  caption: 'ว่างล่าสุดอยู่บนสุด',
+                  icon: 'door',
                   unit: 'ห้อง',
                   total: vacantRoomsList.length,
                   items: paginatedVacantRooms,
@@ -2043,12 +2134,15 @@ function OwnerMain() {
                   setPage: setVacantRoomsPage,
                   empty: 'ไม่มีห้องว่างในขณะนี้',
                   primary: () => 'พร้อมให้เช่า',
-                  secondary: () => 'ว่าง',
+                  secondary: (room) => (room.vacated_at ? `ว่างตั้งแต่ ${formatDate(room.vacated_at)}` : 'ยังไม่เคยมีผู้เช่า'),
                   side: (room) => `฿${formatCurrency(room.price)}`,
+                  alert: () => null,
                 },
                 {
                   key: 'maintenance',
                   title: 'ห้องที่กำลังซ่อม',
+                  caption: 'แจ้งซ่อมล่าสุดอยู่บนสุด',
+                  icon: 'tool',
                   unit: 'ห้อง',
                   total: maintenanceRoomsList.length,
                   items: paginatedMaintenanceRooms,
@@ -2057,42 +2151,76 @@ function OwnerMain() {
                   setPage: setMaintenanceRoomsPage,
                   empty: 'ไม่มีห้องที่กำลังซ่อมบำรุง',
                   primary: (room) => `${room.first_name || ''} ${room.last_name || ''}`.trim() || 'ไม่มีผู้เช่า',
-                  secondary: () => 'กำลังซ่อมบำรุง',
+                  secondary: (room) => (room.maintenance_since ? `แจ้งซ่อม ${formatDate(room.maintenance_since)}` : 'กำลังซ่อมบำรุง'),
                   side: (room) => room.phone || '-',
+                  alert: () => null,
                 },
               ].map((list) => (
                 <div key={list.key} className={`owner-panel owner-ov-list is-${list.key}`}>
                   <div className="owner-ov-list-head">
-                    <h3>{list.title}</h3>
-                    <span className="owner-ov-list-count">{list.total} {list.unit}</span>
-                    <button type="button" className="owner-ov-link" onClick={() => setRoomListFilter(list.key)}>
+                    <span className="owner-ov-list-icon" aria-hidden="true">
+                      <OwnerListIcon name={list.icon} size={18} />
+                    </span>
+                    <div className="owner-ov-list-heading">
+                      <h3>{list.title}</h3>
+                      <small>{list.caption}</small>
+                    </div>
+                    <div className="owner-ov-list-total">
+                      <strong>{list.total}</strong>
+                      <small>{list.unit}</small>
+                    </div>
+                  </div>
+                  <div className="owner-ov-list-body">
+                    {list.items.length ? (
+                      list.items.map((room, index) => {
+                        const alert = list.alert(room)
+                        const isLatest = list.page === 1 && index === 0
+                        return (
+                          <button key={room.room_number} type="button" className={`owner-ov-row${alert ? ' has-alert' : ''}`} onClick={() => handleRoomClick(room)}>
+                            <span className="owner-ov-row-room">
+                              <small>ห้อง</small>
+                              {room.room_number}
+                            </span>
+                            <span className="owner-ov-row-text">
+                              <strong>
+                                <span className="owner-ov-row-name">{list.primary(room)}</span>
+                                {isLatest && <span className="owner-ov-row-latest">ล่าสุด</span>}
+                              </strong>
+                              <small>{list.secondary(room)}</small>
+                            </span>
+                            {alert ? (
+                              <span className="owner-ov-row-alert">{alert}</span>
+                            ) : (
+                              <span className="owner-ov-row-side">{list.side(room)}</span>
+                            )}
+                            <span className="owner-ov-row-chevron" aria-hidden="true">›</span>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="owner-ov-list-empty">
+                        <span aria-hidden="true">
+                          <OwnerListIcon name={list.icon} size={20} />
+                        </span>
+                        {list.empty}
+                      </div>
+                    )}
+                  </div>
+                  <div className="owner-ov-list-foot">
+                    {list.total > SUMMARY_PAGE_SIZE ? (
+                      <div className="owner-ov-pager">
+                        <button type="button" aria-label="หน้าก่อนหน้า" disabled={list.page <= 1} onClick={() => list.setPage((page) => page - 1)}>‹</button>
+                        <span>{list.page} / {list.totalPages}</span>
+                        <button type="button" aria-label="หน้าถัดไป" disabled={list.page >= list.totalPages} onClick={() => list.setPage((page) => page + 1)}>›</button>
+                      </div>
+                    ) : (
+                      <span className="owner-ov-list-foot-note">แสดงครบ {list.total} รายการ</span>
+                    )}
+                    <button type="button" className="owner-ov-link" onClick={() => openRoomList(list.key)}>
                       ดูทั้งหมด
                       <span aria-hidden="true">›</span>
                     </button>
                   </div>
-                  <div className="owner-ov-list-body">
-                    {list.items.length ? (
-                      list.items.map((room) => (
-                        <button key={room.room_number} type="button" className="owner-ov-row" onClick={() => handleRoomClick(room)}>
-                          <span className="owner-ov-row-room">{room.room_number}</span>
-                          <span className="owner-ov-row-text">
-                            <strong>{list.primary(room)}</strong>
-                            <small>{list.secondary(room)}</small>
-                          </span>
-                          <span className="owner-ov-row-side">{list.side(room)}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="owner-ov-list-empty">{list.empty}</div>
-                    )}
-                  </div>
-                  {list.total > SUMMARY_PAGE_SIZE && (
-                    <div className="owner-ov-pager">
-                      <button type="button" aria-label="หน้าก่อนหน้า" disabled={list.page <= 1} onClick={() => list.setPage((page) => page - 1)}>‹</button>
-                      <span>{list.page} / {list.totalPages}</span>
-                      <button type="button" aria-label="หน้าถัดไป" disabled={list.page >= list.totalPages} onClick={() => list.setPage((page) => page + 1)}>›</button>
-                    </div>
-                  )}
                 </div>
               ))}
             </section>
@@ -2122,12 +2250,6 @@ function OwnerMain() {
 
               {occupancyTrendChartData.length ? (
                 <>
-                <div className="staff-summary-tiles owner-stat-tiles owner-occupancy-stat-grid">
-                  <OwnerStatTile tone="blue" icon="rooms" label="ผู้เข้าพักปัจจุบัน" value={`${currentOccupants.length} คน`} hint="ผู้เช่าที่มีข้อมูลอยู่ในห้องปัจจุบัน" />
-                  <OwnerStatTile tone="green" icon="rooms" label="ห้องที่มีผู้พัก" value={`${roomStatus.occupiedCount || 0} ห้อง`} hint={`จากห้องทั้งหมด ${roomStatus.totalRooms || 0} ห้อง`} />
-                  <OwnerStatTile tone="purple" icon="margin" label="อัตราการเข้าพักเฉลี่ย" value={`${occupancyTrendSummary.avgRate.toFixed(1)}%`} hint={`เฉลี่ยจาก ${occupancyTrendSummary.periodCount} ช่วงเวลาที่แสดง`} />
-                  <OwnerStatTile tone="orange" icon="profit" label="ผู้พักสูงสุด" value={`${occupancyTrendSummary.peakOccupied} ห้อง`} hint={`อัตราเข้าพักสูงสุด ${occupancyTrendSummary.peakRate.toFixed(1)}%`} />
-                </div>
                 <div className={`owner-linecard-chart owner-finance-trend-chart ${isOccupancyTrendLoading ? 'is-loading' : ''}`}>
                   <ResponsiveContainer width="100%" height={280}>
                     {occupancyTrendChartData.length >= 2 ? (
@@ -3567,7 +3689,7 @@ function OwnerMain() {
           </>
         )}
 
-        {!isLoading && (
+        {(
           <>
 
             {displayRoomDetail && (() => {
@@ -3577,10 +3699,10 @@ function OwnerMain() {
               const tenantName = detailTenant ? `${detailTenant.first_name || ''} ${detailTenant.last_name || ''}`.trim() : ''
               const contractStart = detailRoom.rental_start_date ? new Date(detailRoom.rental_start_date).getTime() : null
               const contractEnd = detailRoom.rental_end_date ? new Date(detailRoom.rental_end_date).getTime() : null
-              const contractProgress = contractStart && contractEnd && contractEnd > contractStart
-                ? Math.min(100, Math.max(0, ((roomDetailOpenedAt - contractStart) / (contractEnd - contractStart)) * 100))
-                : null
+              const hasContract = Boolean(contractStart && contractEnd && contractEnd > contractStart)
+              const contractMonths = hasContract ? Math.max(1, Math.round((contractEnd - contractStart) / (86400000 * 30.44))) : 0
               const contractDaysLeft = contractEnd ? Math.ceil((contractEnd - roomDetailOpenedAt) / 86400000) : null
+              const contractTone = contractDaysLeft === null ? 'normal' : contractDaysLeft <= 0 ? 'expired' : contractDaysLeft <= 30 ? 'warning' : 'normal'
               const infoTiles = [
                 { key: 'start', tone: 'green', label: 'วันเริ่มสัญญา', value: formatDate(detailRoom.rental_start_date) },
                 { key: 'end', tone: 'amber', label: 'วันสิ้นสุดสัญญา', value: formatDate(detailRoom.rental_end_date) },
@@ -3642,21 +3764,40 @@ function OwnerMain() {
                             ))}
                           </div>
 
-                          {detailTenant && contractProgress !== null && (
-                            <div className="owner-rd-contract">
-                              <div className="owner-rd-contract-head">
-                                <span>ระยะเวลาสัญญา</span>
-                                <strong className={contractDaysLeft !== null && contractDaysLeft <= 30 ? 'is-warning' : ''}>
-                                  {contractDaysLeft !== null && contractDaysLeft > 0 ? `เหลืออีก ${contractDaysLeft} วัน` : 'ครบกำหนดสัญญาแล้ว'}
-                                </strong>
+                          {detailTenant && hasContract && (
+                            <div className={`owner-rd-contract is-${contractTone}`}>
+                              <div className="owner-rd-contract-info">
+                                <span className="owner-rd-contract-icon" aria-hidden="true">
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" />
+                                    <path d="M14 3v6h6M8 13h8M8 17h5" />
+                                  </svg>
+                                </span>
+                                <div>
+                                  <small>สัญญาเช่า</small>
+                                  <strong>{contractMonths} เดือน</strong>
+                                </div>
                               </div>
-                              <div className="owner-rd-contract-bar" aria-hidden="true">
-                                <span style={{ width: `${contractProgress}%` }} />
+                              <div className="owner-rd-contract-dates">
+                                <div>
+                                  <small>เริ่ม</small>
+                                  <strong>{formatDate(detailRoom.rental_start_date)}</strong>
+                                </div>
+                                <span className="owner-rd-contract-arrow" aria-hidden="true">→</span>
+                                <div>
+                                  <small>สิ้นสุด</small>
+                                  <strong>{formatDate(detailRoom.rental_end_date)}</strong>
+                                </div>
                               </div>
-                              <div className="owner-rd-contract-foot">
-                                <small>{formatDate(detailRoom.rental_start_date)}</small>
-                                <small>{Math.round(contractProgress)}%</small>
-                                <small>{formatDate(detailRoom.rental_end_date)}</small>
+                              <div className="owner-rd-contract-left">
+                                {contractTone === 'expired' ? (
+                                  <strong>ครบกำหนดแล้ว</strong>
+                                ) : (
+                                  <>
+                                    <strong>{contractDaysLeft}</strong>
+                                    <small>วันที่เหลือ</small>
+                                  </>
+                                )}
                               </div>
                             </div>
                           )}
@@ -4087,11 +4228,26 @@ function OwnerMain() {
             {displayRoomListFilter && (
               <div className={`owner-modal-backdrop${isRoomListClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setRoomListFilter(null)}>
                 <section className={`owner-modal owner-roomlist-modal${isRoomListClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="room-list-title" onClick={(event) => event.stopPropagation()}>
-                  <div className="owner-modal-header">
+                  <div className="owner-modal-header has-search">
                     <div>
                       <h3 id="room-list-title">{ROOM_LIST_FILTERS.find((item) => item.key === displayRoomListFilter)?.title || 'ห้องทั้งหมด'}</h3>
-                      <p className="owner-modal-subtext">{roomListItems.length} ห้อง · คลิกที่ห้องเพื่อดูรายละเอียด</p>
+                      <p className="owner-modal-subtext">
+                        {roomListKeyword ? `พบ ${visibleRoomListItems.length} จาก ${roomListItems.length} ห้อง` : `${roomListItems.length} ห้อง · คลิกที่ห้องเพื่อดูรายละเอียด`}
+                      </p>
                     </div>
+                    <label className="owner-modal-search">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <input
+                        type="search"
+                        value={roomListSearch}
+                        onChange={(event) => setRoomListSearch(event.target.value)}
+                        placeholder="ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร"
+                        aria-label="ค้นหาห้อง"
+                      />
+                    </label>
                     <button type="button" className="owner-modal-close" onClick={() => setRoomListFilter(null)} aria-label="ปิดรายการห้อง">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
                         <line x1="6" y1="6" x2="18" y2="18" />
@@ -4116,9 +4272,9 @@ function OwnerMain() {
                   </div>
 
                   <div className="owner-modal-body">
-                    {roomListItems.length ? (
+                    {visibleRoomListItems.length ? (
                       <div className="owner-roomlist-grid">
-                        {roomListItems.map((room) => (
+                        {visibleRoomListItems.map((room) => (
                           <button
                             key={room.room_number}
                             type="button"
@@ -4167,7 +4323,7 @@ function OwnerMain() {
                         ))}
                       </div>
                     ) : (
-                      <div className="owner-ov-list-empty">ไม่มีห้องในหมวดนี้</div>
+                      <div className="owner-ov-list-empty">{roomListKeyword ? 'ไม่พบห้องที่ตรงกับคำค้นหา' : 'ไม่มีห้องในหมวดนี้'}</div>
                     )}
                   </div>
                 </section>

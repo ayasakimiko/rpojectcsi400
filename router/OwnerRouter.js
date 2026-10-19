@@ -133,15 +133,18 @@ router.get("/logs/audit", async (req, res) => {
       LEFT JOIN Staff s ON al.actor_role = 'Staff' AND s.id = al.actor_id
       LEFT JOIN Admin a ON al.actor_role = 'Admin' AND a.id = al.actor_id
       LEFT JOIN Owner o ON al.actor_role = 'Owner' AND o.id = al.actor_id`;
-    const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM AuditLog al ${joins} ${whereClause}`, params);
-    const [logs] = await pool.query(
+    const countJoins = search ? joins : "";
+    const [[countRows], [logs]] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS total FROM AuditLog al ${countJoins} ${whereClause}`, params),
+      pool.query(
       `SELECT al.id, al.actor_id, al.actor_role, al.method, al.endpoint, al.status_code, al.ip_address, al.created_at,
               COALESCE(CONCAT(c.first_name, ' ', c.last_name), CONCAT(s.first_name, ' ', s.last_name),
                        CONCAT(a.first_name, ' ', a.last_name), CONCAT(o.first_name, ' ', o.last_name)) AS actor_name
        FROM AuditLog al ${joins} ${whereClause}
        ORDER BY al.created_at DESC, al.id DESC LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
+        [...params, pageSize, offset],
+      ),
+    ]);
     return res.json({ logs, total: countRows[0].total, page, pageSize });
   } catch (error) {
     console.error("Owner fetch audit log error:", error);
@@ -168,13 +171,6 @@ router.get("/overview", async (req, res) => {
     if (dateError) return res.status(400).json({ message: dateError });
 
     const pool = getPool();
-
-    const [roomRows] = await pool.query(
-      `SELECT COUNT(*) AS totalRooms, SUM(is_booked = TRUE) AS occupiedRooms FROM Room`,
-    );
-    const totalRooms = roomRows[0].totalRooms;
-    const occupiedRooms = Number(roomRows[0].occupiedRooms) || 0;
-    const vacantRooms = totalRooms - occupiedRooms;
 
     const from = typeof req.query.from === "string" && req.query.from ? req.query.from : null;
     const to = typeof req.query.to === "string" && req.query.to ? req.query.to : null;
@@ -203,16 +199,23 @@ router.get("/overview", async (req, res) => {
       ? `AND ${dateConditions.map((c) => `mr.created_at ${c}`).join(" AND ")}`
       : "";
 
-    const [[{ total: incomeTotal }]] = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM Payment WHERE status = 'paid' ${incomeDateClause}`,
-      rangeParams,
-    );
-    const [[{ total: expenseTotal }]] = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM Expense ${expenseDateClause}`,
-      rangeParams,
-    );
-
-    const [[{ overdueCount }]] = await pool.query(
+    const [
+      [roomRows],
+      [[{ total: incomeTotal }]],
+      [[{ total: expenseTotal }]],
+      [[{ overdueCount }]],
+      [[{ maintenanceCount }]],
+    ] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS totalRooms, SUM(is_booked = TRUE) AS occupiedRooms FROM Room`),
+      pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM Payment WHERE status = 'paid' ${incomeDateClause}`,
+        rangeParams,
+      ),
+      pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM Expense ${expenseDateClause}`,
+        rangeParams,
+      ),
+      pool.query(
       `SELECT COUNT(*) AS overdueCount
        FROM Room r
        WHERE r.is_booked = TRUE
@@ -221,16 +224,19 @@ router.get("/overview", async (req, res) => {
            JOIN Payment p ON p.booking_id = b.id
            WHERE b.room_id = r.id AND p.status = 'paid' ${overduePaymentClause}
          )`,
-      rangeParams,
-    );
+        rangeParams,
+      ),
+      pool.query(
+        `SELECT COUNT(DISTINCT mr.room_number) AS maintenanceCount
+         FROM MaintenanceRequest mr
+         WHERE mr.status IN ('pending', 'in_progress', 'accepted') ${maintenanceDateClause}`,
+        rangeParams,
+      ),
+    ]);
 
-    const [[{ maintenanceCount }]] = await pool.query(
-      `SELECT COUNT(DISTINCT mr.room_number) AS maintenanceCount
-       FROM MaintenanceRequest mr
-       WHERE mr.status IN ('pending', 'in_progress', 'accepted') ${maintenanceDateClause}`,
-      rangeParams,
-    );
-
+    const totalRooms = Number(roomRows[0].totalRooms) || 0;
+    const occupiedRooms = Number(roomRows[0].occupiedRooms) || 0;
+    const vacantRooms = totalRooms - occupiedRooms;
     const totalIncome = Number(incomeTotal);
     const totalExpense = Number(expenseTotal);
 
@@ -251,6 +257,25 @@ router.get("/overview", async (req, res) => {
   }
 });
 
+let lastOccupancySnapshot = "";
+
+function recordOccupancySnapshot(pool, totalRooms, occupiedCount, vacantCount) {
+  const snapshotKey = `${toDateKey(new Date())}|${totalRooms}|${occupiedCount}|${vacantCount}`;
+  if (snapshotKey === lastOccupancySnapshot) return;
+  lastOccupancySnapshot = snapshotKey;
+  pool
+    .query(
+      `INSERT INTO RoomOccupancySnapshot (snapshot_date, total_rooms, occupied_count, vacant_count)
+       VALUES (CURDATE(), ?, ?, ?)
+       ON DUPLICATE KEY UPDATE total_rooms = VALUES(total_rooms), occupied_count = VALUES(occupied_count), vacant_count = VALUES(vacant_count)`,
+      [totalRooms, occupiedCount, vacantCount],
+    )
+    .catch((snapshotError) => {
+      lastOccupancySnapshot = "";
+      console.error("Owner record occupancy snapshot error:", snapshotError);
+    });
+}
+
 // สรุปสถานะห้องพักและสัดส่วนการเข้าพัก
 router.get("/rooms/status", async (req, res) => {
   try {
@@ -258,6 +283,10 @@ router.get("/rooms/status", async (req, res) => {
     const [rooms] = await pool.query(
       `SELECT r.room_number, r.is_booked, r.price, r.rental_start_date, r.rental_end_date,
               c.id AS customer_id, c.first_name, c.last_name, c.phone,
+              (SELECT MAX(tr.completed_at) FROM TenantRequest tr
+               WHERE tr.room_number = r.room_number AND tr.type = 'moveout' AND tr.status = 'approved') AS vacated_at,
+              (SELECT MIN(mr.created_at) FROM MaintenanceRequest mr
+               WHERE mr.room_number = r.room_number AND mr.status IN ('pending', 'in_progress', 'accepted')) AS maintenance_since,
               CASE
                 WHEN r.is_booked = FALSE THEN 'vacant'
                 WHEN EXISTS (
@@ -276,25 +305,14 @@ router.get("/rooms/status", async (req, res) => {
        LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
        ORDER BY r.room_number ASC`,
     );
-    const vacantRooms = rooms.filter((room) => room.status === "vacant");
-    const occupiedRooms = rooms.filter((room) => room.is_booked);
-
-    try {
-      await pool.query(
-        `INSERT INTO RoomOccupancySnapshot (snapshot_date, total_rooms, occupied_count, vacant_count)
-         VALUES (CURDATE(), ?, ?, ?)
-         ON DUPLICATE KEY UPDATE total_rooms = VALUES(total_rooms), occupied_count = VALUES(occupied_count), vacant_count = VALUES(vacant_count)`,
-        [rooms.length, occupiedRooms.length, vacantRooms.length],
-      );
-    } catch (snapshotError) {
-      console.error("Owner record occupancy snapshot error:", snapshotError);
-    }
+    const vacantCount = rooms.filter((room) => room.status === "vacant").length;
+    const occupiedCount = rooms.filter((room) => room.is_booked).length;
+    recordOccupancySnapshot(pool, rooms.length, occupiedCount, vacantCount);
 
     return res.json({
       totalRooms: rooms.length,
-      vacantCount: vacantRooms.length,
-      occupiedCount: occupiedRooms.length,
-      vacantRooms,
+      vacantCount,
+      occupiedCount,
       rooms,
     });
   } catch (error) {
@@ -389,13 +407,13 @@ router.get("/income", async (req, res) => {
     }
     const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
-    const [totalRows] = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM Payment ${whereClause}`, params);
     const [byType] = await pool.query(
       `SELECT type, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count FROM Payment ${whereClause} GROUP BY type`,
       params,
     );
+    const totalIncome = byType.reduce((sum, row) => sum + Number(row.total || 0), 0);
 
-    return res.json({ totalIncome: totalRows[0].total, byType });
+    return res.json({ totalIncome, byType });
   } catch (error) {
     console.error("Owner fetch income error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -469,22 +487,24 @@ router.get("/trends", async (req, res) => {
       const fromKey = toDateKey(fromDate);
       const toKey = toDateKey(toDate);
 
-      const [incomeRows] = await pool.query(
-        `SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS period,
-                COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
-         FROM Payment
-         WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
-         GROUP BY period`,
-        [fromKey, toKey],
-      );
-      const [expenseRows] = await pool.query(
-        `SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS period,
-                COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
-         FROM Expense
-         WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
-         GROUP BY period`,
-        [fromKey, toKey],
-      );
+      const [[incomeRows], [expenseRows]] = await Promise.all([
+        pool.query(
+          `SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS period,
+                  COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
+           FROM Payment
+           WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
+           GROUP BY period`,
+          [fromKey, toKey],
+        ),
+        pool.query(
+          `SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS period,
+                  COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
+           FROM Expense
+           WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
+           GROUP BY period`,
+          [fromKey, toKey],
+        ),
+      ]);
 
       const incomeByDay = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));
       const expenseByDay = new Map(expenseRows.map((row) => [row.period, Number(row.total)]));
@@ -529,22 +549,24 @@ router.get("/trends", async (req, res) => {
     const requestedFromKey = toDateKey(fromDate);
     const queryFromKey = requestedFromKey > rangeStartKey ? requestedFromKey : rangeStartKey;
     const queryToKey = toDateKey(toDate);
-    const [incomeRows] = await pool.query(
-      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period,
-              COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
-       FROM Payment
-       WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
-       GROUP BY period`,
-      [queryFromKey, queryToKey],
-    );
-    const [expenseRows] = await pool.query(
-      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period,
-              COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
-       FROM Expense
-       WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
-       GROUP BY period`,
-      [queryFromKey, queryToKey],
-    );
+    const [[incomeRows], [expenseRows]] = await Promise.all([
+      pool.query(
+        `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period,
+                COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
+         FROM Payment
+         WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
+         GROUP BY period`,
+        [queryFromKey, queryToKey],
+      ),
+      pool.query(
+        `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period,
+                COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
+         FROM Expense
+         WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
+         GROUP BY period`,
+        [queryFromKey, queryToKey],
+      ),
+    ]);
 
     const incomeByMonth = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));
     const expenseByMonth = new Map(expenseRows.map((row) => [row.period, Number(row.total)]));
@@ -589,7 +611,7 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
 
     const daySpan = Math.round((toDate - fromDate) / 86400000) + 1;
     const movementPeriodFormat = daySpan <= TRENDS_DAILY_THRESHOLD_DAYS ? "%Y-%m-%d" : "%Y-%m";
-    const [movementRows] = await pool.query(
+    const movementQuery = pool.query(
       `SELECT DATE_FORMAT(events.event_date, ?) AS period,
               SUM(events.event_type = 'move_in') AS move_ins,
               SUM(events.event_type = 'move_out') AS move_outs
@@ -605,7 +627,7 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
        GROUP BY period`,
       [movementPeriodFormat, toDateKey(fromDate), toDateKey(toDate)],
     );
-    const movementByPeriod = new Map(movementRows.map((row) => [row.period, {
+    const toMovementMap = ([movementRows]) => new Map(movementRows.map((row) => [row.period, {
       moveIns: Number(row.move_ins || 0),
       moveOuts: Number(row.move_outs || 0),
     }]));
@@ -614,20 +636,28 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
       const fromKey = toDateKey(fromDate);
       const toKey = toDateKey(toDate);
 
-      const [rows] = await pool.query(
-        `SELECT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS period, total_rooms, occupied_count, vacant_count
-         FROM RoomOccupancySnapshot
-         WHERE snapshot_date <= ?
-         ORDER BY snapshot_date ASC`,
-        [toKey],
-      );
+      const [movementResult, [rows], [beforeRows]] = await Promise.all([
+        movementQuery,
+        pool.query(
+          `SELECT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS period, total_rooms, occupied_count, vacant_count
+           FROM RoomOccupancySnapshot
+           WHERE snapshot_date >= ? AND snapshot_date <= ?
+           ORDER BY snapshot_date ASC`,
+          [fromKey, toKey],
+        ),
+        pool.query(
+          `SELECT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS period, total_rooms, occupied_count, vacant_count
+           FROM RoomOccupancySnapshot
+           WHERE snapshot_date < ?
+           ORDER BY snapshot_date DESC
+           LIMIT 1`,
+          [fromKey],
+        ),
+      ]);
+      const movementByPeriod = toMovementMap(movementResult);
       const byDay = new Map(rows.map((row) => [row.period, row]));
 
-      let lastKnown = null;
-      for (const row of rows) {
-        if (row.period > fromKey) break;
-        lastKnown = row;
-      }
+      let lastKnown = beforeRows[0] || null;
 
       const trends = [];
       const cursor = new Date(fromDate);
@@ -662,23 +692,33 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
     );
     const rangeStartMonth = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - (monthsSpan - 1), 1);
     const rangeStartKey = `${rangeStartMonth.getFullYear()}-${String(rangeStartMonth.getMonth() + 1).padStart(2, "0")}`;
+    const rangeStartDate = `${rangeStartKey}-01`;
 
-    const [rows] = await pool.query(
-      `SELECT DATE_FORMAT(snapshot_date, '%Y-%m') AS period,
-              AVG(total_rooms) AS total_rooms, AVG(occupied_count) AS occupied_count, AVG(vacant_count) AS vacant_count
-       FROM RoomOccupancySnapshot
-       WHERE snapshot_date <= ?
-       GROUP BY period
-       ORDER BY period ASC`,
-      [toDateKey(toDate)],
-    );
+    const [movementResult, [rows], [beforeRows]] = await Promise.all([
+      movementQuery,
+      pool.query(
+        `SELECT DATE_FORMAT(snapshot_date, '%Y-%m') AS period,
+                AVG(total_rooms) AS total_rooms, AVG(occupied_count) AS occupied_count, AVG(vacant_count) AS vacant_count
+         FROM RoomOccupancySnapshot
+         WHERE snapshot_date >= ? AND snapshot_date <= ?
+         GROUP BY period
+         ORDER BY period ASC`,
+        [rangeStartDate, toDateKey(toDate)],
+      ),
+      pool.query(
+        `SELECT DATE_FORMAT(snapshot_date, '%Y-%m') AS period,
+                AVG(total_rooms) AS total_rooms, AVG(occupied_count) AS occupied_count, AVG(vacant_count) AS vacant_count
+         FROM RoomOccupancySnapshot
+         WHERE snapshot_date >= DATE_FORMAT((SELECT MAX(snapshot_date) FROM RoomOccupancySnapshot WHERE snapshot_date < ?), '%Y-%m-01')
+           AND snapshot_date < ?
+         GROUP BY period`,
+        [rangeStartDate, rangeStartDate],
+      ),
+    ]);
+    const movementByPeriod = toMovementMap(movementResult);
     const byMonth = new Map(rows.map((row) => [row.period, row]));
 
-    let lastKnownMonth = null;
-    for (const row of rows) {
-      if (row.period >= rangeStartKey) break;
-      lastKnownMonth = row;
-    }
+    let lastKnownMonth = beforeRows[0] || null;
 
     const trends = [];
     for (let i = monthsSpan - 1; i >= 0; i -= 1) {
@@ -807,19 +847,17 @@ router.get("/logs/payments", async (req, res) => {
       WHERE r.is_booked = 1
     `;
 
-    const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS total FROM (${combinedQuery}) AS combined ${whereClause}`,
-      params,
-    );
+    const [[countRows], [payments]] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS total FROM (${combinedQuery}) AS combined ${whereClause}`, params),
+      pool.query(
+        `SELECT * FROM (${combinedQuery}) AS combined
+         ${whereClause}
+         ORDER BY payment_date DESC, created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, PAYMENT_LOG_PAGE_SIZE, offset],
+      ),
+    ]);
     const total = countRows[0].total;
-
-    const [payments] = await pool.query(
-      `SELECT * FROM (${combinedQuery}) AS combined
-       ${whereClause}
-       ORDER BY payment_date DESC, created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, PAYMENT_LOG_PAGE_SIZE, offset],
-    );
 
     return res.json({ payments, total, page, pageSize: PAYMENT_LOG_PAGE_SIZE });
   } catch (error) {
@@ -844,11 +882,11 @@ router.get("/logs/occupancy", async (req, res) => {
     const params = [];
 
     if (typeof req.query.from === "string" && req.query.from) {
-      conditions.push(`DATE(event_date) >= ?`);
+      conditions.push(`event_date >= ?`);
       params.push(req.query.from);
     }
     if (typeof req.query.to === "string" && req.query.to) {
-      conditions.push(`DATE(event_date) <= ?`);
+      conditions.push(`event_date < DATE_ADD(?, INTERVAL 1 DAY)`);
       params.push(req.query.to);
     }
     const search = parseSearch(req.query.search);
@@ -856,9 +894,12 @@ router.get("/logs/occupancy", async (req, res) => {
       conditions.push(`(CAST(room_number AS CHAR) LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ?)`);
       params.push(`%${search}%`, `%${search}%`);
     }
-    if (req.query.type === "move_in" || req.query.type === "move_out") {
+    const summaryWhereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const summaryParams = [...params];
+    const typeFilter = req.query.type === "move_in" || req.query.type === "move_out" ? req.query.type : null;
+    if (typeFilter) {
       conditions.push(`event_type = ?`);
-      params.push(req.query.type);
+      params.push(typeFilter);
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -878,21 +919,24 @@ router.get("/logs/occupancy", async (req, res) => {
       WHERE tr.type = 'moveout' AND tr.status = 'approved'
     `;
 
-    const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS total FROM (${combinedQuery}) AS combined ${whereClause}`,
-      params,
-    );
-    const total = countRows[0].total;
+    const [[summaryRows], [logs]] = await Promise.all([
+      pool.query(
+        `SELECT event_type, COUNT(*) AS count FROM (${combinedQuery}) AS combined ${summaryWhereClause} GROUP BY event_type`,
+        summaryParams,
+      ),
+      pool.query(
+        `SELECT * FROM (${combinedQuery}) AS combined
+         ${whereClause}
+         ORDER BY event_date DESC
+         LIMIT ? OFFSET ?`,
+        [...params, OCCUPANCY_LOG_PAGE_SIZE, offset],
+      ),
+    ]);
+    const countOf = (type) => Number(summaryRows.find((row) => row.event_type === type)?.count || 0);
+    const summary = { moveIns: countOf("move_in"), moveOuts: countOf("move_out") };
+    const total = typeFilter ? countOf(typeFilter) : summary.moveIns + summary.moveOuts;
 
-    const [logs] = await pool.query(
-      `SELECT * FROM (${combinedQuery}) AS combined
-       ${whereClause}
-       ORDER BY event_date DESC
-       LIMIT ? OFFSET ?`,
-      [...params, OCCUPANCY_LOG_PAGE_SIZE, offset],
-    );
-
-    return res.json({ logs, total, page, pageSize: OCCUPANCY_LOG_PAGE_SIZE });
+    return res.json({ logs, total, page, pageSize: OCCUPANCY_LOG_PAGE_SIZE, summary });
   } catch (error) {
     console.error("Owner fetch occupancy log error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
