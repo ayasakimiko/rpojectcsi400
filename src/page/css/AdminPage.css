@@ -2355,6 +2355,10 @@ tr.admin-focus-flash.is-fading > td {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.admin-room-form-grid.is-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .admin-room-field {
   display: flex;
   flex-direction: column;
@@ -2993,6 +2997,10 @@ tr.admin-focus-flash.is-fading > td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-room-form-grid.is-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-room-form-grid.is-3 > :first-child {
     grid-column: 1 / -1;
   }
@@ -3000,7 +3008,8 @@ tr.admin-focus-flash.is-fading > td {
 
 @media (max-width: 380px) {
   .admin-room-form-grid.is-2,
-  .admin-room-form-grid.is-3 {
+  .admin-room-form-grid.is-3,
+  .admin-room-form-grid.is-4 {
     grid-template-columns: minmax(0, 1fr);
   }
 }

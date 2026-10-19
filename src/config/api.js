@@ -48,11 +48,11 @@ export function createBackendSelector({
   }
 
   async function probe() {
-    const checks = backends.map((backend) => ({ backend, ok: healthy(backend) }))
-    const preferred = checks.find((check) => check.backend.id === preferredId())
-    if (preferred && (await preferred.ok)) return preferred.backend
-    for (const check of checks) {
-      if (await check.ok) return check.backend
+    const preferred = backends.find((backend) => backend.id === preferredId())
+    if (preferred && (await healthy(preferred))) return preferred
+    for (const backend of backends) {
+      if (backend.id === preferred?.id) continue
+      if (await healthy(backend)) return backend
     }
     return null
   }

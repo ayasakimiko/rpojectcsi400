@@ -12,6 +12,7 @@ import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -997,7 +998,7 @@ function MoveRoomPreview({ currentRoom, targetRoom }) {
         </span>
         <span className="is-water">
           <FieldIcon name="water" size={13} />
-          น้ำ ฿{formatCurrency(targetRoom.water_price)}/เดือน
+          น้ำ ฿{formatCurrency(targetRoom.water_unit_price)}/หน่วย · ฿{formatCurrency(targetRoom.water_price)}/เดือน
         </span>
         {Number(targetRoom.bed) > 0 && (
           <span>
@@ -1905,6 +1906,7 @@ const NOTIF_PAGE_SIZE = 30
 const CUSTOMER_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'rental-history', label: 'ประวัติการเช่า' },
+  { key: 'utility-history', label: 'ประวัติการชำระค่าน้ำค่าไฟ' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'vehicles', label: 'รถของฉัน' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
@@ -3943,6 +3945,81 @@ function AnnouncementAlertPopup({ announcement, remaining, onAcknowledge }) {
   )
 }
 
+function buildUtilityChartData(rentalHistory = [], rangeDays = 30, endDateKey = '') {
+  const totalsByDate = new Map()
+
+  rentalHistory.forEach((booking) => {
+    ;(booking.payments || []).forEach((payment) => {
+      if (payment.status !== 'paid' || !['water', 'electricity'].includes(payment.type)) return
+      const dateValue = payment.payment_date
+      const date = dateValue instanceof Date ? dateValue : new Date(dateValue)
+      if (Number.isNaN(date.getTime())) return
+
+      const dateKey = typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateValue)
+        ? dateValue.slice(0, 10)
+        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      const day = totalsByDate.get(dateKey) || { dateKey, waterAmount: 0, electricityAmount: 0, waterUnits: 0, electricityUnits: 0 }
+      const amount = Number(payment.amount) || 0
+      if (payment.type === 'water') {
+        day.waterAmount += amount
+        const legacyUnits = payment.note?.match(/([\d.]+)\s*หน่วย/i)?.[1]
+        const recordedUnits = payment.water_units ?? legacyUnits
+        const waterUnitPrice = Number(booking.water_unit_price)
+        const units = recordedUnits !== null && recordedUnits !== undefined && recordedUnits !== ''
+          ? Number(recordedUnits)
+          : waterUnitPrice > 0 && amount > 0
+            ? amount / waterUnitPrice
+            : null
+        if (Number.isFinite(units) && units >= 0) day.waterUnits += units
+      }
+      if (payment.type === 'electricity') {
+        day.electricityAmount += amount
+        const legacyUnits = payment.note?.match(/([\d.]+)\s*หน่วย/i)?.[1]
+        const units = Number(payment.electricity_units ?? legacyUnits)
+        if (Number.isFinite(units) && units >= 0) day.electricityUnits = (day.electricityUnits || 0) + units
+      }
+      totalsByDate.set(dateKey, day)
+    })
+  })
+
+  const today = endDateKey ? dayKeyToDate(endDateKey) : new Date()
+  today.setHours(0, 0, 0, 0)
+  const startDate = new Date(today)
+  startDate.setDate(today.getDate() - rangeDays + 1)
+  const startKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
+  const endKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  if (![...totalsByDate.keys()].some((dateKey) => dateKey >= startKey && dateKey <= endKey)) return []
+  const chartData = []
+  for (let offset = 0; offset < rangeDays; offset += 1) {
+    const date = new Date(startDate)
+    date.setDate(startDate.getDate() + offset)
+    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const day = totalsByDate.get(dateKey) || { dateKey, waterAmount: 0, electricityAmount: 0, waterUnits: 0, electricityUnits: 0 }
+    chartData.push({
+      ...day,
+      dateLabel: new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }).format(date),
+      dateFullLabel: new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }).format(date),
+    })
+  }
+  return chartData
+}
+
+function UtilityChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="dashboard-utility-chart-tooltip">
+      <strong className="dashboard-utility-chart-tooltip-title">{label}</strong>
+      {payload.map((item) => (
+        <div className="dashboard-utility-chart-tooltip-row" key={item.dataKey}>
+          <i style={{ background: item.color }} />
+          <span>{item.name}</span>
+          <strong>{['หน่วยน้ำ', 'หน่วยไฟ'].includes(item.name) ? `${formatCurrency(item.value)} หน่วย` : `฿${formatCurrency(item.value)}`}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function CustomerDashbord() {
   const navigate = useNavigate()
   const dashboardLoadRef = useRef(null)
@@ -3974,6 +4051,11 @@ function CustomerDashbord() {
   }, [])
 
   const [customerTab, setCustomerTab] = useState('home')
+  const [utilityChartDays, setUtilityChartDays] = useState(30)
+  const [utilityChartEndDate, setUtilityChartEndDate] = useState(() => {
+    const date = new Date()
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  })
   const [activeVehicleIds, setActiveVehicleIds] = useState([])
   const [tabSeenVersion, setTabSeenVersion] = useState(0)
   const tabSeenStorageKey = data?.customer?.id ? `customer_tab_seen_${data.customer.id}` : null
@@ -4679,6 +4761,11 @@ function CustomerDashbord() {
     announcements = [],
     parcels = [],
   } = data
+  const utilityChartData = buildUtilityChartData(rentalHistory, utilityChartDays, utilityChartEndDate)
+  const utilityChartMaxDate = (() => {
+    const date = new Date()
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  })()
   const pendingAlerts = announcements.filter(
     (item) =>
       item.tone === 'warning' &&
@@ -6740,6 +6827,71 @@ function CustomerDashbord() {
 
         {customerTab === 'vehicles' && <CustomerParkingTab />}
 
+        {customerTab === 'utility-history' && (
+          <section className="dashboard-card dashboard-utility-history-card">
+            <div className="dashboard-card-header">
+              <h2>ประวัติการชำระค่าน้ำค่าไฟ</h2>
+            </div>
+            <div className="dashboard-utility-history-toolbar">
+              <div className="dashboard-utility-chart-periods" role="group" aria-label="เลือกช่วงวันที่ของกราฟ">
+                {[30, 7, 3].map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    className={utilityChartDays === days ? 'is-active' : ''}
+                    aria-pressed={utilityChartDays === days}
+                    onClick={() => setUtilityChartDays(days)}
+                  >
+                    {days} วัน
+                  </button>
+                ))}
+              </div>
+              <label className="dashboard-utility-chart-date">
+                วันที่สิ้นสุด
+                <input
+                  type="date"
+                  value={utilityChartEndDate}
+                  max={utilityChartMaxDate}
+                  onChange={(event) => setUtilityChartEndDate(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="dashboard-utility-chart">
+              <div className="dashboard-utility-chart-heading">
+                <div>
+                  <h3>ยอดค่าน้ำ ค่าไฟ และหน่วยน้ำ-ไฟที่ชำระแล้ว</h3>
+                  <p>เปรียบเทียบยอดชำระรายวันจากประวัติการเช่าทุกห้อง</p>
+                </div>
+                <div className="dashboard-utility-chart-legend" aria-label="คำอธิบายกราฟ">
+                  <span><i className="is-water" />ค่าน้ำ (บาท)</span>
+                  <span><i className="is-electric" />ค่าไฟ (บาท)</span>
+                  <span><i className="is-water-units" />หน่วยน้ำ</span>
+                  <span><i className="is-units" />หน่วยไฟ</span>
+                </div>
+              </div>
+              {utilityChartData.length ? (
+                <div className="dashboard-utility-chart-canvas">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={utilityChartData} margin={{ top: 12, right: 10, left: 0, bottom: 2 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e9eff6" />
+                      <XAxis dataKey="dateLabel" interval="preserveStartEnd" minTickGap={16} height={42} tick={{ fontFamily: 'inherit', fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="amount" tick={{ fontFamily: 'inherit', fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={52} tickFormatter={(value) => formatCurrency(value)} />
+                      <YAxis yAxisId="units" orientation="right" tick={{ fontFamily: 'inherit', fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={48} tickFormatter={(value) => formatCurrency(value)} />
+                      <Tooltip content={<UtilityChartTooltip />} labelFormatter={(_label, payload) => payload?.[0]?.payload?.dateFullLabel || _label} />
+                      <Line type="monotone" yAxisId="amount" dataKey="waterAmount" name="ค่าน้ำ" stroke="#0891b2" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+                      <Line type="monotone" yAxisId="amount" dataKey="electricityAmount" name="ค่าไฟ" stroke="#d97706" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+                      <Line type="monotone" yAxisId="units" dataKey="waterUnits" name="หน่วยน้ำ" stroke="#16a34a" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+                      <Line type="monotone" yAxisId="units" dataKey="electricityUnits" name="หน่วยไฟ" stroke="#7c3aed" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="dashboard-utility-chart-empty">ยังไม่มีรายการค่าน้ำหรือค่าไฟที่ชำระแล้ว</p>
+              )}
+            </div>
+          </section>
+        )}
+
         {customerTab === 'rental-history' && (
           <section className="dashboard-card dashboard-rental-history-card">
             <div className="dashboard-card-header">
@@ -6881,7 +7033,7 @@ function CustomerDashbord() {
                         </div>
                         <div className="dashboard-utility-rate is-water">
                           <span>ค่าน้ำ</span>
-                          <strong>{formatCurrency(room.water_price)} บาท/เดือน</strong>
+                          <strong>{formatCurrency(room.water_unit_price)} บาท/หน่วย</strong>
                         </div>
                       </div>
 

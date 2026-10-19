@@ -558,6 +558,74 @@
   transition: opacity 0.15s ease;
 }
 
+.owner-utility-receipts-panel { margin-bottom: 24px; }
+
+.owner-utility-receipts-panel .owner-panel-header p {
+  margin: 5px 0 0;
+  color: #718198;
+  font-size: 12px;
+}
+
+.owner-utility-receipts-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: #607187;
+  font-size: 12px;
+}
+
+.owner-utility-receipts-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.owner-utility-receipts-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: #0891b2;
+}
+
+.owner-utility-receipts-legend i.is-electric { background: #d97706; }
+.owner-utility-receipts-legend i.is-water-units { background: #16a34a; border-radius: 50%; }
+.owner-utility-receipts-legend i.is-units { background: #7c3aed; border-radius: 50%; }
+
+.owner-utility-receipts-chart { margin-top: 6px; }
+
+.owner-utility-chart-tooltip {
+  display: flex;
+  min-width: 170px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px solid #e7edf5;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 43, 82, 0.12);
+  color: #45607f;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.owner-utility-chart-tooltip-title { color: #0f2b52; font-size: 12.5px; }
+
+.owner-utility-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.owner-utility-chart-tooltip-row i {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+}
+
+.owner-utility-chart-tooltip-row strong { margin-left: auto; color: #0f2b52; }
+
 .owner-linecard-chart.is-loading {
   opacity: 0.5;
 }
@@ -1061,6 +1129,42 @@
 
 .owner-filter-presets-top {
   margin: -6px 0 16px;
+}
+
+.owner-filter-presets-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.owner-filter-presets-toolbar .owner-filter-presets {
+  margin-bottom: 0;
+}
+
+.owner-filter-end-date {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: #6b859e;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.owner-filter-end-date input {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid #dce9f5;
+  border-radius: 10px;
+  background: #fff;
+  color: #183a63;
+  font: inherit;
+}
+
+.owner-filter-end-date input:focus {
+  border-color: #60a5fa;
+  outline: 3px solid rgb(96 165 250 / 15%);
 }
 
 .owner-filter-preset-btn {
@@ -2204,4 +2308,15 @@
 .owner-safety-status.cancelled {
   background: #f1f5f9;
   color: #64748b;
+}
+
+@media (max-width: 760px) {
+  .owner-filter-presets-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .owner-filter-end-date {
+    justify-content: flex-end;
+  }
 }

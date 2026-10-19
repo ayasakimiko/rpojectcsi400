@@ -215,6 +215,22 @@ function FinanceTrendTooltip(props) {
   return <TrendTooltip {...props} series={FINANCE_TREND_SERIES} formatValue={formatSignedCurrency} />
 }
 
+function OwnerUtilityTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="owner-utility-chart-tooltip">
+      <strong className="owner-utility-chart-tooltip-title">{label}</strong>
+      {payload.map((item) => (
+        <div className="owner-utility-chart-tooltip-row" key={item.dataKey}>
+          <i style={{ background: item.color }} />
+          <span>{item.name}</span>
+          <strong>{['หน่วยน้ำ', 'หน่วยไฟ'].includes(item.name) ? `${formatCurrency(item.value)} หน่วย` : `฿${formatCurrency(item.value)}`}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function OccupancyTrendTooltip(props) {
   return <TrendTooltip {...props} series={OCCUPANCY_TREND_SERIES} formatValue={(value) => `${value} ห้อง`} />
 }
@@ -489,6 +505,7 @@ function OwnerMain() {
   const [overview, setOverview] = useState({ rooms: {}, finance: {} })
   const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, vacantRooms: [], rooms: [] })
   const [incomeSummary, setIncomeSummary] = useState({ totalIncome: 0, byType: [] })
+  const [utilityReceipts, setUtilityReceipts] = useState({ trends: [], granularity: 'month' })
   const [expenses, setExpenses] = useState({ expenses: [], byCategory: [], total: 0, totalAmount: 0, page: 1, pageSize: 10 })
   const [financeTrends, setFinanceTrends] = useState({ trends: [], granularity: 'month' })
   const [isTrendsLoading, setIsTrendsLoading] = useState(false)
@@ -573,6 +590,72 @@ function OwnerMain() {
     const formatLabel = financeTrends.granularity === 'day' ? formatTrendDay : formatTrendMonth
     return (financeTrends.trends || []).map((item) => ({ ...item, monthLabel: formatLabel(item.period) }))
   }, [financeTrends])
+
+  const utilityReceiptChartData = useMemo(() => {
+    const endDate = paymentFilter.to ? parseInputDate(paymentFilter.to) : new Date()
+    const startDate = paymentFilter.from
+      ? parseInputDate(paymentFilter.from)
+      : new Date(endDate.getFullYear(), endDate.getMonth() - 5, 1)
+    endDate.setHours(0, 0, 0, 0)
+    startDate.setHours(0, 0, 0, 0)
+    const daySpan = Math.round((endDate - startDate) / 86400000) + 1
+    const granularity = utilityReceipts.granularity === 'month' || daySpan > 31 ? 'month' : 'day'
+    const trendsByPeriod = new Map()
+    ;(utilityReceipts.trends || []).forEach((item) => {
+      const period = granularity === 'month' ? item.period.slice(0, 7) : item.period
+      const totals = trendsByPeriod.get(period) || {
+        period,
+        water: 0,
+        electricity: 0,
+        waterUnits: 0,
+        electricityUnits: 0,
+      }
+      totals.water += Number(item.water) || 0
+      totals.electricity += Number(item.electricity) || 0
+      totals.waterUnits += Number(item.waterUnits) || 0
+      totals.electricityUnits += Number(item.electricityUnits) || 0
+      trendsByPeriod.set(period, totals)
+    })
+    const chartData = []
+
+    if (granularity === 'month') {
+      const monthCursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+      const monthEnd = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+      for (const date = monthCursor; date <= monthEnd; date.setMonth(date.getMonth() + 1)) {
+        const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        const item = trendsByPeriod.get(period) || {
+          period,
+          water: 0,
+          electricity: 0,
+          waterUnits: 0,
+          electricityUnits: 0,
+        }
+        chartData.push({
+          ...item,
+          dateLabel: formatTrendMonth(period),
+          dateFullLabel: date.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }),
+        })
+      }
+    } else {
+      for (const date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+        const period = toInputDate(date)
+        const item = trendsByPeriod.get(period) || {
+          period,
+          water: 0,
+          electricity: 0,
+          waterUnits: 0,
+          electricityUnits: 0,
+        }
+        chartData.push({
+          ...item,
+          dateLabel: formatTrendDay(period),
+          dateFullLabel: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
+        })
+      }
+    }
+
+    return chartData
+  }, [utilityReceipts, paymentFilter.from, paymentFilter.to])
 
   const trendSummary = useMemo(() => {
     const totalIncome = trendChartData.reduce((sum, item) => sum + Number(item.income || 0), 0)
@@ -781,6 +864,15 @@ function OwnerMain() {
     setIncomeTypePage(1)
   }
 
+  const loadUtilityReceipts = async (overrides = {}) => {
+    const nextFilters = { ...paymentFilter, ...overrides }
+    const { data } = await axios.get('/api/owner/utility-receipts', {
+      headers: getAuthHeaders(),
+      params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
+    })
+    setUtilityReceipts(data)
+  }
+
   const loadExpenses = async (page = expenses.page || 1, overrides = {}) => {
     const nextFilters = { ...paymentFilter, ...overrides }
     const { data } = await axios.get('/api/owner/expenses', {
@@ -934,7 +1026,7 @@ function OwnerMain() {
     const fetchAll = async () => {
       try {
         setIsLoading(true)
-        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadExpenses(1), loadTrends(), loadOccupancyTrend(), loadStaff(), loadPaymentLogs(1), loadOccupancyLogs(1)])
+        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadUtilityReceipts(), loadExpenses(1), loadTrends(), loadOccupancyTrend(), loadStaff(), loadPaymentLogs(1), loadOccupancyLogs(1)])
       } catch (error) {
         const message = error.response?.data?.message || 'ไม่สามารถโหลดข้อมูลหอพักได้'
         setMessage('danger', message)
@@ -975,32 +1067,29 @@ function OwnerMain() {
     }
   }
 
-  const handlePaymentDatePreset = async (presetKey) => {
+  const handlePaymentDatePreset = async (presetKey, selectedEndDate = toInputDate(new Date())) => {
     setPaymentDatePreset(presetKey)
-    const today = new Date()
+    const [selectedYear, selectedMonth, selectedDay] = selectedEndDate.split('-').map(Number)
+    const endDate = selectedEndDate
+      ? new Date(selectedYear, selectedMonth - 1, selectedDay)
+      : new Date()
+    endDate.setHours(0, 0, 0, 0)
     let from = ''
-    let to = ''
+    const to = selectedEndDate || toInputDate(endDate)
     if (presetKey === 'today') {
-      from = toInputDate(today)
-      to = toInputDate(today)
+      from = to
     } else if (presetKey === '7d') {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6))
-      to = toInputDate(today)
+      from = toInputDate(new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 6))
     } else if (presetKey === '30d') {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29))
-      to = toInputDate(today)
+      from = toInputDate(new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 29))
     } else if (presetKey === 'month') {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth(), 1))
-      to = toInputDate(today)
+      from = toInputDate(new Date(endDate.getFullYear(), endDate.getMonth(), 1))
     } else if (presetKey === '3m') {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 2, 1))
-      to = toInputDate(today)
+      from = toInputDate(new Date(endDate.getFullYear(), endDate.getMonth() - 2, 1))
     } else if (presetKey === '6m') {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 5, 1))
-      to = toInputDate(today)
+      from = toInputDate(new Date(endDate.getFullYear(), endDate.getMonth() - 5, 1))
     } else if (presetKey === '1y') {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 11, 1))
-      to = toInputDate(today)
+      from = toInputDate(new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1))
     }
 
     const nextFilters = { ...paymentFilter, from, to }
@@ -1008,6 +1097,7 @@ function OwnerMain() {
     try {
       await Promise.all([
         loadIncome(nextFilters),
+        loadUtilityReceipts(nextFilters),
         loadOverview(nextFilters),
         loadOccupancySummary(nextFilters),
         loadExpenses(1, nextFilters),
@@ -1192,17 +1282,28 @@ function OwnerMain() {
         </ul>
 
         {!isLoading && activeTab === 'rooms' && (
-          <div className="owner-filter-presets owner-filter-presets-top">
-            {PAYMENT_DATE_PRESETS.map((preset) => (
-              <button
-                key={preset.key}
-                type="button"
-                className={`owner-filter-preset-btn${paymentDatePreset === preset.key ? ' active' : ''}`}
-                onClick={() => handlePaymentDatePreset(preset.key)}
-              >
-                {preset.label}
-              </button>
-            ))}
+          <div className="owner-filter-presets-toolbar owner-filter-presets-top">
+            <div className="owner-filter-presets">
+              {PAYMENT_DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  className={`owner-filter-preset-btn${paymentDatePreset === preset.key ? ' active' : ''}`}
+                  onClick={() => handlePaymentDatePreset(preset.key)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <label className="owner-filter-end-date">
+              วันที่สิ้นสุด
+              <input
+                type="date"
+                value={paymentFilter.to || toInputDate(new Date())}
+                max={toInputDate(new Date())}
+                onChange={(event) => handlePaymentDatePreset(paymentDatePreset, event.target.value)}
+              />
+            </label>
           </div>
         )}
 
@@ -1840,17 +1941,28 @@ function OwnerMain() {
 
         {!isLoading && activeTab === 'finance' && (
           <>
-            <div className="owner-filter-presets owner-filter-presets-top">
-              {PAYMENT_DATE_PRESETS.map((preset) => (
-                <button
-                  key={preset.key}
-                  type="button"
-                  className={`owner-filter-preset-btn${paymentDatePreset === preset.key ? ' active' : ''}`}
-                  onClick={() => handlePaymentDatePreset(preset.key)}
-                >
-                  {preset.label}
-                </button>
-              ))}
+            <div className="owner-filter-presets-toolbar owner-filter-presets-top">
+              <div className="owner-filter-presets">
+                {PAYMENT_DATE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className={`owner-filter-preset-btn${paymentDatePreset === preset.key ? ' active' : ''}`}
+                    onClick={() => handlePaymentDatePreset(preset.key)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <label className="owner-filter-end-date">
+                วันที่สิ้นสุด
+                <input
+                  type="date"
+                  value={paymentFilter.to || toInputDate(new Date())}
+                  max={toInputDate(new Date())}
+                  onChange={(event) => handlePaymentDatePreset(paymentDatePreset, event.target.value)}
+                />
+              </label>
             </div>
 
             <section className="owner-card-grid">
@@ -1906,49 +2018,33 @@ function OwnerMain() {
                 <>
                 <div className={`owner-linecard-chart owner-finance-trend-chart ${isTrendsLoading ? 'is-loading' : ''}`}>
                   <ResponsiveContainer width="100%" height={300}>
-                    {trendChartData.length >= 2 ? (
-                      <LineChart data={trendChartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
-                        <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
-                        <Tooltip content={<FinanceTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
-                        <ReferenceLine y={0} stroke="#d8e2ee" />
-                        <Line type="monotone" dataKey="income" name="รายรับ" stroke={FINANCE_TREND_COLORS.income} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                        <Line type="monotone" dataKey="expense" name="รายจ่าย" stroke={FINANCE_TREND_COLORS.expense} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                        <Line
-                          type="monotone"
-                          dataKey="netProfit"
-                          name="กำไร/ขาดทุน"
-                          stroke={FINANCE_TREND_COLORS.net}
-                          strokeWidth={2}
-                          dot={(props) => (
-                            <circle
-                              key={`net-dot-${props.payload.period}`}
-                              cx={props.cx}
-                              cy={props.cy}
-                              r={4}
-                              fill={props.payload.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net}
-                              stroke="none"
-                            />
-                          )}
-                          activeDot={{ r: 5 }}
-                        />
-                      </LineChart>
-                    ) : (
-                      <BarChart data={trendChartData} barGap={4} barCategoryGap="40%">
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
-                        <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
-                        <Tooltip content={<FinanceTrendTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
-                        <Bar dataKey="income" name="รายรับ" fill={FINANCE_TREND_COLORS.income} radius={[4, 4, 0, 0]} maxBarSize={48} />
-                        <Bar dataKey="expense" name="รายจ่าย" fill={FINANCE_TREND_COLORS.expense} radius={[4, 4, 0, 0]} maxBarSize={48} />
-                        <Bar dataKey="netProfit" name="กำไร/ขาดทุน" fill={FINANCE_TREND_COLORS.net} radius={[4, 4, 0, 0]} maxBarSize={48}>
-                          {trendChartData.map((entry) => (
-                            <Cell key={entry.period} fill={entry.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    )}
+                    <LineChart data={trendChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                      <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
+                      <Tooltip content={<FinanceTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
+                      <ReferenceLine y={0} stroke="#d8e2ee" />
+                      <Line type="monotone" dataKey="income" name="รายรับ" stroke={FINANCE_TREND_COLORS.income} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="expense" name="รายจ่าย" stroke={FINANCE_TREND_COLORS.expense} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="netProfit"
+                        name="กำไร/ขาดทุน"
+                        stroke={FINANCE_TREND_COLORS.net}
+                        strokeWidth={2}
+                        dot={(props) => (
+                          <circle
+                            key={`net-dot-${props.payload.period}`}
+                            cx={props.cx}
+                            cy={props.cy}
+                            r={4}
+                            fill={props.payload.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net}
+                            stroke="none"
+                          />
+                        )}
+                        activeDot={{ r: 5 }}
+                      />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
 
@@ -1973,6 +2069,39 @@ function OwnerMain() {
                 </>
               ) : (
                 <div className="owner-empty">ยังไม่มีข้อมูลแนวโน้มย้อนหลัง</div>
+              )}
+            </section>
+
+            <section className="owner-panel owner-utility-receipts-panel">
+              <div className="owner-panel-header">
+                <div>
+                  <h3>รายรับค่าน้ำและค่าไฟจากลูกบ้าน</h3>
+                </div>
+                <div className="owner-utility-receipts-legend">
+                  <span><i className="is-water" />ค่าน้ำ</span>
+                  <span><i className="is-electric" />ค่าไฟ</span>
+                  <span><i className="is-water-units" />หน่วยน้ำ</span>
+                  <span><i className="is-units" />หน่วยไฟ</span>
+                </div>
+              </div>
+              {utilityReceiptChartData.length ? (
+                <div className="owner-linecard-chart owner-utility-receipts-chart">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={utilityReceiptChartData} margin={{ top: 12, right: 10, left: 0, bottom: 2 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                      <XAxis dataKey="dateLabel" interval="preserveStartEnd" minTickGap={16} height={42} tick={{ fontFamily: 'inherit', fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="amount" tick={{ fontFamily: 'inherit', fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={52} tickFormatter={(value) => formatCurrency(value)} />
+                      <YAxis yAxisId="units" orientation="right" tick={{ fontFamily: 'inherit', fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={48} tickFormatter={(value) => formatCurrency(value)} />
+                      <Tooltip content={<OwnerUtilityTooltip />} labelFormatter={(_label, payload) => payload?.[0]?.payload?.dateFullLabel || _label} />
+                      <Line type="monotone" yAxisId="amount" dataKey="water" name="ค่าน้ำ" stroke="#0891b2" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} connectNulls />
+                      <Line type="monotone" yAxisId="amount" dataKey="electricity" name="ค่าไฟ" stroke="#d97706" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} connectNulls />
+                      <Line type="monotone" yAxisId="units" dataKey="waterUnits" name="หน่วยน้ำ" stroke="#16a34a" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+                      <Line type="monotone" yAxisId="units" dataKey="electricityUnits" name="หน่วยไฟ" stroke="#7c3aed" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="owner-empty">ยังไม่มีรายการค่าน้ำหรือค่าไฟที่รับชำระในช่วงนี้</div>
               )}
             </section>
 

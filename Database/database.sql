@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS Room (
     bathroom BOOLEAN DEFAULT FALSE,
     cctv BOOLEAN DEFAULT FALSE,
     electricity_unit_price DECIMAL(10,2) NOT NULL DEFAULT 8.00 CHECK (electricity_unit_price BETWEEN 0 AND 99.99),
+    water_unit_price DECIMAL(10,2) NOT NULL DEFAULT 100.00 CHECK (water_unit_price BETWEEN 0 AND 999.99),
     water_price DECIMAL(10,2) NOT NULL DEFAULT 100.00 CHECK (water_price BETWEEN 0 AND 999.99),
     
     rental_duration_months INT UNSIGNED,
@@ -21,6 +22,32 @@ CREATE TABLE IF NOT EXISTS Room (
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'water_unit_price'),
+    'SELECT 1',
+    'ALTER TABLE `Room` ADD COLUMN `water_unit_price` DECIMAL(10,2) NOT NULL DEFAULT 100.00 AFTER `electricity_unit_price`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @water_unit_price_needs_default = (
+    SELECT COUNT(*) > 0
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'water_unit_price'
+      AND COLUMN_DEFAULT IN ('0', '0.00')
+);
+SET @schema_upgrade_sql = IF(
+    @water_unit_price_needs_default,
+    'UPDATE `Room` SET `water_unit_price` = 100.00 WHERE `water_unit_price` = 0.00',
+    'SELECT 1'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+ALTER TABLE `Room` ALTER COLUMN `water_unit_price` SET DEFAULT 100.00;
 
 CREATE TABLE IF NOT EXISTS Customer (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -97,12 +124,34 @@ CREATE TABLE IF NOT EXISTS Payment (
     payment_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     type VARCHAR(20) NOT NULL DEFAULT 'rent',
+    electricity_units DECIMAL(10,2) NULL,
+    water_units DECIMAL(10,2) NULL,
     note VARCHAR(255),
     slip_path VARCHAR(255),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (booking_id) REFERENCES Booking(id)
 );
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND COLUMN_NAME = 'electricity_units'),
+    'SELECT 1',
+    'ALTER TABLE `Payment` ADD COLUMN `electricity_units` DECIMAL(10,2) NULL AFTER `type`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND COLUMN_NAME = 'water_units'),
+    'SELECT 1',
+    'ALTER TABLE `Payment` ADD COLUMN `water_units` DECIMAL(10,2) NULL AFTER `electricity_units`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
 
 CREATE TABLE IF NOT EXISTS MaintenanceRequest (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -234,6 +283,47 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- Default rooms (existing room numbers are left unchanged).
+INSERT IGNORE INTO Room
+    (room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv,
+     electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until)
+VALUES
+    (101, FALSE, 3500.00, TRUE, TRUE, TRUE, 1, TRUE, TRUE, 8.00, 100.00, NULL, NULL, NULL, NULL),
+    (102, FALSE, 4000.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE, 8.00, 100.00, NULL, NULL, NULL, NULL),
+    (103, FALSE, 3200.00, TRUE, TRUE, FALSE, 1, TRUE, TRUE, 8.00, 100.00, NULL, NULL, NULL, NULL),
+    (104, FALSE, 3000.00, FALSE, TRUE, FALSE, 1, TRUE, FALSE, 8.00, 100.00, NULL, NULL, NULL, NULL),
+    (105, FALSE, 4500.00, TRUE, TRUE, TRUE, 2, TRUE, TRUE, 8.00, 100.00, NULL, NULL, NULL, NULL);
+
+UPDATE Room AS room
+SET room.is_booked = FALSE,
+    room.rental_duration_months = NULL,
+    room.rental_start_date = NULL,
+    room.rental_end_date = NULL,
+    room.prepaid_until = NULL,
+    room.pending_lump_sum_months = NULL
+WHERE room.room_number IN (101, 102, 103)
+  AND NOT EXISTS (SELECT 1 FROM Customer WHERE Customer.room_number = room.room_number)
+  AND NOT EXISTS (SELECT 1 FROM Booking WHERE Booking.room_id = room.id);
+
+-- Default staff accounts. Password for these demo accounts: test1234.
+INSERT IGNORE INTO Staff
+    (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+VALUES
+    ('Staff', '1100200000101', '$2b$10$qMWpWUdFOqo8TXKtjhMujOFGYhYxjiVW8w.SjAfhc9zP8kivpZFM2', '0844444444', 'Staff', 'Demo', FALSE, 27)
+ON DUPLICATE KEY UPDATE password = VALUES(password);
+
+INSERT IGNORE INTO Admin
+    (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+VALUES
+    ('Admin', '1100200000201', '$2b$10$qMWpWUdFOqo8TXKtjhMujOFGYhYxjiVW8w.SjAfhc9zP8kivpZFM2', '0866666666', 'Admin', 'Demo', FALSE, 35)
+ON DUPLICATE KEY UPDATE password = VALUES(password);
+
+INSERT IGNORE INTO Owner
+    (role, idcard, password, phone, first_name, last_name, is_suspended, age)
+VALUES
+    ('Owner', '1100200000301', '$2b$10$qMWpWUdFOqo8TXKtjhMujOFGYhYxjiVW8w.SjAfhc9zP8kivpZFM2', '0877777777', 'Owner', 'Demo', FALSE, 45)
+ON DUPLICATE KEY UPDATE password = VALUES(password);
 
 CREATE TABLE IF NOT EXISTS Parcel (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,

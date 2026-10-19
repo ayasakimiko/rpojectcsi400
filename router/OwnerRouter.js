@@ -308,6 +308,59 @@ router.get("/income", async (req, res) => {
   }
 });
 
+router.get("/utility-receipts", async (req, res) => {
+  try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+
+    const endDate = typeof req.query.to === "string" && req.query.to ? new Date(`${req.query.to}T00:00:00`) : new Date();
+    const startDate = typeof req.query.from === "string" && req.query.from
+      ? new Date(`${req.query.from}T00:00:00`)
+      : new Date(endDate.getFullYear(), endDate.getMonth() - 5, 1);
+    const from = toDateKey(startDate);
+    const to = toDateKey(endDate);
+    const daySpan = Math.round((endDate - startDate) / 86400000) + 1;
+    const granularity = daySpan > 31 ? "month" : "day";
+    const periodFormat = granularity === "month" ? "%Y-%m" : "%Y-%m-%d";
+    const [rows] = await getPool().query(
+      `SELECT DATE_FORMAT(p.payment_date, '${periodFormat}') AS period,
+              COALESCE(SUM(CASE WHEN p.type = 'water' THEN p.amount ELSE 0 END), 0) AS water,
+              COALESCE(SUM(CASE WHEN p.type = 'electricity' THEN p.amount ELSE 0 END), 0) AS electricity,
+              SUM(CASE WHEN p.type = 'water' THEN COALESCE(
+                p.water_units,
+                CAST(REPLACE(REGEXP_SUBSTR(p.note, '[0-9]+([.][0-9]+)?[[:space:]]*หน่วย'), 'หน่วย', '') AS DECIMAL(10,2)),
+                p.amount / NULLIF(r.water_unit_price, 0)
+              ) ELSE NULL END) AS waterUnits,
+              SUM(CASE WHEN p.type = 'electricity' THEN COALESCE(
+                p.electricity_units,
+                CAST(REPLACE(REGEXP_SUBSTR(p.note, '[0-9]+([.][0-9]+)?[[:space:]]*หน่วย'), 'หน่วย', '') AS DECIMAL(10,2))
+              ) ELSE NULL END) AS electricityUnits,
+              COUNT(*) AS paymentCount
+       FROM Payment p
+       LEFT JOIN Booking b ON b.id = p.booking_id
+       LEFT JOIN Room r ON r.id = b.room_id
+       WHERE p.status = 'paid' AND p.type IN ('water', 'electricity')
+         AND p.payment_date >= ? AND p.payment_date <= ?
+       GROUP BY period ORDER BY period`,
+      [from, to],
+    );
+
+    const totalsByPeriod = new Map(rows.map((row) => [row.period, {
+      water: Number(row.water),
+      electricity: Number(row.electricity),
+      waterUnits: row.waterUnits === null ? null : Number(row.waterUnits),
+      electricityUnits: row.electricityUnits === null ? null : Number(row.electricityUnits),
+      paymentCount: Number(row.paymentCount),
+    }]));
+    const trends = rows.map((row) => ({ period: row.period, ...totalsByPeriod.get(row.period) }));
+
+    return res.json({ trends, granularity });
+  } catch (error) {
+    console.error("Owner fetch utility receipts error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 function toDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

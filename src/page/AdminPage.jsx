@@ -3866,6 +3866,11 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
             <small>ต่อหน่วย</small>
           </div>
           <div className="is-water">
+            <dt><RoomDetailIcon type="drop" />อัตราค่าน้ำ</dt>
+            <dd>฿{formatCurrency(data.water_unit_price)}</dd>
+            <small>ต่อหน่วย</small>
+          </div>
+          <div className="is-water">
             <dt><RoomDetailIcon type="drop" />ค่าน้ำ</dt>
             <dd>฿{formatCurrency(data.water_price)}</dd>
             <small>เหมาจ่ายต่อเดือน</small>
@@ -4275,6 +4280,7 @@ const emptyRoomForm = {
   price: '',
   bed: '1',
   electricity_unit_price: '8',
+  water_unit_price: '100',
   water_price: '100',
   air_conditioner: false,
   wifi: false,
@@ -6009,6 +6015,7 @@ function AdminBackupPage() {
       price: String(room.price),
       bed: String(room.bed ?? 1),
       electricity_unit_price: String(room.electricity_unit_price),
+      water_unit_price: String(room.water_unit_price ?? 0),
       water_price: String(room.water_price),
       air_conditioner: Boolean(room.air_conditioner),
       wifi: Boolean(room.wifi),
@@ -6101,8 +6108,8 @@ function AdminBackupPage() {
       setRoomForm((prev) => ({ ...prev, bed: value.replace(/\D/g, '').slice(0, 2) }))
       return
     }
-    if (name === 'electricity_unit_price' || name === 'water_price') {
-      const maxValue = name === 'water_price' ? 999.99 : 99.99
+    if (name === 'electricity_unit_price' || name === 'water_unit_price' || name === 'water_price') {
+      const maxValue = name === 'electricity_unit_price' ? 99.99 : 999.99
       if (value !== '' && Number(value) > maxValue) return
       setRoomForm((prev) => ({ ...prev, [name]: value }))
       return
@@ -6126,6 +6133,11 @@ function AdminBackupPage() {
       setRoomFormError('ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)')
       return
     }
+    const waterUnitValue = Number(roomForm.water_unit_price)
+    if (!Number.isFinite(waterUnitValue) || waterUnitValue < 0 || waterUnitValue > 999.99) {
+      setRoomFormError('อัตราค่าน้ำต่อหน่วยต้องเป็นตัวเลข (0-999.99)')
+      return
+    }
     const waterValue = Number(roomForm.water_price)
     if (!Number.isFinite(waterValue) || waterValue < 0 || waterValue > 999.99) {
       setRoomFormError('ค่าน้ำ/เดือนต้องเป็นตัวเลข 3 หลัก (0-999.99)')
@@ -6138,6 +6150,7 @@ function AdminBackupPage() {
       price: Number(roomForm.price),
       bed: Number(roomForm.bed),
       electricity_unit_price: Number(roomForm.electricity_unit_price),
+      water_unit_price: Number(roomForm.water_unit_price),
       water_price: Number(roomForm.water_price),
       air_conditioner: roomForm.air_conditioner,
       wifi: roomForm.wifi,
@@ -9687,7 +9700,7 @@ function AdminBackupPage() {
                   <small>ราคาค่าเช่าและอัตราค่าน้ำ-ค่าไฟของห้องนี้</small>
                 </div>
               </header>
-              <div className="admin-room-form-grid is-3">
+              <div className="admin-room-form-grid is-4">
                 <label className="admin-room-field">
                   <span>ค่าเช่า</span>
                   <div className="admin-room-input has-prefix">
@@ -9714,7 +9727,24 @@ function AdminBackupPage() {
                   </div>
                 </label>
                 <label className="admin-room-field">
-                  <span>ค่าน้ำ</span>
+                  <span>อัตราค่าน้ำ</span>
+                  <div className="admin-room-input has-prefix">
+                    <b>฿</b>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="999.99"
+                      name="water_unit_price"
+                      className="form-control"
+                      value={roomForm.water_unit_price}
+                      onChange={handleRoomFormChange}
+                    />
+                    <em>/หน่วย</em>
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>ค่าน้ำปกติ</span>
                   <div className="admin-room-input has-prefix">
                     <b>฿</b>
                     <input
