@@ -7,20 +7,6 @@ VALUES
     (104, FALSE, 3000.00, FALSE, TRUE,  FALSE, 1, TRUE, FALSE, 8.00, 100.00, NULL, NULL, NULL, NULL),
     (105, FALSE, 4500.00, TRUE,  TRUE,  TRUE,  2, TRUE, TRUE, 8.00, 100.00, NULL, NULL, NULL, NULL);
 
-INSERT INTO Customer
-    (role, idcard, password, phone, first_name, last_name, is_suspended, age, room_number, deposit_amount)
-VALUES
-    ('Customer', '1100200000001', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0811111111', 'สมชาย',   'ใจดี',     FALSE, 25, 101, 3500.00),
-    ('Customer', '1100200000002', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0822222222', 'สมหญิง',  'รักเรียน', FALSE, 28, 102, 4000.00),
-    ('Customer', '1100200000003', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0833333333', 'วิชัย',   'มั่นคง',   FALSE, 30, 103, 3200.00);
-
-INSERT INTO Booking
-    (customer_id, room_id)
-VALUES
-    (1, 1),
-    (2, 2),
-    (3, 3);
-
 INSERT INTO Staff
     (role, idcard, password, phone, first_name, last_name, is_suspended, age)
 VALUES

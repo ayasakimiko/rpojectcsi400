@@ -7635,6 +7635,11 @@
   flex: 1 1 auto;
 }
 
+.staff-safety-inline-summary {
+  flex: 0 0 auto;
+  margin: 8px 0 18px;
+}
+
 .staff-summary-tile {
   --tone-ink: #2563eb;
   --tone-value: #1d4ed8;
