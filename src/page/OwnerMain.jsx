@@ -4,11 +4,39 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
-import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
-import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import './css/StaffPage.css'
+import { StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
+import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import { downloadUploadFile } from '../utils/uploadFiles.js'
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
+
+function OwnerSlipDownloadButton({ url, fileName }) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const download = async () => {
+    setBusy(true)
+    setFailed(false)
+    try {
+      await downloadUploadFile(url, fileName)
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <button type="button" className={`payment-slip-download${failed ? ' is-failed' : ''}`} onClick={download} disabled={busy}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+      </svg>
+      {busy ? 'กำลังบันทึก...' : failed ? 'บันทึกไม่สำเร็จ ลองอีกครั้ง' : 'บันทึกรูปสลิป'}
+    </button>
+  )
+}
 
 const STAT_ICON_PATHS = {
   rooms: (
@@ -195,6 +223,11 @@ const OCCUPANCY_TREND_SERIES = [
   { key: 'vacant', label: 'ว่าง', color: ROOM_OCCUPANCY_COLORS.vacant },
 ]
 
+const OCCUPANCY_MOVEMENT_SERIES = [
+  { key: 'moveIns', label: 'ย้ายเข้า', color: '#0f9d58' },
+  { key: 'moveOuts', label: 'ย้ายออก', color: '#d97706' },
+]
+
 function TrendTooltip({ active, payload, label, series, formatValue }) {
   if (!active || !payload || !payload.length) return null
   return (
@@ -219,16 +252,24 @@ function OccupancyTrendTooltip(props) {
   return <TrendTooltip {...props} series={OCCUPANCY_TREND_SERIES} formatValue={(value) => `${value} ห้อง`} />
 }
 
+function OccupancyMovementTooltip(props) {
+  return <TrendTooltip {...props} series={OCCUPANCY_MOVEMENT_SERIES} formatValue={(value) => `${value} คน`} />
+}
+
 const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
+  { key: 'parking', label: 'ที่จอดรถ' },
+  { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
 ]
 
 const OWNER_PERIOD_BAR_CONTENT = {
   rooms: { title: 'สรุปข้อมูลห้องพัก', subtitle: 'ภาพรวมห้องพักและผู้เข้าพักประจำเดือน' },
   finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
   staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
+  parking: { title: 'จัดการที่จอดรถ', subtitle: 'ติดตามคำขอและรายการรถของผู้เข้าพัก' },
+  safety: { title: 'จัดการเหตุฉุกเฉิน', subtitle: 'ติดตามและตรวจสอบรายงานจากผู้เข้าพักและเจ้าหน้าที่' },
 }
 
 const PAYMENT_DATE_PRESETS = [
@@ -297,192 +338,6 @@ function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
   return [display, isClosing]
 }
 
-function OwnerParkingSummary() {
-  const [summary, setSummary] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    axios
-      .get('/api/owner/parking/summary', { headers: getAuthHeaders() })
-      .then(({ data }) => setSummary(data))
-      .catch((requestError) => setError(requestError.response?.data?.message || 'โหลดข้อมูลที่จอดรถไม่สำเร็จ'))
-  }, [])
-
-  let statusText = 'กำลังโหลดข้อมูล…'
-  if (error) statusText = error
-  else if (summary?.capacity === null) statusText = 'ยังไม่ได้กำหนดจำนวนที่จอดทั้งหมด'
-  else if (summary) statusText = summary.isFull ? 'พื้นที่จอดรถเต็มแล้ว' : 'ยังมีพื้นที่จอดรถว่าง'
-  const hasCapacity = summary?.capacity !== null && summary?.capacity !== undefined
-
-  return (
-    <section className="owner-parking-summary">
-      <div className="owner-parking-icon" aria-hidden="true">P</div>
-      <div className="owner-parking-copy">
-        <strong>สถานะที่จอดรถ</strong>
-        <span>{statusText}</span>
-      </div>
-      <div className="owner-parking-count">
-        <strong>
-          {summary?.parkedCount ?? '—'}
-          {hasCapacity ? ` / ${summary.capacity}` : ''}
-        </strong>
-        <span>คันที่กำลังจอด</span>
-      </div>
-    </section>
-  )
-}
-
-const SAFETY_INCIDENT_TYPE_LABEL = {
-  accident: 'อุบัติเหตุ',
-  security: 'ความปลอดภัย',
-  fire: 'ไฟไหม้ / ควัน',
-  medical: 'เหตุฉุกเฉินทางการแพทย์',
-  other: 'อื่น ๆ',
-}
-
-function OwnerSafetyIncidentReview() {
-  const [open, setOpen] = useState(false)
-  const [lightbox, setLightbox] = useState(null)
-  const [incidents, setIncidents] = useState([])
-  const [notes, setNotes] = useState({})
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const pendingCount = incidents.filter((item) => item.status === 'pending').length
-
-  const load = useCallback(
-    () =>
-      axios
-        .get('/api/owner/safety-incidents', { headers: getAuthHeaders() })
-        .then(({ data }) => setIncidents(data.incidents || []))
-        .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ')),
-    [],
-  )
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const markReviewed = async (incident) => {
-    setBusy(true)
-    setMessage('')
-    try {
-      await axios.patch(
-        `/api/owner/safety-incidents/${incident.id}/review`,
-        { reviewNote: notes[incident.id] || '' },
-        { headers: getAuthHeaders() },
-      )
-      await load()
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="owner-safety-entry">
-      <button
-        className="owner-safety-trigger"
-        type="button"
-        onClick={() => {
-          setOpen(true)
-          setMessage('')
-          load()
-        }}
-      >
-        ตรวจเหตุฉุกเฉิน{pendingCount ? ` (${pendingCount})` : ''}
-      </button>
-      {open && (
-        <div
-          className="owner-safety-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false)
-          }}
-        >
-          <section className="owner-safety-modal" role="dialog" aria-modal="true" aria-labelledby="owner-safety-title">
-            <button className="owner-safety-close" type="button" aria-label="ปิด" onClick={() => setOpen(false)}>×</button>
-            <span className="owner-safety-eyebrow">SAFETY & SECURITY</span>
-            <h2 id="owner-safety-title">ตรวจสอบเหตุฉุกเฉิน</h2>
-            <p className="owner-safety-intro">รายการรายงานจากผู้พักอาศัยและเจ้าหน้าที่</p>
-            <div className="owner-safety-list">
-              {incidents.length === 0 ? (
-                <p className="owner-safety-empty">ยังไม่มีรายงานเหตุ</p>
-              ) : (
-                incidents.map((item) => (
-                  <article className="owner-safety-card" key={item.id}>
-                    <div className="owner-safety-card-heading">
-                      <strong>{SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type}</strong>
-                      <span className={`owner-safety-status ${item.status} ${item.severity}`}>
-                        {item.status === 'pending' ? 'รอตรวจสอบ' : item.status === 'cancelled' ? 'ยกเลิกแล้ว' : 'ตรวจแล้ว'}
-                        {item.severity === 'urgent' ? ' · ด่วน' : ''}
-                      </span>
-                    </div>
-                    <p>{item.description}</p>
-                    {item.photos?.length > 0 && (
-                      <div className="owner-safety-photos" aria-label="รูปประกอบการแจ้งเหตุ">
-                        {item.photos.map((photo, index) => (
-                          <button
-                            key={`${photo.url}-${index}`}
-                            type="button"
-                            className="owner-safety-photo"
-                            onClick={() => setLightbox({ photos: item.photos, index, title: SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type })}
-                            aria-label={`ดูรูปที่ ${index + 1}`}
-                          >
-                            <UploadImage src={photo.url} alt={photo.name || `รูปประกอบ ${index + 1}`} loading="lazy" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <small>
-                      {item.reporter_name} ({item.reporter_role})
-                      {item.room_number ? ` · ห้อง ${item.room_number}` : ''} · {new Date(item.created_at).toLocaleString('th-TH')}
-                    </small>
-                    {item.status === 'pending' ? (
-                      <>
-                        <textarea
-                          aria-label="บันทึกผลตรวจสอบ"
-                          placeholder="บันทึกผลหรือการดำเนินการ (ถ้ามี)"
-                          value={notes[item.id] || ''}
-                          onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })}
-                        />
-                        <button className="owner-safety-review" type="button" disabled={busy} onClick={() => markReviewed(item)}>
-                          บันทึกว่าตรวจสอบแล้ว
-                        </button>
-                      </>
-                    ) : item.status === 'cancelled' ? (
-                      <p className="owner-safety-note">
-                        ยกเลิกโดย <span className="owner-actor">{item.cancelled_by_name || '-'}</span>
-                        {item.cancel_reason ? ` · ${item.cancel_reason}` : ''}
-                      </p>
-                    ) : (
-                      <p className="owner-safety-note">
-                        ตรวจโดย <span className="owner-actor">{item.reviewed_by_name || '-'}</span>
-                        {item.review_note ? ` · ${item.review_note}` : ''}
-                      </p>
-                    )}
-                  </article>
-                ))
-              )}
-            </div>
-            {message && <p className="owner-safety-message" role="status">{message}</p>}
-          </section>
-        </div>
-      )}
-      {lightbox && (
-        <div className="owner-safety-lightbox-host">
-          <PhotoLightbox
-            photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
-            initialIndex={lightbox.index}
-            title={lightbox.title}
-            label="รูปประกอบการแจ้งเหตุ"
-            onClose={() => setLightbox(null)}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
@@ -494,9 +349,14 @@ function OwnerMain() {
   const [isTrendsLoading, setIsTrendsLoading] = useState(false)
   const [occupancyTrend, setOccupancyTrend] = useState({ trends: [], granularity: 'month' })
   const [isOccupancyTrendLoading, setIsOccupancyTrendLoading] = useState(false)
+  const [occupancyPeriodDetail, setOccupancyPeriodDetail] = useState(null)
   const [expenseCategoryPage, setExpenseCategoryPage] = useState(1)
   const [staffList, setStaffList] = useState([])
   const [paymentLogs, setPaymentLogs] = useState({ payments: [], total: 0, page: 1, pageSize: 20 })
+  const [viewingPaymentSlip, setViewingPaymentSlip] = useState(null)
+  const [paymentSlipZoomOpen, setPaymentSlipZoomOpen] = useState(false)
+  const [pendingSlipReviews, setPendingSlipReviews] = useState([])
+  const [reviewingSlipId, setReviewingSlipId] = useState(null)
   const [occupancyLogs, setOccupancyLogs] = useState({ logs: [], total: 0, page: 1, pageSize: 10 })
   const [occupancyFilter, setOccupancyFilter] = useState({ search: '', type: 'all' })
   const [occupantsPage, setOccupantsPage] = useState(1)
@@ -560,11 +420,15 @@ function OwnerMain() {
 
   const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
 
-  const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.expenses?.length || 0) / SUMMARY_PAGE_SIZE))
+  const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.byCategory?.length || 0) / SUMMARY_PAGE_SIZE))
   const paginatedExpenseCategories = useMemo(() => {
     const start = (expenseCategoryPage - 1) * SUMMARY_PAGE_SIZE
-    return (expenses.expenses || []).slice(start, start + SUMMARY_PAGE_SIZE)
+    return (expenses.byCategory || []).slice(start, start + SUMMARY_PAGE_SIZE)
   }, [expenses, expenseCategoryPage])
+  const expenseByCategoryTotal = useMemo(
+    () => (expenses.byCategory || []).reduce((sum, item) => sum + Number(item.total || 0), 0),
+    [expenses],
+  )
 
   const financeExpensePage = Number(expenses.page || 1)
   const financeExpenseTotalPages = Math.max(1, Math.ceil((Number(expenses.total) || 0) / (Number(expenses.pageSize) || 10)))
@@ -577,9 +441,23 @@ function OwnerMain() {
   const trendSummary = useMemo(() => {
     const totalIncome = trendChartData.reduce((sum, item) => sum + Number(item.income || 0), 0)
     const totalExpense = trendChartData.reduce((sum, item) => sum + Number(item.expense || 0), 0)
+    const incomeCount = trendChartData.reduce((sum, item) => sum + Number(item.incomeCount || 0), 0)
+    const expenseCount = trendChartData.reduce((sum, item) => sum + Number(item.expenseCount || 0), 0)
     const totalNet = totalIncome - totalExpense
     const avgNet = trendChartData.length ? totalNet / trendChartData.length : 0
-    return { totalIncome, totalExpense, totalNet, avgNet }
+    const profitMargin = totalIncome > 0 ? (totalNet / totalIncome) * 100 : 0
+    return {
+      totalIncome,
+      totalExpense,
+      incomeCount,
+      expenseCount,
+      avgIncomePerPayment: incomeCount ? totalIncome / incomeCount : 0,
+      avgExpensePerRecord: expenseCount ? totalExpense / expenseCount : 0,
+      totalNet,
+      avgNet,
+      profitMargin,
+      periodCount: trendChartData.length,
+    }
   }, [trendChartData])
 
   const occupancyTrendChartData = useMemo(() => {
@@ -589,18 +467,68 @@ function OwnerMain() {
 
   const occupancyTrendSummary = useMemo(() => {
     const count = occupancyTrendChartData.length
-    if (!count) return { currentOccupied: 0, currentVacant: 0, avgRate: 0, peakOccupied: 0 }
+    if (!count) {
+      return {
+        currentOccupied: 0,
+        currentVacant: 0,
+        totalRooms: 0,
+        avgOccupied: 0,
+        avgVacant: 0,
+        avgRate: 0,
+        moveIns: 0,
+        moveOuts: 0,
+        peakOccupied: 0,
+        peakRate: 0,
+        occupiedChange: 0,
+        periodCount: 0,
+      }
+    }
     const latest = occupancyTrendChartData[count - 1]
     const totalOccupied = occupancyTrendChartData.reduce((sum, item) => sum + Number(item.occupied || 0), 0)
     const totalRooms = occupancyTrendChartData.reduce((sum, item) => sum + Number(item.total || 0), 0)
+    const moveIns = occupancyTrendChartData.reduce((sum, item) => sum + Number(item.moveIns || 0), 0)
+    const moveOuts = occupancyTrendChartData.reduce((sum, item) => sum + Number(item.moveOuts || 0), 0)
     const peakOccupied = Math.max(...occupancyTrendChartData.map((item) => Number(item.occupied || 0)))
+    const peakRate = Math.max(...occupancyTrendChartData.map((item) => {
+      const capacity = Number(item.total || 0)
+      return capacity > 0 ? (Number(item.occupied || 0) / capacity) * 100 : 0
+    }))
+    const firstOccupied = Number(occupancyTrendChartData[0].occupied || 0)
     return {
       currentOccupied: Number(latest.occupied || 0),
       currentVacant: Number(latest.vacant || 0),
+      totalRooms: Number(latest.total || 0),
+      avgOccupied: totalOccupied / count,
+      avgVacant: occupancyTrendChartData.reduce((sum, item) => sum + Number(item.vacant || 0), 0) / count,
       avgRate: totalRooms > 0 ? (totalOccupied / totalRooms) * 100 : 0,
+      moveIns,
+      moveOuts,
       peakOccupied,
+      peakRate,
+      occupiedChange: Number(latest.occupied || 0) - firstOccupied,
+      periodCount: count,
     }
   }, [occupancyTrendChartData])
+
+  const occupancyComparisonRows = useMemo(
+    () => occupancyTrendChartData.map((item, index) => {
+      const occupied = Number(item.occupied || 0)
+      const vacant = Number(item.vacant || 0)
+      const total = Number(item.total || 0)
+      const previousOccupied = index > 0 ? Number(occupancyTrendChartData[index - 1].occupied || 0) : null
+      return {
+        ...item,
+        occupied,
+        vacant,
+        total,
+        moveIns: Number(item.moveIns || 0),
+        moveOuts: Number(item.moveOuts || 0),
+        occupancyRate: total > 0 ? (occupied / total) * 100 : 0,
+        change: previousOccupied === null ? null : occupied - previousOccupied,
+      }
+    }),
+    [occupancyTrendChartData],
+  )
 
   const currentOccupants = useMemo(
     () => (roomStatus.rooms || []).filter((room) => room.customer_id).sort((a, b) => a.room_number - b.room_number),
@@ -730,6 +658,16 @@ function OwnerMain() {
     const start = (paymentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE
     return (displayRoomDetail?.payments || []).slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
   }, [displayRoomDetail, paymentHistoryPage])
+
+  const openPaymentSlip = (payment) => {
+    setPaymentSlipZoomOpen(false)
+    setViewingPaymentSlip(payment)
+  }
+
+  const closePaymentSlip = () => {
+    setPaymentSlipZoomOpen(false)
+    setViewingPaymentSlip(null)
+  }
 
   const setMessage = (type, message) => {
     setNotice({ type, message })
@@ -897,7 +835,56 @@ function OwnerMain() {
         onlyOverdue: nextFilters.onlyOverdue ? 'true' : undefined,
       },
     })
-    setPaymentLogs(data)
+    const roomNumbers = [...new Set((data.payments || []).map((payment) => payment.room_number).filter(Boolean))]
+    const histories = await Promise.all(roomNumbers.map((roomNumber) =>
+      axios.get(`/api/staff/rooms/${roomNumber}/history`, { headers: getAuthHeaders() }).catch(() => null),
+    ))
+    const historicalSlips = new Map()
+    histories.forEach((response) => {
+      response?.data?.rentalHistory?.forEach((booking) => {
+        booking.payments?.forEach((payment) => {
+          if (payment.slip_path) historicalSlips.set(String(payment.id), payment.slip_path)
+        })
+      })
+    })
+    setPaymentLogs({
+      ...data,
+      payments: (data.payments || []).map((payment) => {
+        const paymentId = String(payment.id || '').replace(/^payment-/, '')
+        return { ...payment, slip_path: payment.slip_path || historicalSlips.get(paymentId) || null }
+      }),
+    })
+  }
+
+  const loadPendingSlipReviews = async () => {
+    const { data } = await axios.get('/api/staff/payment-verifications', { headers: getAuthHeaders() })
+    setPendingSlipReviews(data.payments || [])
+  }
+
+  const reviewOwnerPaymentSlip = async (payment, decision) => {
+    const paymentId = payment.payment_id ?? payment.id
+    const action = decision === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ'
+    const confirmed = window.confirm(`${action}สลิปของห้อง ${payment.room_number} ยอด ฿${formatCurrency(payment.amount)} หรือไม่?`)
+    if (!confirmed) return
+    setReviewingSlipId(paymentId)
+    try {
+      const { data } = await axios.patch(
+        `/api/staff/payment-verifications/${paymentId}`,
+        { decision },
+        { headers: getAuthHeaders() },
+      )
+      setMessage('success', data.message || `บันทึกผลการ${action}สลิปแล้ว`)
+      await Promise.all([loadPendingSlipReviews(), loadPaymentLogs(paymentLogs.page || 1)])
+      const roomNumber = displayRoomDetail?.room?.room_number
+      if (roomNumber) {
+        const { data: roomData } = await axios.get(`/api/owner/rooms/${roomNumber}`, { headers: getAuthHeaders() })
+        setRoomDetail(roomData)
+      }
+    } catch (error) {
+      setMessage('danger', error.response?.data?.message || 'ตรวจสลิปไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setReviewingSlipId(null)
+    }
   }
 
   const loadOccupancyLogs = async (page = occupancyLogs.page || 1, overrides = {}) => {
@@ -915,13 +902,44 @@ function OwnerMain() {
     setOccupancyLogs(data)
   }
 
+  const openOccupancyPeriodDetail = async (item) => {
+    const isDaily = occupancyTrend.granularity === 'day'
+    const from = isDaily ? item.period : `${item.period}-01`
+    const endDate = isDaily ? new Date(`${item.period}T00:00:00`) : new Date(`${item.period}-01T00:00:00`)
+    if (!isDaily) endDate.setMonth(endDate.getMonth() + 1, 0)
+    const to = isDaily ? item.period : `${item.period}-${String(endDate.getDate()).padStart(2, '0')}`
+    setOccupancyPeriodDetail({ item, logs: [], loading: true })
+    try {
+      const params = { from, to, page: 1 }
+      const { data: firstPage } = await axios.get('/api/owner/logs/occupancy', { headers: getAuthHeaders(), params })
+      const pageCount = Math.ceil((Number(firstPage.total) || 0) / (Number(firstPage.pageSize) || 10))
+      const otherPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
+        axios.get('/api/owner/logs/occupancy', { headers: getAuthHeaders(), params: { ...params, page: index + 2 } }),
+      ))
+      const logs = [...(firstPage.logs || []), ...otherPages.flatMap((response) => response.data.logs || [])]
+      setOccupancyPeriodDetail({ item, logs, loading: false })
+    } catch (error) {
+      setOccupancyPeriodDetail({ item, logs: [], loading: false })
+      setMessage('danger', error.response?.data?.message || 'ไม่สามารถโหลดรายละเอียดช่วงเวลาได้')
+    }
+  }
+
   const handleRoomClick = async (room) => {
     setRoomDetail({ room, tenant: null, payments: [] })
     setPaymentHistoryPage(1)
     setIsRoomDetailLoading(true)
     try {
-      const { data } = await axios.get(`/api/owner/rooms/${room.room_number}`, { headers: getAuthHeaders() })
-      setRoomDetail(data)
+      const [{ data }, historyResponse] = await Promise.all([
+        axios.get(`/api/owner/rooms/${room.room_number}`, { headers: getAuthHeaders() }),
+        axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: getAuthHeaders() }).catch(() => null),
+      ])
+      const historicalPayments = (historyResponse?.data?.rentalHistory || []).flatMap((booking) =>
+        (booking.payments || []).map((payment) => ({
+          ...payment,
+          tenantName: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+        })),
+      )
+      setRoomDetail({ ...data, payments: historicalPayments.length ? historicalPayments : data.payments || [] })
     } catch (error) {
       setRoomDetail(null)
       setMessage('danger', error.response?.data?.message || 'ไม่สามารถโหลดรายละเอียดห้องได้')
@@ -934,7 +952,7 @@ function OwnerMain() {
     const fetchAll = async () => {
       try {
         setIsLoading(true)
-        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadExpenses(1), loadTrends(), loadOccupancyTrend(), loadStaff(), loadPaymentLogs(1), loadOccupancyLogs(1)])
+        await Promise.all([loadOverview(), loadRoomStatus(), loadOccupancySummary(), loadIncome(), loadExpenses(1), loadTrends(), loadOccupancyTrend(), loadStaff(), loadPaymentLogs(1), loadPendingSlipReviews(), loadOccupancyLogs(1)])
       } catch (error) {
         const message = error.response?.data?.message || 'ไม่สามารถโหลดข้อมูลหอพักได้'
         setMessage('danger', message)
@@ -1163,15 +1181,12 @@ function OwnerMain() {
             <strong>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</strong>
             <span>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).subtitle}</span>
           </div>
-          <span className="owner-period-badge">
-            {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
-          </span>
+          {(activeTab === 'rooms' || activeTab === 'finance') && (
+            <span className="owner-period-badge">
+              {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
+            </span>
+          )}
         </section>
-
-        <div className="owner-resident-tools">
-          <OwnerParkingSummary />
-          <OwnerSafetyIncidentReview />
-        </div>
 
         {notice.message && (
           <div className={`owner-alert owner-alert-${notice.type}`}>{notice.message}</div>
@@ -1190,6 +1205,14 @@ function OwnerMain() {
             </li>
           ))}
         </ul>
+
+        {activeTab === 'parking' && (
+          <StaffResidentVisitsTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
+        )}
+
+        {activeTab === 'safety' && (
+          <StaffSafetyTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} showSummary />
+        )}
 
         {!isLoading && activeTab === 'rooms' && (
           <div className="owner-filter-presets owner-filter-presets-top">
@@ -1282,7 +1305,12 @@ function OwnerMain() {
 
             <section className="owner-panel">
               <div className="owner-panel-header">
-                <h3>เปรียบเทียบจำนวนผู้เข้าพัก{occupancyTrend.granularity === 'day' ? 'รายวัน' : 'รายเดือน'}</h3>
+                <div>
+                  <h3>เปรียบเทียบจำนวนผู้เข้าพัก</h3>
+                  <p className="owner-occupancy-panel-caption">
+                    แนวโน้มห้องที่มีผู้พัก ห้องว่าง และอัตราการเข้าพักแยกตาม{occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}
+                  </p>
+                </div>
               </div>
 
               <div className="owner-finance-chart-legend">
@@ -1296,6 +1324,40 @@ function OwnerMain() {
 
               {occupancyTrendChartData.length ? (
                 <>
+                <div className="owner-card-grid owner-occupancy-stat-grid">
+                  <article className="owner-stat-card blue">
+                    <div className="owner-stat-header">
+                      <span>ผู้เข้าพักปัจจุบัน</span>
+                      <span className="owner-stat-badge"><StatIcon name="rooms" /></span>
+                    </div>
+                    <h2>{currentOccupants.length} คน</h2>
+                    <p>ผู้เช่าที่มีข้อมูลอยู่ในห้องปัจจุบัน</p>
+                  </article>
+                  <article className="owner-stat-card green">
+                    <div className="owner-stat-header">
+                      <span>ห้องที่มีผู้พัก</span>
+                      <span className="owner-stat-badge"><StatIcon name="rooms" /></span>
+                    </div>
+                    <h2>{roomStatus.occupiedCount || 0} ห้อง</h2>
+                    <p>จากห้องทั้งหมด {roomStatus.totalRooms || 0} ห้อง</p>
+                  </article>
+                  <article className="owner-stat-card purple">
+                    <div className="owner-stat-header">
+                      <span>อัตราการเข้าพักเฉลี่ย</span>
+                      <span className="owner-stat-badge"><StatIcon name="margin" /></span>
+                    </div>
+                    <h2>{occupancyTrendSummary.avgRate.toFixed(1)}%</h2>
+                    <p>เฉลี่ยจาก {occupancyTrendSummary.periodCount} ช่วงเวลาที่แสดง</p>
+                  </article>
+                  <article className="owner-stat-card orange">
+                    <div className="owner-stat-header">
+                      <span>ผู้พักสูงสุด</span>
+                      <span className="owner-stat-badge"><StatIcon name="profit" /></span>
+                    </div>
+                    <h2>{occupancyTrendSummary.peakOccupied} ห้อง</h2>
+                    <p>อัตราเข้าพักสูงสุด {occupancyTrendSummary.peakRate.toFixed(1)}%</p>
+                  </article>
+                </div>
                 <div className={`owner-linecard-chart owner-finance-trend-chart ${isOccupancyTrendLoading ? 'is-loading' : ''}`}>
                   <ResponsiveContainer width="100%" height={280}>
                     {occupancyTrendChartData.length >= 2 ? (
@@ -1320,22 +1382,154 @@ function OwnerMain() {
                   </ResponsiveContainer>
                 </div>
 
-                <div className="owner-balance-summary">
-                  <div>
-                    <span>ปัจจุบันมีผู้เช่า</span>
-                    <strong>{occupancyTrendSummary.currentOccupied} ห้อง</strong>
+                <section className="owner-occupancy-movement">
+                  <div className="owner-occupancy-movement-heading">
+                    <div>
+                      <h4>เปรียบเทียบการย้ายเข้า–ออก</h4>
+                      <p>จำนวนรายการเข้าอยู่และย้ายออกในแต่ละ{occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}</p>
+                    </div>
+                    <div className="owner-finance-chart-legend">
+                      {OCCUPANCY_MOVEMENT_SERIES.map((series) => (
+                        <span key={series.key}>
+                          <i className="owner-chart-tooltip-dot" style={{ background: series.color }} />
+                          {series.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="owner-occupancy-movement-totals">
+                      <span className="is-move-in">ย้ายเข้ารวม <strong>{occupancyTrendSummary.moveIns}</strong> รายการ</span>
+                      <span className="is-move-out">ย้ายออกรวม <strong>{occupancyTrendSummary.moveOuts}</strong> รายการ</span>
+                    </div>
                   </div>
-                  <div>
-                    <span>ปัจจุบันห้องว่าง</span>
-                    <strong>{occupancyTrendSummary.currentVacant} ห้อง</strong>
+                  <div className="owner-occupancy-movement-chart">
+                    <ResponsiveContainer width="100%" height={220}>
+                      {occupancyTrendChartData.length >= 2 ? (
+                        <LineChart data={occupancyTrendChartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                          <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={32} />
+                          <Tooltip content={<OccupancyMovementTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
+                          <Line type="monotone" dataKey="moveIns" name="ย้ายเข้า" stroke="#0f9d58" strokeWidth={2.5} dot={{ r: 3.5 }} activeDot={{ r: 5 }} />
+                          <Line type="monotone" dataKey="moveOuts" name="ย้ายออก" stroke="#d97706" strokeWidth={2.5} dot={{ r: 3.5 }} activeDot={{ r: 5 }} />
+                        </LineChart>
+                      ) : (
+                        <BarChart data={occupancyTrendChartData} barGap={8} barCategoryGap="40%">
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                          <XAxis dataKey="periodLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={32} />
+                          <Tooltip content={<OccupancyMovementTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
+                          <Bar dataKey="moveIns" name="ย้ายเข้า" fill="#0f9d58" radius={[4, 4, 0, 0]} maxBarSize={34} />
+                          <Bar dataKey="moveOuts" name="ย้ายออก" fill="#d97706" radius={[4, 4, 0, 0]} maxBarSize={34} />
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
                   </div>
-                  <div>
-                    <span>อัตราการเข้าพักเฉลี่ย</span>
-                    <strong>{occupancyTrendSummary.avgRate.toFixed(1)}%</strong>
+                </section>
+
+                <div className="owner-occupancy-highlights">
+                  <div className="owner-occupancy-highlight occupied">
+                    <span className="owner-occupancy-highlight-icon"><StatIcon name="rooms" /></span>
+                    <div>
+                      <span>ผู้พัก ณ ช่วงล่าสุด</span>
+                      <strong>{occupancyTrendSummary.currentOccupied} <small>ห้อง</small></strong>
+                    </div>
                   </div>
-                  <div>
-                    <span>สูงสุด</span>
-                    <strong>{occupancyTrendSummary.peakOccupied} ห้อง</strong>
+                  <div className="owner-occupancy-highlight vacant">
+                    <span className="owner-occupancy-highlight-icon"><StatIcon name="rooms" /></span>
+                    <div>
+                      <span>ห้องว่าง ณ ช่วงล่าสุด</span>
+                      <strong>{occupancyTrendSummary.currentVacant} <small>ห้อง</small></strong>
+                    </div>
+                  </div>
+                  <div className={`owner-occupancy-highlight ${occupancyTrendSummary.occupiedChange < 0 ? 'decline' : 'growth'}`}>
+                    <span className="owner-occupancy-highlight-icon"><StatIcon name="profit" /></span>
+                    <div>
+                      <span>เปลี่ยนแปลงจากช่วงแรก</span>
+                      <strong>
+                        {occupancyTrendSummary.occupiedChange > 0 ? '+' : ''}
+                        {occupancyTrendSummary.occupiedChange} <small>ห้อง</small>
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="owner-occupancy-highlight capacity">
+                    <span className="owner-occupancy-highlight-icon"><StatIcon name="margin" /></span>
+                    <div>
+                      <span>ความจุ ณ ช่วงล่าสุด</span>
+                      <strong>{occupancyTrendSummary.totalRooms} <small>ห้อง</small></strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="owner-occupancy-detail">
+                  <div className="owner-occupancy-detail-heading">
+                    <div>
+                      <h4>รายละเอียดผู้เข้าพักตามช่วงเวลา</h4>
+                      <p>เปรียบเทียบห้องที่มีผู้พัก อัตราเข้าพัก และรายการย้ายเข้า–ออกในแต่ละช่วง</p>
+                    </div>
+                    <span>{occupancyTrendSummary.periodCount} {occupancyTrend.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
+                  </div>
+                  <div className="owner-table-wrap owner-occupancy-detail-table-wrap">
+                    <table className="owner-table owner-occupancy-detail-table">
+                      <thead>
+                        <tr>
+                          <th>ช่วงเวลา</th>
+                          <th>มีผู้พัก</th>
+                          <th>ห้องว่าง</th>
+                          <th>ห้องทั้งหมด</th>
+                          <th>ย้ายเข้า</th>
+                          <th>ย้ายออก</th>
+                          <th>อัตราเข้าพัก</th>
+                          <th>เปลี่ยนจากช่วงก่อน</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {occupancyComparisonRows.map((item) => (
+                          <tr
+                            key={item.period}
+                            className="owner-occupancy-clickable-row"
+                            tabIndex={0}
+                            aria-label={`ดูรายละเอียดผู้เข้าพักช่วง ${item.periodLabel}`}
+                            onClick={() => openOccupancyPeriodDetail(item)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                openOccupancyPeriodDetail(item)
+                              }
+                            }}
+                          >
+                            <td><strong>{item.periodLabel}</strong></td>
+                            <td className="owner-occupancy-occupied-cell">{item.occupied} ห้อง</td>
+                            <td className="owner-occupancy-vacant-cell">{item.vacant} ห้อง</td>
+                            <td>{item.total} ห้อง</td>
+                            <td className="owner-occupancy-move-in-cell">{item.moveIns} รายการ</td>
+                            <td className="owner-occupancy-move-out-cell">{item.moveOuts} รายการ</td>
+                            <td>
+                              <div className="owner-occupancy-rate-cell">
+                                <div className="owner-occupancy-rate-track" aria-label={`อัตราการเข้าพัก ${item.occupancyRate.toFixed(1)} เปอร์เซ็นต์`}>
+                                  <span style={{ width: `${Math.min(100, item.occupancyRate)}%` }} />
+                                </div>
+                                <strong>{item.occupancyRate.toFixed(1)}%</strong>
+                              </div>
+                            </td>
+                            <td className={
+                              item.change === null
+                                ? ''
+                                : item.change > 0
+                                  ? 'owner-occupancy-change-cell is-up'
+                                  : item.change < 0
+                                    ? 'owner-occupancy-change-cell is-down'
+                                    : 'owner-occupancy-change-cell is-steady'
+                            }>
+                              {item.change === null
+                                ? '—'
+                                : item.change > 0
+                                  ? `+${item.change} ห้อง`
+                                  : `${item.change} ห้อง`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
                 </>
@@ -1890,7 +2084,12 @@ function OwnerMain() {
 
             <section className="owner-panel">
               <div className="owner-panel-header">
-                <h3>เปรียบเทียบรายรับ-รายจ่าย{financeTrends.granularity === 'day' ? 'รายวัน' : 'รายเดือน'}</h3>
+                <div>
+                  <h3>เปรียบเทียบรายรับและรายจ่าย</h3>
+                  <p className="owner-finance-panel-caption">
+                    แสดงผลราย{financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'} พร้อมกำไรสุทธิในช่วงเวลาที่เลือก
+                  </p>
+                </div>
               </div>
 
               <div className="owner-finance-chart-legend">
@@ -1966,8 +2165,71 @@ function OwnerMain() {
                     <strong>{formatSignedCurrency(trendSummary.totalNet)}</strong>
                   </div>
                   <div className={trendSummary.avgNet < 0 ? 'is-owed' : 'is-refund'}>
-                    <span>เฉลี่ยต่อ{financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
+                    <span>กำไรสุทธิเฉลี่ยต่อ{financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
                     <strong>{formatSignedCurrency(trendSummary.avgNet)}</strong>
+                  </div>
+                  <div>
+                    <span>อัตรากำไรสุทธิ</span>
+                    <strong>{formatPercent(trendSummary.profitMargin)}</strong>
+                  </div>
+                </div>
+                <div className="owner-finance-detail">
+                  <div className="owner-finance-detail-heading">
+                    <div>
+                      <h4>รายละเอียดเปรียบเทียบตามช่วงเวลา</h4>
+                      <p>แสดงจำนวนรายการ ค่าเฉลี่ยต่อรายการ และสัดส่วนรายรับ–รายจ่ายในแต่ละช่วง</p>
+                    </div>
+                    <span>{trendSummary.periodCount} {financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
+                  </div>
+                  <div className="owner-table-wrap owner-finance-detail-table-wrap">
+                    <table className="owner-table owner-finance-detail-table">
+                      <thead>
+                        <tr>
+                          <th>ช่วงเวลา</th>
+                          <th>รายรับ</th>
+                          <th>รายจ่าย</th>
+                          <th>กำไร/ขาดทุนสุทธิ</th>
+                          <th>เปลี่ยนสุทธิจากช่วงก่อน</th>
+                          <th>รายจ่ายต่อรายรับ</th>
+                          <th>อัตรากำไรสุทธิ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trendChartData.map((item, index) => {
+                          const income = Number(item.income || 0)
+                          const expense = Number(item.expense || 0)
+                          const incomeCount = Number(item.incomeCount || 0)
+                          const expenseCount = Number(item.expenseCount || 0)
+                          const netProfit = income - expense
+                          const previous = trendChartData[index - 1]
+                          const previousNet = previous ? Number(previous.income || 0) - Number(previous.expense || 0) : null
+                          const netChange = previousNet === null ? null : netProfit - previousNet
+                          const expenseRatio = income > 0 ? (expense / income) * 100 : null
+                          const periodProfitMargin = income > 0 ? (netProfit / income) * 100 : null
+                          return (
+                            <tr key={item.period}>
+                              <td><strong>{item.monthLabel}</strong></td>
+                              <td className="owner-finance-income-cell">
+                                <strong>{formatSignedCurrency(income)}</strong>
+                                <small>{incomeCount} รายการ · เฉลี่ย {formatSignedCurrency(incomeCount ? income / incomeCount : 0)}</small>
+                              </td>
+                              <td className="owner-finance-expense-cell">
+                                <strong>{formatSignedCurrency(expense)}</strong>
+                                <small>{expenseCount} รายการ · เฉลี่ย {formatSignedCurrency(expenseCount ? expense / expenseCount : 0)}</small>
+                              </td>
+                              <td className={netProfit < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'}>
+                                <strong>{formatSignedCurrency(netProfit)}</strong>
+                              </td>
+                              <td className={netChange === null ? '' : netChange < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'}>
+                                {netChange === null ? '—' : `${netChange > 0 ? '+' : ''}${formatSignedCurrency(netChange)}`}
+                              </td>
+                              <td>{expenseRatio === null ? 'ไม่มีรายรับ' : formatPercent(expenseRatio)}</td>
+                              <td>{periodProfitMargin === null ? 'ไม่มีรายรับ' : formatPercent(periodProfitMargin)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
                 </>
@@ -2029,6 +2291,9 @@ function OwnerMain() {
               <div className="owner-panel">
                 <div className="owner-panel-header">
                   <h3>รายจ่ายตามหมวดหมู่</h3>
+                  <span className="owner-panel-header-count">
+                    รวม {formatSignedCurrency(expenseByCategoryTotal)}
+                  </span>
                   <button type="button" className="owner-panel-header-link" onClick={() => setIsExpenseManagerOpen(true)}>
                     จัดการ
                   </button>
@@ -2036,16 +2301,19 @@ function OwnerMain() {
                 <div className="owner-category-list">
                   {paginatedExpenseCategories.length ? (
                     paginatedExpenseCategories.map((item) => (
-                      <div key={item.id} className="owner-category-item">
+                      <div key={item.category || 'uncategorized'} className="owner-category-item">
                         <span className="owner-category-icon" style={{ color: '#d97706', background: 'rgba(217, 119, 6, 0.12)' }}>
                           <StatIcon name="expense" />
                         </span>
                         <div className="owner-category-info">
                           <span className="owner-category-name">{item.category || 'ไม่ระบุ'}</span>
-                          <span className={`owner-category-count${item.recorded_by_name ? ' owner-actor' : ''}`}>{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</span>
+                          <span className="owner-category-count">{Number(item.count) || 0} รายการ · {expenseByCategoryTotal > 0 ? formatPercent((Number(item.total || 0) / expenseByCategoryTotal) * 100) : '0%'}</span>
+                          <div className="owner-category-progress" aria-label={`สัดส่วนรายจ่าย ${item.category || 'ไม่ระบุ'}`}>
+                            <span style={{ width: `${expenseByCategoryTotal > 0 ? Math.min(100, (Number(item.total || 0) / expenseByCategoryTotal) * 100) : 0}%` }} />
+                          </div>
                         </div>
                         <div className="owner-category-amount">
-                          <strong>฿{formatCurrency(item.amount)}</strong>
+                          <strong>{formatSignedCurrency(item.total)}</strong>
                         </div>
                       </div>
                     ))
@@ -2053,7 +2321,7 @@ function OwnerMain() {
                     <div className="owner-empty">ยังไม่มีข้อมูลรายจ่าย</div>
                   )}
                 </div>
-                {expenses.expenses?.length > SUMMARY_PAGE_SIZE && (
+                {expenses.byCategory?.length > SUMMARY_PAGE_SIZE && (
                   <div className="owner-pagination">
                     <button type="button" disabled={expenseCategoryPage <= 1} onClick={() => setExpenseCategoryPage((page) => page - 1)}>
                       ก่อนหน้า
@@ -2125,6 +2393,37 @@ function OwnerMain() {
                 <h3>บันทึกการชำระเงิน</h3>
               </div>
 
+              <section className="owner-slip-review-panel">
+                <div className="owner-slip-review-heading">
+                  <div>
+                    <h4>สลิปที่รอตรวจสอบ</h4>
+                    <p>{pendingSlipReviews.length ? `มี ${pendingSlipReviews.length} รายการที่ต้องตรวจสอบ` : 'ไม่มีสลิปที่รอตรวจสอบ'}</p>
+                  </div>
+                  <button type="button" className="owner-slip-refresh" onClick={() => loadPendingSlipReviews().catch(() => setMessage('danger', 'โหลดรายการสลิปไม่สำเร็จ'))}>รีเฟรช</button>
+                </div>
+                {pendingSlipReviews.length ? (
+                  <div className="owner-slip-review-list">
+                    {pendingSlipReviews.map((payment) => (
+                      <article className="owner-slip-review-item" key={payment.id}>
+                        <button type="button" className="owner-slip-review-image" onClick={() => openPaymentSlip(payment)} aria-label={`ดูสลิปห้อง ${payment.room_number}`}>
+                          <UploadImage src={payment.slip_path} alt="สลิปโอนเงิน" />
+                          <span>ดูสลิป</span>
+                        </button>
+                        <div className="owner-slip-review-info">
+                          <strong>ห้อง {payment.room_number} · {payment.first_name} {payment.last_name}</strong>
+                          <span>{payment.payment_types?.split(',').map(formatPaymentType).join(' / ') || 'รายการชำระเงิน'} · {payment.phone || 'ไม่มีเบอร์โทร'}</span>
+                          <b>฿{formatCurrency(payment.amount)}</b>
+                        </div>
+                        <div className="owner-slip-review-actions">
+                          <button type="button" className="owner-slip-reject" disabled={reviewingSlipId === payment.id} onClick={() => reviewOwnerPaymentSlip(payment, 'rejected')}>ปฏิเสธ</button>
+                          <button type="button" className="owner-slip-approve" disabled={reviewingSlipId === payment.id} onClick={() => reviewOwnerPaymentSlip(payment, 'approved')}>{reviewingSlipId === payment.id ? 'กำลังบันทึก…' : 'อนุมัติสลิป'}</button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
               <label className="owner-search-standalone">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="7" />
@@ -2182,6 +2481,7 @@ function OwnerMain() {
                       <th>จำนวน</th>
                       <th className="owner-col-status">สถานะ</th>
                       <th>หมายเหตุ</th>
+                      <th>สลิป</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2198,12 +2498,37 @@ function OwnerMain() {
                               {payment.status === 'paid' ? 'ชำระแล้ว' : payment.status === 'pending' ? 'รอชำระ' : payment.status}
                             </span>
                           </td>
-                          <td>{payment.note || '-'}</td>
+                          <td>
+                            {payment.status === 'paid' && payment.slip_path && payment.note?.includes('รอตรวจสอบสลิป')
+                              ? 'ตรวจสอบสลิปแล้ว'
+                              : payment.note || '-'}
+                          </td>
+                          <td>
+                            {payment.slip_path ? (
+                              <div className="owner-payment-slip-cell">
+                                <button
+                                  type="button"
+                                  className="owner-view-slip-btn"
+                                  onClick={() => openPaymentSlip(payment)}
+                                >
+                                  <span>ดูสลิป</span>
+                                </button>
+                                {payment.status === 'pending' && (
+                                  <div className="owner-payment-review-actions">
+                                    <button type="button" className="owner-payment-reject" disabled={reviewingSlipId === (payment.payment_id ?? payment.id)} onClick={() => reviewOwnerPaymentSlip(payment, 'rejected')}>ปฏิเสธ</button>
+                                    <button type="button" className="owner-payment-approve" disabled={reviewingSlipId === (payment.payment_id ?? payment.id)} onClick={() => reviewOwnerPaymentSlip(payment, 'approved')}>อนุมัติ</button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="owner-no-slip">ไม่มีสลิป</span>
+                            )}
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="7" className="owner-empty-row">
+                        <td colSpan="8" className="owner-empty-row">
                           ไม่มีข้อมูลบันทึกการชำระเงิน
                         </td>
                       </tr>
@@ -2224,7 +2549,113 @@ function OwnerMain() {
                 </button>
               </div>
             </section>
+
           </>
+        )}
+
+        {occupancyPeriodDetail && (
+          <div className="owner-modal-backdrop" role="presentation" onClick={() => setOccupancyPeriodDetail(null)}>
+            <section className="owner-modal owner-occupancy-period-modal" role="dialog" aria-modal="true" aria-labelledby="owner-occupancy-period-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header">
+                <div>
+                  <h3 id="owner-occupancy-period-title">รายละเอียดผู้เข้าพัก · {occupancyPeriodDetail.item.periodLabel}</h3>
+                  <p className="owner-modal-subtext">ดูรายการย้ายเข้าและย้ายออกในช่วงเวลานี้</p>
+                </div>
+                <button type="button" className="owner-modal-close" onClick={() => setOccupancyPeriodDetail(null)} aria-label="ปิดรายละเอียด">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="owner-modal-body owner-occupancy-period-body">
+                <div className="owner-occupancy-period-summary">
+                  <div><span>ผู้พักอาศัย</span><strong>{occupancyPeriodDetail.item.occupied} ห้อง</strong></div>
+                  <div><span>ห้องว่าง</span><strong>{occupancyPeriodDetail.item.vacant} ห้อง</strong></div>
+                  <div><span>ย้ายเข้า</span><strong className="is-in">{occupancyPeriodDetail.item.moveIns} รายการ</strong></div>
+                  <div><span>ย้ายออก</span><strong className="is-out">{occupancyPeriodDetail.item.moveOuts} รายการ</strong></div>
+                </div>
+                {occupancyPeriodDetail.loading ? (
+                  <div className="owner-occupancy-period-state">กำลังโหลดรายละเอียด...</div>
+                ) : occupancyPeriodDetail.logs.length ? (
+                  <div className="owner-table-wrap">
+                    <table className="owner-table owner-occupancy-period-table">
+                      <thead><tr><th>วันที่</th><th>รายการ</th><th>ห้อง</th><th>ผู้เช่า</th><th>เบอร์โทร</th><th>หมายเหตุ</th></tr></thead>
+                      <tbody>
+                        {occupancyPeriodDetail.logs.map((log) => (
+                          <tr key={log.id}>
+                            <td>{formatDate(log.event_date)}</td>
+                            <td><span className={`owner-occupancy-event-badge ${log.event_type === 'move_in' ? 'is-in' : 'is-out'}`}>{log.event_type === 'move_in' ? 'ย้ายเข้า' : 'ย้ายออก'}</span></td>
+                            <td>{log.room_number || '-'}</td>
+                            <td>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || '-'}</td>
+                            <td>{log.phone || '-'}</td>
+                            <td>{log.note || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="owner-occupancy-period-state">ไม่มีรายการย้ายเข้า–ออกในช่วงเวลานี้</div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {viewingPaymentSlip && (
+          <div className="payment-slip-overlay" role="presentation" onClick={closePaymentSlip}>
+            <section className="payment-slip-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-payment-slip-title" onClick={(event) => event.stopPropagation()}>
+              <header className="payment-slip-header">
+                <div className="payment-slip-heading">
+                  <span className="payment-slip-heading-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+                      <path d="M9 7h6M9 11h6M9 15h4" />
+                    </svg>
+                  </span>
+                  <h3 id="owner-payment-slip-title">สลิปโอนเงิน</h3>
+                  <span className="payment-slip-room">ห้อง {viewingPaymentSlip.room_number || '-'}</span>
+                </div>
+                <button type="button" className="payment-slip-close" onClick={closePaymentSlip} aria-label="ปิด">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </header>
+              <div className="payment-slip-body">
+                <div className="payment-slip-image-frame">
+                  <button type="button" className="payment-slip-image-btn" onClick={() => setPaymentSlipZoomOpen(true)} title="คลิกเพื่อดูรูปขนาดเต็ม">
+                    <UploadImage src={viewingPaymentSlip.slip_path} alt="สลิปโอนเงิน" />
+                  </button>
+                  <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
+                </div>
+                <dl className="payment-slip-details">
+                  <div className="payment-slip-amount">
+                    <dt>จำนวนเงิน</dt>
+                    <dd>฿{formatCurrency(viewingPaymentSlip.amount)}</dd>
+                  </div>
+                  <div><dt>ผู้เช่า</dt><dd>{viewingPaymentSlip.tenantName || `${viewingPaymentSlip.first_name || ''} ${viewingPaymentSlip.last_name || ''}`.trim() || '-'}</dd></div>
+                  <div><dt>รายการ</dt><dd>{viewingPaymentSlip.payment_types?.split(',').map(formatPaymentType).join(', ') || formatPaymentType(viewingPaymentSlip.type) || 'ค่าเช่าห้อง'}</dd></div>
+                  <div><dt>สถานะ</dt><dd>{viewingPaymentSlip.status === 'paid' ? 'ชำระแล้ว' : viewingPaymentSlip.status === 'pending' ? 'รอตรวจสอบ' : viewingPaymentSlip.status || '-'}</dd></div>
+                  <div><dt>วันที่</dt><dd>{new Date(viewingPaymentSlip.created_at || viewingPaymentSlip.payment_date).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</dd></div>
+                </dl>
+              </div>
+              <footer className="payment-slip-footer">
+                <OwnerSlipDownloadButton url={viewingPaymentSlip.slip_path} fileName={`slip-room-${viewingPaymentSlip.room_number || 'unknown'}-${viewingPaymentSlip.payment_id || viewingPaymentSlip.id || 'payment'}`} />
+              </footer>
+            </section>
+          </div>
+        )}
+        {viewingPaymentSlip && paymentSlipZoomOpen && (
+          <PhotoLightbox
+            photos={[{ name: `สลิปห้อง ${viewingPaymentSlip.room_number || '-'}`, url: viewingPaymentSlip.slip_path }]}
+            title="สลิปโอนเงิน"
+            subtitle={`ห้อง ${viewingPaymentSlip.room_number || '-'} · ${viewingPaymentSlip.tenantName || `${viewingPaymentSlip.first_name || ''} ${viewingPaymentSlip.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้เช่า'}`}
+            label="สลิปโอนเงิน"
+            onClose={() => setPaymentSlipZoomOpen(false)}
+          />
         )}
 
         {displayExpenseManagerOpen && (
@@ -2649,6 +3080,7 @@ function OwnerMain() {
                               <th>ประเภท</th>
                               <th className="owner-col-status">สถานะ</th>
                               <th>จำนวนเงิน</th>
+                              <th>สลิป</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2662,6 +3094,7 @@ function OwnerMain() {
                                   </span>
                                 </td>
                                 <td>฿{formatCurrency(Math.abs(roomDetailBalance.rent - roomDetailBalance.deposit))}</td>
+                                <td>-</td>
                               </tr>
                             )}
                             {displayRoomDetail.payments?.length ? (
@@ -2675,12 +3108,27 @@ function OwnerMain() {
                                     </span>
                                   </td>
                                   <td>฿{formatCurrency(payment.amount)}</td>
+                                  <td>
+                                    {payment.slip_path ? (
+                                      <div className="owner-payment-slip-cell">
+                                        <button type="button" className="owner-view-slip-btn" onClick={() => openPaymentSlip({ ...payment, room_number: displayRoomDetail.room.room_number, first_name: payment.tenantName || displayRoomDetail.tenant?.first_name, last_name: payment.tenantName ? '' : displayRoomDetail.tenant?.last_name })}>
+                                          <span>ดูสลิป</span>
+                                        </button>
+                                        {payment.status === 'pending' && (
+                                          <div className="owner-payment-review-actions">
+                                            <button type="button" className="owner-payment-reject" disabled={reviewingSlipId === payment.id} onClick={() => reviewOwnerPaymentSlip(payment, 'rejected')}>ปฏิเสธ</button>
+                                            <button type="button" className="owner-payment-approve" disabled={reviewingSlipId === payment.id} onClick={() => reviewOwnerPaymentSlip(payment, 'approved')}>อนุมัติ</button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : <span className="owner-no-slip">ไม่มีสลิป</span>}
+                                  </td>
                                 </tr>
                               ))
                             ) : (
                               !roomDetailBalance && (
                                 <tr>
-                                  <td colSpan="4" className="owner-empty-row">
+                                  <td colSpan="5" className="owner-empty-row">
                                     ยังไม่มีประวัติการชำระเงิน
                                   </td>
                                 </tr>
