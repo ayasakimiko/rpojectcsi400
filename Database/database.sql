@@ -553,6 +553,19 @@ CREATE TABLE IF NOT EXISTS SafetyIncident (
     INDEX idx_safety_incident_status (status, created_at)
 );
 
+CREATE TABLE IF NOT EXISTS AuditLog (
+    id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    actor_id INT UNSIGNED NOT NULL,
+    actor_role VARCHAR(20) NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    endpoint VARCHAR(255) NOT NULL,
+    status_code SMALLINT UNSIGNED NOT NULL,
+    ip_address VARCHAR(45) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_log_created_at (created_at, id),
+    INDEX idx_audit_log_actor (actor_role, actor_id, created_at)
+);
+
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND INDEX_NAME = 'idx_payment_status_date'),

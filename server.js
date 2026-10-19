@@ -1,6 +1,8 @@
 import http from "node:http";
 import "dotenv/config";
+import jwt from "jsonwebtoken";
 import { createCorsMiddleware } from "./middleware/cors.js";
+import { getPool } from "./Database/connection.js";
 
 const PORT = process.env.PORT || 4000;
 
@@ -23,6 +25,20 @@ const ROUTES = Object.entries({
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-connection", "proxy-authenticate", "proxy-authorization", "te", "trailer", "upgrade"]);
 
 const cors = createCorsMiddleware();
+
+function getAuditActor(req) {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return null;
+  const authorization = req.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) return null;
+
+  let actor;
+  try {
+    actor = jwt.verify(authorization.slice(7), process.env.JWT_SECRET || "dev-secret-change-me");
+  } catch {
+    return null;
+  }
+  return Number.isSafeInteger(actor.id) && ["Customer", "Staff", "Admin", "Owner"].includes(actor.role) ? actor : null;
+}
 
 function findTarget(url) {
   const end = url.search(/[?#]/);
@@ -47,7 +63,7 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-function proxy(req, res, target) {
+function proxy(req, res, target, actor) {
   let clientClosed = false;
   const proxyReq = http.request({
     protocol: target.protocol,
@@ -60,6 +76,15 @@ function proxy(req, res, target) {
   });
 
   proxyReq.on("response", (proxyRes) => {
+    if (actor && proxyRes.statusCode >= 200 && proxyRes.statusCode < 300) {
+      const endpoint = req.url.split("?")[0].slice(0, 255);
+      const ipAddress = (req.socket.remoteAddress || "").slice(0, 45);
+      getPool().query(
+        `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [actor.id, actor.role, req.method, endpoint, proxyRes.statusCode, ipAddress || null],
+      ).catch((error) => console.error("Audit log write error:", error));
+    }
     res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, stripHopByHop(proxyRes.headers));
     proxyRes.pipe(res);
   });
@@ -88,7 +113,7 @@ const server = http.createServer((req, res) => {
 
     const target = findTarget(req.url);
     if (!target) return sendJson(res, 404, { message: "ไม่พบเส้นทาง API นี้" });
-    return proxy(req, res, target);
+    return proxy(req, res, target, getAuditActor(req));
   });
 });
 
