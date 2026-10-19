@@ -11,7 +11,7 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 
 ## สถาปัตยกรรม Backend
 
-`server.js` เป็น **API Gateway** — รับ request ทั้งหมดที่ `/api/*` บน port เดียว (4000) แล้ว proxy ต่อไปยัง microservice ที่ถูก role ตาม path prefix (ด้วย `http-proxy-middleware`) โดยแต่ละ service มี Express app + DB connection + CORS ของตัวเอง แยกรันคนละ process/container:
+`server.js` เป็น **API Gateway** — รับ request ทั้งหมดที่ `/api/*` บน port เดียว (4000) แล้ว proxy ต่อไปยัง microservice ที่ถูก role ตาม path prefix (เขียนด้วย `node:http` ล้วน ไม่ใช้ Express เพื่อลดหน่วยความจำ) โดยแต่ละ service มี Express app + DB connection + CORS ของตัวเอง แยกรันคนละ process/container:
 
 | Path prefix | Microservice | Port |
 |---|---|---|
@@ -52,6 +52,14 @@ docker compose up -d --build
 Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
 
 MySQL เชื่อมจากเครื่องผ่าน `localhost:3308` ส่วน container เชื่อมผ่าน `db:3306` หากใช้ MySQL บนพอร์ตอื่น ให้กำหนด `DB_PORT` ในไฟล์ `.env`
+
+phpMyAdmin เริ่มพร้อมบริการอื่นโดยอัตโนมัติ เข้าใช้งานที่ `http://localhost:8080` ด้วยชื่อผู้ใช้ `root` และรหัสผ่านจาก `DB_PASSWORD` ใน `.env` (ค่าเริ่มต้น `rootpass`) หากรันบนเซิร์ฟเวอร์ ให้เปลี่ยน `localhost` เป็น IP หรือโดเมนของเซิร์ฟเวอร์
+
+หากต้องการเปิดเฉพาะ phpMyAdmin และ MySQL โดยไม่ build backend:
+
+```bash
+docker compose up -d phpmyadmin
+```
 
 > หมายเหตุ: Dockerfile จะ copy source เข้า image ตอน build เท่านั้น (ไม่ใช่ live-reload) — แก้ `server.js` / `services/*` / `router/*` / `Database/*` แล้วต้องรัน `docker compose up -d --build` ใหม่ทุกครั้งถึงจะมีผล
 

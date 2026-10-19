@@ -2,6 +2,7 @@ import { UploadImage } from './UploadMedia.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import PhotoLightbox from './PhotoLightbox.jsx'
+import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
 import './AnnouncementBoard.css'
 
@@ -19,6 +20,9 @@ const EMPTY_FORM = {
   expYear: '',
   expHour: '23',
   expMinute: '59',
+  popupMode: 'none',
+  popupValue: '1',
+  popupUnit: 'hour',
   keptPhotos: [],
   newPhotos: [],
 }
@@ -66,6 +70,24 @@ const AFTER_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => index)
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => pad2(index))
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => pad2(index))
 const TONE_LABEL = { info: 'ทั่วไป', warning: 'แจ้งเตือน' }
+const POPUP_UNITS = [
+  { key: 'minute', label: 'นาที', minutes: 1 },
+  { key: 'hour', label: 'ชั่วโมง', minutes: 60 },
+  { key: 'day', label: 'วัน', minutes: 1440 },
+]
+const MAX_POPUP_MINUTES = 365 * 1440
+
+function buildPopup(form) {
+  if (form.tone !== 'warning') return { kind: 'none' }
+  if (form.popupMode === 'keep') return { kind: 'keep' }
+  if (form.popupMode !== 'duration') return { kind: 'none' }
+  const value = Number(form.popupValue)
+  if (!Number.isInteger(value) || value < 1) return { error: 'กรุณาระบุระยะเวลาแสดง popup เป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป' }
+  const unit = POPUP_UNITS.find((item) => item.key === form.popupUnit) || POPUP_UNITS[1]
+  const minutes = value * unit.minutes
+  if (minutes > MAX_POPUP_MINUTES) return { error: 'ระยะเวลาแสดง popup ต้องไม่เกิน 365 วัน' }
+  return { kind: 'duration', minutes }
+}
 
 const VARIANT_CLASSES = {
   staff: {
@@ -265,9 +287,41 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   })
   const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [now, setNow] = useState(() => Date.now())
+  const [query, setQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
-  const visibleItems = announcements.slice(0, visibleCount)
-  const hiddenCount = announcements.length - visibleItems.length
+  const keyword = query.trim().toLocaleLowerCase('th-TH')
+  const filtersActive = Boolean(keyword || dateFrom || dateTo)
+  const filteredAnnouncements = filtersActive
+    ? announcements.filter((item) => {
+        const dayKey = toDayKey(item.created_at)
+        if (dateFrom && dayKey < dateFrom) return false
+        if (dateTo && dayKey > dateTo) return false
+        if (!keyword) return true
+        return [item.title, item.message, item.author].some((value) => String(value ?? '').toLocaleLowerCase('th-TH').includes(keyword))
+      })
+    : announcements
+  const updateFilters = (next) => {
+    if ('query' in next) setQuery(next.query)
+    if ('dateFrom' in next) setDateFrom(next.dateFrom)
+    if ('dateTo' in next) setDateTo(next.dateTo)
+    setVisibleCount(ANNOUNCEMENTS_PER_PAGE)
+  }
+  const clearFilters = () => updateFilters({ query: '', dateFrom: '', dateTo: '' })
+
+  const [filterOpenId, setFilterOpenId] = useState(openId)
+  if (openId !== filterOpenId) {
+    setFilterOpenId(openId)
+    if (openId != null) {
+      setQuery('')
+      setDateFrom('')
+      setDateTo('')
+    }
+  }
+
+  const visibleItems = filteredAnnouncements.slice(0, visibleCount)
+  const hiddenCount = filteredAnnouncements.length - visibleItems.length
   const today = new Date(now)
   const todayKey = toDayKey(today)
   const yesterdayKey = toDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1))
@@ -392,6 +446,8 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       expYear: year,
       expHour: hour,
       expMinute: minute,
+      popupMode: item.tone === 'warning' && item.popup_until ? 'keep' : 'none',
+      popupUntil: item.popup_until || '',
       keptPhotos: item.photos || [],
     })
     setError('')
@@ -428,6 +484,21 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     return { tone: 'is-set', text: `จะลบประกาศอัตโนมัติเมื่อ ${formatExpiryDate(built.expiresAt)}` }
   })()
 
+  const popupPreview = (() => {
+    if (form.popupMode === 'keep') {
+      return { tone: 'is-set', text: `popup จะแสดงจนถึง ${formatExpiryDate(form.popupUntil)} ตามที่ตั้งไว้เดิม` }
+    }
+    if (form.popupMode !== 'duration') {
+      return { tone: 'is-none', text: 'popup จะเด้งทุกครั้งที่ผู้เช่าเข้าสู่ระบบ จนกว่าจะกดรับทราบ' }
+    }
+    const built = buildPopup(form)
+    if (built.error) return { tone: 'is-error', text: built.error }
+    return {
+      tone: 'is-set',
+      text: `popup จะเด้งเป็นเวลา ${formatDuration(built.minutes)} นับจากตอนกดยืนยัน หลังจากนั้นจะแสดงเฉพาะในกระดานประกาศ`,
+    }
+  })()
+
   const submitAnnouncement = (event) => {
     event.preventDefault()
     if (!form.title.trim() || !form.message.trim()) {
@@ -439,16 +510,23 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       setError(expiry.error)
       return
     }
+    const popup = buildPopup(form)
+    if (popup.error) {
+      setError(popup.error)
+      return
+    }
     setError('')
-    openConfirm({ kind: editingId ? 'edit' : 'publish', title: form.title.trim(), expiry })
+    openConfirm({ kind: editingId ? 'edit' : 'publish', title: form.title.trim(), expiry, popup })
   }
 
   const publishAnnouncement = async () => {
     setSubmitting(true)
-    const { expiry } = confirm
+    const { expiry, popup } = confirm
     const payload = { title: form.title.trim(), message: form.message.trim(), tone: form.tone }
     if (expiry.kind === 'after') payload.expires_in_minutes = expiry.minutes
     else payload.expires_at = expiry.kind === 'at' ? expiry.expiresAt : ''
+    if (popup?.kind === 'duration') payload.popup_in_minutes = popup.minutes
+    else if (popup?.kind !== 'keep') payload.popup_in_minutes = ''
     if (editingId) payload.keep_photos = form.keptPhotos.map((photo) => photo.url)
     try {
       payload.photos = await Promise.all(form.newPhotos.map((file) => compressImageFile(file)))
@@ -519,8 +597,63 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
         </p>
       )}
 
-      <div className={`announcement-scroll${announcements.length === 0 ? ' is-empty' : ''}`}>
-        {announcements.length === 0 ? (
+      {announcements.length > 0 && (
+        <div className="announcement-filters">
+          <label className="announcement-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              type="search"
+              value={query}
+              placeholder="ค้นหาหัวข้อ รายละเอียด หรือผู้ประกาศ"
+              aria-label="ค้นหาประกาศ"
+              onChange={(event) => updateFilters({ query: event.target.value })}
+            />
+          </label>
+          <div className="announcement-date-range">
+            <ThaiDatePicker
+              className="announcement-date-input"
+              placeholder="ตั้งแต่วันที่"
+              value={dateFrom}
+              maxDate={dateTo ? new Date(`${dateTo}T00:00:00`) : new Date()}
+              isClearable
+              onChange={(value) => updateFilters({ dateFrom: value })}
+            />
+            <span aria-hidden="true">–</span>
+            <ThaiDatePicker
+              className="announcement-date-input"
+              placeholder="ถึงวันที่"
+              value={dateTo}
+              minDate={dateFrom ? new Date(`${dateFrom}T00:00:00`) : undefined}
+              maxDate={new Date()}
+              isClearable
+              onChange={(value) => updateFilters({ dateTo: value })}
+            />
+          </div>
+          {filtersActive && (
+            <div className="announcement-filter-result">
+              <span>พบ {filteredAnnouncements.length} ประกาศ</span>
+              <button type="button" onClick={clearFilters}>ล้างตัวกรอง</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={`announcement-scroll${filteredAnnouncements.length === 0 ? ' is-empty' : ''}`}>
+        {announcements.length > 0 && filteredAnnouncements.length === 0 ? (
+          <div className="announcement-feed-empty">
+            <span className="announcement-feed-empty-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </span>
+            <strong>ไม่พบประกาศที่ตรงกับเงื่อนไข</strong>
+            <span>ลองเปลี่ยนคำค้นหาหรือช่วงวันที่</span>
+          </div>
+        ) : announcements.length === 0 ? (
           <div className="announcement-feed-empty">
             <span className="announcement-feed-empty-icon" aria-hidden="true">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -770,7 +903,32 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                     </span>
                   </div>
                 )}
+                {canManage && detail.tone === 'warning' && (
+                  <div className="announcement-detail-meta-item is-wide">
+                    <span className="announcement-detail-meta-icon is-muted" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                      </svg>
+                    </span>
+                    <span className="announcement-detail-meta-text">
+                      <small>แสดง popup หน้าผู้เช่า</small>
+                      <strong>
+                        {!detail.popup_until
+                          ? 'จนกว่าจะกดรับทราบ'
+                          : detail.popup_active
+                            ? `ถึง ${formatExpiryDate(detail.popup_until)}`
+                            : `หมดเวลาแล้ว (${formatExpiryDate(detail.popup_until)})`}
+                      </strong>
+                    </span>
+                  </div>
+                )}
               </div>
+            </div>
+            <div className="announcement-form-actions">
+              <button type="button" className="announcement-board-cancel" onClick={closeDetail}>
+                ปิด
+              </button>
             </div>
           </section>
         </div>
@@ -835,6 +993,59 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                   </select>
                 </label>
               </div>
+              {form.tone === 'warning' && (
+                <div className="announcement-expiry announcement-popup-field" role="group" aria-labelledby="announcement-popup-label">
+                  <span id="announcement-popup-label">ระยะเวลาแสดง popup หน้าผู้เช่า</span>
+                  <div className="announcement-expiry-modes" role="radiogroup" aria-labelledby="announcement-popup-label">
+                    {[
+                      ...(form.popupUntil ? [{ key: 'keep', label: 'คงเดิม' }] : []),
+                      { key: 'none', label: 'จนกว่าจะกดรับทราบ' },
+                      { key: 'duration', label: 'กำหนดระยะเวลา' },
+                    ].map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={form.popupMode === mode.key}
+                        className={`announcement-expiry-mode${form.popupMode === mode.key ? ' is-active' : ''}`}
+                        onClick={() => {
+                          setError('')
+                          setForm((current) => ({ ...current, popupMode: mode.key }))
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                  {form.popupMode === 'duration' && (
+                    <div className="announcement-expiry-row is-after">
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        aria-label="จำนวน"
+                        value={form.popupValue}
+                        onChange={(event) => setForm((current) => ({ ...current, popupValue: event.target.value.replace(/[^\d]/g, '') }))}
+                      />
+                      <select
+                        aria-label="หน่วยเวลา"
+                        value={form.popupUnit}
+                        onChange={(event) => setForm((current) => ({ ...current, popupUnit: event.target.value }))}
+                      >
+                        {POPUP_UNITS.map((unit) => (
+                          <option key={unit.key} value={unit.key}>
+                            {unit.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <p className={`announcement-expiry-summary ${popupPreview.tone}`} aria-live="polite">
+                    {popupPreview.text}
+                  </p>
+                </div>
+              )}
               <label>
                 รายละเอียด
                 <textarea
@@ -1096,6 +1307,18 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 <strong>{describeExpiry(confirm.expiry)}</strong>
               </div>
             )}
+            {confirm.kind !== 'delete' && form.tone === 'warning' && confirm.popup && (
+              <div className="announcement-confirm-detail">
+                <span>แสดง popup</span>
+                <strong>
+                  {confirm.popup.kind === 'duration'
+                    ? `${formatDuration(confirm.popup.minutes)} นับจากตอนกดยืนยัน`
+                    : confirm.popup.kind === 'keep'
+                      ? `จนถึง ${formatExpiryDate(form.popupUntil)}`
+                      : 'จนกว่าจะกดรับทราบ'}
+                </strong>
+              </div>
+            )}
             <div className="announcement-form-actions">
               <button
                 type="button"
@@ -1126,16 +1349,11 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
           }}
         >
           <section
-            className="announcement-dialog announcement-confirm announcement-result"
+            className="announcement-dialog announcement-confirm"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="announcement-result-title"
           >
-            <button type="button" className="announcement-dialog-close announcement-result-close" onClick={closeResult} aria-label="ปิด" autoFocus>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                <path d="m18 6-12 12M6 6l12 12" />
-              </svg>
-            </button>
             <div className="announcement-confirm-icon is-success">
               <svg
                 width="24"
@@ -1156,6 +1374,11 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
             <div className="announcement-confirm-detail">
               <span>หัวข้อ</span>
               <strong>{result.title}</strong>
+            </div>
+            <div className="announcement-form-actions">
+              <button type="button" className="announcement-board-submit" onClick={closeResult} autoFocus>
+                ปิด
+              </button>
             </div>
           </section>
         </div>

@@ -346,7 +346,7 @@ router.get("/me", async (req, res) => {
     const pool = getPool();
 
     const [customerRows] = await pool.query(
-      `SELECT id, first_name, last_name, phone, room_number, deposit_amount
+      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount, created_at AS registered_at
        FROM Customer WHERE id = ?`,
       [req.user.id],
     );
@@ -355,7 +355,8 @@ router.get("/me", async (req, res) => {
     if (!customerRow) {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
-    const { deposit_amount: depositAmount, ...customer } = customerRow;
+    const customer = customerRow;
+    const depositAmount = customerRow.deposit_amount;
 
     const [
       [roomRows],
@@ -760,7 +761,13 @@ router.get("/parked-vehicles", async (req, res) => {
 
 router.get("/resident-visit-requests", async (req, res) => {
   try {
-    const [requests] = await getPool().query("SELECT * FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC", [req.user.id]);
+    const [requests] = await getPool().query(
+      `SELECT id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone,
+              start_at, end_at, note, status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at,
+              updated_by_name, updated_at, cancelled_by_name, cancelled_at, created_at
+       FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC`,
+      [req.user.id],
+    );
     return res.json({ requests: withVehiclePhotos(requests) });
   } catch (error) {
     console.error("Fetch resident visit requests error:", error);

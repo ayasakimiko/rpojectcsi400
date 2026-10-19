@@ -284,6 +284,16 @@ DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND COLUMN_NAME = 'popup_until'),
+    'SELECT 1',
+    'ALTER TABLE `Announcement` ADD COLUMN `popup_until` DATETIME NULL AFTER expires_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'WaitingList' AND COLUMN_NAME = 'desired_move_in_date'),
     'SELECT 1',
     'ALTER TABLE `WaitingList` ADD COLUMN `desired_move_in_date` DATE NULL AFTER note'
@@ -577,6 +587,76 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'vendor'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `vendor` VARCHAR(120) NULL AFTER description'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'payment_method'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `payment_method` VARCHAR(20) NULL AFTER vendor'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'receipt_number'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `receipt_number` VARCHAR(60) NULL AFTER payment_method'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'room_number'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `room_number` INT UNSIGNED NULL AFTER receipt_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'photos'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `photos` LONGTEXT NULL AFTER room_number'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'deleted_at'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL AFTER created_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND COLUMN_NAME = 'deleted_by_name'),
+    'SELECT 1',
+    'ALTER TABLE `Expense` ADD COLUMN `deleted_by_name` VARCHAR(255) NULL AFTER deleted_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Announcement' AND INDEX_NAME = 'idx_announcement_expires'),
     'SELECT 1',
@@ -651,6 +731,16 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'SafetyIncident' AND COLUMN_NAME = 'cancelled_at'),
     'SELECT 1',
     'ALTER TABLE `SafetyIncident` MODIFY `status` ENUM(''pending'', ''reviewed'', ''cancelled'') NOT NULL DEFAULT ''pending'', ADD COLUMN `cancelled_by_name` VARCHAR(255) NULL AFTER review_note, ADD COLUMN `cancelled_at` DATETIME NULL AFTER cancelled_by_name, ADD COLUMN `cancel_reason` VARCHAR(500) NULL AFTER cancelled_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'hidden_at'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `hidden_at` DATETIME NULL, ADD COLUMN `hidden_by_name` VARCHAR(255) NULL, ADD COLUMN `hidden_tenant_request_id` INT NULL'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
