@@ -2728,7 +2728,6 @@ const TARGET_ROOM_AMENITIES = [
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'refrigerator', label: 'ตู้เย็น' },
   { key: 'bathroom', label: 'ห้องน้ำในตัว' },
-  { key: 'cctv', label: 'CCTV' },
 ]
 
 function getRentDiff(request) {
