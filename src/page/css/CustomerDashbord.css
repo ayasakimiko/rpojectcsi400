@@ -1268,6 +1268,7 @@
   font-variant-numeric: tabular-nums;
 }
 
+.dashboard-rental-table .is-slip,
 .dashboard-rental-table .is-receipt {
   text-align: center;
 }
@@ -1380,7 +1381,7 @@
 
 @media (min-width: 992px) {
   .dashboard-rental-home-card {
-    min-height: 520px;
+    min-height: 640px;
     contain: size;
   }
 
@@ -1388,6 +1389,14 @@
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
+  }
+}
+
+@media (min-width: 1200px) {
+  .dashboard-room-home-card.has-room {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }
 }
 

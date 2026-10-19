@@ -1190,7 +1190,7 @@ const MAINTENANCE_STATUS_LABEL = {
 
 const STAFF_TABS = [
   { key: 'home', label: 'หน้าแรก' },
-  { key: 'payment-review', label: 'สลิปรอตรวจสอบ' },
+  { key: 'payment-review', label: 'ประวัติสลิป' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
@@ -3349,17 +3349,27 @@ function SlipFieldIcon({ name }) {
   )
 }
 
+function formatSlipTime(value) {
+  const date = value ? new Date(value) : null
+  if (!date || Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 function StaffPaymentReview({ onCountChange, focusId }) {
   const [payments, setPayments] = useState([])
+  const [slipHistory, setSlipHistory] = useState([])
+  const [rejectedSlips, setRejectedSlips] = useState([])
+  const [slipView, setSlipView] = useState('passed')
+  const [slipSearch, setSlipSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState(null) 
+  const [notice, setNotice] = useState(null)
   const [confirmReview, setConfirmReview] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
   const [slipViewerOpen, setSlipViewerOpen] = useState(false)
   const [previewClosing, setPreviewClosing] = useState(false)
-  const { setPage, focusItem, resolvePage } = useListFocus(STAFF_CARD_PAGE_SIZE)
+  const { setPage, resolvePage } = useListFocus(STAFF_CARD_PAGE_SIZE)
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -3368,39 +3378,48 @@ function StaffPaymentReview({ onCountChange, focusId }) {
     setNotice({ type: 'error', message })
   }
 
+  const fetchSlips = (headers) =>
+    Promise.all([
+      axios.get('/api/staff/payment-verifications', { headers }),
+      axios.get('/api/staff/payment-slips', { headers }),
+    ]).then(([pending, history]) => ({
+      pending: pending.data.payments || [],
+      history: history.data.slips || [],
+      rejected: history.data.rejected || [],
+    }))
+
+  const applySlips = ({ pending, history, rejected }) => {
+    setPayments(pending)
+    setSlipHistory(history)
+    setRejectedSlips(rejected)
+    if (pending.length === 0) setSlipView((view) => (view === 'pending' ? 'passed' : view))
+    onCountChange?.(pending.length)
+    setError('')
+  }
+
   const loadPayments = () => {
     setLoading(true)
-    return axios
-      .get('/api/staff/payment-verifications', { headers: authHeaders() })
-      .then(({ data }) => {
-        setPayments(data.payments || [])
-        onCountChange?.((data.payments || []).length)
-        setError('')
-      })
-      .catch((err) => showError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ'))
+    return fetchSlips(authHeaders())
+      .then(applySlips)
+      .catch((err) => showError(err.response?.data?.message || 'โหลดประวัติสลิปไม่สำเร็จ'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     let cancelled = false
-    axios
-      .get('/api/staff/payment-verifications', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      })
-      .then(({ data }) => {
+    fetchSlips({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+      .then((result) => {
         if (!cancelled) {
-          setPayments(data.payments || [])
-          onCountChange?.((data.payments || []).length)
-          setError('')
-          const target = focusId ? (data.payments || []).find((payment) => payment.id === focusId) : null
+          applySlips(result)
+          const target = focusId ? result.pending.find((payment) => payment.id === focusId) : null
           if (target) {
-            focusItem(target.id)
+            setSlipView('pending')
             setPreview({ payment: target, url: target.slip_path })
           }
         }
       })
       .catch((err) => {
-        if (!cancelled) showError(err.response?.data?.message || 'โหลดสลิปรอตรวจไม่สำเร็จ')
+        if (!cancelled) showError(err.response?.data?.message || 'โหลดประวัติสลิปไม่สำเร็จ')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -3431,14 +3450,40 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const hasPreview = Boolean(preview)
   useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
 
-  const currentPage = Math.min(resolvePage(payments), Math.max(1, Math.ceil(payments.length / STAFF_CARD_PAGE_SIZE)))
-  const pagePayments = payments.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
+  const isFailedView = slipView === 'failed'
+  const baseSlips = slipView === 'pending' ? payments : isFailedView ? rejectedSlips : slipHistory
+  const searchText = slipSearch.trim().toLowerCase()
+  const visibleSlips = searchText
+    ? baseSlips.filter((slip) =>
+        [
+          slip.room_number,
+          `${slip.first_name || ''} ${slip.last_name || ''}`,
+          slip.phone,
+          slip.sender_name,
+          slip.trans_ref,
+          slip.reason,
+        ].some((value) => String(value ?? '').toLowerCase().includes(searchText)),
+      )
+    : baseSlips
+  const passedTotal = slipHistory.reduce((total, slip) => total + (Number(slip.amount) || 0), 0)
+  const currentPage = Math.min(resolvePage(visibleSlips), Math.max(1, Math.ceil(visibleSlips.length / STAFF_CARD_PAGE_SIZE)))
+  const pageSlips = visibleSlips.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
+  const slipSegments = [
+    { key: 'passed', label: 'ตรวจผ่าน', count: slipHistory.length },
+    { key: 'failed', label: 'ตรวจไม่ผ่าน', count: rejectedSlips.length },
+    ...(payments.length > 0 ? [{ key: 'pending', label: 'ค้างตรวจ (ระบบเดิม)', count: payments.length }] : []),
+  ]
 
-  const openSlip = (payment) => {
+  const selectSlipView = (view) => {
+    setSlipView(view)
+    setPage(1)
+  }
+
+  const openSlip = (payment, isHistory = false, isFailed = false) => {
     setError('')
     setPreviewClosing(false)
     setSlipViewerOpen(false)
-    setPreview({ payment, url: payment.slip_path })
+    setPreview({ payment, url: payment.slip_path, isHistory, isFailed })
   }
 
   const closeSlip = () => setPreviewClosing(true)
@@ -3468,25 +3513,53 @@ function StaffPaymentReview({ onCountChange, focusId }) {
 
   return (
     <section className="staff-card staff-tab-card payment-review-card">
-      <div className="staff-card-header">
-        <h2>
-          สลิปรอตรวจสอบ{' '}
-          <span className="staff-count-pill">{error && payments.length === 0 ? '—' : payments.length}</span>
-        </h2>
-        <button type="button" className="staff-action-btn is-ghost" onClick={loadPayments} disabled={loading}>
-          รีเฟรช
-        </button>
+      <div className="staff-card-header payment-review-header">
+        <div className="payment-review-heading">
+          <span className="payment-review-heading-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+              <path d="m9 10 2 2 4-4" />
+              <path d="M9 16h6" />
+            </svg>
+          </span>
+          <div>
+            <h2>ประวัติสลิป</h2>
+            <p className="payment-review-lead">ตรวจสลิปกับธนาคารอัตโนมัติ สลิปที่ผ่านจะเป็น “ชำระแล้ว” ทันที และใช้ซ้ำไม่ได้</p>
+          </div>
+        </div>
+        <div className="payment-review-stats">
+          <span className="payment-review-stat is-success">
+            <small>ตรวจผ่าน</small>
+            <strong>{slipHistory.length}</strong>
+          </span>
+          <span className="payment-review-stat is-danger">
+            <small>ไม่ผ่าน</small>
+            <strong>{rejectedSlips.length}</strong>
+          </span>
+          <span className="payment-review-stat">
+            <small>ยอดรับแล้ว</small>
+            <strong>฿{passedTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+          </span>
+        </div>
       </div>
-      <p className="payment-review-note">อนุมัติแล้วจึงเปลี่ยนสถานะรายการชำระเป็น “ชำระแล้ว”</p>
-      {loading && payments.length === 0 ? (
-        <p className="staff-empty">กำลังโหลดรายการ...</p>
-      ) : payments.length === 0 && error ? (
-        <p className="staff-empty">โหลดรายการไม่สำเร็จ กดรีเฟรชเพื่อลองใหม่</p>
-      ) : payments.length === 0 ? (
-        <p className="staff-empty">ไม่มีสลิปรอตรวจสอบ</p>
-      ) : (
+      <StaffFilterPanel
+        segments={slipSegments}
+        segmentLabel="หมวดสลิป"
+        active={slipView}
+        onSegment={selectSlipView}
+        search={slipSearch}
+        onSearch={(value) => {
+          setSlipSearch(value)
+          setPage(1)
+        }}
+        searchPlaceholder="ค้นหาเลขห้อง ชื่อผู้เช่า ผู้โอน เบอร์โทร หรือเลขอ้างอิง"
+        resultText={searchText ? `พบ ${visibleSlips.length} จาก ${baseSlips.length} รายการ` : null}
+        canClear={Boolean(searchText)}
+        onClear={() => setSlipSearch('')}
+      />
+      {slipView === 'pending' && visibleSlips.length > 0 && (
         <ul className="staff-rv-list staff-ic-grid is-visit">
-          {pagePayments.map((payment) => {
+          {pageSlips.map((payment) => {
             const types = String(payment.payment_types || '').split(',').filter(Boolean)
             const tenantName = `${payment.first_name || ''} ${payment.last_name || ''}`.trim() || '-'
             return (
@@ -3576,7 +3649,93 @@ function StaffPaymentReview({ onCountChange, focusId }) {
           })}
         </ul>
       )}
-      <StaffPagination page={currentPage} total={payments.length} onChange={setPage} pageSize={STAFF_CARD_PAGE_SIZE} />
+      {loading && visibleSlips.length === 0 ? (
+        <p className="staff-empty">กำลังโหลดรายการ...</p>
+      ) : visibleSlips.length === 0 && error ? (
+        <p className="staff-empty">โหลดรายการไม่สำเร็จ กรุณาเปิดหน้านี้ใหม่อีกครั้ง</p>
+      ) : visibleSlips.length === 0 ? (
+        <p className="staff-empty">
+          {searchText ? 'ไม่พบสลิปที่ตรงกับคำค้นหา' : isFailedView ? 'ไม่มีสลิปที่ตรวจไม่ผ่าน' : 'ยังไม่มีสลิปที่ตรวจผ่าน'}
+        </p>
+      ) : slipView === 'pending' ? null : (
+        <ul className="staff-rv-list staff-ic-grid is-visit">
+          {pageSlips.map((slip) => {
+            const types = String(slip.payment_types || '').split(',').filter(Boolean)
+            const tenantName = `${slip.first_name || ''} ${slip.last_name || ''}`.trim() || '-'
+            return (
+              <li key={slip.id} className={`staff-ic-card staff-ic-visit-card staff-slip-card${isFailedView ? ' is-failed' : ''}`}>
+                <button type="button" className="staff-ic-main" onClick={() => openSlip(slip, true, isFailedView)}>
+                  <span className="staff-ic-head">
+                    <span className="staff-ic-icon">
+                      <SlipFieldIcon name="wallet" />
+                    </span>
+                    <span className="staff-ic-title">
+                      <strong>ห้อง {slip.room_number || '-'}</strong>
+                      <span className="staff-slip-types">
+                        {types.map((type) => (
+                          <em key={type} className="staff-vc-model">{PAYMENT_REVIEW_LABEL[type] || type}</em>
+                        ))}
+                      </span>
+                    </span>
+                    <span className={`staff-ic-status ${isFailedView ? 'is-rejected' : 'is-reviewed'}`}>
+                      {isFailedView ? 'ตรวจไม่ผ่าน' : 'ชำระแล้ว'}
+                    </span>
+                  </span>
+                  <span className="staff-vc-grid">
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">ผู้เช่า</span>
+                      <span className="staff-vc-value" title={tenantName}>{tenantName}</span>
+                    </span>
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">ผู้โอน</span>
+                      <span className="staff-vc-value" title={slip.sender_name || ''}>{slip.sender_name || '-'}</span>
+                    </span>
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">เวลาโอน</span>
+                      <span className="staff-vc-value">{formatSlipTime(slip.trans_at || slip.created_at)}</span>
+                    </span>
+                  </span>
+                  <span className="staff-vc-range staff-slip-amount">
+                    <span className="staff-vc-range-icon" aria-hidden="true">
+                      <SlipFieldIcon name="wallet" />
+                    </span>
+                    <span className="staff-vc-range-body">
+                      <span className="staff-vc-label">ยอดในสลิป</span>
+                      <strong>
+                        {slip.amount == null
+                          ? '-'
+                          : `฿${Number(slip.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </strong>
+                    </span>
+                  </span>
+                  {isFailedView && <span className="payment-review-reason">{slip.reason}</span>}
+                </button>
+                <div className="staff-ic-photos">
+                  <span className="staff-ic-label">สลิปโอนเงิน</span>
+                  <span className="staff-ic-photo-row">
+                    <button type="button" className="staff-ic-photo" onClick={() => openSlip(slip, true, isFailedView)} aria-label={`ดูสลิปห้อง ${slip.room_number}`}>
+                      <UploadImage src={slip.slip_path} alt="" loading="lazy" />
+                    </button>
+                  </span>
+                </div>
+                <div className="staff-ic-foot">
+                  <span className="staff-ic-result" title={slip.trans_ref || ''}>
+                    {isFailedView
+                      ? `ส่งเมื่อ ${formatSlipTime(slip.created_at)}`
+                      : `ตรวจอัตโนมัติ · ${slip.trans_ref}`}
+                  </span>
+                  <span className="staff-ic-actions">
+                    <button type="button" className="staff-ic-btn" onClick={() => openSlip(slip, true, isFailedView)}>
+                      ดูสลิป
+                    </button>
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <StaffPagination page={currentPage} total={visibleSlips.length} onChange={setPage} pageSize={STAFF_CARD_PAGE_SIZE} />
       {confirmReview && (
         <Modal
           title={confirmReview.decision === 'approved' ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป'}
@@ -3783,11 +3942,12 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                 <div className="payment-slip-amount">
                   <dt>ยอดรวม</dt>
                   <dd>
-                    ฿
-                    {Number(preview.payment.amount).toLocaleString('th-TH', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {preview.payment.amount == null
+                      ? '-'
+                      : `฿${Number(preview.payment.amount).toLocaleString('th-TH', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
                   </dd>
                 </div>
                 <div>
@@ -3818,24 +3978,61 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                       .join(', ')}
                   </dd>
                 </div>
-                <div>
-                  <dt>
-                    <SlipFieldIcon name="date" />
-                    วันที่ส่ง
-                  </dt>
-                  <dd>
-                    {new Date(preview.payment.payment_date).toLocaleDateString('th-TH', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </dd>
-                </div>
+                {preview.isHistory ? (
+                  <>
+                    <div>
+                      <dt>
+                        <SlipFieldIcon name="user" />
+                        ผู้โอน
+                      </dt>
+                      <dd>{preview.payment.sender_name || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <SlipFieldIcon name="date" />
+                        เวลาโอน
+                      </dt>
+                      <dd>{formatSlipTime(preview.payment.trans_at || preview.payment.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <SlipFieldIcon name="list" />
+                        เลขอ้างอิง
+                      </dt>
+                      <dd>{preview.payment.trans_ref || '-'}</dd>
+                    </div>
+                    {preview.isFailed && (
+                      <div>
+                        <dt>
+                          <SlipFieldIcon name="list" />
+                          เหตุผลที่ไม่ผ่าน
+                        </dt>
+                        <dd>{preview.payment.reason}</dd>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div>
+                    <dt>
+                      <SlipFieldIcon name="date" />
+                      วันที่ส่ง
+                    </dt>
+                    <dd>
+                      {new Date(preview.payment.payment_date).toLocaleDateString('th-TH', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
 
             <footer className="payment-slip-footer">
               <SlipDownloadButton url={preview.url} fileName={`slip-room-${preview.payment.room_number}-${preview.payment.id}`} />
+              {!preview.isHistory && (
+              <>
               <button
                 type="button"
                 className="staff-action-btn is-danger"
@@ -3852,6 +4049,8 @@ function StaffPaymentReview({ onCountChange, focusId }) {
               >
                 อนุมัติ
               </button>
+              </>
+              )}
             </footer>
           </section>
         </div>
@@ -7676,7 +7875,7 @@ function StaffMain() {
     'payment-review': {
       title: 'การเงิน',
       tiles: [
-        { key: 'slip', icon: 'slip', tone: 'blue', label: 'สลิปรอตรวจ', value: pendingSlipCount, onClick: () => openSummaryTarget('payment-review') },
+        { key: 'slip', icon: 'slip', tone: 'blue', label: 'สลิปค้างตรวจ', value: pendingSlipCount, onClick: () => openSummaryTarget('payment-review') },
         { key: 'due', icon: 'due', tone: 'amber', label: 'รอเก็บเงิน', value: summary.dueCount, onClick: () => openSummaryTarget('home', 'due') },
       ],
     },

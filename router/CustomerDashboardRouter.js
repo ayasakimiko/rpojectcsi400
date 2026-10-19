@@ -24,10 +24,17 @@ import {
   parseTenantRequestInput,
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
+import {
+  inquireSlip,
+  normalizeSlipPayload,
+  SlipVerificationError,
+  slipPartyName,
+  slipReceiverMatches,
+  slipTransactionTime,
+} from "../middleware/slipVerification.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
 import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.js";
 
-// ตั้งค่า Router และเงื่อนไขคำขอ ยานพาหนะ รูปประกอบ และความรุนแรงของเหตุ
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
 const SAFETY_INCIDENT_MAX_PHOTOS = 4;
@@ -61,7 +68,6 @@ export function classifySafetySeverity(incidentType, description) {
   const text = String(description ?? "").toLowerCase();
   return URGENT_INCIDENT_KEYWORDS.some((keyword) => text.includes(keyword)) ? "urgent" : "normal";
 }
-// ตั้งค่าการอัปโหลดสลิปชำระเงินและการจัดการข้อผิดพลาดของไฟล์
 const PAYMENT_SLIP_FOLDER = "payment-slips";
 const PAYMENT_SLIP_EXTENSIONS = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
@@ -87,7 +93,6 @@ function parsePaymentSlip(req, res, next) {
   });
 }
 
-// โหลดรูปประกอบงานแจ้งซ่อมเพื่อใช้ร่วมกันในแต่ละบทบาท
 export async function attachMaintenancePhotos(pool, requests) {
   if (requests.length === 0) return requests;
   const [photos] = await pool.query(
@@ -105,7 +110,6 @@ export async function attachMaintenancePhotos(pool, requests) {
 }
 
 
-// ฟังก์ชันกลางสำหรับแจ้งเหตุด้านความปลอดภัยและบันทึกรูปประกอบ
 export async function createSafetyIncident(req, res) {
   let savedPhotos = [];
   try {
@@ -163,7 +167,6 @@ export async function createSafetyIncident(req, res) {
   }
 }
 
-// ตรวจสอบสิทธิ์ผู้เช่าและจัดการข้อมูลโปรไฟล์กับการเปลี่ยนรหัสผ่าน
 router.use(authenticate, requireCustomerRole, requireActiveCustomer);
 router.post("/dorm-info/acknowledge", async (req, res) => {
   try {
@@ -231,7 +234,6 @@ router.patch("/profile", async (req, res) => {
   }
 });
 
-// คำนวณยอดค่าเช่า ค่าน้ำ ค่าไฟ เงินมัดจำ และยอดค้างชำระปัจจุบัน
 const GRACE_DAYS = 3;
 
 function computeRentDue(room, paymentsForBooking, depositAmount) {
@@ -360,7 +362,6 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   };
 }
 
-// โหลดข้อมูลแดชบอร์ดผู้เช่า ห้องพัก สัญญา บิล ประวัติ และประกาศ
 router.get("/me", async (req, res) => {
   try {
     const pool = getPool();
@@ -490,7 +491,6 @@ router.get("/me", async (req, res) => {
   }
 });
 
-// รับสลิปและสร้างรายการชำระเงินเพื่อรอเจ้าหน้าที่ตรวจสอบ
 const PAYMENT_METHOD_LABELS = { promptpay: "ผ่าน PromptPay", bank: "โอนเข้าบัญชีธนาคาร" };
 
 router.get("/payment-channels", async (_req, res) => {
@@ -514,16 +514,46 @@ router.get("/payment-channels", async (_req, res) => {
   }
 });
 
+const SLIP_USED_MESSAGE = "สลิปนี้ถูกใช้ชำระเงินไปแล้ว ไม่สามารถใช้ซ้ำได้";
+
+async function isSlipUsed(pool, column, value) {
+  const [rows] = await pool.query(`SELECT 1 FROM PaymentSlip WHERE ${column} = ? LIMIT 1`, [value]);
+  return rows.length > 0;
+}
+
+async function recordSlipRejection(pool, attempt, file, reason) {
+  const slip = attempt.slip;
+  const amount = slip ? Math.round(Number(slip.amount) * 100) : NaN;
+  await pool.query(
+    `INSERT INTO PaymentSlipRejection (booking_id, customer_id, slip_path, qr_payload, trans_ref, amount, trans_at,
+                                       sender_name, receiver_name, reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      attempt.bookingId,
+      attempt.customerId,
+      `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(file.filename)}`,
+      attempt.qrPayload || null,
+      slip ? String(slip.transRef ?? "").replace(/[^\x21-\x7e]/g, "").slice(0, 64) || null : null,
+      Number.isSafeInteger(amount) ? amount / 100 : null,
+      slip ? slipTransactionTime(slip) : null,
+      slip ? slipPartyName(slip.sender) : null,
+      slip ? slipPartyName(slip.receiver) : null,
+      String(reason).slice(0, 255),
+    ],
+  );
+}
+
 router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
   let connection;
+  let attempt = null;
   try {
     if (!req.file) return res.status(400).json({ message: "กรุณาแนบสลิปการโอนเงิน" });
     const paymentMethod = req.body?.payment_method;
     if (!PAYMENT_METHOD_LABELS[paymentMethod]) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: "กรุณาเลือกช่องทางการชำระเงิน" });
+      throw new SlipVerificationError(400, "กรุณาเลือกช่องทางการชำระเงิน");
     }
     const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod];
+    const qrPayload = normalizeSlipPayload(req.body?.qr_payload);
     const pool = getPool();
 
     const [customerRows] = await pool.query(
@@ -531,10 +561,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       [req.user.id],
     );
     const customer = customerRows[0];
-    if (!customer) {
-      fs.unlinkSync(req.file.path);
-      return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
-    }
+    if (!customer) throw new SlipVerificationError(404, "ไม่พบข้อมูลผู้ใช้");
 
     const [roomRows] = await pool.query(
       `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
@@ -547,10 +574,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       [customer.id],
     );
     const booking = bookingRows[0];
-    if (!booking) {
-      fs.unlinkSync(req.file.path);
-      return res.status(404).json({ message: "ไม่พบสัญญาเช่าของคุณ" });
-    }
+    if (!booking) throw new SlipVerificationError(404, "ไม่พบสัญญาเช่าของคุณ");
 
     const [paymentsForBooking] = await pool.query(
       `SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ?`,
@@ -558,27 +582,59 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     );
 
     const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount);
-    if (!currentDue) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องชำระในขณะนี้" });
-    }
+    if (!currentDue) throw new SlipVerificationError(400, "ไม่มียอดค่าเช่าที่ต้องชำระในขณะนี้");
 
     if (paymentsForBooking.some((payment) => payment.status === "pending" && payment.slip_path)) {
-      fs.unlinkSync(req.file.path);
-      return res.status(409).json({ message: "มีสลิปที่รอตรวจสอบอยู่แล้ว" });
+      throw new SlipVerificationError(409, "มีสลิปที่รอตรวจสอบอยู่แล้ว");
     }
 
+    attempt = { bookingId: booking.id, customerId: customer.id, qrPayload, slip: null };
+    if (qrPayload && (await isSlipUsed(pool, "qr_payload", qrPayload))) {
+      throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
+    }
+    const slip = await inquireSlip({ payload: qrPayload, file: req.file });
+    attempt.slip = slip;
+    const transRef = String(slip.transRef).replace(/[^\x21-\x7e]/g, "").slice(0, 64);
+    if (!transRef) throw new SlipVerificationError(400, "สลิปไม่ถูกต้อง หรือไม่พบรายการโอนนี้ในระบบธนาคาร");
+    if (await isSlipUsed(pool, "trans_ref", transRef)) throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
+
+    const slipAmountCents = Math.round(Number(slip.amount) * 100);
+    const dueCents = Math.round(Number(currentDue.amount) * 100);
+    if (!Number.isSafeInteger(slipAmountCents) || slipAmountCents < dueCents) {
+      throw new SlipVerificationError(
+        400,
+        `ยอดเงินในสลิป (฿${(Number(slip.amount) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}) น้อยกว่ายอดที่ต้องชำระ (฿${currentDue.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})`,
+      );
+    }
+
+    const [configRows] = await pool.query("SELECT promptpay_id, bank_account_no FROM DormConfig WHERE id = 1");
+    const config = configRows[0] || {};
+    if (!slipReceiverMatches(slip, [config.promptpay_id, config.bank_account_no])) {
+      throw new SlipVerificationError(400, "บัญชีผู้รับในสลิปไม่ตรงกับบัญชีของหอพัก กรุณาตรวจสอบสลิปอีกครั้ง");
+    }
+
+    attempt = null;
     const slipPath = `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
+    await connection.query(`SELECT id FROM Booking WHERE id = ? FOR UPDATE`, [booking.id]);
+    const [lockedPayments] = await connection.query(
+      `SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ? FOR UPDATE`,
+      [booking.id],
+    );
+    const lockedDue = computeCurrentDue(room, lockedPayments, customer.deposit_amount);
+    if (!lockedDue || Math.round(Number(lockedDue.amount) * 100) !== dueCents) {
+      throw new SlipVerificationError(409, "ยอดที่ต้องชำระเปลี่ยนแปลงระหว่างตรวจสอบสลิป กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง");
+    }
+
     if (currentDue.rentAmount > 0) {
       const note = currentDue.lumpSumMonths
-        ? `รอตรวจสอบสลิป - ค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน · ${methodLabel}`
-        : `รอตรวจสอบสลิปค่าเช่า · ${methodLabel}`;
+        ? `ชำระค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน · ${methodLabel} · ตรวจสลิปอัตโนมัติ`
+        : `ชำระค่าเช่า · ${methodLabel} · ตรวจสลิปอัตโนมัติ`;
 
       await connection.query(
-        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'pending', 'rent', ?, ?)`,
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?, ?)`,
         [booking.id, currentDue.rentAmount, note, slipPath],
       );
     }
@@ -586,16 +642,56 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
     if (utilityPaymentIds.length > 0) {
       await connection.query(
-        `UPDATE Payment SET slip_path = ?, note = LEFT(CONCAT(COALESCE(note, ''), ' (รอตรวจสอบสลิป · ', ?, ')'), 255) WHERE id IN (?) AND status = 'pending'`,
+        `UPDATE Payment SET status = 'paid', payment_date = CURDATE(), slip_path = ?,
+                note = LEFT(CONCAT(COALESCE(note, ''), ' (ชำระแล้ว · ', ?, ' · ตรวจสลิปอัตโนมัติ)'), 255)
+         WHERE id IN (?) AND status = 'pending'`,
         [slipPath, methodLabel, utilityPaymentIds],
       );
     }
 
+    if (currentDue.rentAmount > 0 && currentDue.lumpSumMonths) {
+      await connection.query(
+        `UPDATE Room SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
+         WHERE room_number = ?`,
+        [currentDue.periodEnd, currentDue.lumpSumMonths - 1, customer.room_number],
+      );
+    }
+
+    await connection.query(
+      `INSERT INTO PaymentSlip (trans_ref, qr_payload, booking_id, customer_id, slip_path, amount, trans_at,
+                                sending_bank, receiving_bank, sender_name, receiver_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        transRef,
+        qrPayload || null,
+        booking.id,
+        customer.id,
+        slipPath,
+        slipAmountCents / 100,
+        slipTransactionTime(slip),
+        String(slip.sendingBank ?? "").slice(0, 10) || null,
+        String(slip.receivingBank ?? "").slice(0, 10) || null,
+        slipPartyName(slip.sender),
+        slipPartyName(slip.receiver),
+      ],
+    );
+
     await connection.commit();
-    return res.status(201).json({ message: "ส่งสลิปสำเร็จ กรุณารอเจ้าหน้าที่ตรวจสอบ" });
+    return res.status(201).json({ message: "ตรวจสอบสลิปผ่านแล้ว ชำระเงินเรียบร้อย" });
   } catch (error) {
     if (connection) await connection.rollback();
-    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    let keepFile = false;
+    if (attempt && req.file && error instanceof SlipVerificationError && error.status < 500) {
+      keepFile = await recordSlipRejection(getPool(), attempt, req.file, error.message)
+        .then(() => true)
+        .catch((recordError) => {
+          console.error("Record slip rejection error:", recordError);
+          return false;
+        });
+    }
+    if (!keepFile && req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    if (error instanceof SlipVerificationError) return res.status(error.status).json({ message: error.message });
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: SLIP_USED_MESSAGE });
     console.error("Confirm payment error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   } finally {
@@ -603,7 +699,6 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
   }
 });
 
-// ผู้เช่าส่งและยกเลิกคำขอแจ้งซ่อม พร้อมรายละเอียดติดต่อและรูปประกอบ
 router.post("/maintenance", async (req, res) => {
   try {
     const pool = getPool();
@@ -697,7 +792,6 @@ router.post("/maintenance/:id/cancel", async (req, res) => {
   }
 });
 
-// ส่งคำขอต่อสัญญา ย้ายห้อง หรือย้ายออกจากหอพัก
 router.post("/requests", async (req, res) => {
   let connection;
   try {
@@ -768,7 +862,6 @@ router.post("/requests", async (req, res) => {
   }
 });
 
-// บันทึกการรับทราบประกาศของผู้เช่า
 router.post("/announcements/:id/acknowledge", async (req, res) => {
   try {
     const announcementId = Number(req.params.id);
@@ -791,7 +884,6 @@ router.post("/announcements/:id/acknowledge", async (req, res) => {
   }
 });
 
-// แสดงรถที่ลงทะเบียนและจัดการคำขอผู้มาติดต่อกับยานพาหนะของผู้เช่า
 router.get("/parked-vehicles", async (req, res) => {
   try {
     const pool = getPool();
@@ -913,7 +1005,6 @@ router.post("/resident-visit-requests", async (req, res) => {
   }
 });
 
-// แสดงประวัติและรับแจ้งเหตุด้านความปลอดภัยของผู้เช่า
 router.get("/safety-incidents", async (req, res) => {
   try {
     const [incidents] = await getPool().query(

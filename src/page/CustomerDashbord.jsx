@@ -16,6 +16,7 @@ import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
 import { formatPromptPayId, isValidPromptPayId } from '../utils/promptpay.js'
+import readSlipQrPayload from '../utils/slipQr.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -4089,6 +4090,7 @@ function CustomerDashbord() {
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
   const [historyPageByBooking, setHistoryPageByBooking] = useState({})
   const [historyBookingId, setHistoryBookingId] = useState(null)
+  const [slipPreview, setSlipPreview] = useState(null)
 
   const [receiptRequest, setReceiptRequest] = useState(null)
   const [receiptGenerating, setReceiptGenerating] = useState(false)
@@ -4106,7 +4108,8 @@ function CustomerDashbord() {
       confirmCancelId !== null ||
       notifOpen ||
       Boolean(notifDetail) ||
-      Boolean(maintenanceDetail)
+      Boolean(maintenanceDetail) ||
+      Boolean(slipPreview)
 
     if (!isAnyOverlayOpen) return
 
@@ -4126,6 +4129,7 @@ function CustomerDashbord() {
     notifOpen,
     notifDetail,
     maintenanceDetail,
+    slipPreview,
   ])
 
   const remindMoveRoomContact = (dashboardData, onlyOnChange) => {
@@ -4357,8 +4361,10 @@ function CustomerDashbord() {
     setPaymentSubmitting(true)
     setPaymentError('')
     try {
+      const qrPayload = await readSlipQrPayload(paymentSlip)
       const formData = new FormData()
       formData.append('payment_method', paymentMethod)
+      if (qrPayload) formData.append('qr_payload', qrPayload)
       formData.append('slip', paymentSlip)
       const { data: result } = await axios.post(
         '/api/customer/payments/confirm',
@@ -5151,6 +5157,7 @@ function CustomerDashbord() {
                     <th className="is-amount">จำนวนเงิน</th>
                     <th>สถานะ</th>
                     <th>หมายเหตุ</th>
+                    <th className="is-slip">สลิป</th>
                     <th className="is-receipt">ใบเสร็จ</th>
                   </tr>
                 </thead>
@@ -5181,6 +5188,20 @@ function CustomerDashbord() {
                         <span className={`dashboard-rental-note${note && note !== '-' ? '' : ' is-empty'}`} title={typeof note === 'string' ? note : undefined}>
                           {note || '-'}
                         </span>
+                      </td>
+                      <td className="is-slip">
+                        {payment.slip_path ? (
+                          <button
+                            type="button"
+                            className="dashboard-receipt-btn"
+                            onClick={() => setSlipPreview({ ...payment, room_number: entry.room_number })}
+                            aria-label={`ดูสลิปการชำระเงินห้อง ${entry.room_number}`}
+                          >
+                            ดูสลิป
+                          </button>
+                        ) : (
+                          <span className="dashboard-empty-cell">-</span>
+                        )}
                       </td>
                       <td className="is-receipt">
                         {payment.status !== 'paid' ? (
@@ -6877,8 +6898,8 @@ function CustomerDashbord() {
         {customerTab === 'home' && (
           <>
             <div className="row g-3">
-              <div className="col-12 col-lg-4">
-                <div className="dashboard-card">
+              <div className="col-12 col-xl-3">
+                <div className={`dashboard-card dashboard-room-home-card${room ? ' has-room' : ''}`}>
                   <h2>ห้องของฉัน</h2>
                   {room ? (
                     <>
@@ -7137,7 +7158,7 @@ function CustomerDashbord() {
                                       ยกเลิก
                                     </button>
                                     <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting || !paymentSlip}>
-                                      {paymentSubmitting ? 'กำลังส่งสลิป...' : paymentSlip ? 'ส่งสลิปรอตรวจสอบ' : 'แนบสลิปก่อนส่ง'}
+                                      {paymentSubmitting ? 'กำลังตรวจสอบสลิป...' : paymentSlip ? 'ตรวจสอบสลิปและชำระเงิน' : 'แนบสลิปก่อนส่ง'}
                                     </button>
                                   </div>
                                 </form>
@@ -7163,7 +7184,7 @@ function CustomerDashbord() {
                 </div>
               </div>
 
-              <div className="col-12 col-lg-8">
+              <div className="col-12 col-xl-9">
                 <div className="dashboard-card dashboard-rental-home-card">
                   <div className="dashboard-card-header">
                     <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
@@ -7777,6 +7798,15 @@ function CustomerDashbord() {
             <ReceiptTemplate receiptRequest={receiptRequest} customer={customer} />
           </div>
         </div>
+      )}
+      {slipPreview && (
+        <PhotoLightbox
+          photos={[{ name: `สลิปห้อง ${slipPreview.room_number}`, url: slipPreview.slip_path }]}
+          title="สลิปการชำระเงิน"
+          subtitle={`ห้อง ${slipPreview.room_number} · ${formatDateTime(slipPreview.created_at)}`}
+          label="สลิป"
+          onClose={() => setSlipPreview(null)}
+        />
       )}
     </div>
   )

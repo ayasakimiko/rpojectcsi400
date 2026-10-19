@@ -4,14 +4,12 @@ import path from "node:path";
 import { authenticate, STAFF_ROLES } from "../middleware/authMiddleware.js";
 import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
 
-// กำหนดบทบาท โฟลเดอร์ และชนิดไฟล์รูปภาพที่อนุญาต
 const ROLE_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 const FOLDERS = new Set(["announcements", "expenses", "incidents", "maintenance", "move-out-inspections", "parcels", "payment-slips", "vehicles"]);
 const STAFF_ONLY_FOLDERS = new Set(["expenses", "move-out-inspections"]);
 const IMAGE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp)$/i;
 const NOT_FOUND = "ไม่พบรูปภาพนี้";
 
-// ตั้งค่า Router สำหรับโหลดรูปภาพหลังตรวจสอบการเข้าสู่ระบบ
 export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } = {}) {
   const router = Router();
 
@@ -22,7 +20,6 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
   });
   router.use(authenticate);
 
-  // ตรวจสอบสิทธิ์ในรูปภาพและตำแหน่งไฟล์ ก่อนส่งไฟล์ให้ผู้ใช้งาน
   router.get("/:folder/:fileName", async (req, res) => {
     const { folder, fileName } = req.params;
     if (!FOLDERS.has(folder) || fileName.length > 255 || !IMAGE_FILE.test(fileName)) {
@@ -49,10 +46,15 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
 
       const storedUrl = `/uploads/${folder}/${fileName}`;
       if (folder === "payment-slips") {
+        const isCustomer = role === "Customer";
         const [payments] = await pool.query(
           `SELECT p.id FROM Payment p JOIN Booking b ON b.id = p.booking_id
-           WHERE p.slip_path = ?${role === "Customer" ? " AND b.customer_id = ?" : ""} LIMIT 1`,
-          role === "Customer" ? [storedUrl, id] : [storedUrl],
+           WHERE p.slip_path = ?${isCustomer ? " AND b.customer_id = ?" : ""}
+           UNION ALL
+           SELECT r.id FROM PaymentSlipRejection r
+           WHERE r.slip_path = ?${isCustomer ? " AND r.customer_id = ?" : ""}
+           LIMIT 1`,
+          isCustomer ? [storedUrl, id, storedUrl, id] : [storedUrl, storedUrl],
         );
         if (payments.length === 0) return res.status(404).json({ message: NOT_FOUND });
       }

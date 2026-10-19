@@ -8,6 +8,8 @@ x-service-env: &service-env
   PARKING_CAPACITY: ${PARKING_CAPACITY:-}
   JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
   CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+  RDCW_CLIENT_ID: ${RDCW_CLIENT_ID:-}
+  RDCW_CLIENT_SECRET: ${RDCW_CLIENT_SECRET:-}
   NODE_OPTIONS: --max-old-space-size=96 --max-semi-space-size=1
   UV_THREADPOOL_SIZE: 2
   TZ: Asia/Bangkok

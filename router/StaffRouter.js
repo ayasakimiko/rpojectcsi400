@@ -27,7 +27,6 @@ import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 
-// ตั้งค่า Router ตรวจสอบสิทธิ์เจ้าหน้าที่ และเชื่อมส่วนรายจ่ายกับประกาศ
 const router = Router();
 const VEHICLE_MAX_PHOTOS = 6;
 
@@ -38,7 +37,6 @@ router.use("/dorm-info", dormInfoRouter);
 
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
-// จัดการรายงานเหตุด้านความปลอดภัย แจ้งเหตุ ตรวจสอบ และยกเลิก
 router.get("/safety-incidents", listSafetyIncidents);
 router.post("/safety-incidents", createSafetyIncident);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
@@ -63,7 +61,6 @@ router.patch("/safety-incidents/:id/cancel", async (req, res) => {
   }
 });
 
-// โหลดข้อมูลบัญชีเจ้าหน้าที่ที่กำลังเข้าสู่ระบบ
 router.get("/me", async (req, res) => {
   try {
     const pool = getPool();
@@ -83,7 +80,39 @@ router.get("/me", async (req, res) => {
   }
 });
 
-// ตรวจสลิปชำระเงิน อนุมัติหรือปฏิเสธ และปรับสถานะรายการชำระเงิน
+router.get("/payment-slips", async (_req, res) => {
+  try {
+    const [slips] = await getPool().query(
+      `SELECT ps.id, ps.booking_id, ps.trans_ref, ps.amount, ps.trans_at, ps.sending_bank, ps.receiving_bank,
+              ps.sender_name, ps.receiver_name, ps.slip_path, ps.created_at,
+              c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number,
+              (SELECT GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') FROM Payment p
+                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_types
+       FROM PaymentSlip ps
+       JOIN Customer c ON c.id = ps.customer_id
+       LEFT JOIN Booking b ON b.id = ps.booking_id
+       LEFT JOIN Room r ON r.id = b.room_id
+       ORDER BY ps.created_at DESC, ps.id DESC
+       LIMIT 500`,
+    );
+    const [rejected] = await getPool().query(
+      `SELECT sr.id, sr.booking_id, sr.trans_ref, sr.amount, sr.trans_at, sr.sender_name, sr.receiver_name,
+              sr.slip_path, sr.reason, sr.created_at,
+              c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number
+       FROM PaymentSlipRejection sr
+       JOIN Customer c ON c.id = sr.customer_id
+       LEFT JOIN Booking b ON b.id = sr.booking_id
+       LEFT JOIN Room r ON r.id = b.room_id
+       ORDER BY sr.created_at DESC, sr.id DESC
+       LIMIT 500`,
+    );
+    return res.json({ slips, rejected });
+  } catch (error) {
+    console.error("Fetch payment slip history error:", error);
+    return res.status(500).json({ message: "โหลดประวัติสลิปไม่สำเร็จ" });
+  }
+});
+
 router.get("/payment-verifications", async (_req, res) => {
   try {
     const pool = getPool();
@@ -186,7 +215,6 @@ router.patch("/payment-verifications/:id", async (req, res) => {
   }
 });
 
-// จัดการรายชื่อผู้สนใจเข้าพักและคิวรอห้อง
 router.get("/waiting-list", async (_req, res) => {
   try {
     const pool = getPool();
@@ -267,7 +295,6 @@ router.delete("/waiting-list/:id", async (req, res) => {
   }
 });
 
-// จัดการผลตรวจสภาพห้อง รายการตรวจ ความเสียหาย และรูปประกอบ
 router.get("/move-out-inspections", async (_req, res) => {
   try {
     const pool = getPool();
@@ -514,7 +541,6 @@ router.post("/move-out-inspections", async (req, res) => {
   }
 });
 
-// แสดงรายการห้อง ข้อมูลผู้เช่า ยอดเรียกเก็บ และประวัติการเช่า
 router.get("/rooms", async (req, res) => {
   try {
     const pool = getPool();
@@ -637,7 +663,6 @@ router.get("/rooms/:room_number/history", async (req, res) => {
   }
 });
 
-// บันทึกการรับเงินสดค่าเช่าและค่าสาธารณูปโภคของห้องพัก
 router.post("/rooms/:room_number/collect-payment", async (req, res) => {
   let connection;
   try {
@@ -728,7 +753,6 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
   }
 });
 
-// ออกบิลค่าน้ำและค่าไฟจากข้อมูลมิเตอร์และอัตราของห้องพัก
 router.post("/rooms/:room_number/utility-bill", async (req, res) => {
   let connection;
   try {
@@ -847,7 +871,6 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
   }
 });
 
-// แสดงคำขอผู้เช่าและงานแจ้งซ่อมที่รอดำเนินการ
 router.get("/requests", async (req, res) => {
   try {
     const pool = getPool();
@@ -886,7 +909,6 @@ router.get("/requests", async (req, res) => {
   }
 });
 
-// ประวัติคำขอผู้เช่าและแจ้งซ่อม พร้อมการค้นหา กรองสถานะ และแบ่งหน้า
 const REQUEST_HISTORY_PAGE_SIZE = 10;
 
 router.get("/requests/history", async (req, res) => {
@@ -1006,7 +1028,6 @@ router.get("/maintenance/history", async (req, res) => {
   }
 });
 
-// รับเรื่อง อนุมัติ และปฏิเสธคำขอต่อสัญญา ย้ายห้อง หรือย้ายออก
 router.post("/requests/:id/acknowledge", async (req, res) => {
   try {
     const pool = getPool();
@@ -1258,7 +1279,6 @@ router.post("/requests/:id/reject", async (req, res) => {
   }
 });
 
-// กำหนดและดำเนินการเปลี่ยนสถานะงานแจ้งซ่อม พร้อมบันทึกผู้รับผิดชอบ
 const MAINTENANCE_TRANSITIONS = {
   accept: {
     from: ["pending"],
@@ -1321,7 +1341,6 @@ router.post("/maintenance/:id/:action", async (req, res) => {
   }
 });
 
-// จัดการคำขอผู้มาติดต่อและยานพาหนะ เพิ่ม แก้ไข ลบ และอนุมัติผล
 router.get("/resident-visit-requests", listResidentVisitRequests);
 
 router.post("/resident-visit-requests", async (req, res) => {

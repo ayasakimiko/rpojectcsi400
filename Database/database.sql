@@ -750,7 +750,6 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
--- กฎระเบียบและเบอร์ติดต่อที่ Admin/Owner เผยแพร่ให้ผู้เช่าและ Staff
 CREATE TABLE IF NOT EXISTS DormConfig (
     id INT PRIMARY KEY DEFAULT 1,
     dorm_name VARCHAR(255) NOT NULL DEFAULT 'หอพักใจ',
@@ -764,7 +763,6 @@ CREATE TABLE IF NOT EXISTS DormConfig (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- รองรับฐานข้อมูล DormConfig เดิม โดยเก็บข้อมูลที่บันทึกไว้
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'gate_close_time'),
@@ -807,7 +805,6 @@ DEALLOCATE PREPARE schema_upgrade;
 
 ALTER TABLE `Customer` ALTER COLUMN `dorm_info_acknowledged_at` SET DEFAULT NULL;
 
--- ข้อมูลค่าน้ำตามหน่วยและช่องทางรับโอนจาก OwnerC โดยไม่แก้ข้อมูลเดิม
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'water_unit_price'),
     'SELECT 1',
@@ -881,3 +878,42 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+CREATE TABLE IF NOT EXISTS PaymentSlip (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    trans_ref VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    qr_payload VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    booking_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    slip_path VARCHAR(255) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    trans_at DATETIME NULL,
+    sending_bank VARCHAR(10) NULL,
+    receiving_bank VARCHAR(10) NULL,
+    sender_name VARCHAR(255) NULL,
+    receiver_name VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_payment_slip_trans_ref (trans_ref),
+    UNIQUE KEY uq_payment_slip_qr_payload (qr_payload),
+    KEY idx_payment_slip_booking (booking_id),
+    KEY idx_payment_slip_path (slip_path)
+);
+
+CREATE TABLE IF NOT EXISTS PaymentSlipRejection (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    booking_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    slip_path VARCHAR(255) NOT NULL,
+    qr_payload VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    trans_ref VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    amount DECIMAL(10,2) NULL,
+    trans_at DATETIME NULL,
+    sender_name VARCHAR(255) NULL,
+    receiver_name VARCHAR(255) NULL,
+    reason VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    KEY idx_payment_slip_rejection_created (created_at),
+    KEY idx_payment_slip_rejection_path (slip_path)
+);
