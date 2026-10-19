@@ -16,6 +16,7 @@ import {
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
+import announcementRouter from "./AnnouncementRouter.js";
 
 // ตั้งค่า Router ตรวจสอบสิทธิ์เจ้าของหอพัก และเชื่อมส่วนรายจ่ายกับรายงานเหตุ
 const router = Router();
@@ -65,6 +66,7 @@ router.put("/payment-settings", async (req, res) => {
     return res.status(500).json({ message: "ไม่สามารถบันทึกข้อมูลรับโอนได้" });
   }
 });
+router.use("/announcements", announcementRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
@@ -102,6 +104,50 @@ function buildUpdate(allowedColumns, body) {
 }
 
 const PAYMENT_LOG_PAGE_SIZE = 10;
+
+router.get("/logs/audit", async (req, res) => {
+  try {
+    const pool = getPool();
+    const page = parsePage(req.query.page);
+    const pageSize = 20;
+    const offset = (page - 1) * pageSize;
+    const conditions = [];
+    const params = [];
+    const roles = ["Customer", "Staff", "Admin", "Owner"];
+    if (roles.includes(req.query.role)) {
+      conditions.push("al.actor_role = ?");
+      params.push(req.query.role);
+    }
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.query.method)) {
+      conditions.push("al.method = ?");
+      params.push(req.query.method);
+    }
+    const search = parseSearch(req.query.search);
+    if (search) {
+      conditions.push("(al.endpoint LIKE ? OR al.actor_role LIKE ? OR CAST(al.actor_id AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR CONCAT(s.first_name, ' ', s.last_name) LIKE ? OR CONCAT(a.first_name, ' ', a.last_name) LIKE ? OR CONCAT(o.first_name, ' ', o.last_name) LIKE ?)");
+      params.push(...Array(7).fill(`%${search}%`));
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const joins = `
+      LEFT JOIN Customer c ON al.actor_role = 'Customer' AND c.id = al.actor_id
+      LEFT JOIN Staff s ON al.actor_role = 'Staff' AND s.id = al.actor_id
+      LEFT JOIN Admin a ON al.actor_role = 'Admin' AND a.id = al.actor_id
+      LEFT JOIN Owner o ON al.actor_role = 'Owner' AND o.id = al.actor_id`;
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM AuditLog al ${joins} ${whereClause}`, params);
+    const [logs] = await pool.query(
+      `SELECT al.id, al.actor_id, al.actor_role, al.method, al.endpoint, al.status_code, al.ip_address, al.created_at,
+              COALESCE(CONCAT(c.first_name, ' ', c.last_name), CONCAT(s.first_name, ' ', s.last_name),
+                       CONCAT(a.first_name, ' ', a.last_name), CONCAT(o.first_name, ' ', o.last_name)) AS actor_name
+       FROM AuditLog al ${joins} ${whereClause}
+       ORDER BY al.created_at DESC, al.id DESC LIMIT ? OFFSET ?`,
+      [...params, pageSize, offset],
+    );
+    return res.json({ logs, total: countRows[0].total, page, pageSize });
+  } catch (error) {
+    console.error("Owner fetch audit log error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดประวัติการใช้งานได้" });
+  }
+});
 
 function getSelectedMonthRange(query) {
   const yearMonth = parseYearMonthQuery(query);
@@ -419,20 +465,21 @@ router.get("/trends", async (req, res) => {
     const fromDate = from ? new Date(`${from}T00:00:00`) : new Date(toDate.getFullYear(), toDate.getMonth() - 5, 1);
 
     const daySpan = Math.round((toDate - fromDate) / 86400000) + 1;
-
     if (daySpan >= 1 && daySpan <= TRENDS_DAILY_THRESHOLD_DAYS) {
       const fromKey = toDateKey(fromDate);
       const toKey = toDateKey(toDate);
 
       const [incomeRows] = await pool.query(
-        `SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS period, COALESCE(SUM(amount), 0) AS total
+        `SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS period,
+                COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
          FROM Payment
          WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
          GROUP BY period`,
         [fromKey, toKey],
       );
       const [expenseRows] = await pool.query(
-        `SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS period, COALESCE(SUM(amount), 0) AS total
+        `SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS period,
+                COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
          FROM Expense
          WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
          GROUP BY period`,
@@ -441,6 +488,8 @@ router.get("/trends", async (req, res) => {
 
       const incomeByDay = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));
       const expenseByDay = new Map(expenseRows.map((row) => [row.period, Number(row.total)]));
+      const incomeCountByDay = new Map(incomeRows.map((row) => [row.period, Number(row.transaction_count)]));
+      const expenseCountByDay = new Map(expenseRows.map((row) => [row.period, Number(row.transaction_count)]));
 
       const trends = [];
       const cursor = new Date(fromDate);
@@ -448,7 +497,14 @@ router.get("/trends", async (req, res) => {
         const key = toDateKey(cursor);
         const income = incomeByDay.get(key) || 0;
         const expense = expenseByDay.get(key) || 0;
-        trends.push({ period: key, income, expense, netProfit: income - expense });
+        trends.push({
+          period: key,
+          income,
+          expense,
+          incomeCount: incomeCountByDay.get(key) || 0,
+          expenseCount: expenseCountByDay.get(key) || 0,
+          netProfit: income - expense,
+        });
         cursor.setDate(cursor.getDate() + 1);
       }
 
@@ -474,14 +530,16 @@ router.get("/trends", async (req, res) => {
     const queryFromKey = requestedFromKey > rangeStartKey ? requestedFromKey : rangeStartKey;
     const queryToKey = toDateKey(toDate);
     const [incomeRows] = await pool.query(
-      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
+      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period,
+              COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
        FROM Payment
        WHERE status = 'paid' AND payment_date >= ? AND payment_date <= ?
        GROUP BY period`,
       [queryFromKey, queryToKey],
     );
     const [expenseRows] = await pool.query(
-      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS total
+      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS period,
+              COALESCE(SUM(amount), 0) AS total, COUNT(*) AS transaction_count
        FROM Expense
        WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
        GROUP BY period`,
@@ -490,6 +548,8 @@ router.get("/trends", async (req, res) => {
 
     const incomeByMonth = new Map(incomeRows.map((row) => [row.period, Number(row.total)]));
     const expenseByMonth = new Map(expenseRows.map((row) => [row.period, Number(row.total)]));
+    const incomeCountByMonth = new Map(incomeRows.map((row) => [row.period, Number(row.transaction_count)]));
+    const expenseCountByMonth = new Map(expenseRows.map((row) => [row.period, Number(row.transaction_count)]));
 
     const trends = [];
     for (let i = monthsSpan - 1; i >= 0; i -= 1) {
@@ -497,7 +557,14 @@ router.get("/trends", async (req, res) => {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const income = incomeByMonth.get(key) || 0;
       const expense = expenseByMonth.get(key) || 0;
-      trends.push({ period: key, income, expense, netProfit: income - expense });
+      trends.push({
+        period: key,
+        income,
+        expense,
+        incomeCount: incomeCountByMonth.get(key) || 0,
+        expenseCount: expenseCountByMonth.get(key) || 0,
+        netProfit: income - expense,
+      });
     }
 
     return res.json({ trends, granularity: "month" });
@@ -521,6 +588,27 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
     const fromDate = from ? new Date(`${from}T00:00:00`) : new Date(toDate.getFullYear(), toDate.getMonth() - 5, 1);
 
     const daySpan = Math.round((toDate - fromDate) / 86400000) + 1;
+    const movementPeriodFormat = daySpan <= TRENDS_DAILY_THRESHOLD_DAYS ? "%Y-%m-%d" : "%Y-%m";
+    const [movementRows] = await pool.query(
+      `SELECT DATE_FORMAT(events.event_date, ?) AS period,
+              SUM(events.event_type = 'move_in') AS move_ins,
+              SUM(events.event_type = 'move_out') AS move_outs
+       FROM (
+         SELECT b.created_at AS event_date, 'move_in' AS event_type
+         FROM Booking b
+         UNION ALL
+         SELECT tr.completed_at AS event_date, 'move_out' AS event_type
+         FROM TenantRequest tr
+         WHERE tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at IS NOT NULL
+       ) AS events
+       WHERE events.event_date >= ? AND events.event_date < DATE_ADD(?, INTERVAL 1 DAY)
+       GROUP BY period`,
+      [movementPeriodFormat, toDateKey(fromDate), toDateKey(toDate)],
+    );
+    const movementByPeriod = new Map(movementRows.map((row) => [row.period, {
+      moveIns: Number(row.move_ins || 0),
+      moveOuts: Number(row.move_outs || 0),
+    }]));
 
     if (daySpan >= 1 && daySpan <= TRENDS_DAILY_THRESHOLD_DAYS) {
       const fromKey = toDateKey(fromDate);
@@ -546,11 +634,13 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
       for (let i = 0; i < daySpan; i += 1) {
         const key = toDateKey(cursor);
         if (byDay.has(key)) lastKnown = byDay.get(key);
+        const movement = movementByPeriod.get(key) || { moveIns: 0, moveOuts: 0 };
         trends.push({
           period: key,
           occupied: lastKnown ? Number(lastKnown.occupied_count) : 0,
           vacant: lastKnown ? Number(lastKnown.vacant_count) : 0,
           total: lastKnown ? Number(lastKnown.total_rooms) : 0,
+          ...movement,
         });
         cursor.setDate(cursor.getDate() + 1);
       }
@@ -595,11 +685,13 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
       const d = new Date(rangeEndMonth.getFullYear(), rangeEndMonth.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (byMonth.has(key)) lastKnownMonth = byMonth.get(key);
+      const movement = movementByPeriod.get(key) || { moveIns: 0, moveOuts: 0 };
       trends.push({
         period: key,
         occupied: lastKnownMonth ? Math.round(Number(lastKnownMonth.occupied_count)) : 0,
         vacant: lastKnownMonth ? Math.round(Number(lastKnownMonth.vacant_count)) : 0,
         total: lastKnownMonth ? Math.round(Number(lastKnownMonth.total_rooms)) : 0,
+        ...movement,
       });
     }
 
@@ -633,7 +725,7 @@ router.get("/rooms/:roomNumber", async (req, res) => {
     let payments = [];
     if (room.customer_id) {
       const [paymentRows] = await pool.query(
-        `SELECT p.id, p.amount, p.payment_date, p.status, p.type, p.note
+        `SELECT p.id, p.amount, p.payment_date, p.status, p.type, p.note, p.slip_path, p.created_at
          FROM Payment p
          JOIN Booking b ON b.id = p.booking_id
          WHERE b.room_id = ? AND b.customer_id = ?
@@ -688,7 +780,7 @@ router.get("/logs/payments", async (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const combinedQuery = `
-      SELECT CONCAT('payment-', p.id) AS id, p.amount, p.payment_date, p.status, p.type, p.note, p.created_at,
+      SELECT CONCAT('payment-', p.id) AS id, p.id AS payment_id, p.amount, p.payment_date, p.status, p.type, p.note, p.slip_path, p.created_at,
              c.first_name, c.last_name, c.room_number
       FROM Payment p
       JOIN Booking b ON b.id = p.booking_id
@@ -697,6 +789,7 @@ router.get("/logs/payments", async (req, res) => {
       UNION ALL
 
       SELECT CONCAT('room-', c.id) AS id,
+             NULL AS payment_id,
              ABS(COALESCE(r.price, 0) - COALESCE(c.deposit_amount, 0)) AS amount,
              CURDATE() AS payment_date,
              CASE WHEN (COALESCE(r.price, 0) - COALESCE(c.deposit_amount, 0)) > 0 THEN 'pending' ELSE 'paid' END AS status,
@@ -706,6 +799,7 @@ router.get("/logs/payments", async (req, res) => {
                  THEN CONCAT('ค่าห้องประจำเดือน ฿', FORMAT(r.price, 0), ' หักเงินมัดจำ ฿', FORMAT(COALESCE(c.deposit_amount, 0), 0), ' คงเหลือค้างชำระ')
                ELSE CONCAT('ค่าห้องประจำเดือน ฿', FORMAT(r.price, 0), ' หักเงินมัดจำ ฿', FORMAT(COALESCE(c.deposit_amount, 0), 0), ' ครอบคลุมครบแล้ว')
              END AS note,
+             NULL AS slip_path,
              NOW() AS created_at,
              c.first_name, c.last_name, c.room_number
       FROM Customer c
