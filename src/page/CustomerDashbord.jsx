@@ -1,5 +1,6 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
+import ProcessSteps from '../components/ProcessSteps.jsx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoMenu } from '../components/DormInfo'
@@ -3445,6 +3446,8 @@ function SafetyIncidentReportRow() {
   )
 }
 
+const PARKING_PAGE_SIZE = 6
+
 function getParkingPhase(vehicle, now) {
   const start = new Date(vehicle.start_at).getTime()
   if (now < start) return { key: 'upcoming', label: 'รอเข้าจอด' }
@@ -3452,7 +3455,7 @@ function getParkingPhase(vehicle, now) {
 }
 
 function CustomerParkingTab({ onCountChange }) {
-  const [vehicles, setVehicles] = useState([])
+  const [rawVehicles, setVehicles] = useState([])
   const [roomNumber, setRoomNumber] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -3460,6 +3463,7 @@ function CustomerParkingTab({ onCountChange }) {
   const [detail, setDetail] = useState(null)
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -3485,8 +3489,9 @@ function CustomerParkingTab({ onCountChange }) {
     }
   }, [onCountChange])
 
-  const parkedCount = vehicles.filter((vehicle) => getParkingPhase(vehicle, now).key === 'parked').length
-  const upcomingCount = vehicles.length - parkedCount
+  const vehicles = rawVehicles.filter((vehicle) => !vehicle.end_at || new Date(vehicle.end_at).getTime() > now)
+  const parkedVehicles = vehicles.filter((vehicle) => getParkingPhase(vehicle, now).key === 'parked')
+  const parkedCount = parkedVehicles.length
   const keyword = search.trim().toLowerCase()
   const searched = keyword
     ? vehicles.filter((vehicle) =>
@@ -3507,6 +3512,9 @@ function CustomerParkingTab({ onCountChange }) {
       )
     : vehicles
   const filtered = filter === 'all' ? searched : searched.filter((vehicle) => getParkingPhase(vehicle, now).key === filter)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PARKING_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageVehicles = filtered.slice((currentPage - 1) * PARKING_PAGE_SIZE, currentPage * PARKING_PAGE_SIZE)
 
   return (
     <section className="dashboard-card dashboard-park-card" aria-labelledby="customer-parking-title">
@@ -3515,29 +3523,13 @@ function CustomerParkingTab({ onCountChange }) {
           <h2 id="customer-parking-title">รถของฉัน</h2>
           <p className="dashboard-park-subtitle">รถที่ได้รับอนุมัติให้จอดของห้องคุณ</p>
         </div>
-        {roomNumber && <RoomChip room={roomNumber} />}
-      </div>
-
-      <div className="dashboard-park-summary">
-        <div className="dashboard-park-stat is-parked">
-          <span className="dashboard-park-stat-icon" aria-hidden="true">P</span>
-          <div>
-            <strong>{parkedCount}</strong>
-            <span>กำลังจอด</span>
-          </div>
-        </div>
-        <div className="dashboard-park-stat is-upcoming">
-          <span className="dashboard-park-stat-icon" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" />
-              <polyline points="12 7 12 12 15 14" />
-            </svg>
+        <span className="dashboard-park-header-chips">
+          <span className="dashboard-park-count-chip">
+            <span aria-hidden="true" />
+            กำลังจอด <strong>{parkedCount}</strong> คัน
           </span>
-          <div>
-            <strong>{upcomingCount}</strong>
-            <span>รอเข้าจอด</span>
-          </div>
-        </div>
+          {roomNumber && <RoomChip room={roomNumber} />}
+        </span>
       </div>
 
       {loading ? (
@@ -3561,15 +3553,22 @@ function CustomerParkingTab({ onCountChange }) {
               { key: 'upcoming', label: 'รอเข้าจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now).key === 'upcoming').length, tone: 'warning' },
             ]}
             active={filter}
-            onSegment={setFilter}
+            onSegment={(key) => {
+              setFilter(key)
+              setPage(1)
+            }}
             search={search}
-            onSearch={setSearch}
+            onSearch={(value) => {
+              setSearch(value)
+              setPage(1)
+            }}
             searchPlaceholder="ค้นหาทะเบียนรถ รุ่น ชื่อผู้มาเยี่ยม หรือหมายเหตุ"
             resultText={`พบ ${filtered.length} จาก ${vehicles.length} คัน`}
             canClear={filter !== 'all' || Boolean(keyword)}
             onClear={() => {
               setFilter('all')
               setSearch('')
+              setPage(1)
             }}
           />
           {filtered.length === 0 ? (
@@ -3582,7 +3581,7 @@ function CustomerParkingTab({ onCountChange }) {
             </div>
           ) : (
         <ul className="dashboard-park-list">
-          {filtered.map((vehicle) => {
+          {pageVehicles.map((vehicle) => {
             const phase = getParkingPhase(vehicle, now)
             const approver = vehicle.admin_reviewed_by_name || vehicle.reviewed_by_name
             return (
@@ -3594,97 +3593,86 @@ function CustomerParkingTab({ onCountChange }) {
                   aria-label={`ดูรายละเอียดรถทะเบียน ${vehicle.vehicle_plate}`}
                 >
                   <span className="dashboard-park-item-head">
-                    <span className={`dashboard-rv-history-icon${vehicle.guest_name ? ' is-family' : ''}`}>
+                    <span className="dashboard-park-item-icon">
                       <CarIcon />
                     </span>
                     <span className="dashboard-park-item-title">
                       <strong>{vehicle.vehicle_plate}</strong>
-                      <small>{vehicle.vehicle_model || 'ไม่ระบุรุ่น'}</small>
+                      {vehicle.vehicle_model && <em className="dashboard-park-model">{vehicle.vehicle_model}</em>}
                     </span>
                     <span className={`dashboard-park-status is-${phase.key}`}>
                       <span aria-hidden="true" />
                       {phase.label}
                     </span>
                   </span>
-                </button>
-                <div className={`dashboard-park-body${vehicle.vehicle_photos?.length ? ' has-photo' : ''}`}>
-                  {vehicle.vehicle_photos?.length > 0 && (
-                    <button
-                      type="button"
-                      className="dashboard-park-cover"
-                      onClick={() => setLightbox({ photos: vehicle.vehicle_photos, index: 0, plate: vehicle.vehicle_plate })}
-                      aria-label="ดูรูปรถ"
-                    >
-                      <UploadImage src={vehicle.vehicle_photos[0].url} alt={vehicle.vehicle_photos[0].name || 'รูปรถ'} loading="lazy" />
-                      {vehicle.vehicle_photos.length > 1 && <span className="dashboard-park-cover-more">+{vehicle.vehicle_photos.length - 1}</span>}
-                    </button>
-                  )}
-                  <div className="dashboard-park-tiles">
-                    <div className={`dashboard-park-tile is-type${vehicle.guest_name ? ' is-family' : ''}`}>
-                      <span className="dashboard-park-tile-icon" aria-hidden="true">
-                        <CarIcon />
+                  <span className="dashboard-park-grid">
+                    <span className="dashboard-park-cell">
+                      <span className="dashboard-park-label">ประเภท</span>
+                      <span className="dashboard-park-value">{vehicle.guest_name ? 'รถครอบครัว' : 'รถของฉัน'}</span>
+                    </span>
+                    <span className="dashboard-park-cell">
+                      <span className="dashboard-park-label">ห้อง</span>
+                      <span className="dashboard-park-value">{vehicle.room_number || roomNumber ? `ห้อง ${vehicle.room_number || roomNumber}` : 'ไม่ระบุ'}</span>
+                    </span>
+                    <span className="dashboard-park-cell">
+                      <span className="dashboard-park-label">{vehicle.guest_name ? 'ผู้มาเยี่ยม' : 'เจ้าของรถ'}</span>
+                      <span className="dashboard-park-value" title={vehicle.guest_name ? `${vehicle.guest_name}${vehicle.guest_phone ? ` · ${vehicle.guest_phone}` : ''}` : ''}>
+                        {vehicle.guest_name || 'ฉัน'}
                       </span>
-                      <span className="dashboard-park-tile-text">
-                        <small>ประเภท</small>
-                        <strong>{vehicle.guest_name ? 'รถครอบครัวที่มาเยี่ยม' : 'รถของฉัน'}</strong>
-                      </span>
-                    </div>
-                    <div className="dashboard-park-tile is-time">
-                      <span className="dashboard-park-tile-icon" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="9" />
-                          <polyline points="12 7 12 12 15 14" />
-                        </svg>
-                      </span>
-                      <span className="dashboard-park-tile-text">
-                        <small>ช่วงเวลาจอด</small>
-                        <strong>
-                          {formatVisitPoint(vehicle.start_at).day} {formatVisitPoint(vehicle.start_at).time}
-                          <em> → </em>
+                    </span>
+                  </span>
+                  <span className="dashboard-park-range">
+                    <span className="dashboard-park-range-icon" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    </span>
+                    <span className="dashboard-park-range-body">
+                      <span className="dashboard-park-label">ช่วงเวลาจอด</span>
+                      <span className="dashboard-park-value">
+                        {formatVisitPoint(vehicle.start_at).day} {formatVisitPoint(vehicle.start_at).time}
+                        <span className="dashboard-park-arrow" aria-hidden="true">→</span>
+                        <span className={vehicle.end_at ? undefined : 'dashboard-park-open'}>
                           {vehicle.end_at ? `${formatVisitPoint(vehicle.end_at).day} ${formatVisitPoint(vehicle.end_at).time}` : 'ไม่จำกัดเวลา'}
-                        </strong>
+                        </span>
                       </span>
-                    </div>
-                    {vehicle.guest_name && (
-                      <div className="dashboard-park-tile is-guest">
-                        <span className="dashboard-park-tile-icon" aria-hidden="true">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="8" r="4" />
-                            <path d="M4 21a8 8 0 0 1 16 0" />
-                          </svg>
-                        </span>
-                        <span className="dashboard-park-tile-text">
-                          <small>ผู้มาเยี่ยม</small>
-                          <strong>
-                            {vehicle.guest_name}
-                            {vehicle.guest_phone ? ` · ${vehicle.guest_phone}` : ''}
-                          </strong>
-                        </span>
-                      </div>
-                    )}
-                    {approver && (
-                      <div className="dashboard-park-tile is-approver">
-                        <span className="dashboard-park-tile-icon" aria-hidden="true">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-                            <polyline points="9 12 11 14 15 10" />
-                          </svg>
-                        </span>
-                        <span className="dashboard-park-tile-text">
-                          <small>อนุมัติโดย</small>
-                          <strong className="dashboard-actor">{approver}</strong>
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                    </span>
+                  </span>
+                </button>
+                <div className="dashboard-park-photos">
+                  <span className="dashboard-park-photos-label">
+                    {vehicle.vehicle_photos?.length ? `รูปรถ · ${vehicle.vehicle_photos.length} รูป` : 'รูปรถ'}
+                  </span>
+                  {vehicle.vehicle_photos?.length > 0 ? (
+                    <span className="dashboard-park-photo-row">
+                      {vehicle.vehicle_photos.slice(0, 4).map((photo, index) => (
+                        <button
+                          key={`${photo.url}-${index}`}
+                          type="button"
+                          className="dashboard-park-photo"
+                          onClick={() => setLightbox({ photos: vehicle.vehicle_photos, index, plate: vehicle.vehicle_plate })}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                        >
+                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                          {index === 3 && vehicle.vehicle_photos.length > 4 && <span>+{vehicle.vehicle_photos.length - 4}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="dashboard-park-photo-empty">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      ไม่มีรูปรถ
+                    </span>
+                  )}
                 </div>
                 <div className="dashboard-park-item-foot">
-                  <span className="dashboard-park-photo-count">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
-                      <circle cx="12" cy="13" r="3.5" />
-                    </svg>
-                    {vehicle.vehicle_photos?.length ? `${vehicle.vehicle_photos.length} รูป` : 'ไม่มีรูปรถ'}
+                  <span className="dashboard-park-result">
+                    อนุมัติโดย <span className="dashboard-actor">{approver || '-'}</span>
                   </span>
                   <button type="button" className="dashboard-park-more" onClick={() => setDetail(vehicle)}>
                     ดูรายละเอียด
@@ -3695,6 +3683,29 @@ function CustomerParkingTab({ onCountChange }) {
             )
           })}
         </ul>
+          )}
+          {totalPages > 1 && (
+            <div className="dashboard-maintenance-pagination dashboard-park-pagination">
+              <button
+                type="button"
+                className="dashboard-notif-page-btn"
+                disabled={currentPage <= 1}
+                onClick={() => setPage(Math.max(1, currentPage - 1))}
+              >
+                ก่อนหน้า
+              </button>
+              <span className="dashboard-notif-page-info">
+                หน้า {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="dashboard-notif-page-btn"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+              >
+                ถัดไป
+              </button>
+            </div>
           )}
         </>
       )}
@@ -3771,30 +3782,28 @@ function CustomerParkingTab({ onCountChange }) {
                   </section>
                 )}
 
-                <DetailTimeline
+                <ProcessSteps
+                  title="ขั้นตอนการดำเนินการ"
+                  actorClassName="dashboard-actor"
+                  startDate={detail.created_at}
+                  endDate={approvedAt}
+                  waitingText="รอพิจารณา"
                   steps={[
-                    { label: 'ลงทะเบียนรถ', meta: formatVisitDateTime(detail.created_at), state: 'done' },
+                    { key: 'request', label: 'ส่งคำขอ', date: detail.created_at, icon: 'note' },
+                    { key: 'review', label: 'อนุมัติแล้ว', by: approver, date: approvedAt, icon: 'check' },
+                    ...(detail.updated_at
+                      ? [{ key: 'edit', label: 'แก้ไขข้อมูล', by: detail.updated_by_name, date: detail.updated_at, icon: 'edit' }]
+                      : []),
+                    phase.key === 'parked'
+                      ? { key: 'park', label: 'กำลังจอด', date: detail.start_at, icon: 'check' }
+                      : { key: 'park', label: 'รอเข้าจอด', date: null, pendingText: `เริ่ม ${formatVisitDateTime(detail.start_at)}` },
                     {
-                      label: 'อนุมัติแล้ว',
-                      meta: approvedAt ? formatVisitDateTime(approvedAt) : '-',
-                      by: approver,
-                      state: 'done',
-                      tone: 'success',
+                      key: 'end',
+                      label: 'หมดเวลาจอด',
+                      date: null,
+                      pendingText: detail.end_at ? `สิ้นสุด ${formatVisitDateTime(detail.end_at)}` : 'ไม่จำกัดเวลา',
                     },
-                    detail.updated_at
-                      ? { label: 'แก้ไขข้อมูล', meta: formatVisitDateTime(detail.updated_at), by: detail.updated_by_name, state: 'done' }
-                      : null,
-                    {
-                      label: phase.key === 'parked' ? 'กำลังจอด' : 'รอเข้าจอด',
-                      meta:
-                        phase.key === 'parked'
-                          ? detail.end_at
-                            ? `จอดได้ถึง ${formatVisitDateTime(detail.end_at)}`
-                            : 'จอดได้ไม่จำกัดเวลา'
-                          : `เริ่มจอด ${formatVisitDateTime(detail.start_at)}`,
-                      state: 'current',
-                    },
-                  ].filter(Boolean)}
+                  ]}
                 />
 
                 <div className="dashboard-form-actions">
@@ -4006,19 +4015,32 @@ function CustomerDashbord() {
   const newCustomerTabCount = (key) =>
     customerTab === key ? 0 : (customerTabKeys[key] || []).filter((itemKey) => !seenTabKeys.has(itemKey)).length
 
+  const [expiredVehicles, setExpiredVehicles] = useState([])
   useEffect(() => {
     let cancelled = false
-    axios
-      .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
-      .then(({ data }) => {
-        if (cancelled) return
-        setActiveVehicleIds((data.vehicles || []).map((vehicle) => vehicle.id))
-      })
-      .catch(() => {})
+    const loadParking = () =>
+      axios
+        .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+        .then(({ data }) => {
+          if (cancelled) return
+          setActiveVehicleIds((data.vehicles || []).map((vehicle) => vehicle.id))
+          const unseen = (data.expired || []).filter((vehicle) => !localStorage.getItem(`parking_expired_seen_${vehicle.id}`))
+          if (unseen.length > 0) {
+            setExpiredVehicles((current) => [...current, ...unseen.filter((vehicle) => !current.some((item) => item.id === vehicle.id))])
+          }
+        })
+        .catch(() => {})
+    loadParking()
+    const timer = setInterval(loadParking, 60000)
     return () => {
       cancelled = true
+      clearInterval(timer)
     }
   }, [])
+  const closeExpiredVehicles = () => {
+    expiredVehicles.forEach((vehicle) => localStorage.setItem(`parking_expired_seen_${vehicle.id}`, '1'))
+    setExpiredVehicles([])
+  }
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
@@ -5716,6 +5738,49 @@ function CustomerDashbord() {
             label="รูปแจ้งซ่อม"
             onClose={() => setMaintenancePhotoPreview(null)}
           />
+        )}
+
+        {expiredVehicles.length > 0 && (
+          <Modal title="หมดเวลาจอดแล้ว" variant="confirm" onClose={closeExpiredVehicles}>
+            {(requestClose) => (
+              <div className="dashboard-park-expired">
+                <span className="dashboard-park-expired-icon" aria-hidden="true">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <polyline points="12 7 12 12 15 14" />
+                  </svg>
+                </span>
+                <p className="dashboard-park-expired-text">
+                  ระบบยกเลิกสิทธิ์จอดรถให้อัตโนมัติ เนื่องจากถึงเวลาสิ้นสุดที่ขอไว้แล้ว
+                  หากต้องการจอดต่อ กรุณาลงทะเบียนรถใหม่อีกครั้ง
+                </p>
+                <ul className="dashboard-park-expired-list">
+                  {expiredVehicles.map((vehicle) => (
+                    <li key={vehicle.id}>
+                      <span className="dashboard-park-expired-car" aria-hidden="true">
+                        <CarIcon />
+                      </span>
+                      <span className="dashboard-park-expired-info">
+                        <strong>{vehicle.vehicle_plate}</strong>
+                        <small>
+                          {vehicle.guest_name ? `รถผู้มาเยี่ยม · ${vehicle.guest_name}` : vehicle.vehicle_model || 'รถของฉัน'}
+                        </small>
+                      </span>
+                      <span className="dashboard-park-expired-time">
+                        <small>หมดเวลา</small>
+                        {formatVisitDateTime(vehicle.end_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    รับทราบ
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
         )}
 
         {statusPopup && getStatusPopupContent(statusPopup) && (

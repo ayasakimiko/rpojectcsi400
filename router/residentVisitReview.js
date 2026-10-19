@@ -2,9 +2,20 @@ import { getPool } from "../Database/connection.js";
 import { isPositiveId } from "../middleware/validation.js";
 import { parseStoredPhotos } from "../middleware/publicUploads.js";
 
+export const PARKING_EXPIRED_BY = "ระบบ (หมดเวลาจอด)";
+
+export async function expireParkedVehicles(pool) {
+  await pool.query(
+    `UPDATE ResidentVisitRequest SET status = 'cancelled', cancelled_by_name = ?, cancelled_at = end_at
+     WHERE request_type = 'vehicle' AND status = 'approved' AND end_at IS NOT NULL AND end_at <= NOW()`,
+    [PARKING_EXPIRED_BY],
+  );
+}
+
 // โหลดคำขอผู้มาติดต่อและยานพาหนะ พร้อมข้อมูลผู้เช่าและรูปประกอบ
 export async function listResidentVisitRequests(_req, res) {
   try {
+    await expireParkedVehicles(getPool());
     const [requests] = await getPool().query(
       `SELECT r.id, r.customer_id, r.room_number, r.request_type, r.vehicle_plate, r.vehicle_model, r.vehicle_photos,
               r.guest_name, r.guest_phone, r.start_at, r.end_at, r.note, r.status, r.reviewed_by_name, r.reviewed_at,

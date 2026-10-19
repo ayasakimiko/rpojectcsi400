@@ -25,6 +25,7 @@ import {
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
+import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.js";
 
 // ตั้งค่า Router และเงื่อนไขคำขอ ยานพาหนะ รูปประกอบ และความรุนแรงของเหตุ
 const router = Router();
@@ -765,9 +766,18 @@ router.post("/announcements/:id/acknowledge", async (req, res) => {
 router.get("/parked-vehicles", async (req, res) => {
   try {
     const pool = getPool();
+    await expireParkedVehicles(pool);
+    const [expired] = await pool.query(
+      `SELECT id, vehicle_plate, vehicle_model, guest_name, start_at, end_at, cancelled_at
+       FROM ResidentVisitRequest
+       WHERE customer_id = ? AND request_type = 'vehicle' AND status = 'cancelled' AND cancelled_by_name = ?
+         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       ORDER BY cancelled_at DESC`,
+      [req.user.id, PARKING_EXPIRED_BY],
+    );
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     const roomNumber = customers[0]?.room_number;
-    if (!roomNumber) return res.json({ roomNumber: null, vehicles: [] });
+    if (!roomNumber) return res.json({ roomNumber: null, vehicles: [], expired });
     const [vehicles] = await pool.query(
       `SELECT id, room_number, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note,
               status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at, updated_by_name, updated_at, created_at
@@ -777,7 +787,7 @@ router.get("/parked-vehicles", async (req, res) => {
        ORDER BY (start_at <= NOW()) DESC, start_at ASC`,
       [req.user.id, roomNumber],
     );
-    return res.json({ roomNumber, vehicles: withVehiclePhotos(vehicles) });
+    return res.json({ roomNumber, vehicles: withVehiclePhotos(vehicles), expired });
   } catch (error) {
     console.error("Fetch parked vehicles error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลรถได้" });
@@ -786,6 +796,7 @@ router.get("/parked-vehicles", async (req, res) => {
 
 router.get("/resident-visit-requests", async (req, res) => {
   try {
+    await expireParkedVehicles(getPool());
     const [requests] = await getPool().query(
       `SELECT id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone,
               start_at, end_at, note, status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at,
