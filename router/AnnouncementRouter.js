@@ -3,6 +3,7 @@ import { getPool } from "../Database/connection.js";
 import { isPositiveId, parseAnnouncementInput } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
 
+// ตั้งค่า Router และฟังก์ชันกลางสำหรับผู้ประกาศ เวลาแสดงผล และรูปประกอบ
 const router = Router();
 
 const AUTHOR_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
@@ -41,6 +42,7 @@ function parsePhotos(raw) {
 const photoUrls = (photos) => photos.map((photo) => photo.url);
 const serializePhotos = (photos) => (photos.length > 0 ? JSON.stringify(photos) : null);
 
+// โหลดประกาศที่ยังใช้งานและล้างประกาศที่หมดอายุพร้อมรูปประกอบ
 export async function listAnnouncements(pool) {
   const [expired] = await pool.query(
     `SELECT id, photos FROM Announcement WHERE expires_at IS NOT NULL AND expires_at <= NOW()`,
@@ -70,6 +72,7 @@ async function checkFutureExpiry(pool, value) {
   return Boolean(check.is_future);
 }
 
+// แสดงรายการประกาศสำหรับผู้ใช้งาน
 router.get("/", async (_req, res) => {
   try {
     const announcements = await listAnnouncements(getPool());
@@ -80,6 +83,7 @@ router.get("/", async (_req, res) => {
   }
 });
 
+// จัดการประกาศ เพิ่ม แก้ไข และลบ พร้อมกำหนดอายุและรูปประกอบ
 router.post("/", async (req, res) => {
   try {
     const { error, value } = parseAnnouncementInput(req.body ?? {});

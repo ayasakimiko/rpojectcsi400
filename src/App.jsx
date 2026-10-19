@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './page/LoginPage.jsx'
+import ForgotPasswordPage from './page/ForgotPasswordPage.jsx'
 import RegisterMain from './page/RegisterMain.jsx'
 import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
@@ -55,6 +56,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
           path="/register"
           element={

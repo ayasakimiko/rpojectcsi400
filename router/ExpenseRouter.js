@@ -10,6 +10,7 @@ import {
 } from "../middleware/validation.js";
 import { deletePublicImages, parseStoredPhotos, savePublicImages } from "../middleware/publicUploads.js";
 
+// ตั้งค่า Router และฟังก์ชันกลางสำหรับผู้บันทึก ข้อมูลรายจ่าย และรูปหลักฐาน
 const router = Router();
 
 const EXPENSE_LOG_PAGE_SIZE = 20;
@@ -66,6 +67,7 @@ function sanitizeExpense(body) {
 const photoUrls = (photos) => photos.map((photo) => photo.url);
 const serializePhotos = (photos) => (photos.length > 0 ? JSON.stringify(photos) : null);
 
+// แสดงรายการและสรุปรายจ่าย พร้อมการค้นหา กรองวันที่ และแบ่งหน้า
 router.get("/", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
@@ -140,6 +142,7 @@ router.get("/", async (req, res) => {
   }
 });
 
+// จัดการรายจ่าย เพิ่ม แก้ไข และลบ พร้อมรูปหลักฐานประกอบ
 router.post("/", async (req, res) => {
   try {
     const body = req.body ?? {};

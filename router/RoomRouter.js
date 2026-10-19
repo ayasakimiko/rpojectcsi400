@@ -3,9 +3,11 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
 import { isPositiveId, validateRoomFields } from "../middleware/validation.js";
 
+// ตั้งค่า Router และการตรวจสอบบัญชีสำหรับจัดการห้องพัก
 const router = Router();
 const requireActiveAccount = createRequireActiveAccount(getPool);
 
+// ผู้ดูแลเพิ่มห้องพัก พร้อมราคา สิ่งอำนวยความสะดวก และอัตราค่าน้ำค่าไฟ
 router.post("/create", authenticate, requireAdminRole, requireActiveAccount, async (req, res) => {
   try {
     const {
@@ -65,6 +67,7 @@ router.post("/create", authenticate, requireAdminRole, requireActiveAccount, asy
   }
 });
 
+// แสดงรายการห้องและข้อมูลผู้เช่าปัจจุบันสำหรับเจ้าหน้าที่
 router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req, res) => {
   try {
     const pool = getPool();
@@ -92,6 +95,7 @@ router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req
   }
 });
 
+// แสดงห้องว่างและรายละเอียดห้องพักสำหรับการเลือกห้อง
 router.get("/available", async (req, res) => {
   try {
     const pool = getPool();

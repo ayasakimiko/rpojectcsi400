@@ -161,6 +161,62 @@
   color: #027a48;
 }
 
+.auth-forgot-link {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.auth-forgot-link a,
+.auth-footer-link a {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.auth-forgot-link a:hover,
+.auth-footer-link a:hover {
+  text-decoration: underline;
+}
+
+.auth-footer-link {
+  text-align: center;
+  margin-top: 18px;
+}
+
+.auth-info-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid #dce9fb;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.auth-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  padding: 4px 0;
+}
+
+.auth-info-row span {
+  color: #6b859e;
+}
+
+.auth-info-row strong {
+  color: #0f2b52;
+  text-align: right;
+}
+
+.auth-page .auth-otp-input {
+  text-align: center;
+  font-size: 20px;
+  letter-spacing: 8px;
+  font-weight: 700;
+}
+
 @media (max-width: 400px) {
   .auth-card {
     padding: 28px 20px;

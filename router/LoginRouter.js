@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { getPool } from "../Database/connection.js";
 import { validateLoginInput } from "../middleware/validation.js";
 
+// ตั้งค่า Router อายุโทเคน และข้อมูลผู้ใช้ที่ส่งกลับหลังเข้าสู่ระบบ
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
@@ -13,6 +14,7 @@ function toPublicUser({ id, role, idcard, first_name, last_name }) {
   return { id, role, idcard, first_name, last_name };
 }
 
+// ตรวจสอบบัญชีและรหัสผ่าน เลือกบทบาทผู้ใช้ และออกโทเคนเข้าสู่ระบบ
 router.post("/login", async (req, res) => {
   try {
     const { username, password, role: selectedRole } = req.body ?? {};
@@ -34,14 +36,14 @@ router.post("/login", async (req, res) => {
     if (isIdcard) {
       for (const table of selectedRole ? [selectedRole] : roles) {
         const [rows] = await pool.query(
-          `SELECT id, idcard, password, phone, first_name, last_name, is_suspended FROM ${table} WHERE idcard = ?`,
+          `SELECT id, idcard, password, first_name, last_name, is_suspended FROM ${table} WHERE idcard = ?`,
           [normalizedUsername],
         );
         if (rows[0]) candidates.push({ ...rows[0], role: table });
       }
     } else {
       const [rows] = await pool.query(
-        `SELECT id, idcard, password, phone, first_name, last_name FROM Customer
+        `SELECT id, idcard, password, first_name, last_name FROM Customer
          WHERE room_number = ? AND is_suspended = FALSE
          ORDER BY id DESC
          LIMIT 1`,
@@ -53,8 +55,7 @@ router.post("/login", async (req, res) => {
     const matches = [];
     for (const candidate of candidates) {
       if (candidate.is_suspended) continue;
-      const isPhoneAsPassword = Boolean(candidate.phone) && password === candidate.phone;
-      if (isPhoneAsPassword || await bcrypt.compare(password, candidate.password)) matches.push(candidate);
+      if (await bcrypt.compare(password, candidate.password)) matches.push(candidate);
     }
     if (matches.length === 0) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง" });

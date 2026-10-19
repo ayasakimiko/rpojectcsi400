@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 
@@ -116,11 +116,14 @@ function LoginPage() {
                       type="password"
                       name="password"
                       className="form-control"
-                      placeholder="กรอกรหัสผ่าน (ค่าเริ่มต้นคือเบอร์โทรศัพท์)"
+                      placeholder="กรอกรหัสผ่าน"
                       value={loginForm.password}
                       onChange={handleLoginChange}
                       autoComplete="current-password"
                     />
+                    <div className="auth-forgot-link">
+                      <Link to="/forgot-password">ลืมรหัสผ่าน?</Link>
+                    </div>
                   </div>
                 </div>
                 {availableRoles.length > 0 && (

@@ -16,6 +16,7 @@ import {
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 
+// ตั้งค่า Router ตรวจสอบสิทธิ์เจ้าของหอพัก และเชื่อมส่วนรายจ่ายกับรายงานเหตุ
 const router = Router();
 
 const requireActiveOwner = createRequireActiveAccount(getPool);
@@ -25,6 +26,7 @@ router.use("/expenses", expenseRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
+// สรุปจำนวนรถที่จอดและความจุพื้นที่จอดรถ
 router.get("/parking/summary", async (_req, res) => {
   try {
     const [[{ parkedCount }]] = await getPool().query(
@@ -44,6 +46,7 @@ router.get("/parking/summary", async (_req, res) => {
   }
 });
 
+// ฟังก์ชันกลางสำหรับอัปเดตข้อมูลและเลือกช่วงเดือนของรายงาน
 function buildUpdate(allowedColumns, body) {
   const columns = [];
   const values = [];
@@ -70,6 +73,7 @@ function getSelectedMonthRange(query) {
   return { from, toExclusive };
 }
 
+// ภาพรวมการดำเนินงานหอพักและตัวเลขสรุปตามช่วงวันที่
 router.get("/overview", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
@@ -159,6 +163,7 @@ router.get("/overview", async (req, res) => {
   }
 });
 
+// สรุปสถานะห้องพักและสัดส่วนการเข้าพัก
 router.get("/rooms/status", async (req, res) => {
   try {
     const pool = getPool();
@@ -270,6 +275,7 @@ router.get("/rooms/occupancy-summary", async (req, res) => {
   }
 });
 
+// สรุปรายรับจากรายการที่ชำระแล้ว แยกตามประเภทและช่วงเวลา
 router.get("/income", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
@@ -308,6 +314,7 @@ router.get("/income", async (req, res) => {
   }
 });
 
+// คำนวณข้อมูลแนวโน้มรายรับ รายจ่าย และการเข้าพักสำหรับกราฟ
 function toDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -522,6 +529,7 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
   }
 });
 
+// แสดงรายละเอียดห้องพักและข้อมูลผู้เช่าของห้อง
 router.get("/rooms/:roomNumber", async (req, res) => {
   try {
     const roomNumber = Number(req.params.roomNumber);
@@ -561,6 +569,7 @@ router.get("/rooms/:roomNumber", async (req, res) => {
   }
 });
 
+// ประวัติการชำระเงิน พร้อมการค้นหา กรองข้อมูล และแบ่งหน้า
 router.get("/logs/payments", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["date", "from", "to"]);
@@ -644,6 +653,7 @@ router.get("/logs/payments", async (req, res) => {
   }
 });
 
+// ประวัติการเข้าพักและย้ายออก พร้อมการค้นหาและแบ่งหน้า
 const OCCUPANCY_LOG_PAGE_SIZE = 10;
 
 router.get("/logs/occupancy", async (req, res) => {
@@ -714,6 +724,7 @@ router.get("/logs/occupancy", async (req, res) => {
   }
 });
 
+// จัดการบัญชีเจ้าหน้าที่และผู้ดูแล เพิ่ม แก้ไข ระงับการใช้งาน และลบ
 const STAFF_MANAGEABLE_TABLES = { Staff: "Staff", Admin: "Admin" };
 
 router.get("/staff", async (req, res) => {

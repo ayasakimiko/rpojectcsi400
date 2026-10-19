@@ -25,6 +25,7 @@ import {
 } from "../middleware/validation.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
 
+// ตั้งค่า Router และเงื่อนไขคำขอ ยานพาหนะ รูปประกอบ และความรุนแรงของเหตุ
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
 const SAFETY_INCIDENT_MAX_PHOTOS = 4;
@@ -58,6 +59,7 @@ export function classifySafetySeverity(incidentType, description) {
   const text = String(description ?? "").toLowerCase();
   return URGENT_INCIDENT_KEYWORDS.some((keyword) => text.includes(keyword)) ? "urgent" : "normal";
 }
+// ตั้งค่าการอัปโหลดสลิปชำระเงินและการจัดการข้อผิดพลาดของไฟล์
 const PAYMENT_SLIP_FOLDER = "payment-slips";
 const PAYMENT_SLIP_EXTENSIONS = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
@@ -83,6 +85,7 @@ function parsePaymentSlip(req, res, next) {
   });
 }
 
+// โหลดรูปประกอบงานแจ้งซ่อมเพื่อใช้ร่วมกันในแต่ละบทบาท
 export async function attachMaintenancePhotos(pool, requests) {
   if (requests.length === 0) return requests;
   const [photos] = await pool.query(
@@ -100,6 +103,7 @@ export async function attachMaintenancePhotos(pool, requests) {
 }
 
 
+// ฟังก์ชันกลางสำหรับแจ้งเหตุด้านความปลอดภัยและบันทึกรูปประกอบ
 export async function createSafetyIncident(req, res) {
   let savedPhotos = [];
   try {
@@ -157,6 +161,7 @@ export async function createSafetyIncident(req, res) {
   }
 }
 
+// ตรวจสอบสิทธิ์ผู้เช่าและจัดการข้อมูลโปรไฟล์กับการเปลี่ยนรหัสผ่าน
 router.use(authenticate, requireCustomerRole, requireActiveCustomer);
 
 router.patch("/profile", async (req, res) => {
@@ -182,9 +187,7 @@ router.patch("/profile", async (req, res) => {
     const [rows] = await pool.query(`SELECT password, phone FROM Customer WHERE id = ?`, [req.user.id]);
     if (!rows[0]) return res.status(404).json({ message: "ไม่พบข้อมูลผู้เช่า" });
     if (hasPasswordChange) {
-      const isPhoneAsPassword = Boolean(rows[0].phone) && body.current_password === rows[0].phone;
-      const passwordMatches = isPhoneAsPassword || (await bcrypt.compare(body.current_password, rows[0].password));
-      if (!passwordMatches) {
+      if (!(await bcrypt.compare(body.current_password, rows[0].password))) {
         return res.status(400).json({ message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
       }
     }
@@ -213,6 +216,7 @@ router.patch("/profile", async (req, res) => {
   }
 });
 
+// คำนวณยอดค่าเช่า ค่าน้ำ ค่าไฟ เงินมัดจำ และยอดค้างชำระปัจจุบัน
 const GRACE_DAYS = 3;
 
 function computeRentDue(room, paymentsForBooking, depositAmount) {
@@ -341,6 +345,7 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   };
 }
 
+// โหลดข้อมูลแดชบอร์ดผู้เช่า ห้องพัก สัญญา บิล ประวัติ และประกาศ
 router.get("/me", async (req, res) => {
   try {
     const pool = getPool();
@@ -469,6 +474,7 @@ router.get("/me", async (req, res) => {
   }
 });
 
+// รับสลิปและสร้างรายการชำระเงินเพื่อรอเจ้าหน้าที่ตรวจสอบ
 router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
   let connection;
   try {
@@ -552,6 +558,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
   }
 });
 
+// ผู้เช่าส่งและยกเลิกคำขอแจ้งซ่อม พร้อมรายละเอียดติดต่อและรูปประกอบ
 router.post("/maintenance", async (req, res) => {
   try {
     const pool = getPool();
@@ -645,6 +652,7 @@ router.post("/maintenance/:id/cancel", async (req, res) => {
   }
 });
 
+// ส่งคำขอต่อสัญญา ย้ายห้อง หรือย้ายออกจากหอพัก
 router.post("/requests", async (req, res) => {
   let connection;
   try {
@@ -715,6 +723,7 @@ router.post("/requests", async (req, res) => {
   }
 });
 
+// บันทึกการรับทราบประกาศของผู้เช่า
 router.post("/announcements/:id/acknowledge", async (req, res) => {
   try {
     const announcementId = Number(req.params.id);
@@ -737,6 +746,7 @@ router.post("/announcements/:id/acknowledge", async (req, res) => {
   }
 });
 
+// แสดงรถที่ลงทะเบียนและจัดการคำขอผู้มาติดต่อกับยานพาหนะของผู้เช่า
 router.get("/parked-vehicles", async (req, res) => {
   try {
     const pool = getPool();
@@ -848,6 +858,7 @@ router.post("/resident-visit-requests", async (req, res) => {
   }
 });
 
+// แสดงประวัติและรับแจ้งเหตุด้านความปลอดภัยของผู้เช่า
 router.get("/safety-incidents", async (req, res) => {
   try {
     const [incidents] = await getPool().query(

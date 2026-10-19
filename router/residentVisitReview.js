@@ -2,6 +2,7 @@ import { getPool } from "../Database/connection.js";
 import { isPositiveId } from "../middleware/validation.js";
 import { parseStoredPhotos } from "../middleware/publicUploads.js";
 
+// โหลดคำขอผู้มาติดต่อและยานพาหนะ พร้อมข้อมูลผู้เช่าและรูปประกอบ
 export async function listResidentVisitRequests(_req, res) {
   try {
     const [requests] = await getPool().query(
@@ -22,6 +23,7 @@ export async function listResidentVisitRequests(_req, res) {
   }
 }
 
+// ฟังก์ชันอนุมัติหรือปฏิเสธคำขอร่วมกัน พร้อมบันทึกชื่อผู้ดำเนินการ
 export function createResidentVisitReview(getActingName) {
   return async function reviewResidentVisitRequest(req, res) {
     try {

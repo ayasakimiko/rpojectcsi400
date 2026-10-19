@@ -4,12 +4,14 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireStaffRole } from "../middleware/authMiddleware.js";
 import { validateRegisterInput } from "../middleware/validation.js";
 
+// ตั้งค่า Router และแปลงวันที่สำหรับบันทึกข้อมูลการเช่า
 const router = Router();
 
 function toMysqlDateTime(value) {
   return value.replace("T", " ");
 }
 
+// เจ้าหน้าที่ลงทะเบียนผู้เช่า สร้างสัญญา บันทึกมัดจำ และอัปเดตสถานะห้อง
 router.post("/register", authenticate, requireStaffRole, createRequireActiveAccount(getPool), async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();

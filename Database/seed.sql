@@ -10,9 +10,9 @@ VALUES
 INSERT INTO Customer
     (role, idcard, password, phone, first_name, last_name, is_suspended, age, room_number, deposit_amount)
 VALUES
-    ('Customer', '1100200000001', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0811111111', 'สมชาย',   'ใจดี',     FALSE, 25, 101, 3500.00),
-    ('Customer', '1100200000002', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0822222222', 'สมหญิง',  'รักเรียน', FALSE, 28, 102, 4000.00),
-    ('Customer', '1100200000003', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0833333333', 'วิชัย',   'มั่นคง',   FALSE, 30, 103, 3200.00);
+    ('Customer', '1100200000001', '$2b$10$ssHJhT7tpHlr9w/jDQQQEOsJ95CJhBRBwL4uVm4RtdJ19ZHwRsXyW', '0811111111', 'สมชาย',   'ใจดี',     FALSE, 25, 101, 3500.00),
+    ('Customer', '1100200000002', '$2b$10$e0Q42WdaZ2IJ9teAsp8FwuNP9gZ0DTZZZ.zXILmqiAxJU9v/F.R.6', '0822222222', 'สมหญิง',  'รักเรียน', FALSE, 28, 102, 4000.00),
+    ('Customer', '1100200000003', '$2b$10$P2WtjIpOAddS0YnRC0zzvuGOUVCDHtiFPNbJ8nD8Zt4Q8XpkD6Qne', '0833333333', 'วิชัย',   'มั่นคง',   FALSE, 30, 103, 3200.00);
 
 INSERT INTO Booking
     (customer_id, room_id)
@@ -24,15 +24,15 @@ VALUES
 INSERT INTO Staff
     (role, idcard, password, phone, first_name, last_name, is_suspended, age)
 VALUES
-    ('Staff', '1100200000101', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0844444444', 'มานะ', 'ทำงานดี', FALSE, 27),
-    ('Staff', '1100200000102', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0855555555', 'มานี',  'ขยันดี',  FALSE, 24);
+    ('Staff', '1100200000101', '$2b$10$vuNnoMpzhBHszPBMZiNoCeb62WQ.AwHrK55w38e.rwOfW3bHL20Wy', '0844444444', 'มานะ', 'ทำงานดี', FALSE, 27),
+    ('Staff', '1100200000102', '$2b$10$LeLHaVZouERmgNpsysvUUugb95J.6qGpfJvUMo/XvBoZ9kqlYlhUW', '0855555555', 'มานี',  'ขยันดี',  FALSE, 24);
 
 INSERT INTO Admin
     (role, idcard, password, phone, first_name, last_name, is_suspended, age)
 VALUES
-    ('Admin', '1100200000201', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0866666666', 'ปิติ', 'ดูแลระบบ', FALSE, 35);
+    ('Admin', '1100200000201', '$2b$10$ltanaY54.tH8ezptOJk0N.ReKNdAvmieuO8/rEkATvFdV6Wd6yN.O', '0866666666', 'ปิติ', 'ดูแลระบบ', FALSE, 35);
 
 INSERT INTO Owner
     (role, idcard, password, phone, first_name, last_name, is_suspended, age)
 VALUES
-    ('Owner', '1100200000301', '$2b$10$yrCvz3lU7x2R8YlhR7k8E.X4DMTmQdMKPrhWTPOVo5aSxYcVI.4Pu', '0877777777', 'เจ้าของ', 'หอพัก', FALSE, 45);
+    ('Owner', '1100200000301', '$2b$10$k7mCwgfYstVSnRjUSeUx8.D5OWqYr/Ic/drWQSxsxYk0YtAc9yEDC', '0877777777', 'เจ้าของ', 'หอพัก', FALSE, 45);

@@ -7,6 +7,7 @@ import { getPool } from "../Database/connection.js";
 import { PUBLIC_UPLOAD_DIR, deletePublicImages } from "../middleware/publicUploads.js";
 import { isPositiveId } from "../middleware/validation.js";
 
+// ตั้งค่าการอัปโหลดรูปพัสดุ ขนาดไฟล์ และชนิดรูปภาพที่รองรับ
 const MAX_PARCEL_PHOTOS = 6;
 const PARCEL_UPLOAD_DIR = path.join(PUBLIC_UPLOAD_DIR, "parcels");
 const SERVER_ERROR = "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง";
@@ -48,6 +49,7 @@ const parcelUpload = multer({
   },
 }).array("photos", MAX_PARCEL_PHOTOS);
 
+// ฟังก์ชันกลางสำหรับรับและตรวจรูปภาพ ตรวจข้อความ และล้างรูปที่ไม่ใช้
 function uploadPhotos(req, res) {
   return new Promise((resolve, reject) => {
     parcelUpload(req, res, (error) => {
@@ -85,6 +87,7 @@ async function removePhotos(urls) {
   }
 }
 
+// แนบรายการรูปประกอบให้ข้อมูลพัสดุ
 export async function attachParcelPhotos(pool, parcels) {
   if (parcels.length === 0) return parcels;
   const [photos] = await pool.query(
@@ -98,6 +101,7 @@ export async function attachParcelPhotos(pool, parcels) {
   return parcels.map((parcel) => ({ ...parcel, photos: photosByParcel.get(parcel.id) ?? [] }));
 }
 
+// จัดการพัสดุสำหรับเจ้าหน้าที่และผู้ดูแล แสดงรายการ บันทึกพัสดุ และลบ
 export function createParcelRouter(getActorName) {
   const router = Router();
 
@@ -193,6 +197,7 @@ export function createParcelRouter(getActorName) {
   return router;
 }
 
+// ผู้เช่ายืนยันรับพัสดุที่เป็นของตนเองและห้องพักปัจจุบัน
 export const customerParcelRouter = Router();
 
 customerParcelRouter.post("/:id/receive", async (req, res) => {
