@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
+import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
@@ -224,7 +225,7 @@ const OWNER_TABS = [
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
-  { key: 'audit', label: 'ประวัติ Audit' },
+  { key: 'announcements', label: 'ประกาศจากหอพัก' },
 ]
 
 const OWNER_PERIOD_BAR_CONTENT = {
@@ -232,129 +233,29 @@ const OWNER_PERIOD_BAR_CONTENT = {
   finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
   staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
   utilities: { title: 'ค่าน้ำ-ค่าไฟรายห้อง', subtitle: 'หน่วยที่ใช้ ยอดเรียกเก็บ และสถานะการชำระแยกตามห้อง' },
-  audit: { title: 'ประวัติการใช้งานเว็บไซต์', subtitle: 'รายการเปลี่ยนแปลงข้อมูลที่ดำเนินการโดยผู้ใช้ทุกบทบาท' },
+  announcements: { title: 'ประกาศจากหอพัก', subtitle: 'ข่าวสารและการแจ้งเตือนที่สื่อสารกับผู้เช่าและเจ้าหน้าที่' },
 }
 
-const AUDIT_RESOURCES = [
-  ['move-out-inspections', 'ผลตรวจห้องย้ายออก'],
-  ['resident-visit-requests', 'คำขอเข้าเยี่ยม/รถ'],
-  ['payment-verifications', 'รายการชำระเงิน'],
-  ['safety-incidents', 'รายงานเหตุ'],
-  ['utility-bill', 'บิลค่าน้ำ-ค่าไฟ'],
-  ['collect-payment', 'การชำระเงิน'],
-  ['waiting-list', 'รายชื่อผู้รอห้อง'],
-  ['announcements', 'ประกาศ'],
-  ['maintenance', 'งานแจ้งซ่อม'],
-  ['customers', 'ข้อมูลผู้เช่า'],
-  ['requests', 'คำขอผู้เช่า'],
-  ['expenses', 'รายการรายจ่าย'],
-  ['parcels', 'รายการพัสดุ'],
-  ['register', 'ผู้เช่า'],
-  ['rooms', 'ห้องพัก'],
-  ['staff', 'ข้อมูลพนักงาน'],
-  ['profile', 'ข้อมูลส่วนตัว'],
-]
-
-function describeAuditActivity(log) {
-  const endpoint = String(log.endpoint || '').split('?')[0]
-  const segments = endpoint.split('/').filter(Boolean)
-  const method = String(log.method || '').toUpperCase()
-  const resourceEntry = AUDIT_RESOURCES.find(([key]) => segments.includes(key))
-  const resource = resourceEntry?.[1] || 'ข้อมูลในระบบ'
-  const actionSegment = segments.find((segment) => ['approve', 'reject', 'review', 'acknowledge', 'cancel', 'suspend'].includes(segment))
-  const resourceIndex = resourceEntry ? segments.indexOf(resourceEntry[0]) : -1
-  const recordId = resourceIndex >= 0 ? segments.slice(resourceIndex + 1).find((segment) => /^\d+$/.test(segment)) : null
-  const recordLabel = recordId
-    ? resource === 'ห้องพัก' ? `ห้อง ${recordId}` : `${resource} #${recordId}`
-    : resource === 'ผู้เช่า' && segments.includes('register') ? 'ผู้เช่ารายใหม่' : resource
-
-  if (segments.includes('register') && method === 'POST') return { action: 'สมัครผู้เช่า', detail: 'ลงทะเบียนผู้เช่ารายใหม่' }
-  if (actionSegment === 'approve') return { action: `อนุมัติ${resource}`, detail: recordLabel }
-  if (actionSegment === 'reject') return { action: `ปฏิเสธ${resource}`, detail: recordLabel }
-  if (actionSegment === 'review') return { action: `ตรวจสอบ${resource}`, detail: recordLabel }
-  if (actionSegment === 'acknowledge') return { action: `รับทราบ${resource}`, detail: recordLabel }
-  if (actionSegment === 'cancel') return { action: `ยกเลิก${resource}`, detail: recordLabel }
-  if (actionSegment === 'suspend') return { action: `เปลี่ยนสถานะ${resource}`, detail: recordLabel }
-  if (segments.includes('collect-payment')) return { action: 'รับชำระเงิน', detail: recordLabel }
-  if (segments.includes('utility-bill')) return { action: 'บันทึกบิลค่าน้ำ-ค่าไฟ', detail: recordLabel }
-  if (method === 'POST') return { action: `เพิ่ม${resource}`, detail: recordLabel }
-  if (method === 'PUT' || method === 'PATCH') return { action: `แก้ไข${resource}`, detail: recordLabel }
-  if (method === 'DELETE') return { action: `ลบ${resource}`, detail: recordLabel }
-  return { action: 'อัปเดตข้อมูล', detail: recordLabel }
+function getOwnerNotificationStorageKey() {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+    return `owner-notifications-seen-${user.id ?? user.idcard ?? user.username ?? 'current'}`
+  } catch {
+    return 'owner-notifications-seen-current'
+  }
 }
 
-function OwnerAuditLog() {
-  const [result, setResult] = useState({ logs: [], total: 0, page: 1, pageSize: 20 })
-  const [page, setPage] = useState(1)
-  const [role, setRole] = useState('all')
-  const [method, setMethod] = useState('all')
-  const [search, setSearch] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let cancelled = false
-    axios.get('/api/owner/logs/audit', {
-      headers: getAuthHeaders(),
-      params: { page, role: role !== 'all' ? role : undefined, method: method !== 'all' ? method : undefined, search: appliedSearch || undefined },
-    }).then(({ data }) => {
-      if (!cancelled) {
-        setResult(data)
-        setError('')
-      }
-    }).catch((requestError) => {
-      if (!cancelled) setError(requestError.response?.data?.message || 'โหลดประวัติการใช้งานไม่สำเร็จ')
-    }).finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [page, role, method, appliedSearch])
-
-  const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize))
-  return (
-    <section className="owner-panel owner-audit-panel">
-      <div className="owner-panel-header">
-        <div><h3>ประวัติการใช้งานเว็บไซต์</h3><p>บันทึกการเปลี่ยนแปลงข้อมูลที่สำเร็จจากทุกบทบาท</p></div>
-        <span className="owner-panel-header-count">{Number(result.total).toLocaleString('th-TH')} รายการ</span>
-      </div>
-      <form className="owner-audit-filters" onSubmit={(event) => { event.preventDefault(); if (search.trim() !== appliedSearch) setLoading(true); setPage(1); setAppliedSearch(search.trim()) }}>
-        <input className="owner-audit-search" type="search" placeholder="ค้นหาผู้ใช้หรือรายการ" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <select aria-label="กรองบทบาท" value={role} onChange={(event) => { setLoading(true); setRole(event.target.value); setPage(1) }}>
-          <option value="all">ทุกบทบาท</option><option value="Customer">ลูกค้า</option><option value="Staff">พนักงาน</option><option value="Admin">แอดมิน</option><option value="Owner">เจ้าของ</option>
-        </select>
-        <select aria-label="กรองการกระทำ" value={method} onChange={(event) => { setLoading(true); setMethod(event.target.value); setPage(1) }}>
-          <option value="all">ทุกการกระทำ</option><option value="POST">สร้าง</option><option value="PUT">แก้ไข</option><option value="PATCH">แก้ไข</option><option value="DELETE">ลบ</option>
-        </select>
-        <button className="owner-primary-btn small" type="submit">ค้นหา</button>
-      </form>
-      {error && <div className="owner-alert owner-alert-danger" role="alert">{error}</div>}
-      <div className="owner-table-wrap owner-audit-table-wrap">
-        <table className="owner-table owner-audit-table">
-          <thead><tr><th>วัน-เวลา</th><th>ผู้ทำรายการ</th><th>กิจกรรม</th></tr></thead>
-          <tbody>
-            {loading ? <tr><td colSpan="3" className="owner-empty-row">กำลังโหลด...</td></tr> : result.logs.length ? result.logs.map((log) => {
-              const activity = describeAuditActivity(log)
-              return (
-                <tr key={log.id}>
-                  <td>{new Date(log.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-                  <td>{log.actor_name || `${log.actor_role} #${log.actor_id}`}<small>{log.actor_role}</small></td>
-                  <td><strong>{activity.action}</strong><small>{activity.detail}</small></td>
-                </tr>
-              )
-            }) : <tr><td colSpan="3" className="owner-empty-row">ยังไม่มีประวัติการใช้งาน</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div className="owner-audit-pagination">
-        <span>หน้า {page} / {totalPages} · ทั้งหมด {Number(result.total).toLocaleString('th-TH')} รายการ</span>
-        <div className="owner-pagination">
-          <button type="button" disabled={loading || page <= 1} onClick={() => { setLoading(true); setPage(page - 1) }}>ก่อนหน้า</button>
-          <button type="button" disabled={loading || page >= totalPages} onClick={() => { setLoading(true); setPage(page + 1) }}>ถัดไป</button>
-        </div>
-      </div>
-    </section>
-  )
+function buildOwnerAnnouncementNotification(item) {
+  return {
+    key: `announcement-${item.id}`,
+    announcementId: item.id,
+    title: item.title,
+    tone: item.tone === 'warning' ? 'pending' : 'info',
+    label: item.tone === 'warning' ? 'ประกาศแจ้งเตือนจากหอพัก' : 'ประกาศจากหอพัก',
+    date: item.created_at,
+    message: item.message,
+    author: item.author || 'เจ้าหน้าที่',
+  }
 }
 
 const PAYMENT_DATE_PRESETS = [
@@ -612,6 +513,19 @@ function OwnerSafetyIncidentReview() {
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
+  const [announcements, setAnnouncements] = useState([])
+  const [announcementFocus, setAnnouncementFocus] = useState(null)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifPage, setNotifPage] = useState(1)
+  const notifRef = useRef(null)
+  const [seenNotificationKeys, setSeenNotificationKeys] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(getOwnerNotificationStorageKey()) || '[]')
+    } catch {
+      return []
+    }
+  })
+  const [freshNotificationKeys, setFreshNotificationKeys] = useState(() => new Set())
   const [overview, setOverview] = useState({ rooms: {}, finance: {} })
   const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, vacantRooms: [], rooms: [] })
   const [incomeSummary, setIncomeSummary] = useState({ totalIncome: 0, byType: [] })
@@ -662,6 +576,31 @@ function OwnerMain() {
   const [expenseEditFormError, setExpenseEditFormError] = useState('')
   const [isExpenseEditSubmitting, setIsExpenseEditSubmitting] = useState(false)
   const [expenseDeleteConfirm, setExpenseDeleteConfirm] = useState(null)
+
+  const loadAnnouncements = useCallback(() => axios
+    .get('/api/owner/announcements', { headers: getAuthHeaders() })
+    .then(({ data }) => setAnnouncements(data.announcements || []))
+    .catch(() => {}), [])
+
+  useEffect(() => {
+    loadAnnouncements()
+    const interval = setInterval(loadAnnouncements, 30000)
+    const refresh = () => loadAnnouncements()
+    window.addEventListener('focus', refresh)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [loadAnnouncements])
+
+  useEffect(() => {
+    if (!notifOpen) return undefined
+    const closeOnOutsideClick = (event) => {
+      if (!notifRef.current?.contains(event.target)) setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [notifOpen])
 
   const [displayRoomDetail, isRoomDetailClosing] = useClosingValue(roomDetail)
   const [displayRoomListFilter, isRoomListClosing] = useClosingValue(roomListFilter)
@@ -1284,6 +1223,23 @@ function OwnerMain() {
 
   const paymentPage = Number(paymentLogs.page || 1)
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
+  const notifications = announcements.map(buildOwnerAnnouncementNotification)
+  const newNotifications = notifications.filter((item) => !seenNotificationKeys.includes(item.key))
+  const notificationPageSize = 5
+  const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))
+  const notificationPage = Math.min(notifPage, notificationPages)
+  const visibleNotifications = notifications.slice((notificationPage - 1) * notificationPageSize, notificationPage * notificationPageSize)
+  const markNotificationsRead = () => {
+    const keys = notifications.map((item) => item.key)
+    setFreshNotificationKeys(new Set(newNotifications.map((item) => item.key)))
+    setSeenNotificationKeys(keys)
+    localStorage.setItem(getOwnerNotificationStorageKey(), JSON.stringify(keys))
+  }
+  const openNotification = (notification) => {
+    setActiveTab('announcements')
+    setAnnouncementFocus((current) => ({ id: notification.announcementId, nonce: (current?.nonce || 0) + 1 }))
+    setNotifOpen(false)
+  }
 
   return (
     <div className="owner-page">
@@ -1298,6 +1254,84 @@ function OwnerMain() {
           </div>
 
           <div className="owner-header-actions">
+            <div className="owner-notif-wrap" ref={notifRef}>
+              <button
+                type="button"
+                className="owner-notif-btn"
+                aria-label="การแจ้งเตือน"
+                aria-expanded={notifOpen}
+                onClick={() => {
+                  if (notifOpen) setNotifOpen(false)
+                  else {
+                    markNotificationsRead()
+                    setNotifOpen(true)
+                    setNotifPage(1)
+                  }
+                }}
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {newNotifications.length > 0 && <span className="owner-notif-dot">{newNotifications.length > 99 ? '99+' : newNotifications.length}</span>}
+              </button>
+              {notifOpen && (
+                <div className="owner-notif-panel">
+                  <div className="owner-notif-panel-header">
+                    <strong className="owner-notif-panel-title">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      การแจ้งเตือน <span>{notifications.length}</span>
+                    </strong>
+                    <button className="owner-notif-panel-close" type="button" aria-label="ปิด" onClick={() => setNotifOpen(false)}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                        <path d="m18 6-12 12M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {visibleNotifications.length ? (
+                    <div className="owner-notif-list">
+                      {visibleNotifications.map((notification) => (
+                        <button
+                          type="button"
+                          className={`owner-notif-item is-${notification.tone}${freshNotificationKeys.has(notification.key) ? ' is-new' : ''}`}
+                          key={notification.key}
+                          onClick={() => openNotification(notification)}
+                        >
+                          <span className="owner-notif-item-icon">
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="m3 11 18-5v12L3 14v-3z" />
+                              <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                            </svg>
+                          </span>
+                          <span className="owner-notif-item-main">
+                            <span className="owner-notif-item-head">
+                              <span className="owner-notif-item-title">
+                                {freshNotificationKeys.has(notification.key) && <span className="owner-notif-item-new">ใหม่</span>}
+                                {notification.title}
+                              </span>
+                              <time className="owner-notif-item-date">
+                                {notification.date ? new Date(notification.date).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}
+                              </time>
+                            </span>
+                            <span className="owner-notif-item-status">{notification.label}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <div className="owner-notif-empty"><span className="owner-notif-empty-icon">♪</span>ยังไม่มีการแจ้งเตือน</div>}
+                  {notificationPages > 1 && (
+                    <div className="owner-notif-pagination">
+                      <button type="button" disabled={notificationPage <= 1} onClick={() => setNotifPage(notificationPage - 1)}>ก่อนหน้า</button>
+                      <span>{notificationPage} / {notificationPages}</span>
+                      <button type="button" disabled={notificationPage >= notificationPages} onClick={() => setNotifPage(notificationPage + 1)}>ถัดไป</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button type="button" className="owner-logout-btn" onClick={handleLogout}>
               ออกจากระบบ
             </button>
@@ -1730,7 +1764,17 @@ function OwnerMain() {
           </>
         )}
 
-        {!isLoading && activeTab === 'audit' && <OwnerAuditLog />}
+        {!isLoading && activeTab === 'announcements' && (
+          <AnnouncementBoard
+            key={announcementFocus?.nonce ?? 'owner-board'}
+            variant="owner"
+            announcements={announcements}
+            openId={announcementFocus?.id}
+            canManage
+            apiBase="/api/owner/announcements"
+            onChange={loadAnnouncements}
+          />
+        )}
 
         {!isLoading && activeTab === 'staff' && (
           <section className="owner-panel owner-staff-panel">

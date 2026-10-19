@@ -1,10 +1,8 @@
 import express from "express";
 import http from "node:http";
 import "dotenv/config";
-import jwt from "jsonwebtoken";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { createCorsMiddleware } from "./middleware/cors.js";
-import { getPool } from "./Database/connection.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -26,32 +24,6 @@ const ROUTES = {
 };
 
 app.use(createCorsMiddleware());
-
-app.use((req, res, next) => {
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
-  const authorization = req.headers.authorization;
-  if (!authorization?.startsWith("Bearer ")) return next();
-
-  let actor;
-  try {
-    actor = jwt.verify(authorization.slice(7), process.env.JWT_SECRET || "dev-secret-change-me");
-  } catch {
-    return next();
-  }
-  if (!Number.isSafeInteger(actor.id) || !["Customer", "Staff", "Admin", "Owner"].includes(actor.role)) return next();
-
-  res.on("finish", () => {
-    if (res.statusCode < 200 || res.statusCode >= 300) return;
-    const endpoint = req.originalUrl.split("?")[0].slice(0, 255);
-    const ipAddress = (req.socket.remoteAddress || "").slice(0, 45);
-    getPool().query(
-      `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [actor.id, actor.role, req.method, endpoint, res.statusCode, ipAddress || null],
-    ).catch((error) => console.error("Audit log write error:", error));
-  });
-  return next();
-});
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "gateway" });
