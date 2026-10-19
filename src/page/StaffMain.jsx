@@ -13,7 +13,6 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import {
   InspectionDateCell,
@@ -2380,16 +2379,25 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
               )}
             </section>
 
-            <StepTimeline
-              title="ความคืบหน้า"
-              actorClassName="staff-actor"
-              steps={[
-                { label: 'บันทึกพัสดุเข้าห้อง', meta: formatDateTime(parcel.created_at), by: parcel.staff_name || 'เจ้าหน้าที่', state: 'done' },
-                received
-                  ? { label: 'ผู้เช่ารับพัสดุแล้ว', meta: formatDateTime(parcel.received_at), state: 'done', tone: 'success' }
-                  : { label: 'รอผู้เช่ารับพัสดุ', meta: 'ยังไม่ได้รับ', state: 'current' },
-              ]}
-            />
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ขั้นตอนการดำเนินการ</h4>
+              <ProcessSteps
+                actorClassName="staff-actor"
+                startDate={parcel.created_at}
+                endDate={received ? parcel.received_at : null}
+                waitingText="รอผู้เช่ารับพัสดุ"
+                steps={[
+                  { key: 'record', label: 'บันทึกพัสดุเข้าห้อง', by: parcel.staff_name || 'เจ้าหน้าที่', date: parcel.created_at, icon: 'box' },
+                  {
+                    key: 'receive',
+                    label: received ? 'ผู้เช่ารับพัสดุแล้ว' : 'รอผู้เช่ารับพัสดุ',
+                    date: received ? parcel.received_at : null,
+                    icon: 'check',
+                    pendingText: 'ยังไม่ได้รับ',
+                  },
+                ]}
+              />
+            </section>
           </div>
 
           <div className="staff-transfer-footer">
@@ -2417,27 +2425,26 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
   const amenities = TARGET_ROOM_AMENITIES.filter((item) => request[`target_room_${item.key}`])
   const bedCount = Number(request.target_room_bed)
   const hasTargetDetails = isMove && (request.target_room_electricity_unit_price != null || amenities.length > 0)
-  const steps = [
-    { key: 'created', label: 'ส่งคำขอ', date: request.created_at, done: true },
+  const rejected = request.status === 'rejected'
+  const finished = request.status === 'approved' || rejected
+  const progressSteps = [
+    { key: 'request', label: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, icon: 'note' },
     {
-      key: 'accepted',
-      label: request.accepted_by_name ? 'รับเรื่องโดย' : 'เจ้าหน้าที่รับเรื่อง',
+      key: 'accept',
+      label: 'เจ้าหน้าที่รับเรื่อง',
       by: request.accepted_by_name,
       date: request.accepted_at,
-      done: Boolean(request.accepted_at) || request.status !== 'pending',
+      icon: 'user',
+      pendingText: 'กำลังรอดำเนินการ',
     },
     {
-      key: 'final',
-      label:
-        request.status === 'approved'
-          ? `อนุมัติ${request.completed_by_name ? 'โดย' : ''}`
-          : request.status === 'rejected'
-            ? `ปฏิเสธ${request.completed_by_name ? 'โดย' : ''}`
-            : 'รอผลดำเนินการ',
-      by: ['approved', 'rejected'].includes(request.status) ? request.completed_by_name : null,
-      date: request.completed_at,
-      done: ['approved', 'rejected'].includes(request.status),
-      tone: request.status === 'rejected' ? 'danger' : request.status === 'approved' ? 'success' : '',
+      key: 'done',
+      label: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
+      by: request.completed_by_name,
+      date: finished ? request.completed_at : null,
+      icon: rejected ? 'x' : 'check',
+      tone: rejected ? 'danger' : undefined,
+      pendingText: 'ยังไม่ถึงขั้นตอนนี้',
     },
   ]
   return (
@@ -2690,21 +2697,15 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
               />
             )}
 
-            <StepTimeline
-              title="ความคืบหน้า"
-              actorClassName="staff-actor"
-              steps={steps.map((step, index) => {
-                const firstOpen = steps.findIndex((item) => !item.done)
-                const open = ['pending', 'in_progress'].includes(request.status)
-                return {
-                  label: step.label.replace(/โดย$/, '').trim() || step.label,
-                  by: step.done ? step.by : null,
-                  meta: step.done ? (step.date ? formatDateTime(step.date) : '') : index === firstOpen && open ? 'กำลังดำเนินการ' : 'ยังไม่ถึงขั้นตอนนี้',
-                  state: step.done ? 'done' : index === firstOpen && open ? 'current' : 'pending',
-                  tone: step.done ? step.tone : undefined,
-                }
-              })}
-            />
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">ขั้นตอนการดำเนินการ</h4>
+              <ProcessSteps
+                actorClassName="staff-actor"
+                startDate={request.created_at}
+                endDate={finished ? request.completed_at : null}
+                steps={progressSteps}
+              />
+            </section>
           </div>
 
           <div className="staff-transfer-footer">
@@ -3878,17 +3879,6 @@ function StaffEmptyPhotoIcon() {
   )
 }
 
-function StaffVisitRange({ item }) {
-  const openEnded = !item.end_at
-  return (
-    <span className="staff-ic-range">
-      <span>{formatStaffDateTime(item.start_at)}</span>
-      <span className="staff-ic-range-divider" aria-hidden="true">|</span>
-      <span className={openEnded ? 'is-open' : undefined}>{openEnded ? 'ไม่จำกัดเวลา' : formatStaffDateTime(item.end_at)}</span>
-    </span>
-  )
-}
-
 function getStaffVisitPhase(item, now) {
   if (item.status !== 'approved') return { key: item.status, ...(RESIDENT_VISIT_STATUS[item.status] || RESIDENT_VISIT_STATUS.pending) }
   if (!item.end_at) return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
@@ -4030,9 +4020,6 @@ function StaffRange({ start, end, openEnded = false }) {
   )
 }
 
-function StaffDetailTimeline({ steps }) {
-  return <StepTimeline steps={steps} actorClassName="staff-actor" />
-}
 
 function getStaffVisitKind(item) {
   if (item.request_type !== 'vehicle') return 'guest'
@@ -4334,7 +4321,7 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
           </span>
         </div>
       ) : (
-        <ul className="staff-rv-list staff-ic-grid">
+        <ul className="staff-rv-list staff-ic-grid is-visit">
           {pageItems.map((item) => {
             const info = getStaffVisitPhase(item, now)
             const tone = STAFF_IC_TONE[info.tone] || 'pending'
@@ -4351,35 +4338,47 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                     </span>
                     <span className="staff-ic-title">
                       <strong>{getStaffVisitTitle(item)}</strong>
-                      <small>ส่งคำขอ {formatStaffDateTime(item.created_at)}</small>
+                      {item.vehicle_model ? <em className="staff-vc-model">{item.vehicle_model}</em> : <small>ส่งคำขอ {formatStaffDateTime(item.created_at)}</small>}
                     </span>
                     <span className={`staff-ic-status is-${tone}`}>{info.label}</span>
                   </span>
-                  <span className="staff-ic-info">
-                    <span className="staff-ic-cell">
-                      <span className="staff-ic-label">ประเภท</span>
-                      <span className="staff-ic-value">{getStaffVisitOwner(item)}</span>
+                  <span className="staff-vc-grid">
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">ประเภท</span>
+                      <span className="staff-vc-value">{getStaffVisitOwner(item)}</span>
                     </span>
-                    <span className="staff-ic-cell">
-                      <span className="staff-ic-label">ห้อง</span>
-                      <span className="staff-ic-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">ห้อง</span>
+                      <span className="staff-vc-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
                     </span>
-                    <span className="staff-ic-cell is-wide">
-                      <span className="staff-ic-label">ผู้ขอ</span>
-                      <span className="staff-ic-value">
-                        <span className="staff-ic-name">
-                          {item.customer_id ? `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-' : item.guest_name || '-'}
-                        </span>
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">
+                        ผู้ขอ
                         <span className={`staff-ic-role is-${item.customer_id ? 'customer' : 'external'}`}>
-                          {item.customer_id ? 'ผู้เช่า' : 'บุคคลภายนอก'}
+                          {item.customer_id ? 'ผู้เช่า' : 'ภายนอก'}
                         </span>
+                      </span>
+                      <span className="staff-vc-value" title={item.customer_id ? `${item.first_name || ''} ${item.last_name || ''}`.trim() : item.guest_name || ''}>
+                        {item.customer_id ? `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-' : item.guest_name || '-'}
                       </span>
                     </span>
                   </span>
-                  <span className="staff-ic-section staff-ic-visit-section">
-                    <span className="staff-ic-label">ช่วงเวลา{item.vehicle_model ? ` · ${item.vehicle_model}` : ''}</span>
-                    <span className="staff-ic-desc">
-                      <StaffVisitRange item={item} />
+                  <span className="staff-vc-range">
+                    <span className="staff-vc-range-icon" aria-hidden="true">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    </span>
+                    <span className="staff-vc-range-body">
+                      <span className="staff-vc-label">ช่วงเวลาจอด</span>
+                      <span className="staff-vc-value">
+                        {formatStaffPoint(item.start_at).day} {formatStaffPoint(item.start_at).time} น.
+                        <span className="staff-vc-arrow" aria-hidden="true">→</span>
+                        <span className={item.end_at ? undefined : 'staff-vc-open'}>
+                          {item.end_at ? `${formatStaffPoint(item.end_at).day} ${formatStaffPoint(item.end_at).time} น.` : 'ไม่จำกัดเวลา'}
+                        </span>
+                      </span>
                     </span>
                   </span>
                 </button>
@@ -4474,8 +4473,6 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                     [detail.customer_id ? 'เบอร์ผู้มาเยี่ยม' : 'เบอร์ผู้ขอจอด', detail.guest_phone],
                   ]
                 : []),
-              ['เริ่ม', formatStaffDateTime(detail.start_at)],
-              ['สิ้นสุด', detail.end_at ? formatStaffDateTime(detail.end_at) : 'ไม่จำกัดเวลา'],
             ]
             return (
               <div className="staff-rv-detail">
@@ -4499,11 +4496,44 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                       <dd>{value || '-'}</dd>
                     </div>
                   ))}
-                  <div className="is-wide">
-                    <dt>หมายเหตุ</dt>
-                    <dd>{detail.note || '-'}</dd>
-                  </div>
                 </dl>
+                <section className="staff-rv-range-box">
+                  <h4>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                    {detail.request_type === 'vehicle' ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}
+                    {detail.end_at && <span className="staff-rv-range-total">รวม {formatRemaining(new Date(detail.end_at) - new Date(detail.start_at))}</span>}
+                  </h4>
+                  <div className="staff-rv-range-detail">
+                    <span className="staff-rv-range-point">
+                      <small>เริ่ม</small>
+                      <strong>{formatStaffDateTime(detail.start_at)}</strong>
+                    </span>
+                    <span className="staff-rv-range-arrow" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                    </span>
+                    <span className={`staff-rv-range-point${detail.end_at ? '' : ' is-open'}`}>
+                      <small>สิ้นสุด</small>
+                      <strong>{detail.end_at ? formatStaffDateTime(detail.end_at) : 'ไม่จำกัดเวลา'}</strong>
+                    </span>
+                  </div>
+                </section>
+                {detail.note && (
+                  <section className="staff-rv-note-box">
+                    <h4>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" />
+                        <path d="M14 3v6h6M8 13h8M8 17h5" />
+                      </svg>
+                      หมายเหตุ
+                    </h4>
+                    <p>{detail.note}</p>
+                  </section>
+                )}
                 {detail.vehicle_photos?.length > 0 && (
                   <section className="staff-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
                     <h4 className="staff-rv-timeline-title">รูปรถ / ป้ายทะเบียน ({detail.vehicle_photos.length} รูป)</h4>
@@ -4522,29 +4552,36 @@ function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
                     </div>
                   </section>
                 )}
-                <StaffDetailTimeline
+                <ProcessSteps
+                  title="ขั้นตอนการดำเนินการ"
+                  actorClassName="staff-actor"
+                  startDate={detail.created_at}
+                  endDate={detail.status === 'cancelled' ? detail.cancelled_at : detail.status === 'pending' ? null : reviewedAt}
+                  waitingText={detail.status === 'pending' ? 'รออนุมัติ' : 'กำลังดำเนินการ'}
                   steps={[
-                    { label: 'ส่งคำขอ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
+                    {
+                      key: 'request',
+                      label: 'ส่งคำขอ',
+                      by: detail.customer_id ? `${detail.first_name || ''} ${detail.last_name || ''}`.trim() : detail.guest_name,
+                      date: detail.created_at,
+                      icon: 'note',
+                    },
                     detail.status === 'pending' || reviewedAt
                       ? {
+                          key: 'review',
                           label: detail.status === 'pending' ? 'รออนุมัติ' : detail.status === 'rejected' ? 'ไม่อนุมัติ' : 'อนุมัติแล้ว',
-                          meta: detail.status === 'pending' ? 'กำลังรอ' : formatStaffDateTime(reviewedAt),
-                          by: detail.status === 'pending' ? null : reviewer,
-                          state: detail.status === 'pending' ? 'current' : 'done',
-                          tone: detail.status === 'rejected' ? 'danger' : detail.status === 'pending' ? undefined : 'success',
+                          by: reviewer,
+                          date: detail.status === 'pending' ? null : reviewedAt,
+                          icon: detail.status === 'rejected' ? 'x' : 'check',
+                          tone: detail.status === 'rejected' ? 'danger' : undefined,
+                          pendingText: 'กำลังรอเจ้าหน้าที่',
                         }
                       : null,
                     detail.updated_at
-                      ? { label: 'แก้ไขข้อมูล', meta: formatStaffDateTime(detail.updated_at), by: detail.updated_by_name, state: 'done' }
+                      ? { key: 'edit', label: 'แก้ไขข้อมูล', by: detail.updated_by_name, date: detail.updated_at, icon: 'edit' }
                       : null,
                     detail.status === 'cancelled'
-                      ? {
-                          label: 'ยกเลิกรายการ',
-                          meta: formatStaffDateTime(detail.cancelled_at),
-                          by: detail.cancelled_by_name,
-                          state: 'done',
-                          tone: 'danger',
-                        }
+                      ? { key: 'cancel', label: 'ยกเลิกรายการ', by: detail.cancelled_by_name, date: detail.cancelled_at, icon: 'x', tone: 'danger' }
                       : null,
                   ].filter(Boolean)}
                 />
@@ -5357,26 +5394,23 @@ function StaffSafetyTab({ rooms, onCountChange, focusId }) {
                     </div>
                   </section>
                 )}
-                <StaffDetailTimeline
+                <ProcessSteps
+                  title="ขั้นตอนการดำเนินการ"
+                  actorClassName="staff-actor"
+                  startDate={detail.created_at}
+                  endDate={detail.status === 'cancelled' ? detail.cancelled_at : detail.status === 'reviewed' ? detail.reviewed_at : null}
+                  waitingText="รอเจ้าหน้าที่รับเรื่อง"
                   steps={[
-                    { label: 'แจ้งเหตุ', meta: formatStaffDateTime(detail.created_at), state: 'done' },
+                    { key: 'report', label: 'แจ้งเหตุ', by: detail.reporter_name, date: detail.created_at, icon: 'shield' },
                     detail.status === 'cancelled'
-                      ? {
-                          label: 'ยกเลิกแล้ว',
-                          meta: formatStaffDateTime(detail.cancelled_at),
-                          by: detail.cancelled_by_name,
-                          state: 'done',
-                          tone: 'danger',
-                        }
+                      ? { key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name, date: detail.cancelled_at, icon: 'x', tone: 'danger' }
                       : {
+                          key: 'review',
                           label: detail.status === 'reviewed' ? 'ตรวจสอบแล้ว' : 'รอรับเรื่อง',
-                          meta:
-                            detail.status === 'reviewed'
-                              ? formatStaffDateTime(detail.reviewed_at)
-                              : 'กำลังรอ',
-                          by: detail.status === 'reviewed' ? detail.reviewed_by_name : null,
-                          state: detail.status === 'reviewed' ? 'done' : 'current',
-                          tone: detail.status === 'reviewed' ? 'success' : undefined,
+                          by: detail.reviewed_by_name,
+                          date: detail.status === 'reviewed' ? detail.reviewed_at : null,
+                          icon: 'check',
+                          pendingText: 'กำลังรอเจ้าหน้าที่',
                         },
                   ]}
                 />

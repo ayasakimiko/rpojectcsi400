@@ -10,7 +10,6 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -4236,16 +4235,22 @@ const VISIT_PAGE_SIZE = 12
 
 function VisitCarIcon({ size = 18 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17" />
-      <circle cx="7.5" cy="17.5" r="1.5" />
-      <circle cx="16.5" cy="17.5" r="1.5" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8" />
+      <rect x="3" y="10" width="18" height="8" rx="2" />
+      <path d="M7 14h.01M17 14h.01" />
+      <path d="M5 18v2M19 18v2" />
     </svg>
   )
 }
 
 function getVisitHeading(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || 'ไม่ระบุทะเบียน' : item.guest_name || 'ผู้มาพัก'
+}
+
+function formatVisitPoint(value) {
+  const date = new Date(value)
+  return `${date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} ${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
 }
 
 function buildAdminSafetyNotifs(item) {
@@ -4298,16 +4303,6 @@ function buildAdminInspectionNotifs(inspection) {
       request: inspection,
     },
   ]
-}
-
-function VisitRange({ item }) {
-  return (
-    <span className="admin-visit-range">
-      <span>{formatIncidentTime(item.start_at)}</span>
-      <span className="admin-visit-range-divider" aria-hidden="true">|</span>
-      <span className={item.end_at ? undefined : 'is-open'}>{item.end_at ? formatIncidentTime(item.end_at) : 'ไม่จำกัดเวลา'}</span>
-    </span>
-  )
 }
 
 function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
@@ -4457,7 +4452,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
           <small>{items.length === 0 ? 'เมื่อผู้เช่าส่งคำขอ รายการจะแสดงที่นี่' : 'ลองเปลี่ยนสถานะหรือคำค้นหา'}</small>
         </div>
       ) : (
-        <div className="admin-incident-grid">
+        <div className="admin-incident-grid is-visit">
           {pageItems.map((item) => {
             const status = VISIT_STATUS_INFO[item.status] || VISIT_STATUS_INFO.pending
             const photos = item.vehicle_photos || []
@@ -4471,32 +4466,50 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     </span>
                     <span className="admin-incident-title">
                       <strong>{getVisitHeading(item)}</strong>
-                      <small>ส่งคำขอ {formatIncidentTime(item.created_at)}</small>
+                      {isVehicle && item.vehicle_model ? (
+                        <em className="admin-vc-model">{item.vehicle_model}</em>
+                      ) : (
+                        <small>ส่งคำขอ {formatIncidentTime(item.created_at)}</small>
+                      )}
                     </span>
                     <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
                   </span>
-                  <span className="admin-incident-info">
-                    <span className="admin-incident-cell">
-                      <span className="admin-incident-label">ประเภท</span>
-                      <span className="admin-incident-value">{RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type}</span>
+                  <span className="admin-vc-grid">
+                    <span className="admin-vc-cell">
+                      <span className="admin-vc-label">ประเภท</span>
+                      <span className="admin-vc-value">{RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type}</span>
                     </span>
-                    <span className="admin-incident-cell">
-                      <span className="admin-incident-label">ห้อง</span>
-                      <span className="admin-incident-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                    <span className="admin-vc-cell">
+                      <span className="admin-vc-label">ห้อง</span>
+                      <span className="admin-vc-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
                     </span>
-                    <span className="admin-incident-cell is-wide">
-                      <span className="admin-incident-label">ผู้ขอ</span>
-                      <span className="admin-incident-value">
-                        <span className="admin-incident-name">{item.first_name ? `${item.first_name} ${item.last_name}` : 'เจ้าหน้าที่บันทึก'}</span>
+                    <span className="admin-vc-cell">
+                      <span className="admin-vc-label">
+                        ผู้ขอ
                         <span className={`admin-incident-role is-${item.customer_id ? 'customer' : 'staff'}`}>
                           {item.customer_id ? 'ผู้เช่า' : 'เจ้าหน้าที่'}
                         </span>
                       </span>
+                      <span className="admin-vc-value" title={item.first_name ? `${item.first_name} ${item.last_name}` : ''}>
+                        {item.first_name ? `${item.first_name} ${item.last_name}` : 'เจ้าหน้าที่บันทึก'}
+                      </span>
                     </span>
                   </span>
-                  <span className="admin-incident-section admin-visit-section">
-                    <span className="admin-incident-label">ช่วงเวลา{isVehicle && item.vehicle_model ? ` · ${item.vehicle_model}` : ''}</span>
-                    <span className="admin-incident-desc"><VisitRange item={item} /></span>
+                  <span className="admin-vc-range">
+                    <span className="admin-vc-range-icon" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    </span>
+                    <span className="admin-vc-range-body">
+                      <span className="admin-vc-label">{isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}</span>
+                      <span className="admin-vc-value">
+                        {formatVisitPoint(item.start_at)}
+                        <span className="admin-vc-arrow" aria-hidden="true">→</span>
+                        <span className={item.end_at ? undefined : 'admin-vc-open'}>{item.end_at ? formatVisitPoint(item.end_at) : 'ไม่จำกัดเวลา'}</span>
+                      </span>
+                    </span>
                   </span>
                 </button>
                 <div className="admin-incident-photos">
@@ -4527,7 +4540,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     </span>
                   )}
                 </div>
-                <div className="admin-incident-foot">
+                <div className="admin-incident-foot admin-vc-foot">
                   <span className="admin-incident-result">
                     {item.status === 'pending' ? (
                       'ยังไม่มีผู้อนุมัติ'
@@ -4563,17 +4576,19 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
             const isVehicle = detail.request_type === 'vehicle'
             const reviewer = detail.reviewed_by_name || detail.admin_reviewed_by_name
             const reviewedAt = detail.reviewed_at || detail.admin_reviewed_at
+            const cancelledAt = detail.cancelled_at || detail.updated_at
             const steps = [
-              { label: 'ส่งคำขอ', meta: formatIncidentTime(detail.created_at), by: detail.first_name ? `${detail.first_name} ${detail.last_name}` : null, state: 'done' },
+              { key: 'request', label: 'ส่งคำขอ', by: detail.first_name ? `${detail.first_name} ${detail.last_name}` : null, date: detail.created_at, icon: 'note' },
               detail.status === 'pending'
-                ? { label: 'รออนุมัติ', meta: 'กำลังรอ', state: 'current' }
+                ? { key: 'review', label: 'รออนุมัติ', date: null, icon: 'check', pendingText: 'กำลังรอพิจารณา' }
                 : detail.status === 'rejected'
-                  ? { label: 'ไม่อนุมัติ', meta: formatIncidentTime(reviewedAt), by: reviewer, state: 'done', tone: 'danger' }
-                  : { label: 'อนุมัติแล้ว', meta: formatIncidentTime(reviewedAt), by: reviewer, state: 'done', tone: 'success' },
+                  ? { key: 'review', label: 'ไม่อนุมัติ', by: reviewer, date: reviewedAt, icon: 'x', tone: 'danger' }
+                  : { key: 'review', label: 'อนุมัติแล้ว', by: reviewer, date: reviewedAt, icon: 'check' },
               ...(detail.status === 'cancelled'
-                ? [{ label: 'ยกเลิกแล้ว', meta: formatIncidentTime(detail.cancelled_at || detail.updated_at), by: detail.cancelled_by_name || detail.updated_by_name, state: 'done', tone: 'danger' }]
+                ? [{ key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' }]
                 : []),
             ]
+            const stepsEnd = detail.status === 'cancelled' ? cancelledAt : detail.status === 'pending' ? null : reviewedAt
             return (
               <div className="admin-incident-detail">
                 <div className="admin-incident-scroll">
@@ -4624,13 +4639,38 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                         </div>
                       </>
                     )}
-                    <div className="is-wide">
-                      <dt>ช่วงเวลา</dt>
-                      <dd><VisitRange item={detail} /></dd>
+                    <div className="is-wide is-range">
+                      <dt>
+                        <RoomDetailIcon type="clock" size={14} />
+                        {isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}
+                        {detail.end_at && (
+                          <span className="admin-visit-range-total">
+                            รวม {formatRemaining(new Date(detail.end_at) - new Date(detail.start_at))}
+                          </span>
+                        )}
+                      </dt>
+                      <dd className="admin-visit-range-detail">
+                        <span className="admin-visit-range-point">
+                          <small>เริ่ม</small>
+                          <strong>{formatIncidentTime(detail.start_at)}</strong>
+                        </span>
+                        <span className="admin-visit-range-arrow" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 12h14M13 6l6 6-6 6" />
+                          </svg>
+                        </span>
+                        <span className={`admin-visit-range-point${detail.end_at ? '' : ' is-open'}`}>
+                          <small>สิ้นสุด</small>
+                          <strong>{detail.end_at ? formatIncidentTime(detail.end_at) : 'ไม่จำกัดเวลา'}</strong>
+                        </span>
+                      </dd>
                     </div>
                     {detail.note && (
-                      <div className="is-wide">
-                        <dt>หมายเหตุ</dt>
+                      <div className="is-wide is-note">
+                        <dt>
+                          <RoomDetailIcon type="note" size={14} />
+                          หมายเหตุ
+                        </dt>
                         <dd>{detail.note}</dd>
                       </div>
                     )}
@@ -4655,7 +4695,14 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     </section>
                   )}
 
-                  <StepTimeline title="ประวัติการดำเนินการ" steps={steps} actorClassName="admin-actor-inline" />
+                  <ProcessSteps
+                    title="ขั้นตอนการดำเนินการ"
+                    actorClassName="admin-actor-inline"
+                    startDate={detail.created_at}
+                    endDate={stepsEnd}
+                    waitingText="รอพิจารณา"
+                    steps={steps}
+                  />
 
                   {message && <p className="admin-safety-message" role="status">{message}</p>}
                 </div>
@@ -4951,13 +4998,14 @@ function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
             const typeLabel = SAFETY_INCIDENT_TYPE_LABEL[detail.incident_type] || detail.incident_type
             const photos = detail.photos || []
             const steps = [
-              { label: 'แจ้งเหตุ', meta: formatIncidentTime(detail.created_at), by: detail.reporter_name, state: 'done' },
+              { key: 'report', label: 'แจ้งเหตุ', by: detail.reporter_name, date: detail.created_at, icon: 'shield' },
               detail.status === 'reviewed'
-                ? { label: 'ตรวจสอบแล้ว', meta: formatIncidentTime(detail.reviewed_at), by: detail.reviewed_by_name, note: detail.review_note, state: 'done', tone: 'success' }
+                ? { key: 'review', label: 'ตรวจสอบแล้ว', by: detail.reviewed_by_name, note: detail.review_note, date: detail.reviewed_at, icon: 'check' }
                 : detail.status === 'cancelled'
-                  ? { label: 'ยกเลิกแล้ว', meta: formatIncidentTime(detail.cancelled_at), by: detail.cancelled_by_name, note: detail.cancel_reason, state: 'done', tone: 'danger' }
-                  : { label: 'รอตรวจสอบ', meta: 'กำลังรอ', state: 'current' },
+                  ? { key: 'review', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name, note: detail.cancel_reason, date: detail.cancelled_at, icon: 'x', tone: 'danger' }
+                  : { key: 'review', label: 'รอตรวจสอบ', date: null, icon: 'check', pendingText: 'กำลังรอตรวจสอบ' },
             ]
+            const stepsEnd = detail.status === 'reviewed' ? detail.reviewed_at : detail.status === 'cancelled' ? detail.cancelled_at : null
             return (
               <div className="admin-incident-detail">
                 <div className="admin-incident-scroll">
@@ -5021,7 +5069,14 @@ function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
                   </section>
                 )}
 
-                <StepTimeline title="ประวัติการดำเนินการ" steps={steps} actorClassName="admin-actor-inline" />
+                <ProcessSteps
+                  title="ขั้นตอนการดำเนินการ"
+                  actorClassName="admin-actor-inline"
+                  startDate={detail.created_at}
+                  endDate={stepsEnd}
+                  waitingText="รอตรวจสอบ"
+                  steps={steps}
+                />
 
                 {detail.status === 'pending' && (
                   <section className="admin-incident-review">
@@ -8646,14 +8701,21 @@ function AdminBackupPage() {
                       <p className="exp-ui-muted">ไม่มีรูปพัสดุ</p>
                     )}
                   </section>
-                  <StepTimeline
-                    title="ความคืบหน้า"
+                  <ProcessSteps
+                    title="ขั้นตอนการดำเนินการ"
                     actorClassName="admin-actor-inline"
+                    startDate={parcelDetail.created_at}
+                    endDate={received ? parcelDetail.received_at : null}
+                    waitingText="รอผู้เช่ารับพัสดุ"
                     steps={[
-                      { label: 'บันทึกพัสดุเข้าห้อง', meta: formatDateTime(parcelDetail.created_at), by: parcelDetail.staff_name || 'เจ้าหน้าที่', state: 'done' },
-                      received
-                        ? { label: 'ผู้เช่ารับพัสดุแล้ว', meta: formatDateTime(parcelDetail.received_at), state: 'done', tone: 'success' }
-                        : { label: 'รอผู้เช่ารับพัสดุ', meta: 'ยังไม่ได้รับ', state: 'current' },
+                      { key: 'record', label: 'บันทึกพัสดุเข้าห้อง', by: parcelDetail.staff_name || 'เจ้าหน้าที่', date: parcelDetail.created_at, icon: 'box' },
+                      {
+                        key: 'receive',
+                        label: received ? 'ผู้เช่ารับพัสดุแล้ว' : 'รอผู้เช่ารับพัสดุ',
+                        date: received ? parcelDetail.received_at : null,
+                        icon: 'check',
+                        pendingText: 'ยังไม่ได้รับ',
+                      },
                     ]}
                   />
                 </div>

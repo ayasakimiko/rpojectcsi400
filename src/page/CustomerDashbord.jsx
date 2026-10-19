@@ -1483,6 +1483,33 @@ function RequestTimelineDropdown({ kind, request }) {
   )
 }
 
+const STEP_ICON_PATHS = {
+  send: <><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></>,
+  tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
+  shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M12 8v4M12 16h.01" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  check: <path d="M5 12.5 10 17l9-10" />,
+  x: <path d="M6 6l12 12M18 6 6 18" />,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  box: <><path d="M21 8 12 3 3 8l9 5 9-5Z" /><path d="M3 8v8l9 5 9-5V8M12 13v8" /></>,
+}
+
+function StepDotIcon({ type, number }) {
+  if (!type) return <span className="dashboard-step-number">{number}</span>
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      {STEP_ICON_PATHS[type]}
+    </svg>
+  )
+}
+
+function getStepIcon(kind, step, index, { isLast, isCurrent, finalTone }) {
+  if (!step.done) return isCurrent ? 'clock' : null
+  if (isLast && index > 0) return finalTone === 'danger' ? 'x' : 'check'
+  if (index === 0) return kind === 'maintenance' ? 'tool' : kind === 'safety' ? 'shield' : 'send'
+  return 'user'
+}
+
 const STEPPER_MANY_THRESHOLD = 4
 
 function DashboardStepper({ count, currentIndex, children }) {
@@ -1556,12 +1583,12 @@ function RequestTimeline({ kind, request, compact = false }) {
             .join(' ')
           return (
             <li key={step.label + index} className={classes}>
+              {!compact && stepMs !== null && <span className="dashboard-step-gap">+ {formatRemaining(stepMs)}</span>}
               <span className="dashboard-step-dot" aria-hidden="true">
-                {step.done && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                    {isLast && finalTone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
-                  </svg>
-                )}
+                <StepDotIcon
+                  type={getStepIcon(kind, step, index, { isLast, isCurrent: index === currentIndex, finalTone })}
+                  number={index + 1}
+                />
               </span>
               <p className="dashboard-step-label">{compact ? STEP_COMPACT_LABEL[step.label] || step.label : step.label}</p>
               <p className="dashboard-step-date">
@@ -1581,13 +1608,21 @@ function RequestTimeline({ kind, request, compact = false }) {
                   โดย <span className="dashboard-actor">{step.by}</span>
                 </p>
               )}
-              {!compact && stepMs !== null && <p className="dashboard-step-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
             </li>
           )
         })}
       </DashboardStepper>
-      {!compact && totalMs !== null && (
-        <p className="dashboard-progress-total">รวมใช้เวลาทั้งหมด {formatRemaining(totalMs)}</p>
+      {!compact && (
+        <p className={`dashboard-progress-total${totalMs === null ? ' is-waiting' : ''}`}>
+          <StepDotIcon type="clock" />
+          {totalMs !== null ? (
+            <>
+              รวมใช้เวลาทั้งหมด <strong>{formatRemaining(totalMs)}</strong>
+            </>
+          ) : (
+            'กำลังดำเนินการ'
+          )}
+        </p>
       )}
     </div>
   )
@@ -1713,11 +1748,7 @@ function ParcelProgress({ parcel, compact = false }) {
               .join(' ')}
           >
             <span className="dashboard-step-dot" aria-hidden="true">
-              {step.done && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
+              <StepDotIcon type={step.done ? (step.key === 'logged' ? 'box' : 'check') : 'clock'} number={index + 1} />
             </span>
             <p className="dashboard-step-label">{step.label}</p>
             <p className="dashboard-step-date">

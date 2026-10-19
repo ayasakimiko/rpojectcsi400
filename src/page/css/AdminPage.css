@@ -31,7 +31,7 @@
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 20px 26px;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
@@ -790,7 +790,7 @@
   min-height: 96px;
   overflow: hidden;
   padding: 16px 18px;
-  border: 1px solid #e6f0fd;
+  border: 2px solid color-mix(in srgb, var(--tone-ink) 40%, #ffffff);
   border-radius: 16px;
   background: linear-gradient(135deg, #ffffff 40%, var(--tone-soft) 100%);
   box-shadow: 0 5px 15px rgba(37, 99, 235, 0.08), 0 2px 8px rgba(37, 99, 235, 0.05);
@@ -3391,7 +3391,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   align-content: start;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
@@ -3987,6 +3987,117 @@ tr.admin-focus-flash.is-fading > td {
   overflow-wrap: anywhere;
 }
 
+.admin-incident-fields > div.is-range,
+.admin-incident-fields > div.is-note {
+  padding: 12px 14px;
+}
+
+.admin-incident-fields > div.is-range dt,
+.admin-incident-fields > div.is-note dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-incident-fields > div.is-range {
+  border-color: #dce9fb;
+  background: #f5f9ff;
+}
+
+.admin-incident-fields > div.is-range dt {
+  color: #4a6fa5;
+}
+
+.admin-visit-range-total {
+  margin-left: auto;
+  padding: 1px 9px;
+  border: 1px solid #c9dcfb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-visit-range-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-visit-range-point {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.admin-visit-range-point small {
+  color: #8aa0b6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-visit-range-point strong {
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.admin-visit-range-point.is-open {
+  border-color: #c9dcfb;
+  background: #eff6ff;
+}
+
+.admin-visit-range-point.is-open strong {
+  color: #2563eb;
+}
+
+.admin-visit-range-arrow {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #c9dcfb;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #60a5fa;
+}
+
+.admin-incident-fields > div.is-note {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.admin-incident-fields > div.is-note dt {
+  color: #b45309;
+}
+
+.admin-incident-fields > div.is-note dd {
+  color: #713f12;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .admin-visit-range-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-visit-range-arrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+}
+
 .admin-incident-gallery h4,
 .admin-incident-timeline h4 {
   margin: 0 0 8px;
@@ -4219,10 +4330,14 @@ tr.admin-focus-flash.is-fading > td {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 22px 26px;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
+}
+
+.admin-incident-scroll > * {
+  flex-shrink: 0;
 }
 
 .admin-incident-scroll::-webkit-scrollbar {
@@ -4496,7 +4611,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0 -6px;
   padding: 4px 6px 8px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
 }
@@ -6757,7 +6872,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 14px;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 20px 26px;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
@@ -7478,7 +7593,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   padding: 12px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
@@ -8117,7 +8232,7 @@ tr.admin-focus-flash.is-fading > td {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 16px 26px;
   background: #fbfdff;
   scrollbar-width: thin;
@@ -9907,7 +10022,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 0 12px 16px;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
@@ -10073,7 +10188,7 @@ tr.admin-focus-flash.is-fading > td {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 16px 22px;
   background: #fbfdff;
   scrollbar-width: thin;
@@ -10864,7 +10979,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   padding: 4px 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
@@ -13445,7 +13560,7 @@ tr.admin-focus-flash.is-fading > td {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   scrollbar-width: thin;
   scrollbar-color: #c7d7ee transparent;
 }
@@ -13853,4 +13968,266 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-req-open {
   align-self: flex-end;
+}
+
+.admin-incident-grid.is-visit {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  grid-auto-rows: min-content;
+  align-items: start;
+  gap: 16px;
+}
+
+.admin-visit-card .admin-incident-main {
+  gap: 14px;
+  padding: 16px 16px 12px;
+}
+
+.admin-visit-card .admin-incident-head {
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.admin-visit-card .admin-incident-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #c9dcfb;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.admin-visit-card.is-reviewed .admin-incident-icon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.admin-visit-card.is-cancelled .admin-incident-icon {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.admin-visit-card.is-rejected .admin-incident-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.admin-visit-card .admin-incident-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.admin-visit-card.is-reviewed .admin-incident-icon {
+  border-color: #bbf7d0;
+}
+
+.admin-visit-card.is-cancelled .admin-incident-icon {
+  border-color: #e2e8f0;
+}
+
+.admin-visit-card.is-rejected .admin-incident-icon {
+  border-color: #fecaca;
+}
+
+.admin-visit-card .admin-incident-title {
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.admin-visit-card .admin-incident-title strong {
+  font-size: 16px;
+}
+
+.admin-vc-model {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 8px;
+  border: 1px solid #c9dcfb;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-visit-card .admin-incident-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  font-size: 12px;
+}
+
+.admin-visit-card .admin-incident-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.admin-vc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.3fr);
+  overflow: hidden;
+  border: 1px solid #e8eff9;
+  border-radius: 12px;
+}
+
+.admin-vc-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 13px;
+}
+
+.admin-vc-cell + .admin-vc-cell {
+  border-left: 1px solid #e8eff9;
+}
+
+.admin-vc-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b859e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-vc-label .admin-incident-role {
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.admin-vc-value {
+  overflow: hidden;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-vc-arrow {
+  margin: 0 4px;
+  color: #93c5fd;
+}
+
+.admin-vc-open {
+  color: #2563eb;
+}
+
+.admin-vc-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 13px;
+  border: 1px solid #dce9fb;
+  border-radius: 12px;
+  background: #f5f9ff;
+}
+
+.admin-vc-range-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #c9dcfb;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #2563eb;
+}
+
+.admin-vc-range-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.admin-visit-card.is-reviewed .admin-vc-range {
+  border-color: #c6f0d4;
+  background: #f5fdf8;
+}
+
+.admin-visit-card.is-reviewed .admin-vc-range-icon {
+  border-color: #bbf7d0;
+  color: #16a34a;
+}
+
+.admin-visit-card.is-cancelled .admin-vc-range,
+.admin-visit-card.is-rejected .admin-vc-range {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.admin-visit-card .admin-incident-photos {
+  padding: 0 16px 14px;
+}
+
+.admin-visit-card .admin-incident-photo-row .admin-incident-photo {
+  width: 60px;
+  height: 60px;
+}
+
+.admin-vc-foot {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.admin-vc-foot .admin-incident-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  color: #6b859e;
+  font-size: 12.5px;
+  white-space: normal;
+}
+
+.admin-vc-foot .admin-incident-result::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.admin-visit-card.is-pending .admin-vc-foot .admin-incident-result::before {
+  background: #f59e0b;
+}
+
+.admin-visit-card.is-reviewed .admin-vc-foot .admin-incident-result::before {
+  background: #22c55e;
+}
+
+.admin-visit-card.is-rejected .admin-vc-foot .admin-incident-result::before {
+  background: #ef4444;
+}
+
+.admin-vc-foot .admin-incident-open {
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+}
+
+@media (max-width: 420px) {
+  .admin-vc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-vc-cell:nth-child(3) {
+    grid-column: 1 / -1;
+    border-top: 1px solid #e8eff9;
+    border-left: none;
+  }
 }

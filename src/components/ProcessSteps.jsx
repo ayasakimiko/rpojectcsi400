@@ -7,6 +7,9 @@ const ICON_PATHS = {
   x: <path d="M6 6l12 12M18 6 6 18" />,
   tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  box: <><path d="M21 8 12 3 3 8l9 5 9-5Z" /><path d="M3 8v8l9 5 9-5V8M12 13v8" /></>,
+  shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M12 8v4M12 16h.01" /></>,
+  edit: <path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" />,
 }
 
 function StepIcon({ type, size = 16 }) {
@@ -36,7 +39,17 @@ function formatDateTime(value) {
   return date.toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ProcessSteps({ steps: raw, startDate, endDate, pendingText = 'ไม่มีข้อมูล', actorClassName = '', waitingText = 'กำลังดำเนินการ' }) {
+export default function ProcessSteps({ title, ...props }) {
+  if (!title) return <ProcessStepsBody {...props} />
+  return (
+    <section className="process-steps-card">
+      <h4 className="process-steps-title">{title}</h4>
+      <ProcessStepsBody {...props} />
+    </section>
+  )
+}
+
+function ProcessStepsBody({ steps: raw, startDate, endDate, pendingText = 'ไม่มีข้อมูล', actorClassName = '', waitingText = 'กำลังดำเนินการ' }) {
   const steps = raw.map((step, index) => {
     const previous = raw.slice(0, index).reverse().find((item) => item.date)
     const gap = previous && step.date ? new Date(step.date) - new Date(previous.date) : null
@@ -46,7 +59,7 @@ export default function ProcessSteps({ steps: raw, startDate, endDate, pendingTe
 
   return (
     <div className="moveout-steps-wrap">
-      <ol className="moveout-steps">
+      <ol className="moveout-steps" style={{ '--step-count': steps.length }}>
         {steps.map((step, index) => (
           <li key={step.key} className={`${step.done ? 'is-done' : 'is-pending'}${step.tone ? ` is-${step.tone}` : ''}`}>
             {index > 0 && (
@@ -61,6 +74,7 @@ export default function ProcessSteps({ steps: raw, startDate, endDate, pendingTe
               <strong>{step.label}</strong>
               {step.by && step.done && <span className={`moveout-step-by ${actorClassName}`.trim()}>{step.by}</span>}
               <small>{step.date ? formatDateTime(step.date) : step.pendingText || pendingText}</small>
+              {step.note && step.done && <p className="moveout-step-note">{step.note}</p>}
             </div>
           </li>
         ))}
