@@ -3297,6 +3297,12 @@ const SLIP_FIELD_ICON_PATHS = {
   ),
   phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />,
   list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
+  wallet: (
+    <>
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 10h18M16 15h2" />
+    </>
+  ),
   date: (
     <>
       <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
@@ -3353,7 +3359,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const [preview, setPreview] = useState(null)
   const [slipViewerOpen, setSlipViewerOpen] = useState(false)
   const [previewClosing, setPreviewClosing] = useState(false)
-  const { setPage, focusItem, resolvePage } = useListFocus()
+  const { setPage, focusItem, resolvePage } = useListFocus(STAFF_CARD_PAGE_SIZE)
 
   const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
@@ -3425,8 +3431,8 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const hasPreview = Boolean(preview)
   useEffect(() => (hasPreview ? lockBodyScroll() : undefined), [hasPreview])
 
-  const currentPage = Math.min(resolvePage(payments), Math.max(1, Math.ceil(payments.length / STAFF_LIST_PAGE_SIZE)))
-  const pagePayments = payments.slice((currentPage - 1) * STAFF_LIST_PAGE_SIZE, currentPage * STAFF_LIST_PAGE_SIZE)
+  const currentPage = Math.min(resolvePage(payments), Math.max(1, Math.ceil(payments.length / STAFF_CARD_PAGE_SIZE)))
+  const pagePayments = payments.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
 
   const openSlip = (payment) => {
     setError('')
@@ -3479,70 +3485,98 @@ function StaffPaymentReview({ onCountChange, focusId }) {
       ) : payments.length === 0 ? (
         <p className="staff-empty">ไม่มีสลิปรอตรวจสอบ</p>
       ) : (
-        <div className="table-responsive">
-          <table className="staff-table">
-            <thead>
-              <tr>
-                <th>ห้อง</th>
-                <th>ผู้เช่า</th>
-                <th>รายการ</th>
-                <th>ยอดรวม</th>
-                <th>วันที่ส่ง</th>
-                <th>ตรวจ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagePayments.map((payment) => (
-                <tr key={payment.id} data-staff-focus={payment.id}>
-                  <td>{payment.room_number}</td>
-                  <td>
-                    {payment.first_name} {payment.last_name}
-                    <small>{payment.phone}</small>
-                  </td>
-                  <td>
-                    {String(payment.payment_types || '')
-                      .split(',')
-                      .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
-                      .join(', ')}
-                  </td>
-                  <td>
-                    ฿
-                    {Number(payment.amount).toLocaleString('th-TH', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-                  <td>{new Date(payment.payment_date).toLocaleDateString('th-TH')}</td>
-                  <td>
-                    <div className="payment-review-actions">
-                      <button type="button" className="staff-action-btn is-ghost" onClick={() => openSlip(payment)}>
-                        ดูสลิป
+        <ul className="staff-rv-list staff-ic-grid is-visit">
+          {pagePayments.map((payment) => {
+            const types = String(payment.payment_types || '').split(',').filter(Boolean)
+            const tenantName = `${payment.first_name || ''} ${payment.last_name || ''}`.trim() || '-'
+            return (
+              <li key={payment.id} data-staff-focus={payment.id} className="staff-ic-card staff-ic-visit-card staff-slip-card is-pending">
+                <button type="button" className="staff-ic-main" onClick={() => openSlip(payment)}>
+                  <span className="staff-ic-head">
+                    <span className="staff-ic-icon">
+                      <SlipFieldIcon name="wallet" />
+                    </span>
+                    <span className="staff-ic-title">
+                      <strong>ห้อง {payment.room_number}</strong>
+                      <span className="staff-slip-types">
+                        {types.map((type) => (
+                          <em key={type} className="staff-vc-model">{PAYMENT_REVIEW_LABEL[type] || type}</em>
+                        ))}
+                      </span>
+                    </span>
+                    <span className="staff-ic-status is-pending">รอตรวจสอบ</span>
+                  </span>
+                  <span className="staff-vc-grid">
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">ผู้เช่า</span>
+                      <span className="staff-vc-value" title={tenantName}>{tenantName}</span>
+                    </span>
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">เบอร์โทร</span>
+                      <span className="staff-vc-value">{payment.phone || '-'}</span>
+                    </span>
+                    <span className="staff-vc-cell">
+                      <span className="staff-vc-label">วันที่ส่ง</span>
+                      <span className="staff-vc-value">{new Date(payment.payment_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+                    </span>
+                  </span>
+                  <span className="staff-vc-range staff-slip-amount">
+                    <span className="staff-vc-range-icon" aria-hidden="true">
+                      <SlipFieldIcon name="wallet" />
+                    </span>
+                    <span className="staff-vc-range-body">
+                      <span className="staff-vc-label">ยอดที่ต้องตรวจ</span>
+                      <strong>
+                        ฿{Number(payment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </strong>
+                    </span>
+                  </span>
+                </button>
+                <div className="staff-ic-photos">
+                  <span className="staff-ic-label">สลิปโอนเงิน</span>
+                  {payment.slip_path ? (
+                    <span className="staff-ic-photo-row">
+                      <button type="button" className="staff-ic-photo" onClick={() => openSlip(payment)} aria-label={`ดูสลิปห้อง ${payment.room_number}`}>
+                        <UploadImage src={payment.slip_path} alt="" loading="lazy" />
                       </button>
-                      <button
-                        type="button"
-                        className="staff-action-btn is-primary"
-                        disabled={busyId === payment.id}
-                        onClick={() => requestReview(payment, 'approved')}
-                      >
-                        อนุมัติ
-                      </button>
-                      <button
-                        type="button"
-                        className="staff-action-btn is-danger"
-                        disabled={busyId === payment.id}
-                        onClick={() => requestReview(payment, 'rejected')}
-                      >
-                        ปฏิเสธ
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </span>
+                  ) : (
+                    <span className="staff-ic-photo-empty">
+                      <StaffEmptyPhotoIcon />
+                      ไม่มีรูปสลิป
+                    </span>
+                  )}
+                </div>
+                <div className="staff-ic-foot">
+                  <span className="staff-ic-result">รอเจ้าหน้าที่ตรวจสอบสลิป</span>
+                  <span className="staff-ic-actions">
+                    <button type="button" className="staff-ic-btn" onClick={() => openSlip(payment)}>
+                      ดูสลิป
+                    </button>
+                    <button
+                      type="button"
+                      className="staff-ic-btn is-danger"
+                      disabled={busyId === payment.id}
+                      onClick={() => requestReview(payment, 'rejected')}
+                    >
+                      ปฏิเสธ
+                    </button>
+                    <button
+                      type="button"
+                      className="staff-ic-btn is-primary"
+                      disabled={busyId === payment.id}
+                      onClick={() => requestReview(payment, 'approved')}
+                    >
+                      อนุมัติ
+                    </button>
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       )}
-      <StaffPagination page={currentPage} total={payments.length} onChange={setPage} />
+      <StaffPagination page={currentPage} total={payments.length} onChange={setPage} pageSize={STAFF_CARD_PAGE_SIZE} />
       {confirmReview && (
         <Modal
           title={confirmReview.decision === 'approved' ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป'}

@@ -1015,7 +1015,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${variant === 'expense' ? ' admin-modal-expense' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${variant === 'expense' ? ' admin-modal-expense' : ''}${variant === 'customer-profile' ? ' admin-modal-customer-profile' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
@@ -1750,6 +1750,141 @@ function AdminRequestCard({ request, onOpen }) {
         </button>
       </div>
     </article>
+  )
+}
+
+function CustomerProfile({ customer, rentalHistory, loading, error, idcardRevealed, onToggleIdCard, onRetry, onOpenHistory, onEdit, onToggleSuspend }) {
+  const [now] = useState(() => Date.now())
+  const payments = (rentalHistory || []).flatMap((booking) => booking.payments || [])
+  const paidTotal = payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  const outstanding = payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length
+  const movedOut = Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date
+  const facts = [
+    { icon: 'phone', label: 'เบอร์โทร', value: customer.phone ? <a href={`tel:${customer.phone}`}>{customer.phone}</a> : '-' },
+    { icon: 'user', label: 'อายุ', value: customer.age ? `${customer.age} ปี` : '-' },
+    {
+      icon: 'idcard',
+      label: 'บัตรประชาชน',
+      value: (
+        <button type="button" className="admin-idcard-toggle" onClick={onToggleIdCard}>
+          {idcardRevealed ? customer.idcard : '•'.repeat(String(customer.idcard || '').length || 13)}
+        </button>
+      ),
+    },
+    { icon: 'wallet', label: 'เงินมัดจำ', value: customer.deposit_amount != null ? `฿${formatCurrency(customer.deposit_amount)}` : '-' },
+  ]
+  const registeredAt = customer.registered_at || customer.created_at
+  const contractStart = customer.rental_start_date ? new Date(customer.rental_start_date) : null
+  const contractEnd = customer.rental_end_date ? new Date(customer.rental_end_date) : null
+  const dayMs = 24 * 60 * 60 * 1000
+  const remainingDays = contractEnd ? Math.ceil((contractEnd - now) / dayMs) : null
+  const contractTone = remainingDays === null ? 'muted' : remainingDays < 0 ? 'danger' : remainingDays <= 30 ? 'warning' : 'active'
+
+  return (
+    <div className="customer-profile">
+      <div className="customer-profile-scroll">
+        <div className={`customer-profile-hero${customer.is_suspended ? ' is-suspended' : ''}`}>
+          <span className="customer-profile-avatar" aria-hidden="true"><RoomDetailIcon type="user" size={24} /></span>
+          <div className="customer-profile-name">
+            <strong>{customer.first_name} {customer.last_name}</strong>
+            <span>
+              {customer.room_number ? (
+                <span className="customer-profile-room"><RoomDetailIcon type="home" size={13} />ห้อง {customer.room_number}</span>
+              ) : (
+                <span className="customer-profile-room is-empty">ไม่มีห้องพัก</span>
+              )}
+              {movedOut && <span className="customer-profile-note">ย้ายออกจากหอพักแล้ว</span>}
+            </span>
+            {registeredAt && (
+              <small className="customer-profile-since">
+                <RoomDetailIcon type="calendar" size={12} />
+                เข้าพักเมื่อ <strong>{formatDate(registeredAt)}</strong>
+              </small>
+            )}
+          </div>
+          <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
+            {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+          </span>
+        </div>
+
+        <dl className="customer-profile-facts">
+          {facts.map((fact) => (
+            <div key={fact.label}>
+              <dt><WaitingDetailIcon type={fact.icon} size={14} />{fact.label}</dt>
+              <dd>{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <section className={`customer-profile-contract is-${contractTone}`}>
+          <header>
+            <span className="customer-profile-contract-icon"><RoomDetailIcon type="calendar" size={16} /></span>
+            <strong>ระยะเวลาสัญญา</strong>
+            {remainingDays !== null && (
+              <span className="customer-profile-contract-badge">
+                {remainingDays < 0 ? `หมดสัญญาแล้ว ${Math.abs(remainingDays)} วัน` : remainingDays === 0 ? 'หมดสัญญาวันนี้' : `เหลืออีก ${remainingDays} วัน`}
+              </span>
+            )}
+          </header>
+          {contractStart || contractEnd ? (
+            <>
+              <div className="customer-profile-contract-range">
+                <span className="customer-profile-contract-point">
+                  <small>เริ่มสัญญา</small>
+                  <strong>{contractStart ? formatDate(customer.rental_start_date) : '-'}</strong>
+                </span>
+                <span className="customer-profile-contract-arrow" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </span>
+                <span className="customer-profile-contract-point">
+                  <small>สิ้นสุดสัญญา</small>
+                  <strong>{contractEnd ? formatDate(customer.rental_end_date) : '-'}</strong>
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="customer-profile-contract-empty">ยังไม่มีสัญญาเช่าที่ใช้งานอยู่</p>
+          )}
+        </section>
+
+        <section className="customer-profile-history">
+          <header>
+            <span className="admin-room-form-icon"><RoomDetailIcon type="history" size={16} /></span>
+            <div>
+              <strong>ประวัติการเช่า</strong>
+              <small>สรุปสัญญาและการชำระเงินทั้งหมดของลูกค้าคนนี้</small>
+            </div>
+          </header>
+          {loading ? (
+            <p className="customer-profile-state">กำลังโหลดข้อมูล...</p>
+          ) : error ? (
+            <p className="customer-profile-state is-error">
+              {error}
+              <button type="button" onClick={onRetry}>ลองใหม่</button>
+            </p>
+          ) : (
+            <div className="customer-profile-stats">
+              <span><strong>{(rentalHistory || []).length}</strong>สัญญาเช่า</span>
+              <span><strong>{payments.length}</strong>รายการชำระ</span>
+              <span className="is-success"><strong>฿{formatCurrency(paidTotal)}</strong>ชำระแล้ว</span>
+              <span className={outstanding > 0 ? 'is-warning' : ''}><strong>{outstanding}</strong>ค้าง / รอชำระ</span>
+            </div>
+          )}
+          <button type="button" className="admin-action-btn is-primary customer-profile-history-btn" onClick={onOpenHistory} disabled={loading || Boolean(error)}>
+            <RoomDetailIcon type="history" size={15} />
+            ดูประวัติการเช่า
+          </button>
+        </section>
+      </div>
+      <div className="customer-profile-actions">
+        <button type="button" className="admin-action-btn is-ghost" onClick={onEdit}>แก้ไขข้อมูล</button>
+        <button type="button" className={`admin-action-btn ${customer.is_suspended ? 'is-success' : 'is-warning'}`} onClick={onToggleSuspend}>
+          {customer.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -4150,9 +4285,9 @@ const emptyRoomForm = {
   cctv: false,
 }
 
-const emptyStaffForm = { idcard: '', password: '', phone: '', first_name: '', last_name: '', age: '' }
+const emptyStaffForm = { idcard: '', password: '', confirm_password: '', phone: '', first_name: '', last_name: '', age: '' }
 
-const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '' }
+const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '', password: '', confirm_password: '' }
 
 const emptyExpenseForm = {
   category: '',
@@ -6114,6 +6249,7 @@ function AdminBackupPage() {
     setStaffForm({
       idcard: member.idcard,
       password: '',
+      confirm_password: '',
       phone: member.phone,
       first_name: member.first_name,
       last_name: member.last_name,
@@ -6130,11 +6266,23 @@ function AdminBackupPage() {
 
   const submitStaffForm = async (event, requestClose) => {
     event.preventDefault()
+    if (staffForm.password !== staffForm.confirm_password) {
+      setStaffFormError(staffModal.mode === 'create' ? 'ยืนยันรหัสผ่านไม่ตรงกัน' : 'ยืนยันรหัสผ่านใหม่ไม่ตรงกัน')
+      return
+    }
     setStaffSubmitting(true)
     setStaffFormError('')
     try {
       if (staffModal.mode === 'create') {
-        const { data } = await axios.post('/api/admin/staff', staffForm, { headers: authHeaders() })
+        const createPayload = {
+          idcard: staffForm.idcard,
+          password: staffForm.password,
+          phone: staffForm.phone,
+          first_name: staffForm.first_name,
+          last_name: staffForm.last_name,
+          age: staffForm.age,
+        }
+        const { data } = await axios.post('/api/admin/staff', createPayload, { headers: authHeaders() })
         setSuccessMessage(data.message || 'เพิ่มพนักงานสำเร็จ')
       } else {
         const payload = {
@@ -6218,6 +6366,7 @@ function AdminBackupPage() {
   const [customerSubmitting, setCustomerSubmitting] = useState(false)
   const [customerFormError, setCustomerFormError] = useState('')
   const [customerDetail, setCustomerDetail] = useState(null)
+  const [customerProfile, setCustomerProfile] = useState(null)
   const [customerSuspendConfirm, setCustomerSuspendConfirm] = useState(null)
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false)
   const [customerDetailError, setCustomerDetailError] = useState('')
@@ -6264,6 +6413,8 @@ function AdminBackupPage() {
       phone: customer.phone,
       age: String(customer.age),
       deposit_amount: customer.deposit_amount != null ? String(customer.deposit_amount) : '',
+      password: '',
+      confirm_password: '',
     })
     setCustomerFormError('')
     setCustomerModal(customer)
@@ -6276,6 +6427,15 @@ function AdminBackupPage() {
 
   const submitCustomerForm = async (event, requestClose) => {
     event.preventDefault()
+    const password = customerForm.password || ''
+    if (password && (password.length < 6 || password.length > 128)) {
+      setCustomerFormError('รหัสผ่านใหม่ต้องมีความยาว 6-128 ตัวอักษร')
+      return
+    }
+    if (password !== (customerForm.confirm_password || '')) {
+      setCustomerFormError('ยืนยันรหัสผ่านใหม่ไม่ตรงกัน')
+      return
+    }
     setCustomerSubmitting(true)
     setCustomerFormError('')
     try {
@@ -6285,6 +6445,7 @@ function AdminBackupPage() {
         phone: customerForm.phone,
         age: Number(customerForm.age),
         deposit_amount: customerForm.deposit_amount === '' ? null : Number(customerForm.deposit_amount),
+        ...(password ? { password } : {}),
       }
       const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload, { headers: authHeaders() })
       setSuccessMessage(data.message || 'แก้ไขข้อมูลลูกค้าสำเร็จ')
@@ -6313,18 +6474,24 @@ function AdminBackupPage() {
     }
   }
 
-  const openCustomerDetail = async (customer) => {
-    setCustomerDetail({ customer, rentalHistory: null })
-    setCustomerDetailError('')
-    setCustomerDetailLoading(true)
+  const openCustomerProfile = async (customer) => {
+    setCustomerProfile({ id: customer.id, customer, detail: null, loading: true, error: '' })
     try {
       const { data } = await axios.get(`/api/admin/customers/${customer.id}`, { headers: authHeaders() })
-      setCustomerDetail({ customer: data.customer, rentalHistory: data.rentalHistory })
+      setCustomerProfile((prev) => (prev?.id === customer.id ? { ...prev, detail: data, loading: false } : prev))
     } catch (err) {
-      setCustomerDetailError(err.response?.data?.message || 'ไม่สามารถโหลดรายละเอียดลูกค้าได้')
-    } finally {
-      setCustomerDetailLoading(false)
+      if (handleUnauthorized(err)) return
+      setCustomerProfile((prev) =>
+        prev?.id === customer.id ? { ...prev, loading: false, error: err.response?.data?.message || 'ไม่สามารถโหลดประวัติการเช่าได้' } : prev,
+      )
     }
+  }
+
+  const openCustomerProfileHistory = () => {
+    if (!customerProfile?.detail) return
+    setCustomerDetailError('')
+    setCustomerDetailLoading(false)
+    setCustomerDetail({ customer: customerProfile.detail.customer, rentalHistory: customerProfile.detail.rentalHistory })
   }
 
   const filteredCustomers = useMemo(() => {
@@ -7582,13 +7749,13 @@ function AdminBackupPage() {
                         <tr
                           className="moveout-row"
                           tabIndex={0}
-                          aria-label={`ดูประวัติการเช่าของ ${customer.first_name} ${customer.last_name}`}
-                          onClick={() => openCustomerDetail(customer)}
+                          aria-label={`ดูรายละเอียดลูกค้า ${customer.first_name} ${customer.last_name}`}
+                          onClick={() => openCustomerProfile(customer)}
                           onKeyDown={(event) => {
                             if (event.target !== event.currentTarget) return
                             if (event.key === 'Enter' || event.key === ' ') {
                               event.preventDefault()
-                              openCustomerDetail(customer)
+                              openCustomerProfile(customer)
                             }
                           }}
                         >
@@ -7688,7 +7855,7 @@ function AdminBackupPage() {
                               label: 'การดำเนินการ',
                               value: (
                                 <div className="admin-row-actions">
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerDetail(customer)}>
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openCustomerProfile(customer)}>
                                     ดูรายละเอียด
                                   </button>
                                   <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditCustomer(customer)}>
@@ -9860,7 +10027,7 @@ function AdminBackupPage() {
                 </div>
               </header>
               <div className="admin-room-form-grid is-2">
-                <label className="admin-room-field">
+                <label className="admin-room-field is-wide">
                   <span>เลขบัตรประชาชน</span>
                   <div className="admin-room-input has-icon">
                     <i><WaitingDetailIcon type="idcard" size={16} /></i>
@@ -9886,9 +10053,26 @@ function AdminBackupPage() {
                       type="password"
                       name="password"
                       className="form-control"
+                      autoComplete="new-password"
                       value={staffForm.password}
                       onChange={handleStaffFormChange}
-                      placeholder={staffModal.mode === 'create' ? '' : 'เว้นว่างถ้าไม่เปลี่ยน'}
+                      placeholder={staffModal.mode === 'create' ? 'อย่างน้อย 6 ตัวอักษร' : 'เว้นว่างถ้าไม่เปลี่ยน'}
+                      required={staffModal.mode === 'create'}
+                    />
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>{staffModal.mode === 'create' ? 'ยืนยันรหัสผ่าน' : 'ยืนยันรหัสผ่านใหม่'}</span>
+                  <div className="admin-room-input has-icon">
+                    <i><WaitingDetailIcon type="lock" size={16} /></i>
+                    <input
+                      type="password"
+                      name="confirm_password"
+                      className="form-control"
+                      autoComplete="new-password"
+                      value={staffForm.confirm_password}
+                      onChange={handleStaffFormChange}
+                      placeholder="พิมพ์รหัสผ่านอีกครั้ง"
                       required={staffModal.mode === 'create'}
                     />
                   </div>
@@ -9999,6 +10183,26 @@ function AdminBackupPage() {
         </Modal>
       )}
 
+      {customerProfile && (() => {
+        const profileCustomer = customers.find((item) => item.id === customerProfile.id) || customerProfile.customer
+        return (
+          <Modal title="รายละเอียดลูกค้า" onClose={() => setCustomerProfile(null)} variant="customer-profile">
+            <CustomerProfile
+              customer={{ ...customerProfile.detail?.customer, ...profileCustomer }}
+              rentalHistory={customerProfile.detail?.rentalHistory}
+              loading={customerProfile.loading}
+              error={customerProfile.error}
+              idcardRevealed={revealedCustomerIdCards.has(customerProfile.id)}
+              onToggleIdCard={() => toggleCustomerIdCardReveal(customerProfile.id)}
+              onRetry={() => openCustomerProfile(profileCustomer)}
+              onOpenHistory={openCustomerProfileHistory}
+              onEdit={() => openEditCustomer(profileCustomer)}
+              onToggleSuspend={() => setCustomerSuspendConfirm(profileCustomer)}
+            />
+          </Modal>
+        )
+      })()}
+
       {customerModal && (
         <Modal title={`แก้ไขข้อมูลลูกค้า - ${customerModal.first_name} ${customerModal.last_name}`} onClose={() => setCustomerModal(null)}>
           {(requestClose) => (
@@ -10053,6 +10257,49 @@ function AdminBackupPage() {
                   <em>บาท</em>
                 </div>
               </label>
+            </section>
+            <section className="admin-room-form-section">
+              <header>
+                <span className="admin-room-form-icon"><WaitingDetailIcon type="lock" size={16} /></span>
+                <div>
+                  <strong>เปลี่ยนรหัสผ่าน</strong>
+                  <small>เว้นว่างทั้งสองช่องถ้าไม่ต้องการเปลี่ยน · อย่างน้อย 6 ตัวอักษร</small>
+                </div>
+              </header>
+              <div className="admin-room-form-grid is-2">
+                <label className="admin-room-field">
+                  <span>รหัสผ่านใหม่</span>
+                  <div className="admin-room-input has-icon">
+                    <i><WaitingDetailIcon type="lock" size={16} /></i>
+                    <input
+                      type="password"
+                      name="password"
+                      className="form-control"
+                      autoComplete="new-password"
+                      maxLength={128}
+                      placeholder="เว้นว่างถ้าไม่เปลี่ยน"
+                      value={customerForm.password || ''}
+                      onChange={handleCustomerFormChange}
+                    />
+                  </div>
+                </label>
+                <label className="admin-room-field">
+                  <span>ยืนยันรหัสผ่านใหม่</span>
+                  <div className="admin-room-input has-icon">
+                    <i><WaitingDetailIcon type="lock" size={16} /></i>
+                    <input
+                      type="password"
+                      name="confirm_password"
+                      className="form-control"
+                      autoComplete="new-password"
+                      maxLength={128}
+                      placeholder="พิมพ์รหัสผ่านใหม่อีกครั้ง"
+                      value={customerForm.confirm_password || ''}
+                      onChange={handleCustomerFormChange}
+                    />
+                  </div>
+                </label>
+              </div>
             </section>
             <div className="admin-room-form-actions">
               <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={customerSubmitting}>

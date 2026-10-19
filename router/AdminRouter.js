@@ -1066,6 +1066,10 @@ router.put("/customers/:id", async (req, res) => {
     if (normalizedBody.deposit_amount != null) normalizedBody.deposit_amount = Number(normalizedBody.deposit_amount);
 
     const { columns, values } = buildUpdate(CUSTOMER_EDITABLE_COLUMNS, normalizedBody);
+    if (typeof body.password === "string" && body.password) {
+      columns.push("password = ?");
+      values.push(await bcrypt.hash(body.password, 10));
+    }
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }

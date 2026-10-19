@@ -11700,6 +11700,49 @@ tr.staff-focus-row.is-fading > td {
   margin-right: auto;
 }
 
+.staff-slip-card .staff-ic-icon {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.staff-slip-card .staff-ic-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.staff-slip-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.staff-slip-amount {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.staff-slip-amount .staff-vc-range-icon {
+  border-color: #fde68a;
+  color: #d97706;
+}
+
+.staff-slip-amount .staff-vc-range-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.staff-slip-amount .staff-vc-range-body strong {
+  color: #92400e;
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-slip-card .staff-ic-photo img {
+  object-position: top;
+}
+
 .staff-modal:has(.staff-sec-form) {
   height: auto;
   max-height: 88vh;
