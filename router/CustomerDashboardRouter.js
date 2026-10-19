@@ -346,7 +346,7 @@ router.get("/me", async (req, res) => {
     const pool = getPool();
 
     const [customerRows] = await pool.query(
-      `SELECT id, first_name, last_name, phone, room_number, deposit_amount
+      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount, created_at AS registered_at
        FROM Customer WHERE id = ?`,
       [req.user.id],
     );
@@ -355,7 +355,8 @@ router.get("/me", async (req, res) => {
     if (!customerRow) {
       return res.status(404).json({ message: "ไม่พบข้อมูลผู้ใช้" });
     }
-    const { deposit_amount: depositAmount, ...customer } = customerRow;
+    const customer = customerRow;
+    const depositAmount = customerRow.deposit_amount;
 
     const [
       [roomRows],
