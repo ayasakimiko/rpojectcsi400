@@ -87,6 +87,13 @@ services:
     command: ["node", "server.js"]
     restart: unless-stopped
     environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
+      DB_NAME: ${DB_NAME:-projectcsi400}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       PORT: 4000
       CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
       AUTH_SERVICE_URL: http://auth-service:4001
