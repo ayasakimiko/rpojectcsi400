@@ -10155,6 +10155,26 @@
   text-align: center;
 }
 
+.dashboard-pay-test {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.dashboard-pay-test strong {
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .dashboard-pay-amount span {
   color: #6b859e;
   font-size: 12px;

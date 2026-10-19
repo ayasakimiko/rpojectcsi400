@@ -5,6 +5,14 @@ const RDCW_INQUIRY_URL = "https://suba.rdcw.co.th/v2/inquiry";
 const RDCW_TIMEOUT_MS = 20000;
 const RDCW_FILE_TYPES = new Set(["image/jpeg", "image/png"]);
 
+export const DEMO_PAYMENT_CHANNELS = {
+  promptpay_id: "0000000000",
+  bank_name: "ธนาคารทดลอง (ใช้โอนจริงไม่ได้)",
+  bank_account_no: "000-0-00000-0",
+};
+
+export const TEST_PAYMENT_MARK = "โหมดทดลอง";
+
 export class SlipVerificationError extends Error {
   constructor(status, message) {
     super(message);

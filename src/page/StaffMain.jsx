@@ -3297,6 +3297,28 @@ const SLIP_FIELD_ICON_PATHS = {
   ),
   phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />,
   list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
+  bank: <path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" />,
+  room: <path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M14 12h.01" />,
+  hash: <path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18" />,
+  shield: (
+    <>
+      <path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="8" y="8" width="13" height="13" rx="2" />
+      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+    </>
+  ),
+  qr: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" />,
+  alert: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5M12 16h.01" />
+    </>
+  ),
   wallet: (
     <>
       <rect x="3" y="6" width="18" height="13" rx="2" />
@@ -3355,12 +3377,122 @@ function formatSlipTime(value) {
   return date.toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+const THAI_BANKS = {
+  '002': { name: 'กรุงเทพ', logo: 'BBL' },
+  '004': { name: 'กสิกรไทย', logo: 'KBANK' },
+  '006': { name: 'กรุงไทย', logo: 'KTB' },
+  '011': { name: 'ทหารไทยธนชาต', logo: 'TTB' },
+  '014': { name: 'ไทยพาณิชย์', logo: 'SCB' },
+  '017': { name: 'ซิตี้แบงก์', logo: 'CITI' },
+  '022': { name: 'ซีไอเอ็มบี ไทย', logo: 'CIMB' },
+  '024': { name: 'ยูโอบี', logo: 'UOB' },
+  '025': { name: 'กรุงศรีอยุธยา', logo: 'BAY' },
+  '030': { name: 'ออมสิน', logo: 'GSB' },
+  '031': { name: 'เอชเอสบีซี', logo: 'HSBC' },
+  '033': { name: 'อาคารสงเคราะห์', logo: 'GHB' },
+  '034': { name: 'ธ.ก.ส.', logo: 'BAAC' },
+  '066': { name: 'อิสลามแห่งประเทศไทย', logo: 'IBANK' },
+  '067': { name: 'ทิสโก้', logo: 'TISCO' },
+  '069': { name: 'เกียรตินาคินภัทร', logo: 'KKP' },
+  '070': { name: 'ไอซีบีซี (ไทย)', logo: 'ICBC' },
+  '071': { name: 'ไทยเครดิต', logo: 'TCRB' },
+  '073': { name: 'แลนด์ แอนด์ เฮ้าส์', logo: 'LHB' },
+}
+
+function SlipBank({ code }) {
+  const [logoFailed, setLogoFailed] = useState(false)
+  const bank = THAI_BANKS[code]
+  if (!bank) return code
+  return (
+    <span className="slip-bank">
+      {!logoFailed && (
+        <img src={`/Logo/${bank.logo}.png`} alt="" className="slip-bank-logo" onError={() => setLogoFailed(true)} />
+      )}
+      {bank.name}
+    </span>
+  )
+}
+
+function bankLabel(code) {
+  return code ? <SlipBank code={code} /> : ''
+}
+
+function slipVerifyLabel(slip, isFailed) {
+  if (slip.is_test) return 'โหมดทดลอง · ไม่ได้ตรวจกับธนาคาร'
+  if (slip.reviewed_by_name) return `${isFailed ? 'เจ้าหน้าที่ปฏิเสธ' : 'เจ้าหน้าที่อนุมัติ'} · ${slip.reviewed_by_name}`
+  return isFailed ? 'ระบบตรวจอัตโนมัติ (RDCW)' : 'ตรวจอัตโนมัติกับธนาคาร (RDCW)'
+}
+
+function slipReasonInfo(slip) {
+  const reason = String(slip.reason || '')
+  if (slip.reviewed_by_name) return { tone: 'muted', icon: 'user', title: 'เจ้าหน้าที่ไม่อนุมัติ' }
+  if (reason.includes('ใช้ชำระเงินไปแล้ว')) return { tone: 'warning', icon: 'copy', title: 'สลิปถูกใช้ซ้ำ' }
+  if (reason.includes('ยอดเงินในสลิป')) return { tone: 'warning', icon: 'wallet', title: 'ยอดเงินไม่ครบ' }
+  if (reason.includes('บัญชีผู้รับ')) return { tone: 'danger', icon: 'bank', title: 'บัญชีผู้รับไม่ตรง' }
+  if (reason.includes('QR')) return { tone: 'info', icon: 'qr', title: 'อ่าน QR บนสลิปไม่ได้' }
+  return { tone: 'danger', icon: 'alert', title: 'สลิปไม่ถูกต้อง' }
+}
+
+function SlipReason({ slip, compact = false }) {
+  if (!slip.reason) return null
+  const info = slipReasonInfo(slip)
+  return (
+    <div className={`slip-reason is-${info.tone}${compact ? ' is-compact' : ''}`} role="note">
+      <span className="slip-reason-icon" aria-hidden="true">
+        <svg width={compact ? 14 : 18} height={compact ? 14 : 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          {SLIP_FIELD_ICON_PATHS[info.icon]}
+        </svg>
+      </span>
+      <span className="slip-reason-text">
+        <strong>{info.title}</strong>
+        <span>{slip.reason}</span>
+      </span>
+    </div>
+  )
+}
+
+function slipDetailRows({ payment, isHistory, isFailed }) {
+  const tenantName = `${payment.first_name || ''} ${payment.last_name || ''}`.trim()
+  const types = String(payment.payment_types || '')
+    .split(',')
+    .filter(Boolean)
+    .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
+    .join(', ')
+  const hasRealRef = payment.trans_ref && !/^(TEST|MANUAL)-/.test(payment.trans_ref)
+  const rows = [
+    { icon: 'room', label: 'ห้อง', value: payment.room_number ? `ห้อง ${payment.room_number}` : '' },
+    { icon: 'user', label: 'ผู้เช่า', value: tenantName },
+    { icon: 'phone', label: 'เบอร์โทร', value: payment.phone },
+    { icon: 'list', label: 'รายการ', value: types },
+  ]
+  if (!isHistory) {
+    rows.push({
+      icon: 'date',
+      label: 'วันที่ส่ง',
+      value: new Date(payment.payment_date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }),
+    })
+    return rows.filter((row) => row.value)
+  }
+  rows.push(
+    { icon: 'user', label: 'ผู้โอน', value: payment.sender_name },
+    { icon: 'bank', label: 'ธนาคารผู้โอน', value: bankLabel(payment.sending_bank) },
+    { icon: 'user', label: 'ผู้รับ', value: payment.receiver_name },
+    { icon: 'bank', label: 'ธนาคารผู้รับ', value: bankLabel(payment.receiving_bank) },
+    { icon: 'date', label: 'เวลาโอน', value: payment.trans_at ? formatSlipTime(payment.trans_at) : '' },
+    { icon: 'date', label: 'เวลาส่งสลิป', value: formatSlipTime(payment.created_at) },
+    { icon: 'hash', label: 'เลขอ้างอิง', value: hasRealRef ? payment.trans_ref : '' },
+    { icon: 'shield', label: 'วิธีตรวจ', value: slipVerifyLabel(payment, isFailed) },
+  )
+  return rows.filter((row) => row.value)
+}
+
 function StaffPaymentReview({ onCountChange, focusId }) {
   const [payments, setPayments] = useState([])
   const [slipHistory, setSlipHistory] = useState([])
   const [rejectedSlips, setRejectedSlips] = useState([])
   const [slipView, setSlipView] = useState('passed')
   const [slipSearch, setSlipSearch] = useState('')
+  const [slipMode, setSlipMode] = useState('auto')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(null)
@@ -3386,13 +3518,15 @@ function StaffPaymentReview({ onCountChange, focusId }) {
       pending: pending.data.payments || [],
       history: history.data.slips || [],
       rejected: history.data.rejected || [],
+      mode: history.data.mode || 'auto',
     }))
 
-  const applySlips = ({ pending, history, rejected }) => {
+  const applySlips = ({ pending, history, rejected, mode }) => {
+    setSlipMode(mode)
+    if (mode === 'auto' && pending.length === 0) setSlipView((view) => (view === 'pending' ? 'passed' : view))
     setPayments(pending)
     setSlipHistory(history)
     setRejectedSlips(rejected)
-    if (pending.length === 0) setSlipView((view) => (view === 'pending' ? 'passed' : view))
     onCountChange?.(pending.length)
     setError('')
   }
@@ -3411,6 +3545,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
       .then((result) => {
         if (!cancelled) {
           applySlips(result)
+          if (result.mode === 'manual' || (result.mode === 'test' && result.pending.length > 0)) setSlipView('pending')
           const target = focusId ? result.pending.find((payment) => payment.id === focusId) : null
           if (target) {
             setSlipView('pending')
@@ -3465,14 +3600,19 @@ function StaffPaymentReview({ onCountChange, focusId }) {
         ].some((value) => String(value ?? '').toLowerCase().includes(searchText)),
       )
     : baseSlips
-  const passedTotal = slipHistory.reduce((total, slip) => total + (Number(slip.amount) || 0), 0)
+  const passedTotal = slipHistory.reduce((total, slip) => (slip.is_test ? total : total + (Number(slip.amount) || 0)), 0)
   const currentPage = Math.min(resolvePage(visibleSlips), Math.max(1, Math.ceil(visibleSlips.length / STAFF_CARD_PAGE_SIZE)))
   const pageSlips = visibleSlips.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
-  const slipSegments = [
+  const pendingSegment = { key: 'pending', label: 'รอตรวจสอบ', count: payments.length }
+  const historySegments = [
     { key: 'passed', label: 'ตรวจผ่าน', count: slipHistory.length },
     { key: 'failed', label: 'ตรวจไม่ผ่าน', count: rejectedSlips.length },
-    ...(payments.length > 0 ? [{ key: 'pending', label: 'ค้างตรวจ (ระบบเดิม)', count: payments.length }] : []),
   ]
+  const slipSegments = slipMode === 'manual'
+    ? [pendingSegment, ...historySegments]
+    : slipMode === 'test' || payments.length > 0
+      ? [...historySegments, pendingSegment]
+      : historySegments
 
   const selectSlipView = (view) => {
     setSlipView(view)
@@ -3655,7 +3795,13 @@ function StaffPaymentReview({ onCountChange, focusId }) {
         <p className="staff-empty">โหลดรายการไม่สำเร็จ กรุณาเปิดหน้านี้ใหม่อีกครั้ง</p>
       ) : visibleSlips.length === 0 ? (
         <p className="staff-empty">
-          {searchText ? 'ไม่พบสลิปที่ตรงกับคำค้นหา' : isFailedView ? 'ไม่มีสลิปที่ตรวจไม่ผ่าน' : 'ยังไม่มีสลิปที่ตรวจผ่าน'}
+          {searchText
+            ? 'ไม่พบสลิปที่ตรงกับคำค้นหา'
+            : slipView === 'pending'
+              ? 'ไม่มีสลิปรอตรวจสอบ'
+              : isFailedView
+                ? 'ไม่มีสลิปที่ตรวจไม่ผ่าน'
+                : 'ยังไม่มีสลิปที่ตรวจผ่าน'}
         </p>
       ) : slipView === 'pending' ? null : (
         <ul className="staff-rv-list staff-ic-grid is-visit">
@@ -3677,8 +3823,8 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                         ))}
                       </span>
                     </span>
-                    <span className={`staff-ic-status ${isFailedView ? 'is-rejected' : 'is-reviewed'}`}>
-                      {isFailedView ? 'ตรวจไม่ผ่าน' : 'ชำระแล้ว'}
+                    <span className={`staff-ic-status ${isFailedView ? 'is-rejected' : slip.is_test ? 'is-pending' : 'is-reviewed'}`}>
+                      {isFailedView ? 'ตรวจไม่ผ่าน' : slip.is_test ? 'ทดลอง' : 'ชำระแล้ว'}
                     </span>
                   </span>
                   <span className="staff-vc-grid">
@@ -3708,7 +3854,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                       </strong>
                     </span>
                   </span>
-                  {isFailedView && <span className="payment-review-reason">{slip.reason}</span>}
+                  {isFailedView && <SlipReason slip={slip} compact />}
                 </button>
                 <div className="staff-ic-photos">
                   <span className="staff-ic-label">สลิปโอนเงิน</span>
@@ -3722,7 +3868,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                   <span className="staff-ic-result" title={slip.trans_ref || ''}>
                     {isFailedView
                       ? `ส่งเมื่อ ${formatSlipTime(slip.created_at)}`
-                      : `ตรวจอัตโนมัติ · ${slip.trans_ref}`}
+                      : slipVerifyLabel(slip, false)}
                   </span>
                   <span className="staff-ic-actions">
                     <button type="button" className="staff-ic-btn" onClick={() => openSlip(slip, true, isFailedView)}>
@@ -3938,9 +4084,11 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                 <span className="payment-slip-image-hint">คลิกที่รูปเพื่อดูขนาดเต็ม</span>
               </div>
 
+              <div className="payment-slip-side">
+              {preview.isFailed && <SlipReason slip={preview.payment} />}
               <dl className="payment-slip-details">
                 <div className="payment-slip-amount">
-                  <dt>ยอดรวม</dt>
+                  <dt>{preview.isHistory ? 'ยอดในสลิป' : 'ยอดรวม'}</dt>
                   <dd>
                     {preview.payment.amount == null
                       ? '-'
@@ -3950,83 +4098,17 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                         })}`}
                   </dd>
                 </div>
-                <div>
-                  <dt>
-                    <SlipFieldIcon name="user" />
-                    ผู้เช่า
-                  </dt>
-                  <dd>
-                    {preview.payment.first_name} {preview.payment.last_name}
-                  </dd>
-                </div>
-                <div>
-                  <dt>
-                    <SlipFieldIcon name="phone" />
-                    เบอร์โทร
-                  </dt>
-                  <dd>{preview.payment.phone || '-'}</dd>
-                </div>
-                <div>
-                  <dt>
-                    <SlipFieldIcon name="list" />
-                    รายการ
-                  </dt>
-                  <dd>
-                    {String(preview.payment.payment_types || '')
-                      .split(',')
-                      .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
-                      .join(', ')}
-                  </dd>
-                </div>
-                {preview.isHistory ? (
-                  <>
-                    <div>
-                      <dt>
-                        <SlipFieldIcon name="user" />
-                        ผู้โอน
-                      </dt>
-                      <dd>{preview.payment.sender_name || '-'}</dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <SlipFieldIcon name="date" />
-                        เวลาโอน
-                      </dt>
-                      <dd>{formatSlipTime(preview.payment.trans_at || preview.payment.created_at)}</dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <SlipFieldIcon name="list" />
-                        เลขอ้างอิง
-                      </dt>
-                      <dd>{preview.payment.trans_ref || '-'}</dd>
-                    </div>
-                    {preview.isFailed && (
-                      <div>
-                        <dt>
-                          <SlipFieldIcon name="list" />
-                          เหตุผลที่ไม่ผ่าน
-                        </dt>
-                        <dd>{preview.payment.reason}</dd>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div>
+                {slipDetailRows(preview).map((row) => (
+                  <div key={row.label} className={row.tone ? `is-${row.tone}` : undefined}>
                     <dt>
-                      <SlipFieldIcon name="date" />
-                      วันที่ส่ง
+                      <SlipFieldIcon name={row.icon} />
+                      {row.label}
                     </dt>
-                    <dd>
-                      {new Date(preview.payment.payment_date).toLocaleDateString('th-TH', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </dd>
+                    <dd>{row.value}</dd>
                   </div>
-                )}
+                ))}
               </dl>
+              </div>
             </div>
 
             <footer className="payment-slip-footer">
@@ -7875,7 +7957,7 @@ function StaffMain() {
     'payment-review': {
       title: 'การเงิน',
       tiles: [
-        { key: 'slip', icon: 'slip', tone: 'blue', label: 'สลิปค้างตรวจ', value: pendingSlipCount, onClick: () => openSummaryTarget('payment-review') },
+        { key: 'slip', icon: 'slip', tone: 'blue', label: 'สลิปรอตรวจ', value: pendingSlipCount, onClick: () => openSummaryTarget('payment-review') },
         { key: 'due', icon: 'due', tone: 'amber', label: 'รอเก็บเงิน', value: summary.dueCount, onClick: () => openSummaryTarget('home', 'due') },
       ],
     },
@@ -8758,29 +8840,30 @@ function StaffMain() {
             </li>
           ))}
         </ul>
-        <div className="dorm-menu-bar">
-          <DormInfoMenu apiBase="/api/staff/dorm-info" />
+        <div className="staff-subtabs-row">
+          {staffTab === 'home' && (
+            <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
+              {HOME_SECTIONS.map((section) => {
+                const count = newSectionItemCount(section.key)
+                return (
+                  <li className="nav-item" key={section.key}>
+                    <button
+                      type="button"
+                      className={`nav-link staff-subtab-link${homeSection === section.key ? ' active' : ''}`}
+                      onClick={() => setHomeSection(section.key)}
+                    >
+                      {section.label}
+                      {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการใหม่`}>{count}</span>}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <div className="dorm-menu-bar">
+            <DormInfoMenu apiBase="/api/staff/dorm-info" />
+          </div>
         </div>
-
-        {staffTab === 'home' && (
-          <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
-            {HOME_SECTIONS.map((section) => {
-              const count = newSectionItemCount(section.key)
-              return (
-                <li className="nav-item" key={section.key}>
-                  <button
-                    type="button"
-                    className={`nav-link staff-subtab-link${homeSection === section.key ? ' active' : ''}`}
-                    onClick={() => setHomeSection(section.key)}
-                  >
-                    {section.label}
-                    {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการใหม่`}>{count}</span>}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
 
         {staffTab === 'payment-review' && (
           <StaffPaymentReview

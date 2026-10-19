@@ -7195,41 +7195,42 @@ function AdminBackupPage() {
             </li>
           ))}
         </ul>
-        <div className="dorm-menu-bar">
-          <DormInfoMenu
-            apiBase="/api/admin/dorm-info"
-            onManage={() => {
-              setActiveTab('dorm-info')
-              setAnnouncementFocus(null)
-            }}
-          />
+        <div className="admin-subtabs-row">
+          {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
+            <ul
+              key={group.key}
+              className="nav admin-subtabs"
+              hidden={TAB_GROUP_OF[activeTab] !== group.key}
+              aria-label={group.label}
+            >
+              {group.tabs.map((tabKey) => (
+                <li className="nav-item" key={tabKey}>
+                  <button
+                    type="button"
+                    className={`nav-link admin-tab-link admin-subtab-link${activeTab === tabKey ? ' active' : ''}`}
+                    onClick={() => {
+                      setActiveTab(tabKey)
+                      setLastTabByGroup((current) => ({ ...current, [group.key]: tabKey }))
+                      setAnnouncementFocus(null)
+                    }}
+                  >
+                    {TAB_LABEL[tabKey]}
+                    {tabBadges[tabKey] > 0 && <span className="admin-subtab-badge">{tabBadges[tabKey]}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+          <div className="dorm-menu-bar">
+            <DormInfoMenu
+              apiBase="/api/admin/dorm-info"
+              onManage={() => {
+                setActiveTab('dorm-info')
+                setAnnouncementFocus(null)
+              }}
+            />
+          </div>
         </div>
-
-        {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
-          <ul
-            key={group.key}
-            className="nav admin-subtabs"
-            hidden={TAB_GROUP_OF[activeTab] !== group.key}
-            aria-label={group.label}
-          >
-            {group.tabs.map((tabKey) => (
-              <li className="nav-item" key={tabKey}>
-                <button
-                  type="button"
-                  className={`nav-link admin-tab-link admin-subtab-link${activeTab === tabKey ? ' active' : ''}`}
-                  onClick={() => {
-                    setActiveTab(tabKey)
-                    setLastTabByGroup((current) => ({ ...current, [group.key]: tabKey }))
-                    setAnnouncementFocus(null)
-                  }}
-                >
-                  {TAB_LABEL[tabKey]}
-                  {tabBadges[tabKey] > 0 && <span className="admin-subtab-badge">{tabBadges[tabKey]}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ))}
 
         {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/admin/dorm-info" />}
 

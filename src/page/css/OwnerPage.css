@@ -3194,7 +3194,6 @@
 .owner-utility-receipts-chart { width: 100%; height: 280px; }
 .owner-utility-receipts-error { color: #b42318; }
 @media (max-width: 680px) { .owner-utility-receipts-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* Keep the Owner emergency summary tiles at the same compact dimensions as Staff. */
 .owner-page .staff-safety-inline-summary .staff-summary-tile {
   box-sizing: border-box;
   height: 84px;
@@ -4132,36 +4131,6 @@
   overflow-wrap: anywhere;
 }
 
-.owner-ov-pager {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-  color: #6b859e;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.owner-ov-pager button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid #dce9fb;
-  border-radius: 8px;
-  background: #fff;
-  color: #2563eb;
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.owner-ov-pager button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 .owner-roomlist-modal {
   width: min(760px, calc(100vw - 32px));
 }
@@ -4771,11 +4740,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  height: 344px;
-  padding: 2px 4px 2px 2px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #c3d7f2 transparent;
+  padding: 2px;
 }
 
 .owner-rd-payments-empty {
@@ -5866,11 +5831,6 @@
   height: auto;
 }
 
-.owner-ov-list .owner-ov-pager {
-  margin-top: auto;
-  padding-top: 10px;
-}
-
 .owner-ov-list {
   --list-tone: #2563eb;
   padding: 0;
@@ -6022,11 +5982,6 @@
   padding: 10px 14px 12px;
   border-top: 1px solid #eef3f9;
   background: #fbfcfe;
-}
-
-.owner-ov-list-foot .owner-ov-pager {
-  margin: 0;
-  padding: 0;
 }
 
 .owner-ov-list-foot-note {
@@ -7131,5 +7086,268 @@
   .owner-pp-generate {
     width: 100%;
     margin-top: 0;
+  }
+}
+
+.owner-pay-test {
+  margin: 18px 20px 4px;
+  padding: 14px 16px;
+  border: 1px solid #dce9fb;
+  border-radius: 14px;
+  background: #fbfdff;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.owner-pay-muted fieldset > .dorm-settings-group:not(.owner-verify-group) {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.owner-pay-test.is-on {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.owner-pay-test-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.owner-pay-test-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.owner-pay-test-text strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #1f3b57;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.owner-pay-test-text small {
+  color: #6b859e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.owner-pay-test-badge {
+  padding: 2px 10px;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.owner-pay-test-badge.is-draft {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.owner-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #e2e8f0;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.owner-switch.is-on {
+  border-color: #f59e0b;
+  background: #f59e0b;
+}
+
+.owner-switch:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.owner-switch:focus-visible {
+  outline: 3px solid #bfdbfe;
+  outline-offset: 2px;
+}
+
+.owner-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.owner-switch.is-on .owner-switch-thumb {
+  transform: translateX(20px);
+}
+
+.owner-pay-test-demo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed #fcd34d;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.owner-pay-test-demo dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+
+.owner-pay-test-demo dt {
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.owner-pay-test-demo dd {
+  margin: 0;
+  color: #1f3b57;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .owner-pay-test-demo {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.owner-verify-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.owner-payment-settings .owner-verify-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 44px 14px 14px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.owner-payment-settings .owner-verify-option:hover {
+  border-color: #93c5fd;
+  background: #fbfdff;
+}
+
+.owner-payment-settings .owner-verify-option.is-active {
+  border-color: #2563eb;
+  background: linear-gradient(135deg, #ffffff 30%, #eff6ff);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.owner-payment-settings .owner-verify-option:has(.owner-verify-input:focus-visible) {
+  outline: 3px solid #bfdbfe;
+  outline-offset: 2px;
+}
+
+.owner-payment-settings .owner-verify-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+.owner-payment-settings .owner-verify-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dce9fb;
+  border-radius: 12px;
+  background: #f5f9ff;
+  color: #64748b;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.owner-payment-settings .owner-verify-option.is-active .owner-verify-icon {
+  border-color: #bfdbfe;
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.owner-payment-settings .owner-verify-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.owner-payment-settings .owner-verify-title {
+  color: #1f3b57;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.owner-payment-settings .owner-verify-hint {
+  color: #6b859e;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.owner-payment-settings .owner-verify-dot {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.owner-payment-settings .owner-verify-option.is-active .owner-verify-dot {
+  border-color: #2563eb;
+  box-shadow: inset 0 0 0 4px #ffffff;
+  background: #2563eb;
+}
+
+@media (max-width: 640px) {
+  .owner-verify-options {
+    grid-template-columns: 1fr;
   }
 }

@@ -521,9 +521,16 @@
   color: #2563eb;
 }
 
-.dorm-rule-actions button.is-danger:hover:not(:disabled) {
+.dorm-rule-actions button.is-danger {
+  border: 1px solid #fecaca;
   background: #fef2f2;
   color: #dc2626;
+}
+
+.dorm-rule-actions button.is-danger:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .dorm-rule-actions button:disabled {

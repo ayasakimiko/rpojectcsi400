@@ -14,6 +14,7 @@ import {
   parseWaitingListInput,
 } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
+import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import {
@@ -84,7 +85,7 @@ router.get("/payment-slips", async (_req, res) => {
   try {
     const [slips] = await getPool().query(
       `SELECT ps.id, ps.booking_id, ps.trans_ref, ps.amount, ps.trans_at, ps.sending_bank, ps.receiving_bank,
-              ps.sender_name, ps.receiver_name, ps.slip_path, ps.created_at,
+              ps.sender_name, ps.receiver_name, ps.slip_path, ps.is_test, ps.reviewed_by_name, ps.created_at,
               c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number,
               (SELECT GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') FROM Payment p
                 WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_types
@@ -97,7 +98,7 @@ router.get("/payment-slips", async (_req, res) => {
     );
     const [rejected] = await getPool().query(
       `SELECT sr.id, sr.booking_id, sr.trans_ref, sr.amount, sr.trans_at, sr.sender_name, sr.receiver_name,
-              sr.slip_path, sr.reason, sr.created_at,
+              sr.sending_bank, sr.receiving_bank, sr.slip_path, sr.reason, sr.reviewed_by_name, sr.created_at,
               c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number
        FROM PaymentSlipRejection sr
        JOIN Customer c ON c.id = sr.customer_id
@@ -106,7 +107,10 @@ router.get("/payment-slips", async (_req, res) => {
        ORDER BY sr.created_at DESC, sr.id DESC
        LIMIT 500`,
     );
-    return res.json({ slips, rejected });
+    const [configRows] = await getPool().query("SELECT payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1");
+    const testMode = Boolean(configRows[0]?.payment_test_mode);
+    const verifyMode = configRows[0]?.slip_verify_mode === "manual" ? "manual" : "auto";
+    return res.json({ slips, rejected, mode: testMode ? "test" : verifyMode });
   } catch (error) {
     console.error("Fetch payment slip history error:", error);
     return res.status(500).json({ message: "โหลดประวัติสลิปไม่สำเร็จ" });
@@ -159,7 +163,18 @@ router.patch("/payment-verifications/:id", async (req, res) => {
        WHERE booking_id = ? AND slip_path = ? AND status = 'pending' FOR UPDATE`,
       [payment.booking_id, payment.slip_path],
     );
+    const [ownerRows] = await connection.query(`SELECT customer_id FROM Booking WHERE id = ?`, [payment.booking_id]);
+    const reviewerName = await getActingStaffName(pool, req.user);
+    const isTestSlip = relatedPayments.some((item) => String(item.note || "").includes(TEST_PAYMENT_MARK));
+    const slipAmount = relatedPayments.reduce((total, item) => total + Math.round(Number(item.amount) * 100), 0) / 100;
     if (decision === "rejected") {
+      if (ownerRows[0]) {
+        await connection.query(
+          `INSERT INTO PaymentSlipRejection (booking_id, customer_id, slip_path, amount, reason, reviewed_by_name)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [payment.booking_id, ownerRows[0].customer_id, payment.slip_path, slipAmount, "เจ้าหน้าที่ตรวจแล้วไม่อนุมัติสลิป", reviewerName],
+        );
+      }
       await connection.query(
         `UPDATE Payment SET status = 'rejected', note = CONCAT(COALESCE(note, ''), ' (สลิปไม่ผ่านการตรวจสอบ)')
          WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type = 'rent'`,
@@ -204,6 +219,11 @@ router.patch("/payment-verifications/:id", async (req, res) => {
         [currentDue.periodEnd, currentDue.lumpSumMonths - 1, booking.room_number],
       );
     }
+    await connection.query(
+      `INSERT INTO PaymentSlip (trans_ref, booking_id, customer_id, slip_path, amount, reviewed_by_name, is_test)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [`MANUAL-${payment.id}`, payment.booking_id, booking.customer_id, payment.slip_path, slipAmount, reviewerName, isTestSlip],
+    );
     await connection.commit();
     return res.json({ message: `อนุมัติสลิปแล้ว (${relatedPayments.length} รายการ)` });
   } catch (error) {

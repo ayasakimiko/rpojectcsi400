@@ -10,12 +10,16 @@ import './css/StaffPage.css'
 import { StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
-import { formatPromptPayId, isValidPromptPayId, normalizePromptPayId } from '../utils/promptpay.js'
+import { DEMO_PAYMENT_CHANNELS, formatPromptPayId, isValidPromptPayId, normalizePromptPayId } from '../utils/promptpay.js'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 
-const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '' }
+const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
+const SLIP_VERIFY_OPTIONS = [
+  { key: 'auto', label: 'ตรวจอัตโนมัติ', hint: 'ตรวจสลิปกับธนาคารผ่าน RDCW ผ่านแล้วเป็น “ชำระแล้ว” ทันที และใช้สลิปซ้ำไม่ได้' },
+  { key: 'manual', label: 'เจ้าหน้าที่ตรวจเอง', hint: 'ไม่ส่งไปตรวจที่ RDCW สลิปจะรอให้เจ้าหน้าที่กดอนุมัติหรือปฏิเสธ' },
+]
 const headers = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
 function OwnerPaymentSettings() {
@@ -34,8 +38,9 @@ function OwnerPaymentSettings() {
     const controller = new AbortController()
     axios.get('/api/owner/payment-settings', { headers: headers(), signal: controller.signal })
       .then(({ data }) => {
-        setSaved(data.settings)
-        setDraft(data.settings)
+        const settings = { ...data.settings, test_mode: Boolean(data.testMode), verify_mode: data.verifyMode === 'manual' ? 'manual' : 'auto' }
+        setSaved(settings)
+        setDraft(settings)
         if (isValidPromptPayId(data.settings?.promptpay_id)) setQrPreviewId(data.settings.promptpay_id)
       })
       .catch((error) => { if (!axios.isCancel(error)) setMessage({ error: true, text: error.response?.data?.message || 'โหลดข้อมูลรับโอนไม่สำเร็จ' }) })
@@ -73,8 +78,9 @@ function OwnerPaymentSettings() {
     setMessage(null)
     try {
       const { data } = await axios.put('/api/owner/payment-settings', draft, { headers: headers() })
-      setSaved(data.settings)
-      setDraft(data.settings)
+      const settings = { ...data.settings, test_mode: Boolean(data.testMode), verify_mode: data.verifyMode === 'manual' ? 'manual' : 'auto' }
+      setSaved(settings)
+      setDraft(settings)
       setQrPreviewId(isValidPromptPayId(data.settings?.promptpay_id) ? data.settings.promptpay_id : '')
       setSuccessText(data.message || 'บันทึกข้อมูลรับโอนเรียบร้อยแล้ว')
       setDialog('success')
@@ -84,6 +90,10 @@ function OwnerPaymentSettings() {
     } finally {
       setSaving(false)
     }
+  }
+  const toggleTestMode = () => {
+    setDraft({ ...draft, test_mode: !draft.test_mode })
+    setMessage(null)
   }
   const changed = draft && Object.keys(EMPTY).some((field) => draft[field] !== saved?.[field])
   const qrMatchesDraft = qrPreviewId && qrPreviewId === draft?.promptpay_id
@@ -114,8 +124,98 @@ function OwnerPaymentSettings() {
         </p>
       )}
       {!loading && draft && (
-        <form onSubmit={save} className="dorm-settings-form">
+        <div className={`owner-pay-test${draft.test_mode ? ' is-on' : ''}`}>
+          <div className="owner-pay-test-row">
+            <div className="owner-pay-test-text">
+              <strong>
+                โหมดทดลองชำระเงิน
+                {saved?.test_mode && <span className="owner-pay-test-badge">กำลังเปิดอยู่</span>}
+                {draft.test_mode !== saved?.test_mode && (
+                  <span className="owner-pay-test-badge is-draft">{draft.test_mode ? 'จะเปิดเมื่อกดบันทึก' : 'จะปิดเมื่อกดบันทึก'}</span>
+                )}
+              </strong>
+              <small>ผู้เช่าจะเห็น QR และบัญชีตัวอย่างที่ใช้โอนจริงไม่ได้ แนบรูปใดก็ได้ และไม่ตรวจสลิปกับธนาคาร ถ้าเลือกตรวจอัตโนมัติจะเป็นชำระแล้วทันที ถ้าเลือกเจ้าหน้าที่ตรวจเองจะรอเจ้าหน้าที่อนุมัติ ใช้สำหรับทดสอบระบบเท่านั้น</small>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={draft.test_mode}
+              aria-label="โหมดทดลองชำระเงิน"
+              className={`owner-switch${draft.test_mode ? ' is-on' : ''}`}
+              onClick={toggleTestMode}
+              disabled={saving}
+            >
+              <span className="owner-switch-thumb" />
+            </button>
+          </div>
+          {draft.test_mode && (
+            <div className="owner-pay-test-demo">
+              <PromptPayQr promptPayId={DEMO_PAYMENT_CHANNELS.promptpay_id} size={120} className="owner-pp-qr" />
+              <dl>
+                <div>
+                  <dt>PromptPay ทดลอง</dt>
+                  <dd>{formatPromptPayId(DEMO_PAYMENT_CHANNELS.promptpay_id)}</dd>
+                </div>
+                <div>
+                  <dt>ธนาคาร</dt>
+                  <dd>{DEMO_PAYMENT_CHANNELS.bank_name}</dd>
+                </div>
+                <div>
+                  <dt>เลขบัญชี</dt>
+                  <dd>{DEMO_PAYMENT_CHANNELS.bank_account_no}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+        </div>
+      )}
+      {!loading && draft && (
+        <form onSubmit={save} className={`dorm-settings-form${draft.test_mode ? ' owner-pay-muted' : ''}`}>
           <fieldset disabled={saving}>
+            <div className="dorm-settings-group owner-verify-group">
+              <div className="dorm-settings-group-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+                  <path d="m9 10 2 2 4-4" />
+                </svg>
+                <span>วิธีตรวจสลิป</span>
+              </div>
+              <div className="owner-verify-options" role="radiogroup" aria-label="วิธีตรวจสลิป">
+                {SLIP_VERIFY_OPTIONS.map((option) => (
+                  <label key={option.key} className={`owner-verify-option${draft.verify_mode === option.key ? ' is-active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="verify_mode"
+                      className="owner-verify-input"
+                      value={option.key}
+                      checked={draft.verify_mode === option.key}
+                      onChange={change}
+                    />
+                    <span className="owner-verify-icon" aria-hidden="true">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        {option.key === 'auto' ? (
+                          <>
+                            <path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z" />
+                            <path d="m9 12 2 2 4-4" />
+                          </>
+                        ) : (
+                          <>
+                            <circle cx="12" cy="8" r="4" />
+                            <path d="M4 21a8 8 0 0 1 16 0" />
+                          </>
+                        )}
+                      </svg>
+                    </span>
+                    <span className="owner-verify-body">
+                      <strong className="owner-verify-title">{option.label}</strong>
+                      <small className="owner-verify-hint">{option.hint}</small>
+                    </span>
+                    <span className="owner-verify-dot" aria-hidden="true" />
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="dorm-settings-group">
               <div className="dorm-settings-group-head">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -129,10 +229,10 @@ function OwnerPaymentSettings() {
               <div className="owner-pp-row">
                 <div className="dorm-settings-field">
                   <label htmlFor={`${id}-promptpay`}>หมายเลข PromptPay</label>
-                  <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={draft.promptpay_id} onChange={change} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก" />
+                  <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={draft.promptpay_id} onChange={change} disabled={draft.test_mode} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก" />
                   {qrError ? <small className="owner-pp-error">{qrError}</small> : <small className="dorm-settings-hint">ใส่เฉพาะตัวเลข แล้วกดสร้าง QR Code เพื่อตรวจสอบก่อนบันทึก</small>}
                 </div>
-                <button type="button" className="dorm-settings-btn is-ghost owner-pp-generate" onClick={generateQr} disabled={!draft.promptpay_id}>
+                <button type="button" className="dorm-settings-btn is-ghost owner-pp-generate" onClick={generateQr} disabled={!draft.promptpay_id || draft.test_mode}>
                   สร้าง QR Code
                 </button>
               </div>
@@ -167,11 +267,11 @@ function OwnerPaymentSettings() {
               <div className="dorm-settings-row">
                 <div className="dorm-settings-field">
                   <label htmlFor={`${id}-bank`}>ชื่อธนาคาร</label>
-                  <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={draft.bank_name} onChange={change} placeholder="เช่น กสิกรไทย" />
+                  <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={draft.bank_name} onChange={change} disabled={draft.test_mode} placeholder="เช่น กสิกรไทย" />
                 </div>
                 <div className="dorm-settings-field">
                   <label htmlFor={`${id}-account`}>เลขบัญชี</label>
-                  <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={draft.bank_account_no} onChange={change} placeholder="เช่น 123-4-56789-0" />
+                  <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={draft.bank_account_no} onChange={change} disabled={draft.test_mode} placeholder="เช่น 123-4-56789-0" />
                 </div>
               </div>
             </div>
@@ -210,6 +310,8 @@ function OwnerPaymentSettings() {
           ['PromptPay', draft?.promptpay_id ? formatPromptPayId(draft.promptpay_id) : 'ไม่ระบุ'],
           ['ธนาคาร', draft?.bank_name || 'ไม่ระบุ'],
           ['เลขบัญชี', draft?.bank_account_no || 'ไม่ระบุ'],
+          ['วิธีตรวจสลิป', draft?.verify_mode === 'manual' ? 'เจ้าหน้าที่ตรวจเอง' : 'ตรวจอัตโนมัติ (RDCW)'],
+          ['โหมดทดลอง', draft?.test_mode ? 'เปิด (ผู้เช่าเห็นบัญชีทดลอง)' : 'ปิด'],
         ]}
         confirmLabel={saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
         busy={saving}
@@ -875,9 +977,6 @@ function OwnerMain() {
   const [reviewingSlipId, setReviewingSlipId] = useState(null)
   const [occupancyLogs, setOccupancyLogs] = useState({ logs: [], total: 0, page: 1, pageSize: 10 })
   const [occupancyFilter, setOccupancyFilter] = useState({ search: '', type: 'all' })
-  const [occupantsPage, setOccupantsPage] = useState(1)
-  const [vacantRoomsPage, setVacantRoomsPage] = useState(1)
-  const [maintenanceRoomsPage, setMaintenanceRoomsPage] = useState(1)
   const [staffForm, setStaffForm] = useState(EMPTY_STAFF)
   const [paymentFilter, setPaymentFilter] = useState({ from: '', to: '' })
   const [paymentLogFilter, setPaymentLogFilter] = useState({ search: '', from: '', to: '', onlyOverdue: false })
@@ -906,7 +1005,6 @@ function OwnerMain() {
   const [roomPaymentsPage, setRoomPaymentsPage] = useState(1)
   const [confirmDialog, setConfirmDialog] = useState(null)
   const confirmResolverRef = useRef(null)
-  const [paymentHistoryPage, setPaymentHistoryPage] = useState(1)
   const [incomeTypePage, setIncomeTypePage] = useState(1)
   const [staffPage, setStaffPage] = useState(1)
   const [occupancySummary, setOccupancySummary] = useState(null)
@@ -1105,31 +1203,19 @@ function OwnerMain() {
     () => (roomStatus.rooms || []).filter((room) => room.customer_id).sort(compareNewest('rental_start_date')),
     [roomStatus],
   )
-  const occupantsTotalPages = Math.max(1, Math.ceil(currentOccupants.length / SUMMARY_PAGE_SIZE))
-  const paginatedOccupants = useMemo(() => {
-    const start = (occupantsPage - 1) * SUMMARY_PAGE_SIZE
-    return currentOccupants.slice(start, start + SUMMARY_PAGE_SIZE)
-  }, [currentOccupants, occupantsPage])
+  const recentOccupants = currentOccupants.slice(0, SUMMARY_PAGE_SIZE)
 
   const vacantRoomsList = useMemo(
     () => (roomStatus.rooms || []).filter((room) => room.status === 'vacant').sort(compareNewest('vacated_at')),
     [roomStatus],
   )
-  const vacantRoomsTotalPages = Math.max(1, Math.ceil(vacantRoomsList.length / SUMMARY_PAGE_SIZE))
-  const paginatedVacantRooms = useMemo(() => {
-    const start = (vacantRoomsPage - 1) * SUMMARY_PAGE_SIZE
-    return vacantRoomsList.slice(start, start + SUMMARY_PAGE_SIZE)
-  }, [vacantRoomsList, vacantRoomsPage])
+  const recentVacantRooms = vacantRoomsList.slice(0, SUMMARY_PAGE_SIZE)
 
   const maintenanceRoomsList = useMemo(
     () => (roomStatus.rooms || []).filter((room) => room.status === 'maintenance').sort(compareNewest('maintenance_since')),
     [roomStatus],
   )
-  const maintenanceRoomsTotalPages = Math.max(1, Math.ceil(maintenanceRoomsList.length / SUMMARY_PAGE_SIZE))
-  const paginatedMaintenanceRooms = useMemo(() => {
-    const start = (maintenanceRoomsPage - 1) * SUMMARY_PAGE_SIZE
-    return maintenanceRoomsList.slice(start, start + SUMMARY_PAGE_SIZE)
-  }, [maintenanceRoomsList, maintenanceRoomsPage])
+  const recentMaintenanceRooms = maintenanceRoomsList.slice(0, SUMMARY_PAGE_SIZE)
 
   const occupancyPage = Number(occupancyLogs.page || 1)
   const totalOccupancyPages = Math.max(1, Math.ceil((Number(occupancyLogs.total) || 0) / (Number(occupancyLogs.pageSize) || 10)))
@@ -1264,12 +1350,7 @@ function OwnerMain() {
     return { rent, unpaidUtilities, deposit, totalDue, netBalance: totalDue - deposit }
   }, [displayRoomDetail])
 
-  const PAYMENT_HISTORY_PAGE_SIZE = 5
-  const paymentHistoryTotalPages = Math.max(1, Math.ceil((displayRoomDetail?.payments?.length || 0) / PAYMENT_HISTORY_PAGE_SIZE))
-  const paginatedPaymentHistory = useMemo(() => {
-    const start = (paymentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE
-    return (displayRoomDetail?.payments || []).slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
-  }, [displayRoomDetail, paymentHistoryPage])
+  const recentPaymentHistory = (displayRoomDetail?.payments || []).slice(0, 5)
 
   const openPaymentSlip = (payment) => {
     setPaymentSlipZoomOpen(false)
@@ -1548,7 +1629,6 @@ function OwnerMain() {
   const handleRoomClick = async (room) => {
     setRoomDetailOpenedAt(new Date().getTime())
     setRoomDetail({ room, tenant: null, payments: [] })
-    setPaymentHistoryPage(1)
     setIsRoomDetailLoading(true)
     try {
       const [{ data }, historyResponse] = await Promise.all([
@@ -2275,10 +2355,7 @@ function OwnerMain() {
                   icon: 'user',
                   unit: 'คน',
                   total: currentOccupants.length,
-                  items: paginatedOccupants,
-                  page: occupantsPage,
-                  totalPages: occupantsTotalPages,
-                  setPage: setOccupantsPage,
+                  items: recentOccupants,
                   empty: 'ยังไม่มีผู้เข้าพัก',
                   primary: (room) => `${room.first_name || ''} ${room.last_name || ''}`.trim() || 'ไม่ระบุชื่อ',
                   secondary: (room) => `เข้าพัก ${formatDate(room.rental_start_date)}`,
@@ -2292,10 +2369,7 @@ function OwnerMain() {
                   icon: 'door',
                   unit: 'ห้อง',
                   total: vacantRoomsList.length,
-                  items: paginatedVacantRooms,
-                  page: vacantRoomsPage,
-                  totalPages: vacantRoomsTotalPages,
-                  setPage: setVacantRoomsPage,
+                  items: recentVacantRooms,
                   empty: 'ไม่มีห้องว่างในขณะนี้',
                   primary: () => 'พร้อมให้เช่า',
                   secondary: (room) => (room.vacated_at ? `ว่างตั้งแต่ ${formatDate(room.vacated_at)}` : 'ยังไม่เคยมีผู้เช่า'),
@@ -2309,10 +2383,7 @@ function OwnerMain() {
                   icon: 'tool',
                   unit: 'ห้อง',
                   total: maintenanceRoomsList.length,
-                  items: paginatedMaintenanceRooms,
-                  page: maintenanceRoomsPage,
-                  totalPages: maintenanceRoomsTotalPages,
-                  setPage: setMaintenanceRoomsPage,
+                  items: recentMaintenanceRooms,
                   empty: 'ไม่มีห้องที่กำลังซ่อมบำรุง',
                   primary: (room) => `${room.first_name || ''} ${room.last_name || ''}`.trim() || 'ไม่มีผู้เช่า',
                   secondary: (room) => (room.maintenance_since ? `แจ้งซ่อม ${formatDate(room.maintenance_since)}` : 'กำลังซ่อมบำรุง'),
@@ -2338,7 +2409,7 @@ function OwnerMain() {
                     {list.items.length ? (
                       list.items.map((room, index) => {
                         const alert = list.alert(room)
-                        const isLatest = list.page === 1 && index === 0
+                        const isLatest = index === 0
                         return (
                           <button key={room.room_number} type="button" className={`owner-ov-row${alert ? ' has-alert' : ''}`} onClick={() => handleRoomClick(room)}>
                             <span className="owner-ov-row-room">
@@ -2371,15 +2442,7 @@ function OwnerMain() {
                     )}
                   </div>
                   <div className="owner-ov-list-foot">
-                    {list.total > SUMMARY_PAGE_SIZE ? (
-                      <div className="owner-ov-pager">
-                        <button type="button" aria-label="หน้าก่อนหน้า" disabled={list.page <= 1} onClick={() => list.setPage((page) => page - 1)}>‹</button>
-                        <span>{list.page} / {list.totalPages}</span>
-                        <button type="button" aria-label="หน้าถัดไป" disabled={list.page >= list.totalPages} onClick={() => list.setPage((page) => page + 1)}>›</button>
-                      </div>
-                    ) : (
-                      <span className="owner-ov-list-foot-note">แสดงครบ {list.total} รายการ</span>
-                    )}
+                    <span className="owner-ov-list-foot-note">แสดง {list.items.length} จาก {list.total} รายการ</span>
                     <button type="button" className="owner-ov-link" onClick={() => openRoomList(list.key)}>
                       ดูทั้งหมด
                       <span aria-hidden="true">›</span>
@@ -4162,7 +4225,7 @@ function OwnerMain() {
                             </div>
                             <div className="owner-rd-payments">
                               {displayRoomDetail.payments?.length ? (
-                                paginatedPaymentHistory.map((payment) => {
+                                recentPaymentHistory.map((payment) => {
                                   const tone = getRoomPaymentTone(payment.status)
                                   return (
                                     <button
@@ -4204,13 +4267,6 @@ function OwnerMain() {
                                 <div className="owner-rd-payments-empty">ยังไม่มีประวัติการชำระเงิน</div>
                               )}
                             </div>
-                            {displayRoomDetail.payments?.length > PAYMENT_HISTORY_PAGE_SIZE && (
-                              <div className="owner-ov-pager">
-                                <button type="button" aria-label="หน้าก่อนหน้า" disabled={paymentHistoryPage <= 1} onClick={() => setPaymentHistoryPage((page) => page - 1)}>‹</button>
-                                <span>{paymentHistoryPage} / {paymentHistoryTotalPages}</span>
-                                <button type="button" aria-label="หน้าถัดไป" disabled={paymentHistoryPage >= paymentHistoryTotalPages} onClick={() => setPaymentHistoryPage((page) => page + 1)}>›</button>
-                              </div>
-                            )}
                           </div>
                         </>
                       )}

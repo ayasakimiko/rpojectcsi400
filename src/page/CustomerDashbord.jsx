@@ -4361,7 +4361,7 @@ function CustomerDashbord() {
     setPaymentSubmitting(true)
     setPaymentError('')
     try {
-      const qrPayload = await readSlipQrPayload(paymentSlip)
+      const qrPayload = paymentChannels?.test_mode ? '' : await readSlipQrPayload(paymentSlip)
       const formData = new FormData()
       formData.append('payment_method', paymentMethod)
       if (qrPayload) formData.append('qr_payload', qrPayload)
@@ -7059,6 +7059,13 @@ function CustomerDashbord() {
                                           {currentDue.lumpSumMonths ? <small>ค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน</small> : null}
                                         </div>
 
+                                        {channels.test_mode && (
+                                          <div className="dashboard-pay-test" role="note">
+                                            <strong>โหมดทดลอง</strong>
+                                            <span>QR และบัญชีด้านล่างเป็นตัวอย่าง ห้ามโอนเงินจริง แนบรูปใดก็ได้เพื่อทดสอบระบบ</span>
+                                          </div>
+                                        )}
+
                                         <span className="slip-field-label">เลือกช่องทางการชำระเงิน</span>
                                         <div className="dashboard-pay-methods" role="radiogroup" aria-label="ช่องทางการชำระเงิน">
                                           {[
@@ -7158,7 +7165,11 @@ function CustomerDashbord() {
                                       ยกเลิก
                                     </button>
                                     <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting || !paymentSlip}>
-                                      {paymentSubmitting ? 'กำลังตรวจสอบสลิป...' : paymentSlip ? 'ตรวจสอบสลิปและชำระเงิน' : 'แนบสลิปก่อนส่ง'}
+                                      {paymentSubmitting
+                                        ? paymentChannels?.verify_mode === 'manual' ? 'กำลังส่งสลิป...' : 'กำลังตรวจสอบสลิป...'
+                                        : !paymentSlip
+                                          ? 'แนบสลิปก่อนส่ง'
+                                          : paymentChannels?.verify_mode === 'manual' ? 'ส่งสลิปให้เจ้าหน้าที่ตรวจ' : 'ตรวจสอบสลิปและชำระเงิน'}
                                     </button>
                                   </div>
                                 </form>

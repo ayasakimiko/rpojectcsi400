@@ -76,15 +76,6 @@
   gap: 20px;
 }
 
-.admin-container > .dorm-menu-bar {
-  margin-block: -4px;
-}
-
-.admin-container > .admin-subtabs {
-  margin-top: -12px;
-  padding-top: 0;
-}
-
 .admin-header {
   display: flex;
   align-items: center;
@@ -4048,12 +4039,27 @@ tr.admin-focus-flash.is-fading > td {
   color: #64748b;
 }
 
-.admin-subtabs {
+.admin-subtabs-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  margin-top: -4px;
+}
+
+.admin-subtabs-row > .dorm-menu-bar {
   margin: 0;
-  padding: 12px 0 2px;
+}
+
+.admin-subtabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -4098,7 +4104,13 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 @media (max-width: 576px) {
+  .admin-subtabs-row {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
   .admin-subtabs {
+    flex: none;
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;

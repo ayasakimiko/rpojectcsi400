@@ -18,7 +18,6 @@ import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import announcementRouter from "./AnnouncementRouter.js";
 
-// ตั้งค่า Router ตรวจสอบสิทธิ์เจ้าของหอพัก และเชื่อมส่วนรายจ่ายกับรายงานเหตุ
 const router = Router();
 
 const requireActiveOwner = createRequireActiveAccount(getPool);
@@ -27,13 +26,17 @@ router.use(authenticate, requireOwnerRole, requireActiveOwner);
 router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
 
-// ช่องทางรับโอนของหอพัก จัดการได้เฉพาะ Owner หลังตรวจสอบบัญชีแล้ว
 const PAYMENT_FIELDS = ["promptpay_id", "bank_name", "bank_account_no"];
+const SLIP_VERIFY_MODES = new Set(["auto", "manual"]);
 router.get("/payment-settings", async (_req, res) => {
   try {
     res.set("Cache-Control", "private, no-store");
-    const [rows] = await getPool().query(`SELECT ${PAYMENT_FIELDS.join(", ")} FROM DormConfig WHERE id = 1`);
-    return res.json({ settings: Object.fromEntries(PAYMENT_FIELDS.map((field) => [field, rows[0]?.[field] ?? ""])) });
+    const [rows] = await getPool().query(`SELECT ${PAYMENT_FIELDS.join(", ")}, payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1`);
+    return res.json({
+      settings: Object.fromEntries(PAYMENT_FIELDS.map((field) => [field, rows[0]?.[field] ?? ""])),
+      testMode: Boolean(rows[0]?.payment_test_mode),
+      verifyMode: rows[0]?.slip_verify_mode === "manual" ? "manual" : "auto",
+    });
   } catch (error) {
     console.error("Owner payment settings read error:", error.code);
     return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลรับโอนได้" });
@@ -46,6 +49,12 @@ router.put("/payment-settings", async (req, res) => {
   if (!body || typeof body !== "object" || Array.isArray(body) || PAYMENT_FIELDS.some((field) => typeof body[field] !== "string")) {
     return res.status(400).json({ message: "ข้อมูลรับโอนไม่ถูกต้อง" });
   }
+  if (body.test_mode !== undefined && typeof body.test_mode !== "boolean") {
+    return res.status(400).json({ message: "ค่าโหมดทดลองไม่ถูกต้อง" });
+  }
+  if (body.verify_mode !== undefined && !SLIP_VERIFY_MODES.has(body.verify_mode)) {
+    return res.status(400).json({ message: "วิธีตรวจสลิปไม่ถูกต้อง" });
+  }
   const settings = Object.fromEntries(PAYMENT_FIELDS.map((field) => [field, body[field].trim()]));
   if (settings.promptpay_id && !/^(?:0\d{9}|\d{13})$/.test(settings.promptpay_id)) {
     return res.status(400).json({ message: "PromptPay ต้องเป็นเบอร์มือถือ 10 หลักหรือเลขบัตรประชาชน 13 หลัก" });
@@ -55,12 +64,25 @@ router.put("/payment-settings", async (req, res) => {
     return res.status(400).json({ message: "ชื่อธนาคารหรือเลขบัญชีไม่ถูกต้อง" });
   }
   try {
-    await getPool().query(
+    const pool = getPool();
+    await pool.query(
       `INSERT INTO DormConfig (id, ${PAYMENT_FIELDS.join(", ")}) VALUES (1, ?, ?, ?)
        ON DUPLICATE KEY UPDATE ${PAYMENT_FIELDS.map((field) => `${field} = ?`).join(", ")}`,
       [...PAYMENT_FIELDS.map((field) => settings[field]), ...PAYMENT_FIELDS.map((field) => settings[field])],
     );
-    return res.json({ message: "บันทึกข้อมูลรับโอนแล้ว", settings });
+    if (typeof body.test_mode === "boolean") {
+      await pool.query("UPDATE DormConfig SET payment_test_mode = ? WHERE id = 1", [body.test_mode]);
+    }
+    if (SLIP_VERIFY_MODES.has(body.verify_mode)) {
+      await pool.query("UPDATE DormConfig SET slip_verify_mode = ? WHERE id = 1", [body.verify_mode]);
+    }
+    const [rows] = await pool.query("SELECT payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1");
+    return res.json({
+      message: "บันทึกข้อมูลรับโอนแล้ว",
+      settings,
+      testMode: Boolean(rows[0]?.payment_test_mode),
+      verifyMode: rows[0]?.slip_verify_mode === "manual" ? "manual" : "auto",
+    });
   } catch (error) {
     console.error("Owner payment settings save error:", error.code);
     return res.status(500).json({ message: "ไม่สามารถบันทึกข้อมูลรับโอนได้" });
@@ -70,7 +92,6 @@ router.use("/announcements", announcementRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
-// สรุปจำนวนรถที่จอดและความจุพื้นที่จอดรถ
 router.get("/parking/summary", async (_req, res) => {
   try {
     const [[{ parkedCount }]] = await getPool().query(
@@ -90,7 +111,6 @@ router.get("/parking/summary", async (_req, res) => {
   }
 });
 
-// ฟังก์ชันกลางสำหรับอัปเดตข้อมูลและเลือกช่วงเดือนของรายงาน
 function buildUpdate(allowedColumns, body) {
   const columns = [];
   const values = [];
@@ -164,7 +184,6 @@ function getSelectedMonthRange(query) {
   return { from, toExclusive };
 }
 
-// ภาพรวมการดำเนินงานหอพักและตัวเลขสรุปตามช่วงวันที่
 router.get("/overview", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
@@ -276,7 +295,6 @@ function recordOccupancySnapshot(pool, totalRooms, occupiedCount, vacantCount) {
     });
 }
 
-// สรุปสถานะห้องพักและสัดส่วนการเข้าพัก
 router.get("/rooms/status", async (req, res) => {
   try {
     const pool = getPool();
@@ -381,7 +399,6 @@ router.get("/rooms/occupancy-summary", async (req, res) => {
   }
 });
 
-// สรุปรายรับจากรายการที่ชำระแล้ว แยกตามประเภทและช่วงเวลา
 router.get("/income", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
@@ -420,7 +437,6 @@ router.get("/income", async (req, res) => {
   }
 });
 
-// คำนวณข้อมูลแนวโน้มรายรับ รายจ่าย และการเข้าพักสำหรับกราฟ
 router.get("/utility-receipts", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["from", "to"]);
@@ -742,7 +758,6 @@ router.get("/rooms/occupancy-trend", async (req, res) => {
   }
 });
 
-// แสดงรายละเอียดห้องพักและข้อมูลผู้เช่าของห้อง
 router.get("/rooms/:roomNumber", async (req, res) => {
   try {
     const roomNumber = Number(req.params.roomNumber);
@@ -782,7 +797,6 @@ router.get("/rooms/:roomNumber", async (req, res) => {
   }
 });
 
-// ประวัติการชำระเงิน พร้อมการค้นหา กรองข้อมูล และแบ่งหน้า
 router.get("/logs/payments", async (req, res) => {
   try {
     const dateError = validateDateQuery(req.query, ["date", "from", "to"]);
@@ -866,7 +880,6 @@ router.get("/logs/payments", async (req, res) => {
   }
 });
 
-// ประวัติการเข้าพักและย้ายออก พร้อมการค้นหาและแบ่งหน้า
 const OCCUPANCY_LOG_PAGE_SIZE = 10;
 
 router.get("/logs/occupancy", async (req, res) => {
@@ -943,7 +956,6 @@ router.get("/logs/occupancy", async (req, res) => {
   }
 });
 
-// จัดการบัญชีเจ้าหน้าที่และผู้ดูแล เพิ่ม แก้ไข ระงับการใช้งาน และลบ
 const STAFF_MANAGEABLE_TABLES = { Staff: "Staff", Admin: "Admin" };
 
 router.get("/staff", async (req, res) => {

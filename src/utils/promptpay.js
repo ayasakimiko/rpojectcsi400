@@ -1,3 +1,9 @@
+export const DEMO_PAYMENT_CHANNELS = {
+  promptpay_id: '0000000000',
+  bank_name: 'ธนาคารทดลอง (ใช้โอนจริงไม่ได้)',
+  bank_account_no: '000-0-00000-0',
+}
+
 function field(id, value) {
   return `${id}${String(value.length).padStart(2, '0')}${value}`
 }

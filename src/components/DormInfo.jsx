@@ -4,7 +4,7 @@ import axios from 'axios'
 import './DormInfo.css'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
-const PUBLISHED_FIELDS = ['dorm_name', 'dorm_rules', 'gate_close_time', 'caretaker_phone', 'technician_phone']
+const PUBLISHED_FIELDS = ['dorm_name', 'dorm_rules', 'gate_close_time', 'caretaker_phone']
 
 function hasDormInfoChanges(current, saved) {
   if (!saved) return true
@@ -214,20 +214,11 @@ export function DormInfoSettings({ apiBase, children = null }) {
                   <Icon name="phone" size={16} />
                   <span>เบอร์ติดต่อฉุกเฉิน</span>
                 </div>
-                <div className="dorm-settings-row">
-                  <div className="dorm-settings-field">
-                    <label htmlFor={`${formId}-caretaker`}>ผู้ดูแลหอพัก</label>
-                    <div className="dorm-settings-input-icon">
-                      <Icon name="phone" size={16} />
-                      <input id={`${formId}-caretaker`} type="tel" name="caretaker_phone" value={form.caretaker_phone} onChange={update} maxLength={20} placeholder="เช่น 0812345678" />
-                    </div>
-                  </div>
-                  <div className="dorm-settings-field">
-                    <label htmlFor={`${formId}-technician`}>ช่าง</label>
-                    <div className="dorm-settings-input-icon">
-                      <Icon name="wrench" size={16} />
-                      <input id={`${formId}-technician`} type="tel" name="technician_phone" value={form.technician_phone} onChange={update} maxLength={20} placeholder="เช่น 02-123-4567" />
-                    </div>
+                <div className="dorm-settings-field">
+                  <label htmlFor={`${formId}-caretaker`}>ผู้ดูแลหอพัก</label>
+                  <div className="dorm-settings-input-icon">
+                    <Icon name="phone" size={16} />
+                    <input id={`${formId}-caretaker`} type="tel" name="caretaker_phone" value={form.caretaker_phone} onChange={update} maxLength={20} placeholder="เช่น 0812345678" />
                   </div>
                 </div>
               </div>
@@ -260,7 +251,6 @@ export function DormInfoSettings({ apiBase, children = null }) {
           ['ชื่อหอพัก', form?.dorm_name || '-'],
           ['กฎระเบียบ', `${previewRules.length} ข้อ`],
           ['ผู้ดูแลหอพัก', form?.caretaker_phone || 'ไม่ระบุ'],
-          ['ช่าง', form?.technician_phone || 'ไม่ระบุ'],
         ]}
         confirmLabel={saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
         busy={saving}
@@ -318,7 +308,6 @@ export function DormInfoSettings({ apiBase, children = null }) {
               <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>
               <div className="dorm-menu-contacts">
                 <ContactRow icon="phone" label="ผู้ดูแลหอพัก" phone={form.caretaker_phone} />
-                <ContactRow icon="wrench" label="ช่าง" phone={form.technician_phone} />
               </div>
             </section>
           </div>
@@ -352,9 +341,6 @@ const ICONS = {
   ),
   phone: (
     <path d="M21 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 1.1 4.2 2 2 0 0 1 3.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L7.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
-  ),
-  wrench: (
-    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8Z" />
   ),
   edit: (
     <>
@@ -624,7 +610,6 @@ export function DormInfoMenu({ apiBase, onManage, requireAck = false, onAcknowle
                     <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>
                     <div className="dorm-menu-contacts">
                       <ContactRow icon="phone" label="ผู้ดูแลหอพัก" phone={config.caretaker_phone} />
-                      <ContactRow icon="wrench" label="ช่าง" phone={config.technician_phone} />
                     </div>
                   </section>
                 </div>

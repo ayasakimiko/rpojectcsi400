@@ -25,6 +25,8 @@ import {
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
 import {
+  DEMO_PAYMENT_CHANNELS,
+  TEST_PAYMENT_MARK,
   inquireSlip,
   normalizeSlipPayload,
   SlipVerificationError,
@@ -497,15 +499,19 @@ router.get("/payment-channels", async (_req, res) => {
   try {
     res.set("Cache-Control", "private, no-store");
     const [rows] = await getPool().query(
-      "SELECT dorm_name, promptpay_id, bank_name, bank_account_no FROM DormConfig WHERE id = 1",
+      "SELECT dorm_name, promptpay_id, bank_name, bank_account_no, payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1",
     );
     const config = rows[0] || {};
+    const testMode = Boolean(config.payment_test_mode);
+    const source = testMode ? DEMO_PAYMENT_CHANNELS : config;
     return res.json({
       channels: {
         dorm_name: config.dorm_name || "",
-        promptpay_id: config.promptpay_id || "",
-        bank_name: config.bank_name || "",
-        bank_account_no: config.bank_account_no || "",
+        promptpay_id: source.promptpay_id || "",
+        bank_name: source.bank_name || "",
+        bank_account_no: source.bank_account_no || "",
+        test_mode: testMode,
+        verify_mode: config.slip_verify_mode === "manual" ? "manual" : "auto",
       },
     });
   } catch (error) {
@@ -516,28 +522,60 @@ router.get("/payment-channels", async (_req, res) => {
 
 const SLIP_USED_MESSAGE = "สลิปนี้ถูกใช้ชำระเงินไปแล้ว ไม่สามารถใช้ซ้ำได้";
 
-async function isSlipUsed(pool, column, value) {
-  const [rows] = await pool.query(`SELECT 1 FROM PaymentSlip WHERE ${column} = ? LIMIT 1`, [value]);
-  return rows.length > 0;
+async function findUsedSlip(pool, column, value) {
+  const [rows] = await pool.query(
+    `SELECT trans_ref, amount, DATE_FORMAT(trans_at, '%Y-%m-%d %H:%i:%s') AS trans_at, sending_bank, receiving_bank,
+            sender_name, receiver_name
+     FROM PaymentSlip WHERE ${column} = ? LIMIT 1`,
+    [value],
+  );
+  return rows[0] || null;
+}
+
+function rejectionDetails(attempt) {
+  const slip = attempt.slip;
+  if (slip) {
+    const amount = Math.round(Number(slip.amount) * 100);
+    return {
+      transRef: String(slip.transRef ?? "").replace(/[^\x21-\x7e]/g, "").slice(0, 64) || null,
+      amount: Number.isSafeInteger(amount) ? amount / 100 : null,
+      transAt: slipTransactionTime(slip),
+      sendingBank: String(slip.sendingBank ?? "").slice(0, 10) || null,
+      receivingBank: String(slip.receivingBank ?? "").slice(0, 10) || null,
+      senderName: slipPartyName(slip.sender),
+      receiverName: slipPartyName(slip.receiver),
+    };
+  }
+  const used = attempt.used || {};
+  return {
+    transRef: used.trans_ref || null,
+    amount: used.amount ?? null,
+    transAt: used.trans_at || null,
+    sendingBank: used.sending_bank || null,
+    receivingBank: used.receiving_bank || null,
+    senderName: used.sender_name || null,
+    receiverName: used.receiver_name || null,
+  };
 }
 
 async function recordSlipRejection(pool, attempt, file, reason) {
-  const slip = attempt.slip;
-  const amount = slip ? Math.round(Number(slip.amount) * 100) : NaN;
+  const details = rejectionDetails(attempt);
   await pool.query(
     `INSERT INTO PaymentSlipRejection (booking_id, customer_id, slip_path, qr_payload, trans_ref, amount, trans_at,
-                                       sender_name, receiver_name, reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                       sending_bank, receiving_bank, sender_name, receiver_name, reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       attempt.bookingId,
       attempt.customerId,
       `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(file.filename)}`,
       attempt.qrPayload || null,
-      slip ? String(slip.transRef ?? "").replace(/[^\x21-\x7e]/g, "").slice(0, 64) || null : null,
-      Number.isSafeInteger(amount) ? amount / 100 : null,
-      slip ? slipTransactionTime(slip) : null,
-      slip ? slipPartyName(slip.sender) : null,
-      slip ? slipPartyName(slip.receiver) : null,
+      details.transRef,
+      details.amount,
+      details.transAt,
+      details.sendingBank,
+      details.receivingBank,
+      details.senderName,
+      details.receiverName,
       String(reason).slice(0, 255),
     ],
   );
@@ -588,30 +626,77 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       throw new SlipVerificationError(409, "มีสลิปที่รอตรวจสอบอยู่แล้ว");
     }
 
-    attempt = { bookingId: booking.id, customerId: customer.id, qrPayload, slip: null };
-    if (qrPayload && (await isSlipUsed(pool, "qr_payload", qrPayload))) {
-      throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
-    }
-    const slip = await inquireSlip({ payload: qrPayload, file: req.file });
-    attempt.slip = slip;
-    const transRef = String(slip.transRef).replace(/[^\x21-\x7e]/g, "").slice(0, 64);
-    if (!transRef) throw new SlipVerificationError(400, "สลิปไม่ถูกต้อง หรือไม่พบรายการโอนนี้ในระบบธนาคาร");
-    if (await isSlipUsed(pool, "trans_ref", transRef)) throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
-
-    const slipAmountCents = Math.round(Number(slip.amount) * 100);
-    const dueCents = Math.round(Number(currentDue.amount) * 100);
-    if (!Number.isSafeInteger(slipAmountCents) || slipAmountCents < dueCents) {
-      throw new SlipVerificationError(
-        400,
-        `ยอดเงินในสลิป (฿${(Number(slip.amount) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}) น้อยกว่ายอดที่ต้องชำระ (฿${currentDue.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})`,
-      );
-    }
-
-    const [configRows] = await pool.query("SELECT promptpay_id, bank_account_no FROM DormConfig WHERE id = 1");
+    const [configRows] = await pool.query(
+      "SELECT promptpay_id, bank_account_no, payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1",
+    );
     const config = configRows[0] || {};
-    if (!slipReceiverMatches(slip, [config.promptpay_id, config.bank_account_no])) {
-      throw new SlipVerificationError(400, "บัญชีผู้รับในสลิปไม่ตรงกับบัญชีของหอพัก กรุณาตรวจสอบสลิปอีกครั้ง");
+    const testMode = Boolean(config.payment_test_mode);
+
+    if (config.slip_verify_mode === "manual") {
+      const used = !testMode && qrPayload ? await findUsedSlip(pool, "qr_payload", qrPayload) : null;
+      if (used) {
+        attempt = { bookingId: booking.id, customerId: customer.id, qrPayload, slip: null, used };
+        throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
+      }
+      const manualSlipPath = `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
+      const manualLabel = testMode ? `${methodLabel} · ${TEST_PAYMENT_MARK}` : methodLabel;
+      connection = await pool.getConnection();
+      await connection.beginTransaction();
+      if (currentDue.rentAmount > 0) {
+        const note = currentDue.lumpSumMonths
+          ? `รอตรวจสอบสลิป - ค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน · ${manualLabel}`
+          : `รอตรวจสอบสลิปค่าเช่า · ${manualLabel}`;
+        await connection.query(
+          `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'pending', 'rent', ?, ?)`,
+          [booking.id, currentDue.rentAmount, note, manualSlipPath],
+        );
+      }
+      const manualUtilityIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
+      if (manualUtilityIds.length > 0) {
+        await connection.query(
+          `UPDATE Payment SET slip_path = ?, note = LEFT(CONCAT(COALESCE(note, ''), ' (รอตรวจสอบสลิป · ', ?, ')'), 255)
+           WHERE id IN (?) AND status = 'pending'`,
+          [manualSlipPath, manualLabel, manualUtilityIds],
+        );
+      }
+      await connection.commit();
+      return res.status(201).json({
+        message: testMode ? "ส่งสลิปแล้ว (โหมดทดลอง) กรุณารอเจ้าหน้าที่ตรวจสอบ" : "ส่งสลิปแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบ",
+      });
     }
+
+    const dueCents = Math.round(Number(currentDue.amount) * 100);
+    let slip;
+    let transRef;
+    let slipAmountCents;
+
+    if (testMode) {
+      slip = { sender: { displayName: "โหมดทดลอง" }, receiver: { displayName: DEMO_PAYMENT_CHANNELS.bank_name } };
+      transRef = `TEST-${randomUUID()}`;
+      slipAmountCents = dueCents;
+    } else {
+      attempt = { bookingId: booking.id, customerId: customer.id, qrPayload, slip: null, used: null };
+      attempt.used = qrPayload ? await findUsedSlip(pool, "qr_payload", qrPayload) : null;
+      if (attempt.used) throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
+      slip = await inquireSlip({ payload: qrPayload, file: req.file });
+      attempt.slip = slip;
+      transRef = String(slip.transRef).replace(/[^\x21-\x7e]/g, "").slice(0, 64);
+      if (!transRef) throw new SlipVerificationError(400, "สลิปไม่ถูกต้อง หรือไม่พบรายการโอนนี้ในระบบธนาคาร");
+      if (await findUsedSlip(pool, "trans_ref", transRef)) throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
+
+      slipAmountCents = Math.round(Number(slip.amount) * 100);
+      if (!Number.isSafeInteger(slipAmountCents) || slipAmountCents < dueCents) {
+        throw new SlipVerificationError(
+          400,
+          `ยอดเงินในสลิป (฿${(Number(slip.amount) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}) น้อยกว่ายอดที่ต้องชำระ (฿${currentDue.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})`,
+        );
+      }
+
+      if (!slipReceiverMatches(slip, [config.promptpay_id, config.bank_account_no])) {
+        throw new SlipVerificationError(400, "บัญชีผู้รับในสลิปไม่ตรงกับบัญชีของหอพัก กรุณาตรวจสอบสลิปอีกครั้ง");
+      }
+    }
+    const verifyLabel = testMode ? TEST_PAYMENT_MARK : "ตรวจสลิปอัตโนมัติ";
 
     attempt = null;
     const slipPath = `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
@@ -630,8 +715,8 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
 
     if (currentDue.rentAmount > 0) {
       const note = currentDue.lumpSumMonths
-        ? `ชำระค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน · ${methodLabel} · ตรวจสลิปอัตโนมัติ`
-        : `ชำระค่าเช่า · ${methodLabel} · ตรวจสลิปอัตโนมัติ`;
+        ? `ชำระค่าเช่าล่วงหน้า ${currentDue.lumpSumMonths} เดือน · ${methodLabel} · ${verifyLabel}`
+        : `ชำระค่าเช่า · ${methodLabel} · ${verifyLabel}`;
 
       await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?, ?)`,
@@ -643,9 +728,9 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     if (utilityPaymentIds.length > 0) {
       await connection.query(
         `UPDATE Payment SET status = 'paid', payment_date = CURDATE(), slip_path = ?,
-                note = LEFT(CONCAT(COALESCE(note, ''), ' (ชำระแล้ว · ', ?, ' · ตรวจสลิปอัตโนมัติ)'), 255)
+                note = LEFT(CONCAT(COALESCE(note, ''), ' (ชำระแล้ว · ', ?, ' · ', ?, ')'), 255)
          WHERE id IN (?) AND status = 'pending'`,
-        [slipPath, methodLabel, utilityPaymentIds],
+        [slipPath, methodLabel, verifyLabel, utilityPaymentIds],
       );
     }
 
@@ -659,11 +744,11 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
 
     await connection.query(
       `INSERT INTO PaymentSlip (trans_ref, qr_payload, booking_id, customer_id, slip_path, amount, trans_at,
-                                sending_bank, receiving_bank, sender_name, receiver_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                sending_bank, receiving_bank, sender_name, receiver_name, is_test)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         transRef,
-        qrPayload || null,
+        testMode ? null : qrPayload || null,
         booking.id,
         customer.id,
         slipPath,
@@ -673,11 +758,14 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
         String(slip.receivingBank ?? "").slice(0, 10) || null,
         slipPartyName(slip.sender),
         slipPartyName(slip.receiver),
+        testMode,
       ],
     );
 
     await connection.commit();
-    return res.status(201).json({ message: "ตรวจสอบสลิปผ่านแล้ว ชำระเงินเรียบร้อย" });
+    return res.status(201).json({
+      message: testMode ? "ชำระเงินในโหมดทดลองเรียบร้อย (ไม่ได้ตรวจสลิปกับธนาคาร)" : "ตรวจสอบสลิปผ่านแล้ว ชำระเงินเรียบร้อย",
+    });
   } catch (error) {
     if (connection) await connection.rollback();
     let keepFile = false;
