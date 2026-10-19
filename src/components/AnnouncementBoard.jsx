@@ -2,6 +2,7 @@ import { UploadImage } from './UploadMedia.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import PhotoLightbox from './PhotoLightbox.jsx'
+import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
 import './AnnouncementBoard.css'
 
@@ -281,9 +282,41 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   })
   const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [now, setNow] = useState(() => Date.now())
+  const [query, setQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
-  const visibleItems = announcements.slice(0, visibleCount)
-  const hiddenCount = announcements.length - visibleItems.length
+  const keyword = query.trim().toLocaleLowerCase('th-TH')
+  const filtersActive = Boolean(keyword || dateFrom || dateTo)
+  const filteredAnnouncements = filtersActive
+    ? announcements.filter((item) => {
+        const dayKey = toDayKey(item.created_at)
+        if (dateFrom && dayKey < dateFrom) return false
+        if (dateTo && dayKey > dateTo) return false
+        if (!keyword) return true
+        return [item.title, item.message, item.author].some((value) => String(value ?? '').toLocaleLowerCase('th-TH').includes(keyword))
+      })
+    : announcements
+  const updateFilters = (next) => {
+    if ('query' in next) setQuery(next.query)
+    if ('dateFrom' in next) setDateFrom(next.dateFrom)
+    if ('dateTo' in next) setDateTo(next.dateTo)
+    setVisibleCount(ANNOUNCEMENTS_PER_PAGE)
+  }
+  const clearFilters = () => updateFilters({ query: '', dateFrom: '', dateTo: '' })
+
+  const [filterOpenId, setFilterOpenId] = useState(openId)
+  if (openId !== filterOpenId) {
+    setFilterOpenId(openId)
+    if (openId != null) {
+      setQuery('')
+      setDateFrom('')
+      setDateTo('')
+    }
+  }
+
+  const visibleItems = filteredAnnouncements.slice(0, visibleCount)
+  const hiddenCount = filteredAnnouncements.length - visibleItems.length
   const today = new Date(now)
   const todayKey = toDayKey(today)
   const yesterdayKey = toDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1))
@@ -559,8 +592,63 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
         </p>
       )}
 
-      <div className={`announcement-scroll${announcements.length === 0 ? ' is-empty' : ''}`}>
-        {announcements.length === 0 ? (
+      {announcements.length > 0 && (
+        <div className="announcement-filters">
+          <label className="announcement-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              type="search"
+              value={query}
+              placeholder="ค้นหาหัวข้อ รายละเอียด หรือผู้ประกาศ"
+              aria-label="ค้นหาประกาศ"
+              onChange={(event) => updateFilters({ query: event.target.value })}
+            />
+          </label>
+          <div className="announcement-date-range">
+            <ThaiDatePicker
+              className="announcement-date-input"
+              placeholder="ตั้งแต่วันที่"
+              value={dateFrom}
+              maxDate={dateTo ? new Date(`${dateTo}T00:00:00`) : new Date()}
+              isClearable
+              onChange={(value) => updateFilters({ dateFrom: value })}
+            />
+            <span aria-hidden="true">–</span>
+            <ThaiDatePicker
+              className="announcement-date-input"
+              placeholder="ถึงวันที่"
+              value={dateTo}
+              minDate={dateFrom ? new Date(`${dateFrom}T00:00:00`) : undefined}
+              maxDate={new Date()}
+              isClearable
+              onChange={(value) => updateFilters({ dateTo: value })}
+            />
+          </div>
+          {filtersActive && (
+            <div className="announcement-filter-result">
+              <span>พบ {filteredAnnouncements.length} ประกาศ</span>
+              <button type="button" onClick={clearFilters}>ล้างตัวกรอง</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={`announcement-scroll${filteredAnnouncements.length === 0 ? ' is-empty' : ''}`}>
+        {announcements.length > 0 && filteredAnnouncements.length === 0 ? (
+          <div className="announcement-feed-empty">
+            <span className="announcement-feed-empty-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </span>
+            <strong>ไม่พบประกาศที่ตรงกับเงื่อนไข</strong>
+            <span>ลองเปลี่ยนคำค้นหาหรือช่วงวันที่</span>
+          </div>
+        ) : announcements.length === 0 ? (
           <div className="announcement-feed-empty">
             <span className="announcement-feed-empty-icon" aria-hidden="true">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

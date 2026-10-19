@@ -11,6 +11,7 @@ import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
+import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
 import {
@@ -197,6 +198,9 @@ function WaitingDetailIcon({ type, size = 16 }) {
     user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
     edit: <><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" /></>,
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+    wallet: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
+    idcard: <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M6 16a3 3 0 0 1 6 0M15 10h3M15 14h3" /></>,
+    tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1213,18 +1217,6 @@ const MAINTENANCE_CATEGORY_ICON = {
   ),
 }
 
-function MaintenanceCategoryBadge({ category }) {
-  const key = MAINTENANCE_CATEGORY_LABEL[category] ? category : 'other'
-  return (
-    <span className={`admin-badge category-${key}`}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        {MAINTENANCE_CATEGORY_ICON[key]}
-      </svg>
-      {MAINTENANCE_CATEGORY_LABEL[key]}
-    </span>
-  )
-}
-
 function formatCurrency(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '-'
@@ -1360,47 +1352,6 @@ function buildAdminStaffNotifs(member) {
   ]
 }
 
-function getAdminRequestTimeline(kind, request) {
-  if (!request || kind === 'staff') return []
-  const steps = [{ label: kind === 'maintenance' ? 'แจ้งซ่อม' : 'ส่งคำขอ', date: request.created_at }]
-  if (request.accepted_at) {
-    steps.push({ label: request.accepted_by_name ? 'รับเรื่องโดย' : 'รับเรื่อง', by: request.accepted_by_name, date: request.accepted_at })
-  }
-  if (request.completed_at) {
-    steps.push({ label: request.completed_by_name ? 'เสร็จสิ้นโดย' : 'เสร็จสิ้น', by: request.completed_by_name, date: request.completed_at })
-  }
-  return steps
-}
-
-function AdminRequestTimeline({ kind, request }) {
-  const timeline = getAdminRequestTimeline(kind, request)
-  if (timeline.length === 0) return null
-
-  return (
-    <div className="admin-request-log">
-      <div className="admin-request-log-items">
-        {timeline.map((step, index) => {
-          const prevStep = timeline[index - 1]
-          const stepMs = prevStep ? new Date(step.date).getTime() - new Date(prevStep.date).getTime() : null
-          return (
-            <div key={step.label} className="admin-request-log-item">
-              <span className="admin-request-log-dot" />
-              <div className="admin-request-log-content">
-                <p className="admin-request-log-label">
-                  {step.label}
-                  {step.by && <span className="admin-actor-inline"> {step.by}</span>}
-                </p>
-                <p className="admin-request-log-date">{formatDateTime(step.date)}</p>
-                {stepMs !== null && stepMs >= 0 && <p className="admin-request-log-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function useExpandedRows() {
   const [expanded, setExpanded] = useState(() => new Set())
   const toggle = (id) => {
@@ -1491,6 +1442,317 @@ function ExpandToggleRow({ open, colSpan, onClick }) {
   )
 }
 
+const ADMIN_REQUEST_NEXT_STEP = {
+  renew: { pending: 'ขั้นต่อไป: อนุมัติต่อสัญญา', in_progress: 'ขั้นต่อไป: อนุมัติต่อสัญญา' },
+  moveout: { pending: 'ขั้นต่อไป: รับเรื่อง', in_progress: 'ขั้นต่อไป: ตรวจห้องและอนุมัติ' },
+}
+
+function getAdminRequestDetails(request) {
+  const phone = { key: 'phone', icon: 'phone', label: 'โทร', value: request.phone || '-' }
+  if (request.type === 'renew') {
+    return [
+      phone,
+      {
+        key: 'duration',
+        icon: 'calendar',
+        label: 'ระยะเวลา',
+        value: RENEW_DURATION_LABEL[request.renew_duration_months] || (request.renew_duration_months ? `${request.renew_duration_months} เดือน` : '-'),
+      },
+      { key: 'payment', icon: 'wallet', label: 'การชำระเงิน', value: RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type || '-' },
+    ]
+  }
+  if (request.type === 'move_room') {
+    return [
+      phone,
+      { key: 'reason', icon: 'info', label: 'เหตุผล', value: request.move_reason ? MOVE_ROOM_REASON_LABEL[request.move_reason] || request.move_reason : '-' },
+      { key: 'date', icon: 'calendar', label: 'ต้องการย้าย', value: request.preferred_move_date ? formatDate(request.preferred_move_date) : 'ไม่ระบุ' },
+    ]
+  }
+  return [phone, { key: 'created', icon: 'clock', label: 'แจ้งเมื่อ', value: `${formatDateTime(request.created_at)} น.` }]
+}
+
+const ADMIN_REQUEST_STEP_ICON = {
+  created: <><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></>,
+  accepted: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1M9 12l2 2 4-4" /></>,
+  approved: <path d="M5 12.5 10 17l9-10" />,
+  rejected: <path d="M6 6l12 12M18 6 6 18" />,
+  movein: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" /><path d="M10 21v-6h4v6" /></>,
+  moveout: <><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" /><path d="M10 17l-5-5 5-5M5 12h11" /></>,
+  repair: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
+}
+
+const ADMIN_MAINTENANCE_NEXT_STEP = {
+  pending: { label: 'ขั้นต่อไป: รับเรื่อง', tone: 'is-waiting' },
+  in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'is-info' },
+}
+
+function AdminMaintenanceCard({ request, onOpen, onPhotos }) {
+  const nextStep = ADMIN_MAINTENANCE_NEXT_STEP[request.status]
+  const photos = request.photos || []
+  const steps = [{ key: 'created', icon: 'created', label: 'แจ้งซ่อม', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, tone: 'info' }]
+  if (request.accepted_at) steps.push({ key: 'accepted', icon: 'accepted', label: 'รับเรื่อง', by: request.accepted_by_name, date: request.accepted_at, tone: 'info' })
+  if (request.completed_at) {
+    const done = request.status === 'done'
+    steps.push({
+      key: 'completed',
+      icon: done ? 'repair' : 'rejected',
+      label: done ? 'ซ่อมเสร็จแล้ว' : 'ยกเลิกแล้ว',
+      by: request.completed_by_name,
+      date: request.completed_at,
+      tone: done ? 'success' : 'danger',
+    })
+  }
+  return (
+    <article className="admin-req-card type-maintenance" data-admin-focus={`maintenance-${request.id}`}>
+      <div className="admin-req-head">
+        <span className="admin-req-avatar" aria-hidden="true">
+          <WaitingDetailIcon type="user" size={18} />
+        </span>
+        <div className="admin-req-identity">
+          <strong>{request.first_name} {request.last_name}</strong>
+          <span className="admin-req-type is-maintenance">แจ้งซ่อม</span>
+        </div>
+        <span className={`admin-badge status-${request.status}`}>{MAINTENANCE_STATUS_LABEL[request.status] || request.status}</span>
+      </div>
+      <div className="admin-req-route">
+        <div className="admin-req-route-room is-target">
+          <small>ห้องที่แจ้งซ่อม</small>
+          <strong>{request.room_number}</strong>
+        </div>
+        {nextStep && <span className={`admin-req-route-check ${nextStep.tone}`}>{nextStep.label}</span>}
+      </div>
+      <dl className="admin-req-details">
+        {[
+          { key: 'phone', icon: 'phone', label: 'โทร', value: request.contact_phone || request.phone || '-' },
+          { key: 'category', icon: 'tool', label: 'หมวดหมู่', value: MAINTENANCE_CATEGORY_LABEL[request.category] || 'อื่นๆ' },
+          { key: 'time', icon: 'clock', label: 'เวลาสะดวก', value: MAINTENANCE_TIME_LABEL[request.preferred_time] || 'เวลาไหนก็ได้' },
+        ].map((detail) => (
+          <div key={detail.key} className="admin-req-detail">
+            <dt>
+              <WaitingDetailIcon type={detail.icon} size={15} />
+              {detail.label}
+            </dt>
+            <dd>{detail.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {request.description && (
+        <div className="admin-req-note">
+          <span className="admin-req-note-label">รายละเอียดปัญหา</span>
+          <p>{request.description}</p>
+        </div>
+      )}
+      {photos.length > 0 && (
+        <div className="admin-req-photos">
+          <span className="admin-req-photos-label">รูปประกอบ · {photos.length} รูป</span>
+          <div className="admin-req-photos-list">
+            {photos.slice(0, 4).map((photo, index) => (
+              <button
+                key={`${photo.url}-${index}`}
+                type="button"
+                className="parcel-thumb"
+                aria-label={`ดูรูปแจ้งซ่อมห้อง ${request.room_number} รูปที่ ${index + 1}`}
+                onClick={() => onPhotos(request, index)}
+              >
+                <UploadImage src={photo.url} alt="" />
+                {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="admin-req-footer">
+        <AdminCardSteps steps={steps} />
+        <button type="button" className="admin-action-btn is-view admin-req-open" onClick={() => onOpen(request)}>
+          ดูรายละเอียด
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function AdminCardSteps({ steps }) {
+  return (
+    <ol className="admin-req-meta">
+      {steps.map((step) => (
+        <li key={step.key} className={`admin-req-meta-step is-${step.tone}`}>
+          <span className="admin-req-meta-icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              {ADMIN_REQUEST_STEP_ICON[step.icon]}
+            </svg>
+          </span>
+          <span className="admin-req-meta-body">
+            <span className="admin-req-meta-label">{step.label}</span>
+            <span className="admin-req-meta-sub">
+              {step.by && (
+                <span className="admin-req-meta-by" title={step.by}>
+                  โดย <strong>{step.by}</strong>
+                </span>
+              )}
+              <time dateTime={step.date}>
+                {step.dateOnly
+                  ? formatDate(step.date)
+                  : `${new Date(step.date).toLocaleString('th-TH', { year: '2-digit', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} น.`}
+              </time>
+            </span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function AdminMoveoutCard({ moveout, idcardRevealed, onToggleIdCard, onOpen }) {
+  const stayDays = calcStayDays(moveout.move_in_date, moveout.completed_at)
+  const steps = [
+    ...(moveout.move_in_date ? [{ key: 'movein', icon: 'movein', label: 'เข้าพัก', date: moveout.move_in_date, dateOnly: true, tone: 'info' }] : []),
+    { key: 'created', icon: 'created', label: 'แจ้งย้ายออก', date: moveout.created_at, tone: 'info' },
+    ...(moveout.completed_at
+      ? [{ key: 'completed', icon: 'moveout', label: 'ย้ายออกเรียบร้อย', by: moveout.completed_by_name, date: moveout.completed_at, tone: 'success' }]
+      : []),
+  ]
+  return (
+    <article className="admin-req-card type-moveout" data-admin-focus={`moveouts-${moveout.id}`}>
+      <div className="admin-req-head">
+        <span className="admin-req-avatar" aria-hidden="true">
+          <WaitingDetailIcon type="user" size={18} />
+        </span>
+        <div className="admin-req-identity">
+          <strong>{moveout.first_name} {moveout.last_name}</strong>
+          <span className="admin-req-type is-moveout">ผู้ย้ายออก</span>
+        </div>
+        <span className="admin-badge status-approved">ย้ายออกแล้ว</span>
+      </div>
+      <div className="admin-req-route">
+        <div className="admin-req-route-room is-target">
+          <small>ห้องที่ย้ายออก</small>
+          <strong>{moveout.room_number}</strong>
+        </div>
+        {stayDays !== null && <span className="admin-req-route-check is-info">พักอยู่ {stayDays} วัน</span>}
+      </div>
+      <dl className="admin-req-details">
+        <div className="admin-req-detail">
+          <dt>
+            <WaitingDetailIcon type="phone" size={15} />
+            โทร
+          </dt>
+          <dd>{moveout.phone || '-'}</dd>
+        </div>
+        <div className="admin-req-detail">
+          <dt>
+            <WaitingDetailIcon type="idcard" size={15} />
+            บัตรประชาชน
+          </dt>
+          <dd>
+            <button type="button" className="admin-idcard-toggle" onClick={onToggleIdCard} title={idcardRevealed ? 'ซ่อนเลขบัตร' : 'แสดงเลขบัตร'}>
+              {idcardRevealed ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
+            </button>
+          </dd>
+        </div>
+      </dl>
+      {moveout.note && (
+        <div className="admin-req-note">
+          <span className="admin-req-note-label">เหตุผลการย้ายออก</span>
+          <p>{moveout.note}</p>
+        </div>
+      )}
+      <div className="admin-req-footer">
+        <AdminCardSteps steps={steps} />
+        <button type="button" className="admin-action-btn is-view admin-req-open" onClick={() => onOpen(moveout)}>
+          ดูรายละเอียด
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function getAdminRequestSteps(request) {
+  const steps = [{ key: 'created', icon: 'created', label: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, tone: 'info' }]
+  if (request.accepted_at) steps.push({ key: 'accepted', icon: 'accepted', label: 'รับเรื่อง', by: request.accepted_by_name, date: request.accepted_at, tone: 'info' })
+  if (request.completed_at) {
+    const approved = request.status === 'approved'
+    steps.push({
+      key: 'completed',
+      icon: approved ? 'approved' : 'rejected',
+      label: approved ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว',
+      by: request.completed_by_name,
+      date: request.completed_at,
+      tone: approved ? 'success' : 'danger',
+    })
+  }
+  return steps
+}
+
+function AdminRequestCard({ request, onOpen }) {
+  const open = ['pending', 'in_progress'].includes(request.status)
+  const nextStep = ADMIN_REQUEST_NEXT_STEP[request.type]?.[request.status]
+  const roomLabel = request.type === 'renew' ? 'ห้องที่ขอต่อสัญญา' : request.type === 'moveout' ? 'ห้องที่แจ้งย้ายออก' : 'ห้องเดิม'
+  return (
+    <article className={`admin-req-card type-${request.type}`} data-admin-focus={`requests-${request.id}`}>
+      <div className="admin-req-head">
+        <span className="admin-req-avatar" aria-hidden="true">
+          <WaitingDetailIcon type="user" size={18} />
+        </span>
+        <div className="admin-req-identity">
+          <strong>{request.first_name} {request.last_name}</strong>
+          <span className={`admin-req-type is-${request.type}`}>{REQUEST_TYPE_LABEL[request.type] || request.type}</span>
+        </div>
+        <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
+      </div>
+      <div className="admin-req-route">
+        <div className={`admin-req-route-room${request.type === 'move_room' ? '' : ' is-target'}`}>
+          <small>{roomLabel}</small>
+          <strong>{request.room_number}</strong>
+        </div>
+        {request.type === 'move_room' && (
+          <>
+            <span className="admin-req-route-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <polyline points="14 6 20 12 14 18" />
+              </svg>
+            </span>
+            <div className="admin-req-route-room is-target">
+              <small>ห้องใหม่</small>
+              <strong>{request.target_room_number || '-'}</strong>
+            </div>
+          </>
+        )}
+        {request.type === 'move_room' && open ? (
+          <span className={`admin-req-route-check ${request.inspection_id ? 'is-done' : 'is-waiting'}`}>
+            {request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}
+          </span>
+        ) : nextStep ? (
+          <span className={`admin-req-route-check ${request.status === 'pending' ? 'is-waiting' : 'is-info'}`}>{nextStep}</span>
+        ) : null}
+      </div>
+      <dl className="admin-req-details">
+        {getAdminRequestDetails(request).map((detail) => (
+          <div key={detail.key} className="admin-req-detail">
+            <dt>
+              <WaitingDetailIcon type={detail.icon} size={15} />
+              {detail.label}
+            </dt>
+            <dd>{detail.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {request.note && (
+        <div className="admin-req-note">
+          <span className="admin-req-note-label">{request.type === 'moveout' ? 'เหตุผลการย้ายออก' : 'หมายเหตุ'}</span>
+          <p>{request.note}</p>
+        </div>
+      )}
+      <div className="admin-req-footer">
+        <AdminCardSteps steps={getAdminRequestSteps(request)} />
+        <button type="button" className="admin-action-btn is-view admin-req-open" onClick={() => onOpen(request)}>
+          ดูรายละเอียด
+        </button>
+      </div>
+    </article>
+  )
+}
+
 function StaffActionCell({ name, date }) {
   if (!name) return <span className="admin-cell-empty">-</span>
   return (
@@ -1499,11 +1761,6 @@ function StaffActionCell({ name, date }) {
       <span className="admin-staff-action-date">{formatDateTime(date)}</span>
     </div>
   )
-}
-
-function ActorName({ name }) {
-  if (!name) return <span className="admin-cell-empty">-</span>
-  return <span className="admin-actor-name">{name}</span>
 }
 
 function AmenitiesList({ room }) {
@@ -2320,8 +2577,8 @@ function MaintenanceDetail({ request, onPhotos }) {
       </section>
 
       <section className="payment-detail-section">
-        <h4><RoomDetailIcon type="history" size={16} />ขั้นตอนการดำเนินการ</h4>
-        <AdminRequestTimeline kind="maintenance" request={request} />
+        <h4><RoomDetailIcon type="history" size={16} />สถานะการแจ้งซ่อม</h4>
+        <MaintenanceSteps request={request} />
       </section>
 
       <section className="payment-detail-section">
@@ -2349,53 +2606,43 @@ function MaintenanceDetail({ request, onPhotos }) {
   )
 }
 
-function ProcessSteps({ steps: raw, startDate, endDate, pendingText = 'ไม่มีข้อมูล' }) {
-  const steps = raw.map((step, index) => {
-    const previous = raw.slice(0, index).reverse().find((item) => item.date)
-    const gap = previous && step.date ? new Date(step.date) - new Date(previous.date) : null
-    return { ...step, done: Boolean(step.date), gap: gap !== null && gap >= 0 ? formatRemaining(gap) : null }
-  })
-  const total = endDate && startDate ? new Date(endDate) - new Date(startDate) : null
-
+function MaintenanceSteps({ request }) {
+  const cancelled = request.status === 'cancelled'
+  const finished = request.status === 'done' || cancelled
   return (
-    <div className="moveout-steps-wrap">
-      <ol className="moveout-steps">
-        {steps.map((step, index) => (
-          <li key={step.key} className={`${step.done ? 'is-done' : 'is-pending'}${step.tone ? ` is-${step.tone}` : ''}`}>
-            {index > 0 && (
-              <span className="moveout-step-connector" aria-hidden="true">
-                {step.gap && <small>+ {step.gap}</small>}
-              </span>
-            )}
-            <span className="moveout-step-dot">
-              <RoomDetailIcon type={step.done ? step.icon : 'clock'} size={16} />
-            </span>
-            <div className="moveout-step-body">
-              <strong>{step.label}</strong>
-              {step.by && step.done && <span className="admin-actor-inline">{step.by}</span>}
-              <small>{step.date ? formatDateTime(step.date) : step.pendingText || pendingText}</small>
-            </div>
-          </li>
-        ))}
-      </ol>
-      {total !== null && total >= 0 ? (
-        <p className="moveout-steps-total">
-          <RoomDetailIcon type="clock" size={13} />
-          ใช้เวลาทั้งหมด <strong>{formatRemaining(total)}</strong>
-        </p>
-      ) : (
-        <p className="moveout-steps-total is-waiting">
-          <RoomDetailIcon type="clock" size={13} />
-          กำลังดำเนินการ
-        </p>
-      )}
-    </div>
+    <ProcessSteps
+      actorClassName="admin-actor-inline"
+      startDate={request.created_at}
+      endDate={finished ? request.completed_at : null}
+      waitingText={request.status === 'pending' ? 'รอเจ้าหน้าที่รับเรื่อง' : 'กำลังดำเนินการซ่อม'}
+      steps={[
+        { key: 'request', label: 'แจ้งซ่อม', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, icon: 'note' },
+        {
+          key: 'accept',
+          label: 'เจ้าหน้าที่รับเรื่อง',
+          by: request.accepted_by_name,
+          date: request.accepted_at,
+          icon: 'user',
+          pendingText: cancelled ? 'ไม่ได้รับเรื่อง' : 'กำลังรอดำเนินการ',
+        },
+        {
+          key: 'done',
+          label: cancelled ? 'ยกเลิกแล้ว' : finished ? 'ซ่อมเสร็จสิ้น' : 'รอซ่อมเสร็จ',
+          by: request.completed_by_name,
+          date: finished ? request.completed_at : null,
+          icon: cancelled ? 'x' : 'tool',
+          tone: cancelled ? 'danger' : undefined,
+          pendingText: 'ยังไม่ถึงขั้นตอนนี้',
+        },
+      ]}
+    />
   )
 }
 
 function MoveoutSteps({ moveout }) {
   return (
     <ProcessSteps
+      actorClassName="admin-actor-inline"
       startDate={moveout.created_at}
       endDate={moveout.completed_at}
       steps={[
@@ -2412,6 +2659,7 @@ function RequestSteps({ request }) {
   const finished = request.status === 'approved' || rejected
   return (
     <ProcessSteps
+      actorClassName="admin-actor-inline"
       startDate={request.created_at}
       endDate={finished ? request.completed_at : null}
       steps={[
@@ -6424,20 +6672,7 @@ function AdminBackupPage() {
   const maintenanceLogsTotalPages = Math.max(1, Math.ceil(maintenanceLogs.total / maintenanceLogs.pageSize))
   const moveoutLogsTotalPages = Math.max(1, Math.ceil(moveoutLogs.total / moveoutLogs.pageSize))
 
-  const [expandedRequestRows, toggleRequestRow, resetRequestRows] = useExpandedRows()
-  useEffect(() => {
-    resetRequestRows()
-  }, [requestLogs.page, activeTab])
 
-  const [expandedMaintenanceRows, toggleMaintenanceRow, resetMaintenanceRows] = useExpandedRows()
-  useEffect(() => {
-    resetMaintenanceRows()
-  }, [maintenanceLogs.page, activeTab])
-
-  const [expandedMoveoutRows, toggleMoveoutRow, resetMoveoutRows] = useExpandedRows()
-  useEffect(() => {
-    resetMoveoutRows()
-  }, [moveoutLogs.page, activeTab])
 
   const openNotification = (notif) => {
     closeNotifPanel()
@@ -7426,7 +7661,7 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'requests' && (
-          <div className="admin-card">
+          <div className="admin-card admin-request-history">
             <div className="admin-card-header">
               <h2>ประวัติคำขอผู้เช่า</h2>
             </div>
@@ -7469,137 +7704,23 @@ function AdminBackupPage() {
 
             {requestLogsError && <div className="alert alert-danger">{requestLogsError}</div>}
 
-            <div className="table-responsive">
-              <table className="table admin-table">
-                <thead>
-                  <tr>
-                    <th>คำขอ</th>
-                    <th>ห้อง</th>
-                    <th>ผู้เช่า</th>
-                    <th>สถานะ</th>
-                    <th className="admin-col-optional">รับเรื่องโดย</th>
-                    <th className="admin-col-optional">เสร็จสิ้นโดย</th>
-                    <th aria-hidden="true" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {requestLogsLoading ? (
-                    <tr>
-                      <td colSpan={7} className="admin-empty">
-                        กำลังโหลดข้อมูล...
-                      </td>
-                    </tr>
-                  ) : requestLogs.items.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="admin-empty">
-                        ไม่พบประวัติคำขอ
-                      </td>
-                    </tr>
-                  ) : (
-                    requestLogs.items.map((request) => (
-                      <Fragment key={request.id}>
-                        <tr
-                          className="moveout-row"
-                          data-admin-focus={`requests-${request.id}`}
-                          tabIndex={0}
-                          aria-label={`ดูรายละเอียดคำขอ${REQUEST_TYPE_LABEL[request.type] || ''} ห้อง ${request.room_number}`}
-                          onClick={() => setRequestDetail(request)}
-                          onKeyDown={(event) => {
-                            if (event.target !== event.currentTarget) return
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              setRequestDetail(request)
-                            }
-                          }}
-                        >
-                          <td>
-                            <div className={`request-cell-type is-${request.type}`}>
-                              <span className="request-cell-type-icon">
-                                <RoomDetailIcon type={request.type === 'renew' ? 'calendar' : request.type === 'move_room' ? 'history' : 'door'} size={16} />
-                              </span>
-                              <div>
-                                <strong>{REQUEST_TYPE_LABEL[request.type] || request.type}</strong>
-                                <span>{formatDateTime(request.created_at)}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            {request.type === 'move_room' ? (
-                              <span className="request-cell-rooms">
-                                <span className="moveout-cell-room">{request.room_number}</span>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                  <line x1="4" y1="12" x2="20" y2="12" />
-                                  <polyline points="14 6 20 12 14 18" />
-                                </svg>
-                                <span className="moveout-cell-room is-target">{request.target_room_number || '-'}</span>
-                              </span>
-                            ) : (
-                              <span className="moveout-cell-room">
-                                <RoomDetailIcon type="home" size={13} />
-                                {request.room_number}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="moveout-cell-person">
-                              <span className="moveout-cell-avatar" aria-hidden="true"><RoomDetailIcon type="user" size={17} /></span>
-                              <div>
-                                <strong>{request.first_name} {request.last_name}</strong>
-                                <span>
-                                  <RoomDetailIcon type="phone" size={11} />
-                                  {request.phone || '-'}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
-                          </td>
-                          <td className="admin-col-optional">
-                            <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
-                          </td>
-                          <td className="admin-col-optional">
-                            <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
-                          </td>
-                          <td className="moveout-cell-chevron" aria-hidden="true">
-                            <span>
-                              ดูรายละเอียด
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M9 18l6-6-6-6" />
-                              </svg>
-                            </span>
-                          </td>
-                        </tr>
-                        <ExpandToggleRow open={expandedRequestRows.has(request.id)} colSpan={7} onClick={() => toggleRequestRow(request.id)} />
-                        <DetailRow
-                          open={expandedRequestRows.has(request.id)}
-                          colSpan={7}
-                          fields={[
-                            { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
-                            { label: 'เสร็จสิ้นโดย', value: <StaffActionCell name={request.completed_by_name} date={request.completed_at} /> },
-                            { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="tenant" request={request} /> },
-                            {
-                              label: 'รายละเอียด',
-                              value: (
-                                <button type="button" className="admin-action-btn is-view" onClick={() => setRequestDetail(request)}>
-                                  ดูรายละเอียดทั้งหมด
-                                </button>
-                              ),
-                            },
-                          ]}
-                        />
-                      </Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {requestLogsLoading ? (
+              <p className="admin-req-empty">กำลังโหลดข้อมูล...</p>
+            ) : requestLogs.items.length === 0 ? (
+              <p className="admin-req-empty">ไม่พบประวัติคำขอ</p>
+            ) : (
+              <div className="admin-req-grid">
+                {requestLogs.items.map((request) => (
+                  <AdminRequestCard key={request.id} request={request} onOpen={setRequestDetail} />
+                ))}
+              </div>
+            )}
             <Pagination page={requestLogs.page} totalPages={requestLogsTotalPages} onChange={(page) => loadRequestLogs(page, requestStatusFilter, requestSearch)} />
           </div>
         )}
 
         {activeTab === 'maintenance' && (
-          <div className="admin-card">
+          <div className="admin-card admin-request-history">
             <div className="admin-card-header">
               <h2>ประวัติแจ้งซ่อม</h2>
             </div>
@@ -7642,147 +7763,17 @@ function AdminBackupPage() {
 
             {maintenanceLogsError && <div className="alert alert-danger">{maintenanceLogsError}</div>}
 
-            <div className="table-responsive">
-              <table className="table admin-table">
-                <thead>
-                  <tr>
-                    <th>รายการแจ้งซ่อม</th>
-                    <th>ห้อง</th>
-                    <th>ผู้แจ้ง</th>
-                    <th>รูปประกอบ</th>
-                    <th>สถานะ</th>
-                    <th className="admin-col-optional">รับเรื่องโดย</th>
-                    <th className="admin-col-optional">เสร็จสิ้นโดย</th>
-                    <th aria-hidden="true" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {maintenanceLogsLoading ? (
-                    <tr>
-                      <td colSpan={8} className="admin-empty">
-                        กำลังโหลดข้อมูล...
-                      </td>
-                    </tr>
-                  ) : maintenanceLogs.items.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="admin-empty">
-                        ไม่พบประวัติแจ้งซ่อม
-                      </td>
-                    </tr>
-                  ) : (
-                    maintenanceLogs.items.map((request) => {
-                      const category = MAINTENANCE_CATEGORY_LABEL[request.category] ? request.category : 'other'
-                      return (
-                      <Fragment key={request.id}>
-                        <tr
-                          className="moveout-row"
-                          data-admin-focus={`maintenance-${request.id}`}
-                          tabIndex={0}
-                          aria-label={`ดูรายละเอียดแจ้งซ่อม ห้อง ${request.room_number}`}
-                          onClick={() => setMaintenanceDetail(request)}
-                          onKeyDown={(event) => {
-                            if (event.target !== event.currentTarget) return
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              setMaintenanceDetail(request)
-                            }
-                          }}
-                        >
-                          <td>
-                            <div className="request-cell-type maintenance-log-cell">
-                              <span className={`request-cell-type-icon room-detail-row-icon category-${category}`}>
-                                <MaintenanceCategoryIcon category={category} size={16} />
-                              </span>
-                              <div>
-                                <strong title={request.description}>{request.description || MAINTENANCE_CATEGORY_LABEL[category]}</strong>
-                                <span>{MAINTENANCE_CATEGORY_LABEL[category]} · {formatDateTime(request.created_at)}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <span className="moveout-cell-room">
-                              <RoomDetailIcon type="home" size={13} />
-                              {request.room_number}
-                            </span>
-                          </td>
-                          <td>
-                            <div className="moveout-cell-person">
-                              <span className="moveout-cell-avatar" aria-hidden="true"><RoomDetailIcon type="user" size={17} /></span>
-                              <div>
-                                <strong>{request.first_name} {request.last_name}</strong>
-                                <span>
-                                  <RoomDetailIcon type="phone" size={11} />
-                                  {request.contact_phone || request.phone || '-'}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            {request.photos?.length ? (
-                              <button
-                                type="button"
-                                className="parcel-thumb"
-                                aria-label={`ดูรูปแจ้งซ่อมห้อง ${request.room_number} ${request.photos.length} รูป`}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  openMaintenancePhotos(request)
-                                }}
-                              >
-                                <UploadImage src={request.photos[0].url} alt="" />
-                                {request.photos.length > 1 && <span>+{request.photos.length - 1}</span>}
-                              </button>
-                            ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
-                          </td>
-                          <td>
-                            <span className={`admin-badge status-${request.status}`}>
-                              {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
-                            </span>
-                          </td>
-                          <td className="admin-col-optional">
-                            <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} />
-                          </td>
-                          <td className="admin-col-optional">
-                            <StaffActionCell name={request.completed_by_name} date={request.completed_at} />
-                          </td>
-                          <td className="moveout-cell-chevron" aria-hidden="true">
-                            <span>
-                              ดูรายละเอียด
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M9 18l6-6-6-6" />
-                              </svg>
-                            </span>
-                          </td>
-                        </tr>
-                        <ExpandToggleRow
-                          open={expandedMaintenanceRows.has(request.id)}
-                          colSpan={8}
-                          onClick={() => toggleMaintenanceRow(request.id)}
-                        />
-                        <DetailRow
-                          open={expandedMaintenanceRows.has(request.id)}
-                          colSpan={8}
-                          fields={[
-                            { label: 'หมวดหมู่', value: <MaintenanceCategoryBadge category={request.category} /> },
-                            { label: 'รับเรื่องโดย', value: <StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /> },
-                            { label: 'เสร็จสิ้นโดย', value: <StaffActionCell name={request.completed_by_name} date={request.completed_at} /> },
-                            { label: 'ขั้นตอนการดำเนินการ', value: <AdminRequestTimeline kind="maintenance" request={request} /> },
-                            {
-                              label: 'รายละเอียด',
-                              value: (
-                                <button type="button" className="admin-action-btn is-view" onClick={() => setMaintenanceDetail(request)}>
-                                  ดูรายละเอียดทั้งหมด
-                                </button>
-                              ),
-                            },
-                          ]}
-                        />
-                      </Fragment>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {maintenanceLogsLoading ? (
+              <p className="admin-req-empty">กำลังโหลดข้อมูล...</p>
+            ) : maintenanceLogs.items.length === 0 ? (
+              <p className="admin-req-empty">ไม่พบประวัติแจ้งซ่อม</p>
+            ) : (
+              <div className="admin-req-grid">
+                {maintenanceLogs.items.map((request) => (
+                  <AdminMaintenanceCard key={request.id} request={request} onOpen={setMaintenanceDetail} onPhotos={openMaintenancePhotos} />
+                ))}
+              </div>
+            )}
             <Pagination
               page={maintenanceLogs.page}
               totalPages={maintenanceLogsTotalPages}
@@ -7815,158 +7806,23 @@ function AdminBackupPage() {
 
             {moveoutLogsError && <div className="alert alert-danger">{moveoutLogsError}</div>}
 
-            <div className="table-responsive">
-              <table className="table admin-table">
-                <thead>
-                  <tr>
-                    <th>ผู้เช่า</th>
-                    <th className="admin-col-optional">บัตรประชาชน</th>
-                    <th>ห้อง</th>
-                    <th className="admin-col-optional">วันที่เข้าพัก</th>
-                    <th>วันที่ย้ายออก</th>
-                    <th>รวมวันที่พัก</th>
-                    <th className="admin-col-optional">ดำเนินการโดย</th>
-                    <th aria-hidden="true" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {moveoutLogsLoading ? (
-                    <tr>
-                      <td colSpan={8} className="admin-empty">
-                        กำลังโหลดข้อมูล...
-                      </td>
-                    </tr>
-                  ) : moveoutLogs.items.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="admin-empty">
-                        ไม่พบรายชื่อผู้ย้ายออก
-                      </td>
-                    </tr>
-                  ) : (
-                    moveoutLogs.items.map((moveout) => {
-                      const stayDays = calcStayDays(moveout.move_in_date, moveout.completed_at)
-                      return (
-                      <Fragment key={moveout.id}>
-                        <tr
-                          className="moveout-row"
-                          tabIndex={0}
-                          aria-label={`ดูรายละเอียดการย้ายออกของ ${moveout.first_name} ${moveout.last_name}`}
-                          onClick={() => openMoveoutDetail(moveout)}
-                          onKeyDown={(event) => {
-                            if (event.target !== event.currentTarget) return
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              openMoveoutDetail(moveout)
-                            }
-                          }}
-                        >
-                          <td>
-                            <div className="moveout-cell-person">
-                              <span className="moveout-cell-avatar" aria-hidden="true"><RoomDetailIcon type="user" size={17} /></span>
-                              <div>
-                                <strong>{moveout.first_name} {moveout.last_name}</strong>
-                                <span>
-                                  <RoomDetailIcon type="phone" size={11} />
-                                  {moveout.phone || '-'}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="admin-col-optional">
-                            <button
-                              type="button"
-                              className="admin-idcard-toggle"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                toggleMoveoutIdCardReveal(moveout.id)
-                              }}
-                            >
-                              {revealedMoveoutIdCards.has(moveout.id) ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
-                            </button>
-                          </td>
-                          <td>
-                            <span className="moveout-cell-room">
-                              <RoomDetailIcon type="home" size={13} />
-                              {moveout.room_number}
-                            </span>
-                          </td>
-                          <td className="admin-col-optional">
-                            <div className="moveout-cell-date">
-                              <strong>{formatDate(moveout.move_in_date)}</strong>
-                              <span>เข้าพัก</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="moveout-cell-date">
-                              <strong>{formatDate(moveout.completed_at)}</strong>
-                              <span>
-                                {moveout.completed_at
-                                  ? `${new Date(moveout.completed_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
-                                  : '-'}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            {stayDays !== null ? (
-                              <span className="room-detail-chip is-stay">
-                                <RoomDetailIcon type="clock" size={11} />
-                                {stayDays} วัน
-                              </span>
-                            ) : (
-                              <span className="admin-cell-empty">-</span>
-                            )}
-                          </td>
-                          <td className="admin-col-optional">
-                            <ActorName name={moveout.completed_by_name} />
-                          </td>
-                          <td className="moveout-cell-chevron" aria-hidden="true">
-                            <span>
-                              ดูรายละเอียด
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M9 18l6-6-6-6" />
-                              </svg>
-                            </span>
-                          </td>
-                        </tr>
-                        <ExpandToggleRow
-                          open={expandedMoveoutRows.has(moveout.id)}
-                          colSpan={8}
-                          onClick={() => toggleMoveoutRow(moveout.id)}
-                        />
-                        <DetailRow
-                          open={expandedMoveoutRows.has(moveout.id)}
-                          colSpan={8}
-                          fields={[
-                            {
-                              label: 'บัตรประชาชน',
-                              value: (
-                                <button type="button" className="admin-idcard-toggle" onClick={() => toggleMoveoutIdCardReveal(moveout.id)}>
-                                  {revealedMoveoutIdCards.has(moveout.id) ? moveout.idcard : '•'.repeat(String(moveout.idcard || '').length || 13)}
-                                </button>
-                              ),
-                            },
-                            { label: 'เบอร์โทร', value: moveout.phone },
-                            { label: 'วันที่เข้าพัก', value: formatDate(moveout.move_in_date) },
-                            { label: 'รวมวันที่พัก', value: stayDays !== null ? `${stayDays} วัน` : '-' },
-                            { label: 'ดำเนินการโดย', value: <ActorName name={moveout.completed_by_name} /> },
-                            ...(moveout.note ? [{ label: 'หมายเหตุ', value: moveout.note }] : []),
-                            {
-                              label: 'รายละเอียด',
-                              value: (
-                                <button type="button" className="admin-action-btn is-view" onClick={() => openMoveoutDetail(moveout)}>
-                                  ดูรายละเอียดทั้งหมด
-                                </button>
-                              ),
-                            },
-                          ]}
-                        />
-                      </Fragment>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {moveoutLogsLoading ? (
+              <p className="admin-req-empty">กำลังโหลดข้อมูล...</p>
+            ) : moveoutLogs.items.length === 0 ? (
+              <p className="admin-req-empty">ไม่พบรายชื่อผู้ย้ายออก</p>
+            ) : (
+              <div className="admin-req-grid">
+                {moveoutLogs.items.map((moveout) => (
+                  <AdminMoveoutCard
+                    key={moveout.id}
+                    moveout={moveout}
+                    idcardRevealed={revealedMoveoutIdCards.has(moveout.id)}
+                    onToggleIdCard={() => toggleMoveoutIdCardReveal(moveout.id)}
+                    onOpen={openMoveoutDetail}
+                  />
+                ))}
+              </div>
+            )}
             <Pagination
               page={moveoutLogs.page}
               totalPages={moveoutLogsTotalPages}
