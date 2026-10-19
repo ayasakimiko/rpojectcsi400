@@ -83,6 +83,11 @@ const VARIANT_CLASSES = {
     header: 'dashboard-card-header',
     button: 'dashboard-action-btn',
   },
+  owner: {
+    card: 'owner-panel',
+    header: 'owner-panel-header',
+    button: 'owner-primary-btn',
+  },
 }
 
 function formatAnnouncementDate(value) {

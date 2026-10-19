@@ -15,6 +15,7 @@ import {
 } from "../middleware/validation.js";
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
+import announcementRouter from "./AnnouncementRouter.js";
 
 const router = Router();
 
@@ -22,6 +23,7 @@ const requireActiveOwner = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireOwnerRole, requireActiveOwner);
 router.use("/expenses", expenseRouter);
+router.use("/announcements", announcementRouter);
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
@@ -57,50 +59,6 @@ function buildUpdate(allowedColumns, body) {
 }
 
 const PAYMENT_LOG_PAGE_SIZE = 10;
-
-router.get("/logs/audit", async (req, res) => {
-  try {
-    const pool = getPool();
-    const page = parsePage(req.query.page);
-    const pageSize = 20;
-    const offset = (page - 1) * pageSize;
-    const conditions = [];
-    const params = [];
-    const roles = ["Customer", "Staff", "Admin", "Owner"];
-    if (roles.includes(req.query.role)) {
-      conditions.push("al.actor_role = ?");
-      params.push(req.query.role);
-    }
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.query.method)) {
-      conditions.push("al.method = ?");
-      params.push(req.query.method);
-    }
-    const search = parseSearch(req.query.search);
-    if (search) {
-      conditions.push("(al.endpoint LIKE ? OR al.actor_role LIKE ? OR CAST(al.actor_id AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR CONCAT(s.first_name, ' ', s.last_name) LIKE ? OR CONCAT(a.first_name, ' ', a.last_name) LIKE ? OR CONCAT(o.first_name, ' ', o.last_name) LIKE ?)");
-      params.push(...Array(7).fill(`%${search}%`));
-    }
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const joins = `
-      LEFT JOIN Customer c ON al.actor_role = 'Customer' AND c.id = al.actor_id
-      LEFT JOIN Staff s ON al.actor_role = 'Staff' AND s.id = al.actor_id
-      LEFT JOIN Admin a ON al.actor_role = 'Admin' AND a.id = al.actor_id
-      LEFT JOIN Owner o ON al.actor_role = 'Owner' AND o.id = al.actor_id`;
-    const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM AuditLog al ${joins} ${whereClause}`, params);
-    const [logs] = await pool.query(
-      `SELECT al.id, al.actor_id, al.actor_role, al.method, al.endpoint, al.status_code, al.ip_address, al.created_at,
-              COALESCE(CONCAT(c.first_name, ' ', c.last_name), CONCAT(s.first_name, ' ', s.last_name),
-                       CONCAT(a.first_name, ' ', a.last_name), CONCAT(o.first_name, ' ', o.last_name)) AS actor_name
-       FROM AuditLog al ${joins} ${whereClause}
-       ORDER BY al.created_at DESC, al.id DESC LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
-    return res.json({ logs, total: countRows[0].total, page, pageSize });
-  } catch (error) {
-    console.error("Owner fetch audit log error:", error);
-    return res.status(500).json({ message: "ไม่สามารถโหลดประวัติการใช้งานได้" });
-  }
-});
 
 function getSelectedMonthRange(query) {
   const yearMonth = parseYearMonthQuery(query);
