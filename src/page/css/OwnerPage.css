@@ -4759,6 +4759,10 @@
   text-align: center;
 }
 
+.owner-rd-history .owner-rd-payments-empty {
+  min-height: 240px;
+}
+
 .owner-rd-payments-empty.is-compact {
   min-height: 70px;
   padding: 12px;
@@ -5208,6 +5212,22 @@
 
 .owner-rd-modal {
   width: min(920px, calc(100vw - 32px));
+  height: min(900px, calc(100vh - 36px));
+  max-height: calc(100vh - 36px);
+}
+
+.owner-rd-modal > .owner-modal-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.owner-rd-modal .owner-rd-history,
+.owner-rd-modal .owner-rd-payments {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .owner-roomlist-modal {

@@ -900,16 +900,16 @@ function getAuthHeaders() {
 const MODAL_CLOSE_ANIMATION_MS = 60
 
 function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
-  const [prevValue, setPrevValue] = useState(value)
+  const prevValue = useRef(value)
   const [closingValue, setClosingValue] = useState(null)
 
-  if (value !== prevValue) {
-    if (!value && prevValue) {
-      setClosingValue(prevValue)
+  if (value !== prevValue.current) {
+    if (!value && prevValue.current) {
+      setClosingValue(prevValue.current)
     } else if (value && closingValue) {
       setClosingValue(null)
     }
-    setPrevValue(value)
+    prevValue.current = value
   }
 
   useEffect(() => {
@@ -993,6 +993,8 @@ function OwnerMain() {
   })
   const [roomDetail, setRoomDetail] = useState(null)
   const [isRoomDetailLoading, setIsRoomDetailLoading] = useState(false)
+  const [isRoomHistoryLoading, setIsRoomHistoryLoading] = useState(false)
+  const roomDetailRequestIdRef = useRef(0)
   const [roomListFilter, setRoomListFilter] = useState(null)
   const [roomListSearch, setRoomListSearch] = useState('')
   const [roomDetailOpenedAt, setRoomDetailOpenedAt] = useState(0)
@@ -1627,27 +1629,44 @@ function OwnerMain() {
   }
 
   const handleRoomClick = async (room) => {
+    const requestId = ++roomDetailRequestIdRef.current
     setRoomDetailOpenedAt(new Date().getTime())
     setRoomDetail({ room, tenant: null, payments: [] })
     setIsRoomDetailLoading(true)
+    setIsRoomHistoryLoading(true)
+    const historyRequest = axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: getAuthHeaders() }).catch(() => null)
     try {
-      const [{ data }, historyResponse] = await Promise.all([
-        axios.get(`/api/owner/rooms/${room.room_number}`, { headers: getAuthHeaders() }),
-        axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: getAuthHeaders() }).catch(() => null),
-      ])
+      const { data } = await axios.get(`/api/owner/rooms/${room.room_number}`, { headers: getAuthHeaders() })
+      if (requestId !== roomDetailRequestIdRef.current) return
+      setRoomDetail(data)
+      setIsRoomDetailLoading(false)
+
+      const historyResponse = await historyRequest
+      if (requestId !== roomDetailRequestIdRef.current) return
       const historicalPayments = (historyResponse?.data?.rentalHistory || []).flatMap((booking) =>
         (booking.payments || []).map((payment) => ({
           ...payment,
           tenantName: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
         })),
       )
-      setRoomDetail({ ...data, payments: historicalPayments.length ? historicalPayments : data.payments || [] })
+      if (historicalPayments.length) {
+        setRoomDetail((current) => current ? { ...current, payments: historicalPayments } : current)
+      }
+      setIsRoomHistoryLoading(false)
     } catch (error) {
+      if (requestId !== roomDetailRequestIdRef.current) return
       setRoomDetail(null)
       setMessage('danger', error.response?.data?.message || 'ไม่สามารถโหลดรายละเอียดห้องได้')
-    } finally {
       setIsRoomDetailLoading(false)
+      setIsRoomHistoryLoading(false)
     }
+  }
+
+  const closeRoomDetail = () => {
+    roomDetailRequestIdRef.current += 1
+    setRoomDetail(null)
+    setIsRoomDetailLoading(false)
+    setIsRoomHistoryLoading(false)
   }
 
   const getGroupLoaders = (filters) => ({
@@ -4075,14 +4094,14 @@ function OwnerMain() {
                 { key: 'deposit', tone: 'violet', label: 'เงินมัดจำ', value: detailTenant ? `฿${formatCurrency(detailTenant.deposit_amount)}` : '-' },
               ]
               return (
-                <div className={`owner-modal-backdrop${isRoomDetailClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setRoomDetail(null)}>
+                <div className={`owner-modal-backdrop${isRoomDetailClosing ? ' is-closing' : ''}`} role="presentation" onClick={closeRoomDetail}>
                   <section className={`owner-modal owner-rd-modal${isRoomDetailClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="room-detail-title" onClick={(event) => event.stopPropagation()}>
                     <div className="owner-modal-header">
                       <div>
                         <h3 id="room-detail-title">รายละเอียดห้องพัก</h3>
                         <p className="owner-modal-subtext">ข้อมูลผู้เช่า สัญญา และประวัติการชำระเงิน</p>
                       </div>
-                      <button type="button" className="owner-modal-close" onClick={() => setRoomDetail(null)} aria-label="ปิดรายละเอียด">
+                      <button type="button" className="owner-modal-close" onClick={closeRoomDetail} aria-label="ปิดรายละเอียด">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
                           <line x1="6" y1="6" x2="18" y2="18" />
                           <line x1="18" y1="6" x2="6" y2="18" />
@@ -4224,7 +4243,9 @@ function OwnerMain() {
                               </span>
                             </div>
                             <div className="owner-rd-payments">
-                              {displayRoomDetail.payments?.length ? (
+                              {isRoomHistoryLoading ? (
+                                <div className="owner-rd-payments-empty">กำลังโหลดประวัติการชำระเงิน...</div>
+                              ) : displayRoomDetail.payments?.length ? (
                                 recentPaymentHistory.map((payment) => {
                                   const tone = getRoomPaymentTone(payment.status)
                                   return (
