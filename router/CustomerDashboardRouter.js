@@ -390,16 +390,16 @@ router.get("/me", async (req, res) => {
       [parcels],
     ] = await Promise.all([
       pool.query(
-        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
          FROM Room WHERE room_number = ?`,
         [customer.room_number],
       ),
       pool.query(
-        `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price
+        `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price
          FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
       ),
       pool.query(
-        `SELECT b.id AS booking_id, r.room_number, b.created_at,
+        `SELECT b.id AS booking_id, r.room_number, r.water_unit_price, b.created_at,
                 COALESCE(b.rental_start_date, r.rental_start_date) AS rental_start_date,
                 COALESCE(b.rental_end_date, r.rental_end_date) AS rental_end_date
          FROM Booking b
@@ -439,7 +439,7 @@ router.get("/me", async (req, res) => {
     const [[payments], maintenanceWithPhotos, parcelsWithPhotos] = await Promise.all([
       bookingIds.length > 0
         ? pool.query(
-            `SELECT id, booking_id, amount, payment_date, status, type, note, slip_path, created_at
+            `SELECT id, booking_id, amount, payment_date, status, type, electricity_units, water_units, note, slip_path, created_at
              FROM Payment
              WHERE booking_id IN (?)
              ORDER BY payment_date DESC, created_at DESC`,

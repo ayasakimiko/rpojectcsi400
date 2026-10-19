@@ -5965,6 +5965,8 @@ function StaffMain() {
     electricity_mode: 'units',
     electricity_units: '',
     electricity_amount: '',
+    water_mode: 'units',
+    water_units: '',
     water_amount: '',
   })
   const [utilitySubmitting, setUtilitySubmitting] = useState(false)
@@ -7082,6 +7084,8 @@ function StaffMain() {
       electricity_mode: 'units',
       electricity_units: '',
       electricity_amount: '',
+      water_mode: 'units',
+      water_units: '',
       water_amount: room.water_price ? String(room.water_price) : '',
     })
     setUtilityError('')
@@ -7097,7 +7101,8 @@ function StaffMain() {
         {
           electricity_units: utilityForm.electricity_mode === 'units' ? utilityForm.electricity_units : '',
           electricity_amount: utilityForm.electricity_mode === 'amount' ? utilityForm.electricity_amount : '',
-          water_amount: utilityForm.water_amount,
+          water_units: utilityForm.water_mode === 'units' ? utilityForm.water_units : '',
+          water_amount: utilityForm.water_mode === 'amount' ? utilityForm.water_amount : '',
         },
         { headers: authHeaders() },
       )
@@ -10985,7 +10990,13 @@ function StaffMain() {
               : Number.isFinite(directAmount) && directAmount > 0
                 ? directAmount
                 : 0
-            const waterAmount = Number(utilityForm.water_amount)
+            const waterUnitPrice = Number(utilityRoom.water_unit_price) || 0
+            const isWaterUnitsMode = utilityForm.water_mode === 'units'
+            const waterUnits = Number(utilityForm.water_units)
+            const directWaterAmount = Number(utilityForm.water_amount)
+            const waterAmount = isWaterUnitsMode
+              ? Number.isFinite(waterUnits) && waterUnits > 0 ? Math.round(waterUnits * waterUnitPrice * 100) / 100 : 0
+              : Number.isFinite(directWaterAmount) && directWaterAmount > 0 ? directWaterAmount : 0
             const total = electricityAmount + (Number.isFinite(waterAmount) && waterAmount > 0 ? waterAmount : 0)
             return (
               <div className="staff-confirm-body">
@@ -11059,20 +11070,20 @@ function StaffMain() {
                 </div>
 
                 <div className="staff-form-field">
-                  <label className="staff-form-label" htmlFor="utility-water-amount">
-                    ค่าน้ำ (บาท)
+                  <label className="staff-form-label" htmlFor="utility-water-input">
+                    {isWaterUnitsMode ? `ค่าน้ำ (฿${formatCurrency(waterUnitPrice)}/หน่วย)` : 'ค่าน้ำ (บาท)'}
                   </label>
-                  <input
-                    id="utility-water-amount"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    className="staff-form-input no-spinner"
-                    placeholder="เช่น 100"
-                    value={utilityForm.water_amount}
-                    onChange={(event) => setUtilityForm((prev) => ({ ...prev, water_amount: event.target.value }))}
-                  />
+                  <div className="staff-form-mode-switch" role="group" aria-label="วิธีคิดค่าน้ำ">
+                    <button type="button" className={`staff-form-mode-btn${isWaterUnitsMode ? ' is-active' : ''}`} onClick={() => setUtilityForm((prev) => ({ ...prev, water_mode: 'units' }))}>ตามหน่วย</button>
+                    <button type="button" className={`staff-form-mode-btn${!isWaterUnitsMode ? ' is-active' : ''}`} onClick={() => setUtilityForm((prev) => ({ ...prev, water_mode: 'amount' }))}>ระบุยอดเงิน</button>
+                  </div>
+                  {isWaterUnitsMode ? (
+                    <input id="utility-water-input" type="number" inputMode="decimal" min="0" step="0.01" className="staff-form-input no-spinner" placeholder="จำนวนหน่วยน้ำ" value={utilityForm.water_units} onChange={(event) => setUtilityForm((prev) => ({ ...prev, water_units: event.target.value }))} />
+                  ) : (
+                    <input id="utility-water-input" type="number" inputMode="decimal" min="0" step="0.01" className="staff-form-input no-spinner" placeholder="ยอดค่าน้ำ" value={utilityForm.water_amount} onChange={(event) => setUtilityForm((prev) => ({ ...prev, water_amount: event.target.value }))} />
+                  )}
+                  {isWaterUnitsMode && waterAmount > 0 && <span className="staff-form-hint">คิดเป็น ฿{formatCurrency(waterAmount)}</span>}
+                  {isWaterUnitsMode && waterUnitPrice <= 0 && <span className="staff-form-hint">กรุณากำหนดราคาน้ำต่อหน่วยก่อนส่งบิล</span>}
                 </div>
 
                 {total > 0 && (

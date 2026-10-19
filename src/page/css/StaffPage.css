@@ -8447,11 +8447,12 @@ tr.staff-focus-row.is-fading > td {
 .staff-ic-card {
   --incident-tone: #d97706;
   --incident-soft: #fffbeb;
+  --incident-border: #fde68a;
   position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #e3ecf8;
+  border: 1px solid #c9dcfb;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 4px 14px rgba(15, 43, 82, 0.05);
@@ -8471,17 +8472,21 @@ tr.staff-focus-row.is-fading > td {
 .staff-ic-card.is-pending.is-urgent {
   --incident-tone: #dc2626;
   --incident-soft: #fef2f2;
+  --incident-border: #fecaca;
   border-color: #fecaca;
 }
 
 .staff-ic-card.is-reviewed {
   --incident-tone: #16a34a;
   --incident-soft: #f0fdf4;
+  --incident-border: #bbf7d0;
+  border-color: #bbf7d0;
 }
 
 .staff-ic-card.is-cancelled {
   --incident-tone: #94a3b8;
   --incident-soft: #f8fafc;
+  --incident-border: #e2e8f0;
   background: #fbfcfd;
 }
 
@@ -8489,6 +8494,10 @@ tr.staff-focus-row.is-fading > td {
   border-color: #c9dcfb;
   box-shadow: 0 10px 24px rgba(15, 43, 82, 0.1);
   transform: translateY(-1px);
+}
+
+.staff-ic-card.is-reviewed:hover {
+  border-color: #86efac;
 }
 
 .staff-ic-main {
@@ -8516,6 +8525,7 @@ tr.staff-focus-row.is-fading > td {
   width: 38px;
   height: 38px;
   place-items: center;
+  border: 1px solid var(--incident-border, #fde68a);
   border-radius: 11px;
   background: var(--incident-soft, #fffbeb);
   color: var(--incident-tone, #d97706);
@@ -8563,6 +8573,7 @@ tr.staff-focus-row.is-fading > td {
 }
 
 .staff-ic-status.is-reviewed {
+  border: 1px solid #bbf7d0;
   background: #dcfce7;
   color: #15803d;
 }
@@ -8982,6 +8993,7 @@ tr.staff-focus-row.is-fading > td {
 }
 
 .staff-ic-card.is-rejected .staff-ic-icon {
+  border-color: #fecaca;
   background: #fee2e2;
   color: #dc2626;
 }

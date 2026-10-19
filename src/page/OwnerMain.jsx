@@ -1,13 +1,142 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import axios from 'axios'
 import { DormInfoSettings } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
-import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, LabelList } from 'recharts'
 import './css/OwnerPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
+
+const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '' }
+const headers = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+
+function OwnerPaymentSettings() {
+  const id = useId()
+  const [saved, setSaved] = useState(null)
+  const [draft, setDraft] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    axios.get('/api/owner/payment-settings', { headers: headers(), signal: controller.signal })
+      .then(({ data }) => { setSaved(data.settings); setDraft(data.settings) })
+      .catch((error) => { if (!axios.isCancel(error)) setMessage({ error: true, text: error.response?.data?.message || 'โหลดข้อมูลรับโอนไม่สำเร็จ' }) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [])
+
+  const change = (event) => {
+    setDraft({ ...draft, [event.target.name]: event.target.value })
+    setMessage(null)
+  }
+  const save = async (event) => {
+    event.preventDefault()
+    if (!draft || saving) return
+    setSaving(true)
+    setMessage(null)
+    try {
+      const { data } = await axios.put('/api/owner/payment-settings', draft, { headers: headers() })
+      setSaved(data.settings)
+      setDraft(data.settings)
+      setMessage({ error: false, text: data.message })
+    } catch (error) {
+      setMessage({ error: true, text: error.response?.data?.message || 'บันทึกข้อมูลรับโอนไม่สำเร็จ' })
+    } finally {
+      setSaving(false)
+    }
+  }
+  const changed = draft && Object.keys(EMPTY).some((field) => draft[field] !== saved?.[field])
+  return (
+    <section className="owner-payment-settings owner-panel" aria-labelledby={`${id}-title`}>
+      <div className="owner-panel-header">
+        <div><h3 id={`${id}-title`}>ช่องทางรับโอน</h3><p>กำหนดหมายเลข PromptPay และบัญชีธนาคารของหอพัก</p></div>
+      </div>
+      {loading && <p role="status">กำลังโหลดข้อมูล...</p>}
+      {message && <p className={message.error ? 'owner-payment-error' : 'owner-payment-success'} role={message.error ? 'alert' : 'status'}>{message.text}</p>}
+      {!loading && draft && (
+        <form onSubmit={save} className="owner-payment-form">
+          <label htmlFor={`${id}-promptpay`}>หมายเลข PromptPay
+            <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={draft.promptpay_id} onChange={change} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก" />
+          </label>
+          <label htmlFor={`${id}-bank`}>ชื่อธนาคาร
+            <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={draft.bank_name} onChange={change} placeholder="ชื่อธนาคาร" />
+          </label>
+          <label htmlFor={`${id}-account`}>เลขบัญชี
+            <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={draft.bank_account_no} onChange={change} placeholder="เลขบัญชีธนาคาร" />
+          </label>
+          <div className="owner-payment-actions">
+            <button type="button" disabled={!changed || saving} onClick={() => { setDraft(saved); setMessage(null) }}>ยกเลิกการแก้ไข</button>
+            <button type="submit" disabled={!changed || saving}>{saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลรับโอน'}</button>
+          </div>
+        </form>
+      )}
+    </section>
+  )
+}
+
+const currency = (value) => Number(value || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 })
+
+function OwnerUtilityReceipts({ from, to }) {
+  const [result, setResult] = useState({ trends: [], granularity: 'month' })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    const controller = new AbortController()
+    axios.get('/api/owner/utility-receipts', {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      params: { from: from || undefined, to: to || undefined },
+      signal: controller.signal,
+    }).then(({ data }) => { setResult(data); setError('') })
+      .catch((requestError) => { if (!axios.isCancel(requestError)) setError(requestError.response?.data?.message || 'โหลดรายรับค่าน้ำค่าไฟไม่สำเร็จ') })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [from, to])
+
+  const totals = result.trends.reduce((sum, row) => ({
+    water: sum.water + row.water,
+    electricity: sum.electricity + row.electricity,
+    waterUnits: sum.waterUnits + (row.waterUnits || 0),
+    electricityUnits: sum.electricityUnits + (row.electricityUnits || 0),
+  }), { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 })
+  return (
+    <section className="owner-panel owner-utility-receipts" aria-label="รายรับค่าน้ำค่าไฟ">
+      <div className="owner-panel-header">
+        <div><h3>รายรับค่าน้ำและค่าไฟ</h3><p>ยอดที่ชำระแล้วในช่วงวันที่เลือก</p></div>
+      </div>
+      {error && <p className="owner-utility-receipts-error" role="alert">{error}</p>}
+      {loading ? <p role="status">กำลังโหลดข้อมูล...</p> : result.trends.length ? (
+        <>
+          <div className="owner-utility-receipts-summary">
+            <span>ค่าน้ำ <strong>฿{currency(totals.water)}</strong></span>
+            <span>ค่าไฟ <strong>฿{currency(totals.electricity)}</strong></span>
+            <span>หน่วยน้ำ <strong>{currency(totals.waterUnits)}</strong></span>
+            <span>หน่วยไฟ <strong>{currency(totals.electricityUnits)}</strong></span>
+          </div>
+          <div className="owner-utility-receipts-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={result.trends} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="amount" tick={{ fontSize: 11 }} tickFormatter={currency} />
+                <YAxis yAxisId="units" orientation="right" tick={{ fontSize: 11 }} tickFormatter={currency} />
+                <Tooltip formatter={(value, name) => [name.includes('หน่วย') ? `${currency(value)} หน่วย` : `฿${currency(value)}`, name]} />
+                <Legend />
+                <Line yAxisId="amount" type="monotone" dataKey="water" name="ค่าน้ำ" stroke="#0891b2" strokeWidth={2} />
+                <Line yAxisId="amount" type="monotone" dataKey="electricity" name="ค่าไฟ" stroke="#d97706" strokeWidth={2} />
+                <Line yAxisId="units" type="monotone" dataKey="waterUnits" name="หน่วยน้ำ" stroke="#16a34a" strokeWidth={2} connectNulls />
+                <Line yAxisId="units" type="monotone" dataKey="electricityUnits" name="หน่วยไฟ" stroke="#7c3aed" strokeWidth={2} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      ) : !error && <p className="owner-empty">ยังไม่มีรายการค่าน้ำหรือค่าไฟที่รับชำระในช่วงนี้</p>}
+    </section>
+  )
+}
 
 const ROOM_OCCUPANCY_COLORS = { occupied: '#2563eb', vacant: '#10b981' }
 
@@ -1196,7 +1325,12 @@ function OwnerMain() {
           ))}
         </ul>
 
-        {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/owner/dorm-info" />}
+        {activeTab === 'dorm-info' && (
+          <>
+            <DormInfoSettings apiBase="/api/owner/dorm-info" />
+            <OwnerPaymentSettings />
+          </>
+        )}
 
         {!isLoading && activeTab === 'rooms' && (
           <div className="owner-filter-presets owner-filter-presets-top">
@@ -1982,6 +2116,8 @@ function OwnerMain() {
                 <div className="owner-empty">ยังไม่มีข้อมูลแนวโน้มย้อนหลัง</div>
               )}
             </section>
+
+            <OwnerUtilityReceipts from={paymentFilter.from} to={paymentFilter.to} />
 
             <section className="owner-shell-grid">
               <div className="owner-panel">

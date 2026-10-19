@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS Room (
     bathroom BOOLEAN DEFAULT FALSE,
     cctv BOOLEAN DEFAULT FALSE,
     electricity_unit_price DECIMAL(10,2) NOT NULL DEFAULT 8.00 CHECK (electricity_unit_price BETWEEN 0 AND 99.99),
+    water_unit_price DECIMAL(10,2) NOT NULL DEFAULT 100.00 CHECK (water_unit_price BETWEEN 0 AND 999.99),
     water_price DECIMAL(10,2) NOT NULL DEFAULT 100.00 CHECK (water_price BETWEEN 0 AND 999.99),
     
     rental_duration_months INT UNSIGNED,
@@ -98,6 +99,8 @@ CREATE TABLE IF NOT EXISTS Payment (
     payment_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     type VARCHAR(20) NOT NULL DEFAULT 'rent',
+    electricity_units DECIMAL(10,2) NULL,
+    water_units DECIMAL(10,2) NULL,
     note VARCHAR(255),
     slip_path VARCHAR(255),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -738,6 +741,9 @@ DEALLOCATE PREPARE schema_upgrade;
 CREATE TABLE IF NOT EXISTS DormConfig (
     id INT PRIMARY KEY DEFAULT 1,
     dorm_name VARCHAR(255) NOT NULL DEFAULT 'หอพักใจ',
+    promptpay_id VARCHAR(50) NULL,
+    bank_name VARCHAR(100) NULL,
+    bank_account_no VARCHAR(50) NULL,
     dorm_rules TEXT NULL,
     gate_close_time VARCHAR(5) NULL,
     caretaker_phone VARCHAR(20) NULL,
@@ -787,3 +793,58 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 ALTER TABLE `Customer` ALTER COLUMN `dorm_info_acknowledged_at` SET DEFAULT NULL;
+
+-- ข้อมูลค่าน้ำตามหน่วยและช่องทางรับโอนจาก OwnerC โดยไม่แก้ข้อมูลเดิม
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'water_unit_price'),
+    'SELECT 1',
+    'ALTER TABLE `Room` ADD COLUMN `water_unit_price` DECIMAL(10,2) NOT NULL DEFAULT 100.00 AFTER `electricity_unit_price`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND COLUMN_NAME = 'electricity_units'),
+    'SELECT 1',
+    'ALTER TABLE `Payment` ADD COLUMN `electricity_units` DECIMAL(10,2) NULL AFTER `type`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND COLUMN_NAME = 'water_units'),
+    'SELECT 1',
+    'ALTER TABLE `Payment` ADD COLUMN `water_units` DECIMAL(10,2) NULL AFTER `electricity_units`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'promptpay_id'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `promptpay_id` VARCHAR(50) NULL AFTER `dorm_name`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'bank_name'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `bank_name` VARCHAR(100) NULL AFTER `promptpay_id`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'bank_account_no'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `bank_account_no` VARCHAR(50) NULL AFTER `bank_name`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;

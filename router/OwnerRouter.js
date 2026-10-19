@@ -25,6 +25,46 @@ const requireActiveOwner = createRequireActiveAccount(getPool);
 router.use(authenticate, requireOwnerRole, requireActiveOwner);
 router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
+
+// ช่องทางรับโอนของหอพัก จัดการได้เฉพาะ Owner หลังตรวจสอบบัญชีแล้ว
+const PAYMENT_FIELDS = ["promptpay_id", "bank_name", "bank_account_no"];
+router.get("/payment-settings", async (_req, res) => {
+  try {
+    res.set("Cache-Control", "private, no-store");
+    const [rows] = await getPool().query(`SELECT ${PAYMENT_FIELDS.join(", ")} FROM DormConfig WHERE id = 1`);
+    return res.json({ settings: Object.fromEntries(PAYMENT_FIELDS.map((field) => [field, rows[0]?.[field] ?? ""])) });
+  } catch (error) {
+    console.error("Owner payment settings read error:", error.code);
+    return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลรับโอนได้" });
+  }
+});
+
+router.put("/payment-settings", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  const body = req.body;
+  if (!body || typeof body !== "object" || Array.isArray(body) || PAYMENT_FIELDS.some((field) => typeof body[field] !== "string")) {
+    return res.status(400).json({ message: "ข้อมูลรับโอนไม่ถูกต้อง" });
+  }
+  const settings = Object.fromEntries(PAYMENT_FIELDS.map((field) => [field, body[field].trim()]));
+  if (settings.promptpay_id && !/^(?:0\d{9}|\d{13})$/.test(settings.promptpay_id)) {
+    return res.status(400).json({ message: "PromptPay ต้องเป็นเบอร์มือถือ 10 หลักหรือเลขบัตรประชาชน 13 หลัก" });
+  }
+  if (settings.bank_name.length > 100 || settings.bank_account_no.length > 50 ||
+      (settings.bank_account_no && !/^[\d -]+$/.test(settings.bank_account_no))) {
+    return res.status(400).json({ message: "ชื่อธนาคารหรือเลขบัญชีไม่ถูกต้อง" });
+  }
+  try {
+    await getPool().query(
+      `INSERT INTO DormConfig (id, ${PAYMENT_FIELDS.join(", ")}) VALUES (1, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE ${PAYMENT_FIELDS.map((field) => `${field} = ?`).join(", ")}`,
+      [...PAYMENT_FIELDS.map((field) => settings[field]), ...PAYMENT_FIELDS.map((field) => settings[field])],
+    );
+    return res.json({ message: "บันทึกข้อมูลรับโอนแล้ว", settings });
+  } catch (error) {
+    console.error("Owner payment settings save error:", error.code);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกข้อมูลรับโอนได้" });
+  }
+});
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
@@ -317,6 +357,45 @@ router.get("/income", async (req, res) => {
 });
 
 // คำนวณข้อมูลแนวโน้มรายรับ รายจ่าย และการเข้าพักสำหรับกราฟ
+router.get("/utility-receipts", async (req, res) => {
+  try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+    const to = req.query.to || toDateKey(new Date());
+    const from = req.query.from || toDateKey(new Date(new Date(`${to}T00:00:00`).getFullYear(), new Date(`${to}T00:00:00`).getMonth() - 5, 1));
+    if (from > to) return res.status(400).json({ message: "ช่วงวันที่ไม่ถูกต้อง" });
+    const daySpan = Math.round((new Date(`${to}T00:00:00`) - new Date(`${from}T00:00:00`)) / 86400000) + 1;
+    const granularity = daySpan <= 31 ? "day" : "month";
+    const format = granularity === "day" ? "%Y-%m-%d" : "%Y-%m";
+    const [rows] = await getPool().query(
+      `SELECT DATE_FORMAT(p.payment_date, '${format}') AS period,
+              SUM(CASE WHEN p.type = 'water' THEN p.amount ELSE 0 END) AS water,
+              SUM(CASE WHEN p.type = 'electricity' THEN p.amount ELSE 0 END) AS electricity,
+              SUM(CASE WHEN p.type = 'water' THEN p.water_units ELSE NULL END) AS waterUnits,
+              SUM(CASE WHEN p.type = 'electricity' THEN p.electricity_units ELSE NULL END) AS electricityUnits,
+              COUNT(*) AS paymentCount
+       FROM Payment p WHERE p.status = 'paid' AND p.type IN ('water', 'electricity')
+         AND p.payment_date BETWEEN ? AND ?
+       GROUP BY period ORDER BY period`,
+      [from, to],
+    );
+    return res.json({
+      granularity,
+      trends: rows.map((row) => ({
+        period: row.period,
+        water: Number(row.water || 0),
+        electricity: Number(row.electricity || 0),
+        waterUnits: row.waterUnits === null ? null : Number(row.waterUnits),
+        electricityUnits: row.electricityUnits === null ? null : Number(row.electricityUnits),
+        paymentCount: Number(row.paymentCount),
+      })),
+    });
+  } catch (error) {
+    console.error("Owner utility receipts error:", error.code);
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายรับค่าน้ำค่าไฟได้" });
+  }
+});
+
 function toDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

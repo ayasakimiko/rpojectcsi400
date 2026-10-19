@@ -523,7 +523,7 @@ router.get("/rooms", async (req, res) => {
       `SELECT
          r.id, r.room_number, r.is_booked, r.price,
          r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months,
-         r.electricity_unit_price, r.water_price,
+         r.electricity_unit_price, r.water_unit_price, r.water_price,
          c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM Room r
        LEFT JOIN Customer c ON c.id = (
@@ -577,6 +577,7 @@ router.get("/rooms", async (req, res) => {
         is_booked: room.is_booked,
         price: room.price,
         electricity_unit_price: room.electricity_unit_price,
+        water_unit_price: room.water_unit_price,
         water_price: room.water_price,
         rental_start_date: room.rental_start_date,
         rental_end_date: room.rental_end_date,
@@ -750,7 +751,7 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
     }
 
     const [roomRows] = await connection.query(
-      `SELECT is_booked, electricity_unit_price, water_price FROM Room WHERE room_number = ? FOR UPDATE`,
+      `SELECT is_booked, electricity_unit_price, water_unit_price, water_price FROM Room WHERE room_number = ? FOR UPDATE`,
       [roomNumberValue],
     );
     const room = roomRows[0];
@@ -774,11 +775,19 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
       await connection.rollback();
       return res.status(400).json({ message: error });
     }
-    const { electricityUnits, electricityAmount: electricityAmountInput, waterAmount } = value;
+    const { electricityUnits, electricityAmount: electricityAmountInput, waterAmount: waterAmountInput, waterUnits } = value;
     const wantsElectricityByUnits = electricityUnits !== null;
     const wantsElectricityByAmount = electricityAmountInput !== null;
     const wantsElectricity = wantsElectricityByUnits || wantsElectricityByAmount;
-    const wantsWater = waterAmount !== null;
+    const wantsWater = waterUnits !== null || waterAmountInput !== null;
+    const waterUnitPrice = Number(room.water_unit_price) || 0;
+    if (waterUnits !== null && waterUnitPrice <= 0) {
+      await connection.rollback();
+      return res.status(400).json({ message: "กรุณากำหนดราคาน้ำต่อหน่วยของห้องนี้ก่อนส่งบิล" });
+    }
+    const waterAmount = waterUnits !== null
+      ? Math.round(waterUnits * waterUnitPrice * 100) / 100
+      : waterAmountInput;
 
     const [existingPending] = await connection.query(
       `SELECT type FROM Payment
@@ -802,10 +811,11 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
       const unitPrice = Number(room.electricity_unit_price) || 0;
       const amount = Math.round(electricityUnits * unitPrice * 100) / 100;
       await connection.query(
-        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'electricity', ?)`,
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, electricity_units, note) VALUES (?, ?, CURDATE(), 'pending', 'electricity', ?, ?)`,
         [
           booking.id,
           amount,
+          electricityUnits,
           `ค่าไฟฟ้า ${electricityUnits} หน่วย x ฿${unitPrice}/หน่วย (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`,
         ],
       );
@@ -818,8 +828,8 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
 
     if (wantsWater) {
       await connection.query(
-        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', 'water', ?)`,
-        [booking.id, waterAmount, `ค่าน้ำประจำเดือน (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`],
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, water_units, note) VALUES (?, ?, CURDATE(), 'pending', 'water', ?, ?)`,
+        [booking.id, waterAmount, waterUnits, `ค่าน้ำประจำเดือน${waterUnits === null ? "" : ` ${waterUnits} หน่วย`} (แจ้งโดย ${staffName || "เจ้าหน้าที่"})`],
       );
     }
 

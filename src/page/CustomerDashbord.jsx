@@ -3,6 +3,7 @@ import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { DormInfoMenu } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -14,6 +15,85 @@ import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+
+const formatNumber = (value) => Number(value || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 })
+const dateParts = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+})
+
+function dateKey(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = Object.fromEntries(dateParts.formatToParts(date).map((part) => [part.type, part.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+function startDateKey(endDate, days) {
+  const date = new Date(`${endDate}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return ''
+  date.setUTCDate(date.getUTCDate() - days + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+function CustomerUtilityUsage({ rentalHistory = [] }) {
+  const [days, setDays] = useState(30)
+  const [today] = useState(() => dateKey(Date.now()))
+  const [endDate, setEndDate] = useState(today)
+  const chartData = useMemo(() => {
+    const periods = new Map()
+    const startDate = startDateKey(endDate, days)
+    for (const booking of rentalHistory) {
+      for (const payment of booking.payments || []) {
+        if (payment.status !== 'paid' || !['water', 'electricity'].includes(payment.type)) continue
+        const date = dateKey(payment.payment_date)
+        if (!date || date < startDate || date > endDate) continue
+        const row = periods.get(date) || { date, water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 }
+        row[payment.type] += Number(payment.amount || 0)
+        const unitField = payment.type === 'water' ? 'water_units' : 'electricity_units'
+        const units = payment[unitField] ?? payment.note?.match(/([\d.]+)\s*หน่วย/)?.[1]
+        if (units !== null && units !== undefined && Number.isFinite(Number(units))) {
+          row[payment.type === 'water' ? 'waterUnits' : 'electricityUnits'] += Number(units)
+        }
+        periods.set(date, row)
+      }
+    }
+    return [...periods.values()].sort((a, b) => a.date.localeCompare(b.date))
+  }, [rentalHistory, days, endDate])
+
+  return (
+    <section className="dashboard-utility-usage" aria-label="ประวัติการใช้น้ำค่าไฟ">
+      <div className="dashboard-utility-usage-header">
+        <div><h3>ประวัติค่าน้ำ–ค่าไฟที่ชำระแล้ว</h3><p>เปรียบเทียบยอดชำระและจำนวนหน่วยจากประวัติการเช่าทุกห้อง</p></div>
+        <div className="dashboard-utility-usage-filters">
+          <div role="group" aria-label="เลือกช่วงวันที่ของกราฟ">
+            {[30, 7, 3].map((count) => (
+              <button key={count} type="button" className={days === count ? 'is-active' : ''} aria-pressed={days === count} onClick={() => setDays(count)}>{count} วัน</button>
+            ))}
+          </div>
+          <label>วันที่สิ้นสุด <input type="date" value={endDate} max={today} onChange={(event) => setEndDate(event.target.value)} /></label>
+        </div>
+      </div>
+      {chartData.length ? (
+        <div className="dashboard-utility-usage-chart">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 5, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="amount" tick={{ fontSize: 11 }} tickFormatter={formatNumber} />
+              <YAxis yAxisId="units" orientation="right" tick={{ fontSize: 11 }} tickFormatter={formatNumber} />
+              <Tooltip formatter={(value, name) => [name.includes('หน่วย') ? `${formatNumber(value)} หน่วย` : `฿${formatNumber(value)}`, name]} />
+              <Legend />
+              <Line yAxisId="amount" type="monotone" dataKey="water" name="ค่าน้ำ" stroke="#0891b2" strokeWidth={2} />
+              <Line yAxisId="amount" type="monotone" dataKey="electricity" name="ค่าไฟ" stroke="#d97706" strokeWidth={2} />
+              <Line yAxisId="units" type="monotone" dataKey="waterUnits" name="หน่วยน้ำ" stroke="#16a34a" strokeWidth={2} />
+              <Line yAxisId="units" type="monotone" dataKey="electricityUnits" name="หน่วยไฟ" stroke="#7c3aed" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : <p className="dashboard-utility-usage-empty">ยังไม่มีรายการค่าน้ำหรือค่าไฟที่ชำระในช่วงนี้</p>}
+    </section>
+  )
+}
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -999,7 +1079,7 @@ function MoveRoomPreview({ currentRoom, targetRoom }) {
         </span>
         <span className="is-water">
           <FieldIcon name="water" size={13} />
-          น้ำ ฿{formatCurrency(targetRoom.water_price)}/เดือน
+          น้ำ ฿{formatCurrency(targetRoom.water_unit_price)}/หน่วย · เหมา ฿{formatCurrency(targetRoom.water_price)}/เดือน
         </span>
         {Number(targetRoom.bed) > 0 && (
           <span>
@@ -6836,6 +6916,7 @@ function CustomerDashbord() {
             <div className="dashboard-card-header">
               <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
             </div>
+            <CustomerUtilityUsage rentalHistory={rentalHistory} />
             {filteredRentalHistory.length > 0 && (
               <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
                 {filteredRentalHistory.map((entry, index) => {
@@ -6972,7 +7053,7 @@ function CustomerDashbord() {
                         </div>
                         <div className="dashboard-utility-rate is-water">
                           <span>ค่าน้ำ</span>
-                          <strong>{formatCurrency(room.water_price)} บาท/เดือน</strong>
+                          <strong>{formatCurrency(room.water_unit_price)} บาท/หน่วย · เหมา {formatCurrency(room.water_price)} บาท/เดือน</strong>
                         </div>
                       </div>
 

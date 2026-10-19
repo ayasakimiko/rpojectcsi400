@@ -151,6 +151,12 @@ const ROOM_FIELD_VALIDATORS = {
       ? null
       : "ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)";
   },
+  water_unit_price: (value) => {
+    const num = Number(value);
+    return value !== null && value !== "" && Number.isFinite(num) && num >= 0 && num <= 999.99
+      ? null
+      : "ค่าน้ำ/หน่วยต้องเป็นตัวเลข (0-999.99)";
+  },
   water_price: (value) => {
     const num = Number(value);
     return value !== null && value !== "" && Number.isFinite(num) && num >= 0 && num <= 999.99
@@ -354,7 +360,7 @@ export function parseTenantRequestInput(body = {}) {
 
 export function parseUtilityBillInput(body = {}) {
   const isFilled = (raw) => raw !== undefined && raw !== "" && raw !== null;
-  const { electricity_units: unitsRaw, electricity_amount: amountRaw, water_amount: waterRaw } = body;
+  const { electricity_units: unitsRaw, electricity_amount: amountRaw, water_amount: waterRaw, water_units: waterUnitsRaw } = body;
 
   const electricityUnits = isFilled(unitsRaw) ? Number(unitsRaw) : null;
   if (electricityUnits !== null && (!Number.isFinite(electricityUnits) || electricityUnits <= 0 || electricityUnits > 100_000)) {
@@ -369,10 +375,16 @@ export function parseUtilityBillInput(body = {}) {
 
   const electricityAmount = isFilled(amountRaw) ? Number(amountRaw) : null;
   const waterAmount = isFilled(waterRaw) ? Number(waterRaw) : null;
-  if (electricityUnits === null && electricityAmount === null && waterAmount === null) {
+  const waterUnits = isFilled(waterUnitsRaw) ? Number(waterUnitsRaw) : null;
+  if (waterUnits !== null && (!Number.isFinite(waterUnits) || waterUnits <= 0 || waterUnits > 100_000)) {
+    return { error: "หน่วยน้ำไม่ถูกต้อง" };
+  }
+  if (waterUnits !== null && waterAmount !== null) return { error: "เลือกค่าน้ำแบบหน่วยหรือยอดเงินอย่างใดอย่างหนึ่ง" };
+  if (electricityUnits !== null && electricityAmount !== null) return { error: "เลือกค่าไฟแบบหน่วยหรือยอดเงินอย่างใดอย่างหนึ่ง" };
+  if (electricityUnits === null && electricityAmount === null && waterAmount === null && waterUnits === null) {
     return { error: "กรุณากรอกค่าไฟฟ้าหรือค่าน้ำอย่างน้อยหนึ่งรายการ" };
   }
-  return { value: { electricityUnits, electricityAmount, waterAmount } };
+  return { value: { electricityUnits, electricityAmount, waterAmount, waterUnits } };
 }
 
 const MAX_PHOTOS = 6;
