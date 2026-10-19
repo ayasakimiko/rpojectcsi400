@@ -1,0 +1,228 @@
+.process-steps-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  border: 1px solid #e3ecf8;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.process-steps-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.process-steps-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 4px;
+  background: #2563eb;
+}
+
+.moveout-steps-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.moveout-steps {
+  display: grid;
+  grid-template-columns: repeat(var(--step-count, 3), minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moveout-steps > li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.moveout-step-connector {
+  position: absolute;
+  top: 17px;
+  right: calc(50% + 24px);
+  left: calc(-50% + 24px);
+  height: 2px;
+  border-radius: 2px;
+  background: #cbd5e1;
+}
+
+.moveout-steps > li.is-done .moveout-step-connector {
+  background: linear-gradient(90deg, #93c5fd, #34d399);
+}
+
+.moveout-step-connector small {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  padding: 0 6px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #fbfdff;
+  color: #6b859e;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.moveout-step-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #94a3b8;
+}
+
+.moveout-steps > li.is-done .moveout-step-dot {
+  border-color: #34d399;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.moveout-step-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.moveout-step-body strong {
+  color: #0f2b52;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.moveout-step-by {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.moveout-step-body small {
+  color: #6b859e;
+  font-size: 11.5px;
+}
+
+.moveout-step-note {
+  max-width: 100%;
+  margin: 4px 0 0;
+  padding: 4px 9px;
+  border: 1px solid #e3ecf8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4a6582;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.moveout-steps > li.is-pending .moveout-step-body strong {
+  color: #94a3b8;
+}
+
+.moveout-steps > li.is-danger.is-done .moveout-step-dot {
+  border-color: #f87171;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.moveout-steps > li.is-danger.is-done .moveout-step-connector {
+  background: linear-gradient(90deg, #93c5fd, #f87171);
+}
+
+.moveout-steps > li.is-danger.is-done .moveout-step-body strong {
+  color: #b42318;
+}
+
+.moveout-steps-total {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 12px;
+  border: 1px solid #dce9fb;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #4a6582;
+  font-size: 12px;
+}
+
+.moveout-steps-total strong {
+  color: #1d4ed8;
+}
+
+.moveout-steps-total svg {
+  color: #6093d4;
+}
+
+.moveout-steps-total.is-waiting {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.moveout-steps-total.is-waiting svg {
+  color: #d97706;
+}
+
+@media (max-width: 560px) {
+  .moveout-steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .moveout-steps > li {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 0;
+    text-align: left;
+  }
+
+  .moveout-step-body {
+    align-items: flex-start;
+  }
+
+  .moveout-step-connector {
+    top: auto;
+    right: auto;
+    bottom: calc(100% - 2px);
+    left: 17px;
+    width: 2px;
+    height: 22px;
+  }
+
+  .moveout-step-connector small {
+    top: 50%;
+    left: 12px;
+    transform: translateY(-50%);
+  }
+
+  .moveout-steps-total {
+    align-self: flex-start;
+  }
+}

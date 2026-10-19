@@ -222,11 +222,24 @@ export function validateRegisterInput(body) {
   return null;
 }
 
+export const EXPENSE_PAYMENT_METHODS = new Set(["cash", "transfer", "card", "other"]);
+export const EXPENSE_MAX_PHOTOS = 6;
+
+const isBlank = (value) => value === undefined || value === null || value === "";
+
 const EXPENSE_FIELD_VALIDATORS = {
   category: (value) => validateText(value, "หมวดหมู่รายจ่าย", { maxLength: 50 }),
   description: (value) => validateText(value, "คำอธิบาย", { maxLength: 255, required: false }),
   amount: (value) => (isValidMoney(value, { allowZero: false }) ? null : "จำนวนเงินไม่ถูกต้อง"),
   expense_date: (value) => (isValidDateString(value) ? null : "วันที่ไม่ถูกต้อง"),
+  vendor: (value) => validateText(value, "ผู้รับเงิน/ร้านค้า", { maxLength: 120, required: false }),
+  payment_method: (value) =>
+    isBlank(value) || EXPENSE_PAYMENT_METHODS.has(value) ? null : "วิธีชำระเงินไม่ถูกต้อง",
+  receipt_number: (value) => validateText(value, "เลขที่ใบเสร็จ", { maxLength: 60, required: false }),
+  room_number: (value) =>
+    isBlank(value) || (Number.isInteger(Number(value)) && Number(value) >= 100 && Number(value) <= 999)
+      ? null
+      : "เลขห้องไม่ถูกต้อง",
 };
 
 export function validateExpenseInput(body, { partial }) {
@@ -385,6 +398,7 @@ export function parsePhotoList(photos, maxPhotos = MAX_PHOTOS) {
 
 const ANNOUNCEMENT_TONES = new Set(["info", "warning"]);
 const MAX_EXPIRY_MINUTES = 30 * 24 * 60;
+const MAX_POPUP_MINUTES = 365 * 24 * 60;
 export const ANNOUNCEMENT_MAX_PHOTOS = 6;
 
 export function parseAnnouncementInput(body = {}, existingPhotos = []) {
@@ -417,6 +431,21 @@ export function parseAnnouncementInput(body = {}, existingPhotos = []) {
     expiresInMinutes = minutes;
   }
 
+  let popupInMinutes;
+  if (tone !== "warning") {
+    popupInMinutes = null;
+  } else if (body.popup_in_minutes === null || body.popup_in_minutes === "") {
+    popupInMinutes = null;
+  } else if (body.popup_in_minutes !== undefined) {
+    const raw = body.popup_in_minutes;
+    const isNumeric = typeof raw === "number" || (typeof raw === "string" && /^\d+$/.test(raw.trim()));
+    const minutes = isNumeric ? Number(raw) : Number.NaN;
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_POPUP_MINUTES) {
+      return { error: "ระยะเวลาแสดง popup ต้องอยู่ระหว่าง 1 นาที ถึง 365 วัน" };
+    }
+    popupInMinutes = minutes;
+  }
+
   let keptPhotos = existingPhotos;
   if (body.keep_photos !== undefined) {
     if (!Array.isArray(body.keep_photos)) return { error: "รายการรูปที่เก็บไว้ไม่ถูกต้อง" };
@@ -436,6 +465,7 @@ export function parseAnnouncementInput(body = {}, existingPhotos = []) {
       tone,
       expiresAt,
       expiresInMinutes,
+      popupInMinutes,
       keptPhotos,
       newPhotos: newPhotos.value,
     },

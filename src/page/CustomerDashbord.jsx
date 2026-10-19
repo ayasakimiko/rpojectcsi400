@@ -401,7 +401,6 @@ const AMENITIES = [
   { key: 'wifi', label: 'ไวไฟ', color: 'purple' },
   { key: 'refrigerator', label: 'ตู้เย็น', color: 'teal' },
   { key: 'bathroom', label: 'ห้องน้ำในตัว', color: 'amber' },
-  { key: 'cctv', label: 'กล้องวงจรปิด', color: 'red' },
 ]
 
 const AMENITY_ICON_PATHS = {
@@ -425,12 +424,6 @@ const AMENITY_ICON_PATHS = {
     </>
   ),
   bathroom: <path d="M12 2.69 17.66 8.35a8 8 0 1 1-11.31 0z" />,
-  cctv: (
-    <>
-      <path d="M23 7l-7 5 7 5V7z" />
-      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-    </>
-  ),
   bed: (
     <>
       <path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6" />
@@ -1483,6 +1476,172 @@ function RequestTimelineDropdown({ kind, request }) {
   )
 }
 
+const STEP_ICON_PATHS = {
+  send: <><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></>,
+  tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
+  shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M12 8v4M12 16h.01" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  check: <path d="M5 12.5 10 17l9-10" />,
+  x: <path d="M6 6l12 12M18 6 6 18" />,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  box: <><path d="M21 8 12 3 3 8l9 5 9-5Z" /><path d="M3 8v8l9 5 9-5V8M12 13v8" /></>,
+}
+
+function StepDotIcon({ type, number }) {
+  if (!type) return <span className="dashboard-step-number">{number}</span>
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      {STEP_ICON_PATHS[type]}
+    </svg>
+  )
+}
+
+function getStepIcon(kind, step, index, { isLast, isCurrent, finalTone }) {
+  if (!step.done) return isCurrent ? 'clock' : null
+  if (isLast && index > 0) return finalTone === 'danger' ? 'x' : 'check'
+  if (index === 0) return kind === 'maintenance' ? 'tool' : kind === 'safety' ? 'shield' : 'send'
+  return 'user'
+}
+
+const PROFILE_SUMMARY_ICONS = {
+  home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" /></>,
+  money: <><rect x="3" y="6" width="18" height="13" rx="2" /><circle cx="12" cy="12.5" r="2.5" /></>,
+  phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  idcard: <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M6 16a3 3 0 0 1 6 0M15 10h3M15 14h3" /></>,
+  wallet: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+}
+
+function CustomerProfileSummary({ customer, room }) {
+  const [idcardRevealed, setIdcardRevealed] = useState(false)
+  const fullName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || '-'
+  const idcard = String(customer.idcard || '')
+  const renting = Boolean(room?.is_booked)
+  const rows = [
+    { key: 'room', icon: 'home', label: 'ห้องพัก', value: room?.room_number ? `ห้อง ${room.room_number}` : 'ไม่มีห้องพัก' },
+    ...(room?.price != null ? [{ key: 'price', icon: 'money', label: 'ค่าเช่า', value: `฿${formatCurrency(room.price)} / เดือน` }] : []),
+    { key: 'phone', icon: 'phone', label: 'เบอร์โทร', value: customer.phone || '-' },
+    { key: 'age', icon: 'user', label: 'อายุ', value: customer.age ? `${customer.age} ปี` : '-' },
+    {
+      key: 'idcard',
+      icon: 'idcard',
+      label: 'บัตรประชาชน',
+      value: idcard ? (
+        <button
+          type="button"
+          className={`dashboard-profile-idcard${idcardRevealed ? ' is-revealed' : ''}`}
+          onClick={() => setIdcardRevealed((value) => !value)}
+          title={idcardRevealed ? 'ซ่อนเลขบัตร' : 'กดเพื่อแสดงเลขบัตร'}
+          aria-label={idcardRevealed ? 'ซ่อนเลขบัตรประชาชน' : 'แสดงเลขบัตรประชาชน'}
+        >
+          <span>{idcardRevealed ? idcard : '•'.repeat(idcard.length || 13)}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {idcardRevealed ? (
+              <>
+                <path d="M3 3l18 18" />
+                <path d="M10.6 6.1A10.5 10.5 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.4 7.6A17 17 0 0 0 2.5 12s3.5 6 9.5 6a9.7 9.7 0 0 0 4-.9" />
+              </>
+            ) : (
+              <>
+                <path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                <circle cx="12" cy="12" r="2.5" />
+              </>
+            )}
+          </svg>
+        </button>
+      ) : '-',
+    },
+    { key: 'deposit', icon: 'wallet', label: 'เงินมัดจำ', value: customer.deposit_amount != null ? `฿${formatCurrency(customer.deposit_amount)}` : '-' },
+    {
+      key: 'contract',
+      icon: 'calendar',
+      label: 'สัญญาเช่า',
+      value: room?.rental_start_date || room?.rental_end_date
+        ? `${room.rental_start_date ? formatDate(room.rental_start_date) : '-'} ถึง ${room.rental_end_date ? formatDate(room.rental_end_date) : '-'}`
+        : '-',
+    },
+    { key: 'since', icon: 'clock', label: 'เข้าพักเมื่อ', value: customer.registered_at ? formatDate(customer.registered_at) : '-' },
+  ]
+
+  return (
+    <aside className="dashboard-profile-summary">
+      <div className="dashboard-profile-summary-head">
+        <svg className="dashboard-profile-summary-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="10" r="3.2" />
+          <path d="M6.2 18.6a6.5 6.5 0 0 1 11.6 0" />
+        </svg>
+        <strong>{fullName}</strong>
+        <span className={`dashboard-profile-summary-status${renting ? ' is-active' : ''}`}>{renting ? 'กำลังเช่าอยู่' : 'ไม่มีห้องพัก'}</span>
+      </div>
+      <dl className="dashboard-profile-summary-list">
+        {rows.map((row) => (
+          <div key={row.key}>
+            <dt>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {PROFILE_SUMMARY_ICONS[row.icon]}
+              </svg>
+              {row.label}
+            </dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </aside>
+  )
+}
+
+const REMINDER_ICON_PATHS = {
+  contract: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M12 14v3" /></>,
+  payment: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
+}
+
+function DashboardReminders({ reminders }) {
+  const [open, setOpen] = useState(true)
+  if (reminders.length === 0) return null
+  const urgent = reminders.some((reminder) => reminder.type === 'danger')
+  return (
+    <section className={`dashboard-reminders${urgent ? ' is-danger' : ' is-warning'}${open ? ' is-open' : ''}`}>
+      <button type="button" className="dashboard-reminders-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <span className="dashboard-reminders-bell" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        </span>
+        <span className="dashboard-reminders-heading">
+          <strong>สิ่งที่ต้องดำเนินการ</strong>
+          <small>{urgent ? 'มีรายการที่ต้องดำเนินการด่วน' : 'มีรายการที่ควรดำเนินการเร็วๆ นี้'}</small>
+        </span>
+        <span className="dashboard-reminders-count">{reminders.length}</span>
+        <svg className="dashboard-reminders-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <ul className="dashboard-reminders-list">
+          {reminders.map((reminder) => (
+            <li key={`${reminder.kind}-${reminder.title}`} className={`dashboard-reminder is-${reminder.type}`}>
+              <span className="dashboard-reminder-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                  {REMINDER_ICON_PATHS[reminder.kind]}
+                </svg>
+              </span>
+              <span className="dashboard-reminder-text">
+                <strong>{reminder.title}</strong>
+                <span>{reminder.text}</span>
+              </span>
+              <span className="dashboard-reminder-tag">{reminder.type === 'danger' ? 'ด่วน' : 'แจ้งเตือน'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 const STEPPER_MANY_THRESHOLD = 4
 
 function DashboardStepper({ count, currentIndex, children }) {
@@ -1556,12 +1715,12 @@ function RequestTimeline({ kind, request, compact = false }) {
             .join(' ')
           return (
             <li key={step.label + index} className={classes}>
+              {!compact && stepMs !== null && <span className="dashboard-step-gap">+ {formatRemaining(stepMs)}</span>}
               <span className="dashboard-step-dot" aria-hidden="true">
-                {step.done && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                    {isLast && finalTone === 'danger' ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
-                  </svg>
-                )}
+                <StepDotIcon
+                  type={getStepIcon(kind, step, index, { isLast, isCurrent: index === currentIndex, finalTone })}
+                  number={index + 1}
+                />
               </span>
               <p className="dashboard-step-label">{compact ? STEP_COMPACT_LABEL[step.label] || step.label : step.label}</p>
               <p className="dashboard-step-date">
@@ -1581,13 +1740,21 @@ function RequestTimeline({ kind, request, compact = false }) {
                   โดย <span className="dashboard-actor">{step.by}</span>
                 </p>
               )}
-              {!compact && stepMs !== null && <p className="dashboard-step-duration">ใช้เวลา {formatRemaining(stepMs)}</p>}
             </li>
           )
         })}
       </DashboardStepper>
-      {!compact && totalMs !== null && (
-        <p className="dashboard-progress-total">รวมใช้เวลาทั้งหมด {formatRemaining(totalMs)}</p>
+      {!compact && (
+        <p className={`dashboard-progress-total${totalMs === null ? ' is-waiting' : ''}`}>
+          <StepDotIcon type="clock" />
+          {totalMs !== null ? (
+            <>
+              รวมใช้เวลาทั้งหมด <strong>{formatRemaining(totalMs)}</strong>
+            </>
+          ) : (
+            'กำลังดำเนินการ'
+          )}
+        </p>
       )}
     </div>
   )
@@ -1713,11 +1880,7 @@ function ParcelProgress({ parcel, compact = false }) {
               .join(' ')}
           >
             <span className="dashboard-step-dot" aria-hidden="true">
-              {step.done && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
+              <StepDotIcon type={step.done ? (step.key === 'logged' ? 'box' : 'check') : 'clock'} number={index + 1} />
             </span>
             <p className="dashboard-step-label">{step.label}</p>
             <p className="dashboard-step-date">
@@ -1749,6 +1912,7 @@ const CUSTOMER_TABS = [
 ]
 const MAINTENANCE_PAGE_SIZE = 5
 const RENTAL_HISTORY_PAGE_SIZE = 5
+const RENTAL_HISTORY_FULL_PAGE_SIZE = 10
 const PARCEL_PAGE_SIZE = 3
 
 function parcelDayKey(value) {
@@ -2243,7 +2407,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'form' && (
         <Modal title="ลงทะเบียนรถและผู้มาติดต่อ" onClose={() => setView(null)}>
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-rv">
               <div className="dashboard-rv-top">
                 <p className="dashboard-rv-intro">ส่งข้อมูลให้เจ้าหน้าที่ตรวจสอบและอนุมัติ</p>
@@ -2387,6 +2551,9 @@ function ResidentVisitRequestRow() {
 
                 {error && <p className="dashboard-form-error">{error}</p>}
                 <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                    ยกเลิก
+                  </button>
                   <button type="submit" className="dashboard-action-btn is-primary" disabled={busy}>
                     {busy ? 'กำลังส่ง...' : 'ส่งคำขอ'}
                   </button>
@@ -2407,7 +2574,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'success' && submitted && (
         <Modal title="ส่งคำขอแล้ว" onClose={() => setView(null)} variant="success">
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-confirm-body">
               <div className="dashboard-confirm-icon is-success">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2428,6 +2595,9 @@ function ResidentVisitRequestRow() {
                 </div>
               </div>
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-primary" onClick={openHistory}>
                   ดูคำขอของฉัน
                 </button>
@@ -2438,7 +2608,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'history' && (
         <Modal title="คำขอของฉัน" onClose={() => setView(null)} onBack={() => setView('form')}>
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-rv">
               <DashboardFilterPanel
                 segments={RESIDENT_VISIT_FILTERS.map((filter) => ({
@@ -2503,6 +2673,9 @@ function ResidentVisitRequestRow() {
                 )}
               </section>
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-primary" onClick={() => setView('form')}>
                   ลงทะเบียนใหม่
                 </button>
@@ -2513,7 +2686,7 @@ function ResidentVisitRequestRow() {
       )}
       {view === 'detail' && detailItem && (
         <Modal title="รายละเอียดคำขอ" onClose={() => setView(null)} onBack={() => setView('history')}>
-          {() => {
+          {(requestClose) => {
             const reviewer = detailItem.admin_reviewed_by_name || detailItem.reviewed_by_name
             const reviewedAt = detailItem.admin_reviewed_at || detailItem.reviewed_at
             const fields =
@@ -2629,6 +2802,9 @@ function ResidentVisitRequestRow() {
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={() => setView('history')}>
                     กลับไปที่ประวัติ
+                  </button>
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    ปิด
                   </button>
                 </div>
               </div>
@@ -2814,7 +2990,7 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
   return (
     <>
       <Modal title={detail.title} onClose={onClose} onBack={onBack}>
-        {() => (
+        {(requestClose) => (
           <div className="dashboard-rv">
             <div className={`dashboard-rv-detail-hero is-${detail.heroStatus}${kind === 'safety' && request.severity ? ` is-severity-${request.severity}` : ''}`}>
               <span className={`dashboard-rv-history-icon ${detail.iconClass}`}>{detail.icon}</span>
@@ -2867,6 +3043,7 @@ function RequestDetailModal({ kind, request, onClose, onBack, backLabel = 'ก�
 
             <div className="dashboard-form-actions">
               {onBack && <button type="button" className="dashboard-action-btn is-ghost" onClick={onBack}>{backLabel}</button>}
+              <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>ปิด</button>
             </div>
           </div>
         )}
@@ -3099,7 +3276,7 @@ function SafetyIncidentReportRow() {
 
       {view === 'success' && (
         <Modal title="ส่งรายงานแล้ว" onClose={() => setView(null)} variant="success">
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-confirm-body">
               <div className="dashboard-confirm-icon is-success">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -3134,6 +3311,9 @@ function SafetyIncidentReportRow() {
                 </div>
               )}
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-primary" onClick={openHistory}>
                   ดูประวัติการแจ้งเหตุ
                 </button>
@@ -3145,7 +3325,7 @@ function SafetyIncidentReportRow() {
 
       {view === 'history' && (
         <Modal title="ประวัติการแจ้งเหตุ" onClose={() => setView(null)} onBack={() => setView('form')}>
-          {() => (
+          {(requestClose) => (
             <div className="dashboard-rv">
               <DashboardFilterPanel
                 segments={SAFETY_FILTERS.map((filter) => ({
@@ -3235,6 +3415,9 @@ function SafetyIncidentReportRow() {
                 )}
               </section>
               <div className="dashboard-form-actions">
+                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                  ปิด
+                </button>
                 <button type="button" className="dashboard-action-btn is-danger" onClick={() => setView('form')}>
                   แจ้งเหตุใหม่
                 </button>
@@ -3513,7 +3696,7 @@ function CustomerParkingTab({ onCountChange }) {
 
       {detail && (
         <Modal title="รายละเอียดรถ" onClose={() => setDetail(null)}>
-          {() => {
+          {(requestClose) => {
             const phase = getParkingPhase(detail, now)
             const approver = detail.admin_reviewed_by_name || detail.reviewed_by_name
             const approvedAt = detail.admin_reviewed_at || detail.reviewed_at
@@ -3609,6 +3792,11 @@ function CustomerParkingTab({ onCountChange }) {
                   ].filter(Boolean)}
                 />
 
+                <div className="dashboard-form-actions">
+                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                    ปิด
+                  </button>
+                </div>
               </div>
             )
           }}
@@ -3731,7 +3919,11 @@ function AnnouncementAlertPopup({ announcement, remaining, onAcknowledge }) {
             )}
           </div>
           <footer className="dashboard-alert-actions">
-            <p className="dashboard-alert-hint">ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ</p>
+            <p className="dashboard-alert-hint">
+              {announcement.popup_until
+                ? `ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ หรือถึง ${formatDateTime(announcement.popup_until)} น.`
+                : 'ประกาศนี้จะแสดงทุกครั้งที่เข้าสู่ระบบ จนกว่าจะกดรับทราบ'}
+            </p>
             <button type="button" className="dashboard-alert-confirm" disabled={busy} onClick={acknowledge}>
               {busy ? 'กำลังบันทึก...' : 'รับทราบและปิด'}
             </button>
@@ -3772,8 +3964,12 @@ function CustomerDashbord() {
   }
 
   const [, tickCountdown] = useState(0)
+  const [popupNow, setPopupNow] = useState(() => Date.now())
   useEffect(() => {
-    const interval = setInterval(() => tickCountdown((tick) => tick + 1), 30000)
+    const interval = setInterval(() => {
+      tickCountdown((tick) => tick + 1)
+      setPopupNow(Date.now())
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -4484,7 +4680,12 @@ function CustomerDashbord() {
     parcels = [],
   } = data
   const pendingAlerts = announcements.filter(
-    (item) => item.tone === 'warning' && !item.acknowledged && !acknowledgedAnnouncementIds.has(item.id),
+    (item) =>
+      item.tone === 'warning' &&
+      !item.acknowledged &&
+      !acknowledgedAnnouncementIds.has(item.id) &&
+      item.popup_active !== false &&
+      !(item.popup_epoch && item.popup_epoch * 1000 <= popupNow),
   )
   const pendingParcels = parcels.filter((parcel) => parcel.status === 'pending')
   const receivedParcels = parcels.filter((parcel) => parcel.status === 'received')
@@ -4834,12 +5035,10 @@ function CustomerDashbord() {
     const { movedIn, movedOut } = getBookingTransfer(index)
     const originalEntry =
       rentalHistoryWithDue.find((item) => item.booking_id === entry.booking_id) || entry
-    const totalPages = Math.max(1, Math.ceil(entry.payments.length / RENTAL_HISTORY_PAGE_SIZE))
+    const pageSize = scope === 'all' ? RENTAL_HISTORY_FULL_PAGE_SIZE : RENTAL_HISTORY_PAGE_SIZE
+    const totalPages = Math.max(1, Math.ceil(entry.payments.length / pageSize))
     const currentPage = Math.min(historyPageByBooking[pageKey] || 1, totalPages)
-    const paginatedPayments = entry.payments.slice(
-      (currentPage - 1) * RENTAL_HISTORY_PAGE_SIZE,
-      currentPage * RENTAL_HISTORY_PAGE_SIZE,
-    )
+    const paginatedPayments = entry.payments.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     const setBookingPage = (page) =>
       setHistoryPageByBooking((prev) => ({ ...prev, [pageKey]: page }))
     return (
@@ -4939,30 +5138,46 @@ function CustomerDashbord() {
         ) : (
           <>
             <div className="table-responsive">
-              <table className="dashboard-table">
+              <table className="dashboard-table dashboard-rental-table">
                 <thead>
                   <tr>
                     <th>วันที่ชำระ</th>
                     <th>รายการ</th>
-                    <th>จำนวนเงิน</th>
+                    <th className="is-amount">จำนวนเงิน</th>
                     <th>สถานะ</th>
                     <th>หมายเหตุ</th>
-                    <th>ใบเสร็จ</th>
+                    <th className="is-receipt">ใบเสร็จ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedPayments.map((payment) => (
+                  {paginatedPayments.map((payment) => {
+                    const paidAt = new Date(payment.created_at)
+                    const note = formatCustomerNote(payment.note)
+                    return (
                     <tr key={payment.id}>
-                      <td>{formatDateTime(payment.created_at)}</td>
-                      <td>{PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}</td>
-                      <td className="dashboard-payment-amount">฿{formatCurrency(payment.amount)}</td>
+                      <td>
+                        <span className="dashboard-rental-date">
+                          <strong>{paidAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+                          <small>{paidAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</small>
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`dashboard-rental-type is-${payment.type || 'rent'}`}>
+                          {PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง'}
+                        </span>
+                      </td>
+                      <td className="dashboard-payment-amount is-amount">฿{formatCurrency(payment.amount)}</td>
                       <td>
                         <span className={`dashboard-badge status-${payment.status}`}>
                           {payment.status === 'pending' && payment.slip_path ? 'รอตรวจสอบสลิป' : STATUS_LABEL[payment.status] || payment.status}
                         </span>
                       </td>
-                      <td>{formatCustomerNote(payment.note)}</td>
                       <td>
+                        <span className={`dashboard-rental-note${note && note !== '-' ? '' : ' is-empty'}`} title={typeof note === 'string' ? note : undefined}>
+                          {note || '-'}
+                        </span>
+                      </td>
+                      <td className="is-receipt">
                         {payment.status !== 'paid' ? (
                           <span className="dashboard-empty-cell">-</span>
                         ) : (
@@ -4994,7 +5209,8 @@ function CustomerDashbord() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -5030,21 +5246,35 @@ function CustomerDashbord() {
   const reminders = []
   if (room?.is_booked) {
     if (isExpired) {
-      reminders.push({ type: 'danger', text: `สัญญาเช่าห้อง ${room.room_number} หมดอายุแล้ว กรุณาต่อสัญญาหรือแจ้งย้ายออก` })
+      reminders.push({
+        type: 'danger',
+        kind: 'contract',
+        title: 'สัญญาเช่าหมดอายุแล้ว',
+        text: `สัญญาเช่าห้อง ${room.room_number} หมดอายุแล้ว กรุณาต่อสัญญาหรือแจ้งย้ายออก`,
+      })
     } else if (isWarning) {
-      reminders.push({ type: 'warning', text: `สัญญาเช่าห้อง ${room.room_number} ใกล้หมดอายุ (เหลืออีก ${formatRemaining(msLeft)})` })
+      reminders.push({
+        type: 'warning',
+        kind: 'contract',
+        title: 'สัญญาเช่าใกล้หมดอายุ',
+        text: `สัญญาเช่าห้อง ${room.room_number} จะหมดอายุในอีก ${formatRemaining(msLeft)}`,
+      })
     }
   }
   if (currentDue) {
     if (currentDue.status === 'overdue') {
       reminders.push({
         type: 'danger',
-        text: `ค้างชำระค่าเช่างวดนี้ (ครบกำหนดวันที่ ${formatDate(currentDue.dueDate)}) กรุณาชำระโดยเร็ว`,
+        kind: 'payment',
+        title: 'ค้างชำระค่าเช่า',
+        text: `เลยกำหนดชำระงวดนี้แล้ว (ครบกำหนดวันที่ ${formatDate(currentDue.dueDate)}) กรุณาชำระโดยเร็ว`,
       })
     } else if (currentDue.status === 'due') {
       reminders.push({
         type: 'warning',
-        text: `ถึงกำหนดชำระค่าเช่าประจำงวดนี้แล้ว กรุณาชำระภายในวันที่ ${formatDate(currentDue.dueDate)}`,
+        kind: 'payment',
+        title: 'ถึงกำหนดชำระค่าเช่า',
+        text: `กรุณาชำระค่าเช่างวดนี้ภายในวันที่ ${formatDate(currentDue.dueDate)}`,
       })
     }
   }
@@ -5301,7 +5531,7 @@ function CustomerDashbord() {
 
             {notifDetail && (
               <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
-                {() => (
+                {(requestClose) => (
                   <div className="dashboard-confirm-body">
                     <div className={`dashboard-confirm-icon is-${notifDetail.tone}`}>
                       <svg
@@ -5353,6 +5583,11 @@ function CustomerDashbord() {
                         {formatDateTime(notifDetail.date)}
                       </p>
                     )}
+                    <div className="dashboard-form-actions">
+                      <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
+                        ปิด
+                      </button>
+                    </div>
                   </div>
                 )}
               </Modal>
@@ -5720,7 +5955,7 @@ function CustomerDashbord() {
           const photos = parcel.photos || []
           return (
             <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetailId(null)} variant="parcel">
-              {() => (
+              {(requestClose) => (
                 <div className="dashboard-confirm-body dashboard-status-body dashboard-parcel-detail">
                   <div className={`dashboard-status-hero ${isPending ? 'is-pending' : 'is-success'}`}>
                     <div className="dashboard-confirm-icon">
@@ -5813,6 +6048,9 @@ function CustomerDashbord() {
                     )}
                   </div>
                   <div className="dashboard-form-actions">
+                    <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
+                      ปิด
+                    </button>
                     {isPending && (
                       <button
                         type="button"
@@ -6008,15 +6246,7 @@ function CustomerDashbord() {
           </Modal>
         )}
 
-        {reminders.length > 0 && (
-          <div className="dashboard-reminders">
-            {reminders.map((reminder, index) => (
-              <div key={index} className={`alert alert-${reminder.type} dashboard-reminder`}>
-                {reminder.text}
-              </div>
-            ))}
-          </div>
-        )}
+        <DashboardReminders reminders={reminders} />
 
         <ul className="nav nav-tabs dashboard-tabs">
           {CUSTOMER_TABS.map((tab) => (
@@ -6369,11 +6599,20 @@ function CustomerDashbord() {
                 <p className="dashboard-profile-subtitle">แก้ไขเบอร์โทรศัพท์ และเปลี่ยนรหัสผ่านของคุณ</p>
               </div>
             </div>
+            <CustomerProfileSummary customer={customer} room={room} />
             <form className="dashboard-inline-form dashboard-profile-form" onSubmit={handleProfileSubmit}>
               <div className="dashboard-profile-grid">
                 <section className="dashboard-profile-section">
-                  <h3 className="dashboard-section-title">ข้อมูลส่วนตัว</h3>
-                  <p className="dashboard-profile-hint">ชื่อและนามสกุลอ้างอิงตามข้อมูลที่ลงทะเบียน ไม่สามารถแก้ไขได้</p>
+                  <header className="dashboard-profile-head">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 21a8 8 0 0 1 16 0" />
+                    </svg>
+                    <div>
+                      <h3>ข้อมูลส่วนตัว</h3>
+                      <p>ชื่อและนามสกุลอ้างอิงตามข้อมูลที่ลงทะเบียน ไม่สามารถแก้ไขได้</p>
+                    </div>
+                  </header>
                   <ProfileField
                     id="profile-first-name"
                     label="ชื่อ"
@@ -6412,8 +6651,16 @@ function CustomerDashbord() {
                   />
                 </section>
                 <section className="dashboard-profile-section">
-                  <h3 className="dashboard-section-title">เปลี่ยนรหัสผ่าน</h3>
-                  <p className="dashboard-profile-hint">หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นช่องด้านล่างว่างไว้</p>
+                  <header className="dashboard-profile-head">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="4" y="11" width="16" height="10" rx="2" />
+                      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                    </svg>
+                    <div>
+                      <h3>เปลี่ยนรหัสผ่าน</h3>
+                      <p>หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นช่องด้านล่างว่างไว้</p>
+                    </div>
+                  </header>
                   <ProfileField
                     id="profile-current-password"
                     label="รหัสผ่านปัจจุบัน"
@@ -6689,7 +6936,7 @@ function CustomerDashbord() {
                             </div>
                           )}
                           {currentDue.depositApplied > 0 && (
-                            <p className="dashboard-due-deposit-note">
+                            <p className="dashboard-due-deposit-note is-deposit-applied">
                               หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
                             </p>
                           )}
