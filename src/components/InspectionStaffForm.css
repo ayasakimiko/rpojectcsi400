@@ -794,13 +794,6 @@
   border-color: #fecaca;
 }
 
-.staff-page .staff-action-btn.is-danger {
-  padding: 4px 9px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  border-radius: 8px;
-}
-
 .staff-action-btn.is-danger:hover:not(:disabled) {
   background: #fee2e2;
   border-color: #fca5a5;

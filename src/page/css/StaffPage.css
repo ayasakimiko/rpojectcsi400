@@ -11699,3 +11699,162 @@ tr.staff-focus-row.is-fading > td {
 .payment-slip-footer .payment-slip-download {
   margin-right: auto;
 }
+
+.staff-modal:has(.staff-sec-form) {
+  height: auto;
+  max-height: 88vh;
+}
+
+.staff-sec-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.staff-sec-form > * {
+  flex-shrink: 0;
+}
+
+.staff-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  border: 1px solid #e3ecf8;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.staff-sec > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.staff-sec > header > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.staff-sec > header strong {
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.staff-sec > header small {
+  color: #8aa0b6;
+  font-size: 11.5px;
+}
+
+.staff-sec-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #c9dcfb;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.staff-sec-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.staff-sec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.staff-sec-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.staff-sec-field > span {
+  color: #33506f;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.staff-sec-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.staff-sec-input i {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  display: inline-flex;
+  transform: translateY(-50%);
+  color: #6b8fc2;
+  pointer-events: none;
+}
+
+.staff-sec-input i svg {
+  width: 16px;
+  height: 16px;
+}
+
+.staff-sec-form .form-control {
+  height: 42px;
+  padding-left: 38px;
+  border: 1.5px solid #dbe4f3;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.staff-sec-form select.form-control {
+  padding-right: 34px;
+}
+
+.staff-sec-form .form-control::placeholder {
+  color: #b4c2d3;
+  font-weight: 400;
+  opacity: 1;
+}
+
+.staff-sec-form .form-control:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+}
+
+.staff-sec-form .parcel-photo-section {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.staff-sec-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.staff-sec-actions .staff-action-btn {
+  justify-content: center;
+  min-width: 112px;
+  min-height: 40px;
+}
+
+@media (max-width: 480px) {
+  .staff-sec-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
