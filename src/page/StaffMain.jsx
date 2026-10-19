@@ -14,6 +14,7 @@ import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
+import ProcessSteps from '../components/ProcessSteps.jsx'
 import {
   InspectionDateCell,
   InspectionInspectorCell,
@@ -11368,6 +11369,41 @@ function StaffMain() {
                   <span className="staff-req-note-label">รายละเอียดปัญหา</span>
                   <p className="is-full">{maintenanceDetail.description || '-'}</p>
                 </div>
+              </section>
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">สถานะการแจ้งซ่อม</h4>
+                <ProcessSteps
+                  actorClassName="staff-actor"
+                  startDate={maintenanceDetail.created_at}
+                  endDate={['done', 'cancelled'].includes(maintenanceDetail.status) ? maintenanceDetail.completed_at : null}
+                  waitingText={maintenanceDetail.status === 'pending' ? 'รอเจ้าหน้าที่รับเรื่อง' : 'กำลังดำเนินการซ่อม'}
+                  steps={[
+                    {
+                      key: 'request',
+                      label: 'แจ้งซ่อม',
+                      by: [maintenanceDetail.first_name, maintenanceDetail.last_name].filter(Boolean).join(' '),
+                      date: maintenanceDetail.created_at,
+                      icon: 'note',
+                    },
+                    {
+                      key: 'accept',
+                      label: 'เจ้าหน้าที่รับเรื่อง',
+                      by: maintenanceDetail.accepted_by_name,
+                      date: maintenanceDetail.accepted_at,
+                      icon: 'user',
+                      pendingText: maintenanceDetail.status === 'cancelled' ? 'ไม่ได้รับเรื่อง' : 'กำลังรอดำเนินการ',
+                    },
+                    {
+                      key: 'done',
+                      label: maintenanceDetail.status === 'cancelled' ? 'ยกเลิกแล้ว' : maintenanceDetail.status === 'done' ? 'ซ่อมเสร็จสิ้น' : 'รอซ่อมเสร็จ',
+                      by: maintenanceDetail.completed_by_name,
+                      date: ['done', 'cancelled'].includes(maintenanceDetail.status) ? maintenanceDetail.completed_at : null,
+                      icon: maintenanceDetail.status === 'cancelled' ? 'x' : 'tool',
+                      tone: maintenanceDetail.status === 'cancelled' ? 'danger' : undefined,
+                      pendingText: 'ยังไม่ถึงขั้นตอนนี้',
+                    },
+                  ]}
+                />
               </section>
               {maintenanceDetail.photos?.length > 0 && (
                 <section className="staff-transfer-section staff-maintenance-photos-section">
