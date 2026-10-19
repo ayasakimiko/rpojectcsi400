@@ -225,6 +225,7 @@ const OWNER_TABS = [
   { key: 'finance', label: 'รายละเอียดการเงิน' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
+  { key: 'audit', label: 'ประวัติ Audit' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
 ]
 
@@ -233,7 +234,127 @@ const OWNER_PERIOD_BAR_CONTENT = {
   finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
   staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
   utilities: { title: 'ค่าน้ำ-ค่าไฟรายห้อง', subtitle: 'หน่วยที่ใช้ ยอดเรียกเก็บ และสถานะการชำระแยกตามห้อง' },
+  audit: { title: 'ประวัติการใช้งานเว็บไซต์', subtitle: 'รายการเปลี่ยนแปลงข้อมูลที่ดำเนินการโดยผู้ใช้ทุกบทบาท' },
   announcements: { title: 'ประกาศจากหอพัก', subtitle: 'ข่าวสารและการแจ้งเตือนที่สื่อสารกับผู้เช่าและเจ้าหน้าที่' },
+}
+
+const AUDIT_RESOURCES = [
+  ['move-out-inspections', 'ผลตรวจห้องย้ายออก'],
+  ['resident-visit-requests', 'คำขอเข้าเยี่ยม/รถ'],
+  ['payment-verifications', 'รายการชำระเงิน'],
+  ['safety-incidents', 'รายงานเหตุ'],
+  ['utility-bill', 'บิลค่าน้ำ-ค่าไฟ'],
+  ['collect-payment', 'การชำระเงิน'],
+  ['waiting-list', 'รายชื่อผู้รอห้อง'],
+  ['announcements', 'ประกาศ'],
+  ['maintenance', 'งานแจ้งซ่อม'],
+  ['customers', 'ข้อมูลผู้เช่า'],
+  ['requests', 'คำขอผู้เช่า'],
+  ['expenses', 'รายการรายจ่าย'],
+  ['parcels', 'รายการพัสดุ'],
+  ['register', 'ผู้เช่า'],
+  ['rooms', 'ห้องพัก'],
+  ['staff', 'ข้อมูลพนักงาน'],
+  ['profile', 'ข้อมูลส่วนตัว'],
+]
+
+function describeAuditActivity(log) {
+  const segments = String(log.endpoint || '').split('?')[0].split('/').filter(Boolean)
+  const method = String(log.method || '').toUpperCase()
+  const resourceEntry = AUDIT_RESOURCES.find(([key]) => segments.includes(key))
+  const resource = resourceEntry?.[1] || 'ข้อมูลในระบบ'
+  const actionSegment = segments.find((segment) => ['approve', 'reject', 'review', 'acknowledge', 'cancel', 'suspend'].includes(segment))
+  const resourceIndex = resourceEntry ? segments.indexOf(resourceEntry[0]) : -1
+  const recordId = resourceIndex >= 0 ? segments.slice(resourceIndex + 1).find((segment) => /^\d+$/.test(segment)) : null
+  const recordLabel = recordId
+    ? resource === 'ห้องพัก' ? `ห้อง ${recordId}` : `${resource} #${recordId}`
+    : resource === 'ผู้เช่า' && segments.includes('register') ? 'ผู้เช่ารายใหม่' : resource
+
+  if (segments.includes('register') && method === 'POST') return { action: 'สมัครผู้เช่า', detail: 'ลงทะเบียนผู้เช่ารายใหม่' }
+  if (actionSegment === 'approve') return { action: `อนุมัติ${resource}`, detail: recordLabel }
+  if (actionSegment === 'reject') return { action: `ปฏิเสธ${resource}`, detail: recordLabel }
+  if (actionSegment === 'review') return { action: `ตรวจสอบ${resource}`, detail: recordLabel }
+  if (actionSegment === 'acknowledge') return { action: `รับทราบ${resource}`, detail: recordLabel }
+  if (actionSegment === 'cancel') return { action: `ยกเลิก${resource}`, detail: recordLabel }
+  if (actionSegment === 'suspend') return { action: `เปลี่ยนสถานะ${resource}`, detail: recordLabel }
+  if (segments.includes('collect-payment')) return { action: 'รับชำระเงิน', detail: recordLabel }
+  if (segments.includes('utility-bill')) return { action: 'บันทึกบิลค่าน้ำ-ค่าไฟ', detail: recordLabel }
+  if (method === 'POST') return { action: `เพิ่ม${resource}`, detail: recordLabel }
+  if (method === 'PUT' || method === 'PATCH') return { action: `แก้ไข${resource}`, detail: recordLabel }
+  if (method === 'DELETE') return { action: `ลบ${resource}`, detail: recordLabel }
+  return { action: 'อัปเดตข้อมูล', detail: recordLabel }
+}
+
+function OwnerAuditLog() {
+  const [result, setResult] = useState({ logs: [], total: 0, page: 1, pageSize: 20 })
+  const [page, setPage] = useState(1)
+  const [role, setRole] = useState('all')
+  const [method, setMethod] = useState('all')
+  const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    axios.get('/api/owner/logs/audit', {
+      headers: getAuthHeaders(),
+      params: { page, role: role !== 'all' ? role : undefined, method: method !== 'all' ? method : undefined, search: appliedSearch || undefined },
+    }).then(({ data }) => {
+      if (!cancelled) {
+        setResult(data)
+        setError('')
+      }
+    }).catch((requestError) => {
+      if (!cancelled) setError(requestError.response?.data?.message || 'โหลดประวัติการใช้งานไม่สำเร็จ')
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [page, role, method, appliedSearch])
+
+  const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize))
+  return (
+    <section className="owner-panel owner-audit-panel">
+      <div className="owner-panel-header">
+        <div><h3>ประวัติการใช้งานเว็บไซต์</h3><p>บันทึกการเปลี่ยนแปลงข้อมูลที่สำเร็จจากทุกบทบาท</p></div>
+        <span className="owner-panel-header-count">{Number(result.total).toLocaleString('th-TH')} รายการ</span>
+      </div>
+      <form className="owner-audit-filters" onSubmit={(event) => { event.preventDefault(); if (search.trim() !== appliedSearch) setLoading(true); setPage(1); setAppliedSearch(search.trim()) }}>
+        <input className="owner-audit-search" type="search" placeholder="ค้นหาผู้ใช้หรือรายการ" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <select aria-label="กรองบทบาท" value={role} onChange={(event) => { setLoading(true); setRole(event.target.value); setPage(1) }}>
+          <option value="all">ทุกบทบาท</option><option value="Customer">ลูกค้า</option><option value="Staff">พนักงาน</option><option value="Admin">แอดมิน</option><option value="Owner">เจ้าของ</option>
+        </select>
+        <select aria-label="กรองการกระทำ" value={method} onChange={(event) => { setLoading(true); setMethod(event.target.value); setPage(1) }}>
+          <option value="all">ทุกการกระทำ</option><option value="POST">สร้าง</option><option value="PUT">แก้ไข</option><option value="PATCH">แก้ไข</option><option value="DELETE">ลบ</option>
+        </select>
+        <button className="owner-primary-btn small" type="submit">ค้นหา</button>
+      </form>
+      {error && <div className="owner-alert owner-alert-danger" role="alert">{error}</div>}
+      <div className="owner-table-wrap owner-audit-table-wrap">
+        <table className="owner-table owner-audit-table">
+          <thead><tr><th>วัน-เวลา</th><th>ผู้ทำรายการ</th><th>กิจกรรม</th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan="3" className="owner-empty-row">กำลังโหลด...</td></tr> : result.logs.length ? result.logs.map((log) => {
+              const activity = describeAuditActivity(log)
+              return <tr key={log.id}>
+                <td>{new Date(log.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                <td>{log.actor_name || `${log.actor_role} #${log.actor_id}`}<small>{log.actor_role}</small></td>
+                <td><strong>{activity.action}</strong><small>{activity.detail}</small></td>
+              </tr>
+            }) : <tr><td colSpan="3" className="owner-empty-row">ยังไม่มีประวัติการใช้งาน</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="owner-audit-pagination">
+        <span>หน้า {page} / {totalPages} · ทั้งหมด {Number(result.total).toLocaleString('th-TH')} รายการ</span>
+        <div className="owner-pagination">
+          <button type="button" disabled={loading || page <= 1} onClick={() => { setLoading(true); setPage(page - 1) }}>ก่อนหน้า</button>
+          <button type="button" disabled={loading || page >= totalPages} onClick={() => { setLoading(true); setPage(page + 1) }}>ถัดไป</button>
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function getOwnerNotificationStorageKey() {
@@ -1763,6 +1884,8 @@ function OwnerMain() {
             </section>
           </>
         )}
+
+        {!isLoading && activeTab === 'audit' && <OwnerAuditLog />}
 
         {!isLoading && activeTab === 'announcements' && (
           <AnnouncementBoard
