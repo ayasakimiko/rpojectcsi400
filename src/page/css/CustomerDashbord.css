@@ -1178,7 +1178,7 @@
 .dashboard-card.dashboard-rental-history-card {
   display: flex;
   flex-direction: column;
-  height: 1120px;
+  height: 1280px;
   min-height: 420px;
 }
 
@@ -1198,7 +1198,7 @@
   }
 
   .dashboard-rental-history-card > .dashboard-rental-entry {
-    height: 640px;
+    height: 820px;
   }
 }
 
@@ -10462,4 +10462,38 @@
   .dashboard-pay-right .slip-dropzone {
     min-height: 160px;
   }
+}
+
+/* Rental history: keep controls visible while the payment rows scroll. */
+.dashboard-rental-history-card > .dashboard-rental-entry > .table-responsive {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #b9d4f5 #f4f8fd;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+}
+.dashboard-rental-history-card .table-responsive::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.dashboard-rental-history-card .table-responsive::-webkit-scrollbar-track {
+  background: #f4f8fd;
+  border-radius: 8px;
+}
+.dashboard-rental-history-card .table-responsive::-webkit-scrollbar-thumb {
+  background: #b9d4f5;
+  border: 2px solid #f4f8fd;
+  border-radius: 8px;
+}
+.dashboard-rental-history-card .table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #7fb0ec;
+}
+.dashboard-rental-history-card .dashboard-rental-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f5f9ff;
+  box-shadow: 0 1px 0 #dce9fb;
 }

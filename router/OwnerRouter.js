@@ -430,10 +430,77 @@ router.get("/income", async (req, res) => {
     );
     const totalIncome = byType.reduce((sum, row) => sum + Number(row.total || 0), 0);
 
-    return res.json({ totalIncome, byType });
+    const [previews] = await pool.query(
+      `SELECT ranked.id, ranked.type, ranked.amount, ranked.payment_date, ranked.booking_id,
+              r.room_number, c.first_name, c.last_name
+       FROM (
+         SELECT id, type, amount, payment_date, booking_id,
+                ROW_NUMBER() OVER (PARTITION BY type ORDER BY payment_date DESC, id DESC) AS position
+         FROM Payment ${whereClause}
+       ) ranked
+       LEFT JOIN Booking b ON b.id = ranked.booking_id
+       LEFT JOIN Room r ON r.id = b.room_id
+       LEFT JOIN Customer c ON c.id = b.customer_id
+       WHERE ranked.position <= 3 ORDER BY ranked.payment_date DESC, ranked.id DESC`, params,
+    );
+    return res.json({ totalIncome, byType: byType.map((item) => ({ ...item, previews: previews.filter((payment) => payment.type === item.type) })) });
   } catch (error) {
     console.error("Owner fetch income error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/income/items", async (req, res) => {
+  try {
+    const dateError = validateDateQuery(req.query, ["from", "to"]);
+    if (dateError) return res.status(400).json({ message: dateError });
+    const conditions = ["p.status = 'paid'"];
+    const params = [];
+    if (req.query.from) { conditions.push("p.payment_date >= ?"); params.push(req.query.from); }
+    if (req.query.to) { conditions.push("p.payment_date < DATE_ADD(?, INTERVAL 1 DAY)"); params.push(req.query.to); }
+    if (!req.query.from && !req.query.to) {
+      const range = getSelectedMonthRange(req.query);
+      if (range) { conditions.push("p.payment_date >= ? AND p.payment_date < ?"); params.push(range.from, range.toExclusive); }
+    }
+    if (typeof req.query.type === "string" && req.query.type && req.query.type !== "all") {
+      conditions.push("p.type = ?"); params.push(req.query.type);
+    }
+    const search = parseSearch(req.query.search);
+    if (search) {
+      conditions.push("(CAST(r.room_number AS CHAR) LIKE ? OR CONCAT_WS(' ', c.first_name, c.last_name) LIKE ? OR p.note LIKE ? OR CAST(p.id AS CHAR) LIKE ?)");
+      params.push(...Array(4).fill(`%${search}%`));
+    }
+    const page = parsePage(req.query.page);
+    const pageSize = 30;
+    const base = `FROM Payment p LEFT JOIN Booking b ON b.id = p.booking_id LEFT JOIN Room r ON r.id = b.room_id LEFT JOIN Customer c ON c.id = b.customer_id WHERE ${conditions.join(" AND ")}`;
+    const pool = getPool();
+    const [[summary], [items]] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS total, COALESCE(SUM(p.amount), 0) AS amount ${base}`, params),
+      pool.query(`SELECT p.id, p.type, p.amount, p.payment_date, p.note, r.room_number, c.first_name, c.last_name ${base} ORDER BY p.payment_date DESC, p.id DESC LIMIT ? OFFSET ?`, [...params, pageSize, (page - 1) * pageSize]),
+    ]);
+    return res.json({ items, total: Number(summary[0].total), amount: Number(summary[0].amount), page, pageSize });
+  } catch (error) {
+    console.error("Owner income items error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายการรายรับได้" });
+  }
+});
+
+router.get("/income/items/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!isPositiveId(id)) return res.status(400).json({ message: "เลขรายการไม่ถูกต้อง" });
+  try {
+    const [rows] = await getPool().query(
+      `SELECT p.id, p.type, p.amount, p.status, p.payment_date, p.created_at, p.note, p.slip_path,
+              r.room_number, c.first_name, c.last_name
+       FROM Payment p LEFT JOIN Booking b ON b.id = p.booking_id
+       LEFT JOIN Room r ON r.id = b.room_id LEFT JOIN Customer c ON c.id = b.customer_id
+       WHERE p.id = ? AND p.status = 'paid' LIMIT 1`, [id],
+    );
+    if (!rows.length) return res.status(404).json({ message: "ไม่พบรายการรับชำระ" });
+    return res.json({ payment: rows[0] });
+  } catch (error) {
+    console.error("Owner income payment detail error:", error);
+    return res.status(500).json({ message: "โหลดรายละเอียดการชำระเงินไม่สำเร็จ" });
   }
 });
 
@@ -455,12 +522,13 @@ router.get("/utility-receipts", async (req, res) => {
               SUM(CASE WHEN p.type = 'electricity' THEN p.electricity_units ELSE NULL END) AS electricityUnits,
               COUNT(*) AS paymentCount
        FROM Payment p WHERE p.status = 'paid' AND p.type IN ('water', 'electricity')
-         AND p.payment_date BETWEEN ? AND ?
+         AND p.payment_date >= ? AND p.payment_date < DATE_ADD(?, INTERVAL 1 DAY)
        GROUP BY period ORDER BY period`,
       [from, to],
     );
     return res.json({
       granularity,
+      range: { from, to },
       trends: rows.map((row) => ({
         period: row.period,
         water: Number(row.water || 0),
@@ -953,6 +1021,52 @@ router.get("/logs/occupancy", async (req, res) => {
   } catch (error) {
     console.error("Owner fetch occupancy log error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/logs/occupancy/:eventId", async (req, res) => {
+  const match = /^(movein|moveout)-(\d+)$/.exec(req.params.eventId);
+  if (!match || !isPositiveId(Number(match[2]))) return res.status(400).json({ message: "เลขบันทึกไม่ถูกต้อง" });
+  try {
+    const pool = getPool();
+    const isMoveIn = match[1] === "movein";
+    const id = Number(match[2]);
+    const [rows] = await pool.query(isMoveIn ?
+      `SELECT b.id AS booking_id, b.created_at AS event_date, b.created_at AS requested_at,
+              b.rental_start_date, b.rental_end_date, r.room_number,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone,
+              NULL AS note, NULL AS accepted_at, NULL AS accepted_by_name,
+              NULL AS completed_at, NULL AS completed_by_name
+       FROM Booking b JOIN Room r ON r.id = b.room_id JOIN Customer c ON c.id = b.customer_id WHERE b.id = ? LIMIT 1` :
+      `SELECT b.id AS booking_id, tr.completed_at AS event_date, tr.created_at AS requested_at,
+              b.rental_start_date, b.rental_end_date, tr.room_number,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone,
+              tr.note, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name
+       FROM TenantRequest tr JOIN Customer c ON c.id = tr.customer_id
+       LEFT JOIN Booking b ON b.id = (
+         SELECT bx.id FROM Booking bx JOIN Room rx ON rx.id = bx.room_id
+         WHERE bx.customer_id = tr.customer_id AND rx.room_number = tr.room_number
+           AND bx.created_at <= tr.created_at ORDER BY bx.created_at DESC, bx.id DESC LIMIT 1
+       )
+       WHERE tr.id = ? AND tr.type = 'moveout' AND tr.status = 'approved' LIMIT 1`, [id]);
+    const detail = rows[0];
+    if (!detail) return res.status(404).json({ message: "ไม่พบบันทึกการเข้าพักหรือย้ายออก" });
+    let payments = [];
+    let paymentSummary = { total: 0, paid: 0, pending: 0 };
+    if (detail.booking_id) {
+      const [[summary], [items]] = await Promise.all([
+        pool.query(`SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) AS paid,
+          COALESCE(SUM(CASE WHEN status IN ('pending', 'unpaid', 'overdue') THEN amount ELSE 0 END), 0) AS pending
+          FROM Payment WHERE booking_id = ?`, [detail.booking_id]),
+        pool.query(`SELECT id, type, amount, status, payment_date FROM Payment WHERE booking_id = ? ORDER BY payment_date DESC, id DESC`, [detail.booking_id]),
+      ]);
+      paymentSummary = { total: Number(summary[0].total), paid: Number(summary[0].paid), pending: Number(summary[0].pending) };
+      payments = items;
+    }
+    return res.json({ detail: { ...detail, id: req.params.eventId, event_type: isMoveIn ? "move_in" : "move_out" }, payments, paymentSummary });
+  } catch (error) {
+    console.error("Owner occupancy detail error:", error);
+    return res.status(500).json({ message: "โหลดรายละเอียดบันทึกไม่สำเร็จ" });
   }
 });
 

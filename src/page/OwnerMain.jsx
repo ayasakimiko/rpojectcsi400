@@ -12,6 +12,7 @@ import { UploadImage } from '../components/UploadMedia.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
 import { DEMO_PAYMENT_CHANNELS, formatPromptPayId, isValidPromptPayId, normalizePromptPayId } from '../utils/promptpay.js'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import ProcessSteps from '../components/ProcessSteps.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 
@@ -335,60 +336,569 @@ function OwnerPaymentSettings() {
 
 const currency = (value) => Number(value || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 })
 
-function OwnerUtilityReceipts({ from, to }) {
-  const [result, setResult] = useState({ trends: [], granularity: 'month' })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+function OwnerOccupancyLogDialog({ eventId, onClose }) {
+  const [response, setResponse] = useState(null)
+  const [retry, setRetry] = useState(0)
+  const [paymentId, setPaymentId] = useState(null)
+  const [showAllPayments, setShowAllPayments] = useState(false)
+  const [paymentSearch, setPaymentSearch] = useState('')
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = paymentId !== null ? () => {} : showAllPayments ? () => setShowAllPayments(false) : onClose }, [onClose, paymentId, showAllPayments])
   useEffect(() => {
+    const controller = new AbortController()
+    axios.get(`/api/owner/logs/occupancy/${eventId}`, { headers: getAuthHeaders(), signal: controller.signal })
+      .then(({ data }) => { if (!controller.signal.aborted) setResponse(data) })
+      .catch((error) => { if (!controller.signal.aborted) setResponse({ error: error.response?.data?.message || 'โหลดรายละเอียดไม่สำเร็จ' }) })
+    return () => controller.abort()
+  }, [eventId, retry])
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    const previousFocus = document.activeElement
+    document.body.style.overflow = 'hidden'
+    const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', escape)
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); previousFocus?.focus() }
+  }, [])
+  const detail = response?.detail
+  const isIn = detail?.event_type === 'move_in'
+  const time = (value) => value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ไม่ระบุ'
+  const paymentKeyword = paymentSearch.trim().toLowerCase()
+  const filteredPayments = (response?.payments || []).filter((payment) => !paymentKeyword || [
+    formatPaymentType(payment.type), formatDate(payment.payment_date), `#${payment.id}`, String(payment.amount), currency(payment.amount),
+    ROOM_PAYMENT_STATUS_LABELS[payment.status] || payment.status,
+  ].some((value) => String(value || '').toLowerCase().includes(paymentKeyword)))
+  const renderPayment = (payment) => (
+    <article key={payment.id} className="owner-olog-payment">
+      <span className="owner-olog-payment-icon" aria-hidden="true"><PaymentTypeIcon type={payment.type} /></span>
+      <div className="owner-olog-payment-name"><strong>{formatPaymentType(payment.type)}</strong><small>{formatDate(payment.payment_date)} · #{payment.id}</small></div>
+      <div className="owner-olog-payment-end">
+        <div className="owner-olog-payment-value"><strong>฿{currency(payment.amount)}</strong><span className={`owner-olog-payment-status is-${getRoomPaymentTone(payment.status)}`}>{ROOM_PAYMENT_STATUS_LABELS[payment.status] || payment.status}</span></div>
+        {payment.status === 'paid' && <button type="button" className="owner-ur-view owner-olog-slip-link" onClick={() => setPaymentId(payment.id)}><OwnerListIcon name="receipt" size={14} />รายละเอียด / สลิป <span aria-hidden="true">›</span></button>}
+      </div>
+    </article>
+  )
+  return (
+    <div className="owner-modal-backdrop owner-olog-overlay" onClick={onClose}>
+      <section className="owner-modal owner-olog-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-olog-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header"><span className="owner-ip-heading-icon"><OwnerListIcon name="receipt" size={20} /></span><div><h3 id="owner-olog-title">รายละเอียดบันทึกการเข้าพักและย้ายออก</h3><p className="owner-modal-subtext">เลขบันทึก {eventId}</p></div><button type="button" className="owner-modal-close" autoFocus onClick={onClose} aria-label="ปิดรายละเอียดบันทึก">×</button></header>
+        <div className="owner-modal-body">
+          {!response ? <div className="owner-empty" role="status">กำลังโหลดรายละเอียด...</div> : response.error ? <div className="owner-income-error" role="alert"><h4>โหลดข้อมูลไม่สำเร็จ</h4><p>{response.error}</p><button type="button" onClick={() => { setResponse(null); setRetry((value) => value + 1) }}>ลองอีกครั้ง</button></div> : (
+            <>
+              <div className={`owner-olog-hero ${isIn ? 'is-in' : 'is-out'}`}><span className="owner-olog-hero-icon"><OwnerListIcon name={isIn ? 'moveIn' : 'moveOut'} size={24} /></span><div><small>{isIn ? 'บันทึกการเข้าพัก' : 'บันทึกการย้ายออก'}</small><h4>{`${detail.first_name || ''} ${detail.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</h4><p>ห้อง {detail.room_number} · {time(detail.event_date)}</p></div><span className="owner-olog-event">{isIn ? 'เข้าพัก' : 'ย้ายออกแล้ว'}</span></div>
+              <div className="owner-olog-columns">
+                <section className="owner-olog-section"><h4><OwnerListIcon name="user" />ข้อมูลผู้เข้าพักและการเช่า</h4><dl>
+                  {[
+                    ['ชื่อผู้เข้าพัก', `${detail.first_name || ''} ${detail.last_name || ''}`.trim(), 'user'], ['เบอร์โทร', detail.phone || 'ไม่ระบุ', 'phone'],
+                    ['เลขห้องในบันทึก', detail.room_number, 'door'], ['เลขการจอง', detail.booking_id ? `#${detail.booking_id}` : 'ไม่พบบัญชีการจองที่เชื่อมโยง', 'hash'],
+                    ['เริ่มสัญญา', detail.rental_start_date ? formatDate(detail.rental_start_date) : 'ไม่มีข้อมูลในประวัติ', 'calendar'], ['สิ้นสุดสัญญา', detail.rental_end_date ? formatDate(detail.rental_end_date) : 'ไม่มีข้อมูลในประวัติ', 'calendar'],
+                  ].map(([label, value, icon]) => <div key={label}><dt><OwnerListIcon name={icon} size={14} />{label}</dt><dd>{value || '—'}</dd></div>)}
+                </dl></section>
+                <section className="owner-olog-section owner-olog-process"><h4><OwnerListIcon name="clock" />ขั้นตอนการดำเนินการ</h4>
+                  <ProcessSteps
+                    actorClassName="owner-olog-step-actor"
+                    startDate={detail.requested_at}
+                    endDate={isIn ? null : detail.completed_at}
+                    pendingText="ไม่มีข้อมูลเวลาบันทึก"
+                    waitingText={isIn ? 'บันทึกการเข้าพักเรียบร้อย' : 'ไม่มีข้อมูลเวลาสิ้นสุด'}
+                    steps={isIn ? [
+                      { key: 'booking', icon: 'note', label: 'บันทึกการเข้าพัก', date: detail.requested_at, by: `${detail.first_name || ''} ${detail.last_name || ''}`.trim() },
+                    ] : [
+                      { key: 'request', icon: 'note', label: 'ส่งคำขอย้ายออก', date: detail.requested_at, by: `${detail.first_name || ''} ${detail.last_name || ''}`.trim() },
+                      { key: 'accepted', icon: 'user', label: 'เจ้าหน้าที่รับเรื่อง', date: detail.accepted_at, by: detail.accepted_by_name },
+                      { key: 'completed', icon: 'check', label: 'อนุมัติคำขอ', date: detail.completed_at, by: detail.completed_by_name },
+                    ]}
+                  />
+                  <div className="owner-il-note owner-ip-note"><OwnerListIcon name="note" size={16} /><div><strong>หมายเหตุ</strong><p>{detail.note || 'ไม่มีหมายเหตุในบันทึกนี้'}</p></div></div>
+                </section>
+              </div>
+              <section className="owner-olog-section"><h4><OwnerListIcon name="receipt" />การชำระเงินของการจองนี้{response.payments.length > 5 && <button type="button" className="owner-olog-view-all" onClick={() => { setPaymentSearch(''); setShowAllPayments(true) }}>กดดูทั้งหมด ({response.payments.length}) <span aria-hidden="true">›</span></button>}</h4>
+                <div className="owner-olog-money">
+                  {[
+                    { key: 'paid', icon: 'check', label: 'รับชำระแล้ว', value: currency(response.paymentSummary.paid), unit: 'บาท' },
+                    { key: 'pending', icon: 'clock', label: 'ยังไม่ชำระ / รอตรวจ', value: currency(response.paymentSummary.pending), unit: 'บาท' },
+                    { key: 'total', icon: 'receipt', label: 'รายการทั้งหมด', value: response.paymentSummary.total, unit: 'รายการ' },
+                  ].map((item) => <div key={item.key} className={`owner-olog-money-card is-${item.key}`}><span className="owner-olog-money-label"><OwnerListIcon name={item.icon} size={16} /><small>{item.label}</small></span><strong>{item.value} <em>{item.unit}</em></strong></div>)}
+                </div>
+                <div className="owner-olog-payment-list">{response.payments.slice(0, 5).map(renderPayment)}{!response.payments.length && <div className="owner-income-group-empty">ไม่มีประวัติการชำระเงินที่เชื่อมโยง</div>}</div>
+                <p className="owner-olog-caption">แสดง 5 รายการล่าสุด กดดูทั้งหมดเพื่อดูรายการเพิ่มเติม · ข้อมูลสัญญาอ้างอิงการจองที่เชื่อมโยง ส่วนชื่อและเบอร์โทรอ้างอิงข้อมูลบัญชีล่าสุด</p>
+              </section>
+            </>
+          )}
+        </div>
+        {showAllPayments && response?.payments && (
+          <div className="owner-modal-backdrop owner-olog-all-overlay" onClick={() => setShowAllPayments(false)}>
+            <section className="owner-modal owner-olog-all-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-olog-all-title" onClick={(event) => event.stopPropagation()}>
+              <header className="owner-modal-header"><span className="owner-ip-heading-icon"><OwnerListIcon name="receipt" size={20} /></span><div><h3 id="owner-olog-all-title">การชำระเงินทั้งหมดของการจองนี้</h3><p className="owner-modal-subtext">ทั้งหมด {response.payments.length} รายการ</p></div><button type="button" className="owner-modal-close" autoFocus onClick={() => setShowAllPayments(false)} aria-label="ปิดรายการการชำระเงินทั้งหมด">×</button></header>
+              <div className="owner-modal-body">
+                <label className="owner-fp-search owner-olog-all-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} aria-label="ค้นหารายการชำระเงิน" placeholder="ค้นหาประเภท วันที่ เลขรายการ ยอดเงิน หรือสถานะ" /></label>
+                <div className="owner-olog-payment-list">{filteredPayments.map(renderPayment)}{!filteredPayments.length && <div className="owner-income-group-empty">ไม่พบรายการที่ตรงกับคำค้นหา</div>}</div>
+              </div>
+            </section>
+          </div>
+        )}
+        {paymentId !== null && <OwnerIncomePaymentDialog key={paymentId} id={paymentId} onClose={() => setPaymentId(null)} />}
+      </section>
+    </div>
+  )
+}
+
+function OwnerFinancePeriodDialog({ period, range, onClose }) {
+  const [tab, setTab] = useState('income')
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+  useEffect(() => {
+    const keyword = search.trim()
+    if (keyword === appliedSearch) return
+    const timer = setTimeout(() => { setAppliedSearch(keyword); setPage(1) }, 300)
+    return () => clearTimeout(timer)
+  }, [search, appliedSearch])
+  const [response, setResponse] = useState(null)
+  const [retry, setRetry] = useState(0)
+  const [paymentId, setPaymentId] = useState(null)
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = paymentId === null ? onClose : () => {} }, [onClose, paymentId])
+  const month = period.period.length === 7
+  const start = month ? `${period.period}-01` : period.period
+  const endDate = month ? new Date(Number(period.period.slice(0, 4)), Number(period.period.slice(5, 7)), 0) : null
+  const end = month ? `${period.period}-${String(endDate.getDate()).padStart(2, '0')}` : period.period
+  const from = range.from && range.from > start ? range.from : start
+  const to = range.to && range.to < end ? range.to : end
+  const requestKey = JSON.stringify({ tab, page, search: appliedSearch, from, to, retry })
+  useEffect(() => {
+    const controller = new AbortController()
+    const { tab: kind, retry: ignored, ...params } = JSON.parse(requestKey)
+    void ignored
+    axios.get(kind === 'income' ? '/api/owner/income/items' : '/api/owner/expenses', { headers: getAuthHeaders(), params, signal: controller.signal })
+      .then(({ data }) => { if (!controller.signal.aborted) setResponse({ key: requestKey, data }) })
+      .catch((error) => { if (!controller.signal.aborted) setResponse({ key: requestKey, error: error.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ' }) })
+    return () => controller.abort()
+  }, [requestKey])
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    const focus = document.activeElement
+    document.body.style.overflow = 'hidden'
+    const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', escape)
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); focus?.focus() }
+  }, [])
+  const current = response?.key === requestKey ? response : null
+  const data = current?.data
+  const items = tab === 'income' ? data?.items || [] : data?.expenses || []
+  const pages = Math.max(1, Math.ceil((data?.total || 0) / (data?.pageSize || 30)))
+  const net = Number(period.income || 0) - Number(period.expense || 0)
+  return (
+    <div className="owner-modal-backdrop owner-finance-period-overlay" onClick={onClose}>
+      <section className="owner-modal owner-finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-finance-period-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header"><div><h3 id="owner-finance-period-title">รายละเอียดการเงิน · {period.monthLabel}</h3><p className="owner-modal-subtext">{formatDate(from)} – {formatDate(to)}</p></div><button type="button" className="owner-modal-close" aria-label="ปิดรายละเอียดช่วงเวลา" onClick={onClose} autoFocus>×</button></header>
+        <div className="owner-finance-period-summary">
+          {[
+            { key: 'income', icon: 'income', label: 'รายรับรวม', amount: period.income, caption: `${period.incomeCount || 0} รายการที่ชำระแล้ว` },
+            { key: 'expense', icon: 'expense', label: 'รายจ่ายรวม', amount: period.expense, caption: `${period.expenseCount || 0} รายการค่าใช้จ่าย` },
+            { key: net < 0 ? 'loss' : 'net', icon: 'profit', label: net < 0 ? 'ขาดทุนสุทธิ' : 'กำไรสุทธิ', amount: Math.abs(net), caption: 'รายรับรวมหักรายจ่ายรวม' },
+          ].map((item) => (
+            <div key={item.key} className={`owner-fp-stat is-${item.key}`}>
+              <div className="owner-fp-stat-heading"><StatIcon name={item.icon} /><small>{item.label}</small></div>
+              <strong>{currency(item.amount)} <em>บาท</em></strong>
+              <span className="owner-fp-stat-caption">{item.caption}</span>
+            </div>
+          ))}
+        </div>
+        <div className="owner-finance-period-tools">
+          <div className="nav staff-subtabs">{[{ key: 'income', label: 'รายการรายรับ' }, { key: 'expense', label: 'รายการรายจ่าย' }].map((item) => <button key={item.key} type="button" className={`nav-link staff-subtab-link${tab === item.key ? ' active' : ''}`} aria-pressed={tab === item.key} onClick={() => { setTab(item.key); setPage(1) }}>{item.label}</button>)}</div>
+          <form onSubmit={(event) => event.preventDefault()} role="search">
+            <label className="owner-fp-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="ค้นหารายการในช่วงเวลา" placeholder={tab === 'income' ? 'ค้นหาห้อง ผู้ชำระ หรือหมายเหตุ' : 'ค้นหาหมวดหมู่ หรือรายละเอียด'} /></label>
+          </form>
+        </div>
+        <div className={`owner-income-dialog-body owner-fp-body${data && !items.length ? ' is-empty' : ''}`}>
+          {!current ? <div className="owner-empty" role="status">กำลังโหลดรายการ...</div> : current.error ? <div className="owner-income-error" role="alert"><p>{current.error}</p><button type="button" onClick={() => setRetry((value) => value + 1)}>ลองอีกครั้ง</button></div> : (
+            <><table className="owner-finance-period-table">
+              <colgroup><col className="is-date" /><col className="is-type" /><col className="is-person" /><col /><col className="is-amount" /></colgroup>
+              <thead><tr><th scope="col">วันที่ / เลขรายการ</th><th scope="col">ประเภท / หมวดหมู่</th><th scope="col">{tab === 'income' ? 'ห้อง / ผู้ชำระ' : 'บันทึกโดย'}</th><th scope="col">รายละเอียด</th><th scope="col">จำนวนเงิน (บาท)</th></tr></thead><tbody>
+              {items.map((item) => (
+                <tr key={item.id} className={tab === 'income' ? 'owner-fp-income-row' : ''} onClick={tab === 'income' ? () => setPaymentId(item.id) : undefined}>
+                  <td><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(tab === 'income' ? item.payment_date : item.expense_date)}</strong></span><span className="owner-il-id">รายการ #{item.id}</span></td>
+                  <td><span className="owner-il-type" style={{ '--type-tone': tab === 'income' ? getPaymentTypeColor(item.type) : '#d97706' }}>{tab === 'income' ? <PaymentTypeIcon type={item.type} /> : <StatIcon name="expense" />}{tab === 'income' ? formatPaymentType(item.type) : item.category || 'ไม่ระบุ'}</span></td>
+                  <td>{tab === 'income' ? <div className="owner-il-person"><span className="owner-il-room">{item.room_number || '—'}</span><div><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><span>ห้อง {item.room_number || '—'}</span></div></div> : <span className="owner-fp-recorder"><OwnerListIcon name="user" /><strong>{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</strong></span>}</td>
+                  <td><span className={`owner-il-note${(tab === 'income' ? item.note : item.description) ? '' : ' is-empty'}`}>{(tab === 'income' ? item.note : item.description) || 'ไม่มีรายละเอียดเพิ่มเติม'}</span></td>
+                  <td><strong className={`owner-il-amount${tab === 'expense' ? ' owner-fp-expense-amount' : ''}`}>฿{currency(item.amount)}</strong>{tab === 'income' && <button type="button" className="owner-ur-view owner-fp-payment-link" onClick={(event) => { event.stopPropagation(); setPaymentId(item.id) }}><OwnerListIcon name="receipt" size={13} />รายละเอียด / สลิป <span aria-hidden="true">›</span></button>}</td>
+                </tr>
+              ))}
+            </tbody></table>
+            {!items.length && <div className="owner-fp-empty" role="status"><span className="owner-fp-empty-icon" aria-hidden="true"><OwnerListIcon name="receipt" size={26} /></span><strong>{appliedSearch ? 'ไม่พบรายการที่ตรงกับคำค้นหา' : 'ไม่พบรายการในช่วงเวลานี้'}</strong><p>{appliedSearch ? 'ลองเปลี่ยนคำค้นหา หรือดูรายการทั้งหมดของช่วงนี้' : 'ยังไม่มีรายการในหมวดและช่วงวันที่ที่เลือก'}</p>{appliedSearch && <button type="button" onClick={() => { setSearch(''); setAppliedSearch(''); setPage(1) }}>ล้างคำค้นหา</button>}</div>}</>
+          )}
+        </div>
+        <footer className="owner-income-dialog-footer"><span>พบ {data?.total || 0} รายการ</span><div className="owner-pa-pager"><button type="button" aria-label="หน้าก่อนหน้า" disabled={!data || page <= 1} onClick={() => setPage(page - 1)}>‹</button><span>{page} / {pages}</span><button type="button" aria-label="หน้าถัดไป" disabled={!data || page >= pages} onClick={() => setPage(page + 1)}>›</button></div></footer>
+        {paymentId !== null && <OwnerIncomePaymentDialog key={paymentId} id={paymentId} onClose={() => setPaymentId(null)} />}
+      </section>
+    </div>
+  )
+}
+
+function OwnerIncomePaymentDialog({ id, onClose }) {
+  const [response, setResponse] = useState(null)
+  const [retry, setRetry] = useState(0)
+  const [zoom, setZoom] = useState(false)
+  const dialogRef = useRef(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    axios.get(`/api/owner/income/items/${id}`, { headers: getAuthHeaders(), signal: controller.signal })
+      .then(({ data }) => { if (!controller.signal.aborted) setResponse({ payment: data.payment }) })
+      .catch((error) => { if (!controller.signal.aborted) setResponse({ error: error.response?.data?.message || 'โหลดรายละเอียดไม่สำเร็จ' }) })
+    return () => controller.abort()
+  }, [id, retry])
+  useEffect(() => {
+    const previousFocus = document.activeElement
+    const onKey = (event) => {
+      if (zoom) return
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); onClose() }
+      if (event.key === 'Tab') {
+        const controls = dialogRef.current?.querySelectorAll('button:not(:disabled), [href], [tabindex="0"]')
+        if (!controls?.length) return
+        const first = controls[0], last = controls[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('keydown', onKey, true); previousFocus?.focus() }
+  }, [onClose, zoom])
+  const payment = response?.payment
+  return (
+    <div className="owner-modal-backdrop owner-income-payment-overlay" onClick={onClose}>
+      <section ref={dialogRef} className="owner-modal owner-income-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-income-payment-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header owner-ip-header"><span className="owner-ip-heading-icon" aria-hidden="true"><OwnerListIcon name="receipt" size={20} /></span><div><h3 id="owner-income-payment-title">รายละเอียดการชำระเงิน</h3><p className="owner-modal-subtext">รายการ #{id}</p></div><button type="button" className="owner-modal-close" aria-label="ปิดรายละเอียดการชำระเงิน" autoFocus onClick={onClose}>×</button></header>
+        <div className="owner-modal-body">
+          {!response ? <div className="owner-empty" role="status">กำลังโหลดรายละเอียด...</div> : response.error ? <div className="owner-income-error" role="alert"><h4>โหลดรายละเอียดไม่สำเร็จ</h4><p>{response.error}</p><button type="button" onClick={() => { setResponse(null); setRetry((value) => value + 1) }}>ลองอีกครั้ง</button></div> : (
+            <>
+              <div className="owner-income-payment-hero"><span className="owner-ip-amount-icon" aria-hidden="true"><StatIcon name="income" /></span><div className="owner-ip-amount"><span>ยอดรับชำระทั้งหมด</span><strong>฿{currency(payment.amount)}</strong></div><span className="owner-ip-paid"><OwnerListIcon name="check" size={14} />ชำระแล้ว</span></div>
+              <h4 className="owner-ip-section-title"><OwnerListIcon name="receipt" />ข้อมูลการชำระเงิน</h4>
+              <dl className="owner-income-payment-fields">
+                {[
+                  ['ผู้ชำระ', `${payment.first_name || ''} ${payment.last_name || ''}`.trim() || 'ไม่ระบุชื่อ', 'user'], ['ห้องพัก', payment.room_number ? `ห้อง ${payment.room_number}` : '—', 'door'],
+                  ['ประเภทการชำระ', formatPaymentType(payment.type), 'receipt'], ['เลขรายการ', `#${payment.id}`, 'hash'],
+                  ['วันที่ชำระ', formatDate(payment.payment_date), 'calendar'], ['วันที่บันทึก', payment.created_at ? new Date(payment.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '—', 'clock'],
+                ].map(([label, value, icon]) => <div key={label}><dt><OwnerListIcon name={icon} size={15} /><span>{label}</span></dt><dd>{value}</dd></div>)}
+              </dl>
+              <div className="owner-il-note owner-ip-note"><OwnerListIcon name="note" size={18} /><div><strong>หมายเหตุ</strong><p>{payment.note || 'ไม่มีหมายเหตุ'}</p></div></div>
+              <section className="owner-income-payment-slip"><h4 className="owner-ip-section-title"><OwnerListIcon name="receipt" />หลักฐานการชำระเงิน<span className="owner-ip-slip-count">{payment.slip_path ? '1 ไฟล์' : 'ไม่มีไฟล์'}</span></h4>{payment.slip_path ? <><button type="button" className="owner-income-slip-preview" onClick={() => setZoom(true)} aria-label="ดูสลิปขนาดเต็ม"><UploadImage src={payment.slip_path} alt={`สลิปชำระเงินรายการ ${payment.id}`} /></button><p>กดรูปเพื่อขยายสลิป</p></> : <div className="owner-income-group-empty owner-ip-no-slip"><OwnerListIcon name="receipt" size={24} /><span>รายการนี้ไม่มีสลิปแนบ</span><small>ตรวจสอบข้อมูลการรับชำระได้จากรายละเอียดด้านบน</small></div>}</section>
+            </>
+          )}
+        </div>
+      </section>
+      {zoom && payment?.slip_path && <div className="owner-income-slip-lightbox" onClick={(event) => event.stopPropagation()}><PhotoLightbox photos={[{ url: payment.slip_path, name: `สลิปรายการ ${payment.id}` }]} title="หลักฐานการชำระเงิน" onClose={() => setZoom(false)} /></div>}
+    </div>
+  )
+}
+
+function OwnerIncomeItemsDialog({ initialType, types, range, onClose }) {
+  const [filters, setFilters] = useState({ type: initialType, from: range.from || '', to: range.to || '', search: '', page: 1 })
+  const [search, setSearch] = useState('')
+  useEffect(() => {
+    const keyword = search.trim()
+    if (keyword === filters.search) return
+    const timer = setTimeout(() => setFilters((previous) => ({ ...previous, search: keyword, page: 1 })), 300)
+    return () => clearTimeout(timer)
+  }, [search, filters.search])
+  const [retry, setRetry] = useState(0)
+  const [response, setResponse] = useState(null)
+  const [paymentId, setPaymentId] = useState(null)
+  const requestKey = JSON.stringify({ ...filters, month: range.month, year: range.year, retry })
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = paymentId === null ? onClose : () => {} }, [onClose, paymentId])
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    const previousFocus = document.activeElement
+    document.body.style.overflow = 'hidden'
+    const onKey = (event) => { if (event.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', onKey); previousFocus?.focus() }
+  }, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    const params = JSON.parse(requestKey)
+    delete params.retry
+    axios.get('/api/owner/income/items', { headers: getAuthHeaders(), params, signal: controller.signal })
+      .then(({ data }) => { if (!controller.signal.aborted) setResponse({ key: requestKey, data }) })
+      .catch((error) => { if (!controller.signal.aborted) setResponse({ key: requestKey, error: error.response?.data?.message || 'โหลดรายการไม่สำเร็จ' }) })
+    return () => controller.abort()
+  }, [requestKey])
+  const current = response?.key === requestKey ? response : null
+  const data = current?.data
+  const pages = Math.max(1, Math.ceil((data?.total || 0) / 30))
+  const change = (field, value) => setFilters((previous) => ({ ...previous, [field]: value, page: 1 }))
+  return (
+    <div className="owner-modal-backdrop owner-income-dialog-overlay" onClick={onClose}>
+      <section className="owner-modal owner-income-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-income-items-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header"><div><h3 id="owner-income-items-title">รายการรายรับทั้งหมด</h3><p className="owner-modal-subtext">เฉพาะรายการที่ชำระแล้ว · {data?.total || 0} รายการ</p></div><button type="button" className="owner-modal-close" autoFocus onClick={onClose} aria-label="ปิดรายการรายรับ">×</button></header>
+        <form className="owner-income-dialog-filters" role="search" onSubmit={(event) => event.preventDefault()}>
+          <label>ประเภทรายรับ<select value={filters.type} onChange={(event) => change('type', event.target.value)}><option value="all">ทุกประเภท</option>{types.map((item) => <option key={item.type} value={item.type}>{formatPaymentType(item.type)}</option>)}</select></label>
+          <label>ตั้งแต่<ThaiDatePicker value={filters.from} onChange={(value) => change('from', value)} maxDate={parseInputDate(filters.to)} isClearable /></label>
+          <label>ถึง<ThaiDatePicker value={filters.to} onChange={(value) => change('to', value)} minDate={parseInputDate(filters.from)} isClearable /></label>
+          <label className="owner-income-dialog-search">ค้นหารายการ<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="เลขห้อง ชื่อผู้เช่า หมายเหตุ หรือเลขรายการ" /></label>
+        </form>
+        <div className="owner-income-dialog-total">
+          <span className="owner-income-total-icon" aria-hidden="true"><StatIcon name="income" /></span>
+          <div className="owner-income-total-text"><span>ยอดรับชำระตามตัวกรอง</span><small>{data ? `${data.total.toLocaleString('th-TH')} รายการที่ชำระแล้ว` : current?.error ? 'ไม่สามารถโหลดข้อมูลได้' : 'กำลังคำนวณยอดรวม...'}</small></div>
+          <div className="owner-income-total-value"><strong>{data ? currency(data.amount) : '—'}</strong><span>บาท</span></div>
+        </div>
+        <div className="owner-income-dialog-body" aria-busy={!current}>
+          {!current ? <div className="owner-empty" role="status">กำลังโหลดรายการ...</div> : current.error ? (
+            <div className="owner-income-error" role="alert">
+              <span className="owner-income-error-icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 17h.01" /></svg>
+              </span>
+              <h4>โหลดรายการไม่สำเร็จ</h4>
+              <p>{current.error}</p>
+              <button type="button" onClick={() => setRetry((value) => value + 1)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1" /></svg>
+                ลองโหลดอีกครั้ง
+              </button>
+            </div>
+          ) : (
+            <table className="owner-income-ledger">
+              <colgroup><col className="is-date" /><col className="is-type" /><col className="is-person" /><col /><col className="is-amount" /></colgroup>
+              <thead><tr>
+                <th scope="col"><span className="owner-il-heading"><OwnerListIcon name="calendar" />วันที่รับชำระ</span></th>
+                <th scope="col"><span className="owner-il-heading"><StatIcon name="income" />ประเภทรายรับ</span></th>
+                <th scope="col"><span className="owner-il-heading"><OwnerListIcon name="user" />ห้อง / ผู้ชำระ</span></th>
+                <th scope="col"><span className="owner-il-heading">หมายเหตุ</span></th>
+                <th scope="col"><span className="owner-il-heading is-amount">ยอดรับชำระ <small>(บาท)</small></span></th>
+              </tr></thead><tbody>
+              {data.items.map((item) => (
+                <tr key={item.id} className="owner-il-clickable" onClick={() => setPaymentId(item.id)}>
+                  <td><button type="button" className="owner-il-open" onClick={(event) => { event.stopPropagation(); setPaymentId(item.id) }} aria-label={`ดูรายละเอียดการชำระเงินรายการ ${item.id}`}><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(item.payment_date)}</strong></span><span className="owner-il-id">รายการ #{item.id} · ดูรายละเอียด ›</span></button></td>
+                  <td><span className="owner-il-type" style={{ '--type-tone': getPaymentTypeColor(item.type) }}><PaymentTypeIcon type={item.type} />{formatPaymentType(item.type)}</span></td>
+                  <td><div className="owner-il-person"><span className="owner-il-room">{item.room_number || '—'}</span><div><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><span>ห้อง {item.room_number || '—'}</span></div></div></td>
+                  <td><span className={`owner-il-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</span></td>
+                  <td><strong className="owner-il-amount">{currency(item.amount)}</strong><span className="owner-il-status"><i aria-hidden="true" />ชำระแล้ว</span></td>
+                </tr>
+              ))}
+              {!data.items.length && <tr><td colSpan={5} className="owner-empty-row">ไม่พบรายการตามตัวกรอง</td></tr>}
+            </tbody></table>
+          )}
+        </div>
+        <footer className="owner-income-dialog-footer"><span>แสดงครั้งละ 30 รายการ</span><div className="owner-pa-pager"><button type="button" disabled={!data || filters.page <= 1} aria-label="หน้าก่อนหน้า" onClick={() => setFilters((value) => ({ ...value, page: value.page - 1 }))}>‹</button><span>{filters.page} / {pages}</span><button type="button" disabled={!data || filters.page >= pages} aria-label="หน้าถัดไป" onClick={() => setFilters((value) => ({ ...value, page: value.page + 1 }))}>›</button></div></footer>
+        {paymentId !== null && <OwnerIncomePaymentDialog key={paymentId} id={paymentId} onClose={() => setPaymentId(null)} />}
+      </section>
+    </div>
+  )
+}
+
+function OwnerIncomeTypeCards({ summary, range }) {
+  const [openType, setOpenType] = useState(null)
+  const [previewPaymentId, setPreviewPaymentId] = useState(null)
+  const categories = [...(summary.byType || [])]
+  for (const type of ['rent', 'deposit', 'water', 'electricity']) {
+    if (!categories.some((item) => item.type === type)) categories.push({ type, total: 0, count: 0, previews: [] })
+  }
+  categories.sort((a, b) => Number(b.total) - Number(a.total))
+  return (
+    <section className="owner-income-groups">
+      <header className="owner-income-groups-heading"><div><h3>รายรับตามประเภท</h3><p>รายการรับชำระล่าสุด แยกตามประเภท · ตามช่วงวันที่ที่เลือก</p></div><button type="button" className="owner-panel-header-link" onClick={() => setOpenType('all')}>ดูรายรับทั้งหมด ›</button></header>
+      <div className="owner-income-groups-grid">
+        {categories.map((category) => (
+          <section className="owner-panel owner-income-group" key={category.type} style={{ '--income-tone': getPaymentTypeColor(category.type) }}>
+            <header>
+              <span className="owner-income-group-icon" aria-hidden="true"><PaymentTypeIcon type={category.type} /></span>
+              <div className="owner-income-group-title"><h4>{formatPaymentType(category.type)}</h4><span className="owner-income-group-count">{category.count} รายการ</span></div>
+              <div className="owner-income-group-total"><small>รับชำระรวม</small><strong>฿{currency(category.total)}</strong></div>
+            </header>
+            <div className="owner-income-group-subhead"><span>รายการล่าสุด</span><span>ยอดรับชำระ</span></div>
+            <div className="owner-income-group-items">
+              {(category.previews || []).map((item) => (
+                <button key={item.id} type="button" className="owner-income-preview-row" aria-label={`ดูรายละเอียดการชำระเงินรายการ ${item.id}`} onClick={() => setPreviewPaymentId(item.id)}>
+                  <span className="owner-income-room"><small>ห้อง</small>{item.room_number || '—'}</span>
+                  <div className="owner-income-preview-person"><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><small>{formatDate(item.payment_date)} <span>· #{item.id}</span></small></div>
+                  <div className="owner-income-preview-amount"><b>฿{currency(item.amount)}</b><small><i aria-hidden="true" />ชำระแล้ว</small></div>
+                </button>
+              ))}
+              {!category.previews?.length && <p className="owner-income-group-empty">ยังไม่มีรายการแสดง</p>}
+            </div>
+            <footer><span>แสดง {category.previews?.length || 0} จาก {category.count} รายการ</span><button type="button" onClick={() => setOpenType(category.type)}>ดูทั้งหมด <span aria-hidden="true">›</span></button></footer>
+          </section>
+        ))}
+        {!categories.length && <div className="owner-empty">ยังไม่มีรายรับในช่วงวันที่เลือก</div>}
+      </div>
+      {openType !== null && <OwnerIncomeItemsDialog initialType={openType} types={categories} range={range} onClose={() => setOpenType(null)} />}
+      {previewPaymentId !== null && <OwnerIncomePaymentDialog key={previewPaymentId} id={previewPaymentId} onClose={() => setPreviewPaymentId(null)} />}
+    </section>
+  )
+}
+
+function OwnerUtilityTooltip({ active, payload, label, unit }) {
+  if (!active || !payload?.length) return null
+  const period = String(label || '')
+  const date = /^\d{4}-\d{2}(?:-\d{2})?$/.test(period) ? new Date(`${period.length === 7 ? period + '-01' : period}T00:00:00`) : null
+  const title = date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString('th-TH', { month: 'long', year: 'numeric', ...(period.length > 7 ? { day: 'numeric' } : {}) })
+    : period
+  return (
+    <div className="owner-ur-tooltip">
+      <div className="owner-ur-tooltip-title">{title}</div>
+      <div className="owner-ur-tooltip-rows">
+        {payload.map((item) => (
+          <div key={item.dataKey} className="owner-ur-tooltip-row">
+            <span className="owner-ur-tooltip-label"><i style={{ backgroundColor: item.color }} />{item.name}</span>
+            <strong>{currency(item.value)} <small>{unit}</small></strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function useOwnerUtilityReceipts(enabled, from, to) {
+  const key = `${from || ''}:${to || ''}`
+  const [response, setResponse] = useState(null)
+  useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
     axios.get('/api/owner/utility-receipts', {
       headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
       params: { from: from || undefined, to: to || undefined },
       signal: controller.signal,
-    }).then(({ data }) => { setResult(data); setError('') })
-      .catch((requestError) => { if (!axios.isCancel(requestError)) setError(requestError.response?.data?.message || 'โหลดรายรับค่าน้ำค่าไฟไม่สำเร็จ') })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    }).then(({ data }) => { if (!controller.signal.aborted) setResponse({ key, result: data, error: '' }) })
+      .catch((requestError) => { if (!controller.signal.aborted) setResponse({ key, result: { trends: [], granularity: 'month' }, error: requestError.response?.data?.message || 'โหลดรายรับค่าน้ำค่าไฟไม่สำเร็จ' }) })
     return () => controller.abort()
-  }, [from, to])
+  }, [enabled, from, to, key])
+  const current = response?.key === key ? response : null
+  return { result: current?.result || { trends: [], granularity: 'month' }, loading: !current, error: current?.error || '' }
+}
+
+function OwnerUtilityPeriodDialog({ period, onClose }) {
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = onClose }, [onClose])
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', escape)
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape) }
+  }, [])
+  const water = Number(period.water || 0)
+  const electricity = Number(period.electricity || 0)
+  return (
+    <div className="owner-modal-backdrop owner-ur-detail-overlay" onClick={onClose}>
+      <section className="owner-modal owner-ur-detail" role="dialog" aria-modal="true" aria-labelledby="owner-ur-detail-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header">
+          <div><h3 id="owner-ur-detail-title">รายละเอียดรายรับ · {period.label}</h3><p className="owner-modal-subtext">สรุปยอดที่รับชำระแล้วในช่วงเวลานี้</p></div>
+          <button type="button" className="owner-modal-close" aria-label="ปิดรายละเอียด" autoFocus onClick={onClose}>×</button>
+        </header>
+        <div className="owner-modal-body">
+          <div className="owner-ur-detail-total"><span>ยอดรับชำระรวม</span><strong>฿{currency(period.total)}</strong><small>ค่าน้ำและค่าไฟรวมกัน</small></div>
+          <div className="owner-ur-detail-grid">
+            {[
+              { key: 'water', label: 'ค่าน้ำ', amount: water, units: period.waterUnits, icon: 'water' },
+              { key: 'electricity', label: 'ค่าไฟ', amount: electricity, units: period.electricityUnits, icon: 'electricity' },
+            ].map((item) => (
+              <section key={item.key} className={'owner-ur-detail-item is-' + item.key}>
+                <h4><StatIcon name={item.icon} />{item.label}</h4>
+                <dl>
+                  <div><dt>ยอดรับชำระ</dt><dd>฿{currency(item.amount)}</dd></div>
+                  <div><dt>หน่วยที่รับชำระ</dt><dd>{currency(item.units)} <small>หน่วย</small></dd></div>
+                  <div><dt>สัดส่วนรายรับ</dt><dd>{period.total > 0 ? (item.amount / period.total * 100).toFixed(1) : '0.0'}%</dd></div>
+                </dl>
+              </section>
+            ))}
+          </div>
+          <p className="owner-ur-detail-note">ข้อมูลนี้เป็นยอดรวมของช่วงเวลา ไม่ใช่ยอดเรียกเก็บหรือยอดค้างชำระรายห้อง</p>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function OwnerUtilityReceipts({ from, to, result, loading, error }) {
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [selectedPeriod, setSelectedPeriod] = useState(null)
 
   const totals = result.trends.reduce((sum, row) => ({
-    water: sum.water + row.water,
-    electricity: sum.electricity + row.electricity,
-    waterUnits: sum.waterUnits + (row.waterUnits || 0),
-    electricityUnits: sum.electricityUnits + (row.electricityUnits || 0),
+    water: sum.water + Number(row.water || 0),
+    electricity: sum.electricity + Number(row.electricity || 0),
+    waterUnits: sum.waterUnits + Number(row.waterUnits || 0),
+    electricityUnits: sum.electricityUnits + Number(row.electricityUnits || 0),
   }), { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 })
+  const totalRevenue = totals.water + totals.electricity
+  const waterShare = totalRevenue > 0 ? totals.water / totalRevenue * 100 : 0
+  const periods = result.trends.map((row) => {
+    const date = new Date(`${row.period.length === 7 ? row.period + '-01' : row.period}T00:00:00`)
+    return { ...row, total: Number(row.water || 0) + Number(row.electricity || 0), label: Number.isNaN(date.getTime()) ? row.period : date.toLocaleDateString('th-TH', { month: 'short', year: 'numeric', ...(row.period.length > 7 ? { day: 'numeric' } : {}) }) }
+  })
+  const peak = periods.reduce((best, row) => !best || row.total > best.total ? row : best, null)
+  const keyword = search.trim().toLowerCase()
+  const matchedPeriods = periods.filter((row) => `${row.period} ${row.label}`.toLowerCase().includes(keyword)).sort((a, b) => b.period.localeCompare(a.period))
+  const totalPages = Math.max(1, Math.ceil(matchedPeriods.length / 12))
+  const currentPage = Math.min(page, totalPages)
+  const visiblePeriods = matchedPeriods.slice((currentPage - 1) * 12, currentPage * 12)
   return (
     <section className="owner-panel owner-utility-receipts" aria-label="รายรับค่าน้ำค่าไฟ">
-      <div className="owner-panel-header">
-        <div><h3>รายรับค่าน้ำและค่าไฟ</h3><p>ยอดที่ชำระแล้วในช่วงวันที่เลือก</p></div>
+      <div className="owner-ur-header">
+        <span className="owner-ur-heading-icon" aria-hidden="true"><StatIcon name="income" /></span>
+        <div><h3>รายรับค่าน้ำและค่าไฟ</h3><p>สรุปยอดรับชำระจริงและหน่วยการใช้งานในช่วงที่เลือก</p></div>
+        <span className="owner-ur-period">{result.range ? `${formatDate(result.range.from)} – ${formatDate(result.range.to)}` : from || to ? 'ตามช่วงวันที่เลือก' : 'ย้อนหลัง 6 เดือน'}</span>
       </div>
       {error && <p className="owner-utility-receipts-error" role="alert">{error}</p>}
       {loading ? <p role="status">กำลังโหลดข้อมูล...</p> : result.trends.length ? (
         <>
-          <div className="owner-utility-receipts-summary">
-            <span>ค่าน้ำ <strong>฿{currency(totals.water)}</strong></span>
-            <span>ค่าไฟ <strong>฿{currency(totals.electricity)}</strong></span>
-            <span>หน่วยน้ำ <strong>{currency(totals.waterUnits)}</strong></span>
-            <span>หน่วยไฟ <strong>{currency(totals.electricityUnits)}</strong></span>
+          <div className="owner-ur-insights">
+            <div><small>รับชำระรวมทั้งหมด</small><strong>฿{currency(totalRevenue)}</strong><span>ค่าน้ำและค่าไฟรวมกัน</span></div>
+            <div><small>รายรับเฉลี่ยต่อ{result.granularity === 'day' ? 'วัน' : 'เดือน'}</small><strong>฿{currency(totalRevenue / periods.length)}</strong><span>จาก {periods.length} ช่วงเวลาที่มีข้อมูล</span></div>
+            <div><small>ช่วงที่รับชำระสูงสุด</small><strong>฿{currency(peak?.total)}</strong><span>{peak?.label}</span></div>
+            <div className="owner-ur-share"><small>สัดส่วนรายรับ</small>
+              <dl className="owner-ur-share-values">
+                <div className="is-water"><dt><i aria-hidden="true" />ค่าน้ำ</dt><dd>{waterShare.toFixed(1)}<small>%</small></dd></div>
+                <div className="is-electricity"><dt><i aria-hidden="true" />ค่าไฟ</dt><dd>{totalRevenue > 0 ? (100 - waterShare).toFixed(1) : '0.0'}<small>%</small></dd></div>
+              </dl>
+            </div>
           </div>
-          <div className="owner-utility-receipts-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={result.trends} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="amount" tick={{ fontSize: 11 }} tickFormatter={currency} />
-                <YAxis yAxisId="units" orientation="right" tick={{ fontSize: 11 }} tickFormatter={currency} />
-                <Tooltip formatter={(value, name) => [name.includes('หน่วย') ? `${currency(value)} หน่วย` : `฿${currency(value)}`, name]} />
-                <Legend />
-                <Line animationDuration={350} yAxisId="amount" type="monotone" dataKey="water" name="ค่าน้ำ" stroke="#0891b2" strokeWidth={2} />
-                <Line animationDuration={350} yAxisId="amount" type="monotone" dataKey="electricity" name="ค่าไฟ" stroke="#d97706" strokeWidth={2} />
-                <Line animationDuration={350} yAxisId="units" type="monotone" dataKey="waterUnits" name="หน่วยน้ำ" stroke="#16a34a" strokeWidth={2} connectNulls />
-                <Line animationDuration={350} yAxisId="units" type="monotone" dataKey="electricityUnits" name="หน่วยไฟ" stroke="#7c3aed" strokeWidth={2} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="owner-ur-charts">
+            {[
+              { title: 'รายรับที่ชำระแล้ว', caption: 'จำนวนเงิน · บาท', unit: 'บาท', series: [{ key: 'water', name: 'ค่าน้ำ', color: '#0891b2' }, { key: 'electricity', name: 'ค่าไฟ', color: '#d97706' }] },
+              { title: 'หน่วยการใช้งานที่รับชำระ', caption: 'การใช้งาน · หน่วย', unit: 'หน่วย', series: [{ key: 'waterUnits', name: 'หน่วยน้ำ', color: '#0891b2' }, { key: 'electricityUnits', name: 'หน่วยไฟ', color: '#d97706' }] },
+            ].map((chart) => (
+              <section key={chart.title} className="owner-ur-chart-panel">
+                <div className="owner-ur-chart-heading"><h4>{chart.title}</h4><span>{chart.caption}</span></div>
+                <div className="owner-utility-receipts-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={result.trends} margin={{ top: 16, right: 12, left: 8, bottom: 0 }} barGap={8}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8eff8" />
+                      <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#6b859e' }} tickLine={false} axisLine={{ stroke: '#dce6f3' }} />
+                      <YAxis width={72} tick={{ fontSize: 11, fill: '#6b859e' }} tickLine={false} axisLine={false} tickFormatter={(value) => Intl.NumberFormat('th-TH', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
+                      <Tooltip cursor={{ fill: '#f1f6fd' }} content={<OwnerUtilityTooltip unit={chart.unit} />} />
+                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+                      {chart.series.map((series) => <Bar key={series.key} animationDuration={180} dataKey={series.key} name={series.name} fill={series.color} maxBarSize={48} radius={[6, 6, 0, 0]} />)}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            ))}
           </div>
+          <section className="owner-ur-breakdown">
+            <header><div><h4>รายละเอียดรายรับตามช่วงเวลา</h4><p>ยอดที่รับชำระแล้ว เรียงจากช่วงล่าสุด</p></div>
+              <input type="search" aria-label="ค้นหาช่วงเวลารายรับ" placeholder="ค้นหาเดือน ปี หรือวันที่" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} />
+            </header>
+            <div className="owner-ur-table-scroll">
+              <table><thead><tr><th>ช่วงเวลา</th><th>ค่าน้ำ</th><th>หน่วยน้ำ</th><th>ค่าไฟ</th><th>หน่วยไฟ</th><th>รับชำระรวม</th><th><span className="visually-hidden">รายละเอียด</span></th></tr></thead>
+                <tbody>{visiblePeriods.map((row) => <tr key={row.period} className="owner-ur-period-row" onClick={() => setSelectedPeriod(row)}>
+                  <td><span className="owner-ur-period-cell"><OwnerListIcon name="calendar" />{row.label}</span></td>
+                  <td><span className="owner-ur-amount is-water">฿{currency(row.water)}</span></td>
+                  <td><span className="owner-ur-units">{currency(row.waterUnits)} <small>หน่วย</small></span></td>
+                  <td><span className="owner-ur-amount is-electricity">฿{currency(row.electricity)}</span></td>
+                  <td><span className="owner-ur-units">{currency(row.electricityUnits)} <small>หน่วย</small></span></td>
+                  <td><strong className="owner-ur-row-total">฿{currency(row.total)}</strong></td>
+                  <td><button type="button" className="owner-ur-view" aria-label={`ดูรายละเอียด ${row.label}`} onClick={(event) => { event.stopPropagation(); setSelectedPeriod(row) }}>ดูรายละเอียด <span aria-hidden="true">›</span></button></td>
+                </tr>)}
+                  {!visiblePeriods.length && <tr><td colSpan={7} className="owner-ur-no-results">ไม่พบช่วงเวลาที่ตรงกับคำค้นหา</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <footer><span>พบ {matchedPeriods.length} ช่วงเวลา</span><div className="owner-pa-pager"><button type="button" aria-label="หน้าก่อนหน้า" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>‹</button><span>{currentPage} / {totalPages}</span><button type="button" aria-label="หน้าถัดไป" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>›</button></div></footer>
+          </section>
         </>
       ) : !error && <p className="owner-empty">ยังไม่มีรายการค่าน้ำหรือค่าไฟที่รับชำระในช่วงนี้</p>}
+      {selectedPeriod && <OwnerUtilityPeriodDialog period={selectedPeriod} onClose={() => setSelectedPeriod(null)} />}
     </section>
   )
 }
@@ -507,6 +1017,9 @@ function StatIcon({ name }) {
 }
 
 const OWNER_LIST_ICON_PATHS = {
+  receipt: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" /><path d="M9 7h6M9 11h6M9 15h3" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  hash: <><path d="M5 9h14M4 15h14M11 3 7 21M17 3l-4 18" /></>,
   user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   door: <><path d="M4 21h16" /><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17" /><path d="M14 12h.01" /></>,
   tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
@@ -712,6 +1225,12 @@ const OWNER_ROOMS_SECTIONS = [
   { key: 'logs', label: 'บันทึกการเข้าพักและย้ายออก' },
 ]
 
+const OWNER_FINANCE_SECTIONS = [
+  { key: 'overview', label: 'ภาพรวมการเงิน' },
+  { key: 'expenses', label: 'รายการรายจ่ายทั้งหมด' },
+  { key: 'payments', label: 'บันทึกการชำระเงิน' },
+]
+
 const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
@@ -730,7 +1249,6 @@ const OWNER_PERIOD_BAR_CONTENT = {
   staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
   parking: { title: 'จัดการที่จอดรถ', subtitle: 'ติดตามคำขอและรายการรถของผู้เข้าพัก' },
   safety: { title: 'จัดการเหตุฉุกเฉิน', subtitle: 'ติดตามและตรวจสอบรายงานจากผู้เข้าพักและเจ้าหน้าที่' },
-  utilities: { title: 'ค่าน้ำ-ค่าไฟรายห้อง', subtitle: 'หน่วยที่ใช้ ยอดเรียกเก็บ และสถานะการชำระแยกตามห้อง' },
   audit: { title: 'ประวัติการใช้งานเว็บไซต์', subtitle: 'รายการเปลี่ยนแปลงข้อมูลที่ดำเนินการโดยผู้ใช้ทุกบทบาท' },
   announcements: { title: 'ประกาศจากหอพัก', subtitle: 'ข่าวสารและการแจ้งเตือนที่สื่อสารกับผู้เช่าและเจ้าหน้าที่' },
 }
@@ -793,6 +1311,13 @@ function OwnerAuditLog() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const keyword = search.trim()
+    if (keyword === appliedSearch) return
+    const timer = setTimeout(() => { setLoading(true); setPage(1); setAppliedSearch(keyword) }, 300)
+    return () => clearTimeout(timer)
+  }, [search, appliedSearch])
+
+  useEffect(() => {
     let cancelled = false
     axios.get('/api/owner/logs/audit', {
       headers: getAuthHeaders(),
@@ -817,7 +1342,7 @@ function OwnerAuditLog() {
         <div><h3>ประวัติการใช้งานเว็บไซต์</h3><p>บันทึกการเปลี่ยนแปลงข้อมูลที่สำเร็จจากทุกบทบาท</p></div>
         <span className="owner-panel-header-count">{Number(result.total).toLocaleString('th-TH')} รายการ</span>
       </div>
-      <form className="owner-audit-filters" onSubmit={(event) => { event.preventDefault(); if (search.trim() !== appliedSearch) setLoading(true); setPage(1); setAppliedSearch(search.trim()) }}>
+      <form className="owner-audit-filters" role="search" onSubmit={(event) => event.preventDefault()}>
         <input className="owner-audit-search" type="search" placeholder="ค้นหาผู้ใช้หรือรายการ" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select aria-label="กรองบทบาท" value={role} onChange={(event) => { setLoading(true); setRole(event.target.value); setPage(1) }}>
           <option value="all">ทุกบทบาท</option><option value="Customer">ลูกค้า</option><option value="Staff">พนักงาน</option><option value="Admin">แอดมิน</option><option value="Owner">เจ้าของ</option>
@@ -825,7 +1350,6 @@ function OwnerAuditLog() {
         <select aria-label="กรองการกระทำ" value={method} onChange={(event) => { setLoading(true); setMethod(event.target.value); setPage(1) }}>
           <option value="all">ทุกการกระทำ</option><option value="POST">สร้าง</option><option value="PUT">แก้ไข</option><option value="PATCH">แก้ไข</option><option value="DELETE">ลบ</option>
         </select>
-        <button className="owner-primary-btn small" type="submit">ค้นหา</button>
       </form>
       {error && <div className="owner-alert owner-alert-danger" role="alert">{error}</div>}
       <div className="owner-table-wrap owner-audit-table-wrap">
@@ -939,6 +1463,10 @@ function getNeededDataGroups(tab, roomsSection) {
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
+  const [financeSection, setFinanceSection] = useState('overview')
+  const [financeComparisonPage, setFinanceComparisonPage] = useState(1)
+  const [financeComparisonSearch, setFinanceComparisonSearch] = useState('')
+  const [financePeriodDetail, setFinancePeriodDetail] = useState(null)
   const [roomsSection, setRoomsSection] = useState('overview')
   const [announcements, setAnnouncements] = useState([])
   const [announcementFocus, setAnnouncementFocus] = useState(null)
@@ -964,12 +1492,11 @@ function OwnerMain() {
   const [occupancyTrend, setOccupancyTrend] = useState({ trends: [], granularity: 'month' })
   const [isOccupancyTrendLoading, setIsOccupancyTrendLoading] = useState(false)
   const [occupancyPeriodDetail, setOccupancyPeriodDetail] = useState(null)
+  const [occupancyLogId, setOccupancyLogId] = useState(null)
   const [periodDetailFilter, setPeriodDetailFilter] = useState('all')
+  const [periodDetailSearch, setPeriodDetailSearch] = useState('')
   const [expenseCategoryPage, setExpenseCategoryPage] = useState(1)
   const [staffList, setStaffList] = useState([])
-  const [utilities, setUtilities] = useState({ summary: {}, rooms: [] })
-  const [utilityMonth, setUtilityMonth] = useState(() => new Date().toISOString().slice(0, 7))
-  const [utilityRoomFilter, setUtilityRoomFilter] = useState('all')
   const [paymentLogs, setPaymentLogs] = useState({ payments: [], total: 0, page: 1, pageSize: 20 })
   const [viewingPaymentSlip, setViewingPaymentSlip] = useState(null)
   const [paymentSlipZoomOpen, setPaymentSlipZoomOpen] = useState(false)
@@ -979,6 +1506,13 @@ function OwnerMain() {
   const [occupancyFilter, setOccupancyFilter] = useState({ search: '', type: 'all' })
   const [staffForm, setStaffForm] = useState(EMPTY_STAFF)
   const [paymentFilter, setPaymentFilter] = useState({ from: '', to: '' })
+  const utilityReceipts = useOwnerUtilityReceipts(activeTab === 'utilities', paymentFilter.from, paymentFilter.to)
+  const utilityTotals = useMemo(() => utilityReceipts.result.trends.reduce((sum, row) => ({
+    water: sum.water + Number(row.water || 0),
+    electricity: sum.electricity + Number(row.electricity || 0),
+    waterUnits: sum.waterUnits + Number(row.waterUnits || 0),
+    electricityUnits: sum.electricityUnits + Number(row.electricityUnits || 0),
+  }), { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 }), [utilityReceipts.result])
   const [paymentLogFilter, setPaymentLogFilter] = useState({ search: '', from: '', to: '', onlyOverdue: false })
   const [notice, setNotice] = useState({ type: '', message: '' })
   const [loadedDataGroups, setLoadedDataGroups] = useState(() => new Set())
@@ -1007,7 +1541,6 @@ function OwnerMain() {
   const [roomPaymentsPage, setRoomPaymentsPage] = useState(1)
   const [confirmDialog, setConfirmDialog] = useState(null)
   const confirmResolverRef = useRef(null)
-  const [incomeTypePage, setIncomeTypePage] = useState(1)
   const [staffPage, setStaffPage] = useState(1)
   const [occupancySummary, setOccupancySummary] = useState(null)
   const [isOccupancySummaryLoading, setIsOccupancySummaryLoading] = useState(false)
@@ -1077,24 +1610,14 @@ function OwnerMain() {
   const totalExpense = Number(overview?.finance?.totalExpense ?? 0)
   const netProfit = Number(overview?.finance?.netProfit ?? totalIncome - totalExpense)
 
-  const incomeByTypeTotal = useMemo(
-    () => (incomeSummary.byType || []).reduce((sum, item) => sum + Number(item.total || 0), 0),
-    [incomeSummary],
-  )
-
   const SUMMARY_PAGE_SIZE = 5
-  const incomeTypeTotalPages = Math.max(1, Math.ceil((incomeSummary.byType?.length || 0) / SUMMARY_PAGE_SIZE))
-  const paginatedIncomeByType = useMemo(() => {
-    const start = (incomeTypePage - 1) * SUMMARY_PAGE_SIZE
-    return (incomeSummary.byType || []).slice(start, start + SUMMARY_PAGE_SIZE)
-  }, [incomeSummary, incomeTypePage])
 
   const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
 
   const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.byCategory?.length || 0) / SUMMARY_PAGE_SIZE))
   const paginatedExpenseCategories = useMemo(() => {
     const start = (expenseCategoryPage - 1) * SUMMARY_PAGE_SIZE
-    return (expenses.byCategory || []).slice(start, start + SUMMARY_PAGE_SIZE)
+    return [...(expenses.byCategory || [])].sort((a, b) => Number(b.total || 0) - Number(a.total || 0)).slice(start, start + SUMMARY_PAGE_SIZE)
   }, [expenses, expenseCategoryPage])
   const expenseByCategoryTotal = useMemo(
     () => (expenses.byCategory || []).reduce((sum, item) => sum + Number(item.total || 0), 0),
@@ -1108,6 +1631,23 @@ function OwnerMain() {
     const formatLabel = financeTrends.granularity === 'day' ? formatTrendDay : formatTrendMonth
     return (financeTrends.trends || []).map((item) => ({ ...item, monthLabel: formatLabel(item.period) }))
   }, [financeTrends])
+
+  const financeComparisonPageSize = 5
+  const financeComparisonFiltered = useMemo(() => {
+    const keyword = financeComparisonSearch.trim().toLowerCase()
+    return trendChartData.map((item, originalIndex) => ({ ...item, originalIndex }))
+      .filter((item) => !keyword || [item.period, item.monthLabel, formatDate(`${item.period.length === 7 ? item.period + '-01' : item.period}T00:00:00`), String(item.income || 0), String(item.expense || 0), currency(item.income), currency(item.expense)]
+        .join(' ').toLowerCase().includes(keyword))
+      .sort((a, b) => {
+        const aHasAmount = Number(a.income || 0) !== 0 || Number(a.expense || 0) !== 0
+        const bHasAmount = Number(b.income || 0) !== 0 || Number(b.expense || 0) !== 0
+        return Number(bHasAmount) - Number(aHasAmount) || b.period.localeCompare(a.period)
+      })
+  }, [trendChartData, financeComparisonSearch])
+  const financeComparisonPages = Math.max(1, Math.ceil(financeComparisonFiltered.length / financeComparisonPageSize))
+  const financeComparisonCurrentPage = Math.min(financeComparisonPage, financeComparisonPages)
+  const financeComparisonOffset = (financeComparisonCurrentPage - 1) * financeComparisonPageSize
+  const financeComparisonRows = financeComparisonFiltered.slice(financeComparisonOffset, financeComparisonOffset + financeComparisonPageSize)
 
   const trendSummary = useMemo(() => {
     const totalIncome = trendChartData.reduce((sum, item) => sum + Number(item.income || 0), 0)
@@ -1411,7 +1951,7 @@ function OwnerMain() {
       },
     })
     setIncomeSummary(data)
-    setIncomeTypePage(1)
+
   }
 
   const loadExpenses = async (page = expenses.page || 1, overrides = {}) => {
@@ -1518,15 +2058,6 @@ function OwnerMain() {
     setStaffList(data.staff || [])
   }
 
-  const loadUtilities = async () => {
-    const [year, month] = utilityMonth.split('-')
-    const { data } = await axios.get('/api/owner/utilities', {
-      headers: getAuthHeaders(),
-      params: { year, month },
-    })
-    setUtilities({ summary: data.summary || {}, rooms: data.rooms || [] })
-  }
-
   const loadPaymentLogs = async (page = paymentLogs.page || 1, overrides = {}) => {
     const nextFilters = { ...paymentLogFilter, ...overrides }
     const { data } = await axios.get('/api/owner/logs/payments', {
@@ -1612,6 +2143,7 @@ function OwnerMain() {
     if (!isDaily) endDate.setMonth(endDate.getMonth() + 1, 0)
     const to = isDaily ? item.period : `${item.period}-${String(endDate.getDate()).padStart(2, '0')}`
     setPeriodDetailFilter('all')
+    setPeriodDetailSearch('')
     setOccupancyPeriodDetail({ item, logs: [], loading: true })
     try {
       const params = { from, to, page: 1 }
@@ -1709,14 +2241,6 @@ function OwnerMain() {
   }, [activeTab, roomsSection])
 
   useEffect(() => {
-    if (activeTab !== 'utilities') return
-
-    loadUtilities().catch((error) => {
-      setMessage('danger', error.response?.data?.message || 'โหลดข้อมูลค่าน้ำ-ค่าไฟไม่สำเร็จ')
-    })
-  }, [activeTab, utilityMonth])
-
-  useEffect(() => {
     const isModalOpen = Boolean(displayRoomDetail) || Boolean(displayRoomListFilter) || displayStaffModalOpen || Boolean(displayViewingStaff)
     if (!isModalOpen) return undefined
 
@@ -1746,6 +2270,7 @@ function OwnerMain() {
   }
 
   const handlePaymentRangeChange = (field, value) => {
+    setFinanceComparisonPage(1)
     const nextFilters = { ...paymentFilter, [field]: value || '' }
     setPaymentFilter(nextFilters)
     const visibleGroups = getNeededDataGroups(activeTab, roomsSection).filter((group) => DATE_DEPENDENT_GROUPS.includes(group))
@@ -1895,6 +2420,12 @@ function OwnerMain() {
     localStorage.setItem(getOwnerNotificationStorageKey(), JSON.stringify(keys))
   }
   const ownerSummaryTiles = {
+    utilities: [
+      { key: 'water', tone: 'blue', icon: 'water', label: 'รายรับค่าน้ำ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.water)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
+      { key: 'electricity', tone: 'orange', icon: 'electricity', label: 'รายรับค่าไฟ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.electricity)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
+      { key: 'water-units', tone: 'blue', icon: 'water', label: 'หน่วยน้ำที่รับชำระ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `${currency(utilityTotals.waterUnits)} หน่วย` },
+      { key: 'electricity-units', tone: 'orange', icon: 'electricity', label: 'หน่วยไฟที่รับชำระ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `${currency(utilityTotals.electricityUnits)} หน่วย` },
+    ],
     rooms: roomsSection === 'occupancy'
       ? [
           { key: 'occupants', tone: 'blue', icon: 'rooms', label: 'ผู้เข้าพักปัจจุบัน', value: `${currentOccupants.length} คน`, hint: 'ผู้เช่าที่พักอยู่ตอนนี้' },
@@ -1929,12 +2460,6 @@ function OwnerMain() {
       { key: 'expense', tone: 'orange', icon: 'expense', label: 'รายจ่ายรวม', value: formatSignedCurrency(totalExpense), hint: 'รวมรายจ่ายทั้งหมดตามช่วงที่เลือก' },
       { key: 'net', tone: netProfit < 0 ? 'red' : 'green', icon: 'profit', label: netProfit < 0 ? 'ขาดทุนสุทธิ' : 'กำไรสุทธิ', value: formatSignedCurrency(netProfit), hint: 'รายรับ - รายจ่าย' },
       { key: 'margin', tone: netProfit < 0 ? 'red' : 'purple', icon: 'margin', label: 'อัตรากำไร', value: formatPercent(profitMargin), hint: 'กำไรสุทธิเทียบกับรายรับรวม' },
-    ],
-    utilities: [
-      { key: 'water', tone: 'blue', icon: 'water', label: 'ค่าน้ำรวม', value: `฿${formatCurrency(utilities.summary.waterTotal)}`, hint: `${utilities.summary.waterUnits ?? 0} หน่วย` },
-      { key: 'electricity', tone: 'orange', icon: 'electricity', label: 'ค่าไฟรวม', value: `฿${formatCurrency(utilities.summary.electricityTotal)}`, hint: `${utilities.summary.electricityUnits ?? 0} หน่วย` },
-      { key: 'unpaid', tone: 'red', icon: 'overdue', label: 'ค้างชำระ', value: `฿${formatCurrency(utilities.summary.unpaidTotal)}`, hint: 'ค่าน้ำ-ค่าไฟที่ยังไม่ชำระ' },
-      { key: 'rooms', tone: 'purple', icon: 'rooms', label: 'จำนวนห้อง', value: utilities.rooms.length, hint: 'ห้องที่มีข้อมูล' },
     ],
   }[activeTab]
 
@@ -2099,7 +2624,7 @@ function OwnerMain() {
           </div>
         </header>
 
-        {activeTab !== 'dorm-info' && (
+        {activeTab !== 'dorm-info' && activeTab !== 'utilities' && (
           <section className="owner-period-bar">
             <div className="owner-period-text">
               <h2>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</h2>
@@ -2146,7 +2671,7 @@ function OwnerMain() {
           ))}
         </ul>
 
-        {(activeTab === 'rooms' || activeTab === 'finance') && (
+        {(activeTab === 'rooms' || activeTab === 'finance' || activeTab === 'utilities') && (
           <div className="owner-section-toolbar">
             {activeTab === 'rooms' && (
               <ul className="nav staff-subtabs owner-subtabs" aria-label="หมวดหมู่สรุปห้อง">
@@ -2164,7 +2689,18 @@ function OwnerMain() {
                 ))}
               </ul>
             )}
-            <div className="owner-period-range">
+            {activeTab === 'finance' && (
+              <ul className="nav staff-subtabs owner-subtabs" aria-label="หมวดหมู่รายละเอียดการเงิน">
+                {OWNER_FINANCE_SECTIONS.map((section) => (
+                  <li className="nav-item" key={section.key}>
+                    <button type="button" className={`nav-link staff-subtab-link${financeSection === section.key ? ' active' : ''}`} aria-pressed={financeSection === section.key} onClick={() => setFinanceSection(section.key)}>{section.label}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="owner-period-range-group">
+              <small className="owner-period-range-caption">กรองข้อมูลตามช่วงวันที่</small>
+            <div className="owner-period-range" role="group" aria-label="กรองข้อมูลตามช่วงวันที่">
               <span className="owner-period-range-icon" aria-hidden="true">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -2175,7 +2711,20 @@ function OwnerMain() {
                 value={paymentFilter.from}
                 onChange={(value) => handlePaymentRangeChange('from', value)}
                 maxDate={parseInputDate(paymentFilter.to)}
-                placeholder="วันที่เริ่มต้น"
+                placeholder="เลือกวันเริ่มต้นย้อนหลัง"
+                aria-label="วันเริ่มต้น เลือกย้อนหลังได้"
+                renderCustomHeader={({ monthDate, changeMonth, changeYear, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => (
+                  <div className="thai-dp-header owner-range-calendar-header">
+                    <button type="button" className="thai-dp-nav" onClick={decreaseMonth} disabled={prevMonthButtonDisabled} aria-label="เดือนก่อนหน้า">‹</button>
+                    <select aria-label="เลือกเดือนเริ่มต้น" value={monthDate.getMonth()} onChange={(event) => changeMonth(Number(event.target.value))}>
+                      {Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{new Date(2000, month, 1).toLocaleDateString('th-TH', { month: 'long' })}</option>)}
+                    </select>
+                    <select aria-label="เลือกปีเริ่มต้นย้อนหลัง" value={monthDate.getFullYear()} onChange={(event) => changeYear(Number(event.target.value))}>
+                      {Array.from({ length: 101 }, (_, index) => monthDate.getFullYear() + 1 - index).map((year) => <option key={year} value={year}>{year + 543}</option>)}
+                    </select>
+                    <button type="button" className="thai-dp-nav" onClick={increaseMonth} disabled={nextMonthButtonDisabled} aria-label="เดือนถัดไป">›</button>
+                  </div>
+                )}
                 isClearable
               />
               <span className="owner-period-range-sep" aria-hidden="true">–</span>
@@ -2186,6 +2735,7 @@ function OwnerMain() {
                 placeholder="วันที่สิ้นสุด"
                 isClearable
               />
+            </div>
             </div>
           </div>
         )}
@@ -2319,7 +2869,7 @@ function OwnerMain() {
                           title={`ห้อง ${room.room_number} · ${ROOM_STATUS_LABELS[status] || 'ว่าง'}`}
                         >
                           <span className="owner-ov-room-top">
-                            <strong>{room.room_number}</strong>
+                            <span className="owner-ov-room-number"><small>ห้อง</small><strong>{room.room_number}</strong></span>
                             <span className="owner-ov-room-icon" aria-hidden="true">
                               <StatIcon name={status === 'maintenance' ? 'maintenance' : status === 'overdue' ? 'overdue' : 'rooms'} />
                             </span>
@@ -2328,7 +2878,7 @@ function OwnerMain() {
                             <small>{status === 'vacant' ? 'สถานะห้อง' : 'ผู้เช่า'}</small>
                             <strong>{tenantName || (status === 'vacant' ? 'พร้อมให้เช่า' : 'ไม่ระบุชื่อ')}</strong>
                           </span>
-                          <span className="owner-ov-room-status">{ROOM_STATUS_LABELS[status] || 'ว่าง'}</span>
+                          <span className="owner-ov-room-bottom"><span className="owner-ov-room-status">{ROOM_STATUS_LABELS[status] || 'ว่าง'}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></span>
                         </button>
                       )
                     })}
@@ -2362,6 +2912,7 @@ function OwnerMain() {
                     </div>
                   </div>
                 )}
+                <div className="owner-ov-map-actions"><button type="button" className="owner-ov-map-view-all" onClick={() => openRoomList('all')}>ดูทั้งหมด <span aria-hidden="true">›</span></button></div>
               </div>
             </section>
 
@@ -2723,54 +3274,8 @@ function OwnerMain() {
           </>
         )}
 
-        {!isLoading && activeTab === 'utilities' && (
-          <>
-            <section className="owner-panel">
-              <div className="owner-panel-header">
-                <h3>ค่าน้ำ-ค่าไฟแยกตามห้อง</h3>
-                <input
-                  type="month"
-                  value={utilityMonth}
-                  onChange={(event) => setUtilityMonth(event.target.value)}
-                  aria-label="เลือกเดือน"
-                />
-              </div>
-
-              <div className="owner-table-wrap">
-                <table className="owner-table">
-                  <thead>
-                    <tr>
-                      <th>ห้อง</th><th>ผู้เช่า</th><th>ค่าน้ำ (หน่วย)</th><th>ค่าน้ำ</th>
-                      <th>ค่าไฟ (หน่วย)</th><th>ค่าไฟ</th><th>รวม</th><th>สถานะ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {utilities.rooms
-                      .filter((room) => utilityRoomFilter === 'all' || String(room.room_number) === utilityRoomFilter)
-                      .map((room) => (
-                        <tr key={room.room_number}>
-                          <td>{room.room_number}</td>
-                          <td>{room.tenant_name || '-'}</td>
-                          <td>{room.water_units ?? 0}</td>
-                          <td>฿{formatCurrency(room.water_amount)}</td>
-                          <td>{room.electricity_units ?? 0}</td>
-                          <td>฿{formatCurrency(room.electricity_amount)}</td>
-                          <td><strong>฿{formatCurrency(room.total)}</strong></td>
-                          <td>
-                            <span className={`owner-status-badge ${room.status === 'paid' ? 'active' : 'pending'}`}>
-                              {room.status === 'paid' ? 'ชำระแล้ว' : 'รอชำระ'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    {!utilities.rooms.length && (
-                      <tr><td colSpan="8" className="owner-empty-row">ไม่มีข้อมูลค่าน้ำ-ค่าไฟ</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </>
+        {activeTab === 'utilities' && (
+          <OwnerUtilityReceipts key={`${paymentFilter.from}:${paymentFilter.to}`} from={paymentFilter.from} to={paymentFilter.to} {...utilityReceipts} />
         )}
 
         {!isLoading && activeTab === 'audit' && <OwnerAuditLog />}
@@ -3114,10 +3619,11 @@ function OwnerMain() {
           </div>
         )}
 
-        {!isLoading && activeTab === 'finance' && (
+        {!isLoading && activeTab === 'finance' && financeSection === 'overview' && (
           <>
-            <section className="owner-panel">
-              <div className="owner-panel-header">
+            <section className="owner-panel owner-fc-panel">
+              <div className="owner-panel-header owner-fc-header">
+                <span className="owner-fc-heading-icon" aria-hidden="true"><StatIcon name="margin" /></span>
                 <div>
                   <h3>เปรียบเทียบรายรับและรายจ่าย</h3>
                   <p className="owner-finance-panel-caption">
@@ -3138,23 +3644,24 @@ function OwnerMain() {
               {trendChartData.length ? (
                 <>
                 <div className={`owner-linecard-chart owner-finance-trend-chart ${isTrendsLoading ? 'is-loading' : ''}`}>
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={340}>
                     {trendChartData.length >= 2 ? (
-                      <LineChart data={trendChartData}>
+                      <LineChart data={trendChartData} margin={{ top: 20, right: 24, left: 4, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
                         <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
+                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={72} tickFormatter={(value) => Intl.NumberFormat('th-TH', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
                         <Tooltip content={<FinanceTrendTooltip />} cursor={{ stroke: '#c7d8f0', strokeWidth: 1 }} />
                         <ReferenceLine y={0} stroke="#d8e2ee" />
-                        <Line animationDuration={350} type="monotone" dataKey="income" name="รายรับ" stroke={FINANCE_TREND_COLORS.income} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                        <Line animationDuration={350} type="monotone" dataKey="expense" name="รายจ่าย" stroke={FINANCE_TREND_COLORS.expense} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                        <Line animationDuration={350}
+                        <Line animationDuration={180} type="monotone" dataKey="income" name="รายรับ" stroke={FINANCE_TREND_COLORS.income} strokeWidth={3} dot={trendChartData.length <= 16 ? { r: 3, strokeWidth: 2, fill: '#fff' } : false} activeDot={{ r: 6, stroke: '#fff', strokeWidth: 3 }} />
+                        <Line animationDuration={180} type="monotone" dataKey="expense" name="รายจ่าย" stroke={FINANCE_TREND_COLORS.expense} strokeWidth={3} dot={trendChartData.length <= 16 ? { r: 3, strokeWidth: 2, fill: '#fff' } : false} activeDot={{ r: 6, stroke: '#fff', strokeWidth: 3 }} />
+                        <Line animationDuration={180}
                           type="monotone"
                           dataKey="netProfit"
                           name="กำไร/ขาดทุน"
                           stroke={FINANCE_TREND_COLORS.net}
-                          strokeWidth={2}
-                          dot={(props) => (
+                          strokeWidth={3}
+                          strokeDasharray="6 4"
+                          dot={trendChartData.length <= 16 ? (props) => (
                             <circle
                               key={`net-dot-${props.payload.period}`}
                               cx={props.cx}
@@ -3163,19 +3670,19 @@ function OwnerMain() {
                               fill={props.payload.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net}
                               stroke="none"
                             />
-                          )}
-                          activeDot={{ r: 5 }}
+                          ) : false}
+                          activeDot={{ r: 6, stroke: '#fff', strokeWidth: 3 }}
                         />
                       </LineChart>
                     ) : (
-                      <BarChart data={trendChartData} barGap={4} barCategoryGap="40%">
+                      <BarChart data={trendChartData} margin={{ top: 20, right: 24, left: 4, bottom: 8 }} barGap={10} barCategoryGap="30%">
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
                         <XAxis dataKey="monthLabel" tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={{ stroke: '#e6f0fd' }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={56} tickFormatter={(value) => formatCurrency(value)} />
+                        <YAxis tick={{ fontSize: 12, fill: '#6b859e' }} axisLine={false} tickLine={false} width={72} tickFormatter={(value) => Intl.NumberFormat('th-TH', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
                         <Tooltip content={<FinanceTrendTooltip />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
-                        <Bar animationDuration={350} dataKey="income" name="รายรับ" fill={FINANCE_TREND_COLORS.income} radius={[4, 4, 0, 0]} maxBarSize={48} />
-                        <Bar animationDuration={350} dataKey="expense" name="รายจ่าย" fill={FINANCE_TREND_COLORS.expense} radius={[4, 4, 0, 0]} maxBarSize={48} />
-                        <Bar animationDuration={350} dataKey="netProfit" name="กำไร/ขาดทุน" fill={FINANCE_TREND_COLORS.net} radius={[4, 4, 0, 0]} maxBarSize={48}>
+                        <Bar animationDuration={180} dataKey="income" name="รายรับ" fill={FINANCE_TREND_COLORS.income} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                        <Bar animationDuration={180} dataKey="expense" name="รายจ่าย" fill={FINANCE_TREND_COLORS.expense} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                        <Bar animationDuration={180} dataKey="netProfit" name="กำไร/ขาดทุน" fill={FINANCE_TREND_COLORS.net} radius={[4, 4, 0, 0]} maxBarSize={48}>
                           {trendChartData.map((entry) => (
                             <Cell key={entry.period} fill={entry.netProfit < 0 ? '#ef4444' : FINANCE_TREND_COLORS.net} />
                           ))}
@@ -3185,38 +3692,33 @@ function OwnerMain() {
                   </ResponsiveContainer>
                 </div>
 
-                <div className="owner-balance-summary">
-                  <div>
-                    <span>รวมรายรับ</span>
-                    <strong>{formatSignedCurrency(trendSummary.totalIncome)}</strong>
-                  </div>
-                  <div>
-                    <span>รวมรายจ่าย</span>
-                    <strong>{formatSignedCurrency(trendSummary.totalExpense)}</strong>
-                  </div>
-                  <div className={trendSummary.totalNet < 0 ? 'is-owed' : 'is-refund'}>
-                    <span>กำไร/ขาดทุนสุทธิ</span>
-                    <strong>{formatSignedCurrency(trendSummary.totalNet)}</strong>
-                  </div>
-                  <div className={trendSummary.avgNet < 0 ? 'is-owed' : 'is-refund'}>
-                    <span>กำไรสุทธิเฉลี่ยต่อ{financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
-                    <strong>{formatSignedCurrency(trendSummary.avgNet)}</strong>
-                  </div>
-                  <div>
-                    <span>อัตรากำไรสุทธิ</span>
-                    <strong>{formatPercent(trendSummary.profitMargin)}</strong>
-                  </div>
+                <div className="owner-balance-summary owner-fc-balances">
+                  {[
+                    { key: 'income', icon: 'income', label: 'รายรับรวม', value: trendSummary.totalIncome, tone: 'blue', hint: 'ยอดรับชำระในช่วงที่เลือก' },
+                    { key: 'expense', icon: 'expense', label: 'รายจ่ายรวม', value: trendSummary.totalExpense, tone: 'orange', hint: 'ค่าใช้จ่ายในช่วงที่เลือก' },
+                    { key: 'net', icon: 'profit', label: trendSummary.totalNet < 0 ? 'ขาดทุนสุทธิ' : 'กำไรสุทธิ', value: Math.abs(trendSummary.totalNet), tone: trendSummary.totalNet < 0 ? 'red' : 'green', hint: 'รายรับรวม − รายจ่ายรวม' },
+                    { key: 'average', icon: 'margin', label: `${trendSummary.avgNet < 0 ? 'ขาดทุน' : 'กำไร'}เฉลี่ยต่อ${financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}`, value: Math.abs(trendSummary.avgNet), tone: trendSummary.avgNet < 0 ? 'red' : 'violet', hint: `เฉลี่ยจาก ${trendSummary.periodCount} ช่วงเวลา` },
+                  ].map((item) => (
+                    <div key={item.key} className={`owner-fc-balance is-${item.tone}${item.key === 'net' ? ' is-net' : ''}`}>
+                      <div className="owner-fc-balance-label"><StatIcon name={item.icon} /><span>{item.label}</span></div>
+                      <strong>{currency(item.value)} <small>บาท</small></strong>
+                      <p>{item.hint}</p>
+                    </div>
+                  ))}
                 </div>
                 <div className="owner-finance-detail">
                   <div className="owner-finance-detail-heading">
-                    <div>
+                    <span className="owner-fc-detail-icon" aria-hidden="true"><OwnerListIcon name="calendar" size={18} /></span>
+                    <div className="owner-fc-detail-title">
                       <h4>รายละเอียดเปรียบเทียบตามช่วงเวลา</h4>
-                      <p>แสดงจำนวนรายการ ค่าเฉลี่ยต่อรายการ และสัดส่วนรายรับ–รายจ่ายในแต่ละช่วง</p>
+                      <p>ช่วงที่มียอดเงินแสดงก่อน · เรียงล่าสุดก่อน · กดแถวเพื่อดูรายละเอียด</p>
                     </div>
-                    <span>{trendSummary.periodCount} {financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
+                    <label className="owner-fc-comparison-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={financeComparisonSearch} onChange={(event) => { setFinanceComparisonSearch(event.target.value); setFinanceComparisonPage(1) }} placeholder="ค้นหาเดือน ปี หรือยอดเงิน" aria-label="ค้นหารายละเอียดเปรียบเทียบตามช่วงเวลา" /></label>
+                    <span className="owner-fc-period-count">{trendSummary.periodCount} {financeTrends.granularity === 'day' ? 'วัน' : 'เดือน'}</span>
                   </div>
                   <div className="owner-table-wrap owner-finance-detail-table-wrap">
                     <table className="owner-table owner-finance-detail-table">
+                      <colgroup><col style={{ width: '14%' }} /><col style={{ width: '16%' }} /><col style={{ width: '16%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /><col style={{ width: '12%' }} /><col style={{ width: '12%' }} /></colgroup>
                       <thead>
                         <tr>
                           <th>ช่วงเวลา</th>
@@ -3229,7 +3731,8 @@ function OwnerMain() {
                         </tr>
                       </thead>
                       <tbody>
-                        {trendChartData.map((item, index) => {
+                        {financeComparisonRows.map((item) => {
+                          const index = item.originalIndex
                           const income = Number(item.income || 0)
                           const expense = Number(item.expense || 0)
                           const incomeCount = Number(item.incomeCount || 0)
@@ -3241,29 +3744,38 @@ function OwnerMain() {
                           const expenseRatio = income > 0 ? (expense / income) * 100 : null
                           const periodProfitMargin = income > 0 ? (netProfit / income) * 100 : null
                           return (
-                            <tr key={item.period}>
-                              <td><strong>{item.monthLabel}</strong></td>
+                            <tr key={item.period} className="owner-fc-clickable" onClick={() => setFinancePeriodDetail(item)}>
+                              <td><button type="button" className="owner-fc-period owner-fc-period-button" onClick={(event) => { event.stopPropagation(); setFinancePeriodDetail(item) }} aria-label={`ดูรายละเอียดการเงิน ${item.monthLabel}`}><OwnerListIcon name="calendar" /><strong>{item.monthLabel}</strong></button><small>ดูรายละเอียด ›</small></td>
                               <td className="owner-finance-income-cell">
                                 <strong>{formatSignedCurrency(income)}</strong>
-                                <small>{incomeCount} รายการ · เฉลี่ย {formatSignedCurrency(incomeCount ? income / incomeCount : 0)}</small>
+                                <small>{incomeCount ? `${incomeCount} รายการ · เฉลี่ย ${formatSignedCurrency(income / incomeCount)}` : 'ไม่มีรายการรับชำระ'}</small>
                               </td>
                               <td className="owner-finance-expense-cell">
                                 <strong>{formatSignedCurrency(expense)}</strong>
-                                <small>{expenseCount} รายการ · เฉลี่ย {formatSignedCurrency(expenseCount ? expense / expenseCount : 0)}</small>
+                                <small>{expenseCount ? `${expenseCount} รายการ · เฉลี่ย ${formatSignedCurrency(expense / expenseCount)}` : 'ไม่มีรายการรายจ่าย'}</small>
                               </td>
                               <td className={netProfit < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'}>
-                                <strong>{formatSignedCurrency(netProfit)}</strong>
+                                <span className={`owner-fc-net-value ${netProfit < 0 ? 'is-loss' : netProfit > 0 ? 'is-profit' : 'is-zero'}`}>{formatSignedCurrency(netProfit)}</span>
                               </td>
                               <td className={netChange === null ? '' : netChange < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'}>
-                                {netChange === null ? '—' : `${netChange > 0 ? '+' : ''}${formatSignedCurrency(netChange)}`}
+                                <span className={`owner-fc-delta ${netChange === null || netChange === 0 ? 'is-neutral' : netChange < 0 ? 'is-down' : 'is-up'}`}>{netChange === null ? '—' : `${netChange > 0 ? '↑ +' : netChange < 0 ? '↓ ' : ''}${formatSignedCurrency(netChange)}`}</span>
                               </td>
-                              <td>{expenseRatio === null ? 'ไม่มีรายรับ' : formatPercent(expenseRatio)}</td>
-                              <td>{periodProfitMargin === null ? 'ไม่มีรายรับ' : formatPercent(periodProfitMargin)}</td>
+                              <td><span className={`owner-fc-ratio ${expenseRatio === null ? 'is-neutral' : expenseRatio > 100 ? 'is-negative' : 'is-positive'}`}>{expenseRatio === null ? 'ไม่มีรายรับ' : formatPercent(expenseRatio)}</span></td>
+                              <td><span className={`owner-fc-ratio ${periodProfitMargin === null ? 'is-neutral' : periodProfitMargin < 0 ? 'is-negative' : 'is-positive'}`}>{periodProfitMargin === null ? 'ไม่มีรายรับ' : formatPercent(periodProfitMargin)}</span></td>
                             </tr>
                           )
                         })}
+                        {!financeComparisonRows.length && <tr><td colSpan={7} className="owner-fc-search-empty"><span>ไม่พบช่วงเวลาที่ตรงกับคำค้นหา</span></td></tr>}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="owner-fc-table-footer">
+                    <span>แสดง {financeComparisonFiltered.length ? financeComparisonOffset + 1 : 0}–{Math.min(financeComparisonOffset + financeComparisonPageSize, financeComparisonFiltered.length)} จาก {financeComparisonFiltered.length} ช่วงเวลา</span>
+                    <div className="owner-pa-pager">
+                      <button type="button" aria-label="หน้าก่อนหน้า" disabled={financeComparisonCurrentPage <= 1} onClick={() => setFinanceComparisonPage(financeComparisonCurrentPage - 1)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button>
+                      <span>{financeComparisonCurrentPage} / {financeComparisonPages}</span>
+                      <button type="button" aria-label="หน้าถัดไป" disabled={financeComparisonCurrentPage >= financeComparisonPages} onClick={() => setFinanceComparisonPage(financeComparisonCurrentPage + 1)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></button>
+                    </div>
                   </div>
                 </div>
                 </>
@@ -3272,59 +3784,15 @@ function OwnerMain() {
               )}
             </section>
 
-            <OwnerUtilityReceipts from={paymentFilter.from} to={paymentFilter.to} />
 
-            <section className="owner-shell-grid">
-              <div className="owner-panel">
-                <div className="owner-panel-header">
-                  <h3>รายรับตามประเภท</h3>
-                </div>
-                <div className="owner-income-type-list">
-                  {paginatedIncomeByType.length ? (
-                    paginatedIncomeByType.map((item) => {
-                      const color = getPaymentTypeColor(item.type)
-                      const percent = incomeByTypeTotal > 0 ? (Number(item.total || 0) / incomeByTypeTotal) * 100 : 0
-                      return (
-                        <div key={item.type} className="owner-income-type-item">
-                          <span className="owner-income-type-icon" style={{ color, background: `${color}1f` }}>
-                            <PaymentTypeIcon type={item.type} />
-                          </span>
-                          <div className="owner-income-type-body">
-                            <div className="owner-income-type-row">
-                              <span className="owner-summary-label">{item.type ? formatPaymentType(item.type) : 'ไม่ระบุ'}</span>
-                              <strong>฿{formatCurrency(item.total)}</strong>
-                            </div>
-                            <div className="owner-income-type-progress">
-                              <div className="owner-income-type-progress-fill" style={{ width: `${percent}%`, background: color }} />
-                            </div>
-                            <div className="owner-income-type-row">
-                              <small>{item.count || 0} รายการ</small>
-                              <small>{percent.toFixed(0)}%</small>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <div className="owner-empty">ยังไม่มีข้อมูลรายรับ</div>
-                  )}
-                </div>
-                {incomeSummary.byType?.length > SUMMARY_PAGE_SIZE && (
-                  <div className="owner-pagination">
-                    <button type="button" disabled={incomeTypePage <= 1} onClick={() => setIncomeTypePage((page) => page - 1)}>
-                      ก่อนหน้า
-                    </button>
-                    <span>
-                      หน้า {incomeTypePage}/{incomeTypeTotalPages}
-                    </span>
-                    <button type="button" disabled={incomeTypePage >= incomeTypeTotalPages} onClick={() => setIncomeTypePage((page) => page + 1)}>
-                      ถัดไป
-                    </button>
-                  </div>
-                )}
-              </div>
+            <OwnerIncomeTypeCards summary={incomeSummary} range={{ ...paymentFilter, ...selectedPeriod }} />
 
-              <div className="owner-panel">
+          </>
+        )}
+
+        {!isLoading && activeTab === 'finance' && financeSection === 'expenses' && (
+          <>
+              <section className="owner-panel owner-expense-categories">
                 <div className="owner-panel-header">
                   <h3>รายจ่ายตามหมวดหมู่</h3>
                   <span className="owner-panel-header-count">
@@ -3334,6 +3802,7 @@ function OwnerMain() {
                     จัดการ
                   </button>
                 </div>
+                <p className="owner-expense-category-hint">เรียงจากยอดรายจ่ายสูงสุด · ตามช่วงวันที่ที่เลือก</p>
                 <div className="owner-category-list">
                   {paginatedExpenseCategories.length ? (
                     paginatedExpenseCategories.map((item) => (
@@ -3344,9 +3813,6 @@ function OwnerMain() {
                         <div className="owner-category-info">
                           <span className="owner-category-name">{item.category || 'ไม่ระบุ'}</span>
                           <span className="owner-category-count">{Number(item.count) || 0} รายการ · {expenseByCategoryTotal > 0 ? formatPercent((Number(item.total || 0) / expenseByCategoryTotal) * 100) : '0%'}</span>
-                          <div className="owner-category-progress" aria-label={`สัดส่วนรายจ่าย ${item.category || 'ไม่ระบุ'}`}>
-                            <span style={{ width: `${expenseByCategoryTotal > 0 ? Math.min(100, (Number(item.total || 0) / expenseByCategoryTotal) * 100) : 0}%` }} />
-                          </div>
                         </div>
                         <div className="owner-category-amount">
                           <strong>{formatSignedCurrency(item.total)}</strong>
@@ -3370,8 +3836,7 @@ function OwnerMain() {
                     </button>
                   </div>
                 )}
-              </div>
-            </section>
+              </section>
 
             <section className="owner-panel">
               <div className="owner-panel-header">
@@ -3424,6 +3889,10 @@ function OwnerMain() {
               </div>
             </section>
 
+          </>
+        )}
+
+        {!isLoading && activeTab === 'finance' && financeSection === 'payments' && (
             <section className="owner-panel">
               <div className="owner-panel-header">
                 <h3>บันทึกการชำระเงิน</h3>
@@ -3586,13 +4055,17 @@ function OwnerMain() {
               </div>
             </section>
 
-          </>
         )}
+
+        {occupancyLogId !== null && <OwnerOccupancyLogDialog key={occupancyLogId} eventId={occupancyLogId} onClose={() => setOccupancyLogId(null)} />}
+        {financePeriodDetail && <OwnerFinancePeriodDialog key={financePeriodDetail.period} period={financePeriodDetail} range={paymentFilter} onClose={() => setFinancePeriodDetail(null)} />}
 
         {occupancyPeriodDetail && (() => {
           const detailItem = occupancyPeriodDetail.item
           const detailLogs = occupancyPeriodDetail.logs || []
-          const visibleLogs = periodDetailFilter === 'all' ? detailLogs : detailLogs.filter((log) => log.event_type === periodDetailFilter)
+          const periodKeyword = periodDetailSearch.trim().toLowerCase()
+          const searchedLogs = detailLogs.filter((log) => !periodKeyword || [log.room_number, `${log.first_name || ''} ${log.last_name || ''}`, log.phone, log.note, log.event_date, log.event_type === 'move_in' ? 'ย้ายเข้า' : 'ย้ายออก'].filter(Boolean).join(' ').toLowerCase().includes(periodKeyword))
+          const visibleLogs = periodDetailFilter === 'all' ? searchedLogs : searchedLogs.filter((log) => log.event_type === periodDetailFilter)
           const summaryChips = [
             { key: 'occupied', tone: 'blue', icon: 'user', label: 'มีผู้พัก', value: detailItem.occupied, unit: 'ห้อง' },
             { key: 'vacant', tone: 'green', icon: 'door', label: 'ห้องว่าง', value: detailItem.vacant, unit: 'ห้อง' },
@@ -3600,9 +4073,9 @@ function OwnerMain() {
             { key: 'out', tone: 'orange', icon: 'moveOut', label: 'ย้ายออก', value: detailItem.moveOuts, unit: 'ครั้ง' },
           ]
           const filterChips = [
-            { key: 'all', label: 'ทั้งหมด', count: detailLogs.length },
-            { key: 'move_in', label: 'ย้ายเข้า', count: detailLogs.filter((log) => log.event_type === 'move_in').length },
-            { key: 'move_out', label: 'ย้ายออก', count: detailLogs.filter((log) => log.event_type === 'move_out').length },
+            { key: 'all', label: 'ทั้งหมด', count: searchedLogs.length },
+            { key: 'move_in', label: 'ย้ายเข้า', count: searchedLogs.filter((log) => log.event_type === 'move_in').length },
+            { key: 'move_out', label: 'ย้ายออก', count: searchedLogs.filter((log) => log.event_type === 'move_out').length },
           ]
           return (
             <div className="owner-modal-backdrop" role="presentation" onClick={() => setOccupancyPeriodDetail(null)}>
@@ -3639,6 +4112,7 @@ function OwnerMain() {
                       </div>
                     ))}
                   </div>
+                  <div className="owner-pdx-toolbar">
                   <div className="owner-pdx-filters" role="group" aria-label="กรองประเภทรายการ">
                     {filterChips.map((chip) => (
                       <button
@@ -3652,6 +4126,8 @@ function OwnerMain() {
                         <span>{chip.count}</span>
                       </button>
                     ))}
+                  </div>
+                  <label className="owner-pdx-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={periodDetailSearch} onChange={(event) => setPeriodDetailSearch(event.target.value)} aria-label="ค้นหารายละเอียดผู้เข้าพัก" placeholder="ค้นหาชื่อ ห้อง เบอร์โทร หรือหมายเหตุ" disabled={occupancyPeriodDetail.loading} /></label>
                   </div>
                 </div>
 
@@ -3723,7 +4199,7 @@ function OwnerMain() {
                     </div>
                   ) : (
                     <div className="owner-ov-list-empty owner-pdx-state">
-                      {detailLogs.length ? 'ไม่มีรายการประเภทนี้ในช่วงเวลานี้' : 'ไม่มีรายการย้ายเข้า–ออกในช่วงเวลานี้'}
+                      {periodKeyword ? 'ไม่พบรายการที่ตรงกับคำค้นหา' : detailLogs.length ? 'ไม่มีรายการประเภทนี้ในช่วงเวลานี้' : 'ไม่มีรายการย้ายเข้า–ออกในช่วงเวลานี้'}
                     </div>
                   )}
                 </div>
@@ -3986,9 +4462,9 @@ function OwnerMain() {
 
         {!isLoading && activeTab === 'rooms' && roomsSection === 'logs' && (
           <>
-            <section className="owner-panel">
+            <section className="owner-panel owner-olog-panel">
               <div className="owner-panel-header">
-                <h3>บันทึกการเข้าพักและย้ายออก</h3>
+                <h3 className="owner-olog-heading"><OwnerListIcon name="calendar" size={20} />บันทึกการเข้าพักและย้ายออก</h3>
               </div>
 
               <div className="owner-filter-box">
@@ -4019,8 +4495,8 @@ function OwnerMain() {
                 </div>
               </div>
 
-              <div className="owner-table-wrap">
-                <table className="owner-table">
+              <div className="owner-table-wrap owner-olog-table-wrap">
+                <table className="owner-olog-table"><colgroup><col style={{width:'15%'}} /><col style={{width:'12%'}} /><col style={{width:'8%'}} /><col style={{width:'19%'}} /><col style={{width:'15%'}} /><col style={{width:'20%'}} /><col style={{width:'11%'}} /></colgroup>
                   <thead>
                     <tr>
                       <th>วันที่</th>
@@ -4029,27 +4505,29 @@ function OwnerMain() {
                       <th>ผู้เข้าพัก</th>
                       <th>เบอร์โทร</th>
                       <th>หมายเหตุ</th>
+                      <th><span className="visually-hidden">รายละเอียด</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {occupancyLogs.logs?.length ? (
                       occupancyLogs.logs.map((log) => (
-                        <tr key={log.id}>
-                          <td>{formatDate(log.event_date)}</td>
+                        <tr key={log.id} className="owner-olog-row" onClick={() => setOccupancyLogId(log.id)}>
+                          <td><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(log.event_date)}</strong></span><span className="owner-il-id">{log.id}</span></td>
                           <td className="owner-col-status">
-                            <span className={`owner-status-badge ${log.event_type === 'move_in' ? 'active' : 'disabled'}`}>
+                            <span className={`owner-olog-event ${log.event_type === 'move_in' ? 'is-in' : 'is-out'}`}><OwnerListIcon name={log.event_type === 'move_in' ? 'moveIn' : 'moveOut'} size={13} />
                               {formatOccupancyEventType(log.event_type)}
                             </span>
                           </td>
-                          <td>{log.room_number || '-'}</td>
-                          <td>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || '-'}</td>
-                          <td>{log.phone || '-'}</td>
-                          <td>{log.note || '-'}</td>
+                          <td><span className="owner-il-room">{log.room_number || '—'}</span></td>
+                          <td><span className="owner-olog-name"><OwnerListIcon name="user" size={15} /><strong>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</strong></span></td>
+                          <td><span className="owner-olog-phone"><OwnerListIcon name="phone" size={13} />{log.phone || 'ไม่ระบุ'}</span></td>
+                          <td><span className={`owner-il-note${log.note ? '' : ' is-empty'}`}>{log.note || 'ไม่มีหมายเหตุ'}</span></td>
+                          <td><button type="button" className="owner-ur-view" onClick={(event) => { event.stopPropagation(); setOccupancyLogId(log.id) }}>รายละเอียด ›</button></td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" className="owner-empty-row">
+                        <td colSpan="7" className="owner-empty-row">
                           ไม่มีข้อมูลการเข้าพักหรือย้ายออก
                         </td>
                       </tr>
