@@ -1,6 +1,7 @@
 import express from "express";
 import "dotenv/config";
 import { createCorsMiddleware } from "../middleware/cors.js";
+import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import loginRouter from "../router/LoginRouter.js";
 import registerRouter from "../router/Register.js";
 import forgotPasswordRouter from "../router/ForgotPasswordRouter.js";
@@ -10,6 +11,7 @@ const PORT = process.env.AUTH_PORT || 4001;
 
 app.use(createCorsMiddleware());
 app.use(express.json());
+app.use(auditDetailsMiddleware);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "auth" });

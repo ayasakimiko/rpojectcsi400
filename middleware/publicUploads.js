@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { recordAuditImages } from "./auditDetails.js";
 
 export const PUBLIC_UPLOAD_DIR = path.resolve(process.env.PUBLIC_UPLOADS_DIR || path.join(process.cwd(), "public", "uploads"));
 const URL_PREFIX = "/uploads";
@@ -52,5 +53,6 @@ export async function savePublicImages(folder, photos) {
     await deletePublicImages(saved.map((photo) => photo.url));
     throw error;
   }
+  recordAuditImages(saved.map((photo) => photo.url));
   return saved;
 }

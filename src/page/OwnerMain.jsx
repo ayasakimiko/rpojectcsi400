@@ -1744,6 +1744,163 @@ const AUDIT_METHOD_BADGES = {
   LOGIN: { label: 'เข้าระบบ', tone: 'login' },
 }
 
+const AUDIT_FIELD_LABELS = {
+  roomNumber: 'ห้อง', room_number: 'ห้อง', targetRoomNumber: 'ห้องปลายทาง', target_room_number: 'ห้องปลายทาง',
+  first_name: 'ชื่อ', firstName: 'ชื่อ', last_name: 'นามสกุล', lastName: 'นามสกุล', phone: 'เบอร์โทร', age: 'อายุ', role: 'ตำแหน่ง',
+  amount: 'จำนวนเงิน', price: 'ราคา', rent: 'ค่าเช่า', monthly_rent: 'ค่าเช่ารายเดือน', deposit: 'เงินประกัน',
+  category: 'หมวดหมู่', description: 'รายละเอียด', vendor: 'ร้านค้า/ผู้รับเงิน', payment_method: 'ช่องทางชำระ', paymentMethod: 'ช่องทางชำระ',
+  receipt_number: 'เลขที่ใบเสร็จ', expense_date: 'วันที่จ่าย', payment_date: 'วันที่ชำระ', type: 'ประเภท', types: 'ประเภท',
+  title: 'หัวข้อ', message: 'ข้อความ', tone: 'ระดับประกาศ', expiresAt: 'ลบอัตโนมัติเมื่อ', popupUntil: 'แสดงป๊อปอัปถึง',
+  note: 'หมายเหตุ', reason: 'เหตุผล', reviewNote: 'ผลการตรวจสอบ', status: 'สถานะ', decision: 'ผลการพิจารณา',
+  incidentType: 'ประเภทเหตุ', severity: 'ระดับความรุนแรง',
+  vehiclePlate: 'ทะเบียนรถ', vehicleModel: 'รุ่นรถ', guestName: 'ชื่อผู้มาเยี่ยม', guestPhone: 'เบอร์ผู้มาเยี่ยม', owner: 'เจ้าของรถ',
+  startAt: 'เริ่มจอด', endAt: 'สิ้นสุดการจอด', limitTime: 'จำกัดเวลาจอด',
+  water_units: 'หน่วยน้ำ', waterUnits: 'หน่วยน้ำ', electricity_units: 'หน่วยไฟ', electricityUnits: 'หน่วยไฟ',
+  water_meter: 'มิเตอร์น้ำ', electricity_meter: 'มิเตอร์ไฟ', full_name: 'ชื่อ-นามสกุล', room_preference: 'ห้องที่ต้องการ',
+  desired_move_in_date: 'วันที่ต้องการเข้าพัก', rental_start_date: 'วันเริ่มเช่า', move_in_date: 'วันย้ายเข้า',
+  preferred_move_date: 'วันที่ต้องการย้าย', move_reason: 'เหตุผลการย้าย', requestType: 'ประเภทคำขอ', request_type: 'ประเภทคำขอ',
+  recipient_name: 'ชื่อผู้รับ', carrier: 'บริษัทขนส่ง', tracking_number: 'เลขพัสดุ', floor: 'ชั้น', room_type: 'ประเภทห้อง',
+}
+
+const AUDIT_VALUE_LABELS = {
+  warning: 'แจ้งเตือน', info: 'ทั่วไป', urgent: 'ฉุกเฉิน', normal: 'ทั่วไป', approved: 'อนุมัติ', approve: 'อนุมัติ',
+  rejected: 'ไม่อนุมัติ', reject: 'ไม่อนุมัติ', pending: 'รอดำเนินการ', cancelled: 'ยกเลิก', reviewed: 'ตรวจสอบแล้ว',
+  vacant: 'ว่าง', occupied: 'มีผู้เช่า', maintenance: 'ปิดซ่อม', rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ',
+  self: 'รถของผู้เช่า', family: 'รถครอบครัว', external: 'บุคคลภายนอก', moveout: 'แจ้งย้ายออก', move_room: 'ย้ายห้อง',
+  accident: 'อุบัติเหตุ', security: 'ความปลอดภัย', fire: 'ไฟไหม้ / ควัน', medical: 'เจ็บป่วยฉุกเฉิน', other: 'อื่น ๆ',
+  cash: 'เงินสด', transfer: 'โอนเงิน', promptpay: 'พร้อมเพย์',
+}
+
+function formatAuditFieldValue(value) {
+  if (typeof value === 'boolean') return value ? 'ใช่' : 'ไม่ใช่'
+  if (typeof value === 'number') return value.toLocaleString('th-TH')
+  const text = String(value)
+  if (AUDIT_VALUE_LABELS[text]) return AUDIT_VALUE_LABELS[text]
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) {
+    const date = new Date(text)
+    if (!Number.isNaN(date.getTime())) return date.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T00:00:00`).toLocaleDateString('th-TH', { dateStyle: 'medium' })
+  return text
+}
+
+function parseAuditDetails(log) {
+  if (!log?.details) return { fields: [], images: [] }
+  try {
+    const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
+    return {
+      fields: Array.isArray(details?.fields) ? details.fields.filter((field) => Array.isArray(field) && field.length === 2) : [],
+      images: Array.isArray(details?.images) ? details.images.filter((url) => typeof url === 'string') : [],
+    }
+  } catch {
+    return { fields: [], images: [] }
+  }
+}
+
+function getAuditMethodBadge(log) {
+  if (String(log.endpoint || '').startsWith('/api/auth/login')) return AUDIT_METHOD_BADGES.LOGIN
+  return AUDIT_METHOD_BADGES[String(log.method || '').toUpperCase()] || AUDIT_METHOD_BADGES.PUT
+}
+
+function getAuditActorName(log) {
+  return log.actor_name || `${log.actor_role} #${log.actor_id}`
+}
+
+function OwnerAuditDetailModal({ log, isClosing, onClose }) {
+  const [photoIndex, setPhotoIndex] = useState(null)
+  const activity = describeAuditActivity(log)
+  const method = getAuditMethodBadge(log)
+  const actorName = getAuditActorName(log)
+  const roleKey = String(log.actor_role || '').toLowerCase()
+  const details = parseAuditDetails(log)
+  const createdAt = new Date(log.created_at)
+  const target = activity.detail && !activity.action.endsWith(activity.detail) ? ` (${activity.detail})` : ''
+  const summary = {
+    create: `${actorName} ${activity.action}${target} เข้าระบบ`,
+    update: `${actorName} ${activity.action}${target}`,
+    delete: `${actorName} ${activity.action}${target} ออกจากระบบ`,
+    login: `${actorName} เข้าสู่ระบบเพื่อใช้งานเว็บไซต์`,
+  }[method.tone]
+
+  useEffect(() => {
+    const handleKey = (event) => {
+      if (event.key === 'Escape' && photoIndex === null) onClose()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose, photoIndex])
+
+  return (
+    <div className={`owner-modal-backdrop${isClosing ? ' is-closing' : ''}`} role="presentation" onClick={onClose}>
+      <section className={`owner-modal owner-audit-detail${isClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-audit-detail-title" onClick={(event) => event.stopPropagation()}>
+        <div className="owner-modal-header owner-audit-detail-header">
+          <span className={`owner-audit-method is-${method.tone}`}>{method.label}</span>
+          <div>
+            <h3 id="owner-audit-detail-title">{activity.action}</h3>
+            <p>{createdAt.toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })} น.</p>
+          </div>
+          <button type="button" className="owner-modal-close" onClick={onClose} aria-label="ปิดรายละเอียด">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="owner-modal-body owner-audit-detail-body">
+          <div className="owner-audit-detail-actor">
+            <span className={`owner-audit-avatar is-lg is-${roleKey}`} aria-hidden="true">{actorName.trim().charAt(0) || '?'}</span>
+            <span className="owner-audit-actor-text">
+              <strong>{actorName}</strong>
+              <span className={`owner-audit-role is-${roleKey}`}>{AUDIT_ROLE_LABELS[log.actor_role] || log.actor_role}</span>
+            </span>
+          </div>
+
+          <p className="owner-audit-detail-summary">{summary}</p>
+
+          <h4 className="owner-audit-detail-heading">ข้อมูลที่{method.tone === 'delete' ? 'ลบ' : method.tone === 'create' ? 'เพิ่ม' : 'บันทึก'}</h4>
+          {details.fields.length > 0 ? (
+            <dl className="owner-audit-detail-fields">
+              {details.fields.map(([key, value]) => (
+                <div key={key}>
+                  <dt>{AUDIT_FIELD_LABELS[key] || key}</dt>
+                  <dd>{formatAuditFieldValue(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="owner-audit-detail-empty">
+              {method.tone === 'login' || method.tone === 'delete' ? `รายการ: ${activity.detail}` : 'ไม่มีรายละเอียดเพิ่มเติมสำหรับรายการนี้'}
+            </p>
+          )}
+
+          {details.images.length > 0 && (
+            <>
+              <h4 className="owner-audit-detail-heading">รูปภาพที่แนบ ({details.images.length})</h4>
+              <div className="owner-audit-detail-photos">
+                {details.images.map((url, index) => (
+                  <button key={url} type="button" onClick={() => setPhotoIndex(index)} aria-label={`ดูรูปที่ ${index + 1}`}>
+                    <UploadImage src={url} alt={`รูปที่ ${index + 1}`} loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+      {photoIndex !== null && (
+        <PhotoLightbox
+          photos={details.images.map((url, index) => ({ url, name: `รูปที่ ${index + 1}` }))}
+          initialIndex={photoIndex}
+          title={activity.action}
+          subtitle={actorName}
+          label="รูปภาพจากประวัติการใช้งาน"
+          onClose={() => setPhotoIndex(null)}
+        />
+      )}
+    </div>
+  )
+}
+
 function describeAuditActivity(log) {
   const segments = String(log.endpoint || '').split('?')[0].split('/').filter(Boolean)
   const method = String(log.method || '').toUpperCase()
@@ -1773,7 +1930,11 @@ function describeAuditActivity(log) {
 }
 
 function OwnerAuditLog({ onSummaryChange }) {
-  const [result, setResult] = useState({ logs: [], total: 0, page: 1, pageSize: 20 })
+  const [result, setResult] = useState({ logs: [], total: 0, page: 1, pageSize: 100 })
+  const [selectedLog, setSelectedLog] = useState(null)
+  const [displaySelectedLog, isSelectedLogClosing] = useClosingValue(selectedLog)
+  const closeSelectedLog = useCallback(() => setSelectedLog(null), [])
+  const tableWrapRef = useRef(null)
   const [page, setPage] = useState(1)
   const [role, setRole] = useState('all')
   const [method, setMethod] = useState('all')
@@ -1812,6 +1973,11 @@ function OwnerAuditLog({ onSummaryChange }) {
   }, [result.summary, onSummaryChange])
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize))
+  const goToPage = (nextPage) => {
+    setLoading(true)
+    setPage(nextPage)
+    tableWrapRef.current?.scrollTo({ top: 0 })
+  }
   return (
     <section className="owner-panel owner-audit-panel">
       <div className="owner-panel-header">
@@ -1828,7 +1994,7 @@ function OwnerAuditLog({ onSummaryChange }) {
         </select>
       </form>
       {error && <div className="owner-alert owner-alert-danger" role="alert">{error}</div>}
-      <div className="owner-table-wrap owner-audit-table-wrap">
+      <div className="owner-table-wrap owner-audit-table-wrap" ref={tableWrapRef}>
         <table className="owner-table owner-audit-table">
           <colgroup><col className="owner-audit-col-time" /><col className="owner-audit-col-actor" /><col /></colgroup>
           <thead><tr><th>วัน-เวลา</th><th>ผู้ทำรายการ</th><th>กิจกรรม</th></tr></thead>
@@ -1836,11 +2002,22 @@ function OwnerAuditLog({ onSummaryChange }) {
             {loading ? <tr><td colSpan="3" className="owner-empty-row">กำลังโหลด...</td></tr> : result.logs.length ? result.logs.map((log) => {
               const activity = describeAuditActivity(log)
               const createdAt = new Date(log.created_at)
-              const actorName = log.actor_name || `${log.actor_role} #${log.actor_id}`
-              const method = String(log.endpoint || '').startsWith('/api/auth/login')
-                ? AUDIT_METHOD_BADGES.LOGIN
-                : AUDIT_METHOD_BADGES[String(log.method || '').toUpperCase()] || AUDIT_METHOD_BADGES.PUT
-              return <tr key={log.id}>
+              const actorName = getAuditActorName(log)
+              const method = getAuditMethodBadge(log)
+              const photoCount = parseAuditDetails(log).images.length
+              return <tr
+                key={log.id}
+                className="owner-audit-row"
+                tabIndex={0}
+                aria-label={`ดูรายละเอียด ${activity.action} โดย ${actorName}`}
+                onClick={() => setSelectedLog(log)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    setSelectedLog(log)
+                  }
+                }}
+              >
                 <td className="owner-audit-time">
                   <strong>{createdAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
                   <small>{createdAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</small>
@@ -1859,8 +2036,9 @@ function OwnerAuditLog({ onSummaryChange }) {
                     <span className={`owner-audit-method is-${method.tone}`}>{method.label}</span>
                     <span className="owner-audit-activity-text">
                       <strong>{activity.action}</strong>
-                      <small>{activity.detail}</small>
+                      <small>{activity.detail}{photoCount > 0 ? ` · รูป ${photoCount}` : ''}</small>
                     </span>
+                    <span className="owner-audit-row-chevron" aria-hidden="true">›</span>
                   </div>
                 </td>
               </tr>
@@ -1869,12 +2047,17 @@ function OwnerAuditLog({ onSummaryChange }) {
         </table>
       </div>
       <div className="owner-audit-pagination">
-        <span>หน้า {page} / {totalPages} · ทั้งหมด {Number(result.total).toLocaleString('th-TH')} รายการ</span>
+        <span>
+          {result.total > 0
+            ? `แสดง ${((page - 1) * result.pageSize + 1).toLocaleString('th-TH')}–${Math.min(page * result.pageSize, result.total).toLocaleString('th-TH')} จาก ${Number(result.total).toLocaleString('th-TH')} รายการ · หน้า ${page} / ${totalPages}`
+            : `หน้า ${page} / ${totalPages} · ทั้งหมด 0 รายการ`}
+        </span>
         <div className="owner-pagination">
-          <button type="button" disabled={loading || page <= 1} onClick={() => { setLoading(true); setPage(page - 1) }}>ก่อนหน้า</button>
-          <button type="button" disabled={loading || page >= totalPages} onClick={() => { setLoading(true); setPage(page + 1) }}>ถัดไป</button>
+          <button type="button" disabled={loading || page <= 1} onClick={() => goToPage(page - 1)}>ก่อนหน้า</button>
+          <button type="button" disabled={loading || page >= totalPages} onClick={() => goToPage(page + 1)}>ถัดไป</button>
         </div>
       </div>
+      {displaySelectedLog && <OwnerAuditDetailModal log={displaySelectedLog} isClosing={isSelectedLogClosing} onClose={closeSelectedLog} />}
     </section>
   )
 }

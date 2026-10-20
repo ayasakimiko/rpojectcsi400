@@ -137,7 +137,7 @@ router.get("/logs/audit", async (req, res) => {
   try {
     const pool = getPool();
     const page = parsePage(req.query.page);
-    const pageSize = 20;
+    const pageSize = 100;
     const offset = (page - 1) * pageSize;
     const conditions = [...AUDIT_BASE_CONDITIONS];
     const params = [];
@@ -164,7 +164,7 @@ router.get("/logs/audit", async (req, res) => {
     const [[countRows], [logs], [summaryRows]] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS total FROM AuditLog al ${countJoins} ${whereClause}`, params),
       pool.query(
-      `SELECT al.id, al.actor_id, al.actor_role, al.method, al.endpoint, al.status_code, al.ip_address, al.created_at,
+      `SELECT al.id, al.actor_id, al.actor_role, al.method, al.endpoint, al.status_code, al.ip_address, al.details, al.created_at,
               COALESCE(CONCAT(c.first_name, ' ', c.last_name), CONCAT(s.first_name, ' ', s.last_name),
                        CONCAT(a.first_name, ' ', a.last_name), CONCAT(o.first_name, ' ', o.last_name)) AS actor_name
        FROM AuditLog al ${joins} ${whereClause}

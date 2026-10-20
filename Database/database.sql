@@ -565,10 +565,21 @@ CREATE TABLE IF NOT EXISTS AuditLog (
     endpoint VARCHAR(255) NOT NULL,
     status_code SMALLINT UNSIGNED NOT NULL,
     ip_address VARCHAR(45) NULL,
+    details TEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_audit_log_created_at (created_at, id),
     INDEX idx_audit_log_actor (actor_role, actor_id, created_at)
 );
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'AuditLog' AND COLUMN_NAME = 'details'),
+    'SELECT 1',
+    'ALTER TABLE `AuditLog` ADD COLUMN `details` TEXT NULL AFTER ip_address'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS

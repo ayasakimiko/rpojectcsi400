@@ -3,6 +3,7 @@ import "dotenv/config";
 import jwt from "jsonwebtoken";
 import { createCorsMiddleware } from "./middleware/cors.js";
 import { getPool } from "./Database/connection.js";
+import { AUDIT_DETAILS_HEADER, decodeAuditDetails } from "./middleware/auditDetails.js";
 
 const PORT = process.env.PORT || 4000;
 
@@ -76,13 +77,15 @@ function proxy(req, res, target, actor) {
   });
 
   proxyReq.on("response", (proxyRes) => {
+    const auditDetails = decodeAuditDetails(proxyRes.headers[AUDIT_DETAILS_HEADER]);
+    delete proxyRes.headers[AUDIT_DETAILS_HEADER];
     if (actor && proxyRes.statusCode >= 200 && proxyRes.statusCode < 300) {
       const endpoint = req.url.split("?")[0].slice(0, 255);
       const ipAddress = (req.socket.remoteAddress || "").slice(0, 45);
       getPool().query(
-        `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [actor.id, actor.role, req.method, endpoint, proxyRes.statusCode, ipAddress || null],
+        `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address, details)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [actor.id, actor.role, req.method, endpoint, proxyRes.statusCode, ipAddress || null, auditDetails],
       ).catch((error) => console.error("Audit log write error:", error));
     }
     res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, stripHopByHop(proxyRes.headers));

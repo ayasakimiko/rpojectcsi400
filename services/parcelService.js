@@ -1,6 +1,7 @@
 import express from "express";
 import "dotenv/config";
 import { createCorsMiddleware } from "../middleware/cors.js";
+import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import {
   authenticate,
   requireAdminRole,
@@ -20,6 +21,7 @@ const PORT = process.env.PARCEL_PORT || 4007;
 
 app.use(createCorsMiddleware());
 app.use(express.json());
+app.use(auditDetailsMiddleware);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "parcel" });
