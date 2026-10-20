@@ -1070,6 +1070,11 @@
   flex-shrink: 0;
 }
 
+.owner-audit-detail-body::after {
+  content: "";
+  flex: 0 0 6px;
+}
+
 .owner-audit-detail-actor {
   display: flex;
   align-items: center;
@@ -1172,7 +1177,7 @@
 
 .owner-audit-detail-photos {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, 112px);
   gap: 10px;
 }
 
@@ -1224,7 +1229,7 @@
   }
 
   .owner-audit-detail-photos {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   }
 
   .owner-audit-filters {
