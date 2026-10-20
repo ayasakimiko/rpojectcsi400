@@ -1027,8 +1027,10 @@
   color: #475569;
 }
 
-.owner-audit-detail {
-  width: min(560px, 100%);
+.owner-modal.owner-audit-detail {
+  width: min(860px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
 }
 
 .owner-audit-detail-header {
@@ -1057,10 +1059,15 @@
 
 .owner-audit-detail-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 14px;
-  max-height: min(70vh, 640px);
+  min-height: 0;
   overflow-y: auto;
+}
+
+.owner-audit-detail-body > * {
+  flex-shrink: 0;
 }
 
 .owner-audit-detail-actor {
@@ -1150,6 +1157,10 @@
 }
 
 .owner-audit-detail-empty {
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  min-height: 120px;
   margin: 0;
   padding: 14px;
   border: 1px dashed #d6e1ef;
