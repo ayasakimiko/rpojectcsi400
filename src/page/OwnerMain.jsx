@@ -1459,10 +1459,16 @@ const STAT_ICON_PATHS = {
       <path d="M12 8v5M12 16h.01" />
     </>
   ),
-  megaphone: (
+  announce: (
     <>
-      <path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1Z" />
-      <path d="M17 9a4 4 0 0 1 0 6" />
+      <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1Z" />
+      <path d="M16 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
     </>
   ),
   history: (
@@ -1473,7 +1479,7 @@ const STAT_ICON_PATHS = {
   ),
 }
 
-const OWNER_TILE_TONES = { blue: 'blue', green: 'green', purple: 'violet', orange: 'orange', red: 'red', teal: 'teal', indigo: 'indigo', slate: 'slate' }
+const OWNER_TILE_TONES = { blue: 'blue', green: 'green', purple: 'violet', orange: 'orange', red: 'red', teal: 'teal', indigo: 'indigo', slate: 'slate', amber: 'amber' }
 
 function StatIcon({ name }) {
   return (
@@ -1520,7 +1526,7 @@ function compareNewest(field) {
 
 function OwnerStatTile({ icon, label, value, hint, tone }) {
   return (
-    <div className={`staff-summary-tile is-${OWNER_TILE_TONES[tone] || 'blue'}`}>
+    <div className={`staff-summary-tile is-${OWNER_TILE_TONES[tone] || 'blue'}${value === 0 ? ' is-zero' : ''}`}>
       <span className="staff-summary-tile-icon">
         <StatIcon name={icon} />
       </span>
@@ -1618,11 +1624,6 @@ function PaymentTypeIcon({ type }) {
   )
 }
 
-const THAI_MONTHS = [
-  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
-]
-
 const THAI_MONTHS_SHORT = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
@@ -1710,16 +1711,6 @@ const OWNER_TABS = [
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
 ]
-
-const OWNER_PERIOD_BAR_CONTENT = {
-  rooms: { title: 'สรุปข้อมูลห้องพัก', subtitle: 'ภาพรวมห้องพักและผู้เข้าพักประจำเดือน' },
-  finance: { title: 'สรุปข้อมูลการเงิน', subtitle: 'ยอดรายรับ รายจ่าย และกำไรสุทธิของเดือนปัจจุบัน' },
-  staff: { title: 'ข้อมูลพนักงาน', subtitle: 'รายชื่อและสถานะพนักงานทั้งหมด' },
-  parking: { title: 'จัดการที่จอดรถ', subtitle: 'ติดตามคำขอและรายการรถของผู้เข้าพัก' },
-  safety: { title: 'จัดการเหตุฉุกเฉิน', subtitle: 'ติดตามและตรวจสอบรายงานจากผู้เข้าพักและเจ้าหน้าที่' },
-  audit: { title: 'ประวัติการใช้งานเว็บไซต์', subtitle: 'รายการเปลี่ยนแปลงข้อมูลที่ดำเนินการโดยผู้ใช้ทุกบทบาท' },
-  announcements: { title: 'ประกาศจากหอพัก', subtitle: 'ข่าวสารและการแจ้งเตือนที่สื่อสารกับผู้เช่าและเจ้าหน้าที่' },
-}
 
 const AUDIT_RESOURCES = [
   ['move-out-inspections', 'ผลตรวจห้องย้ายออก'],
@@ -3033,13 +3024,13 @@ function OwnerMain() {
     })(),
     announcements: (() => {
       const warningCount = announcements.filter((item) => item.tone === 'warning').length
-      const popupCount = announcements.filter((item) => item.popup_active).length
-      const expiringCount = announcements.filter((item) => item.expires_epoch && Number(item.expires_epoch) - announcementsLoadedAt <= 7 * 24 * 60 * 60).length
+      const scheduledCount = announcements.filter((item) => item.expires_at).length
+      const newCount = announcements.filter((item) => announcementsLoadedAt * 1000 - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000).length
       return [
-        { key: 'ann-total', tone: 'blue', icon: 'megaphone', label: 'ประกาศที่เผยแพร่', value: `${announcements.length} ประกาศ`, hint: 'ประกาศที่ยังไม่หมดอายุ' },
-        { key: 'ann-warning', tone: warningCount > 0 ? 'orange' : 'slate', icon: 'overdue', label: 'ประกาศแจ้งเตือน', value: `${warningCount} ประกาศ`, hint: 'ประกาศระดับแจ้งเตือน' },
-        { key: 'ann-popup', tone: 'purple', icon: 'megaphone', label: 'กำลังแสดงป๊อปอัป', value: `${popupCount} ประกาศ`, hint: 'แสดงให้ผู้เช่าเห็นทันที' },
-        { key: 'ann-expiring', tone: expiringCount > 0 ? 'red' : 'teal', icon: 'history', label: 'ใกล้หมดอายุ', value: `${expiringCount} ประกาศ`, hint: 'หมดอายุภายใน 7 วัน' },
+        { key: 'ann-all', tone: 'blue', icon: 'announce', label: 'ประกาศทั้งหมด', value: announcements.length },
+        { key: 'ann-warning', tone: 'amber', icon: 'announce', label: 'ประกาศแจ้งเตือน', value: warningCount },
+        { key: 'ann-info', tone: 'indigo', icon: 'announce', label: 'ประกาศทั่วไป', value: announcements.length - warningCount },
+        { key: 'ann-scheduled', tone: 'slate', icon: 'clock', label: 'กำหนดลบอัตโนมัติ', value: scheduledCount, hint: newCount > 0 ? `ใหม่ใน 24 ชม. ${newCount} รายการ` : null },
       ]
     })(),
     audit: (() => {
@@ -3214,27 +3205,6 @@ function OwnerMain() {
             </button>
           </div>
         </header>
-
-        {activeTab !== 'dorm-info' && activeTab !== 'utilities' && (
-          <section className="owner-period-bar">
-            <div className="owner-period-text">
-              <h2>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).title}</h2>
-              <p>{(OWNER_PERIOD_BAR_CONTENT[activeTab] || OWNER_PERIOD_BAR_CONTENT.rooms).subtitle}</p>
-            </div>
-            {(activeTab === 'rooms' || activeTab === 'finance') && (
-              <span className="owner-period-badge">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="16" rx="2" />
-                  <path d="M16 3v4M8 3v4M3 10h18" />
-                </svg>
-                <span>
-                  <small>ข้อมูลประจำเดือน</small>
-                  {THAI_MONTHS[selectedPeriod.month - 1]} {selectedPeriod.year + 543}
-                </span>
-              </span>
-            )}
-          </section>
-        )}
 
         {notice.message && (
           <div className="owner-modal-backdrop owner-confirm-backdrop owner-notice-backdrop" role="presentation" onClick={closeNotice} onKeyDown={(event) => { if (event.key === 'Escape') closeNotice() }}>
