@@ -1813,6 +1813,9 @@ function OwnerAuditDetailModal({ log, isClosing, onClose }) {
   const actorName = getAuditActorName(log)
   const roleKey = String(log.actor_role || '').toLowerCase()
   const details = parseAuditDetails(log)
+  const fieldRows = details.fields
+    .map(([key, value]) => ({ key, label: AUDIT_FIELD_LABELS[key] || key, value: formatAuditFieldValue(value) }))
+    .sort((a, b) => Number(a.value.length > 40) - Number(b.value.length > 40))
   const createdAt = new Date(log.created_at)
   const target = activity.detail && !activity.action.endsWith(activity.detail) ? ` (${activity.detail})` : ''
   const summary = {
@@ -1858,12 +1861,12 @@ function OwnerAuditDetailModal({ log, isClosing, onClose }) {
           <p className="owner-audit-detail-summary">{summary}</p>
 
           <h4 className="owner-audit-detail-heading">ข้อมูลที่{method.tone === 'delete' ? 'ลบ' : method.tone === 'create' ? 'เพิ่ม' : 'บันทึก'}</h4>
-          {details.fields.length > 0 ? (
+          {fieldRows.length > 0 ? (
             <dl className="owner-audit-detail-fields">
-              {details.fields.map(([key, value]) => (
-                <div key={key}>
-                  <dt>{AUDIT_FIELD_LABELS[key] || key}</dt>
-                  <dd>{formatAuditFieldValue(value)}</dd>
+              {fieldRows.map((field) => (
+                <div key={field.key} className={field.value.length > 40 ? 'is-long' : undefined}>
+                  <dt>{field.label}</dt>
+                  <dd>{field.value}</dd>
                 </div>
               ))}
             </dl>
