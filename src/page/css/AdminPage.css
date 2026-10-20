@@ -15191,3 +15191,17 @@ tr.admin-focus-flash.is-fading > td {
     background: #b9d4f5;
   }
 }
+
+/* ปุ่มการดำเนินการในแถวรายละเอียด (มือถือ) ให้เรียงเต็มความกว้างเท่ากัน */
+.admin-table .admin-detail-item .admin-row-actions {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  margin-left: 0;
+}
+
+.admin-table .admin-detail-item .admin-row-actions .admin-action-btn {
+  width: 100%;
+  text-align: center;
+}
