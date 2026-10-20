@@ -46,8 +46,11 @@ function useDormInfo(apiBase) {
   return { config, setConfig, loading, error, reload }
 }
 
-export function DormInfoSettings({ apiBase, children = null }) {
+export function DormInfoSettings({ apiBase, children = null, slipPreview = null }) {
   const { config, setConfig, loading, error, reload } = useDormInfo(apiBase)
+  const [previewTab, setPreviewTab] = useState('info')
+  const showSlip = Boolean(slipPreview) && previewTab === 'slip'
+  const previewChanged = showSlip ? slipPreview.changed : null
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
@@ -273,8 +276,21 @@ export function DormInfoSettings({ apiBase, children = null }) {
         <aside className="dorm-settings-preview" aria-label="ตัวอย่างที่ผู้เช่าเห็น">
           <div className="dorm-settings-preview-head">
             <span>ตัวอย่างที่ผู้เช่าเห็น</span>
-            <span className={`dorm-settings-status ${changed ? 'is-draft' : 'is-saved'}`}>{changed ? 'ตัวอย่างก่อนบันทึก' : 'ข้อมูลปัจจุบัน'}</span>
+            <span className={`dorm-settings-status ${(showSlip ? previewChanged : changed) ? 'is-draft' : 'is-saved'}`}>{(showSlip ? previewChanged : changed) ? 'ตัวอย่างก่อนบันทึก' : 'ข้อมูลปัจจุบัน'}</span>
           </div>
+          {slipPreview && (
+            <div className="dorm-settings-preview-tabs" role="tablist" aria-label="เลือกตัวอย่าง">
+              <button type="button" role="tab" aria-selected={!showSlip} className={!showSlip ? 'is-active' : ''} onClick={() => setPreviewTab('info')}>
+                <Icon name="rules" size={15} />
+                กฎระเบียบและเบอร์ติดต่อ
+              </button>
+              <button type="button" role="tab" aria-selected={showSlip} className={showSlip ? 'is-active' : ''} onClick={() => setPreviewTab('slip')}>
+                <Icon name="bank" size={15} />
+                ชำระเงินและแนบสลิป
+              </button>
+            </div>
+          )}
+          {showSlip ? slipPreview.content : (
           <div className="dorm-settings-preview-card">
             <div className="dorm-settings-preview-title">
               <Icon name="book" size={18} />
@@ -311,6 +327,7 @@ export function DormInfoSettings({ apiBase, children = null }) {
               </div>
             </section>
           </div>
+          )}
         </aside>
       )}
     </div>

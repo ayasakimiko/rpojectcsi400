@@ -355,6 +355,52 @@
   font-weight: 800;
 }
 
+.dorm-settings-preview-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid #dce6f3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dorm-settings-preview-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #6b859e;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.dorm-settings-preview-tabs button:hover {
+  color: #1d4ed8;
+  background: #f5f9ff;
+}
+
+.dorm-settings-preview-tabs button.is-active {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.22);
+}
+
+.dorm-settings-preview-tabs button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
 .dorm-settings-preview-card {
   display: flex;
   flex-direction: column;

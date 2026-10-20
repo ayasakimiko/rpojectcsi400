@@ -23,7 +23,92 @@ const SLIP_VERIFY_OPTIONS = [
 ]
 const headers = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
-function OwnerPaymentSettings() {
+const SLIP_PREVIEW_AMOUNT = 3500
+
+function OwnerSlipPreview({ settings }) {
+  const [method, setMethod] = useState('promptpay')
+  const channels = settings.test_mode ? DEMO_PAYMENT_CHANNELS : settings
+  const hasPromptPay = isValidPromptPayId(channels.promptpay_id)
+  const hasBank = Boolean(channels.bank_name && channels.bank_account_no)
+  const manual = settings.verify_mode === 'manual'
+  return (
+    <div className="dorm-settings-preview-card owner-slip-preview">
+      <div className="dorm-settings-preview-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20M6 15h4" /></svg>
+        <span><strong>ชำระเงินและแนบสลิป</strong><small>ตัวอย่างยอด ฿{currency(SLIP_PREVIEW_AMOUNT)}</small></span>
+      </div>
+      <section className="dorm-menu-card owner-slip-preview-body">
+        <div className="owner-slip-preview-amount"><span>ยอดที่ต้องชำระ</span><strong>฿{currency(SLIP_PREVIEW_AMOUNT)}</strong></div>
+        {settings.test_mode && <div className="owner-slip-preview-test" role="note"><strong>โหมดทดลอง</strong><span>QR และบัญชีด้านล่างเป็นตัวอย่าง ห้ามโอนเงินจริง แนบรูปใดก็ได้เพื่อทดสอบระบบ</span></div>}
+        <span className="owner-slip-preview-label">เลือกช่องทางการชำระเงิน</span>
+        <div className="owner-slip-preview-methods" role="radiogroup" aria-label="ช่องทางการชำระเงินตัวอย่าง">
+          {[
+            { key: 'promptpay', label: 'PromptPay', hint: 'สแกน QR จากแอปธนาคาร', available: hasPromptPay },
+            { key: 'bank', label: 'โอนเข้าบัญชี', hint: 'โอนผ่านเลขบัญชีธนาคาร', available: hasBank },
+          ].map((option) => (
+            <button key={option.key} type="button" role="radio" aria-checked={method === option.key} className={method === option.key ? 'is-active' : ''} onClick={() => setMethod(option.key)}>
+              <span className="owner-slip-preview-method-icon" aria-hidden="true">
+                {option.key === 'promptpay' ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h3v-3" /></svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10 12 4l9 6" /><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" /></svg>
+                )}
+              </span>
+              <span className="owner-slip-preview-method-text">
+                <strong>{option.label}</strong>
+                <small>{option.available ? option.hint : 'หอพักยังไม่ได้ตั้งค่า'}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+        {method === 'promptpay' ? (
+          hasPromptPay ? (
+            <div className="owner-slip-preview-panel is-promptpay">
+              <span className="owner-slip-preview-badge">PromptPay</span>
+              <PromptPayQr promptPayId={channels.promptpay_id} amount={SLIP_PREVIEW_AMOUNT} size={172} className="owner-pp-qr" />
+              <strong>{formatPromptPayId(channels.promptpay_id)}</strong>
+              <p className="owner-slip-preview-owner">ชำระผ่าน PromptPay</p>
+              <small>สแกนผ่านแอปธนาคาร ยอดเงินจะถูกใส่ให้อัตโนมัติ</small>
+            </div>
+          ) : <div className="owner-slip-preview-panel is-empty">หอพักยังไม่ได้ตั้งค่า PromptPay กรุณาเลือกโอนเข้าบัญชีหรือติดต่อเจ้าหน้าที่</div>
+        ) : hasBank ? (
+          <div className="owner-slip-preview-panel is-bank">
+            <div><span>ธนาคาร</span><strong>{channels.bank_name}</strong></div>
+            <div><span>เลขบัญชี</span><strong className="is-account">{channels.bank_account_no}</strong><em className="owner-slip-preview-copy" aria-hidden="true">คัดลอก</em></div>
+            <small>โอนยอด ฿{currency(SLIP_PREVIEW_AMOUNT)} แล้วแนบสลิปด้านล่าง</small>
+          </div>
+        ) : <div className="owner-slip-preview-panel is-empty">หอพักยังไม่ได้ตั้งค่าบัญชีธนาคาร กรุณาเลือก PromptPay หรือติดต่อเจ้าหน้าที่</div>}
+        <span className="owner-slip-preview-label">แนบสลิปโอนเงิน <em className="owner-slip-preview-required">จำเป็น</em></span>
+        <div className="owner-slip-preview-drop" aria-hidden="true">
+          <span className="owner-slip-preview-drop-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+          </span>
+          <strong>ลากรูปสลิปมาวางที่นี่</strong>
+          <span>หรือ <b>คลิกเพื่อเลือกไฟล์</b></span>
+          <small>JPG, PNG หรือ WebP ไม่เกิน 5 MB</small>
+        </div>
+        <div className={`owner-slip-preview-verify${manual ? ' is-manual' : ''}`}>
+          <strong>{manual ? 'ส่งสลิปให้เจ้าหน้าที่ตรวจ' : 'ตรวจสอบสลิปและชำระเงิน'}</strong>
+          <small>{manual ? 'สลิปจะรอเจ้าหน้าที่อนุมัติก่อนเป็น “ชำระแล้ว”' : settings.test_mode ? 'โหมดทดลอง: ไม่ตรวจกับธนาคาร เป็น “ชำระแล้ว” ทันที' : 'ระบบตรวจสลิปกับธนาคารอัตโนมัติ ผ่านแล้วเป็น “ชำระแล้ว” ทันที'}</small>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function OwnerDormInfoSettings() {
+  const [paymentPreview, setPaymentPreview] = useState(null)
+  return (
+    <DormInfoSettings
+      apiBase="/api/owner/dorm-info"
+      slipPreview={paymentPreview && { changed: paymentPreview.changed, content: <OwnerSlipPreview settings={paymentPreview.settings} /> }}
+    >
+      <OwnerPaymentSettings onPreviewChange={setPaymentPreview} />
+    </DormInfoSettings>
+  )
+}
+
+function OwnerPaymentSettings({ onPreviewChange }) {
   const id = useId()
   const [saved, setSaved] = useState(null)
   const [draft, setDraft] = useState(null)
@@ -99,6 +184,9 @@ function OwnerPaymentSettings() {
   const changed = draft && Object.keys(EMPTY).some((field) => draft[field] !== saved?.[field])
   const qrMatchesDraft = qrPreviewId && qrPreviewId === draft?.promptpay_id
   const qrIsSaved = qrPreviewId && qrPreviewId === saved?.promptpay_id && !changed
+  useEffect(() => {
+    if (draft) onPreviewChange?.({ settings: draft, changed: Boolean(changed) })
+  }, [draft, changed, onPreviewChange])
   return (
     <section className="owner-payment-settings dorm-settings-editor" aria-labelledby={`${id}-title`}>
       <div className="dorm-settings-head">
@@ -335,6 +423,257 @@ function OwnerPaymentSettings() {
 }
 
 const currency = (value) => Number(value || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 })
+
+const EXPENSE_CATEGORY_ICON_PATHS = {
+  water: <path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11Z" />,
+  bolt: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />,
+  tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z" />,
+  sparkle: <><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /><path d="m6.3 6.3 2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1" /></>,
+  box: <><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" /><path d="m3 8 9 5 9-5M12 13v8" /></>,
+  wifi: <><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" /><path d="M2 9a15 15 0 0 1 20 0" /><circle cx="12" cy="19.5" r=".8" /></>,
+  wallet: <><path d="M20 7H5a2 2 0 0 1 0-4h13v4" /><path d="M3 5v14a2 2 0 0 0 2 2h15V7" /><path d="M16 14h.01" /></>,
+  receipt: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" /><path d="M9 7h6M9 11h6M9 15h3" /></>,
+}
+const EXPENSE_CATEGORY_STYLES = {
+  'ค่าน้ำ': { icon: 'water', color: '#0891b2', bg: '#ecfeff' },
+  'ค่าไฟ': { icon: 'bolt', color: '#d97706', bg: '#fffbeb' },
+  'ซ่อมบำรุง': { icon: 'tool', color: '#ea580c', bg: '#fff7ed' },
+  'ทำความสะอาด': { icon: 'sparkle', color: '#0d9488', bg: '#f0fdfa' },
+  'วัสดุอุปกรณ์': { icon: 'box', color: '#7c3aed', bg: '#f5f3ff' },
+  'อินเทอร์เน็ต': { icon: 'wifi', color: '#2563eb', bg: '#eff6ff' },
+  'เงินเดือน': { icon: 'wallet', color: '#4f46e5', bg: '#eef2ff' },
+}
+const EXPENSE_CATEGORY_FALLBACKS = [
+  { icon: 'receipt', color: '#db2777', bg: '#fdf2f8' },
+  { icon: 'receipt', color: '#65a30d', bg: '#f7fee7' },
+  { icon: 'receipt', color: '#0284c7', bg: '#f0f9ff' },
+  { icon: 'receipt', color: '#64748b', bg: '#f8fafc' },
+]
+const EXPENSE_METHOD_LABELS = { cash: 'เงินสด', transfer: 'โอนเงิน', card: 'บัตร', other: 'อื่นๆ' }
+const EXPENSE_LEDGER_PAGE_SIZE = 10
+
+function expenseCategoryStyle(name) {
+  if (EXPENSE_CATEGORY_STYLES[name]) return EXPENSE_CATEGORY_STYLES[name]
+  const key = String(name || '')
+  const hash = [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return EXPENSE_CATEGORY_FALLBACKS[hash % EXPENSE_CATEGORY_FALLBACKS.length]
+}
+
+function ExpenseCategoryIcon({ category, size = 18 }) {
+  const style = expenseCategoryStyle(category)
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {EXPENSE_CATEGORY_ICON_PATHS[style.icon]}
+    </svg>
+  )
+}
+
+function ExpenseCategoryBadge({ category }) {
+  const style = expenseCategoryStyle(category)
+  return (
+    <span className="owner-xl-badge" style={{ '--xl-color': style.color, '--xl-bg': style.bg }}>
+      <ExpenseCategoryIcon category={category} size={13} />
+      {category || 'ไม่ระบุ'}
+    </span>
+  )
+}
+
+function OwnerExpenseDetailDialog({ expense, onClose, onEdit, onDelete }) {
+  const [photoIndex, setPhotoIndex] = useState(null)
+  const photos = Array.isArray(expense.photos) ? expense.photos : []
+  const style = expenseCategoryStyle(expense.category)
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = photoIndex === null ? onClose : () => {} }, [onClose, photoIndex])
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    const previousFocus = document.activeElement
+    document.body.style.overflow = 'hidden'
+    const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', escape)
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); previousFocus?.focus?.() }
+  }, [])
+  const recordedAt = expense.created_at ? new Date(expense.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ไม่ระบุ'
+  const fields = [
+    { key: 'date', icon: 'calendar', label: 'วันที่จ่าย', value: formatDate(expense.expense_date) },
+    { key: 'method', icon: 'receipt', label: 'ชำระโดย', value: EXPENSE_METHOD_LABELS[expense.payment_method] || 'ไม่ระบุ' },
+    { key: 'vendor', icon: 'user', label: 'ร้านค้า / ผู้รับเงิน', value: expense.vendor || 'ไม่ระบุ' },
+    { key: 'receipt', icon: 'hash', label: 'เลขที่ใบเสร็จ', value: expense.receipt_number || 'ไม่ระบุ' },
+    { key: 'room', icon: 'door', label: 'ห้องที่เกี่ยวข้อง', value: expense.room_number ? `ห้อง ${expense.room_number}` : 'ไม่ระบุ' },
+    { key: 'by', icon: 'user', label: 'บันทึกโดย', value: expense.recorded_by_name || 'เจ้าของหอพัก' },
+    { key: 'at', icon: 'clock', label: 'บันทึกเมื่อ', value: recordedAt },
+  ]
+  return (
+    <div className="owner-modal-backdrop owner-xl-overlay" onClick={onClose}>
+      <section className="owner-modal owner-xl-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-xl-dialog-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header owner-xl-dialog-header">
+          <span className="owner-xl-dialog-icon" style={{ color: style.color, background: style.bg }}><ExpenseCategoryIcon category={expense.category} size={22} /></span>
+          <div><h3 id="owner-xl-dialog-title">รายละเอียดรายจ่าย</h3><p className="owner-modal-subtext">รายการ #{expense.id}</p></div>
+          <button type="button" className="owner-modal-close" autoFocus onClick={onClose} aria-label="ปิดรายละเอียดรายจ่าย">×</button>
+        </header>
+        <div className="owner-modal-body owner-xl-dialog-body">
+          <div className="owner-xl-hero" style={{ '--xl-color': style.color, '--xl-bg': style.bg }}>
+            <div>
+              <ExpenseCategoryBadge category={expense.category} />
+              <p>{expense.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+            </div>
+            <strong><small>จำนวนเงิน</small>฿{formatCurrency(expense.amount)}</strong>
+          </div>
+          <dl className="owner-xl-fields">
+            {fields.map((field) => (
+              <div key={field.key} className={field.value === 'ไม่ระบุ' ? 'is-empty' : ''}>
+                <dt><OwnerListIcon name={field.icon} size={14} />{field.label}</dt>
+                <dd>{field.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <section className="owner-xl-photos">
+            <h4><OwnerListIcon name="note" size={15} />หลักฐาน / ใบเสร็จ <span>{photos.length} รูป</span></h4>
+            {photos.length ? (
+              <div className="owner-xl-photo-grid">
+                {photos.map((photo, index) => (
+                  <button key={photo.url || index} type="button" className="owner-xl-photo" onClick={() => setPhotoIndex(index)} aria-label={`ดูรูปหลักฐานที่ ${index + 1}`}>
+                    <img src={photo.url} alt={photo.name || `หลักฐานที่ ${index + 1}`} loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            ) : <div className="owner-xl-photo-empty">ไม่มีรูปหลักฐานแนบไว้</div>}
+          </section>
+        </div>
+        {(onEdit || onDelete) && (
+          <footer className="owner-xl-dialog-actions">
+            {onDelete && <button type="button" className="owner-xl-btn is-danger" onClick={() => onDelete(expense)}><ExpenseActionIcon name="trash" />ลบรายจ่าย</button>}
+            {onEdit && <button type="button" className="owner-xl-btn is-primary" onClick={() => onEdit(expense)}><ExpenseActionIcon name="edit" />แก้ไขรายจ่าย</button>}
+          </footer>
+        )}
+      </section>
+      {photoIndex !== null && (
+        <div onClick={(event) => event.stopPropagation()}>
+          <PhotoLightbox photos={photos.map((photo, index) => ({ url: photo.url, name: photo.name || `หลักฐานที่ ${index + 1}` }))} initialIndex={photoIndex} title="หลักฐานรายจ่าย" subtitle={`${expense.category || 'ไม่ระบุ'} · ฿${formatCurrency(expense.amount)}`} label="หลักฐานรายจ่าย" onClose={() => setPhotoIndex(null)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ExpenseActionIcon({ name }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {name === 'edit' ? <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></> : <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /></>}
+    </svg>
+  )
+}
+
+function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
+  const [category, setCategory] = useState('')
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [selected, setSelected] = useState(null)
+  const from = range?.from || ''
+  const to = range?.to || ''
+
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    axios.get('/api/owner/expenses', {
+      headers: getAuthHeaders(),
+      signal: controller.signal,
+      params: { page, pageSize: EXPENSE_LEDGER_PAGE_SIZE, from: from || undefined, to: to || undefined, category: category || undefined, search: query || undefined },
+    })
+      .then(({ data: next }) => { if (!controller.signal.aborted) { setData(next); setError('') } })
+      .catch((loadError) => { if (!controller.signal.aborted) setError(loadError.response?.data?.message || 'โหลดรายการรายจ่ายไม่สำเร็จ') })
+    return () => controller.abort()
+  }, [page, from, to, category, query, version])
+
+  const categories = useMemo(() => [...(data?.byCategory || [])].sort((a, b) => Number(b.total || 0) - Number(a.total || 0)), [data])
+  const rows = data?.expenses || []
+  const total = Number(data?.total) || 0
+  const totalPages = Math.max(1, Math.ceil(total / (Number(data?.pageSize) || EXPENSE_LEDGER_PAGE_SIZE)))
+  const currentPage = Math.min(page, totalPages)
+  const filtered = Boolean(category || query)
+  const chooseCategory = (next) => { setCategory(next); setPage(1) }
+
+  return (
+    <>
+      <section className="owner-panel owner-xl-panel">
+        <div className="owner-xl-list-head">
+          <div>
+            <h3>รายการรายจ่าย</h3>
+            <p>{category ? <>หมวด <ExpenseCategoryBadge category={category} /></> : 'ทุกหมวดหมู่'} · พบ {total} รายการ · รวม ฿{formatCurrency(data?.totalAmount)}</p>
+          </div>
+          <div className="owner-xl-tools">
+            <label className="owner-xl-category">
+              <span className="visually-hidden">กรองตามหมวดหมู่</span>
+              <select value={category} onChange={(event) => chooseCategory(event.target.value)}>
+                <option value="">ทุกหมวดหมู่</option>
+                {categories.map((item) => <option key={item.category || 'none'} value={item.category || ''}>{item.category || 'ไม่ระบุ'} ({Number(item.count) || 0})</option>)}
+              </select>
+            </label>
+            <label className="owner-xl-search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+              <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="ค้นหารายละเอียด ร้านค้า เลขใบเสร็จ ห้อง หรือผู้บันทึก" aria-label="ค้นหารายจ่าย" />
+            </label>
+            {filtered && <button type="button" className="owner-xl-clear" onClick={() => { setSearch(''); setQuery(''); chooseCategory('') }}>ล้างตัวกรอง</button>}          </div>
+        </div>
+        {error && <p className="owner-xl-error" role="alert">{error}</p>}
+        <div className="owner-xl-table-wrap">
+          <table className="owner-xl-table">
+            <colgroup><col style={{ width: '13%' }} /><col style={{ width: '15%' }} /><col /><col style={{ width: '15%' }} /><col style={{ width: '8%' }} /><col style={{ width: '13%' }} /><col style={{ width: '96px' }} /></colgroup>
+            <thead><tr><th>วันที่</th><th>หมวดหมู่</th><th>รายละเอียด</th><th>บันทึกโดย</th><th>หลักฐาน</th><th className="is-amount">จำนวนเงิน</th><th className="is-actions">จัดการ</th></tr></thead>
+            <tbody>
+              {rows.map((item) => {
+                const photoCount = Array.isArray(item.photos) ? item.photos.length : 0
+                const meta = [item.vendor, item.room_number ? `ห้อง ${item.room_number}` : '', item.receipt_number ? `ใบเสร็จ ${item.receipt_number}` : ''].filter(Boolean).join(' · ')
+                return (
+                  <tr key={item.id} className="owner-xl-row" tabIndex={0} onClick={() => setSelected(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(item) } }} aria-label={`ดูรายละเอียดรายจ่าย ${item.category || ''} ${formatCurrency(item.amount)} บาท`}>
+                    <td><span className="owner-xl-date"><OwnerListIcon name="calendar" size={14} /><strong>{formatDate(item.expense_date)}</strong></span><small className="owner-xl-id">#{item.id}</small></td>
+                    <td><ExpenseCategoryBadge category={item.category} /></td>
+                    <td><span className="owner-xl-desc"><strong>{item.description || 'ไม่มีรายละเอียด'}</strong>{meta && <small>{meta}</small>}</span></td>
+                    <td><span className="owner-xl-actor"><OwnerListIcon name="user" size={13} />{item.recorded_by_name || 'เจ้าของหอพัก'}</span></td>
+                    <td><span className={`owner-xl-proof${photoCount ? '' : ' is-none'}`}>{photoCount ? `${photoCount} รูป` : 'ไม่มี'}</span></td>
+                    <td className="is-amount"><strong className="owner-xl-amount">฿{formatCurrency(item.amount)}</strong><span className="owner-xl-more">ดูรายละเอียด ›</span></td>
+                    <td className="is-actions">
+                      <span className="owner-xl-row-actions">
+                        <button type="button" className="owner-xl-icon-btn is-edit" title="แก้ไข" aria-label={`แก้ไขรายจ่าย #${item.id}`} onClick={(event) => { event.stopPropagation(); onEdit?.(item) }} onKeyDown={(event) => event.stopPropagation()}><ExpenseActionIcon name="edit" /></button>
+                        <button type="button" className="owner-xl-icon-btn is-delete" title="ลบ" aria-label={`ลบรายจ่าย #${item.id}`} onClick={(event) => { event.stopPropagation(); onDelete?.(item) }} onKeyDown={(event) => event.stopPropagation()}><ExpenseActionIcon name="trash" /></button>
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+              {!rows.length && (
+                <tr><td colSpan={7} className="owner-xl-empty">{!data ? 'กำลังโหลดรายการ...' : filtered ? 'ไม่พบรายจ่ายที่ตรงกับตัวกรอง' : 'ไม่มีรายการรายจ่ายในช่วงที่เลือก'}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <footer className="owner-xl-footer">
+          <span>แสดง {rows.length ? (currentPage - 1) * EXPENSE_LEDGER_PAGE_SIZE + 1 : 0}–{(currentPage - 1) * EXPENSE_LEDGER_PAGE_SIZE + rows.length} จาก {total} รายการ</span>
+          <div className="owner-pa-pager">
+            <button type="button" aria-label="หน้าก่อนหน้า" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>‹</button>
+            <span>{currentPage} / {totalPages}</span>
+            <button type="button" aria-label="หน้าถัดไป" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>›</button>
+          </div>
+        </footer>
+      </section>
+      {selected && (
+        <OwnerExpenseDetailDialog
+          key={selected.id}
+          expense={selected}
+          onClose={() => setSelected(null)}
+          onEdit={onEdit ? (item) => { setSelected(null); onEdit(item) } : undefined}
+          onDelete={onDelete ? (item) => { setSelected(null); onDelete(item) } : undefined}
+        />
+      )}
+    </>
+  )
+}
 
 function OwnerOccupancyLogDialog({ eventId, onClose }) {
   const [response, setResponse] = useState(null)
@@ -1495,7 +1834,6 @@ function OwnerMain() {
   const [occupancyLogId, setOccupancyLogId] = useState(null)
   const [periodDetailFilter, setPeriodDetailFilter] = useState('all')
   const [periodDetailSearch, setPeriodDetailSearch] = useState('')
-  const [expenseCategoryPage, setExpenseCategoryPage] = useState(1)
   const [staffList, setStaffList] = useState([])
   const [paymentLogs, setPaymentLogs] = useState({ payments: [], total: 0, page: 1, pageSize: 20 })
   const [viewingPaymentSlip, setViewingPaymentSlip] = useState(null)
@@ -1548,9 +1886,8 @@ function OwnerMain() {
   const [editingStaff, setEditingStaff] = useState(null)
   const [viewingStaff, setViewingStaff] = useState(null)
 
-  const [isExpenseManagerOpen, setIsExpenseManagerOpen] = useState(false)
   const [expenseEditModal, setExpenseEditModal] = useState(null)
-  const [expenseEditForm, setExpenseEditForm] = useState({ category: '', description: '', amount: '', expense_date: '' })
+  const [expenseEditForm, setExpenseEditForm] = useState({ category: '', description: '', amount: '', expense_date: '', vendor: '', payment_method: '', receipt_number: '', room_number: '' })
   const [expenseEditFormError, setExpenseEditFormError] = useState('')
   const [isExpenseEditSubmitting, setIsExpenseEditSubmitting] = useState(false)
   const [expenseDeleteConfirm, setExpenseDeleteConfirm] = useState(null)
@@ -1602,7 +1939,6 @@ function OwnerMain() {
   }
   const [displayStaffModalOpen, isStaffModalClosing] = useClosingValue(isStaffModalOpen)
   const [displayViewingStaff, isViewingStaffClosing] = useClosingValue(viewingStaff)
-  const [displayExpenseManagerOpen, isExpenseManagerClosing] = useClosingValue(isExpenseManagerOpen)
   const [displayExpenseEditModal, isExpenseEditClosing] = useClosingValue(expenseEditModal)
   const [displayExpenseDeleteConfirm, isExpenseDeleteClosing] = useClosingValue(expenseDeleteConfirm)
 
@@ -1614,18 +1950,8 @@ function OwnerMain() {
 
   const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
 
-  const expenseCategoryTotalPages = Math.max(1, Math.ceil((expenses.byCategory?.length || 0) / SUMMARY_PAGE_SIZE))
-  const paginatedExpenseCategories = useMemo(() => {
-    const start = (expenseCategoryPage - 1) * SUMMARY_PAGE_SIZE
-    return [...(expenses.byCategory || [])].sort((a, b) => Number(b.total || 0) - Number(a.total || 0)).slice(start, start + SUMMARY_PAGE_SIZE)
-  }, [expenses, expenseCategoryPage])
-  const expenseByCategoryTotal = useMemo(
-    () => (expenses.byCategory || []).reduce((sum, item) => sum + Number(item.total || 0), 0),
-    [expenses],
-  )
 
   const financeExpensePage = Number(expenses.page || 1)
-  const financeExpenseTotalPages = Math.max(1, Math.ceil((Number(expenses.total) || 0) / (Number(expenses.pageSize) || 10)))
 
   const trendChartData = useMemo(() => {
     const formatLabel = financeTrends.granularity === 'day' ? formatTrendDay : formatTrendMonth
@@ -1961,7 +2287,6 @@ function OwnerMain() {
       params: { page, from: nextFilters.from || undefined, to: nextFilters.to || undefined },
     })
     setExpenses(data)
-    setExpenseCategoryPage(1)
   }
 
   const openExpenseEdit = (expense) => {
@@ -1970,6 +2295,10 @@ function OwnerMain() {
       description: expense.description || '',
       amount: String(expense.amount ?? ''),
       expense_date: (expense.expense_date || '').slice(0, 10),
+      vendor: expense.vendor || '',
+      payment_method: expense.payment_method || '',
+      receipt_number: expense.receipt_number || '',
+      room_number: expense.room_number ? String(expense.room_number) : '',
     })
     setExpenseEditFormError('')
     setExpenseEditModal(expense)
@@ -1990,6 +2319,26 @@ function OwnerMain() {
       setExpenseEditFormError('กรุณาระบุวันที่')
       return
     }
+    const roomValue = (expenseEditForm.room_number || '').trim()
+    if (roomValue && !/^[1-9]\d{2}$/.test(roomValue)) {
+      setExpenseEditFormError('เลขห้องต้องเป็นตัวเลข 3 หลัก (100–999)')
+      return
+    }
+
+    setExpenseEditFormError('')
+    const confirmed = await askConfirm({
+      tone: 'primary',
+      title: 'ยืนยันการแก้ไขรายจ่าย',
+      message: 'ตรวจสอบข้อมูลก่อนบันทึก ยอดสรุปรายจ่ายจะเปลี่ยนตามข้อมูลใหม่ทันที',
+      details: [
+        ['หมวดหมู่', expenseEditForm.category.trim()],
+        ['จำนวนเงิน', `฿${formatCurrency(amountValue)}`],
+        ['วันที่จ่าย', formatDate(expenseEditForm.expense_date)],
+        ['ชำระโดย', EXPENSE_METHOD_LABELS[expenseEditForm.payment_method] || 'ไม่ระบุ'],
+      ],
+      confirmLabel: 'บันทึกการแก้ไข',
+    })
+    if (!confirmed) return
 
     setIsExpenseEditSubmitting(true)
     setExpenseEditFormError('')
@@ -2001,6 +2350,10 @@ function OwnerMain() {
           description: expenseEditForm.description.trim() || null,
           amount: amountValue,
           expense_date: expenseEditForm.expense_date,
+          vendor: (expenseEditForm.vendor || '').trim(),
+          payment_method: expenseEditForm.payment_method || null,
+          receipt_number: (expenseEditForm.receipt_number || '').trim(),
+          room_number: roomValue || null,
         },
         { headers: getAuthHeaders() },
       )
@@ -2455,7 +2808,18 @@ function OwnerMain() {
             },
           ]
         : statCards.map((card) => ({ key: card.label, icon: card.icon, label: card.label, value: card.value, hint: card.subtitle, tone: card.tone })),
-    finance: [
+    finance: financeSection === 'expenses' ? (() => {
+      const categories = [...(expenses.byCategory || [])].sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
+      const grandTotal = categories.reduce((sum, item) => sum + Number(item.total || 0), 0)
+      const grandCount = categories.reduce((sum, item) => sum + Number(item.count || 0), 0)
+      const top = categories[0]
+      return [
+        { key: 'xl-total', tone: 'orange', icon: 'expense', label: 'รายจ่ายรวม', value: `฿${currency(grandTotal)}`, hint: `${grandCount} รายการ ตามช่วงที่เลือก` },
+        { key: 'xl-avg', tone: 'blue', icon: 'margin', label: 'เฉลี่ยต่อรายการ', value: `฿${currency(grandCount ? grandTotal / grandCount : 0)}`, hint: 'คำนวณจากทุกหมวด' },
+        { key: 'xl-top', tone: 'red', icon: 'profit', label: 'หมวดที่จ่ายมากสุด', value: top ? top.category || 'ไม่ระบุ' : '—', hint: top ? `฿${currency(top.total)} · ${grandTotal ? formatPercent((Number(top.total) / grandTotal) * 100) : '0%'}` : 'ยังไม่มีข้อมูล' },
+        { key: 'xl-cats', tone: 'purple', icon: 'rooms', label: 'จำนวนหมวดหมู่', value: `${categories.length} หมวด`, hint: 'ที่มีรายจ่ายในช่วงนี้' },
+      ]
+    })() : [
       { key: 'income', tone: 'blue', icon: 'income', label: 'รายรับรวม', value: formatSignedCurrency(totalIncome), hint: 'รวมรายการชำระเงินที่สำเร็จตามช่วงที่เลือก' },
       { key: 'expense', tone: 'orange', icon: 'expense', label: 'รายจ่ายรวม', value: formatSignedCurrency(totalExpense), hint: 'รวมรายจ่ายทั้งหมดตามช่วงที่เลือก' },
       { key: 'net', tone: netProfit < 0 ? 'red' : 'green', icon: 'profit', label: netProfit < 0 ? 'ขาดทุนสุทธิ' : 'กำไรสุทธิ', value: formatSignedCurrency(netProfit), hint: 'รายรับ - รายจ่าย' },
@@ -2742,9 +3106,7 @@ function OwnerMain() {
 
         {activeTab === 'dorm-info' && (
           <>
-            <DormInfoSettings apiBase="/api/owner/dorm-info">
-              <OwnerPaymentSettings />
-            </DormInfoSettings>
+            <OwnerDormInfoSettings />
           </>
         )}
 
@@ -3791,105 +4153,7 @@ function OwnerMain() {
         )}
 
         {!isLoading && activeTab === 'finance' && financeSection === 'expenses' && (
-          <>
-              <section className="owner-panel owner-expense-categories">
-                <div className="owner-panel-header">
-                  <h3>รายจ่ายตามหมวดหมู่</h3>
-                  <span className="owner-panel-header-count">
-                    รวม {formatSignedCurrency(expenseByCategoryTotal)}
-                  </span>
-                  <button type="button" className="owner-panel-header-link" onClick={() => setIsExpenseManagerOpen(true)}>
-                    จัดการ
-                  </button>
-                </div>
-                <p className="owner-expense-category-hint">เรียงจากยอดรายจ่ายสูงสุด · ตามช่วงวันที่ที่เลือก</p>
-                <div className="owner-category-list">
-                  {paginatedExpenseCategories.length ? (
-                    paginatedExpenseCategories.map((item) => (
-                      <div key={item.category || 'uncategorized'} className="owner-category-item">
-                        <span className="owner-category-icon" style={{ color: '#d97706', background: 'rgba(217, 119, 6, 0.12)' }}>
-                          <StatIcon name="expense" />
-                        </span>
-                        <div className="owner-category-info">
-                          <span className="owner-category-name">{item.category || 'ไม่ระบุ'}</span>
-                          <span className="owner-category-count">{Number(item.count) || 0} รายการ · {expenseByCategoryTotal > 0 ? formatPercent((Number(item.total || 0) / expenseByCategoryTotal) * 100) : '0%'}</span>
-                        </div>
-                        <div className="owner-category-amount">
-                          <strong>{formatSignedCurrency(item.total)}</strong>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="owner-empty">ยังไม่มีข้อมูลรายจ่าย</div>
-                  )}
-                </div>
-                {expenses.byCategory?.length > SUMMARY_PAGE_SIZE && (
-                  <div className="owner-pagination">
-                    <button type="button" disabled={expenseCategoryPage <= 1} onClick={() => setExpenseCategoryPage((page) => page - 1)}>
-                      ก่อนหน้า
-                    </button>
-                    <span>
-                      หน้า {expenseCategoryPage}/{expenseCategoryTotalPages}
-                    </span>
-                    <button type="button" disabled={expenseCategoryPage >= expenseCategoryTotalPages} onClick={() => setExpenseCategoryPage((page) => page + 1)}>
-                      ถัดไป
-                    </button>
-                  </div>
-                )}
-              </section>
-
-            <section className="owner-panel">
-              <div className="owner-panel-header">
-                <h3>รายการรายจ่ายทั้งหมด</h3>
-              </div>
-              <div className="owner-table-wrap">
-                <table className="owner-table">
-                  <thead>
-                    <tr>
-                      <th>วันที่</th>
-                      <th>หมวดหมู่</th>
-                      <th>รายละเอียด</th>
-                      <th>บันทึกโดย</th>
-                      <th>จำนวนเงิน</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expenses.expenses?.length ? (
-                      expenses.expenses.map((item) => (
-                        <tr key={item.id}>
-                          <td>{formatDate(item.expense_date)}</td>
-                          <td>{item.category || '-'}</td>
-                          <td>{item.description || '-'}</td>
-                          <td>
-                          <span className="owner-actor">{item.recorded_by_name || 'เจ้าของหอพัก'}</span>
-                        </td>
-                          <td>฿{formatCurrency(item.amount)}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="5" className="owner-empty-row">
-                          ไม่มีรายการรายจ่ายในช่วงที่เลือก
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="owner-pagination">
-                <button type="button" disabled={financeExpensePage <= 1} onClick={() => loadExpenses(financeExpensePage - 1)}>
-                  ก่อนหน้า
-                </button>
-                <span>
-                  หน้า {financeExpensePage}/{financeExpenseTotalPages}
-                </span>
-                <button type="button" disabled={financeExpensePage >= financeExpenseTotalPages} onClick={() => loadExpenses(financeExpensePage + 1)}>
-                  ถัดไป
-                </button>
-              </div>
-            </section>
-
-          </>
+          <OwnerExpenseLedger range={paymentFilter} version={expenses} onEdit={openExpenseEdit} onDelete={setExpenseDeleteConfirm} />
         )}
 
         {!isLoading && activeTab === 'finance' && financeSection === 'payments' && (
@@ -4263,87 +4527,15 @@ function OwnerMain() {
           />
         )}
 
-        {displayExpenseManagerOpen && (
-          <div className={`owner-modal-backdrop${isExpenseManagerClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setIsExpenseManagerOpen(false)}>
-            <section className={`owner-modal${isExpenseManagerClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-manager-title" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-modal-header">
-                <div>
-                  <h3 id="expense-manager-title">จัดการรายจ่าย</h3>
-                  <p className="owner-modal-subtext">แก้ไขหรือลบรายการรายจ่าย</p>
-                </div>
-                <button type="button" className="owner-modal-close" onClick={() => setIsExpenseManagerOpen(false)} aria-label="ปิดหน้าต่างจัดการรายจ่าย">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div className="owner-modal-body">
-                <div className="owner-table-wrap">
-                  <table className="owner-table">
-                    <thead>
-                      <tr>
-                        <th>วันที่</th>
-                        <th>หมวดหมู่</th>
-                        <th>รายละเอียด</th>
-                        <th>บันทึกโดย</th>
-                        <th>จำนวนเงิน</th>
-                        <th>จัดการ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {expenses.expenses?.length ? (
-                        expenses.expenses.map((item) => (
-                          <tr key={item.id}>
-                            <td>{formatDate(item.expense_date)}</td>
-                            <td>{item.category || '-'}</td>
-                            <td>{item.description || '-'}</td>
-                            <td>{item.recorded_by_name ? <span className="owner-actor">{item.recorded_by_name}</span> : '-'}</td>
-                            <td>฿{formatCurrency(item.amount)}</td>
-                            <td>
-                              <div className="owner-inline-actions">
-                                <button type="button" className="owner-action-btn update" onClick={() => openExpenseEdit(item)}>
-                                  แก้ไข
-                                </button>
-                                <button type="button" className="owner-action-btn delete" onClick={() => setExpenseDeleteConfirm(item)}>
-                                  ลบ
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="6" className="owner-empty-row">
-                            ไม่มีรายการรายจ่ายในช่วงที่เลือก
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="owner-pagination">
-                  <button type="button" disabled={financeExpensePage <= 1} onClick={() => loadExpenses(financeExpensePage - 1)}>
-                    ก่อนหน้า
-                  </button>
-                  <span>
-                    หน้า {financeExpensePage}/{financeExpenseTotalPages}
-                  </span>
-                  <button type="button" disabled={financeExpensePage >= financeExpenseTotalPages} onClick={() => loadExpenses(financeExpensePage + 1)}>
-                    ถัดไป
-                  </button>
-                </div>
-              </div>
-            </section>
-          </div>
-        )}
 
         {displayExpenseEditModal && (
           <div className={`owner-modal-backdrop${isExpenseEditClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setExpenseEditModal(null)}>
-            <section className={`owner-modal${isExpenseEditClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-edit-title" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-modal-header">
+            <section className={`owner-modal owner-xe-dialog${isExpenseEditClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-edit-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header owner-xe-header">
+                <span className="owner-xe-header-icon" style={{ color: expenseCategoryStyle(expenseEditForm.category).color, background: expenseCategoryStyle(expenseEditForm.category).bg }}><ExpenseCategoryIcon category={expenseEditForm.category} size={20} /></span>
                 <div>
                   <h3 id="expense-edit-title">แก้ไขรายจ่าย</h3>
+                  <p className="owner-modal-subtext">รายการ #{displayExpenseEditModal.id} · บันทึกโดย {displayExpenseEditModal.recorded_by_name || 'เจ้าของหอพัก'}</p>
                 </div>
                 <button type="button" className="owner-modal-close" onClick={() => setExpenseEditModal(null)} aria-label="ปิดหน้าต่างแก้ไขรายจ่าย">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
@@ -4352,60 +4544,73 @@ function OwnerMain() {
                   </svg>
                 </button>
               </div>
-              <div className="owner-modal-body">
-                <form onSubmit={(event) => submitExpenseEdit(event, () => setExpenseEditModal(null))} className="owner-form-group">
-                  {expenseEditFormError && <div className="owner-alert owner-alert-danger">{expenseEditFormError}</div>}
-                  <label>
-                    หมวดหมู่
-                    <input
-                      type="text"
-                      value={expenseEditForm.category}
-                      onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, category: event.target.value }))}
-                      placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซ่อมบำรุง"
-                    />
-                  </label>
-                  <label>
-                    รายละเอียด (ไม่บังคับ)
-                    <input
-                      type="text"
-                      value={expenseEditForm.description}
-                      onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, description: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    จำนวนเงิน (บาท)
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={expenseEditForm.amount}
-                      onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, amount: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    วันที่
-                    <ThaiDatePicker
-                      value={expenseEditForm.expense_date}
-                      onChange={(date) => setExpenseEditForm((prev) => ({ ...prev, expense_date: date }))}
-                    />
-                  </label>
-                  <div className="owner-form-actions">
-                    <button type="button" className="owner-secondary-btn" onClick={() => setExpenseEditModal(null)}>
-                      ยกเลิก
-                    </button>
-                    <button type="submit" className="owner-primary-btn" disabled={isExpenseEditSubmitting}>
-                      {isExpenseEditSubmitting ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
-                    </button>
+              <form className="owner-xe-form" onSubmit={(event) => submitExpenseEdit(event, () => setExpenseEditModal(null))}>
+                <div className="owner-modal-body owner-xe-body">
+                  {expenseEditFormError && <div className="owner-xe-error" role="alert">{expenseEditFormError}</div>}
+                  <section className="owner-xe-section">
+                    <h4>หมวดหมู่ <em>จำเป็น</em></h4>
+                    <div className="owner-xe-chips">
+                      {Object.keys(EXPENSE_CATEGORY_STYLES).concat('อื่นๆ').map((name) => {
+                        const style = expenseCategoryStyle(name)
+                        const active = expenseEditForm.category === name
+                        return (
+                          <button key={name} type="button" className={`owner-xe-chip${active ? ' is-active' : ''}`} style={{ '--xl-color': style.color, '--xl-bg': style.bg }} aria-pressed={active} onClick={() => setExpenseEditForm((prev) => ({ ...prev, category: prev.category === name ? '' : name }))} title={active ? 'กดอีกครั้งเพื่อยกเลิก' : undefined}>
+                            <ExpenseCategoryIcon category={name} size={14} />{name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <input className="owner-xe-input" type="text" maxLength={50} value={expenseEditForm.category} onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, category: event.target.value }))} placeholder="หรือพิมพ์ชื่อหมวดหมู่เอง" aria-label="หมวดหมู่" />
+                  </section>
+                  <div className="owner-xe-grid">
+                    <label className="owner-xe-field">
+                      <span>จำนวนเงิน <em>จำเป็น</em></span>
+                      <span className="owner-xe-amount"><b>฿</b><input type="number" step="0.01" min="0" inputMode="decimal" value={expenseEditForm.amount} onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="0.00" /></span>
+                    </label>
+                    <label className="owner-xe-field">
+                      <span>วันที่จ่าย <em>จำเป็น</em></span>
+                      <ThaiDatePicker className="owner-xe-input owner-xe-date" value={expenseEditForm.expense_date} onChange={(date) => setExpenseEditForm((prev) => ({ ...prev, expense_date: date }))} />
+                    </label>
                   </div>
-                </form>
-              </div>
+                  <label className="owner-xe-field">
+                    <span>รายละเอียด</span>
+                    <textarea className="owner-xe-input" rows={2} maxLength={255} value={expenseEditForm.description} onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="เช่น ซ่อมก๊อกน้ำห้อง 204" />
+                  </label>
+                  <section className="owner-xe-section">
+                    <h4>ชำระโดย</h4>
+                    <div className="owner-xe-methods" role="radiogroup" aria-label="ชำระโดย">
+                      {[['', 'ไม่ระบุ'], ...Object.entries(EXPENSE_METHOD_LABELS)].map(([key, label]) => (
+                        <button key={key || 'none'} type="button" role="radio" aria-checked={expenseEditForm.payment_method === key} className={expenseEditForm.payment_method === key ? 'is-active' : ''} onClick={() => setExpenseEditForm((prev) => ({ ...prev, payment_method: key }))}>{label}</button>
+                      ))}
+                    </div>
+                  </section>
+                  <div className="owner-xe-grid is-three">
+                    <label className="owner-xe-field">
+                      <span>ร้านค้า / ผู้รับเงิน</span>
+                      <input className="owner-xe-input" type="text" maxLength={120} value={expenseEditForm.vendor} onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, vendor: event.target.value }))} placeholder="ไม่ระบุ" />
+                    </label>
+                    <label className="owner-xe-field">
+                      <span>เลขที่ใบเสร็จ</span>
+                      <input className="owner-xe-input" type="text" maxLength={60} value={expenseEditForm.receipt_number} onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, receipt_number: event.target.value }))} placeholder="ไม่ระบุ" />
+                    </label>
+                    <label className="owner-xe-field">
+                      <span>ห้องที่เกี่ยวข้อง</span>
+                      <input className="owner-xe-input" type="text" inputMode="numeric" maxLength={3} value={expenseEditForm.room_number} onChange={(event) => setExpenseEditForm((prev) => ({ ...prev, room_number: event.target.value.replace(/\D/g, '') }))} placeholder="เช่น 204" />
+                    </label>
+                  </div>
+                </div>
+                <footer className="owner-xe-footer">
+                  <button type="button" className="owner-xl-btn is-ghost" onClick={() => setExpenseEditModal(null)}>ยกเลิก</button>
+                  <button type="submit" className="owner-xl-btn is-primary" disabled={isExpenseEditSubmitting}>{isExpenseEditSubmitting ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}</button>
+                </footer>
+              </form>
             </section>
           </div>
         )}
 
         {displayExpenseDeleteConfirm && (
           <div className={`owner-modal-backdrop${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setExpenseDeleteConfirm(null)}>
-            <section className={`owner-modal${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-delete-title" onClick={(event) => event.stopPropagation()}>
+            <section className={`owner-modal owner-xd-dialog${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-delete-title" onClick={(event) => event.stopPropagation()}>
               <div className="owner-modal-header">
                 <div>
                   <h3 id="expense-delete-title">ยืนยันการลบรายจ่าย</h3>
@@ -4433,6 +4638,7 @@ function OwnerMain() {
                     <br />
                     จำนวน <strong>฿{formatCurrency(displayExpenseDeleteConfirm.amount)}</strong> ใช่หรือไม่?
                   </p>
+                  <p className="owner-confirm-note">รายการจะถูกซ่อนจากรายจ่ายและยอดสรุป แต่ยังเก็บประวัติไว้ในระบบพร้อมชื่อผู้ลบ</p>
                   <div className="owner-form-actions">
                     <button type="button" className="owner-secondary-btn" onClick={() => setExpenseDeleteConfirm(null)}>
                       ยกเลิก
