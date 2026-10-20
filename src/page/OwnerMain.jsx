@@ -675,6 +675,91 @@ function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
   )
 }
 
+function paymentLogStatus(payment) {
+  if (payment.status === 'pending') return payment.slip_path ? { tone: 'pending', label: 'รอตรวจสอบสลิป' } : { tone: 'other', label: 'รอชำระ' }
+  return { tone: getRoomPaymentTone(payment.status), label: ROOM_PAYMENT_STATUS_LABELS[payment.status] || payment.status || 'ไม่ระบุ' }
+}
+
+function paymentLogNote(payment) {
+  if (payment.status === 'paid' && payment.slip_path && payment.note?.includes('รอตรวจสอบสลิป')) return 'ตรวจสอบสลิปแล้ว'
+  return payment.note || ''
+}
+
+function OwnerPaymentLogDialog({ payment, onClose, onReview, reviewing }) {
+  const [zoom, setZoom] = useState(false)
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = zoom ? () => {} : onClose }, [onClose, zoom])
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    const previousFocus = document.activeElement
+    document.body.style.overflow = 'hidden'
+    const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', escape)
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); previousFocus?.focus?.() }
+  }, [])
+  const status = paymentLogStatus(payment)
+  const name = `${payment.first_name || ''} ${payment.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'
+  const types = payment.payment_types ? payment.payment_types.split(',').map(formatPaymentType).join(' / ') : payment.type ? formatPaymentType(payment.type) : 'รายการชำระเงิน'
+  const paymentId = payment.payment_id ?? (typeof payment.id === 'number' ? payment.id : null)
+  const canReview = Boolean(onReview && payment.status !== 'paid' && payment.slip_path && paymentId)
+  const fields = [
+    { key: 'date', icon: 'calendar', label: 'วันที่ชำระ', value: formatDate(payment.payment_date) },
+    { key: 'type', icon: 'receipt', label: 'ประเภท', value: types },
+    { key: 'room', icon: 'door', label: 'ห้อง', value: payment.room_number ? `ห้อง ${payment.room_number}` : 'ไม่ระบุ' },
+    { key: 'name', icon: 'user', label: 'ผู้ชำระ', value: name },
+    { key: 'phone', icon: 'phone', label: 'เบอร์โทร', value: payment.phone || 'ไม่ระบุ' },
+    { key: 'id', icon: 'hash', label: 'เลขรายการ', value: paymentId ? `#${paymentId}` : 'ยอดค้างที่ระบบคำนวณ' },
+  ]
+  const note = paymentLogNote(payment)
+  return (
+    <div className="owner-modal-backdrop owner-pl-overlay" onClick={onClose}>
+      <section className="owner-modal owner-pl-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-pl-dialog-title" onClick={(event) => event.stopPropagation()}>
+        <header className="owner-modal-header owner-pl-dialog-header">
+          <span className="owner-pl-dialog-icon"><PaymentTypeIcon type={payment.type || payment.payment_types?.split(',')[0]} /></span>
+          <div><h3 id="owner-pl-dialog-title">รายละเอียดการชำระเงิน</h3><p className="owner-modal-subtext">{payment.room_number ? `ห้อง ${payment.room_number} · ` : ''}{name}</p></div>
+          <button type="button" className="owner-modal-close" autoFocus onClick={onClose} aria-label="ปิดรายละเอียดการชำระเงิน">×</button>
+        </header>
+        <div className="owner-modal-body owner-pl-dialog-body">
+          <div className="owner-pl-dialog-main">
+            <div className={`owner-pl-hero is-${status.tone}`}>
+              <div><small>ยอดชำระ</small><strong>฿{formatCurrency(payment.amount)}</strong></div>
+              <span className={`owner-pl-status is-${status.tone}`}><i aria-hidden="true" />{status.label}</span>
+            </div>
+            <dl className="owner-pl-fields">
+              {fields.map((field) => (
+                <div key={field.key}><dt><OwnerListIcon name={field.icon} size={13} />{field.label}</dt><dd>{field.value}</dd></div>
+              ))}
+            </dl>
+            <div className="owner-pl-note"><OwnerListIcon name="note" size={15} /><div><strong>หมายเหตุ</strong><p>{note || 'ไม่มีหมายเหตุ'}</p></div></div>
+          </div>
+          <aside className="owner-pl-slip">
+            <h4><OwnerListIcon name="receipt" size={15} />สลิปโอนเงิน</h4>
+            {payment.slip_path ? (
+              <button type="button" className="owner-pl-slip-frame" onClick={() => setZoom(true)} aria-label="ขยายดูสลิป">
+                <UploadImage src={payment.slip_path} alt="สลิปโอนเงิน" />
+                <span>กดเพื่อขยาย</span>
+              </button>
+            ) : (
+              <div className="owner-pl-slip-empty"><OwnerListIcon name="receipt" size={26} /><span>ไม่มีสลิปแนบ</span></div>
+            )}
+          </aside>
+        </div>
+        {canReview && (
+          <footer className="owner-pl-dialog-actions">
+            <button type="button" className="owner-xl-btn is-danger" disabled={reviewing} onClick={() => onReview(payment, 'rejected')}>ปฏิเสธสลิป</button>
+            <button type="button" className="owner-xl-btn is-success" disabled={reviewing} onClick={() => onReview(payment, 'approved')}>{reviewing ? 'กำลังบันทึก…' : 'อนุมัติสลิป'}</button>
+          </footer>
+        )}
+      </section>
+      {zoom && payment.slip_path && (
+        <div onClick={(event) => event.stopPropagation()}>
+          <PhotoLightbox photos={[{ url: payment.slip_path, name: `สลิปห้อง ${payment.room_number || '-'}` }]} title="สลิปโอนเงิน" subtitle={`${payment.room_number ? `ห้อง ${payment.room_number} · ` : ''}${name}`} label="สลิปโอนเงิน" onClose={() => setZoom(false)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function OwnerOccupancyLogDialog({ eventId, onClose }) {
   const [response, setResponse] = useState(null)
   const [retry, setRetry] = useState(0)
@@ -1568,6 +1653,7 @@ const OWNER_FINANCE_SECTIONS = [
   { key: 'overview', label: 'ภาพรวมการเงิน' },
   { key: 'expenses', label: 'รายการรายจ่ายทั้งหมด' },
   { key: 'payments', label: 'บันทึกการชำระเงิน' },
+  { key: 'slips', label: 'สลิปรอตรวจสอบ' },
 ]
 
 const OWNER_TABS = [
@@ -1803,6 +1889,8 @@ function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
   const [financeSection, setFinanceSection] = useState('overview')
+  const [paymentLogDetail, setPaymentLogDetail] = useState(null)
+  const [slipSearch, setSlipSearch] = useState('')
   const [financeComparisonPage, setFinanceComparisonPage] = useState(1)
   const [financeComparisonSearch, setFinanceComparisonSearch] = useState('')
   const [financePeriodDetail, setFinancePeriodDetail] = useState(null)
@@ -2758,6 +2846,13 @@ function OwnerMain() {
     navigate('/login')
   }
 
+  const slipKeyword = slipSearch.trim().toLowerCase()
+  const filteredSlipReviews = slipKeyword
+    ? pendingSlipReviews.filter((payment) => [
+      payment.room_number, payment.first_name, payment.last_name, `${payment.first_name || ''} ${payment.last_name || ''}`, payment.phone,
+      (payment.payment_types || '').split(',').map(formatPaymentType).join(' '), payment.amount, formatCurrency(payment.amount),
+    ].some((value) => String(value ?? '').toLowerCase().includes(slipKeyword)))
+    : pendingSlipReviews
   const paymentPage = Number(paymentLogs.page || 1)
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
   const notifications = announcements.map(buildOwnerAnnouncementNotification)
@@ -3057,7 +3152,7 @@ function OwnerMain() {
               <ul className="nav staff-subtabs owner-subtabs" aria-label="หมวดหมู่รายละเอียดการเงิน">
                 {OWNER_FINANCE_SECTIONS.map((section) => (
                   <li className="nav-item" key={section.key}>
-                    <button type="button" className={`nav-link staff-subtab-link${financeSection === section.key ? ' active' : ''}`} aria-pressed={financeSection === section.key} onClick={() => setFinanceSection(section.key)}>{section.label}</button>
+                    <button type="button" className={`nav-link staff-subtab-link${financeSection === section.key ? ' active' : ''}`} aria-pressed={financeSection === section.key} onClick={() => setFinanceSection(section.key)}>{section.label}{section.key === 'slips' && pendingSlipReviews.length > 0 && <span className="owner-subtab-count">{pendingSlipReviews.length}</span>}</button>
                   </li>
                 ))}
               </ul>
@@ -4157,168 +4252,131 @@ function OwnerMain() {
         )}
 
         {!isLoading && activeTab === 'finance' && financeSection === 'payments' && (
-            <section className="owner-panel">
-              <div className="owner-panel-header">
-                <h3>บันทึกการชำระเงิน</h3>
-              </div>
-
-              <section className="owner-slip-review-panel">
-                <div className="owner-slip-review-heading">
-                  <div>
-                    <h4>สลิปที่รอตรวจสอบ</h4>
-                    <p>{pendingSlipReviews.length ? `มี ${pendingSlipReviews.length} รายการที่ต้องตรวจสอบ` : 'ไม่มีสลิปที่รอตรวจสอบ'}</p>
-                  </div>
-                  <button type="button" className="owner-slip-refresh" onClick={() => loadPendingSlipReviews().catch(() => setMessage('danger', 'โหลดรายการสลิปไม่สำเร็จ'))}>รีเฟรช</button>
+            <section className="owner-panel owner-pl-panel">
+              <div className="owner-pl-head">
+                <div>
+                  <h3>บันทึกการชำระเงิน</h3>
+                  <p>พบ {Number(paymentLogs.total) || 0} รายการ · กดแถวเพื่อดูรายละเอียดและสลิป</p>
                 </div>
-                {pendingSlipReviews.length ? (
-                  <div className="owner-slip-review-list">
-                    {pendingSlipReviews.map((payment) => (
-                      <article className="owner-slip-review-item" key={payment.id}>
-                        <button type="button" className="owner-slip-review-image" onClick={() => openPaymentSlip(payment)} aria-label={`ดูสลิปห้อง ${payment.room_number}`}>
-                          <UploadImage src={payment.slip_path} alt="สลิปโอนเงิน" />
-                          <span>ดูสลิป</span>
-                        </button>
-                        <div className="owner-slip-review-info">
-                          <strong>ห้อง {payment.room_number} · {payment.first_name} {payment.last_name}</strong>
-                          <span>{payment.payment_types?.split(',').map(formatPaymentType).join(' / ') || 'รายการชำระเงิน'} · {payment.phone || 'ไม่มีเบอร์โทร'}</span>
-                          <b>฿{formatCurrency(payment.amount)}</b>
-                        </div>
-                        <div className="owner-slip-review-actions">
-                          <button type="button" className="owner-slip-reject" disabled={reviewingSlipId === payment.id} onClick={() => reviewOwnerPaymentSlip(payment, 'rejected')}>ปฏิเสธ</button>
-                          <button type="button" className="owner-slip-approve" disabled={reviewingSlipId === payment.id} onClick={() => reviewOwnerPaymentSlip(payment, 'approved')}>{reviewingSlipId === payment.id ? 'กำลังบันทึก…' : 'อนุมัติสลิป'}</button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-
-              <label className="owner-search-standalone">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  type="text"
-                  value={paymentLogFilter.search}
-                  onChange={(event) => handlePaymentLogFilterChange('search', event.target.value)}
-                  placeholder="ค้นหาห้อง / ลูกค้า / หมายเหตุ"
-                />
-              </label>
-
-              <div className="owner-filter-box">
-                <div className="owner-filter-row">
-                  <label className="owner-date-field">
-                    จาก
-                    <ThaiDatePicker
-                      value={paymentLogFilter.from}
-                      onChange={(value) => handlePaymentLogFilterChange('from', value)}
-                      maxDate={parseInputDate(paymentLogFilter.to)}
-                      isClearable
-                    />
-                  </label>
-                  <label className="owner-date-field">
-                    ถึง
-                    <ThaiDatePicker
-                      value={paymentLogFilter.to}
-                      onChange={(value) => handlePaymentLogFilterChange('to', value)}
-                      minDate={parseInputDate(paymentLogFilter.from)}
-                      isClearable
-                    />
-                  </label>
-                  <label className="owner-search-box">
-                    สถานะการชำระ
-                    <select
-                      value={paymentLogFilter.onlyOverdue ? 'overdue' : 'all'}
-                      onChange={(event) => handlePaymentLogFilterChange('onlyOverdue', event.target.value === 'overdue')}
-                    >
-                      <option value="all">ทั้งหมด</option>
-                      <option value="overdue">แสดงเฉพาะที่ค้างชำระ</option>
-                    </select>
-                  </label>
+                {pendingSlipReviews.length > 0 && (
+                  <button type="button" className="owner-pl-pending-link" onClick={() => setFinanceSection('slips')}>
+                    <i aria-hidden="true" />มีสลิปรอตรวจสอบ {pendingSlipReviews.length} รายการ ›
+                  </button>
+                )}
+              </div>
+              <div className="owner-pl-toolbar">
+                <label className="owner-xl-search owner-pl-search">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+                  <input type="search" value={paymentLogFilter.search} onChange={(event) => handlePaymentLogFilterChange('search', event.target.value)} placeholder="ค้นหาห้อง ลูกค้า หรือหมายเหตุ" aria-label="ค้นหาบันทึกการชำระเงิน" />
+                </label>
+                <div className="owner-pl-dates">
+                  <ThaiDatePicker className="owner-xe-input owner-xe-date" placeholder="ตั้งแต่วันที่" value={paymentLogFilter.from} onChange={(value) => handlePaymentLogFilterChange('from', value)} maxDate={parseInputDate(paymentLogFilter.to)} isClearable />
+                  <span aria-hidden="true">–</span>
+                  <ThaiDatePicker className="owner-xe-input owner-xe-date" placeholder="ถึงวันที่" value={paymentLogFilter.to} onChange={(value) => handlePaymentLogFilterChange('to', value)} minDate={parseInputDate(paymentLogFilter.from)} isClearable />
+                </div>
+                <div className="owner-pl-segment" role="radiogroup" aria-label="สถานะการชำระ">
+                  {[[false, 'ทั้งหมด'], [true, 'ค้างชำระ']].map(([value, label]) => (
+                    <button key={label} type="button" role="radio" aria-checked={paymentLogFilter.onlyOverdue === value} className={paymentLogFilter.onlyOverdue === value ? 'is-active' : ''} onClick={() => handlePaymentLogFilterChange('onlyOverdue', value)}>{label}</button>
+                  ))}
                 </div>
               </div>
-
-              <div className="owner-table-wrap">
-                <table className="owner-table">
-                  <thead>
-                    <tr>
-                      <th>วันที่</th>
-                      <th>ลูกค้า</th>
-                      <th>ห้อง</th>
-                      <th>ประเภท</th>
-                      <th>จำนวน</th>
-                      <th className="owner-col-status">สถานะ</th>
-                      <th>หมายเหตุ</th>
-                      <th>สลิป</th>
-                    </tr>
-                  </thead>
+              <div className="owner-pl-table-wrap">
+                <table className="owner-pl-table">
+                  <colgroup><col style={{ width: '13%' }} /><col style={{ width: '20%' }} /><col style={{ width: '12%' }} /><col style={{ width: '12%' }} /><col style={{ width: '14%' }} /><col /><col style={{ width: '160px' }} /></colgroup>
+                  <thead><tr><th>วันที่</th><th>ผู้ชำระ / ห้อง</th><th>ประเภท</th><th className="is-amount">จำนวน</th><th>สถานะ</th><th>หมายเหตุ</th><th>สลิป / รายละเอียด</th></tr></thead>
                   <tbody>
-                    {paymentLogs.payments?.length ? (
-                      paymentLogs.payments.map((payment) => (
-                        <tr key={payment.id}>
-                          <td>{formatDate(payment.payment_date)}</td>
-                          <td>{`${payment.first_name || ''} ${payment.last_name || ''}`.trim() || '-'}</td>
-                          <td>{payment.room_number || '-'}</td>
-                          <td>{payment.type ? formatPaymentType(payment.type) : '-'}</td>
-                          <td>฿{formatCurrency(payment.amount)}</td>
-                          <td className="owner-col-status">
-                            <span className={`owner-status-badge ${payment.status === 'paid' ? 'active' : payment.status === 'pending' ? 'pending' : 'disabled'}`}>
-                              {payment.status === 'paid' ? 'ชำระแล้ว' : payment.status === 'pending' ? 'รอชำระ' : payment.status}
-                            </span>
-                          </td>
-                          <td>
-                            {payment.status === 'paid' && payment.slip_path && payment.note?.includes('รอตรวจสอบสลิป')
-                              ? 'ตรวจสอบสลิปแล้ว'
-                              : payment.note || '-'}
-                          </td>
-                          <td>
-                            {payment.slip_path ? (
-                              <div className="owner-payment-slip-cell">
-                                <button
-                                  type="button"
-                                  className="owner-view-slip-btn"
-                                  onClick={() => openPaymentSlip(payment)}
-                                >
-                                  <span>ดูสลิป</span>
-                                </button>
-                                {payment.status === 'pending' && (
-                                  <div className="owner-payment-review-actions">
-                                    <button type="button" className="owner-payment-reject" disabled={reviewingSlipId === (payment.payment_id ?? payment.id)} onClick={() => reviewOwnerPaymentSlip(payment, 'rejected')}>ปฏิเสธ</button>
-                                    <button type="button" className="owner-payment-approve" disabled={reviewingSlipId === (payment.payment_id ?? payment.id)} onClick={() => reviewOwnerPaymentSlip(payment, 'approved')}>อนุมัติ</button>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="owner-no-slip">ไม่มีสลิป</span>
-                            )}
-                          </td>
+                    {(paymentLogs.payments || []).map((payment) => {
+                      const status = paymentLogStatus(payment)
+                      const note = paymentLogNote(payment)
+                      return (
+                        <tr key={payment.id} className="owner-pl-row" tabIndex={0} onClick={() => setPaymentLogDetail(payment)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPaymentLogDetail(payment) } }} aria-label={`ดูรายละเอียดการชำระเงินห้อง ${payment.room_number || '-'} ${formatCurrency(payment.amount)} บาท`}>
+                          <td><span className="owner-xl-date"><OwnerListIcon name="calendar" size={14} /><strong>{formatDate(payment.payment_date)}</strong></span></td>
+                          <td><div className="owner-pl-person"><span className="owner-pl-room">{payment.room_number || '—'}</span><strong>{`${payment.first_name || ''} ${payment.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</strong></div></td>
+                          <td><span className="owner-pl-type"><PaymentTypeIcon type={payment.type} />{payment.type ? formatPaymentType(payment.type) : '-'}</span></td>
+                          <td className="is-amount"><strong className="owner-pl-amount">฿{formatCurrency(payment.amount)}</strong></td>
+                          <td><span className={`owner-pl-status is-${status.tone}`}><i aria-hidden="true" />{status.label}</span></td>
+                          <td><span className={`owner-pl-note-cell${note ? '' : ' is-empty'}`} title={note || undefined}>{note || 'ไม่มีหมายเหตุ'}</span></td>
+                          <td><span className="owner-pl-view">{payment.slip_path ? <span className="owner-pl-thumb"><UploadImage src={payment.slip_path} alt="" /></span> : <span className="owner-pl-noslip">ไม่มีสลิป</span>}<b>ดูรายละเอียด ›</b></span></td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="8" className="owner-empty-row">
-                          ไม่มีข้อมูลบันทึกการชำระเงิน
-                        </td>
-                      </tr>
-                    )}
+                      )
+                    })}
+                    {!paymentLogs.payments?.length && <tr><td colSpan={7} className="owner-xl-empty">ไม่มีข้อมูลบันทึกการชำระเงิน</td></tr>}
                   </tbody>
                 </table>
               </div>
-
-              <div className="owner-pagination">
-                <button type="button" disabled={paymentPage <= 1} onClick={() => loadPaymentLogs(paymentPage - 1)}>
-                  ก่อนหน้า
-                </button>
-                <span>
-                  หน้า {paymentPage}/{totalPaymentPages}
-                </span>
-                <button type="button" disabled={paymentPage >= totalPaymentPages} onClick={() => loadPaymentLogs(paymentPage + 1)}>
-                  ถัดไป
-                </button>
-              </div>
+              <footer className="owner-xl-footer">
+                <span>หน้า {paymentPage} จาก {totalPaymentPages}</span>
+                <div className="owner-pa-pager">
+                  <button type="button" aria-label="หน้าก่อนหน้า" disabled={paymentPage <= 1} onClick={() => loadPaymentLogs(paymentPage - 1)}>‹</button>
+                  <span>{paymentPage} / {totalPaymentPages}</span>
+                  <button type="button" aria-label="หน้าถัดไป" disabled={paymentPage >= totalPaymentPages} onClick={() => loadPaymentLogs(paymentPage + 1)}>›</button>
+                </div>
+              </footer>
             </section>
+        )}
 
+        {!isLoading && activeTab === 'finance' && financeSection === 'slips' && (
+          <section className="owner-panel owner-pl-panel">
+            <div className="owner-pl-head">
+              <div>
+                <h3>สลิปรอตรวจสอบ</h3>
+                <p>{pendingSlipReviews.length ? `มี ${pendingSlipReviews.length} รายการที่ต้องตรวจสอบ · กดการ์ดเพื่อดูสลิปขนาดใหญ่` : 'ตรวจสอบครบทุกรายการแล้ว'}</p>
+              </div>
+              <div className="owner-pl-head-tools">
+                <label className="owner-xl-search owner-sr-search">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+                  <input type="search" value={slipSearch} onChange={(event) => setSlipSearch(event.target.value)} placeholder="ค้นหาห้อง ชื่อ เบอร์โทร หรือประเภท" aria-label="ค้นหาสลิปรอตรวจสอบ" />
+                </label>
+                <button type="button" className="owner-xl-btn is-ghost" onClick={() => loadPendingSlipReviews().catch(() => setMessage('danger', 'โหลดรายการสลิปไม่สำเร็จ'))}>รีเฟรช</button>
+              </div>
+            </div>
+            <div className="owner-sr-scroll">
+              {filteredSlipReviews.length ? (
+                <div className="owner-sr-grid">
+                  {filteredSlipReviews.map((payment) => {
+                    const busy = reviewingSlipId === payment.id
+                    const open = () => setPaymentLogDetail({ ...payment, status: 'pending' })
+                    return (
+                      <article key={payment.id} className="owner-sr-card">
+                        <header className="owner-sr-head">
+                          <span className="owner-pl-room">{payment.room_number || '—'}</span>
+                          <div><strong>{`${payment.first_name || ''} ${payment.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</strong><small>{payment.phone || 'ไม่มีเบอร์โทร'}</small></div>
+                          <span className="owner-pl-status is-pending"><i aria-hidden="true" />รอตรวจ</span>
+                        </header>
+                        <button type="button" className="owner-sr-image" onClick={open} aria-label={`ดูรายละเอียดสลิปห้อง ${payment.room_number}`}>
+                          <UploadImage src={payment.slip_path} alt="สลิปโอนเงิน" />
+                        </button>
+                        <div className="owner-sr-meta">
+                          <div><small>ยอดชำระ</small><b>฿{formatCurrency(payment.amount)}</b></div>
+                          <div><small>ประเภท</small><span>{payment.payment_types?.split(',').map(formatPaymentType).join(' / ') || 'รายการชำระเงิน'}</span></div>
+                          <div><small>วันที่ส่ง</small><span>{formatDate(payment.payment_date)}</span></div>
+                        </div>
+                        <button type="button" className="owner-sr-more" onClick={open}>ดูรายละเอียดและสลิป ›</button>
+                        <div className="owner-sr-actions">
+                          <button type="button" className="owner-xl-btn is-danger" disabled={busy} onClick={() => reviewOwnerPaymentSlip(payment, 'rejected')}>ปฏิเสธ</button>
+                          <button type="button" className="owner-xl-btn is-primary" disabled={busy} onClick={() => reviewOwnerPaymentSlip(payment, 'approved')}>{busy ? 'กำลังบันทึก…' : 'อนุมัติสลิป'}</button>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              ) : pendingSlipReviews.length ? (
+                <div className="owner-sr-empty is-search"><OwnerListIcon name="note" size={28} /><strong>ไม่พบสลิปที่ตรงกับคำค้นหา</strong><span>ลองค้นด้วยเลขห้อง ชื่อ หรือเบอร์โทร</span></div>
+              ) : (
+                <div className="owner-sr-empty"><OwnerListIcon name="check" size={30} /><strong>ไม่มีสลิปที่รอตรวจสอบ</strong><span>สลิปใหม่จากผู้เช่าจะแสดงที่นี่</span></div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {paymentLogDetail && (
+          <OwnerPaymentLogDialog
+            key={paymentLogDetail.id}
+            payment={paymentLogDetail}
+            reviewing={reviewingSlipId === (paymentLogDetail.payment_id ?? paymentLogDetail.id)}
+            onClose={() => setPaymentLogDetail(null)}
+            onReview={async (payment, decision) => { if (await reviewOwnerPaymentSlip(payment, decision)) setPaymentLogDetail(null) }}
+          />
         )}
 
         {occupancyLogId !== null && <OwnerOccupancyLogDialog key={occupancyLogId} eventId={occupancyLogId} onClose={() => setOccupancyLogId(null)} />}
