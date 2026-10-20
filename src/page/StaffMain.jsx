@@ -25,6 +25,7 @@ import {
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+import RoleTabMenu from '../components/RoleTabMenu.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -8831,27 +8832,23 @@ function StaffMain() {
           </section>
         )}
 
-        <ul className="nav nav-tabs staff-tabs mb-0">
-          {STAFF_TABS.map((tab) => (
-            <li className="nav-item" key={tab.key}>
-              <button
-                type="button"
-                className={`nav-link staff-tab-link${staffTab === tab.key ? ' active' : ''}`}
-                onClick={() => {
-                  goToStaffTab(tab.key)
-                  setAnnouncementFocus(null)
-                }}
-              >
-                {tab.label}
-                {newTabItemCount(tab.key) > 0 && (
-                  <span className="staff-tab-badge" aria-label={`${newTabItemCount(tab.key)} รายการใหม่`}>
-                    {newTabItemCount(tab.key)}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <RoleTabMenu
+          tabs={STAFF_TABS}
+          activeKey={staffTab}
+          onSelect={(key) => {
+            goToStaffTab(key)
+            setAnnouncementFocus(null)
+          }}
+          listClassName="staff-tabs mb-0"
+          linkClassName="staff-tab-link"
+          logoutClassName="staff-logout-btn"
+          onLogout={handleLogout}
+          renderBadge={(key) => newTabItemCount(key) > 0 && (
+            <span className="staff-tab-badge" aria-label={`${newTabItemCount(key)} รายการใหม่`}>
+              {newTabItemCount(key)}
+            </span>
+          )}
+        />
         <div className="staff-subtabs-row">
           {staffTab === 'home' && (
             <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
@@ -9441,7 +9438,7 @@ function StaffMain() {
                   </thead>
                   <tbody>
                     {filteredRooms.length === 0 ? (
-                      <tr>
+                      <tr className="staff-room-empty-row">
                         <td colSpan={8} className="staff-empty">
                           ไม่พบข้อมูลห้องพักที่ตรงกับเงื่อนไข
                         </td>
@@ -9453,14 +9450,20 @@ function StaffMain() {
                         const expiryStatus = getRoomExpiryStatus(room)
                         return (
                           <Fragment key={room.room_number}>
-                            <tr>
-                              <td className="staff-room-number-cell">{room.room_number}</td>
-                              <td>
+                            <tr className={`staff-room-main-row${hasDue ? ' has-due' : ''}${hasDue || !room.is_booked ? ' has-mobile-action' : ''}`}>
+                              <td className="staff-room-number-cell">
+                                <span className="staff-room-mobile-label">ห้อง</span>
+                                {room.room_number}
+                              </td>
+                              <td className="staff-room-status-cell">
                                 <span className={`staff-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
                                   {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
                                 </span>
                               </td>
-                              <td>{room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'}</td>
+                              <td className="staff-room-tenant-cell">
+                                <span className="staff-room-mobile-label">ผู้เช่า</span>
+                                <span className="staff-room-tenant-name">{room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'}</span>
+                              </td>
                               <td className="staff-col-optional">{room.tenant?.phone || '-'}</td>
                               <td className="staff-col-optional">
                                 <div className="staff-contract-dates">
@@ -9480,7 +9483,8 @@ function StaffMain() {
                                   </div>
                                 )}
                               </td>
-                              <td>
+                              <td className="staff-room-payment-cell">
+                                <span className="staff-room-mobile-label">การชำระเงิน</span>
                                 {room.currentDue ? (
                                   <span className={`staff-badge status-${dueBadgeClass(room.currentDue.status)}`}>
                                     {DUE_STATUS_LABEL[room.currentDue.status] || room.currentDue.status}
@@ -9489,7 +9493,8 @@ function StaffMain() {
                                   <span className="staff-badge status-none">-</span>
                                 )}
                               </td>
-                              <td className="staff-col-optional">
+                              <td className="staff-col-optional staff-room-due-cell">
+                                <span className="staff-room-mobile-label">ยอดค้างชำระ</span>
                                 {hasDue ? (
                                   <button
                                     type="button"
@@ -9502,7 +9507,7 @@ function StaffMain() {
                                   <span className="staff-due-amount is-none">-</span>
                                 )}
                               </td>
-                              <td>
+                              <td className="staff-room-action-cell">
                                 <div className="staff-row-actions staff-row-actions-desktop">
                                   {Boolean(room.is_booked) && room.tenant && (
                                     <button
@@ -9541,6 +9546,24 @@ function StaffMain() {
                                     </button>
                                   )}
                                 </div>
+                                {hasDue && (
+                                  <button
+                                    type="button"
+                                    className="staff-action-btn is-primary staff-room-mobile-action"
+                                    onClick={() => openCollect(room)}
+                                  >
+                                    เก็บเงิน
+                                  </button>
+                                )}
+                                {!room.is_booked && (
+                                  <button
+                                    type="button"
+                                    className="staff-action-btn is-primary staff-room-mobile-action"
+                                    onClick={() => navigate('/register', { state: { roomNumber: room.room_number } })}
+                                  >
+                                    เพิ่มผู้เช่า
+                                  </button>
+                                )}
                               </td>
                             </tr>
                             <tr className="staff-row-detail">
@@ -9573,22 +9596,8 @@ function StaffMain() {
                                           )}
                                         </span>
                                       </div>
-                                      <div className="staff-row-detail-item">
-                                        <span>ยอดค้างชำระ</span>
-                                        {hasDue ? (
-                                          <button
-                                            type="button"
-                                            className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
-                                            onClick={() => openDueDetail(room)}
-                                          >
-                                            ฿{formatCurrency(room.currentDue.amount)}
-                                          </button>
-                                        ) : (
-                                          <strong className="staff-due-amount is-none">-</strong>
-                                        )}
-                                      </div>
-                                      <div className="staff-row-actions">
-                                        {Boolean(room.is_booked) && room.tenant && (
+                                      {Boolean(room.is_booked) && room.tenant && (
+                                        <div className="staff-row-actions">
                                           <button
                                             type="button"
                                             className="staff-action-btn is-ghost"
@@ -9596,8 +9605,6 @@ function StaffMain() {
                                           >
                                             ประวัติการจ่ายเงิน
                                           </button>
-                                        )}
-                                        {Boolean(room.is_booked) && room.tenant && (
                                           <button
                                             type="button"
                                             className="staff-action-btn is-ghost"
@@ -9605,28 +9612,8 @@ function StaffMain() {
                                           >
                                             ส่งค่าน้ำ-ค่าไฟ
                                           </button>
-                                        )}
-                                        {hasDue && (
-                                          <button
-                                            type="button"
-                                            className="staff-action-btn is-primary"
-                                            onClick={() => openCollect(room)}
-                                          >
-                                            เก็บเงิน
-                                          </button>
-                                        )}
-                                        {!room.is_booked && (
-                                          <button
-                                            type="button"
-                                            className="staff-action-btn is-primary"
-                                            onClick={() =>
-                                              navigate('/register', { state: { roomNumber: room.room_number } })
-                                            }
-                                          >
-                                            เพิ่มผู้เช่า
-                                          </button>
-                                        )}
-                                      </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </div>

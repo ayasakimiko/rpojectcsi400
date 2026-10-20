@@ -23,6 +23,7 @@ import {
 } from '../components/InspectionCells.jsx'
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionForm from '../components/InspectionForm.jsx'
+import RoleTabMenu from '../components/RoleTabMenu.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -7175,23 +7176,21 @@ function AdminBackupPage() {
             ))}
           </div>
         )}
-        <ul className="nav nav-tabs admin-tabs mb-0">
-          {TAB_GROUPS.map((group) => (
-            <li className="nav-item" key={group.key}>
-              <button
-                type="button"
-                className={`nav-link admin-tab-link${TAB_GROUP_OF[activeTab] === group.key ? ' active' : ''}`}
-                onClick={() => {
-                  if (TAB_GROUP_OF[activeTab] === group.key) return
-                  setActiveTab(lastTabByGroup[group.key] || group.tabs[0])
-                  setAnnouncementFocus(null)
-                }}
-              >
-                {group.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <RoleTabMenu
+          tabs={TAB_GROUPS}
+          activeKey={TAB_GROUP_OF[activeTab]}
+          activeLabel={TAB_LABEL[activeTab]}
+          onSelect={(key) => {
+            if (TAB_GROUP_OF[activeTab] === key) return
+            const group = TAB_GROUPS.find((item) => item.key === key)
+            setActiveTab(lastTabByGroup[key] || group.tabs[0])
+            setAnnouncementFocus(null)
+          }}
+          listClassName="admin-tabs mb-0"
+          linkClassName="admin-tab-link"
+          logoutClassName="admin-logout-btn"
+          onLogout={handleLogout}
+        />
         <div className="admin-subtabs-row">
           {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
             <ul
@@ -7448,15 +7447,15 @@ function AdminBackupPage() {
             {invoicePrintError && <div className="alert alert-danger">{invoicePrintError}</div>}
             {roomsError && <div className="alert alert-danger">{roomsError}</div>}
 
-            <div className="table-responsive">
-              <table className="table admin-table">
+            <div className="table-responsive admin-rooms-table-wrap">
+              <table className="table admin-table admin-rooms-table">
                 <thead>
                   <tr>
                     <th>เลขห้อง</th>
                     <th>สถานะ</th>
                     <th>ราคา/เดือน</th>
                     <th className="admin-col-optional">สิ่งอำนวยความสะดวก</th>
-                    <th>ผู้เช่า</th>
+                    <th className="admin-col-optional">ผู้เช่า</th>
                     <th className="admin-col-optional">การดำเนินการ</th>
                   </tr>
                 </thead>
@@ -7495,7 +7494,7 @@ function AdminBackupPage() {
                           <td className="admin-col-optional admin-amenities-cell">
                             <AmenitiesList room={room} />
                           </td>
-                          <td>
+                          <td className="admin-col-optional">
                             {room.customer_id ? (
                               <span className="admin-room-tenant">
                                 <span className="admin-room-tenant-avatar" aria-hidden="true">
@@ -7530,6 +7529,12 @@ function AdminBackupPage() {
                           open={expandedRoomRows.has(room.room_number)}
                           colSpan={6}
                           fields={[
+                            {
+                              label: 'ผู้เช่า',
+                              value: room.customer_id
+                                ? `${room.first_name} ${room.last_name}`
+                                : 'ยังไม่มีผู้เช่า',
+                            },
                             { label: 'สิ่งอำนวยความสะดวก', value: <AmenitiesList room={room} /> },
                             {
                               label: 'การดำเนินการ',

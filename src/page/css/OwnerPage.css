@@ -8720,3 +8720,34 @@ textarea.owner-xe-input { resize: vertical; line-height: 1.5; }
 .owner-xl-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .owner-xl-photo-empty { display: flex; align-items: center; justify-content: center; min-height: 90px; border: 1px dashed #d6e3f3; border-radius: 12px; background: #fff; color: #8aa0b6; font-size: 12.5px; font-style: italic; }
 @media(max-width:640px) { .owner-xl-panel { padding: 16px; } .owner-xl-tools, .owner-xl-search, .owner-xl-category, .owner-xl-category select { width: 100%; } .owner-xl-fields { grid-template-columns: 1fr; } .owner-xl-hero { flex-direction: column; align-items: flex-start; } .owner-xl-hero > strong { align-items: flex-start; } }
+
+@media (max-width: 768px) {
+  .owner-pl-segment {
+    max-width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9d4f5 #f4f8fd;
+  }
+
+  .owner-pl-segment button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .owner-pl-segment::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .owner-pl-segment::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: #f4f8fd;
+  }
+
+  .owner-pl-segment::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #b9d4f5;
+  }
+}

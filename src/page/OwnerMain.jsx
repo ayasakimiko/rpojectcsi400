@@ -15,6 +15,7 @@ import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
+import RoleTabMenu from '../components/RoleTabMenu.jsx'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
@@ -3466,19 +3467,15 @@ function OwnerMain() {
           </section>
         )}
 
-        <ul className="nav nav-tabs owner-tabs">
-          {OWNER_TABS.map((tab) => (
-            <li className="nav-item" key={tab.key}>
-              <button
-                type="button"
-                className={`nav-link owner-tab-link${activeTab === tab.key ? ' active' : ''}`}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <RoleTabMenu
+          tabs={OWNER_TABS}
+          activeKey={activeTab}
+          onSelect={setActiveTab}
+          listClassName="owner-tabs"
+          linkClassName="owner-tab-link"
+          logoutClassName="owner-logout-btn"
+          onLogout={handleLogout}
+        />
 
         {(activeTab === 'rooms' || activeTab === 'finance' || activeTab === 'utilities') && (
           <div className="owner-section-toolbar">

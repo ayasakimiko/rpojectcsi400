@@ -3937,6 +3937,7 @@ function CustomerDashbord() {
   }, [])
 
   const [customerTab, setCustomerTab] = useState('home')
+  const [mobileTabMenuOpen, setMobileTabMenuOpen] = useState(false)
   const [activeVehicleIds, setActiveVehicleIds] = useState([])
   const [tabSeenVersion, setTabSeenVersion] = useState(0)
   const tabSeenStorageKey = data?.customer?.id ? `customer_tab_seen_${data.customer.id}` : null
@@ -4424,6 +4425,7 @@ function CustomerDashbord() {
   }
 
   const selectCustomerTab = (key) => {
+    setMobileTabMenuOpen(false)
     const visited = [...(customerTabKeys[customerTab] || []), ...(customerTabKeys[key] || [])]
     if (tabSeenStorageKey && visited.some((itemKey) => !seenTabKeys.has(itemKey))) {
       const current = new Set(Object.values(customerTabKeys).flat())
@@ -6381,27 +6383,47 @@ function CustomerDashbord() {
 
         <DashboardReminders reminders={reminders} />
 
-        <ul className="nav nav-tabs dashboard-tabs mb-0">
-          {CUSTOMER_TABS.map((tab) => (
-            <li className="nav-item" key={tab.key}>
-              <button
-                type="button"
-                className={`nav-link dashboard-tab-link${customerTab === tab.key ? ' active' : ''}`}
-                onClick={() => selectCustomerTab(tab.key)}
-              >
-                {tab.label}
-                {newCustomerTabCount(tab.key) > 0 && (
-                  <span
-                    className={`dashboard-parcel-tab-count${tab.key === 'vehicles' ? ' is-info' : ''}`}
-                    aria-label={`${newCustomerTabCount(tab.key)} รายการใหม่`}
+        <nav className={`dashboard-tab-menu${mobileTabMenuOpen ? ' is-open' : ''}`} aria-label="เมนูแดชบอร์ด">
+          <button
+            type="button"
+            className="dashboard-tab-menu-toggle"
+            aria-expanded={mobileTabMenuOpen}
+            aria-controls="dashboard-tab-menu-panel"
+            onClick={() => setMobileTabMenuOpen((open) => !open)}
+          >
+            <span className="dashboard-tab-menu-icon" aria-hidden="true"><span /><span /><span /></span>
+            <span>เมนู</span>
+            <strong>{CUSTOMER_TABS.find((tab) => tab.key === customerTab)?.label}</strong>
+          </button>
+          <div className="dashboard-tab-menu-panel" id="dashboard-tab-menu-panel">
+            <ul className="nav nav-tabs dashboard-tabs mb-0">
+              {CUSTOMER_TABS.map((tab) => (
+                <li className="nav-item" key={tab.key}>
+                  <button
+                    type="button"
+                    className={`nav-link dashboard-tab-link${customerTab === tab.key ? ' active' : ''}`}
+                    onClick={() => selectCustomerTab(tab.key)}
                   >
-                    {newCustomerTabCount(tab.key)}
-                  </span>
-                )}
+                    {tab.label}
+                    {newCustomerTabCount(tab.key) > 0 && (
+                      <span
+                        className={`dashboard-parcel-tab-count${tab.key === 'vehicles' ? ' is-info' : ''}`}
+                        aria-label={`${newCustomerTabCount(tab.key)} รายการใหม่`}
+                      >
+                        {newCustomerTabCount(tab.key)}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="dashboard-tab-menu-footer">
+              <button type="button" className="dashboard-logout-btn" onClick={handleLogout}>
+                ออกจากระบบ
               </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+          </div>
+        </nav>
         <div className="dorm-menu-bar">
           <DormInfoMenu
             apiBase="/api/customer/dorm-info"

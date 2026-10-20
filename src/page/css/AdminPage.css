@@ -15101,3 +15101,93 @@ tr.admin-focus-flash.is-fading > td {
     border-left: none;
   }
 }
+
+@media (max-width: 768px) {
+  .admin-incident-segments,
+  .room-history-segments,
+  .admin-page .waiting-filter-segments {
+    display: flex;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9d4f5 #f4f8fd;
+  }
+
+  .admin-incident-segment,
+  .room-history-segment,
+  .admin-page .waiting-filter-segment {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .admin-incident-segments::-webkit-scrollbar,
+  .room-history-segments::-webkit-scrollbar,
+  .admin-page .waiting-filter-segments::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .admin-incident-segments::-webkit-scrollbar-track,
+  .room-history-segments::-webkit-scrollbar-track,
+  .admin-page .waiting-filter-segments::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: #f4f8fd;
+  }
+
+  .admin-incident-segments::-webkit-scrollbar-thumb,
+  .room-history-segments::-webkit-scrollbar-thumb,
+  .admin-page .waiting-filter-segments::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #b9d4f5;
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-subtabs-row {
+    min-width: 0;
+  }
+
+  .admin-subtabs {
+    flex: 0 1 100%;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 5px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9d4f5 #f4f8fd;
+  }
+
+  .admin-subtabs .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .admin-subtabs .nav-link.admin-tab-link {
+    white-space: nowrap;
+  }
+
+  .admin-subtabs::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .admin-subtabs::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: #f4f8fd;
+  }
+
+  .admin-subtabs::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #b9d4f5;
+  }
+}

@@ -1992,6 +1992,14 @@
   color: #2563eb;
 }
 
+.staff-room-mobile-label {
+  display: none;
+}
+
+.staff-action-btn.staff-room-mobile-action {
+  display: none;
+}
+
 .staff-empty {
   color: #6b859e;
   font-size: 14px;
@@ -8262,13 +8270,11 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .staff-summary-tiles {
-    grid-auto-columns: minmax(180px, 1fr);
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
-    overflow-x: auto;
-    padding: 2px 2px 6px;
-    scrollbar-width: none;
   }
 
   .staff-summary-tile {
@@ -8299,6 +8305,45 @@
 
   .staff-summary-tile-arrow {
     display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .staff-summary-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .staff-req-segments {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9d4f5 #f4f8fd;
+  }
+
+  .staff-req-segments::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .staff-req-segments::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: #f4f8fd;
+  }
+
+  .staff-req-segments::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #b9d4f5;
+  }
+
+  .staff-req-segment {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 }
 
@@ -12849,4 +12894,347 @@ tr.staff-focus-row.is-fading > td {
   border-radius: 7px;
   background: #ffffff;
   object-fit: contain;
+}
+
+@media (max-width: 768px) {
+  .staff-subtabs-row,
+  .owner-section-toolbar {
+    min-width: 0;
+  }
+
+  .staff-subtabs {
+    flex: 0 1 100%;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 5px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9d4f5 #f4f8fd;
+  }
+
+  .staff-subtabs .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .staff-subtabs .nav-link.staff-subtab-link {
+    white-space: nowrap;
+  }
+
+  .staff-subtabs::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .staff-subtabs::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: #f4f8fd;
+  }
+
+  .staff-subtabs::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #b9d4f5;
+  }
+}
+
+@media (max-width: 700px) {
+  .staff-rooms-card > .table-responsive {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .staff-rooms-table,
+  .staff-rooms-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .staff-rooms-table thead {
+    display: none;
+  }
+
+  .staff-rooms-table tbody tr.staff-room-main-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'room status'
+      'tenant tenant'
+      'payment payment';
+    gap: 9px 12px;
+    width: 100%;
+    padding: 13px 14px;
+    border: 1px solid #dce9fb;
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+    background: linear-gradient(135deg, #ffffff, #f8fbff);
+  }
+
+  .staff-rooms-table tbody tr.staff-room-main-row.has-mobile-action:not(.has-due) {
+    grid-template-areas:
+      'room status'
+      'tenant tenant'
+      'payment payment'
+      'actions actions';
+  }
+
+  .staff-rooms-table tbody tr.staff-room-main-row.has-due {
+    grid-template-areas:
+      'room status'
+      'tenant tenant'
+      'payment payment'
+      'due due'
+      'actions actions';
+  }
+
+  .staff-rooms-table tbody .staff-room-main-row:hover {
+    background: linear-gradient(135deg, #ffffff, #f8fbff);
+  }
+
+  .staff-rooms-table tbody .staff-row-detail:hover,
+  .staff-rooms-table tbody .staff-row-toggle-row:hover {
+    background: #ffffff;
+  }
+
+  .staff-rooms-table .staff-room-main-row > td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .staff-rooms-table .staff-room-main-row > .staff-col-optional,
+  .staff-rooms-table .staff-room-main-row > td:last-child {
+    display: none;
+  }
+
+  .staff-rooms-table .staff-room-number-cell {
+    grid-area: room;
+    font-size: 19px;
+    line-height: 1.2;
+  }
+
+  .staff-rooms-table .staff-room-status-cell {
+    grid-area: status;
+    align-self: center;
+  }
+
+  .staff-rooms-table .staff-room-main-row > .staff-room-tenant-cell {
+    grid-area: tenant;
+    padding-top: 10px;
+    border-top: 1px solid #e5edf8;
+  }
+
+  .staff-rooms-table .staff-room-tenant-name {
+    display: block;
+    overflow-wrap: anywhere;
+    font-weight: 700;
+  }
+
+  .staff-rooms-table .staff-room-main-row > .staff-room-payment-cell {
+    grid-area: payment;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .staff-rooms-table .staff-room-mobile-label {
+    display: block;
+    margin-bottom: 3px;
+    color: #7189a4;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .staff-rooms-table .staff-room-payment-cell .staff-room-mobile-label {
+    margin-bottom: 0;
+  }
+
+  .staff-rooms-table .staff-room-main-row.has-due > .staff-room-due-cell {
+    grid-area: due;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 9px;
+    border-top: 1px solid #e5edf8;
+  }
+
+  .staff-rooms-table .staff-room-due-cell .staff-room-mobile-label {
+    margin-bottom: 0;
+  }
+
+  .staff-rooms-table .staff-room-main-row.has-mobile-action > .staff-room-action-cell {
+    display: grid;
+    grid-area: actions;
+    gap: 8px;
+    padding-top: 9px;
+    border-top: 1px dashed #dce9fb;
+  }
+
+  .staff-rooms-table .staff-room-mobile-action {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .staff-rooms-table tbody tr.staff-row-detail,
+  .staff-rooms-table tbody tr.staff-row-toggle-row {
+    display: block;
+    width: 100%;
+    background: #ffffff;
+  }
+
+  .staff-rooms-table .staff-row-detail {
+    border-right: 1px solid #dce9fb;
+    border-left: 1px solid #dce9fb;
+  }
+
+  .staff-rooms-table .staff-row-detail > td,
+  .staff-rooms-table .staff-row-toggle-row > td {
+    display: block;
+    width: 100%;
+    border: 0;
+  }
+
+  .staff-rooms-table .staff-row-detail > td {
+    padding: 0 14px;
+  }
+
+  .staff-rooms-table .staff-row-detail-wrap {
+    transition: grid-template-rows 0.14s ease-out;
+  }
+
+  .staff-rooms-table .staff-row-detail-content {
+    padding: 10px 0 14px;
+  }
+
+  .staff-rooms-table .staff-row-detail-item {
+    flex-wrap: wrap;
+  }
+
+  .staff-rooms-table .staff-row-detail-item + .staff-row-detail-item {
+    padding-top: 9px;
+    border-top: 1px dashed #dce9fb;
+  }
+
+  .staff-rooms-table .staff-contract-value strong {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .staff-rooms-table .staff-row-detail .staff-row-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    padding-top: 10px;
+    border-top: 1px dashed #dce9fb;
+  }
+
+  .staff-rooms-table .staff-row-detail .staff-action-btn {
+    width: 100%;
+    margin: 0;
+  }
+
+  .staff-rooms-table .staff-row-toggle-row {
+    margin-bottom: 12px;
+    border: 1px solid #dce9fb;
+    border-top: 1px dashed #dce9fb;
+    border-radius: 0 0 14px 14px;
+  }
+
+  .staff-rooms-table .staff-row-toggle-row > td {
+    padding: 5px 14px 9px;
+  }
+
+  .staff-rooms-table .staff-row-toggle {
+    padding: 5px 0 0;
+  }
+
+  .staff-rooms-table .staff-room-empty-row,
+  .staff-rooms-table .staff-room-empty-row > td {
+    display: block;
+    width: 100%;
+  }
+}
+@media (max-width: 700px) {
+  .staff-expenses-card {
+    height: auto;
+    overflow: visible;
+  }
+
+  .staff-expenses-card > .staff-card-body {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .staff-expenses-card .staff-req-card.type-expense {
+    height: auto;
+    min-height: 0;
+    min-width: 0;
+    overflow: visible;
+    padding: 14px;
+  }
+
+  .staff-expenses-card .staff-expense-thumbs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .staff-expenses-card .staff-req-card.type-expense .staff-req-actions {
+    flex-wrap: wrap;
+  }
+
+  .staff-expenses-card .staff-req-card.type-expense .staff-req-actions .staff-text-link {
+    flex: 1 1 100%;
+    margin-right: 0;
+  }
+
+  .staff-expenses-card .staff-req-card.type-expense .staff-req-actions .staff-action-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .staff-pagination {
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .staff-pagination-info {
+    width: 100%;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .staff-pagination-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .staff-pagination-controls .staff-action-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .staff-pagination-page {
+    font-size: 12px;
+    text-align: center;
+  }
 }

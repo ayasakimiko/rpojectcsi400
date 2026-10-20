@@ -1946,8 +1946,10 @@
 }
 
 .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link.active {
-  color: #2563eb;
-  background: transparent;
+  color: #1d4ed8;
+  background: #eef5ff;
+  box-shadow: inset 0 0 0 1px #d6e7ff;
+  font-weight: 700;
 }
 
 .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link.active::after {
@@ -1960,6 +1962,181 @@
 
 .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link:hover:not(.active)::after {
   transform: scaleX(1);
+}
+
+.dashboard-tab-menu-toggle,
+.dashboard-tab-menu-footer {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .dashboard-header .dashboard-logout-btn {
+    display: none;
+  }
+
+  .dashboard-tab-menu {
+    position: sticky;
+    top: 8px;
+    z-index: 30;
+    overflow: hidden;
+    margin-bottom: 10px;
+    border: 1px solid #cfe0f8;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.07);
+  }
+
+  .dashboard-tab-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 0;
+    background: #f8fbff;
+    color: #0f2b52;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .dashboard-tab-menu-toggle:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: -3px;
+  }
+
+  .dashboard-tab-menu-toggle strong {
+    overflow: hidden;
+    margin-left: auto;
+    color: #2563eb;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dashboard-tab-menu-icon {
+    display: grid;
+    gap: 3px;
+    flex: 0 0 auto;
+    width: 16px;
+  }
+
+  .dashboard-tab-menu-icon span {
+    height: 2px;
+    border-radius: 2px;
+    background: #2563eb;
+    transition: transform 0.08s ease-out, opacity 0.08s ease-out;
+  }
+
+  .dashboard-tab-menu.is-open .dashboard-tab-menu-icon span:first-child {
+    transform: translateY(5px) rotate(45deg);
+  }
+
+  .dashboard-tab-menu.is-open .dashboard-tab-menu-icon span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .dashboard-tab-menu.is-open .dashboard-tab-menu-icon span:last-child {
+    transform: translateY(-5px) rotate(-45deg);
+  }
+
+  .dashboard-tab-menu-panel {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #b9d4f5 #f4f8fd;
+    transition: max-height 0.08s ease-out, opacity 0.08s ease-out, visibility 0s linear 0.08s;
+  }
+
+  .dashboard-tab-menu-panel::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .dashboard-tab-menu-panel::-webkit-scrollbar-track {
+    background: #f4f8fd;
+    border-radius: 999px;
+  }
+
+  .dashboard-tab-menu-panel::-webkit-scrollbar-thumb {
+    background: #b9d4f5;
+    border-radius: 999px;
+  }
+
+  .dashboard-tab-menu.is-open .dashboard-tab-menu-panel {
+    max-height: min(440px, calc(100dvh - 72px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    opacity: 1;
+    visibility: visible;
+    border-top: 1px solid #e4edf9;
+    transition: max-height 0.08s ease-out, opacity 0.08s ease-out, visibility 0s;
+  }
+
+  .nav-tabs.dashboard-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px;
+    border: 0;
+  }
+
+  .nav-tabs.dashboard-tabs .nav-item,
+  .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link {
+    width: 100%;
+  }
+
+  .nav-tabs.dashboard-tabs .nav-item:not(:last-child) {
+    padding-bottom: 3px;
+    border-bottom: 1px solid #e8eff9;
+  }
+
+  .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    text-align: left;
+  }
+
+  .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link.active {
+    background: linear-gradient(90deg, #e8f1ff, #f5f9ff);
+    box-shadow: inset 0 0 0 1px #bfdbfe;
+  }
+
+  .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link::after {
+    left: 12px;
+    right: 12px;
+    bottom: 2px;
+    height: 2px;
+    border-radius: 2px;
+  }
+
+  .nav-tabs.dashboard-tabs .nav-link.dashboard-tab-link:hover:not(.active)::after {
+    transform: scaleX(0);
+  }
+
+  .dashboard-tab-menu-footer {
+    display: block;
+    padding: 10px;
+    border-top: 1px solid #e4edf9;
+  }
+
+  .dashboard-tab-menu-footer .dashboard-logout-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .dashboard-tab-menu-panel,
+  .dashboard-tab-menu-icon span {
+    transition: none;
+  }
 }
 
 .dashboard-reminder {
