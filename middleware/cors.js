@@ -1,11 +1,11 @@
 import cors from "cors";
 
-const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173"];
-
+// อนุญาตเฉพาะ origin ที่ระบุใน CLIENT_URL (คั่นด้วย ,) ถ้าไม่ตั้งไว้จะไม่อนุญาต origin ใดเลย
 export function createCorsMiddleware() {
-  const allowedOrigins = process.env.CLIENT_URL
-    ? process.env.CLIENT_URL.split(",").map((origin) => origin.trim())
-    : DEFAULT_ALLOWED_ORIGINS;
+  const allowedOrigins = (process.env.CLIENT_URL || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   return cors({
     origin(origin, callback) {

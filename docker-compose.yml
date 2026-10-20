@@ -7,7 +7,7 @@ x-service-env: &service-env
   DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
   PARKING_CAPACITY: ${PARKING_CAPACITY:-}
   JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-  CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+  CLIENT_URL: ${CLIENT_URL:-}
   RDCW_CLIENT_ID: ${RDCW_CLIENT_ID:-}
   RDCW_CLIENT_SECRET: ${RDCW_CLIENT_SECRET:-}
   NODE_OPTIONS: --max-old-space-size=96 --max-semi-space-size=1
@@ -110,7 +110,7 @@ services:
       DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       PORT: 4000
-      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+      CLIENT_URL: ${CLIENT_URL:-}
       AUTH_SERVICE_URL: http://auth-service:4001
       ROOM_SERVICE_URL: http://room-service:4002
       CUSTOMER_SERVICE_URL: http://customer-service:4003

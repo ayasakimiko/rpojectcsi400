@@ -21,12 +21,14 @@ function copyPublicAssets() {
   }
 }
 
-function backendProxy(target, prefix = '') {
+// keepOrigin: ส่ง Origin ต่อไปให้ server ตรวจกับ CLIENT_URL (ใช้กับ VPS)
+function backendProxy(target, prefix = '', { keepOrigin = false } = {}) {
   return {
     target,
     changeOrigin: true,
     rewrite: (url) => prefix ? url.slice(prefix.length) : url,
     configure(proxy) {
+      if (keepOrigin) return
       proxy.on('proxyReq', (proxyReq) => {
         proxyReq.removeHeader('origin')
       })
@@ -39,9 +41,9 @@ export default defineConfig({
   build: { copyPublicDir: false },
   server: {
     proxy: {
-      '/__api/vps': backendProxy(API_ORIGIN, '/__api/vps'),
+      '/__api/vps': backendProxy(API_ORIGIN, '/__api/vps', { keepOrigin: true }),
       '/__api/local': backendProxy(LOCAL_API_ORIGIN, '/__api/local'),
-      '/api': backendProxy(API_ORIGIN),
+      '/api': backendProxy(API_ORIGIN, '', { keepOrigin: true }),
     },
   },
 })
