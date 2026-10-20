@@ -154,7 +154,7 @@ router.get("/logs/audit", async (req, res) => {
       LEFT JOIN Admin a ON al.actor_role = 'Admin' AND a.id = al.actor_id
       LEFT JOIN Owner o ON al.actor_role = 'Owner' AND o.id = al.actor_id`;
     const countJoins = search ? joins : "";
-    const [[countRows], [logs]] = await Promise.all([
+    const [[countRows], [logs], [summaryRows]] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS total FROM AuditLog al ${countJoins} ${whereClause}`, params),
       pool.query(
       `SELECT al.id, al.actor_id, al.actor_role, al.method, al.endpoint, al.status_code, al.ip_address, al.created_at,
@@ -164,8 +164,16 @@ router.get("/logs/audit", async (req, res) => {
        ORDER BY al.created_at DESC, al.id DESC LIMIT ? OFFSET ?`,
         [...params, pageSize, offset],
       ),
+      pool.query(
+        `SELECT COUNT(*) AS total, SUM(created_at >= CURDATE()) AS today,
+                COUNT(DISTINCT actor_role, actor_id) AS actors, SUM(method = 'DELETE') AS deletes
+         FROM AuditLog`,
+      ),
     ]);
-    return res.json({ logs, total: countRows[0].total, page, pageSize });
+    const summary = Object.fromEntries(
+      Object.entries(summaryRows[0]).map(([key, value]) => [key, Number(value) || 0]),
+    );
+    return res.json({ logs, total: countRows[0].total, page, pageSize, summary });
   } catch (error) {
     console.error("Owner fetch audit log error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดประวัติการใช้งานได้" });

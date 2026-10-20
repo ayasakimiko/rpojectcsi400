@@ -1438,9 +1438,42 @@ const STAT_ICON_PATHS = {
   electricity: (
     <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
   ),
+  staff: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="M5 17h14v-5l-2-5H7l-2 5v5Z" />
+      <path d="M5 12h14" />
+      <circle cx="8" cy="17" r="2" />
+      <circle cx="16" cy="17" r="2" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z" />
+      <path d="M12 8v5M12 16h.01" />
+    </>
+  ),
+  megaphone: (
+    <>
+      <path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1Z" />
+      <path d="M17 9a4 4 0 0 1 0 6" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5M12 7v5l3 2" />
+    </>
+  ),
 }
 
-const OWNER_TILE_TONES = { blue: 'blue', green: 'green', purple: 'violet', orange: 'orange', red: 'red' }
+const OWNER_TILE_TONES = { blue: 'blue', green: 'green', purple: 'violet', orange: 'orange', red: 'red', teal: 'teal', indigo: 'indigo', slate: 'slate' }
 
 function StatIcon({ name }) {
   return (
@@ -1735,7 +1768,7 @@ function describeAuditActivity(log) {
   return { action: 'อัปเดตข้อมูล', detail: recordLabel }
 }
 
-function OwnerAuditLog() {
+function OwnerAuditLog({ onSummaryChange }) {
   const [result, setResult] = useState({ logs: [], total: 0, page: 1, pageSize: 20 })
   const [page, setPage] = useState(1)
   const [role, setRole] = useState('all')
@@ -1769,6 +1802,10 @@ function OwnerAuditLog() {
     })
     return () => { cancelled = true }
   }, [page, role, method, appliedSearch])
+
+  useEffect(() => {
+    if (result.summary) onSummaryChange?.(result.summary)
+  }, [result.summary, onSummaryChange])
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize))
   return (
@@ -1906,7 +1943,13 @@ function OwnerMain() {
   const [financePeriodDetail, setFinancePeriodDetail] = useState(null)
   const [roomsSection, setRoomsSection] = useState('overview')
   const [announcements, setAnnouncements] = useState([])
+  const [announcementsLoadedAt, setAnnouncementsLoadedAt] = useState(0)
   const [announcementFocus, setAnnouncementFocus] = useState(null)
+  const [tabSummaries, setTabSummaries] = useState({})
+  const summaryReporters = useMemo(() => Object.fromEntries(['parking', 'safety', 'audit'].map((tab) => [
+    tab,
+    (summary) => setTabSummaries((current) => ({ ...current, [tab]: summary })),
+  ])), [])
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifPage, setNotifPage] = useState(1)
   const notifRef = useRef(null)
@@ -1994,7 +2037,10 @@ function OwnerMain() {
 
   const loadAnnouncements = useCallback(() => axios
     .get('/api/owner/announcements', { headers: getAuthHeaders() })
-    .then(({ data }) => setAnnouncements(data.announcements || []))
+    .then(({ data }) => {
+      setAnnouncements(data.announcements || [])
+      setAnnouncementsLoadedAt(Date.now() / 1000)
+    })
     .catch(() => {}), [])
 
   useEffect(() => {
@@ -2959,6 +3005,53 @@ function OwnerMain() {
       { key: 'net', tone: netProfit < 0 ? 'red' : 'green', icon: 'profit', label: netProfit < 0 ? 'ขาดทุนสุทธิ' : 'กำไรสุทธิ', value: formatSignedCurrency(netProfit), hint: 'รายรับ - รายจ่าย' },
       { key: 'margin', tone: netProfit < 0 ? 'red' : 'purple', icon: 'margin', label: 'อัตรากำไร', value: formatPercent(profitMargin), hint: 'กำไรสุทธิเทียบกับรายรับรวม' },
     ],
+    staff: [
+      { key: 'staff-all', tone: 'blue', icon: 'staff', label: 'พนักงานทั้งหมด', value: `${staffCounts.all} คน`, hint: `ใช้งานอยู่ ${staffCounts.all - staffCounts.suspended} คน` },
+      { key: 'staff-staff', tone: 'teal', icon: 'staff', label: 'ตำแหน่ง Staff', value: `${staffCounts.Staff} คน`, hint: 'เจ้าหน้าที่ดูแลหอพัก' },
+      { key: 'staff-admin', tone: 'purple', icon: 'staff', label: 'ตำแหน่ง Admin', value: `${staffCounts.Admin} คน`, hint: 'ผู้ดูแลระบบ' },
+      { key: 'staff-suspended', tone: staffCounts.suspended > 0 ? 'red' : 'slate', icon: 'overdue', label: 'ระงับใช้งาน', value: `${staffCounts.suspended} คน`, hint: 'บัญชีที่ถูกระงับสิทธิ์' },
+    ],
+    parking: (() => {
+      const summary = tabSummaries.parking
+      const show = (value) => (summary ? `${value} คัน` : '—')
+      return [
+        { key: 'parking-parked', tone: 'green', icon: 'car', label: 'กำลังจอด', value: show(summary?.parked), hint: 'รถที่อนุมัติและยังอยู่ในเวลาจอด' },
+        { key: 'parking-pending', tone: summary?.pending > 0 ? 'orange' : 'slate', icon: 'overdue', label: 'รออนุมัติ', value: show(summary?.pending), hint: 'คำขอที่ยังไม่ได้ตรวจสอบ' },
+        { key: 'parking-expired', tone: 'indigo', icon: 'history', label: 'หมดเวลาจอด', value: show(summary?.expired), hint: 'อนุมัติแล้วแต่เลยเวลาที่ขอ' },
+        { key: 'parking-total', tone: 'blue', icon: 'car', label: 'คำขอทั้งหมด', value: summary ? `${summary.total} รายการ` : '—', hint: 'รวมทุกสถานะ' },
+      ]
+    })(),
+    safety: (() => {
+      const summary = tabSummaries.safety
+      const show = (value) => (summary ? `${value} รายการ` : '—')
+      return [
+        { key: 'safety-pending', tone: summary?.pending > 0 ? 'orange' : 'slate', icon: 'shield', label: 'รอตรวจสอบ', value: show(summary?.pending), hint: summary ? `จากทั้งหมด ${summary.total} รายการ` : 'รายงานที่ยังไม่รับเรื่อง' },
+        { key: 'safety-urgent', tone: summary?.urgent > 0 ? 'red' : 'slate', icon: 'overdue', label: 'เหตุฉุกเฉิน', value: show(summary?.urgent), hint: 'ระดับฉุกเฉินที่ยังรอดำเนินการ' },
+        { key: 'safety-reviewed', tone: 'teal', icon: 'shield', label: 'ตรวจสอบแล้ว', value: show(summary?.reviewed), hint: 'ดำเนินการเรียบร้อย' },
+        { key: 'safety-cancelled', tone: 'indigo', icon: 'history', label: 'ยกเลิกแล้ว', value: show(summary?.cancelled), hint: 'รายงานที่ถูกยกเลิก' },
+      ]
+    })(),
+    announcements: (() => {
+      const warningCount = announcements.filter((item) => item.tone === 'warning').length
+      const popupCount = announcements.filter((item) => item.popup_active).length
+      const expiringCount = announcements.filter((item) => item.expires_epoch && Number(item.expires_epoch) - announcementsLoadedAt <= 7 * 24 * 60 * 60).length
+      return [
+        { key: 'ann-total', tone: 'blue', icon: 'megaphone', label: 'ประกาศที่เผยแพร่', value: `${announcements.length} ประกาศ`, hint: 'ประกาศที่ยังไม่หมดอายุ' },
+        { key: 'ann-warning', tone: warningCount > 0 ? 'orange' : 'slate', icon: 'overdue', label: 'ประกาศแจ้งเตือน', value: `${warningCount} ประกาศ`, hint: 'ประกาศระดับแจ้งเตือน' },
+        { key: 'ann-popup', tone: 'purple', icon: 'megaphone', label: 'กำลังแสดงป๊อปอัป', value: `${popupCount} ประกาศ`, hint: 'แสดงให้ผู้เช่าเห็นทันที' },
+        { key: 'ann-expiring', tone: expiringCount > 0 ? 'red' : 'teal', icon: 'history', label: 'ใกล้หมดอายุ', value: `${expiringCount} ประกาศ`, hint: 'หมดอายุภายใน 7 วัน' },
+      ]
+    })(),
+    audit: (() => {
+      const summary = tabSummaries.audit
+      const show = (value) => (summary ? `${Number(value).toLocaleString('th-TH')} รายการ` : '—')
+      return [
+        { key: 'audit-total', tone: 'blue', icon: 'history', label: 'รายการทั้งหมด', value: show(summary?.total), hint: 'การเปลี่ยนแปลงข้อมูลที่บันทึกไว้' },
+        { key: 'audit-today', tone: 'green', icon: 'profit', label: 'วันนี้', value: show(summary?.today), hint: 'กิจกรรมตั้งแต่เที่ยงคืน' },
+        { key: 'audit-actors', tone: 'purple', icon: 'staff', label: 'ผู้ใช้งานที่มีกิจกรรม', value: summary ? `${Number(summary.actors).toLocaleString('th-TH')} คน` : '—', hint: 'ทุกบทบาทในระบบ' },
+        { key: 'audit-deletes', tone: summary?.deletes > 0 ? 'red' : 'slate', icon: 'expense', label: 'การลบข้อมูล', value: show(summary?.deletes), hint: 'รายการที่ถูกลบออกจากระบบ' },
+      ]
+    })(),
   }[activeTab]
 
   const closeNotifPanel = () => setNotifClosing(true)
@@ -3262,11 +3355,11 @@ function OwnerMain() {
         )}
 
         {activeTab === 'parking' && (
-          <StaffResidentVisitsTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
+          <StaffResidentVisitsTab onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
         )}
 
         {activeTab === 'safety' && (
-          <StaffSafetyTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} showSummary />
+          <StaffSafetyTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} onSummaryChange={summaryReporters.safety} />
         )}
 
         {isLoading && <div className="owner-loading-box">กำลังโหลดข้อมูล...</div>}
@@ -3791,7 +3884,7 @@ function OwnerMain() {
           <OwnerUtilityReceipts key={`${paymentFilter.from}:${paymentFilter.to}`} from={paymentFilter.from} to={paymentFilter.to} {...utilityReceipts} />
         )}
 
-        {!isLoading && activeTab === 'audit' && <OwnerAuditLog />}
+        {!isLoading && activeTab === 'audit' && <OwnerAuditLog onSummaryChange={summaryReporters.audit} />}
 
         {!isLoading && activeTab === 'announcements' && (
           <AnnouncementBoard

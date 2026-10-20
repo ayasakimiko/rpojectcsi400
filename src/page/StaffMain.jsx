@@ -4357,7 +4357,7 @@ function getStaffVisitTitle(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || '-' : item.guest_name || '-'
 }
 
-export function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
+export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, focusId }) {
   const pendingFocusRef = useRef(focusId)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -4444,6 +4444,11 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, focusId }) {
   const pageItems = filtered.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
   const pendingCount = items.filter((item) => item.status === 'pending').length
   const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
+  const expiredCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'expired').length
+
+  useEffect(() => {
+    if (!loading) onSummaryChange?.({ total: items.length, pending: pendingCount, parked: parkedCount, expired: expiredCount })
+  }, [onSummaryChange, loading, items.length, pendingCount, parkedCount, expiredCount])
 
   const openCreate = () => {
     setEditing(null)
@@ -5319,7 +5324,7 @@ const SAFETY_STATUS = {
 const EMPTY_SAFETY_FORM = { incidentType: 'security', description: '', roomNumber: '', photos: [] }
 const STAFF_SAFETY_MAX_PHOTOS = 4
 
-export function StaffSafetyTab({ rooms, onCountChange, focusId, showSummary = false }) {
+export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId }) {
   const pendingFocusRef = useRef(focusId)
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -5385,6 +5390,13 @@ export function StaffSafetyTab({ rooms, onCountChange, focusId, showSummary = fa
   const pageItems = filtered.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
 
   const pendingCount = incidents.filter((item) => item.status === 'pending').length
+  const urgentCount = incidents.filter((item) => item.status === 'pending' && item.severity === 'urgent').length
+  const reviewedCount = incidents.filter((item) => item.status === 'reviewed').length
+  const cancelledCount = incidents.filter((item) => item.status === 'cancelled').length
+
+  useEffect(() => {
+    if (!loading) onSummaryChange?.({ total: incidents.length, pending: pendingCount, urgent: urgentCount, reviewed: reviewedCount, cancelled: cancelledCount })
+  }, [onSummaryChange, loading, incidents.length, pendingCount, urgentCount, reviewedCount, cancelledCount])
 
   const openReview = (item) => {
     setReviewNote('')
@@ -5489,28 +5501,6 @@ export function StaffSafetyTab({ rooms, onCountChange, focusId, showSummary = fa
           + แจ้งเหตุ
         </button>
       </div>
-
-      {showSummary && (
-        <div className="staff-summary-tiles staff-safety-inline-summary">
-          {[
-            { key: 'pending', label: 'รอตรวจสอบ', value: incidents.filter((item) => item.status === 'pending').length, tone: 'red' },
-            { key: 'urgent', label: 'เหตุฉุกเฉิน', value: incidents.filter((item) => item.status === 'pending' && item.severity === 'urgent').length, tone: 'red' },
-            { key: 'normal', label: 'เหตุทั่วไป', value: incidents.filter((item) => item.status === 'pending' && item.severity !== 'urgent').length, tone: 'blue' },
-            { key: 'reviewed', label: 'ตรวจสอบแล้ว', value: incidents.filter((item) => item.status === 'reviewed').length, tone: 'teal' },
-            { key: 'cancelled', label: 'ยกเลิกแล้ว', value: incidents.filter((item) => item.status === 'cancelled').length, tone: 'indigo' },
-          ].map((tile) => (
-            <div key={tile.key} className={`staff-summary-tile is-${tile.tone}${tile.value === 0 ? ' is-zero' : ''}${tile.key === 'pending' && tile.value > 0 ? ' is-alert' : ''}`}>
-              <span className="staff-summary-tile-icon">
-                <StaffShieldIcon />
-              </span>
-              <span className="staff-summary-tile-text">
-                <span className="staff-summary-tile-label">{tile.label}</span>
-                <strong className="staff-summary-tile-value">{tile.value}</strong>
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
 
       <StaffFilterPanel
         segments={[
