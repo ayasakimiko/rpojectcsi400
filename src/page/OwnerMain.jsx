@@ -1732,6 +1732,15 @@ const AUDIT_RESOURCES = [
   ['profile', 'ข้อมูลส่วนตัว'],
 ]
 
+const AUDIT_ROLE_LABELS = { Customer: 'ลูกค้า', Staff: 'พนักงาน', Admin: 'แอดมิน', Owner: 'เจ้าของ' }
+
+const AUDIT_METHOD_BADGES = {
+  POST: { label: 'สร้าง', tone: 'create' },
+  PUT: { label: 'แก้ไข', tone: 'update' },
+  PATCH: { label: 'แก้ไข', tone: 'update' },
+  DELETE: { label: 'ลบ', tone: 'delete' },
+}
+
 function describeAuditActivity(log) {
   const segments = String(log.endpoint || '').split('?')[0].split('/').filter(Boolean)
   const method = String(log.method || '').toUpperCase()
@@ -1817,14 +1826,37 @@ function OwnerAuditLog({ onSummaryChange }) {
       {error && <div className="owner-alert owner-alert-danger" role="alert">{error}</div>}
       <div className="owner-table-wrap owner-audit-table-wrap">
         <table className="owner-table owner-audit-table">
+          <colgroup><col className="owner-audit-col-time" /><col className="owner-audit-col-actor" /><col /></colgroup>
           <thead><tr><th>วัน-เวลา</th><th>ผู้ทำรายการ</th><th>กิจกรรม</th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan="3" className="owner-empty-row">กำลังโหลด...</td></tr> : result.logs.length ? result.logs.map((log) => {
               const activity = describeAuditActivity(log)
+              const createdAt = new Date(log.created_at)
+              const actorName = log.actor_name || `${log.actor_role} #${log.actor_id}`
+              const method = AUDIT_METHOD_BADGES[String(log.method || '').toUpperCase()] || AUDIT_METHOD_BADGES.PUT
               return <tr key={log.id}>
-                <td>{new Date(log.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-                <td>{log.actor_name || `${log.actor_role} #${log.actor_id}`}<small>{log.actor_role}</small></td>
-                <td><strong>{activity.action}</strong><small>{activity.detail}</small></td>
+                <td className="owner-audit-time">
+                  <strong>{createdAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+                  <small>{createdAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</small>
+                </td>
+                <td>
+                  <div className="owner-audit-actor">
+                    <span className={`owner-audit-avatar is-${String(log.actor_role || '').toLowerCase()}`} aria-hidden="true">{actorName.trim().charAt(0) || '?'}</span>
+                    <span className="owner-audit-actor-text">
+                      <strong title={actorName}>{actorName}</strong>
+                      <span className={`owner-audit-role is-${String(log.actor_role || '').toLowerCase()}`}>{AUDIT_ROLE_LABELS[log.actor_role] || log.actor_role}</span>
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div className="owner-audit-activity">
+                    <span className={`owner-audit-method is-${method.tone}`}>{method.label}</span>
+                    <span className="owner-audit-activity-text">
+                      <strong>{activity.action}</strong>
+                      <small>{activity.detail}</small>
+                    </span>
+                  </div>
+                </td>
               </tr>
             }) : <tr><td colSpan="3" className="owner-empty-row">ยังไม่มีประวัติการใช้งาน</td></tr>}
           </tbody>
