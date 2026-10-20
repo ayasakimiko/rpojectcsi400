@@ -1759,6 +1759,8 @@ const AUDIT_FIELD_LABELS = {
   water_meter: 'มิเตอร์น้ำ', electricity_meter: 'มิเตอร์ไฟ', full_name: 'ชื่อ-นามสกุล', room_preference: 'ห้องที่ต้องการ',
   desired_move_in_date: 'วันที่ต้องการเข้าพัก', rental_start_date: 'วันเริ่มเช่า', move_in_date: 'วันย้ายเข้า',
   preferred_move_date: 'วันที่ต้องการย้าย', move_reason: 'เหตุผลการย้าย', requestType: 'ประเภทคำขอ', request_type: 'ประเภทคำขอ',
+  paidItems: 'รายการที่ชำระ', totalAmount: 'ยอดรวม', result: 'ผลการดำเนินการ',
+  electricity_amount: 'ค่าไฟ (บาท)', water_amount: 'ค่าน้ำ (บาท)',
   recipient_name: 'ชื่อผู้รับ', carrier: 'บริษัทขนส่ง', tracking_number: 'เลขพัสดุ', floor: 'ชั้น', room_type: 'ประเภทห้อง',
 }
 
@@ -1771,8 +1773,11 @@ const AUDIT_VALUE_LABELS = {
   cash: 'เงินสด', transfer: 'โอนเงิน', promptpay: 'พร้อมเพย์',
 }
 
-function formatAuditFieldValue(value) {
+const AUDIT_MONEY_KEYS = new Set(['amount', 'totalAmount', 'price', 'rent', 'monthly_rent', 'deposit', 'electricity_amount', 'water_amount'])
+
+function formatAuditFieldValue(value, key) {
   if (typeof value === 'boolean') return value ? 'ใช่' : 'ไม่ใช่'
+  if (AUDIT_MONEY_KEYS.has(key) && value !== '' && Number.isFinite(Number(value))) return `${Number(value).toLocaleString('th-TH')} บาท`
   if (typeof value === 'number') return value.toLocaleString('th-TH')
   const text = String(value)
   if (AUDIT_VALUE_LABELS[text]) return AUDIT_VALUE_LABELS[text]
@@ -1814,7 +1819,7 @@ function OwnerAuditDetailModal({ log, isClosing, onClose }) {
   const roleKey = String(log.actor_role || '').toLowerCase()
   const details = parseAuditDetails(log)
   const fieldRows = details.fields
-    .map(([key, value]) => ({ key, label: AUDIT_FIELD_LABELS[key] || key, value: formatAuditFieldValue(value) }))
+    .map(([key, value]) => ({ key, label: AUDIT_FIELD_LABELS[key] || key, value: formatAuditFieldValue(value, key) }))
     .sort((a, b) => Number(a.value.length > 40) - Number(b.value.length > 40))
   const createdAt = new Date(log.created_at)
   const target = activity.detail && !activity.action.endsWith(activity.detail) ? ` (${activity.detail})` : ''

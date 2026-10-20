@@ -14,6 +14,7 @@ import {
   parseWaitingListInput,
 } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
+import { recordAuditFields } from "../middleware/auditDetails.js";
 import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
@@ -760,6 +761,12 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
     }
 
     await connection.commit();
+    recordAuditFields({
+      roomNumber: roomNumberValue,
+      paidItems: currentDue.items.map((item) => `${item.label} ${Number(item.amount).toLocaleString("th-TH")} บาท`).join(", "),
+      totalAmount: currentDue.amount,
+      paymentMethod: "cash",
+    });
     return res.status(201).json({ message: "บันทึกการเก็บเงินสำเร็จ" });
   } catch (error) {
     if (connection) await connection.rollback();

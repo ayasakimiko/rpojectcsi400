@@ -17,6 +17,13 @@ export function recordAuditImages(urls) {
   auditContext.getStore()?.images.push(...urls.filter((url) => typeof url === "string"));
 }
 
+// ให้ route เพิ่มข้อมูลที่ server คำนวณเอง เช่น ยอดเงินที่เก็บ เมื่อคำขอไม่ได้ส่งข้อมูลนั้นมา
+export function recordAuditFields(fields) {
+  const store = auditContext.getStore();
+  if (!store) return;
+  for (const [key, value] of Object.entries(fields)) store.fields.push([key, value]);
+}
+
 function collectUploadUrls(value, found, depth = 0) {
   if (depth > 4 || found.length >= MAX_IMAGES * 2) return;
   if (typeof value === "string") {
@@ -41,16 +48,20 @@ function toFieldValue(value) {
   return null;
 }
 
-export function buildAuditDetails(body, extraImages = []) {
+export function buildAuditDetails(body, extraImages = [], { extraFields = [], resultMessage = null } = {}) {
   const fields = [];
-  if (body && typeof body === "object" && !Array.isArray(body)) {
-    for (const [key, value] of Object.entries(body)) {
-      if (fields.length >= MAX_FIELDS) break;
-      if (HIDDEN_KEY.test(key)) continue;
-      const fieldValue = toFieldValue(value);
-      if (fieldValue !== null) fields.push([key, fieldValue]);
-    }
+  const entries = [
+    ...(body && typeof body === "object" && !Array.isArray(body) ? Object.entries(body) : []),
+    ...extraFields,
+  ];
+  for (const [key, value] of entries) {
+    if (fields.length >= MAX_FIELDS) break;
+    if (HIDDEN_KEY.test(key) || fields.some(([existing]) => existing === key)) continue;
+    const fieldValue = toFieldValue(value);
+    if (fieldValue !== null) fields.push([key, fieldValue]);
   }
+  const resultText = toFieldValue(resultMessage);
+  if (fields.length === 0 && resultText !== null) fields.push(["result", resultText]);
   const found = [...extraImages];
   collectUploadUrls(body, found);
   const images = [...new Set(found)].slice(0, MAX_IMAGES);
@@ -91,14 +102,22 @@ function uploadedFileUrl(file) {
 // ใช้หลัง express.json() เพื่อให้รูปที่บันทึกในคำขอเดียวกันถูกเก็บไว้ในบริบทของคำขอนั้น
 export function auditDetailsMiddleware(req, res, next) {
   if (!MUTATING_METHODS.has(req.method)) return next();
-  const store = { images: [] };
+  const store = { images: [], fields: [], resultMessage: null };
+  const json = res.json;
+  res.json = function jsonWithAuditMessage(body) {
+    if (body && typeof body.message === "string") store.resultMessage = body.message;
+    return json.call(this, body);
+  };
   const writeHead = res.writeHead;
   res.writeHead = function writeHeadWithAuditDetails(...args) {
     if (!res.headersSent) {
       try {
         const files = [req.file, ...(Array.isArray(req.files) ? req.files : [])];
         const fileUrls = files.map(uploadedFileUrl).filter(Boolean);
-        const encoded = encodeAuditDetails(buildAuditDetails(req.body, [...store.images, ...fileUrls]));
+        const encoded = encodeAuditDetails(buildAuditDetails(req.body, [...store.images, ...fileUrls], {
+          extraFields: store.fields,
+          resultMessage: store.resultMessage,
+        }));
         if (encoded) res.setHeader(AUDIT_DETAILS_HEADER, encoded);
       } catch (error) {
         console.error("Audit details build error:", error);
