@@ -877,6 +877,23 @@ function OwnerOccupancyLogDialog({ eventId, onClose }) {
   )
 }
 
+function OwnerModalRowSummary({ title, expense = false }) {
+  return (
+    <div className="owner-modal-row-summary">
+      <span className="owner-modal-row-avatar" aria-hidden="true">{expense ? <StatIcon name="expense" /> : <OwnerListIcon name="user" size={20} />}</span>
+      <strong>{title}</strong>
+    </div>
+  )
+}
+
+function OwnerModalRowToggle({ expanded, onToggle }) {
+  return (
+    <button type="button" className="owner-modal-row-toggle" aria-expanded={expanded} onClick={(event) => { event.stopPropagation(); onToggle() }}>
+      {expanded ? 'ย่อข้อมูล' : 'ดูเพิ่มเติม'} <span aria-hidden="true">⌄</span>
+    </button>
+  )
+}
+
 function OwnerFinancePeriodDialog({ period, range, onClose }) {
   const [tab, setTab] = useState('income')
   const [page, setPage] = useState(1)
@@ -891,6 +908,7 @@ function OwnerFinancePeriodDialog({ period, range, onClose }) {
   const [response, setResponse] = useState(null)
   const [retry, setRetry] = useState(0)
   const [paymentId, setPaymentId] = useState(null)
+  const [expandedRowKey, setExpandedRowKey] = useState(null)
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = paymentId === null ? onClose : () => {} }, [onClose, paymentId])
   const month = period.period.length === 7
@@ -947,16 +965,19 @@ function OwnerFinancePeriodDialog({ period, range, onClose }) {
         </div>
         <div className={`owner-income-dialog-body owner-fp-body${data && !items.length ? ' is-empty' : ''}`}>
           {!current ? <div className="owner-empty" role="status">กำลังโหลดรายการ...</div> : current.error ? <div className="owner-income-error" role="alert"><p>{current.error}</p><button type="button" onClick={() => setRetry((value) => value + 1)}>ลองอีกครั้ง</button></div> : (
-            <><table className="owner-finance-period-table">
+            <><table className="owner-finance-period-table owner-modal-responsive-table">
               <colgroup><col className="is-date" /><col className="is-type" /><col className="is-person" /><col /><col className="is-amount" /></colgroup>
               <thead><tr><th scope="col">วันที่ / เลขรายการ</th><th scope="col">ประเภท / หมวดหมู่</th><th scope="col">{tab === 'income' ? 'ห้อง / ผู้ชำระ' : 'บันทึกโดย'}</th><th scope="col">รายละเอียด</th><th scope="col">จำนวนเงิน (บาท)</th></tr></thead><tbody>
               {items.map((item) => (
-                <tr key={item.id} className={tab === 'income' ? 'owner-fp-income-row' : ''} onClick={tab === 'income' ? () => setPaymentId(item.id) : undefined}>
-                  <td><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(tab === 'income' ? item.payment_date : item.expense_date)}</strong></span><span className="owner-il-id">รายการ #{item.id}</span></td>
-                  <td><span className="owner-il-type" style={{ '--type-tone': tab === 'income' ? getPaymentTypeColor(item.type) : '#d97706' }}>{tab === 'income' ? <PaymentTypeIcon type={item.type} /> : <StatIcon name="expense" />}{tab === 'income' ? formatPaymentType(item.type) : item.category || 'ไม่ระบุ'}</span></td>
-                  <td>{tab === 'income' ? <div className="owner-il-person"><span className="owner-il-room">{item.room_number || '—'}</span><div><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><span>ห้อง {item.room_number || '—'}</span></div></div> : <span className="owner-fp-recorder"><OwnerListIcon name="user" /><strong>{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</strong></span>}</td>
-                  <td><span className={`owner-il-note${(tab === 'income' ? item.note : item.description) ? '' : ' is-empty'}`}>{(tab === 'income' ? item.note : item.description) || 'ไม่มีรายละเอียดเพิ่มเติม'}</span></td>
-                  <td><strong className={`owner-il-amount${tab === 'expense' ? ' owner-fp-expense-amount' : ''}`}>฿{currency(item.amount)}</strong>{tab === 'income' && <button type="button" className="owner-ur-view owner-fp-payment-link" onClick={(event) => { event.stopPropagation(); setPaymentId(item.id) }}><OwnerListIcon name="receipt" size={13} />รายละเอียด / สลิป <span aria-hidden="true">›</span></button>}</td>
+                <tr key={item.id} className={`owner-modal-data-row${tab === 'income' ? ' owner-fp-income-row' : ''}${expandedRowKey === `${tab}-${item.id}` ? ' is-expanded' : ''}`} onClick={tab === 'income' ? () => { if (!window.matchMedia('(max-width: 768px)').matches) setPaymentId(item.id) } : undefined}>
+                  <td>
+                    <OwnerModalRowSummary title={tab === 'income' ? `${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ' : item.category || 'รายจ่าย'} expense={tab === 'expense'} />
+                    <div className="owner-modal-row-date" data-label="วันที่ / เลขรายการ"><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(tab === 'income' ? item.payment_date : item.expense_date)}</strong></span><span className="owner-il-id">รายการ #{item.id}</span></div>
+                  </td>
+                  <td data-label="ประเภท / หมวดหมู่"><span className="owner-il-type" style={{ '--type-tone': tab === 'income' ? getPaymentTypeColor(item.type) : '#d97706' }}>{tab === 'income' ? <PaymentTypeIcon type={item.type} /> : <StatIcon name="expense" />}{tab === 'income' ? formatPaymentType(item.type) : item.category || 'ไม่ระบุ'}</span></td>
+                  <td data-label={tab === 'income' ? 'ห้อง' : 'บันทึกโดย'}>{tab === 'income' ? <div className="owner-il-person"><span className="owner-il-room">{item.room_number || '—'}</span><div><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><span>ห้อง {item.room_number || '—'}</span></div></div> : <span className="owner-fp-recorder"><OwnerListIcon name="user" /><strong>{item.recorded_by_name || 'ไม่ระบุผู้บันทึก'}</strong></span>}</td>
+                  <td data-label="รายละเอียด"><span className={`owner-il-note${(tab === 'income' ? item.note : item.description) ? '' : ' is-empty'}`}>{(tab === 'income' ? item.note : item.description) || 'ไม่มีรายละเอียดเพิ่มเติม'}</span></td>
+                  <td data-label="จำนวนเงิน (บาท)"><strong className={`owner-il-amount${tab === 'expense' ? ' owner-fp-expense-amount' : ''}`}>฿{currency(item.amount)}</strong>{tab === 'income' && <button type="button" className="owner-ur-view owner-fp-payment-link" onClick={(event) => { event.stopPropagation(); setPaymentId(item.id) }}><OwnerListIcon name="receipt" size={13} />รายละเอียด / สลิป <span aria-hidden="true">›</span></button>}<OwnerModalRowToggle expanded={expandedRowKey === `${tab}-${item.id}`} onToggle={() => setExpandedRowKey((current) => current === `${tab}-${item.id}` ? null : `${tab}-${item.id}`)} /></td>
                 </tr>
               ))}
             </tbody></table>
@@ -1038,6 +1059,7 @@ function OwnerIncomeItemsDialog({ initialType, types, range, onClose }) {
   const [retry, setRetry] = useState(0)
   const [response, setResponse] = useState(null)
   const [paymentId, setPaymentId] = useState(null)
+  const [expandedRowId, setExpandedRowId] = useState(null)
   const requestKey = JSON.stringify({ ...filters, month: range.month, year: range.year, retry })
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = paymentId === null ? onClose : () => {} }, [onClose, paymentId])
@@ -1091,7 +1113,7 @@ function OwnerIncomeItemsDialog({ initialType, types, range, onClose }) {
               </button>
             </div>
           ) : (
-            <table className="owner-income-ledger">
+            <table className="owner-income-ledger owner-modal-responsive-table">
               <colgroup><col className="is-date" /><col className="is-type" /><col className="is-person" /><col /><col className="is-amount" /></colgroup>
               <thead><tr>
                 <th scope="col"><span className="owner-il-heading"><OwnerListIcon name="calendar" />วันที่รับชำระ</span></th>
@@ -1101,12 +1123,15 @@ function OwnerIncomeItemsDialog({ initialType, types, range, onClose }) {
                 <th scope="col"><span className="owner-il-heading is-amount">ยอดรับชำระ <small>(บาท)</small></span></th>
               </tr></thead><tbody>
               {data.items.map((item) => (
-                <tr key={item.id} className="owner-il-clickable" onClick={() => setPaymentId(item.id)}>
-                  <td><button type="button" className="owner-il-open" onClick={(event) => { event.stopPropagation(); setPaymentId(item.id) }} aria-label={`ดูรายละเอียดการชำระเงินรายการ ${item.id}`}><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(item.payment_date)}</strong></span><span className="owner-il-id">รายการ #{item.id} · ดูรายละเอียด ›</span></button></td>
-                  <td><span className="owner-il-type" style={{ '--type-tone': getPaymentTypeColor(item.type) }}><PaymentTypeIcon type={item.type} />{formatPaymentType(item.type)}</span></td>
-                  <td><div className="owner-il-person"><span className="owner-il-room">{item.room_number || '—'}</span><div><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><span>ห้อง {item.room_number || '—'}</span></div></div></td>
-                  <td><span className={`owner-il-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</span></td>
-                  <td><strong className="owner-il-amount">{currency(item.amount)}</strong><span className="owner-il-status"><i aria-hidden="true" />ชำระแล้ว</span></td>
+                <tr key={item.id} className={`owner-il-clickable owner-modal-data-row${expandedRowId === item.id ? ' is-expanded' : ''}`} onClick={() => { if (!window.matchMedia('(max-width: 768px)').matches) setPaymentId(item.id) }}>
+                  <td>
+                    <OwnerModalRowSummary title={`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'} />
+                    <div className="owner-modal-row-date" data-label="วันที่รับชำระ"><button type="button" className="owner-il-open" onClick={(event) => { event.stopPropagation(); setPaymentId(item.id) }} aria-label={`ดูรายละเอียดการชำระเงินรายการ ${item.id}`}><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(item.payment_date)}</strong></span><span className="owner-il-id">รายการ #{item.id} · ดูรายละเอียด ›</span></button></div>
+                  </td>
+                  <td data-label="ประเภทรายรับ"><span className="owner-il-type" style={{ '--type-tone': getPaymentTypeColor(item.type) }}><PaymentTypeIcon type={item.type} />{formatPaymentType(item.type)}</span></td>
+                  <td data-label="ห้อง"><div className="owner-il-person"><span className="owner-il-room">{item.room_number || '—'}</span><div><strong>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || 'ไม่ระบุชื่อผู้ชำระ'}</strong><span>ห้อง {item.room_number || '—'}</span></div></div></td>
+                  <td data-label="หมายเหตุ"><span className={`owner-il-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</span></td>
+                  <td data-label="ยอดรับชำระ (บาท)"><strong className="owner-il-amount">{currency(item.amount)}</strong><span className="owner-il-status"><i aria-hidden="true" />ชำระแล้ว</span><OwnerModalRowToggle expanded={expandedRowId === item.id} onToggle={() => setExpandedRowId((current) => current === item.id ? null : item.id)} /></td>
                 </tr>
               ))}
               {!data.items.length && <tr><td colSpan={5} className="owner-empty-row">ไม่พบรายการตามตัวกรอง</td></tr>}
@@ -4017,20 +4042,20 @@ function OwnerMain() {
                               }
                             }}
                           >
-                            <td>
+                            <td data-label="ช่วงเวลา">
                               <span className="owner-oc-period">
                                 <OwnerListIcon name="calendar" size={14} />
                                 {item.periodLabel}
                               </span>
                             </td>
                             {[
-                              { key: 'occupied', tone: 'blue', icon: 'user', value: item.occupied, unit: 'ห้อง' },
-                              { key: 'vacant', tone: 'green', icon: 'door', value: item.vacant, unit: 'ห้อง' },
-                              { key: 'total', tone: 'slate', icon: 'grid', value: item.total, unit: 'ห้อง' },
-                              { key: 'in', tone: 'teal', icon: 'moveIn', value: item.moveIns, unit: 'ครั้ง' },
-                              { key: 'out', tone: 'orange', icon: 'moveOut', value: item.moveOuts, unit: 'ครั้ง' },
+                              { key: 'occupied', label: 'มีผู้พัก', tone: 'blue', icon: 'user', value: item.occupied, unit: 'ห้อง' },
+                              { key: 'vacant', label: 'ห้องว่าง', tone: 'green', icon: 'door', value: item.vacant, unit: 'ห้อง' },
+                              { key: 'total', label: 'ห้องทั้งหมด', tone: 'slate', icon: 'grid', value: item.total, unit: 'ห้อง' },
+                              { key: 'in', label: 'ย้ายเข้า', tone: 'teal', icon: 'moveIn', value: item.moveIns, unit: 'ครั้ง' },
+                              { key: 'out', label: 'ย้ายออก', tone: 'orange', icon: 'moveOut', value: item.moveOuts, unit: 'ครั้ง' },
                             ].map((cell) => (
-                              <td key={cell.key}>
+                              <td key={cell.key} data-label={cell.label}>
                                 <span className={`owner-oc-cell is-${cell.tone}${cell.value ? '' : ' is-zero'}`}>
                                   <OwnerListIcon name={cell.icon} size={15} />
                                   <strong>{cell.value}</strong>
@@ -4038,7 +4063,7 @@ function OwnerMain() {
                                 </span>
                               </td>
                             ))}
-                            <td>
+                            <td data-label="อัตราเข้าพัก">
                               {item.total > 0 ? (
                                 <span className={`owner-oc-rate ${item.occupancyRate >= 80 ? 'is-high' : item.occupancyRate >= 50 ? 'is-mid' : 'is-low'}`}>
                                   {item.occupancyRate.toFixed(1)}%
@@ -4047,7 +4072,7 @@ function OwnerMain() {
                                 <span className="owner-oc-dash">–</span>
                               )}
                             </td>
-                            <td>
+                            <td data-label="เปลี่ยนจากช่วงก่อน">
                               {item.change ? (
                                 <span className={`owner-oc-cell is-${item.change > 0 ? 'blue' : 'red'}`}>
                                   <OwnerListIcon name={item.change > 0 ? 'trendUp' : 'trendDown'} size={15} />
@@ -4058,7 +4083,7 @@ function OwnerMain() {
                                 <span className="owner-oc-dash">–</span>
                               )}
                             </td>
-                            <td>
+                            <td className="owner-oc-action-cell">
                               <span className="owner-oc-row-more">
                                 ดูเพิ่มเติม <span className="owner-oc-row-arrow" aria-hidden="true">›</span>
                               </span>
@@ -4416,23 +4441,23 @@ function OwnerMain() {
                           const periodProfitMargin = income > 0 ? (netProfit / income) * 100 : null
                           return (
                             <tr key={item.period} className="owner-fc-clickable" onClick={() => setFinancePeriodDetail(item)}>
-                              <td><button type="button" className="owner-fc-period owner-fc-period-button" onClick={(event) => { event.stopPropagation(); setFinancePeriodDetail(item) }} aria-label={`ดูรายละเอียดการเงิน ${item.monthLabel}`}><OwnerListIcon name="calendar" /><strong>{item.monthLabel}</strong></button><small>ดูรายละเอียด ›</small></td>
-                              <td className="owner-finance-income-cell">
+                              <td data-label="ช่วงเวลา"><button type="button" className="owner-fc-period owner-fc-period-button" onClick={(event) => { event.stopPropagation(); setFinancePeriodDetail(item) }} aria-label={`ดูรายละเอียดการเงิน ${item.monthLabel}`}><OwnerListIcon name="calendar" /><strong>{item.monthLabel}</strong></button><button type="button" className="owner-fc-period-detail" onClick={(event) => { event.stopPropagation(); setFinancePeriodDetail(item) }} aria-label={`ดูรายละเอียดการเงิน ${item.monthLabel}`}>ดูรายละเอียด ›</button></td>
+                              <td className="owner-finance-income-cell" data-label="รายรับ">
                                 <strong>{formatSignedCurrency(income)}</strong>
                                 <small>{incomeCount ? `${incomeCount} รายการ · เฉลี่ย ${formatSignedCurrency(income / incomeCount)}` : 'ไม่มีรายการรับชำระ'}</small>
                               </td>
-                              <td className="owner-finance-expense-cell">
+                              <td className="owner-finance-expense-cell" data-label="รายจ่าย">
                                 <strong>{formatSignedCurrency(expense)}</strong>
                                 <small>{expenseCount ? `${expenseCount} รายการ · เฉลี่ย ${formatSignedCurrency(expense / expenseCount)}` : 'ไม่มีรายการรายจ่าย'}</small>
                               </td>
-                              <td className={netProfit < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'}>
+                              <td className={netProfit < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'} data-label="กำไร/ขาดทุนสุทธิ">
                                 <span className={`owner-fc-net-value ${netProfit < 0 ? 'is-loss' : netProfit > 0 ? 'is-profit' : 'is-zero'}`}>{formatSignedCurrency(netProfit)}</span>
                               </td>
-                              <td className={netChange === null ? '' : netChange < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'}>
+                              <td className={netChange === null ? '' : netChange < 0 ? 'owner-finance-loss-cell' : 'owner-finance-profit-cell'} data-label="เปลี่ยนสุทธิจากช่วงก่อน">
                                 <span className={`owner-fc-delta ${netChange === null || netChange === 0 ? 'is-neutral' : netChange < 0 ? 'is-down' : 'is-up'}`}>{netChange === null ? '—' : `${netChange > 0 ? '↑ +' : netChange < 0 ? '↓ ' : ''}${formatSignedCurrency(netChange)}`}</span>
                               </td>
-                              <td><span className={`owner-fc-ratio ${expenseRatio === null ? 'is-neutral' : expenseRatio > 100 ? 'is-negative' : 'is-positive'}`}>{expenseRatio === null ? 'ไม่มีรายรับ' : formatPercent(expenseRatio)}</span></td>
-                              <td><span className={`owner-fc-ratio ${periodProfitMargin === null ? 'is-neutral' : periodProfitMargin < 0 ? 'is-negative' : 'is-positive'}`}>{periodProfitMargin === null ? 'ไม่มีรายรับ' : formatPercent(periodProfitMargin)}</span></td>
+                              <td data-label="รายจ่ายต่อรายรับ"><span className={`owner-fc-ratio ${expenseRatio === null ? 'is-neutral' : expenseRatio > 100 ? 'is-negative' : 'is-positive'}`}>{expenseRatio === null ? 'ไม่มีรายรับ' : formatPercent(expenseRatio)}</span></td>
+                              <td data-label="อัตรากำไรสุทธิ"><span className={`owner-fc-ratio ${periodProfitMargin === null ? 'is-neutral' : periodProfitMargin < 0 ? 'is-negative' : 'is-positive'}`}>{periodProfitMargin === null ? 'ไม่มีรายรับ' : formatPercent(periodProfitMargin)}</span></td>
                             </tr>
                           )
                         })}
@@ -4990,17 +5015,17 @@ function OwnerMain() {
                     {occupancyLogs.logs?.length ? (
                       occupancyLogs.logs.map((log) => (
                         <tr key={log.id} className="owner-olog-row" onClick={() => setOccupancyLogId(log.id)}>
-                          <td><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(log.event_date)}</strong></span><span className="owner-il-id">{log.id}</span></td>
-                          <td className="owner-col-status">
+                          <td data-label="วันที่"><span className="owner-il-date"><OwnerListIcon name="calendar" /><strong>{formatDate(log.event_date)}</strong></span><span className="owner-il-id">{log.id}</span></td>
+                          <td className="owner-col-status" data-label="เหตุการณ์">
                             <span className={`owner-olog-event ${log.event_type === 'move_in' ? 'is-in' : 'is-out'}`}><OwnerListIcon name={log.event_type === 'move_in' ? 'moveIn' : 'moveOut'} size={13} />
                               {formatOccupancyEventType(log.event_type)}
                             </span>
                           </td>
-                          <td><span className="owner-il-room">{log.room_number || '—'}</span></td>
-                          <td><span className="owner-olog-name"><OwnerListIcon name="user" size={15} /><strong>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</strong></span></td>
-                          <td><span className="owner-olog-phone"><OwnerListIcon name="phone" size={13} />{log.phone || 'ไม่ระบุ'}</span></td>
-                          <td><span className={`owner-il-note${log.note ? '' : ' is-empty'}`}>{log.note || 'ไม่มีหมายเหตุ'}</span></td>
-                          <td><button type="button" className="owner-ur-view" onClick={(event) => { event.stopPropagation(); setOccupancyLogId(log.id) }}>รายละเอียด ›</button></td>
+                          <td data-label="ห้อง"><span className="owner-il-room">{log.room_number || '—'}</span></td>
+                          <td data-label="ผู้เข้าพัก"><span className="owner-olog-name"><OwnerListIcon name="user" size={15} /><strong>{`${log.first_name || ''} ${log.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</strong></span></td>
+                          <td data-label="เบอร์โทร"><span className="owner-olog-phone"><OwnerListIcon name="phone" size={13} />{log.phone || 'ไม่ระบุ'}</span></td>
+                          <td data-label="หมายเหตุ"><span className={`owner-il-note${log.note ? '' : ' is-empty'}`}>{log.note || 'ไม่มีหมายเหตุ'}</span></td>
+                          <td className="owner-olog-action-cell"><button type="button" className="owner-ur-view" onClick={(event) => { event.stopPropagation(); setOccupancyLogId(log.id) }}>รายละเอียด ›</button></td>
                         </tr>
                       ))
                     ) : (
