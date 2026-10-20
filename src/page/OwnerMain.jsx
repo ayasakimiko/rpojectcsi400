@@ -1719,6 +1719,8 @@ const AUDIT_RESOURCES = [
   ['safety-incidents', 'รายงานเหตุ'],
   ['utility-bill', 'บิลค่าน้ำ-ค่าไฟ'],
   ['collect-payment', 'การชำระเงิน'],
+  ['payments', 'การชำระเงิน'],
+  ['dorm-info', 'กฎระเบียบและเบอร์ติดต่อ'],
   ['waiting-list', 'รายชื่อผู้รอห้อง'],
   ['announcements', 'ประกาศ'],
   ['maintenance', 'งานแจ้งซ่อม'],
@@ -1811,13 +1813,13 @@ function OwnerAuditLog({ onSummaryChange }) {
   return (
     <section className="owner-panel owner-audit-panel">
       <div className="owner-panel-header">
-        <div><h3>ประวัติการใช้งานเว็บไซต์</h3><p>บันทึกการเปลี่ยนแปลงข้อมูลที่สำเร็จจากทุกบทบาท</p></div>
+        <div><h3>ประวัติการใช้งานเว็บไซต์</h3><p>งานที่พนักงาน แอดมิน และลูกค้าทำในระบบ</p></div>
         <span className="owner-panel-header-count">{Number(result.total).toLocaleString('th-TH')} รายการ</span>
       </div>
       <form className="owner-audit-filters" role="search" onSubmit={(event) => event.preventDefault()}>
         <input className="owner-audit-search" type="search" placeholder="ค้นหาผู้ใช้หรือรายการ" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select aria-label="กรองบทบาท" value={role} onChange={(event) => { setLoading(true); setRole(event.target.value); setPage(1) }}>
-          <option value="all">ทุกบทบาท</option><option value="Customer">ลูกค้า</option><option value="Staff">พนักงาน</option><option value="Admin">แอดมิน</option><option value="Owner">เจ้าของ</option>
+          <option value="all">ทุกบทบาท</option><option value="Customer">ลูกค้า</option><option value="Staff">พนักงาน</option><option value="Admin">แอดมิน</option>
         </select>
         <select aria-label="กรองการกระทำ" value={method} onChange={(event) => { setLoading(true); setMethod(event.target.value); setPage(1) }}>
           <option value="all">ทุกการกระทำ</option><option value="POST">สร้าง</option><option value="PUT">แก้ไข</option><option value="PATCH">แก้ไข</option><option value="DELETE">ลบ</option>
@@ -3071,7 +3073,7 @@ function OwnerMain() {
       return [
         { key: 'audit-total', tone: 'blue', icon: 'history', label: 'รายการทั้งหมด', value: show(summary?.total), hint: 'การเปลี่ยนแปลงข้อมูลที่บันทึกไว้' },
         { key: 'audit-today', tone: 'green', icon: 'profit', label: 'วันนี้', value: show(summary?.today), hint: 'กิจกรรมตั้งแต่เที่ยงคืน' },
-        { key: 'audit-actors', tone: 'purple', icon: 'staff', label: 'ผู้ใช้งานที่มีกิจกรรม', value: summary ? `${Number(summary.actors).toLocaleString('th-TH')} คน` : '—', hint: 'ทุกบทบาทในระบบ' },
+        { key: 'audit-actors', tone: 'purple', icon: 'staff', label: 'ผู้ใช้งานที่มีกิจกรรม', value: summary ? `${Number(summary.actors).toLocaleString('th-TH')} คน` : '—', hint: 'พนักงาน แอดมิน และลูกค้า' },
         { key: 'audit-deletes', tone: summary?.deletes > 0 ? 'red' : 'slate', icon: 'expense', label: 'การลบข้อมูล', value: show(summary?.deletes), hint: 'รายการที่ถูกลบออกจากระบบ' },
       ]
     })(),

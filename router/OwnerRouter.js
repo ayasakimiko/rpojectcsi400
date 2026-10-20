@@ -125,16 +125,24 @@ function buildUpdate(allowedColumns, body) {
 
 const PAYMENT_LOG_PAGE_SIZE = 10;
 
+// แสดงเฉพาะงานที่พนักงาน แอดมิน และลูกค้าทำ ไม่รวมการเข้าสู่ระบบ อัปโหลดไฟล์ และการกดรับทราบของลูกค้า
+const AUDIT_ACTOR_ROLES = ["Customer", "Staff", "Admin"];
+const AUDIT_BASE_CONDITIONS = [
+  "al.actor_role IN ('Customer', 'Staff', 'Admin')",
+  "al.endpoint NOT LIKE '/api/auth/%'",
+  "al.endpoint NOT LIKE '/api/files/%'",
+  "al.endpoint NOT LIKE '/api/customer/%acknowledge'",
+];
+
 router.get("/logs/audit", async (req, res) => {
   try {
     const pool = getPool();
     const page = parsePage(req.query.page);
     const pageSize = 20;
     const offset = (page - 1) * pageSize;
-    const conditions = [];
+    const conditions = [...AUDIT_BASE_CONDITIONS];
     const params = [];
-    const roles = ["Customer", "Staff", "Admin", "Owner"];
-    if (roles.includes(req.query.role)) {
+    if (AUDIT_ACTOR_ROLES.includes(req.query.role)) {
       conditions.push("al.actor_role = ?");
       params.push(req.query.role);
     }
@@ -147,7 +155,7 @@ router.get("/logs/audit", async (req, res) => {
       conditions.push("(al.endpoint LIKE ? OR al.actor_role LIKE ? OR CAST(al.actor_id AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR CONCAT(s.first_name, ' ', s.last_name) LIKE ? OR CONCAT(a.first_name, ' ', a.last_name) LIKE ? OR CONCAT(o.first_name, ' ', o.last_name) LIKE ?)");
       params.push(...Array(7).fill(`%${search}%`));
     }
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
     const joins = `
       LEFT JOIN Customer c ON al.actor_role = 'Customer' AND c.id = al.actor_id
       LEFT JOIN Staff s ON al.actor_role = 'Staff' AND s.id = al.actor_id
@@ -167,7 +175,7 @@ router.get("/logs/audit", async (req, res) => {
       pool.query(
         `SELECT COUNT(*) AS total, SUM(created_at >= CURDATE()) AS today,
                 COUNT(DISTINCT actor_role, actor_id) AS actors, SUM(method = 'DELETE') AS deletes
-         FROM AuditLog`,
+         FROM AuditLog al WHERE ${AUDIT_BASE_CONDITIONS.join(" AND ")}`,
       ),
     ]);
     const summary = Object.fromEntries(
