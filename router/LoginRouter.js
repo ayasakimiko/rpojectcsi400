@@ -71,6 +71,14 @@ router.post("/login", async (req, res) => {
       expiresIn: JWT_EXPIRES_IN,
     });
 
+    // บันทึกการเข้าสู่ระบบลงประวัติการใช้งาน หากบันทึกไม่สำเร็จจะไม่กระทบการเข้าสู่ระบบ
+    const ipAddress = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim().slice(0, 45);
+    pool.query(
+      `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address)
+       VALUES (?, ?, 'POST', '/api/auth/login', 200, ?)`,
+      [user.id, user.role, ipAddress || null],
+    ).catch((error) => console.error("Login audit log write error:", error));
+
     return res.json({ message: "เข้าสู่ระบบสำเร็จ", token, user: toPublicUser(user) });
   } catch (error) {
     console.error("Login error:", error);

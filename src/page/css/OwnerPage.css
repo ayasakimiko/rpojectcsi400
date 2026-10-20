@@ -965,6 +965,11 @@
   color: #b42318;
 }
 
+.owner-audit-method.is-login {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .owner-audit-pagination {
   display: flex;
   align-items: center;

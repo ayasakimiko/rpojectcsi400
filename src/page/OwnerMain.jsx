@@ -1741,6 +1741,7 @@ const AUDIT_METHOD_BADGES = {
   PUT: { label: 'แก้ไข', tone: 'update' },
   PATCH: { label: 'แก้ไข', tone: 'update' },
   DELETE: { label: 'ลบ', tone: 'delete' },
+  LOGIN: { label: 'เข้าระบบ', tone: 'login' },
 }
 
 function describeAuditActivity(log) {
@@ -1755,6 +1756,7 @@ function describeAuditActivity(log) {
     ? resource === 'ห้องพัก' ? `ห้อง ${recordId}` : `${resource} #${recordId}`
     : resource === 'ผู้เช่า' && segments.includes('register') ? 'ผู้เช่ารายใหม่' : resource
 
+  if (segments.includes('auth') && segments.includes('login')) return { action: 'เข้าสู่ระบบ', detail: 'เข้าใช้งานเว็บไซต์' }
   if (segments.includes('register') && method === 'POST') return { action: 'สมัครผู้เช่า', detail: 'ลงทะเบียนผู้เช่ารายใหม่' }
   if (actionSegment === 'approve') return { action: `อนุมัติ${resource}`, detail: recordLabel }
   if (actionSegment === 'reject') return { action: `ปฏิเสธ${resource}`, detail: recordLabel }
@@ -1835,7 +1837,9 @@ function OwnerAuditLog({ onSummaryChange }) {
               const activity = describeAuditActivity(log)
               const createdAt = new Date(log.created_at)
               const actorName = log.actor_name || `${log.actor_role} #${log.actor_id}`
-              const method = AUDIT_METHOD_BADGES[String(log.method || '').toUpperCase()] || AUDIT_METHOD_BADGES.PUT
+              const method = String(log.endpoint || '').startsWith('/api/auth/login')
+                ? AUDIT_METHOD_BADGES.LOGIN
+                : AUDIT_METHOD_BADGES[String(log.method || '').toUpperCase()] || AUDIT_METHOD_BADGES.PUT
               return <tr key={log.id}>
                 <td className="owner-audit-time">
                   <strong>{createdAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
