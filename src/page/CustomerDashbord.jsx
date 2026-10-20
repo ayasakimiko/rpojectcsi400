@@ -1,7 +1,7 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoMenu } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
@@ -4089,6 +4089,10 @@ function CustomerDashbord() {
   const [historySearch, setHistorySearch] = useState('')
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
   const [historyPageByBooking, setHistoryPageByBooking] = useState({})
+  const [expandedHomePayments, setExpandedHomePayments] = useState(() => new Set())
+  const homePaymentRowsRef = useRef(new Map())
+  const homePaymentHeightsRef = useRef(new Map())
+  const homePaymentAnimationsRef = useRef(new Map())
   const [historyBookingId, setHistoryBookingId] = useState(null)
   const [slipPreview, setSlipPreview] = useState(null)
 
@@ -4096,6 +4100,33 @@ function CustomerDashbord() {
   const [receiptGenerating, setReceiptGenerating] = useState(false)
   const receiptRef = useRef(null)
   const moveRoomReminderRef = useRef(null)
+
+  useLayoutEffect(() => {
+    for (const [key, previousHeight] of homePaymentHeightsRef.current) {
+      const row = homePaymentRowsRef.current.get(key)
+      if (!row) continue
+      const nextHeight = row.getBoundingClientRect().height
+      if (Math.abs(nextHeight - previousHeight) < 1) continue
+      row.style.overflow = 'hidden'
+      const animation = row.animate(
+        [{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }],
+        { duration: 100, easing: 'ease-out' },
+      )
+      homePaymentAnimationsRef.current.set(key, animation)
+      const clearAnimation = () => {
+        if (homePaymentAnimationsRef.current.get(key) !== animation) return
+        row.style.overflow = ''
+        homePaymentAnimationsRef.current.delete(key)
+      }
+      animation.onfinish = clearAnimation
+      animation.oncancel = clearAnimation
+    }
+    homePaymentHeightsRef.current.clear()
+  }, [expandedHomePayments])
+
+  useEffect(() => () => {
+    for (const animation of homePaymentAnimationsRef.current.values()) animation.cancel()
+  }, [])
 
   useEffect(() => {
     const isAnyOverlayOpen =
@@ -5165,8 +5196,13 @@ function CustomerDashbord() {
                   {paginatedPayments.map((payment) => {
                     const paidAt = new Date(payment.created_at)
                     const note = formatCustomerNote(payment.note)
+                    const homePaymentKey = `${entry.booking_id}-${payment.id}`
+                    const isHomePaymentExpanded = scope === 'home' && expandedHomePayments.has(homePaymentKey)
                     return (
-                    <tr key={payment.id}>
+                    <tr key={payment.id} ref={scope === 'home' ? (node) => {
+                      if (node) homePaymentRowsRef.current.set(homePaymentKey, node)
+                      else homePaymentRowsRef.current.delete(homePaymentKey)
+                    } : undefined} data-payment-status={payment.status} className={`${isHomePaymentExpanded ? 'is-expanded ' : ''}${note && note !== '-' ? 'has-note' : ''}`}>
                       <td>
                         <span className="dashboard-rental-date">
                           <strong>{paidAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
@@ -5184,12 +5220,12 @@ function CustomerDashbord() {
                           {payment.status === 'pending' && payment.slip_path ? 'รอตรวจสอบสลิป' : STATUS_LABEL[payment.status] || payment.status}
                         </span>
                       </td>
-                      <td>
+                      <td className={note && note !== '-' ? '' : 'is-empty-note'}>
                         <span className={`dashboard-rental-note${note && note !== '-' ? '' : ' is-empty'}`} title={typeof note === 'string' ? note : undefined}>
                           {note || '-'}
                         </span>
                       </td>
-                      <td className="is-slip">
+                      <td className={`is-slip${payment.slip_path ? '' : ' is-empty-action'}`}>
                         {payment.slip_path ? (
                           <button
                             type="button"
@@ -5203,7 +5239,7 @@ function CustomerDashbord() {
                           <span className="dashboard-empty-cell">-</span>
                         )}
                       </td>
-                      <td className="is-receipt">
+                      <td className={`is-receipt${payment.status === 'paid' ? '' : ' is-empty-action'}`}>
                         {payment.status !== 'paid' ? (
                           <span className="dashboard-empty-cell">-</span>
                         ) : (
@@ -5234,6 +5270,30 @@ function CustomerDashbord() {
                           </button>
                         )}
                       </td>
+                      {scope === 'home' && (
+                        <td className="dashboard-rental-more-cell">
+                          <button
+                            type="button"
+                            aria-expanded={isHomePaymentExpanded}
+                            onClick={(event) => {
+                              const row = event.currentTarget.closest('tr')
+                              if (row && window.matchMedia('(max-width: 768px) and (prefers-reduced-motion: no-preference)').matches) {
+                                homePaymentHeightsRef.current.set(homePaymentKey, row.getBoundingClientRect().height)
+                                homePaymentAnimationsRef.current.get(homePaymentKey)?.cancel()
+                              }
+                              setExpandedHomePayments((previous) => {
+                                const next = new Set(previous)
+                                if (next.has(homePaymentKey)) next.delete(homePaymentKey)
+                                else next.add(homePaymentKey)
+                                return next
+                              })
+                            }}
+                          >
+                            {isHomePaymentExpanded ? 'ย่อรายละเอียด' : 'ดูเพิ่มเติม'}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                     )
                   })}

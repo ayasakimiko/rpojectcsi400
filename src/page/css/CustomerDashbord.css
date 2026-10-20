@@ -1253,8 +1253,10 @@
   border-bottom: none;
 }
 
-.dashboard-rental-table tbody tr:hover td {
-  background: #f8fbff;
+@media (min-width: 769px) and (hover: hover) {
+  .dashboard-rental-table tbody tr:hover td {
+    background: #f8fbff;
+  }
 }
 
 .dashboard-rental-table .is-amount {
@@ -2837,6 +2839,7 @@
 
 .dashboard-progress-toggle-count {
   padding: 0 7px;
+  border: 1px solid #bfdbfe;
   border-radius: 999px;
   background: #e0ecff;
   color: #1d4ed8;
@@ -10496,4 +10499,285 @@
   z-index: 2;
   background: #f5f9ff;
   box-shadow: 0 1px 0 #dce9fb;
+}
+
+.dashboard-rental-home-card .dashboard-rental-table td.dashboard-rental-more-cell {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .dashboard-rental-home-card > .dashboard-rental-entry {
+    height: auto;
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .dashboard-rental-home-card > .dashboard-rental-entry > .table-responsive {
+    flex: none;
+    overflow: visible;
+    border: 0;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table,
+  .dashboard-rental-home-card .dashboard-rental-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table thead {
+    display: none;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr {
+    display: grid;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 12px;
+    border: 1px solid #e3ecf8;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(1) { grid-area: 1 / 1; }
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(2) { grid-area: 2 / 1; }
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(3) { grid-area: 1 / 2; }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(n+4):nth-child(-n+7) {
+    display: none;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded td:nth-child(n+4):nth-child(-n+7):not(.is-empty-note):not(.is-empty-action) {
+    display: block;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded td:nth-child(n+5):nth-child(-n+7):not(.is-empty-note):not(.is-empty-action),
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded:not([data-payment-status="paid"]) td:nth-child(4) {
+    animation: dashboard-rental-details-slide .1s ease-out both;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(4),
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(5) {
+    padding-top: 8px;
+    border-top: 1px dashed #dce9fb;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr[data-payment-status="paid"] td:nth-child(4) {
+    display: block;
+    grid-area: 2 / 2;
+    justify-self: end;
+    text-align: right;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(5)::before {
+    content: 'หมายเหตุ: ';
+    display: block;
+    margin-bottom: 3px;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td:nth-child(5) .dashboard-rental-note {
+    display: block;
+    max-width: none;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    color: #0f2b52;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.6;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td.is-slip,
+  .dashboard-rental-home-card .dashboard-rental-table tbody td.is-receipt {
+    text-align: left;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td.is-slip { grid-column: 1; justify-self: end; }
+  .dashboard-rental-home-card .dashboard-rental-table tbody td.is-receipt { grid-column: 2; justify-self: end; }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded:not([data-payment-status="paid"]).has-note td.is-slip,
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded:not([data-payment-status="paid"]).has-note td.is-receipt {
+    grid-row: 5;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded:not([data-payment-status="paid"]):not(.has-note) td.is-slip,
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded:not([data-payment-status="paid"]):not(.has-note) td.is-receipt,
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded[data-payment-status="paid"].has-note td.is-slip,
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded[data-payment-status="paid"].has-note td.is-receipt {
+    grid-row: 4;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded[data-payment-status="paid"]:not(.has-note) td.is-slip,
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded[data-payment-status="paid"]:not(.has-note) td.is-receipt {
+    grid-row: 3;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-table tbody td.dashboard-rental-more-cell {
+    display: block;
+    grid-column: 1 / -1;
+    padding-top: 8px;
+    border-top: 1px dashed #dce9fb;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-more-cell button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-more-cell button svg {
+    transition: transform .1s ease-out;
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-more-cell button[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+
+  .dashboard-rental-home-card .dashboard-rental-more-cell button:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@keyframes dashboard-rental-details-slide {
+  from { opacity: 0; transform: translateY(-8px); clip-path: inset(0 0 100% 0); }
+  to { opacity: 1; transform: translateY(0); clip-path: inset(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-rental-home-card .dashboard-rental-table tbody tr.is-expanded td:nth-child(n+4):nth-child(-n+7) {
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-rental-history-card > .dashboard-rental-entry {
+    height: auto;
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .dashboard-rental-history-card > .dashboard-rental-entry > .table-responsive {
+    flex: none;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    scrollbar-gutter: auto;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table,
+  .dashboard-rental-history-card .dashboard-rental-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table thead {
+    display: none;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 12px;
+    border: 1px solid #e3ecf8;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(1) { grid-area: 1 / 1; }
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(2) { grid-area: 2 / 1; }
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(3) { grid-area: 1 / 2; }
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(4) { grid-area: 2 / 2; }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(5) {
+    grid-column: 1 / -1;
+    padding-top: 8px;
+    border-top: 1px dashed #dce9fb;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(5)::before {
+    content: 'หมายเหตุ: ';
+    display: block;
+    margin-bottom: 3px;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td:nth-child(5) .dashboard-rental-note {
+    display: block;
+    max-width: none;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    color: #0f2b52;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.6;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td.is-slip,
+  .dashboard-rental-history-card .dashboard-rental-table tbody td.is-receipt {
+    text-align: left;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td.is-slip { grid-column: 1; justify-self: end; }
+  .dashboard-rental-history-card .dashboard-rental-table tbody td.is-receipt { grid-column: 2; justify-self: end; }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody tr.has-note td.is-slip,
+  .dashboard-rental-history-card .dashboard-rental-table tbody tr.has-note td.is-receipt {
+    grid-row: 4;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody tr:not(.has-note) td.is-slip,
+  .dashboard-rental-history-card .dashboard-rental-table tbody tr:not(.has-note) td.is-receipt {
+    grid-row: 3;
+  }
+
+  .dashboard-rental-history-card .dashboard-rental-table tbody td.is-empty-note,
+  .dashboard-rental-history-card .dashboard-rental-table tbody td.is-empty-action {
+    display: none;
+  }
 }
