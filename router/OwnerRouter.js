@@ -125,11 +125,10 @@ function buildUpdate(allowedColumns, body) {
 
 const PAYMENT_LOG_PAGE_SIZE = 10;
 
-// แสดงเฉพาะงานที่พนักงาน แอดมิน และลูกค้าทำ ไม่รวมการเข้าสู่ระบบ อัปโหลดไฟล์ และการกดรับทราบของลูกค้า
+// แสดงเฉพาะงานที่พนักงาน แอดมิน และลูกค้าทำ ไม่รวมการอัปโหลดไฟล์และการกดรับทราบของลูกค้า
 const AUDIT_ACTOR_ROLES = ["Customer", "Staff", "Admin"];
 const AUDIT_BASE_CONDITIONS = [
   "al.actor_role IN ('Customer', 'Staff', 'Admin')",
-  "al.endpoint NOT LIKE '/api/auth/%'",
   "al.endpoint NOT LIKE '/api/files/%'",
   "al.endpoint NOT LIKE '/api/customer/%acknowledge'",
 ];
