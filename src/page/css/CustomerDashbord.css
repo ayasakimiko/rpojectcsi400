@@ -4927,6 +4927,7 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+  margin-bottom: 16px;
 }
 
 .dashboard-parcel-meta > span {
@@ -8879,6 +8880,42 @@
     grid-column: 1 / -1;
     border-top: 1px solid #e8eff9;
     border-left: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-park-card {
+    height: auto;
+  }
+
+  .dashboard-park-card > .dashboard-park-list {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .dashboard-park-item-main {
+    gap: 10px;
+    padding: 14px 14px 12px;
+  }
+
+  .dashboard-park-range .dashboard-park-value {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .dashboard-park-photos {
+    padding: 0 14px 12px;
+  }
+
+  .dashboard-park-photo-row {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-park-item-foot {
+    padding: 10px 14px 12px;
   }
 }
 

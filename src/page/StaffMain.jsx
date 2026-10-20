@@ -1710,6 +1710,7 @@ const TENANT_TYPE_SEGMENTS = [
 
 function StaffFilterPanel({
   segments,
+  segmentsClassName = '',
   active,
   onSegment,
   segmentLabel = 'กรองตามสถานะ',
@@ -1726,7 +1727,7 @@ function StaffFilterPanel({
   return (
     <div className={`staff-req-filters${sticky ? ' is-sticky' : ''}`}>
       {segments && (
-        <div className="staff-req-segments" role="tablist" aria-label={segmentLabel}>
+        <div className={`staff-req-segments${segmentsClassName ? ` ${segmentsClassName}` : ''}`} role="tablist" aria-label={segmentLabel}>
           {segments.map((segment) => (
             <button
               type="button"
@@ -8954,16 +8955,16 @@ function StaffMain() {
               </div>
             </div>
             <div className="table-responsive parcel-table-wrap">
-              <table className="parcel-table parcel-ui-table">
+              <table className="parcel-table parcel-ui-table staff-parcel-table">
                 <thead>
                   <tr>
-                    <th>ห้อง / ผู้รับ</th>
-                    <th>ผู้ส่ง / รายละเอียด</th>
-                    <th>เลขพัสดุ</th>
-                    <th>รูป</th>
-                    <th>สถานะ</th>
-                    <th>บันทึก</th>
-                    <th aria-label="การดำเนินการ" />
+                    <th className="staff-parcel-who">ห้อง / ผู้รับ</th>
+                    <th className="staff-parcel-sender">ผู้ส่ง / รายละเอียด</th>
+                    <th className="staff-parcel-tracking">เลขพัสดุ</th>
+                    <th className="staff-parcel-photo">รูป</th>
+                    <th className="staff-parcel-status">สถานะ</th>
+                    <th className="staff-parcel-record">บันทึก</th>
+                    <th className="staff-parcel-action" aria-label="การดำเนินการ" />
                   </tr>
                 </thead>
                 <tbody>
@@ -8989,12 +8990,13 @@ function StaffMain() {
                         key={parcel.id}
                         className="parcel-row-clickable"
                         tabIndex={0}
+                        aria-label={`ดูรายละเอียดพัสดุห้อง ${parcel.room_number}`}
                         onClick={() => setParcelDetail(parcel)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') setParcelDetail(parcel)
                         }}
                       >
-                        <td>
+                        <td className="staff-parcel-who">
                           <div className="parcel-ui-who">
                             <span className="parcel-room-badge">{parcel.room_number}</span>
                             <div className="parcel-ui-stack">
@@ -9006,16 +9008,16 @@ function StaffMain() {
                             </div>
                           </div>
                         </td>
-                        <td>
+                        <td className="staff-parcel-sender">
                           <div className="parcel-ui-stack">
                             <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
                             <small className="parcel-ui-desc">{parcel.description || 'ไม่มีรายละเอียด'}</small>
                           </div>
                         </td>
-                        <td>
+                        <td className="staff-parcel-tracking">
                           {parcel.tracking_number ? <span className="parcel-ui-tracking">{parcel.tracking_number}</span> : <span className="parcel-ui-none">-</span>}
                         </td>
-                        <td>
+                        <td className="staff-parcel-photo">
                           {parcel.photos?.length ? (
                             <button
                               type="button"
@@ -9031,7 +9033,7 @@ function StaffMain() {
                             </button>
                           ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
                         </td>
-                        <td>
+                        <td className="staff-parcel-status">
                           <div className="parcel-ui-stack">
                             <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
                               <span className="parcel-ui-status-dot" aria-hidden="true" />
@@ -9040,7 +9042,7 @@ function StaffMain() {
                             {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
                           </div>
                         </td>
-                        <td>
+                        <td className="staff-parcel-record">
                           <div className="parcel-ui-stack">
                             <strong className="parcel-ui-date">{formatDateTime(parcel.created_at)}</strong>
                             <small>
@@ -9048,7 +9050,7 @@ function StaffMain() {
                             </small>
                           </div>
                         </td>
-                        <td className="parcel-ui-action">
+                        <td className="parcel-ui-action staff-parcel-action">
                           <span className="parcel-ui-open">
                             ดูรายละเอียด
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -9086,6 +9088,7 @@ function StaffMain() {
               </button>
             </div>
             <StaffFilterPanel
+              segmentsClassName="staff-waiting-segments"
               segments={[
                 { key: 'all', label: 'ทั้งหมด', count: waitingList.length },
                 ...Object.entries(WAITING_LIST_STATUS).map(([key, info]) => ({
@@ -9186,6 +9189,7 @@ function StaffMain() {
               </p>
             )}
             <StaffFilterPanel
+              segmentsClassName="staff-inspection-segments"
               segments={[
                 { key: 'all', label: 'ทั้งหมด', count: kindInspections.length },
                 ...INSPECTION_RESULT_SEGMENTS.map((segment) => ({
@@ -9243,25 +9247,16 @@ function StaffMain() {
                 <option value="oldest">ตรวจเก่าสุดก่อน</option>
               </select>
             </StaffFilterPanel>
-            <div className="table-responsive">
+            <div className="table-responsive staff-inspection-table-wrap">
               <table className="staff-table inspection-table insp-table">
-                <colgroup>
-                  <col className="is-room" />
-                  <col className="is-tenant" />
-                  <col className="is-date" />
-                  <col className="is-result" />
-                  <col className="is-inspector" />
-                  <col className="is-photos" />
-                  <col className="is-actions" />
-                </colgroup>
                 <thead>
                   <tr>
                     <th>ห้อง</th>
                     <th>ผู้เช่า</th>
                     <th>วันที่ตรวจ</th>
                     <th>ผลตรวจ</th>
-                    <th>ผู้ตรวจ</th>
-                    <th>รูป</th>
+                    <th className="staff-insp-inspector">ผู้ตรวจ</th>
+                    <th className="staff-insp-photos">รูป</th>
                     <th className="inspection-col-actions">จัดการ</th>
                   </tr>
                 </thead>
@@ -9291,20 +9286,20 @@ function StaffMain() {
                             }
                           }}
                         >
-                          <td>
+                          <td className="staff-insp-room">
                             <InspectionRoomCell
                               roomNumber={inspection.room_number}
                               targetRoomNumber={inspection.target_room_number}
                               isMoveRoom={Boolean(inspection.tenant_request_id)}
                             />
                           </td>
-                          <td>
+                          <td className="staff-insp-tenant">
                             <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} />
                           </td>
-                          <td>
+                          <td className="staff-insp-date">
                             <InspectionDateCell value={inspection.created_at} />
                           </td>
-                          <td>
+                          <td className="staff-insp-result">
                             <div className="inspection-cell-result">
                               <span className={`inspection-result is-${summary.tone}`}>
                                 {summary.label}
@@ -9312,13 +9307,13 @@ function StaffMain() {
                               </span>
                             </div>
                           </td>
-                          <td>
+                          <td className="staff-insp-inspector">
                             <InspectionInspectorCell name={inspection.inspected_by_name} className="staff-actor" />
                           </td>
-                          <td>
+                          <td className="staff-insp-photos">
                             <InspectionPhotosCell count={inspection.photo_count} />
                           </td>
-                          <td className="inspection-col-actions insp-actions-cell">
+                          <td className="inspection-col-actions insp-actions-cell staff-insp-actions">
                             <div className="insp-actions">
                               <div
                                 className="insp-actions-row"

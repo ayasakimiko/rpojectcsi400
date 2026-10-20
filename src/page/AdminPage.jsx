@@ -1367,17 +1367,27 @@ function useExpandedRows() {
 }
 
 function DetailRow({ open, colSpan, fields }) {
-  if (!open) return null
+  const [rendered, setRendered] = useState(open)
+
+  useEffect(() => {
+    const delay = open || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 130
+    const timeout = window.setTimeout(() => setRendered(open), delay)
+    return () => window.clearTimeout(timeout)
+  }, [open])
+
+  if (!rendered) return null
   return (
-    <tr className="admin-detail-row">
+    <tr className={`admin-detail-row${open ? '' : ' is-closing'}`} aria-hidden={!open}>
       <td colSpan={colSpan}>
-        <div className="admin-detail-grid">
-          {fields.map(({ label, value }) => (
-            <div className="admin-detail-item" key={label}>
-              <span className="admin-detail-item-label">{label}</span>
-              <span className="admin-detail-item-value">{value}</span>
-            </div>
-          ))}
+        <div className="admin-detail-reveal">
+          <div className="admin-detail-grid">
+            {fields.map(({ label, value }) => (
+              <div className="admin-detail-item" key={label}>
+                <span className="admin-detail-item-label">{label}</span>
+                <span className="admin-detail-item-value">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </td>
     </tr>
@@ -5368,6 +5378,7 @@ function AdminBackupPage() {
   const [inspectionSearch, setInspectionSearch] = useState('')
   const [inspectionResultFilter, setInspectionResultFilter] = useState('all')
   const [inspectionStatusFilter, setInspectionStatusFilter] = useState('all')
+  const [expandedInspectionRows, toggleInspectionRow] = useExpandedRows()
   const [announcements, setAnnouncements] = useState([])
   const [inspectionDetail, setInspectionDetail] = useState(null)
   const [inspectionEditor, setInspectionEditor] = useState(null)
@@ -7300,16 +7311,16 @@ function AdminBackupPage() {
               </div>
             </div>
             <div className="table-responsive parcel-table-wrap">
-              <table className="parcel-table parcel-ui-table">
+              <table className="parcel-table parcel-ui-table admin-parcel-table">
                 <thead>
                   <tr>
-                    <th>ห้อง / ผู้รับ</th>
-                    <th>ผู้ส่ง / รายละเอียด</th>
-                    <th>เลขพัสดุ</th>
-                    <th>รูป</th>
-                    <th>สถานะ</th>
-                    <th>บันทึก</th>
-                    <th aria-label="การดำเนินการ" />
+                    <th className="admin-parcel-who">ห้อง / ผู้รับ</th>
+                    <th className="admin-parcel-sender">ผู้ส่ง / รายละเอียด</th>
+                    <th className="admin-parcel-tracking">เลขพัสดุ</th>
+                    <th className="admin-parcel-photo">รูป</th>
+                    <th className="admin-parcel-status">สถานะ</th>
+                    <th className="admin-parcel-record">บันทึก</th>
+                    <th className="admin-parcel-action" aria-label="การดำเนินการ" />
                   </tr>
                 </thead>
                 <tbody>
@@ -7334,12 +7345,13 @@ function AdminBackupPage() {
                       key={parcel.id}
                       className="parcel-row-clickable"
                       tabIndex={0}
+                      aria-label={`ดูรายละเอียดพัสดุห้อง ${parcel.room_number}`}
                       onClick={() => setParcelDetail(parcel)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') setParcelDetail(parcel)
                       }}
                     >
-                      <td>
+                      <td className="admin-parcel-who">
                         <div className="parcel-ui-who">
                           <span className="parcel-room-badge">{parcel.room_number}</span>
                           <div className="parcel-ui-stack">
@@ -7351,16 +7363,16 @@ function AdminBackupPage() {
                           </div>
                         </div>
                       </td>
-                      <td>
+                      <td className="admin-parcel-sender">
                         <div className="parcel-ui-stack">
                           <strong>{parcel.sender_name || 'พัสดุทั่วไป'}</strong>
                           <small className="parcel-ui-desc">{parcel.description || 'ไม่มีรายละเอียด'}</small>
                         </div>
                       </td>
-                      <td>
+                      <td className="admin-parcel-tracking">
                         {parcel.tracking_number ? <span className="parcel-ui-tracking">{parcel.tracking_number}</span> : <span className="parcel-ui-none">-</span>}
                       </td>
-                      <td>
+                      <td className="admin-parcel-photo">
                         {parcel.photos?.length ? (
                           <button
                             type="button"
@@ -7377,7 +7389,7 @@ function AdminBackupPage() {
                           </button>
                         ) : <span className="parcel-ui-nophoto">ไม่มีรูป</span>}
                       </td>
-                      <td>
+                      <td className="admin-parcel-status">
                         <div className="parcel-ui-stack">
                           <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
                             <span className="parcel-ui-status-dot" aria-hidden="true" />
@@ -7386,7 +7398,7 @@ function AdminBackupPage() {
                           {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
                         </div>
                       </td>
-                      <td>
+                      <td className="admin-parcel-record">
                         <div className="parcel-ui-stack">
                           <strong className="parcel-ui-date">{formatDateTime(parcel.created_at)}</strong>
                           <small>
@@ -7394,7 +7406,7 @@ function AdminBackupPage() {
                           </small>
                         </div>
                       </td>
-                      <td className="parcel-ui-action">
+                      <td className="parcel-ui-action admin-parcel-action">
                         <span className="parcel-ui-open">
                           ดูรายละเอียด
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -7453,10 +7465,10 @@ function AdminBackupPage() {
                   <tr>
                     <th>เลขห้อง</th>
                     <th>สถานะ</th>
-                    <th>ราคา/เดือน</th>
-                    <th className="admin-col-optional">สิ่งอำนวยความสะดวก</th>
-                    <th className="admin-col-optional">ผู้เช่า</th>
-                    <th className="admin-col-optional">การดำเนินการ</th>
+                    <th className="admin-room-price-column">ราคา/เดือน</th>
+                    <th className="admin-col-optional admin-room-amenities-column">สิ่งอำนวยความสะดวก</th>
+                    <th className="admin-col-optional admin-room-tenant-column">ผู้เช่า</th>
+                    <th className="admin-col-optional admin-room-actions-column">การดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -7487,14 +7499,14 @@ function AdminBackupPage() {
                               {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
                             </span>
                           </td>
-                          <td className="admin-price-cell">
+                          <td className="admin-price-cell admin-room-price-column">
                             ฿{formatCurrency(room.price)}
                             <span className="admin-price-unit">/เดือน</span>
                           </td>
-                          <td className="admin-col-optional admin-amenities-cell">
+                          <td className="admin-col-optional admin-amenities-cell admin-room-amenities-column">
                             <AmenitiesList room={room} />
                           </td>
-                          <td className="admin-col-optional">
+                          <td className="admin-col-optional admin-room-tenant-column">
                             {room.customer_id ? (
                               <span className="admin-room-tenant">
                                 <span className="admin-room-tenant-avatar" aria-hidden="true">
@@ -7506,7 +7518,7 @@ function AdminBackupPage() {
                               <span className="admin-room-tenant is-empty">ยังไม่มีผู้เช่า</span>
                             )}
                           </td>
-                          <td className="admin-col-optional">
+                          <td className="admin-col-optional admin-room-actions-column">
                             <div className="admin-row-actions">
                               <button type="button" className="admin-action-btn is-view" onClick={() => openRoomDetail(room)}>
                                 รายละเอียด
@@ -7529,6 +7541,8 @@ function AdminBackupPage() {
                           open={expandedRoomRows.has(room.room_number)}
                           colSpan={6}
                           fields={[
+                            { label: 'สถานะ', value: room.is_booked ? 'ไม่ว่าง' : 'ว่าง' },
+                            { label: 'ราคา/เดือน', value: `฿${formatCurrency(room.price)}` },
                             {
                               label: 'ผู้เช่า',
                               value: room.customer_id
@@ -7596,15 +7610,15 @@ function AdminBackupPage() {
 
             {staffError && <div className="alert alert-danger">{staffError}</div>}
 
-            <div className="table-responsive">
+            <div className="table-responsive admin-staff-table-wrap">
               <table className="table admin-table admin-staff-table">
                 <thead>
                   <tr>
-                    <th>พนักงาน</th>
+                    <th className="admin-staff-person-cell">พนักงาน</th>
                     <th className="admin-col-optional">บัตรประชาชน</th>
-                    <th>เบอร์โทร</th>
+                    <th className="admin-staff-phone-cell">เบอร์โทร</th>
                     <th className="admin-col-optional">อายุ</th>
-                    <th>สถานะ</th>
+                    <th className="admin-staff-status-cell">สถานะ</th>
                     <th className="admin-col-optional">การดำเนินการ</th>
                   </tr>
                 </thead>
@@ -7628,12 +7642,13 @@ function AdminBackupPage() {
                         data-admin-focus={`staff-${member.id}`}
                         className={`admin-staff-row${member.is_suspended ? ' is-suspended' : ''}`}
                         tabIndex={0}
+                        aria-label={`ดูรายละเอียดพนักงาน ${member.first_name} ${member.last_name}`}
                         onClick={() => setStaffDetail(member)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') setStaffDetail(member)
                         }}
                       >
-                        <td>
+                        <td className="admin-staff-person-cell">
                           <div className="admin-staff-person">
                             <span className="admin-staff-avatar" aria-hidden="true">
                               <RoomDetailIcon type="user" size={18} />
@@ -7658,7 +7673,7 @@ function AdminBackupPage() {
                             {revealedStaffIdCards.has(member.id) ? member.idcard : '•'.repeat(String(member.idcard || '').length || 13)}
                           </button>
                         </td>
-                        <td>
+                        <td className="admin-staff-phone-cell">
                           <span className="admin-staff-phone">
                             <RoomDetailIcon type="phone" size={14} />
                             {member.phone || '-'}
@@ -7667,11 +7682,12 @@ function AdminBackupPage() {
                         <td className="admin-col-optional">
                           <span className="admin-staff-age">{member.age ? `${member.age} ปี` : '-'}</span>
                         </td>
-                        <td>
+                        <td className="admin-staff-status-cell">
                           <span className={`admin-staff-status${member.is_suspended ? ' is-suspended' : ' is-active'}`}>
                             <span className="admin-staff-status-dot" aria-hidden="true" />
                             {member.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                           </span>
+                          <span className="admin-staff-mobile-open" aria-hidden="true">ดูรายละเอียด ›</span>
                         </td>
                         <td className="admin-col-optional">
                           <div className="admin-row-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
@@ -7745,17 +7761,17 @@ function AdminBackupPage() {
 
             {customersError && <div className="alert alert-danger">{customersError}</div>}
 
-            <div className="table-responsive">
-              <table className="table admin-table">
+            <div className="table-responsive admin-customers-table-wrap">
+              <table className="table admin-table admin-customer-table">
                 <thead>
                   <tr>
                     <th>ลูกค้า</th>
                     <th className="admin-col-optional">บัตรประชาชน</th>
-                    <th>ห้อง</th>
+                    <th className="admin-customer-room-column">ห้อง</th>
                     <th className="admin-col-optional">ระยะเวลาสัญญา</th>
-                    <th>สถานะ</th>
+                    <th className="admin-customer-status-column">สถานะ</th>
                     <th className="admin-col-optional">การดำเนินการ</th>
-                    <th aria-hidden="true" />
+                    <th className="admin-customer-profile-column" aria-hidden="true" />
                   </tr>
                 </thead>
                 <tbody>
@@ -7794,7 +7810,7 @@ function AdminBackupPage() {
                               </span>
                               <div>
                                 <strong>{customer.first_name} {customer.last_name}</strong>
-                                <span>
+                                <span className="admin-customer-phone">
                                   <RoomDetailIcon type="phone" size={11} />
                                   {customer.phone || '-'}
                                 </span>
@@ -7813,7 +7829,7 @@ function AdminBackupPage() {
                               {revealedCustomerIdCards.has(customer.id) ? customer.idcard : '•'.repeat(String(customer.idcard || '').length || 13)}
                             </button>
                           </td>
-                          <td>
+                          <td className="admin-customer-room-column">
                             {customer.room_number ? (
                               <span className="moveout-cell-room">
                                 <RoomDetailIcon type="home" size={13} />
@@ -7826,7 +7842,7 @@ function AdminBackupPage() {
                           <td className="admin-col-optional">
                             <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />
                           </td>
-                          <td>
+                          <td className="admin-customer-status-column">
                             <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                             </span>
@@ -7848,7 +7864,7 @@ function AdminBackupPage() {
                               </button>
                             </div>
                           </td>
-                          <td className="moveout-cell-chevron" aria-hidden="true">
+                          <td className="moveout-cell-chevron admin-customer-profile-column" aria-hidden="true">
                             <span>
                               ดูรายละเอียด
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -7866,6 +7882,20 @@ function AdminBackupPage() {
                           open={expandedCustomerRows.has(customer.id)}
                           colSpan={7}
                           fields={[
+                            { label: 'ห้อง', value: customer.room_number || '-' },
+                            {
+                              label: 'สถานะ',
+                              value: (
+                                <>
+                                  <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
+                                    {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
+                                  </span>
+                                  {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
+                                    <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
+                                  )}
+                                </>
+                              ),
+                            },
                             {
                               label: 'บัตรประชาชน',
                               value: (
@@ -8290,7 +8320,7 @@ function AdminBackupPage() {
                 + เพิ่มผลตรวจก่อนย้ายห้อง
               </button>
             </div>
-            <div className="admin-toolbar">
+            <div className="admin-toolbar admin-inspection-toolbar">
               <div className="admin-search-group">
                 <label className="admin-toolbar-label" htmlFor="inspection-search">ค้นหา</label>
                 <input
@@ -8355,28 +8385,18 @@ function AdminBackupPage() {
                 )}
               </div>
             </div>
-            <div className="table-responsive">
+            <div className="table-responsive admin-inspection-table-wrap">
               <table className="table admin-table admin-inspection-table insp-table">
-                <colgroup>
-                  <col className="is-room" />
-                  <col className="is-tenant" />
-                  <col className="is-date" />
-                  <col className="is-result" />
-                  <col className="is-inspector" />
-                  <col className="is-photos" />
-                  <col className="is-status" />
-                  <col className="is-actions" />
-                </colgroup>
                 <thead>
                   <tr>
                     <th>ห้อง</th>
-                    <th>ผู้เช่า</th>
-                    <th>วันที่ตรวจ</th>
+                    <th className="admin-insp-tenant-column">ผู้เช่า</th>
+                    <th className="admin-insp-date-column">วันที่ตรวจ</th>
                     <th>ผลตรวจ</th>
-                    <th>ผู้ตรวจ</th>
-                    <th>รูป</th>
-                    <th>สถานะ</th>
-                    <th className="admin-inspection-actions">จัดการ</th>
+                    <th className="admin-insp-inspector-column">ผู้ตรวจ</th>
+                    <th className="admin-insp-photos-column">รูป</th>
+                    <th className="admin-insp-status-column">สถานะ</th>
+                    <th className="admin-inspection-actions admin-insp-actions-column">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -8391,8 +8411,8 @@ function AdminBackupPage() {
                       const summary = summarizeInspection(inspection.checklist)
                       const issueCount = summary.counts.damaged + summary.counts.missing
                       return (
+                        <Fragment key={inspection.id}>
                         <tr
-                          key={inspection.id}
                           data-admin-focus={`inspection-${inspection.id}`}
                           className="moveout-row"
                           tabIndex={0}
@@ -8413,10 +8433,10 @@ function AdminBackupPage() {
                               isMoveRoom={Boolean(inspection.tenant_request_id)}
                             />
                           </td>
-                          <td>
+                          <td className="admin-insp-tenant-column">
                             <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} />
                           </td>
-                          <td>
+                          <td className="admin-insp-date-column">
                             <InspectionDateCell value={inspection.created_at} />
                           </td>
                           <td>
@@ -8427,13 +8447,13 @@ function AdminBackupPage() {
                               </span>
                             </div>
                           </td>
-                          <td>
+                          <td className="admin-insp-inspector-column">
                             <InspectionInspectorCell name={inspection.inspected_by} className="admin-actor-inline" />
                           </td>
-                          <td>
+                          <td className="admin-insp-photos-column">
                             <InspectionPhotosCell count={inspection.photo_count} />
                           </td>
-                          <td>
+                          <td className="admin-insp-status-column">
                             {inspection.tenant_request_id ? (
                               <span className="insp-status-badge is-reviewed">Staff ตรวจแล้ว</span>
                             ) : (
@@ -8442,7 +8462,7 @@ function AdminBackupPage() {
                               </span>
                             )}
                           </td>
-                          <td className="admin-inspection-actions">
+                          <td className="admin-inspection-actions admin-insp-actions-column">
                             <div className="insp-actions">
                               {!inspection.tenant_request_id && (
                                 <div
@@ -8484,6 +8504,55 @@ function AdminBackupPage() {
                             </div>
                           </td>
                         </tr>
+                        <ExpandToggleRow
+                          open={expandedInspectionRows.has(inspection.id)}
+                          colSpan={8}
+                          onClick={() => toggleInspectionRow(inspection.id)}
+                        />
+                        <DetailRow
+                          open={expandedInspectionRows.has(inspection.id)}
+                          colSpan={8}
+                          fields={[
+                            { label: 'ผู้เช่า', value: <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} /> },
+                            { label: 'วันที่ตรวจ', value: <InspectionDateCell value={inspection.created_at} /> },
+                            {
+                              label: 'ผลตรวจ',
+                              value: <span className={`inspection-result is-${summary.tone}`}>{INSPECTION_TONE_LABEL[summary.tone]}{issueCount > 0 && ` ${issueCount} ข้อ`}</span>,
+                            },
+                            { label: 'ผู้ตรวจ', value: <InspectionInspectorCell name={inspection.inspected_by} /> },
+                            { label: 'รูป', value: <InspectionPhotosCell count={inspection.photo_count} /> },
+                            {
+                              label: 'สถานะ',
+                              value: inspection.tenant_request_id
+                                ? <span className="insp-status-badge is-reviewed">Staff ตรวจแล้ว</span>
+                                : <span className={`insp-status-badge is-${inspection.status || 'pending'}`}>{MOVE_OUT_INSPECTION_STATUS[inspection.status || 'pending']}</span>,
+                            },
+                            {
+                              label: 'การดำเนินการ',
+                              value: (
+                                <div className="admin-inspection-mobile-actions">
+                                  <button type="button" className="admin-action-btn is-view" onClick={() => openInspectionDetail(inspection)}>ดูรายละเอียด</button>
+                                  {inspection.tenant_request_id ? (
+                                    <button
+                                      type="button"
+                                      className="insp-status-action is-edit"
+                                      disabled={inspectionEditLoadingId === inspection.id}
+                                      onClick={() => openEditInspectionFromRow(inspection)}
+                                    >
+                                      {inspectionEditLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
+                                    </button>
+                                  ) : (
+                                    <InspectionStatusActions
+                                      status={inspection.status || 'pending'}
+                                      onChange={(next) => setInspectionConfirm({ kind: 'status', inspection, next })}
+                                    />
+                                  )}
+                                </div>
+                              ),
+                            },
+                          ]}
+                        />
+                        </Fragment>
                       )
                     })
                   )}
