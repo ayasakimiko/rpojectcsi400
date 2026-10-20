@@ -1703,13 +1703,13 @@ const OWNER_FINANCE_SECTIONS = [
 const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
+    { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
+    { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
-  { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
   { key: 'audit', label: 'ประวัติ Audit' },
-  { key: 'announcements', label: 'ประกาศจากหอพัก' },
-  { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
+  { key: 'dorm-info', label: 'ตั้งแค่ากฎและการจ่ายเงิน' },
 ]
 
 const AUDIT_RESOURCES = [
