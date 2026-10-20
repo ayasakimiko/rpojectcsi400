@@ -61,7 +61,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     }
 
     const [roomRows] = await connection.query(
-      `SELECT id, is_booked FROM Room WHERE room_number = ? FOR UPDATE`,
+      `SELECT id, is_booked, price FROM Room WHERE room_number = ? FOR UPDATE`,
       [normalizedRoomNumber],
     );
 
@@ -73,6 +73,10 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     if (room.is_booked) {
       await connection.rollback();
       return res.status(409).json({ message: "ห้องพักนี้ถูกจองแล้ว" });
+    }
+    if (normalizedDepositAmount !== null && normalizedDepositAmount > Number(room.price)) {
+      await connection.rollback();
+      return res.status(400).json({ message: "เงินมัดจำต้องไม่เกินราคาห้องที่เลือก" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);

@@ -71,6 +71,8 @@ function RegisterMain() {
   const [success, setSuccess] = useState('')
   const [availableRooms, setAvailableRooms] = useState([])
   const [roomsLoading, setRoomsLoading] = useState(true)
+  const selectedRoom = availableRooms.find((room) => String(room.room_number) === String(registerForm.room_number))
+  const selectedRoomPrice = selectedRoom ? Number(selectedRoom.price) : null
 
   useEffect(() => {
     let isMounted = true
@@ -114,7 +116,25 @@ function RegisterMain() {
 
   const handleDepositChange = (e) => {
     const cleaned = e.target.value.replace(/[^\d.]/g, '')
-    setRegisterForm((prev) => ({ ...prev, deposit_amount: cleaned }))
+    if (!/^\d*(?:\.\d{0,2})?$/.test(cleaned)) return
+    const amount = Number(cleaned)
+    setRegisterForm((prev) => ({
+      ...prev,
+      deposit_amount: Number.isFinite(selectedRoomPrice) && cleaned && amount > selectedRoomPrice
+        ? String(selectedRoomPrice)
+        : cleaned,
+    }))
+  }
+
+  const handleRoomChange = (e) => {
+    const roomNumber = e.target.value
+    const room = availableRooms.find((item) => String(item.room_number) === roomNumber)
+    const price = room ? Number(room.price) : null
+    setRegisterForm((prev) => ({
+      ...prev,
+      room_number: roomNumber,
+      deposit_amount: room && Number(prev.deposit_amount) <= price ? prev.deposit_amount : '',
+    }))
   }
 
   const handleRentalDateChange = (name, date) => {
@@ -180,6 +200,11 @@ function RegisterMain() {
 
     if (deposit_amount && (!Number.isFinite(Number(deposit_amount)) || Number(deposit_amount) < 0)) {
       setError('จำนวนเงินมัดจำไม่ถูกต้อง')
+      return
+    }
+
+    if (deposit_amount && selectedRoomPrice !== null && Number(deposit_amount) > selectedRoomPrice) {
+      setError('เงินมัดจำต้องไม่เกินราคาห้องที่เลือก')
       return
     }
 
@@ -312,7 +337,7 @@ function RegisterMain() {
                       name="room_number"
                       className="form-select"
                       value={registerForm.room_number}
-                      onChange={handleRegisterChange}
+                      onChange={handleRoomChange}
                       disabled={roomsLoading}
                     >
                       <option value="">
@@ -342,8 +367,13 @@ function RegisterMain() {
                       placeholder="เว้นว่างไว้หากไม่มีมัดจำ"
                       value={registerForm.deposit_amount}
                       onChange={handleDepositChange}
+                      disabled={!selectedRoom}
                     />
-                    <div className="form-text">ยอดมัดจำนี้จะถูกหักออกจากค่าเช่าเดือนแรกให้อัตโนมัติ</div>
+                    <div className="form-text">
+                      {selectedRoomPrice !== null
+                        ? `กรอกได้ไม่เกินราคาห้อง ฿${selectedRoomPrice.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ยอดมัดจำจะถูกหักจากค่าเช่าเดือนแรก`
+                        : 'เลือกห้องก่อนกรอกเงินมัดจำ'}
+                    </div>
                   </div>
 
                   <div className="col-12 col-md-6">

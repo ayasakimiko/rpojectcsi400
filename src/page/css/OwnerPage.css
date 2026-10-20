@@ -8468,7 +8468,7 @@ table tbody td.owner-empty-row:last-child {
 .owner-xl-footer .owner-pa-pager { gap: 12px; }
 .owner-xl-table .is-actions { text-align: center; }
 .owner-xl-row-actions { display: inline-flex; gap: 6px; }
-.owner-xl-icon-btn { display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 1px solid #e3ecf8; border-radius: 9px; background: #fff; color: #6b859e; cursor: pointer; transition: background .1s ease, border-color .1s ease, color .1s ease; }
+.owner-xl-icon-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 10px; border: 1px solid #e3ecf8; border-radius: 9px; background: #fff; color: #6b859e; font: inherit; font-size: 11.5px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: background .1s ease, border-color .1s ease, color .1s ease; }
 .owner-xl-icon-btn.is-edit:hover { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
 .owner-xl-icon-btn.is-delete:hover { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
 .owner-xl-icon-btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
@@ -8671,11 +8671,11 @@ textarea.owner-xe-input { resize: vertical; line-height: 1.5; }
 .owner-sf-password { position: relative; display: block; }
 .owner-sf-password .owner-xe-input { padding-right: 64px; }
 .owner-sf-password button { position: absolute; top: 50%; right: 6px; padding: 4px 10px; border: 1px solid #e3ecf8; border-radius: 8px; background: #f8fbff; color: #2563eb; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transform: translateY(-50%); }
-.owner-modal.owner-sf-detail { width: min(560px,calc(100vw - 32px)); height: min(420px,92dvh); max-height: min(420px,92dvh); }
+.owner-modal.owner-sf-detail { width: min(560px,calc(100vw - 32px)); height: auto; max-height: min(720px,92dvh); }
 .owner-sf-detail .owner-xe-header > div { flex: 1; min-width: 0; }
 .owner-sf-detail .owner-xe-header h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .owner-sf-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
-.owner-sf-detail-body { flex: 1; min-height: 0; }
+.owner-sf-detail-body { flex: 0 1 auto; min-height: 0; }
 .owner-sf-fields dd { white-space: normal; }
 .owner-sf-detail-actions .owner-xl-btn.is-danger { margin-right: auto; }
 @media(max-width:560px) { .owner-sf-roles, .owner-xe-grid.is-three.owner-sf-grid { grid-template-columns: 1fr; } }

@@ -1726,14 +1726,6 @@
   overscroll-behavior: contain;
 }
 
-.announcement-detail > .announcement-form-actions {
-  flex: 0 0 auto;
-  padding: 14px 20px 18px;
-  border-top: 1.5px solid #eef2f7;
-  background: #fcfdff;
-  box-shadow: 0 -6px 16px rgba(15, 43, 82, 0.04);
-}
-
 @media (max-width: 560px) {
   .announcement-detail > .announcement-dialog-header {
     padding: 14px 16px 12px;
@@ -1741,10 +1733,6 @@
 
   .announcement-detail > .announcement-detail-body {
     padding: 16px 16px 20px;
-  }
-
-  .announcement-detail > .announcement-form-actions {
-    padding: 12px 16px 16px;
   }
 }
 

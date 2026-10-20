@@ -925,11 +925,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
                 )}
               </div>
             </div>
-            <div className="announcement-form-actions">
-              <button type="button" className="announcement-board-cancel" onClick={closeDetail}>
-                ปิด
-              </button>
-            </div>
           </section>
         </div>
       )}

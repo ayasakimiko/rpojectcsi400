@@ -634,7 +634,7 @@ function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
         {error && <p className="owner-xl-error" role="alert">{error}</p>}
         <div className="owner-xl-table-wrap">
           <table className="owner-xl-table">
-            <colgroup><col style={{ width: '13%' }} /><col style={{ width: '15%' }} /><col /><col style={{ width: '15%' }} /><col style={{ width: '8%' }} /><col style={{ width: '13%' }} /><col style={{ width: '96px' }} /></colgroup>
+            <colgroup><col style={{ width: '13%' }} /><col style={{ width: '15%' }} /><col /><col style={{ width: '15%' }} /><col style={{ width: '8%' }} /><col style={{ width: '13%' }} /><col style={{ width: '170px' }} /></colgroup>
             <thead><tr><th>วันที่</th><th>หมวดหมู่</th><th>รายละเอียด</th><th>บันทึกโดย</th><th>หลักฐาน</th><th className="is-amount">จำนวนเงิน</th><th className="is-actions">จัดการ</th></tr></thead>
             <tbody>
               {rows.map((item) => {
@@ -650,8 +650,8 @@ function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
                     <td className="is-amount"><strong className="owner-xl-amount">฿{formatCurrency(item.amount)}</strong><span className="owner-xl-more">ดูรายละเอียด ›</span></td>
                     <td className="is-actions">
                       <span className="owner-xl-row-actions">
-                        <button type="button" className="owner-xl-icon-btn is-edit" title="แก้ไข" aria-label={`แก้ไขรายจ่าย #${item.id}`} onClick={(event) => { event.stopPropagation(); onEdit?.(item) }} onKeyDown={(event) => event.stopPropagation()}><ExpenseActionIcon name="edit" /></button>
-                        <button type="button" className="owner-xl-icon-btn is-delete" title="ลบ" aria-label={`ลบรายจ่าย #${item.id}`} onClick={(event) => { event.stopPropagation(); onDelete?.(item) }} onKeyDown={(event) => event.stopPropagation()}><ExpenseActionIcon name="trash" /></button>
+                        <button type="button" className="owner-xl-icon-btn is-edit" title="แก้ไข" aria-label={`แก้ไขรายจ่าย #${item.id}`} onClick={(event) => { event.stopPropagation(); onEdit?.(item) }} onKeyDown={(event) => event.stopPropagation()}><ExpenseActionIcon name="edit" /><span>แก้ไข</span></button>
+                        <button type="button" className="owner-xl-icon-btn is-delete" title="ลบ" aria-label={`ลบรายจ่าย #${item.id}`} onClick={(event) => { event.stopPropagation(); onDelete?.(item) }} onKeyDown={(event) => event.stopPropagation()}><ExpenseActionIcon name="trash" /><span>ลบ</span></button>
                       </span>
                     </td>
                   </tr>
@@ -3160,7 +3160,9 @@ function OwnerMain() {
     : pendingSlipReviews
   const paymentPage = Number(paymentLogs.page || 1)
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = announcements.map(buildOwnerAnnouncementNotification)
+  const notifications = announcements
+    .map(buildOwnerAnnouncementNotification)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
   const newNotifications = notifications.filter((item) => !seenNotificationKeys.includes(item.key))
   const notificationPageSize = 30
   const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))

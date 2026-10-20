@@ -292,11 +292,14 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                           </span>
                         )}
                         <div className="waiting-tags">
-                          {preferences.length > 0 ? (
-                            preferences.map((preference) => <span key={preference}>{preference}</span>)
-                          ) : (
-                            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-                          )}
+                          <small className="waiting-tags-label">ประเภทห้องที่สนใจ</small>
+                          <div className="waiting-tags-values">
+                            {preferences.length > 0 ? (
+                              preferences.map((preference) => <span key={preference}><DoorIcon size={15} />{preference}</span>)
+                            ) : (
+                              <span className="is-muted"><DoorIcon size={15} />ไม่ระบุประเภทห้อง</span>
+                            )}
+                          </div>
                         </div>
                         {item.note && (
                           <div className="waiting-card-note">
@@ -330,18 +333,6 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                         <div className="waiting-card-actions">
                           <button
                             type="button"
-                            className="waiting-icon-btn is-view"
-                            onClick={() => onDetail(item)}
-                            aria-label={`ดูรายละเอียด ${item.full_name}`}
-                            title="ดูรายละเอียด"
-                          >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
                             className="waiting-icon-btn"
                             onClick={() => onEdit(item)}
                             aria-label={`แก้ไขข้อมูล ${item.full_name}`}
@@ -351,6 +342,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                               <path d="M12 20h9" />
                               <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                             </svg>
+                            <span>แก้ไข</span>
                           </button>
                           <button
                             type="button"
@@ -364,6 +356,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                               <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
                             </svg>
+                            <span>ลบ</span>
                           </button>
                           <button type="button" className="waiting-detail-btn" onClick={() => onDetail(item)}>
                             ดูรายละเอียด
@@ -494,10 +487,14 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
           {vacantRooms.length > 0 ? (
             <div className="waiting-vacant-rooms">
               {vacantRooms.map((room) => (
-                <span key={room.room_number}>
+              <div className="waiting-vacant-room" key={room.room_number}>
+                <span className="waiting-vacant-room-icon" aria-hidden="true"><DoorIcon size={19} /></span>
+                <span className="waiting-vacant-room-info">
                   <strong>ห้อง {room.room_number}</strong>
                   {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
                 </span>
+                <span className="waiting-vacant-room-status">ว่าง</span>
+              </div>
               ))}
             </div>
           ) : (
@@ -8806,7 +8803,7 @@ function AdminBackupPage() {
 
       {parcelDetail && (
         <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetail(null)} variant="expense">
-          {(requestClose) => {
+          {() => {
             const received = parcelDetail.status === 'received'
             const photos = parcelDetail.photos || []
             const tenantName = parcelDetail.first_name ? `${parcelDetail.first_name} ${parcelDetail.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
@@ -8912,13 +8909,6 @@ function AdminBackupPage() {
                       },
                     ]}
                   />
-                </div>
-                <div className="exp-ui-footer-bar">
-                  <div className="exp-ui-modal-actions">
-                    <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                      ปิด
-                    </button>
-                  </div>
                 </div>
               </div>
             )
@@ -9528,9 +9518,6 @@ function AdminBackupPage() {
               </div>
               <div className="exp-ui-footer-bar">
                 <div className="exp-ui-modal-actions">
-                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
-                  </button>
                   <button
                     type="button"
                     className="admin-action-btn is-primary"

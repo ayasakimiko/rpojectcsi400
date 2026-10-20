@@ -22,7 +22,7 @@
   min-height: 0;
   gap: 0;
   overflow: hidden;
-}b
+}
 
 .admin-modal-waiting-detail .waiting-detail-scroll {
   display: flex;
@@ -6265,22 +6265,59 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 12px;
 }
 
 :where(.admin-page) .waiting-tags span {
-  padding: 2px 9px;
-  border: 1px solid #e1ecfb;
-  border-radius: 999px;
-  background: #f8fbff;
   color: #33506f;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 :where(.admin-page) .waiting-tags span.is-muted {
-  border-style: dashed;
-  color: #9db4cc;
+  color: #7089a4;
+}
+
+:where(.admin-page) .waiting-card .waiting-tags {
+  flex-direction: column;
+  gap: 3px;
+}
+
+:where(.admin-page) .waiting-tags-label {
+  color: #7089a4;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+:where(.admin-page) .waiting-tags-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:where(.admin-page) .waiting-tags-values > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #dce9fb;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+:where(.admin-page) .waiting-tags-values > span svg {
+  flex: 0 0 auto;
+  color: #2563eb;
+}
+
+:where(.admin-page) .waiting-tags-values > span.is-muted {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+:where(.admin-page) .waiting-tags-values > span.is-muted svg {
+  color: #8aa0b6;
 }
 
 :where(.admin-page) .waiting-empty {
@@ -6512,6 +6549,11 @@ tr.admin-focus-flash.is-fading > td {
   color: #7a8fa6;
 }
 
+:where(.admin-page) .waiting-detail-section.is-vacancies {
+  border-color: #dceee3;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fdf9 100%);
+}
+
 :where(.admin-page) .waiting-detail-section.is-vacancies h4 > svg {
   color: #16a34a;
 }
@@ -6525,32 +6567,66 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-vacant-rooms {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
-  max-height: 180px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 10px;
+  max-height: 220px;
   overflow-y: auto;
+  padding: 2px;
   scrollbar-width: thin;
 }
 
-:where(.admin-page) .waiting-vacant-rooms span {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid #bbf7d0;
+:where(.admin-page) .waiting-vacant-room {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid #d5eadc;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 3px 10px rgba(22, 101, 52, 0.06);
+}
+
+:where(.admin-page) .waiting-vacant-room-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  height: 36px;
   border-radius: 10px;
-  background: #f0fdf4;
-  line-height: 1.3;
+  background: #eaf8ee;
+  color: #16a34a;
 }
 
-:where(.admin-page) .waiting-vacant-rooms strong {
-  color: #15803d;
-  font-size: 12.5px;
+:where(.admin-page) .waiting-vacant-room-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  line-height: 1.35;
 }
 
-:where(.admin-page) .waiting-vacant-rooms small {
+:where(.admin-page) .waiting-vacant-room-info strong {
+  color: #0f2b52;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+:where(.admin-page) .waiting-vacant-room-info small {
   color: #4d7c63;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:where(.admin-page) .waiting-vacant-room-status {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eaf8ee;
+  color: #15803d;
   font-size: 11px;
+  font-weight: 700;
 }
 
 :where(.admin-page) .waiting-detail-hint {
@@ -6842,13 +6918,17 @@ tr.admin-focus-flash.is-fading > td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  gap: 5px;
   height: 32px;
-  padding: 0;
+  padding: 0 10px;
   border: 1px solid #e1ecfb;
   border-radius: 9px;
   background: #ffffff;
   color: #52708f;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -6904,6 +6984,7 @@ tr.admin-focus-flash.is-fading > td {
 
   :where(.admin-page) .waiting-card-actions {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   :where(.admin-page) .waiting-detail-btn {
@@ -7426,11 +7507,46 @@ tr.admin-focus-flash.is-fading > td {
   font-weight: 600;
 }
 
+:where(.admin-page) .waiting-card .waiting-status-control {
+  padding: 2px 0 12px;
+  border-bottom: 1px dashed #cbdcf2;
+}
+
+:where(.admin-page) .waiting-card .waiting-status-control > span {
+  color: #33506f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+:where(.admin-page) .waiting-card .waiting-status-control select {
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 :where(.admin-page) .waiting-status-control.is-detail {
-  padding: 12px 16px;
-  border: 1px solid #e6eef9;
+  padding: 14px 16px;
+  border: 1px solid #bfdbfe;
   border-radius: 12px;
-  background: #fbfdff;
+  background: linear-gradient(105deg, #eff6ff, #f8fbff);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+}
+
+:where(.admin-page) .waiting-status-control.is-detail > span {
+  color: #0f2b52;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+:where(.admin-page) .waiting-status-control.is-detail select {
+  min-width: 148px;
+  min-height: 38px;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  font-weight: 800;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.08);
 }
 
 :where(.admin-page) .waiting-status-control select {

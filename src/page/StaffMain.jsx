@@ -193,11 +193,14 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                           </span>
                         )}
                         <div className="waiting-tags">
-                          {preferences.length > 0 ? (
-                            preferences.map((preference) => <span key={preference}>{preference}</span>)
-                          ) : (
-                            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-                          )}
+                          <small className="waiting-tags-label">ประเภทห้องที่สนใจ</small>
+                          <div className="waiting-tags-values">
+                            {preferences.length > 0 ? (
+                              preferences.map((preference) => <span key={preference}><DoorIcon size={15} />{preference}</span>)
+                            ) : (
+                              <span className="is-muted"><DoorIcon size={15} />ไม่ระบุประเภทห้อง</span>
+                            )}
+                          </div>
                         </div>
                         {item.note && (
                           <div className="waiting-card-note">
@@ -231,18 +234,6 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                         <div className="waiting-card-actions">
                           <button
                             type="button"
-                            className="waiting-icon-btn is-view"
-                            onClick={() => onDetail(item)}
-                            aria-label={`ดูรายละเอียด ${item.full_name}`}
-                            title="ดูรายละเอียด"
-                          >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
                             className="waiting-icon-btn"
                             onClick={() => onEdit(item)}
                             aria-label={`แก้ไขข้อมูล ${item.full_name}`}
@@ -252,6 +243,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                               <path d="M12 20h9" />
                               <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                             </svg>
+                            <span>แก้ไข</span>
                           </button>
                           <button
                             type="button"
@@ -265,6 +257,7 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                               <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
                             </svg>
+                            <span>ลบ</span>
                           </button>
                           <button type="button" className="waiting-detail-btn" onClick={() => onDetail(item)}>
                             ดูรายละเอียด
@@ -394,10 +387,14 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
         {vacantRooms.length > 0 ? (
           <div className="waiting-vacant-rooms">
             {vacantRooms.map((room) => (
-              <span key={room.room_number}>
-                <strong>ห้อง {room.room_number}</strong>
-                {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
-              </span>
+              <div className="waiting-vacant-room" key={room.room_number}>
+                <span className="waiting-vacant-room-icon" aria-hidden="true"><DoorIcon size={19} /></span>
+                <span className="waiting-vacant-room-info">
+                  <strong>ห้อง {room.room_number}</strong>
+                  {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
+                </span>
+                <span className="waiting-vacant-room-status">ว่าง</span>
+              </div>
             ))}
           </div>
         ) : (
@@ -2272,7 +2269,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
   const tenantName = parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
   return (
     <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="parcel-detail">
-      {(requestClose) => (
+      {() => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-transfer-hero">
@@ -2401,20 +2398,13 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
             </section>
           </div>
 
-          <div className="staff-transfer-footer">
-            <div className="staff-form-actions">
-              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                ปิด
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </Modal>
   )
 }
 
-function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
+function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
   const isMove = request.type === 'move_room'
   const isOpen = ['pending', 'in_progress'].includes(request.status)
   const [openedAt] = useState(() => Date.now())
@@ -2454,7 +2444,7 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
       onClose={onClose}
       variant="transfer-detail"
     >
-      {(requestClose) => (
+      {() => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-req-detail-head">
@@ -2709,13 +2699,11 @@ function TenantRequestDetailModal({ request, sourceRoom, onClose }) {
             </section>
           </div>
 
-          <div className="staff-transfer-footer">
-            <div className="staff-form-actions">
-              <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                ปิด
-              </button>
+          {isOpen && actions && (
+            <div className="staff-transfer-footer">
+              <div className="staff-form-actions">{actions}</div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </Modal>
@@ -2776,7 +2764,7 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
   const photos = inspection?.photos || []
 
   return (
-    <section className="staff-transfer-section">
+    <section className="staff-transfer-section staff-transfer-inspection">
       <div className="staff-transfer-section-head">
         <h4 className="staff-transfer-section-title">ผลตรวจห้อง {roomNumber}</h4>
         {inspection && (
@@ -2804,33 +2792,54 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
           )}
           {issueItems.length > 0 && (
             <ul className="staff-transfer-issues">
-              {issueItems.map((item) => (
-                <li key={item.key}>
-                  <span>{item.label}</span>
-                  <strong>{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
-                </li>
-              ))}
+              {issueItems.map((item, index) => {
+                const [title, detail] = item.label.split(' (')
+                return (
+                  <li key={item.key} className={`is-${checklist[item.key]}`}>
+                    <span className="staff-transfer-issue-number" aria-hidden="true">{index + 1}</span>
+                    <div className="staff-transfer-issue-content">
+                      <span className="staff-transfer-issue-title">{title}</span>
+                      {detail && <small>{detail.replace(/\)$/, '')}</small>}
+                    </div>
+                    <strong className="staff-transfer-issue-status">{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
+                  </li>
+                )
+              })}
             </ul>
           )}
           {inspection.damage_note && (
-            <p className="staff-transfer-note">
-              <span>ความเสียหาย:</span> {inspection.damage_note}
-            </p>
+            <div className="staff-transfer-note is-damage">
+              <span className="staff-transfer-note-icon" aria-hidden="true">!</span>
+              <div className="staff-transfer-note-content">
+                <strong>รายละเอียดความเสียหาย</strong>
+                <p>{inspection.damage_note}</p>
+              </div>
+            </div>
           )}
           {photos.length > 0 ? (
-            <div className="staff-transfer-photos">
-              {photos.slice(0, 8).map((photo, index) => (
-                <button
-                  type="button"
-                  key={photo.url}
-                  className="staff-transfer-photo"
-                  onClick={() => setPhotoIndex(index)}
-                  aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
-                >
-                  <UploadImage src={photo.url} alt="" />
-                  {index === 7 && photos.length > 8 && <span>+{photos.length - 8}</span>}
-                </button>
-              ))}
+            <div className="staff-transfer-inspection-gallery">
+              <div className="staff-transfer-gallery-heading">
+                <h5>รูปประกอบผลตรวจ <span>{photos.length} รูป</span></h5>
+                <small>คลิกรูปเพื่อดูขนาดเต็ม</small>
+              </div>
+              <div className="staff-transfer-photos">
+                {photos.slice(0, 8).map((photo, index) => (
+                  <button
+                    type="button"
+                    key={photo.url}
+                    className="staff-transfer-photo"
+                    onClick={() => setPhotoIndex(index)}
+                    aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
+                  >
+                    <UploadImage src={photo.url} alt="" />
+                    {index === 7 && photos.length > 8 ? (
+                      <span>+{photos.length - 8}</span>
+                    ) : (
+                      <small className="staff-transfer-photo-caption">รูปที่ {index + 1}</small>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <p className="staff-transfer-muted">ไม่มีรูปถ่าย</p>
@@ -7120,23 +7129,20 @@ function StaffMain() {
     }
   }
 
-  const renderTenantRequestItem = (request) => {
+  const renderTenantRequestActions = (request) => {
     const key = `tenant-${request.id}`
     const isProcessing = processingRequestKey === key
+    const openAction = (action) => {
+      setTenantRequestDetail(null)
+      action(request)
+    }
     return (
-      <TenantRequestCard
-        key={key}
-        request={request}
-        steps={[{ key: 'created', label: 'ส่งคำขอ', date: request.created_at, tone: 'info' }]}
-      >
-        <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
-          ดูรายละเอียด
-        </button>
+      <>
         <button
           type="button"
-          className="staff-action-btn is-ghost"
+          className="staff-action-btn is-danger-outline"
           disabled={isProcessing}
-          onClick={() => setTenantRejectConfirm(request)}
+          onClick={() => openAction(setTenantRejectConfirm)}
         >
           ปฏิเสธ
         </button>
@@ -7146,7 +7152,7 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => setMoveoutConfirmRequest(request)}
+              onClick={() => openAction(setMoveoutConfirmRequest)}
             >
               {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติการย้ายออก'}
             </button>
@@ -7155,7 +7161,7 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => setMoveoutAcknowledgeConfirm(request)}
+              onClick={() => openAction(setMoveoutAcknowledgeConfirm)}
             >
               {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
             </button>
@@ -7166,7 +7172,7 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => setRenewApproveConfirm(request)}
+              onClick={() => openAction(setRenewApproveConfirm)}
             >
               {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติย้ายห้อง'}
             </button>
@@ -7174,7 +7180,8 @@ function StaffMain() {
             <button
               type="button"
               className="staff-action-btn is-primary"
-              onClick={() => openMoveRoomInspection(request)}
+              disabled={isProcessing}
+              onClick={() => openAction(openMoveRoomInspection)}
             >
               ตรวจห้องก่อนย้าย
             </button>
@@ -7184,11 +7191,26 @@ function StaffMain() {
             type="button"
             className="staff-action-btn is-primary"
             disabled={isProcessing}
-            onClick={() => setRenewApproveConfirm(request)}
+            onClick={() => openAction(setRenewApproveConfirm)}
           >
             {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
           </button>
         )}
+      </>
+    )
+  }
+
+  const renderTenantRequestItem = (request) => {
+    return (
+      <TenantRequestCard
+        key={`tenant-${request.id}`}
+        request={request}
+        steps={[{ key: 'created', label: 'ส่งคำขอ', date: request.created_at, tone: 'info' }]}
+      >
+        <button type="button" className="staff-text-link" onClick={() => setTenantRequestDetail(request)}>
+          ดูรายละเอียด
+        </button>
+        {renderTenantRequestActions(request)}
       </TenantRequestCard>
     )
   }
@@ -7261,7 +7283,7 @@ function StaffMain() {
           </button>
           <button
             type="button"
-            className="staff-action-btn is-ghost"
+            className="staff-action-btn is-danger-outline"
             disabled={isProcessing}
             onClick={() => setMaintenanceRejectConfirm(request)}
           >
@@ -7417,7 +7439,7 @@ function StaffMain() {
       ...tenantRequests.flatMap(buildStaffTenantNotifs),
       ...maintenanceRequests.flatMap(buildStaffMaintenanceNotifs),
       ...announcements.map(buildAnnouncementNotif),
-    ].sort((a, b) => Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)) || new Date(b.date) - new Date(a.date))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements])
 
   const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
@@ -10440,9 +10462,6 @@ function StaffMain() {
               </div>
               <div className="staff-transfer-footer">
                 <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
-                  </button>
                   <button
                     type="button"
                     className="staff-action-btn is-primary"
@@ -11708,13 +11727,14 @@ function StaffMain() {
         <TenantRequestDetailModal
           request={tenantRequestDetail}
           sourceRoom={rooms.find((room) => String(room.room_number) === String(tenantRequestDetail.room_number))}
+          actions={renderTenantRequestActions(tenantRequestDetail)}
           onClose={() => setTenantRequestDetail(null)}
         />
       )}
 
       {maintenanceDetail && (
         <Modal title="รายละเอียดการแจ้งซ่อม" onClose={() => setMaintenanceDetail(null)} variant="transfer-detail">
-          {(requestClose) => (
+          {() => (
             <div className="staff-transfer-body">
               <div className="staff-transfer-top">
                 <div className="staff-req-detail-head">
@@ -11825,13 +11845,35 @@ function StaffMain() {
               )}
               </div>
 
-              <div className="staff-transfer-footer">
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                    ปิด
-                  </button>
+              {['pending', 'in_progress'].includes(maintenanceDetail.status) && (
+                <div className="staff-transfer-footer">
+                  <div className="staff-form-actions">
+                    <button
+                      type="button"
+                      className="staff-action-btn is-danger-outline"
+                      disabled={processingRequestKey === `maintenance-${maintenanceDetail.id}`}
+                      onClick={() => {
+                        setMaintenanceRejectConfirm(maintenanceDetail)
+                        setMaintenanceDetail(null)
+                      }}
+                    >
+                      ปฏิเสธ
+                    </button>
+                    <button
+                      type="button"
+                      className="staff-action-btn is-primary"
+                      disabled={processingRequestKey === `maintenance-${maintenanceDetail.id}`}
+                      onClick={() => {
+                        if (maintenanceDetail.status === 'pending') setMaintenanceAcceptConfirm(maintenanceDetail)
+                        else setMaintenanceCompleteConfirm(maintenanceDetail)
+                        setMaintenanceDetail(null)
+                      }}
+                    >
+                      {maintenanceDetail.status === 'pending' ? 'รับเรื่อง' : 'เสร็จสิ้น'}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </Modal>
