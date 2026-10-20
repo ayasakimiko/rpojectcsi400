@@ -555,6 +555,16 @@ function OwnerExpenseDetailDialog({ expense, onClose, onEdit, onDelete }) {
   )
 }
 
+function StaffRoleIcon({ role, size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {role === 'Admin'
+        ? <><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z" /><path d="m9 12 2 2 4-4" /></>
+        : <><circle cx="12" cy="8" r="3.6" /><path d="M5 20.5c.6-3.6 3.5-6 7-6s6.4 2.4 7 6" /></>}
+    </svg>
+  )
+}
+
 function ExpenseActionIcon({ name }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1968,6 +1978,8 @@ function OwnerMain() {
   const [confirmDialog, setConfirmDialog] = useState(null)
   const confirmResolverRef = useRef(null)
   const [staffPage, setStaffPage] = useState(1)
+  const [staffSearch, setStaffSearch] = useState('')
+  const [staffRoleFilter, setStaffRoleFilter] = useState('all')
   const [occupancySummary, setOccupancySummary] = useState(null)
   const [isOccupancySummaryLoading, setIsOccupancySummaryLoading] = useState(false)
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false)
@@ -2177,12 +2189,27 @@ function OwnerMain() {
   const totalOccupancyPages = Math.max(1, Math.ceil((Number(occupancyLogs.total) || 0) / (Number(occupancyLogs.pageSize) || 10)))
 
   const STAFF_PAGE_SIZE = 10
-  const staffTotalPages = Math.max(1, Math.ceil(staffList.length / STAFF_PAGE_SIZE))
+  const filteredStaff = useMemo(() => {
+    const keyword = staffSearch.trim().toLowerCase()
+    return staffList.filter((member) => {
+      if (staffRoleFilter !== 'all' && (staffRoleFilter === 'suspended' ? !member.is_suspended : member.role !== staffRoleFilter)) return false
+      if (!keyword) return true
+      return [member.first_name, member.last_name, `${member.first_name || ''} ${member.last_name || ''}`, member.phone, member.role]
+        .some((value) => String(value || '').toLowerCase().includes(keyword))
+    })
+  }, [staffList, staffSearch, staffRoleFilter])
+  const staffTotalPages = Math.max(1, Math.ceil(filteredStaff.length / STAFF_PAGE_SIZE))
   const clampedStaffPage = Math.min(staffPage, staffTotalPages)
   const paginatedStaff = useMemo(() => {
     const start = (clampedStaffPage - 1) * STAFF_PAGE_SIZE
-    return staffList.slice(start, start + STAFF_PAGE_SIZE)
-  }, [staffList, clampedStaffPage])
+    return filteredStaff.slice(start, start + STAFF_PAGE_SIZE)
+  }, [filteredStaff, clampedStaffPage])
+  const staffCounts = useMemo(() => ({
+    all: staffList.length,
+    Staff: staffList.filter((member) => member.role === 'Staff').length,
+    Admin: staffList.filter((member) => member.role === 'Admin').length,
+    suspended: staffList.filter((member) => member.is_suspended).length,
+  }), [staffList])
 
   const roomListItems = useMemo(() => {
     if (displayRoomListFilter === 'occupied') return (roomStatus.rooms || []).filter((room) => room.is_booked)
@@ -2320,10 +2347,8 @@ function OwnerMain() {
 
   const setMessage = (type, message) => {
     setNotice({ type, message })
-    window.setTimeout(() => {
-      setNotice((prev) => (prev.message === message ? { type: '', message: '' } : prev))
-    }, 3500)
   }
+  const closeNotice = () => setNotice({ type: '', message: '' })
 
   const loadOverview = async (overrides = {}) => {
     const nextFilters = { ...paymentFilter, ...overrides }
@@ -2732,6 +2757,7 @@ function OwnerMain() {
 
   const validateStaffForm = (isEdit) => {
     const errors = {}
+    if (!staffForm.first_name.trim() || !staffForm.last_name.trim()) errors.name = 'กรุณากรอกชื่อและนามสกุล'
     if (!isEdit && !/^\d{13}$/.test(staffForm.idcard.trim())) errors.idcard = 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก'
     if (!/^0\d{8,9}$/.test(staffForm.phone.trim())) errors.phone = 'เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก'
     if (!isEdit || staffForm.password) {
@@ -2806,8 +2832,21 @@ function OwnerMain() {
   }
 
   const toggleStaffStatus = async (staffMember) => {
+    const action = staffMember.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'
+    const confirmed = await askConfirm({
+      tone: staffMember.is_suspended ? 'success' : 'danger',
+      title: staffMember.is_suspended ? 'เปิดใช้งานพนักงาน' : 'ระงับการใช้งานพนักงาน',
+      message: staffMember.is_suspended
+        ? 'พนักงานคนนี้จะกลับมาเข้าสู่ระบบและใช้งานได้ตามปกติ'
+        : 'พนักงานคนนี้จะเข้าสู่ระบบไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง ข้อมูลเดิมยังอยู่ครบ',
+      details: [
+        ['ชื่อ', `${staffMember.first_name || ''} ${staffMember.last_name || ''}`.trim() || '-'],
+        ['ตำแหน่ง', staffMember.role || '-'],
+      ],
+      confirmLabel: action,
+    })
+    if (!confirmed) return
     try {
-      const action = staffMember.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'
       await axios.patch(
         `/api/owner/staff/${staffMember.role}/${staffMember.id}/suspend`,
         { is_suspended: !staffMember.is_suspended },
@@ -3105,7 +3144,24 @@ function OwnerMain() {
         )}
 
         {notice.message && (
-          <div className={`owner-alert owner-alert-${notice.type}`}>{notice.message}</div>
+          <div className="owner-modal-backdrop owner-confirm-backdrop owner-notice-backdrop" role="presentation" onClick={closeNotice} onKeyDown={(event) => { if (event.key === 'Escape') closeNotice() }}>
+            <section className={`owner-modal owner-confirm-modal is-${notice.type === 'danger' ? 'danger' : 'success'}`} role="alertdialog" aria-modal="true" aria-labelledby="owner-notice-title" aria-describedby="owner-notice-message" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-confirm-body">
+                <span className="owner-confirm-icon" aria-hidden="true">
+                  {notice.type === 'danger' ? (
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+                  ) : (
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 10" /></svg>
+                  )}
+                </span>
+                <h3 id="owner-notice-title">{notice.type === 'danger' ? 'ดำเนินการไม่สำเร็จ' : 'ดำเนินการสำเร็จ'}</h3>
+                <p id="owner-notice-message">{notice.message}</p>
+              </div>
+              <div className="owner-confirm-actions owner-notice-actions">
+                <button type="button" className="owner-confirm-ok" onClick={closeNotice} autoFocus>ตกลง</button>
+              </div>
+            </section>
+          </div>
         )}
 
         {!isLoading && ownerSummaryTiles && (
@@ -3750,214 +3806,168 @@ function OwnerMain() {
         )}
 
         {!isLoading && activeTab === 'staff' && (
-          <section className="owner-panel owner-staff-panel">
-              <div className="owner-panel-header">
+          <section className="owner-panel owner-pl-panel owner-sf-panel">
+            <div className="owner-pl-head">
+              <div>
                 <h3>จัดการพนักงาน</h3>
-                <button type="button" className="owner-primary-btn small" onClick={openStaffModal}>
-                  + เพิ่มพนักงาน
-                </button>
+                <p>ทั้งหมด {staffCounts.all} คน · กดแถวเพื่อดูรายละเอียดพนักงาน</p>
               </div>
-
-                <div className="owner-table-wrap owner-staff-table-wrap">
-                  <table className="owner-table">
-                    <thead>
-                      <tr>
-                        <th>ชื่อ-นามสกุล</th>
-                        <th>ตำแหน่ง</th>
-                        <th>เบอร์</th>
-                        <th className="owner-col-status">สถานะ</th>
-                        <th>จัดการ</th>
+              <button type="button" className="owner-xl-btn is-primary" onClick={openStaffModal}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                เพิ่มพนักงาน
+              </button>
+            </div>
+            <div className="owner-pl-toolbar">
+              <label className="owner-xl-search owner-pl-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+                <input type="search" value={staffSearch} onChange={(event) => { setStaffSearch(event.target.value); setStaffPage(1) }} placeholder="ค้นหาชื่อ เบอร์โทร หรือตำแหน่ง" aria-label="ค้นหาพนักงาน" />
+              </label>
+              <div className="owner-pl-segment" role="radiogroup" aria-label="กรองพนักงาน">
+                {[['all', 'ทั้งหมด'], ['Staff', 'Staff'], ['Admin', 'Admin'], ['suspended', 'ระงับใช้งาน']].map(([key, label]) => (
+                  <button key={key} type="button" role="radio" aria-checked={staffRoleFilter === key} className={staffRoleFilter === key ? 'is-active' : ''} onClick={() => { setStaffRoleFilter(key); setStaffPage(1) }}>
+                    {label}<span className="owner-sf-count">{staffCounts[key]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="owner-pl-table-wrap owner-sf-table-wrap">
+              <table className="owner-pl-table owner-sf-table">
+                <colgroup><col /><col style={{ width: '13%' }} /><col style={{ width: '16%' }} /><col style={{ width: '15%' }} /><col style={{ width: '14%' }} /><col style={{ width: '250px' }} /></colgroup>
+                <thead><tr><th>พนักงาน</th><th>ตำแหน่ง</th><th>เบอร์โทร</th><th>สถานะ</th><th>เพิ่มเข้าระบบ</th><th className="is-center">จัดการ</th></tr></thead>
+                <tbody>
+                  {paginatedStaff.map((member) => {
+                    const name = `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'
+                    const stop = (event) => event.stopPropagation()
+                    return (
+                      <tr key={`${member.role}-${member.id}`} className={`owner-pl-row${member.is_suspended ? ' is-suspended' : ''}`} tabIndex={0} onClick={() => setViewingStaff(member)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setViewingStaff(member) } }} aria-label={`ดูรายละเอียดพนักงาน ${name}`}>
+                        <td>
+                          <div className="owner-sf-person">
+                            <span className={`owner-sf-avatar is-${member.role === 'Admin' ? 'admin' : 'staff'}`} aria-hidden="true"><StaffRoleIcon role={member.role} /></span>
+                            <div><strong>{name}</strong><small>ดูรายละเอียด ›</small></div>
+                          </div>
+                        </td>
+                        <td><span className={`owner-sf-role is-${member.role === 'Admin' ? 'admin' : 'staff'}`}>{member.role}</span></td>
+                        <td><span className="owner-sf-phone"><OwnerListIcon name="phone" size={13} />{member.phone || '-'}</span></td>
+                        <td><span className={`owner-pl-status ${member.is_suspended ? 'is-danger' : 'is-paid'}`}><i aria-hidden="true" />{member.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}</span></td>
+                        <td><span className="owner-xl-date"><OwnerListIcon name="calendar" size={13} /><strong>{member.created_at ? formatDate(member.created_at) : '-'}</strong></span></td>
+                        <td className="is-center">
+                          <span className="owner-xl-row-actions">
+                            <button type="button" className="owner-xl-icon-btn owner-sf-act is-edit" aria-label={`แก้ไข ${name}`} onClick={(event) => { stop(event); openStaffEditModal(member) }} onKeyDown={stop}><ExpenseActionIcon name="edit" /><span>แก้ไข</span></button>
+                            <button type="button" className={`owner-xl-icon-btn owner-sf-act ${member.is_suspended ? 'is-enable' : 'is-suspend'}`} aria-label={`${member.is_suspended ? 'เปิดใช้งาน' : 'ระงับใช้งาน'} ${name}`} onClick={(event) => { stop(event); toggleStaffStatus(member) }} onKeyDown={stop}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{member.is_suspended ? <path d="m5 12.5 4.5 4.5L19 7.5" /> : <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>}</svg>
+                              <span>{member.is_suspended ? 'เปิดใช้' : 'ระงับ'}</span>
+                            </button>
+                            <button type="button" className="owner-xl-icon-btn owner-sf-act is-delete" aria-label={`ลบ ${name}`} onClick={(event) => { stop(event); deleteStaffMember(member) }} onKeyDown={stop}><ExpenseActionIcon name="trash" /><span>ลบ</span></button>
+                          </span>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedStaff.length ? (
-                        paginatedStaff.map((member) => (
-                          <tr key={`${member.role}-${member.id}`}>
-                            <td>{`${member.first_name || ''} ${member.last_name || ''}`.trim() || '-'}</td>
-                            <td>{member.role}</td>
-                            <td>{member.phone || '-'}</td>
-                            <td className="owner-col-status">
-                              <span className={`owner-status-badge ${member.is_suspended ? 'disabled' : 'active'}`}>
-                                {member.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="owner-inline-actions">
-                                <button type="button" className="owner-action-btn view" onClick={() => setViewingStaff(member)}>
-                                  ดูรายละเอียด
-                                </button>
-                                <button type="button" className="owner-action-btn update" onClick={() => openStaffEditModal(member)}>
-                                  แก้ไข
-                                </button>
-                                <button type="button" className="owner-action-btn update" onClick={() => toggleStaffStatus(member)}>
-                                  {member.is_suspended ? 'เปิดใช้งาน' : 'ระงับ'}
-                                </button>
-                                <button type="button" className="owner-action-btn delete" onClick={() => deleteStaffMember(member)}>
-                                  ลบ
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="5" className="owner-empty-row">
-                            ไม่มีข้อมูลพนักงาน
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {staffList.length > STAFF_PAGE_SIZE && (
-                  <div className="owner-pagination">
-                    <button type="button" disabled={clampedStaffPage <= 1} onClick={() => setStaffPage((page) => page - 1)}>
-                      ก่อนหน้า
-                    </button>
-                    <span>
-                      หน้า {clampedStaffPage}/{staffTotalPages}
-                    </span>
-                    <button type="button" disabled={clampedStaffPage >= staffTotalPages} onClick={() => setStaffPage((page) => page + 1)}>
-                      ถัดไป
-                    </button>
-                  </div>
-                )}
+                    )
+                  })}
+                  {!paginatedStaff.length && <tr><td colSpan={6} className="owner-xl-empty">{staffList.length ? 'ไม่พบพนักงานที่ตรงกับตัวกรอง' : 'ยังไม่มีข้อมูลพนักงาน'}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <footer className="owner-xl-footer">
+              <span>แสดง {paginatedStaff.length ? (clampedStaffPage - 1) * STAFF_PAGE_SIZE + 1 : 0}–{(clampedStaffPage - 1) * STAFF_PAGE_SIZE + paginatedStaff.length} จาก {filteredStaff.length} คน</span>
+              <div className="owner-pa-pager">
+                <button type="button" aria-label="หน้าก่อนหน้า" disabled={clampedStaffPage <= 1} onClick={() => setStaffPage(clampedStaffPage - 1)}>‹</button>
+                <span>{clampedStaffPage} / {staffTotalPages}</span>
+                <button type="button" aria-label="หน้าถัดไป" disabled={clampedStaffPage >= staffTotalPages} onClick={() => setStaffPage(clampedStaffPage + 1)}>›</button>
+              </div>
+            </footer>
           </section>
         )}
 
         {displayStaffModalOpen && (
           <div className={`owner-modal-backdrop${isStaffModalClosing ? ' is-closing' : ''}`} role="presentation" onClick={closeStaffModal}>
-            <section className={`owner-modal${isStaffModalClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-modal-header">
+            <section className={`owner-modal owner-xe-dialog owner-sf-dialog${isStaffModalClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header owner-xe-header">
+                <span className={`owner-sf-avatar is-lg is-${staffForm.role === 'Admin' ? 'admin' : 'staff'}`} aria-hidden="true"><StaffRoleIcon role={staffForm.role} size={21} /></span>
                 <div>
-                  <h3 id="staff-modal-title">{editingStaff ? 'แก้ไขพนักงาน' : 'เพิ่มพนักงาน'}</h3>
-                  <p className="owner-modal-subtext">
-                    {editingStaff ? 'แก้ไขรายละเอียดพนักงานคนนี้' : 'กรอกรายละเอียดพนักงานที่ต้องการเพิ่ม'}
-                  </p>
+                  <h3 id="staff-modal-title">{editingStaff ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มพนักงานใหม่'}</h3>
+                  <p className="owner-modal-subtext">{editingStaff ? 'ตำแหน่งและเลขบัตรประชาชนแก้ไขไม่ได้' : 'พนักงานใช้เลขบัตรประชาชนและรหัสผ่านนี้เข้าสู่ระบบ'}</p>
                 </div>
-                <button type="button" className="owner-modal-close" onClick={closeStaffModal} aria-label="ปิดหน้าต่างเพิ่มพนักงาน">
+                <button type="button" className="owner-modal-close" onClick={closeStaffModal} aria-label="ปิดหน้าต่างพนักงาน">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
                     <line x1="6" y1="6" x2="18" y2="18" />
                     <line x1="18" y1="6" x2="6" y2="18" />
                   </svg>
                 </button>
               </div>
-
-              <div className="owner-modal-body">
-                <form onSubmit={handleStaffSubmit} className="owner-staff-form">
-                  <div className="owner-form-row">
-                    <label>
-                      ตำแหน่ง
-                      <select
-                        value={staffForm.role}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, role: event.target.value }))}
-                        disabled={Boolean(editingStaff)}
-                      >
-                        <option value="Staff">Staff</option>
-                        <option value="Admin">Admin</option>
-                      </select>
+              <form className="owner-xe-form" onSubmit={handleStaffSubmit} noValidate>
+                <div className="owner-modal-body owner-xe-body">
+                  <section className="owner-xe-section">
+                    <h4>ตำแหน่ง</h4>
+                    <div className="owner-sf-roles" role="radiogroup" aria-label="ตำแหน่ง">
+                      {[
+                        { key: 'Staff', title: 'Staff', hint: 'ดูแลงานประจำวัน ห้องพัก และผู้เช่า' },
+                        { key: 'Admin', title: 'Admin', hint: 'จัดการระบบและข้อมูลได้มากกว่า Staff' },
+                      ].map((option) => (
+                        <button key={option.key} type="button" role="radio" aria-checked={staffForm.role === option.key} disabled={Boolean(editingStaff)} className={`owner-sf-role-option is-${option.key === 'Admin' ? 'admin' : 'staff'}${staffForm.role === option.key ? ' is-active' : ''}`} onClick={() => setStaffForm((prev) => ({ ...prev, role: option.key }))}>
+                          <span className="owner-sf-role-dot" aria-hidden="true" />
+                          <span><strong>{option.title}</strong><small>{option.hint}</small></span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="owner-xe-section">
+                    <h4>ข้อมูลส่วนตัว</h4>
+                    <div className="owner-xe-grid">
+                      <label className="owner-xe-field"><span>ชื่อ <em>จำเป็น</em></span><input className="owner-xe-input" type="text" value={staffForm.first_name} onChange={(event) => setStaffForm((prev) => ({ ...prev, first_name: event.target.value }))} placeholder="ชื่อ" /></label>
+                      <label className="owner-xe-field"><span>นามสกุล <em>จำเป็น</em></span><input className="owner-xe-input" type="text" value={staffForm.last_name} onChange={(event) => setStaffForm((prev) => ({ ...prev, last_name: event.target.value }))} placeholder="นามสกุล" /></label>
+                    </div>
+                    {staffErrors.name && <small className="owner-sf-error">{staffErrors.name}</small>}
+                    <div className="owner-xe-grid is-three owner-sf-grid">
+                      <label className={`owner-xe-field${staffErrors.idcard ? ' has-error' : ''}`}>
+                        <span>เลขบัตรประชาชน {!editingStaff && <em>จำเป็น</em>}</span>
+                        <input className="owner-xe-input" type="text" inputMode="numeric" maxLength={13} value={staffForm.idcard} onChange={(event) => setStaffForm((prev) => ({ ...prev, idcard: event.target.value.replace(/\D/g, '') }))} placeholder="13 หลัก" disabled={Boolean(editingStaff)} />
+                        {staffErrors.idcard && <small className="owner-sf-error">{staffErrors.idcard}</small>}
+                      </label>
+                      <label className={`owner-xe-field${staffErrors.phone ? ' has-error' : ''}`}>
+                        <span>เบอร์โทร <em>จำเป็น</em></span>
+                        <input className="owner-xe-input" type="tel" inputMode="numeric" maxLength={10} value={staffForm.phone} onChange={(event) => setStaffForm((prev) => ({ ...prev, phone: event.target.value.replace(/\D/g, '') }))} placeholder="0812345678" />
+                        {staffErrors.phone && <small className="owner-sf-error">{staffErrors.phone}</small>}
+                      </label>
+                      <label className={`owner-xe-field${staffErrors.age ? ' has-error' : ''}`}>
+                        <span>อายุ <em>จำเป็น</em></span>
+                        <input className="owner-xe-input" type="number" min="1" max="120" value={staffForm.age} onChange={(event) => setStaffForm((prev) => ({ ...prev, age: event.target.value }))} placeholder="25" />
+                        {staffErrors.age && <small className="owner-sf-error">{staffErrors.age}</small>}
+                      </label>
+                    </div>
+                  </section>
+                  <section className="owner-xe-section">
+                    <h4>{editingStaff ? 'เปลี่ยนรหัสผ่าน' : 'รหัสผ่านเข้าสู่ระบบ'} {!editingStaff && <em>จำเป็น</em>}</h4>
+                    <label className={`owner-xe-field${staffErrors.password ? ' has-error' : ''}`}>
+                      <span className="owner-sf-password">
+                        <input className="owner-xe-input" type={showPassword ? 'text' : 'password'} value={staffForm.password} onChange={(event) => setStaffForm((prev) => ({ ...prev, password: event.target.value }))} placeholder={editingStaff ? 'เว้นว่างหากไม่ต้องการเปลี่ยน' : 'อย่างน้อย 6 ตัวอักษร'} autoComplete="new-password" aria-label="รหัสผ่าน" />
+                        <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}>{showPassword ? 'ซ่อน' : 'แสดง'}</button>
+                      </span>
+                      {staffErrors.password ? <small className="owner-sf-error">{staffErrors.password}</small> : <small className="owner-sf-hint">{editingStaff ? 'กรอกเฉพาะเมื่อต้องการตั้งรหัสผ่านใหม่' : 'แจ้งรหัสผ่านนี้ให้พนักงานเพื่อใช้เข้าสู่ระบบครั้งแรก'}</small>}
                     </label>
-                    <label>
-                      อายุ
-                      <input
-                        type="number"
-                        min="1"
-                        max="120"
-                        value={staffForm.age}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, age: event.target.value }))}
-                        placeholder="25"
-                      />
-                      {staffErrors.age && <span className="owner-field-error">{staffErrors.age}</span>}
-                    </label>
-                  </div>
-
-                  <div className="owner-form-row">
-                    <label>
-                      เลขบัตรประชาชน
-                      <input
-                        type="text"
-                        maxLength={13}
-                        value={staffForm.idcard}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, idcard: event.target.value }))}
-                        placeholder="13 หลัก"
-                        disabled={Boolean(editingStaff)}
-                      />
-                      {staffErrors.idcard && <span className="owner-field-error">{staffErrors.idcard}</span>}
-                    </label>
-                    <label>
-                      โทรศัพท์
-                      <input
-                        type="tel"
-                        value={staffForm.phone}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, phone: event.target.value }))}
-                        placeholder="0812345678"
-                      />
-                      {staffErrors.phone && <span className="owner-field-error">{staffErrors.phone}</span>}
-                    </label>
-                  </div>
-
-                  <div className="owner-form-row">
-                    <label>
-                      ชื่อ
-                      <input
-                        type="text"
-                        value={staffForm.first_name}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, first_name: event.target.value }))}
-                        placeholder="ชื่อ"
-                      />
-                    </label>
-                    <label>
-                      นามสกุล
-                      <input
-                        type="text"
-                        value={staffForm.last_name}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, last_name: event.target.value }))}
-                        placeholder="นามสกุล"
-                      />
-                    </label>
-                  </div>
-
-                  <label>
-                    {editingStaff ? 'รหัสผ่านใหม่ (ไม่บังคับ)' : 'รหัสผ่าน'}
-                    <span className="owner-password-field">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={staffForm.password}
-                        onChange={(event) => setStaffForm((prev) => ({ ...prev, password: event.target.value }))}
-                        placeholder={editingStaff ? 'เว้นว่างหากไม่ต้องการเปลี่ยน' : 'อย่างน้อย 6 ตัว'}
-                      />
-                      <button type="button" className="owner-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}>
-                        <span className={`owner-password-icon ${showPassword ? 'is-visible' : ''}`} aria-hidden="true" />
-                      </button>
-                    </span>
-                    {staffErrors.password && <span className="owner-field-error">{staffErrors.password}</span>}
-                  </label>
-
-                  <div className="owner-form-actions">
-                    <button type="button" className="owner-secondary-btn" onClick={closeStaffModal}>
-                      ยกเลิก
-                    </button>
-                    <button type="submit" className="owner-primary-btn" disabled={isSubmittingStaff}>
-                      {isSubmittingStaff
-                        ? (editingStaff ? 'กำลังบันทึก...' : 'กำลังเพิ่ม...')
-                        : (editingStaff ? 'บันทึกการแก้ไข' : 'เพิ่มพนักงาน')}
-                    </button>
-                  </div>
-                </form>
-              </div>
+                  </section>
+                </div>
+                <footer className="owner-xe-footer">
+                  <button type="button" className="owner-xl-btn is-ghost" onClick={closeStaffModal}>ยกเลิก</button>
+                  <button type="submit" className="owner-xl-btn is-primary" disabled={isSubmittingStaff}>
+                    {isSubmittingStaff ? (editingStaff ? 'กำลังบันทึก...' : 'กำลังเพิ่ม...') : (editingStaff ? 'บันทึกการแก้ไข' : 'เพิ่มพนักงาน')}
+                  </button>
+                </footer>
+              </form>
             </section>
           </div>
         )}
 
         {displayViewingStaff && (
           <div className={`owner-modal-backdrop${isViewingStaffClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setViewingStaff(null)}>
-            <section className={`owner-modal${isViewingStaffClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="staff-detail-title" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-modal-header">
+            <section className={`owner-modal owner-sf-detail${isViewingStaffClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="staff-detail-title" onClick={(event) => event.stopPropagation()}>
+              <div className="owner-modal-header owner-xe-header">
+                <span className={`owner-sf-avatar is-lg is-${displayViewingStaff.role === 'Admin' ? 'admin' : 'staff'}`} aria-hidden="true"><StaffRoleIcon role={displayViewingStaff.role} size={21} /></span>
                 <div>
-                  <span className={`owner-status-badge ${displayViewingStaff.is_suspended ? 'disabled' : 'active'}`}>
-                    {displayViewingStaff.role}
-                  </span>
-                  <h3 id="staff-detail-title">รายละเอียดพนักงาน</h3>
+                  <h3 id="staff-detail-title">{`${displayViewingStaff.first_name || ''} ${displayViewingStaff.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'}</h3>
+                  <p className="owner-sf-detail-tags">
+                    <span className={`owner-sf-role is-${displayViewingStaff.role === 'Admin' ? 'admin' : 'staff'}`}>{displayViewingStaff.role}</span>
+                    <span className={`owner-pl-status ${displayViewingStaff.is_suspended ? 'is-danger' : 'is-paid'}`}><i aria-hidden="true" />{displayViewingStaff.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}</span>
+                  </p>
                 </div>
                 <button type="button" className="owner-modal-close" onClick={() => setViewingStaff(null)} aria-label="ปิดรายละเอียด">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
@@ -3966,112 +3976,25 @@ function OwnerMain() {
                   </svg>
                 </button>
               </div>
-              <div className="owner-modal-body">
-                <div className="owner-detail-grid">
-                  <div>
-                    <div className="owner-detail-icon blue" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="8" r="3.3" />
-                        <path d="M5.5 20c0-3.9 2.9-7 6.5-7s6.5 3.1 6.5 7" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>ชื่อ-นามสกุล</span>
-                      <strong>{`${displayViewingStaff.first_name || ''} ${displayViewingStaff.last_name || ''}`.trim() || '-'}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="owner-detail-icon purple" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>เบอร์โทรศัพท์</span>
-                      <strong>{displayViewingStaff.phone || '-'}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="owner-detail-icon green" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="3" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>เลขบัตรประชาชน</span>
-                      <strong>{displayViewingStaff.idcard || '-'}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="owner-detail-icon amber" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="3" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>อายุ</span>
-                      <strong>{displayViewingStaff.age ? `${displayViewingStaff.age} ปี` : '-'}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="owner-detail-icon cyan" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>ตำแหน่ง</span>
-                      <strong>{displayViewingStaff.role}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="owner-detail-icon rose" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2 4 5v6c0 5.25 3.6 9.74 8 11 4.4-1.26 8-5.75 8-11V5l-8-3Z" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>สถานะ</span>
-                      <strong>{displayViewingStaff.is_suspended ? 'ระงับใช้งาน' : 'ใช้งานปกติ'}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="owner-detail-icon blue" aria-hidden="true">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="3" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </div>
-                    <div className="owner-detail-text">
-                      <span>วันที่เพิ่มเข้าระบบ</span>
-                      <strong>{formatDate(displayViewingStaff.created_at)}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="owner-form-actions">
-                  <button
-                    type="button"
-                    className="owner-primary-btn"
-                    onClick={() => {
-                      const staffMember = viewingStaff
-                      setViewingStaff(null)
-                      openStaffEditModal(staffMember)
-                    }}
-                  >
-                    แก้ไขข้อมูล
-                  </button>
-                </div>
+              <div className="owner-modal-body owner-sf-detail-body">
+                <dl className="owner-pl-fields owner-sf-fields">
+                  {[
+                    { key: 'phone', icon: 'phone', label: 'เบอร์โทรศัพท์', value: displayViewingStaff.phone || '-' },
+                    { key: 'idcard', icon: 'hash', label: 'เลขบัตรประชาชน', value: displayViewingStaff.idcard ? displayViewingStaff.idcard.replace(/^(\d)(\d{4})(\d{5})(\d{2})(\d)$/, '$1-$2-$3-$4-$5') : '-' },
+                    { key: 'age', icon: 'user', label: 'อายุ', value: displayViewingStaff.age ? `${displayViewingStaff.age} ปี` : '-' },
+                    { key: 'role', icon: 'grid', label: 'ตำแหน่ง', value: displayViewingStaff.role === 'Admin' ? 'Admin · ผู้ดูแลระบบ' : 'Staff · พนักงาน' },
+                    { key: 'created', icon: 'calendar', label: 'วันที่เพิ่มเข้าระบบ', value: displayViewingStaff.created_at ? formatDate(displayViewingStaff.created_at) : '-' },
+                    { key: 'status', icon: 'check', label: 'สถานะบัญชี', value: displayViewingStaff.is_suspended ? 'ระงับใช้งาน (เข้าสู่ระบบไม่ได้)' : 'ใช้งานปกติ' },
+                  ].map((field) => (
+                    <div key={field.key}><dt><OwnerListIcon name={field.icon} size={13} />{field.label}</dt><dd>{field.value}</dd></div>
+                  ))}
+                </dl>
               </div>
+              <footer className="owner-xe-footer owner-sf-detail-actions">
+                <button type="button" className="owner-xl-btn is-danger" onClick={() => { const member = viewingStaff; setViewingStaff(null); deleteStaffMember(member) }}><ExpenseActionIcon name="trash" />ลบ</button>
+                <button type="button" className="owner-xl-btn is-ghost" onClick={() => { const member = viewingStaff; setViewingStaff(null); toggleStaffStatus(member) }}>{displayViewingStaff.is_suspended ? 'เปิดใช้งาน' : 'ระงับใช้งาน'}</button>
+                <button type="button" className="owner-xl-btn is-primary" onClick={() => { const member = viewingStaff; setViewingStaff(null); openStaffEditModal(member) }}><ExpenseActionIcon name="edit" />แก้ไขข้อมูล</button>
+              </footer>
             </section>
           </div>
         )}
