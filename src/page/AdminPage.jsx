@@ -5883,22 +5883,6 @@ function AdminBackupPage() {
     }
   }
 
-  const removeMoveOutInspection = (inspection) => {
-    setInspectionConfirm({ kind: 'delete', inspection })
-  }
-
-  const deleteMoveOutInspection = async (inspection) => {
-    try {
-      const { data } = await axios.delete(`/api/admin/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
-      setSuccessMessage(data.message)
-      setInspectionDetail(null)
-      await loadMoveOutInspections()
-    } catch (err) {
-      if (handleUnauthorized(err)) return
-      setPageError(err.response?.data?.message || 'ลบผลตรวจไม่สำเร็จ')
-    }
-  }
-
   const confirmDeleteExpense = async (requestClose) => {
     setExpenseDeleting(true)
     setExpenseDeleteError('')
@@ -6489,7 +6473,7 @@ function AdminBackupPage() {
       )
       setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
       requestClose()
-      await loadCustomers()
+      await Promise.all([loadCustomers(), loadRooms()])
     } catch (err) {
       setPageError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ')
       requestClose()
@@ -8603,14 +8587,6 @@ function AdminBackupPage() {
                 onOpenGallery={() => setPhotoGalleryPage(1)}
                 footer={
                   <footer className="idt-footer">
-                    {!isMoveRoom && (
-                      <button type="button" className="idt-footer-btn is-danger" onClick={() => removeMoveOutInspection(inspectionDetail)}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                        </svg>
-                        ลบผลตรวจ
-                      </button>
-                    )}
                     {isMoveRoom && (
                       <div className="idt-footer-right">
                         <button type="button" className="idt-footer-btn is-primary" onClick={() => openEditInspectionForm(inspectionDetail)}>
@@ -8669,11 +8645,9 @@ function AdminBackupPage() {
       {inspectionConfirm && (
         <Modal
           title={
-            inspectionConfirm.kind === 'delete'
-              ? 'ยืนยันการลบผลตรวจ'
-              : inspectionConfirm.kind === 'status'
-                ? 'ยืนยันการเปลี่ยนสถานะ'
-                : inspectionConfirm.kind === 'save'
+            inspectionConfirm.kind === 'status'
+              ? 'ยืนยันการเปลี่ยนสถานะ'
+              : inspectionConfirm.kind === 'save'
                 ? 'ยืนยันการบันทึกผลตรวจ'
                 : 'ยืนยันการยกเลิก'
           }
@@ -8695,10 +8669,6 @@ function AdminBackupPage() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="m5 12 5 5 9-10" />
                   </svg>
-                ) : inspectionConfirm.kind === 'delete' ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                  </svg>
                 ) : (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="9" />
@@ -8707,14 +8677,12 @@ function AdminBackupPage() {
                 )}
               </div>
               <p className="admin-confirm-message">
-                {inspectionConfirm.kind === 'delete'
-                  ? `ต้องการลบผลตรวจห้อง ${inspectionConfirm.inspection.room_number} ใช่หรือไม่? ผลตรวจจะถูกซ่อนจากหน้าระบบ แต่ข้อมูลและรูปยังเก็บไว้`
-                  : inspectionConfirm.kind === 'status'
-                    ? inspectionConfirm.next === 'reviewed'
-                      ? `ยืนยันว่าตรวจผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เรียบร้อยแล้วใช่หรือไม่?`
-                      : inspectionConfirm.next === 'follow_up'
-                        ? `ต้องการตั้งผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เป็น "ต้องติดตาม" ใช่หรือไม่?`
-                        : `ต้องการยกเลิกสถานะและย้อนผลตรวจห้อง ${inspectionConfirm.inspection.room_number} กลับเป็น "รอ Admin ตรวจ" ใช่หรือไม่?`
+                {inspectionConfirm.kind === 'status'
+                  ? inspectionConfirm.next === 'reviewed'
+                    ? `ยืนยันว่าตรวจผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เรียบร้อยแล้วใช่หรือไม่?`
+                    : inspectionConfirm.next === 'follow_up'
+                      ? `ต้องการตั้งผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เป็น "ต้องติดตาม" ใช่หรือไม่?`
+                      : `ต้องการยกเลิกสถานะและย้อนผลตรวจห้อง ${inspectionConfirm.inspection.room_number} กลับเป็น "รอ Admin ตรวจ" ใช่หรือไม่?`
                   : inspectionConfirm.kind === 'save'
                     ? inspectionEditor?.mode === 'create'
                       ? 'ต้องการบันทึกผลตรวจห้องนี้ใช่หรือไม่?'
@@ -8746,7 +8714,6 @@ function AdminBackupPage() {
                     try {
                       if (current.kind === 'save') await submitInspectionEditor(current.payload, current.close)
                       else if (current.kind === 'status') await setMoveOutInspectionStatus(current.inspection, current.next)
-                      else await deleteMoveOutInspection(current.inspection)
                     } finally {
                       setInspectionConfirmBusy(false)
                       requestClose()
@@ -8755,14 +8722,12 @@ function AdminBackupPage() {
                 >
                   {inspectionConfirmBusy
                     ? 'กำลังดำเนินการ...'
-                    : inspectionConfirm.kind === 'delete'
-                      ? 'ลบผลตรวจ'
-                      : inspectionConfirm.kind === 'status'
-                        ? inspectionConfirm.next === 'reviewed'
-                          ? 'ยืนยันตรวจแล้ว'
-                          : inspectionConfirm.next === 'follow_up'
-                            ? 'ตั้งเป็นต้องติดตาม'
-                            : 'ยืนยันยกเลิกสถานะ'
+                    : inspectionConfirm.kind === 'status'
+                      ? inspectionConfirm.next === 'reviewed'
+                        ? 'ยืนยันตรวจแล้ว'
+                        : inspectionConfirm.next === 'follow_up'
+                          ? 'ตั้งเป็นต้องติดตาม'
+                          : 'ยืนยันยกเลิกสถานะ'
                       : inspectionConfirm.kind === 'save'
                         ? 'ยืนยันบันทึก'
                         : 'ยืนยันยกเลิก'}
@@ -10417,6 +10382,12 @@ function AdminBackupPage() {
               <p className="admin-confirm-message">
                 ต้องการ{customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}ลูกค้า {customerSuspendConfirm.first_name}{' '}
                 {customerSuspendConfirm.last_name} ใช่หรือไม่?
+                {!customerSuspendConfirm.is_suspended && customerSuspendConfirm.room_number && (
+                  <><br />ลูกค้าจะถูกนำออกจากห้อง {customerSuspendConfirm.room_number} หากไม่มีผู้เช่าคนอื่น ห้องจะถูกปล่อยเป็นห้องว่าง และการเปิดใช้งานบัญชีอีกครั้งจะไม่คืนห้องให้อัตโนมัติ</>
+                )}
+                {Boolean(customerSuspendConfirm.is_suspended) && (
+                  <><br />บัญชีจะกลับมาใช้งานได้โดยไม่มีห้องพัก ห้องเดิมจะยังว่างอยู่หากไม่มีผู้เช่าคนอื่น</>
+                )}
               </p>
               <div className="admin-form-actions">
                 <button

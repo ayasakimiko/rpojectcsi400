@@ -1109,6 +1109,7 @@ router.put("/customers/:id", async (req, res) => {
 });
 
 router.patch("/customers/:id/suspend", async (req, res) => {
+  let connection;
   try {
     const customerId = Number(req.params.id);
     if (!isPositiveId(customerId)) {
@@ -1119,19 +1120,79 @@ router.patch("/customers/:id/suspend", async (req, res) => {
       return res.status(400).json({ message: "รูปแบบข้อมูลไม่ถูกต้อง" });
     }
 
-    const pool = getPool();
-    const [result] = await pool.query(`UPDATE Customer SET is_suspended = ? WHERE id = ?`, [
-      is_suspended,
-      customerId,
-    ]);
-    if (result.affectedRows === 0) {
+    connection = await getPool().getConnection();
+    await connection.beginTransaction();
+    const [customers] = await connection.query(
+      `SELECT room_number, is_suspended FROM Customer WHERE id = ? FOR UPDATE`,
+      [customerId],
+    );
+    if (!customers.length) {
+      await connection.rollback();
       return res.status(404).json({ message: "ไม่พบลูกค้านี้" });
     }
 
-    return res.json({ message: is_suspended ? "ระงับการใช้งานลูกค้าสำเร็จ" : "เปิดการใช้งานลูกค้าสำเร็จ" });
+    const roomNumber = customers[0].room_number;
+    const wasSuspended = Boolean(customers[0].is_suspended);
+    let roomVacated = false;
+    if (roomNumber != null && (is_suspended || wasSuspended)) {
+      const [rooms] = await connection.query(
+        `SELECT id, rental_start_date, rental_end_date FROM Room WHERE room_number = ? FOR UPDATE`,
+        [roomNumber],
+      );
+      const [otherTenants] = await connection.query(
+        `SELECT id FROM Customer WHERE room_number = ? AND id <> ? AND is_suspended = FALSE LIMIT 1 FOR UPDATE`,
+        [roomNumber, customerId],
+      );
+      if (!otherTenants.length && rooms.length) {
+        const [bookings] = await connection.query(
+          `SELECT id, room_id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+          [customerId],
+        );
+        if (bookings[0]?.room_id === rooms[0].id) {
+          await connection.query(
+            `UPDATE Booking SET rental_start_date = COALESCE(?, rental_start_date),
+                                rental_end_date = COALESCE(?, rental_end_date) WHERE id = ?`,
+            [rooms[0].rental_start_date, rooms[0].rental_end_date, bookings[0].id],
+          );
+        }
+      }
+
+      if (!otherTenants.length) {
+        const [roomUpdate] = await connection.query(
+          `UPDATE Room SET is_booked = FALSE, rental_start_date = NULL, rental_end_date = NULL,
+                           rental_duration_months = NULL, prepaid_until = NULL, pending_lump_sum_months = NULL
+           WHERE room_number = ?`,
+          [roomNumber],
+        );
+        roomVacated = roomUpdate.affectedRows > 0;
+      }
+    }
+
+    await connection.query(
+      is_suspended || wasSuspended
+        ? `UPDATE Customer SET is_suspended = ?, room_number = NULL WHERE id = ?`
+        : `UPDATE Customer SET is_suspended = ? WHERE id = ?`,
+      [is_suspended, customerId],
+    );
+    await connection.commit();
+    const message = is_suspended
+      ? roomNumber != null
+        ? roomVacated
+          ? `ระงับการใช้งานลูกค้าและปล่อยห้อง ${roomNumber} เป็นว่างแล้ว`
+          : `ระงับการใช้งานลูกค้าและนำออกจากห้อง ${roomNumber} แล้ว`
+        : "ระงับการใช้งานลูกค้าสำเร็จ"
+      : roomNumber != null && wasSuspended
+        ? `เปิดการใช้งานลูกค้าสำเร็จ โดยไม่คืนห้อง ${roomNumber} ให้บัญชีนี้`
+        : "เปิดการใช้งานลูกค้าสำเร็จ";
+    return res.json({
+      message,
+    });
   } catch (error) {
+    if (connection) await connection.rollback();
     console.error("Admin suspend customer error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
   }
 });
 

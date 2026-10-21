@@ -390,10 +390,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     try {
       await pool.query(
         `UPDATE MoveOutInspection
-         SET checklist = ?, damage_note = ?, photos = ?,
-             status = CASE WHEN tenant_request_id IS NULL THEN 'pending' ELSE 'reviewed' END,
-             reviewed_at = CASE WHEN tenant_request_id IS NULL THEN NULL ELSE NOW() END,
-             updated_at = NOW()
+         SET checklist = ?, damage_note = ?, photos = ?, updated_at = NOW()
          WHERE id = ?`,
         [
           JSON.stringify(value.checklist),
@@ -416,30 +413,8 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
   }
 });
 
-router.delete("/move-out-inspections/:id", async (req, res) => {
-  try {
-    const inspectionId = Number(req.params.id);
-    if (!isPositiveId(inspectionId)) {
-      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
-    }
-
-    const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
-    if (!rows[0]) {
-      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
-    }
-    const staffName = await getActingStaffName(pool, req.user);
-    await pool.query(
-      `UPDATE MoveOutInspection
-       SET hidden_at = NOW(), hidden_by_name = ?, hidden_tenant_request_id = tenant_request_id, tenant_request_id = NULL
-       WHERE id = ? AND hidden_at IS NULL`,
-      [staffName, inspectionId],
-    );
-    return res.json({ message: "ลบผลตรวจห้องสำเร็จ" });
-  } catch (error) {
-    console.error("Delete move-out inspection error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
-  }
+router.delete("/move-out-inspections/:id", (_req, res) => {
+  return res.status(403).json({ message: "เจ้าหน้าที่ไม่มีสิทธิ์ลบผลตรวจห้อง" });
 });
 
 router.post("/move-out-inspections", async (req, res) => {

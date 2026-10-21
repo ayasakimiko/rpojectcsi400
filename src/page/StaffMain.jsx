@@ -6077,9 +6077,6 @@ function StaffMain() {
   const [inspectionView, setInspectionView] = useState(null)
   const [inspectionViewPhoto, setInspectionViewPhoto] = useState(null)
   const [inspectionListError, setInspectionListError] = useState('')
-  const [inspectionDelete, setInspectionDelete] = useState(null)
-  const [inspectionDeleting, setInspectionDeleting] = useState(false)
-  const [inspectionDeleteError, setInspectionDeleteError] = useState('')
   const [inspectionError, setInspectionError] = useState('')
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
@@ -6571,26 +6568,6 @@ function StaffMain() {
       if (error.response?.status === 404) await loadMoveOutInspections()
     } finally {
       setInspectionLoadingId(null)
-    }
-  }
-
-  const confirmDeleteInspection = async (requestClose) => {
-    setInspectionDeleting(true)
-    setInspectionDeleteError('')
-    try {
-      const { data } = await axios.delete(`/api/staff/move-out-inspections/${inspectionDelete.id}`, {
-        headers: authHeaders(),
-      })
-      setActionSuccess(data.message || 'ลบผลตรวจห้องสำเร็จ')
-      requestClose()
-      await Promise.all([loadMoveOutInspections(), loadRequests()])
-    } catch (error) {
-      setInspectionDeleteError(error.response?.data?.message || 'ลบผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
-      if (error.response?.status === 404) {
-        await Promise.all([loadMoveOutInspections(), loadRequests()])
-      }
-    } finally {
-      setInspectionDeleting(false)
     }
   }
 
@@ -8475,21 +8452,6 @@ function StaffMain() {
                   onOpenPhoto={setInspectionViewPhoto}
                   footer={
                     <footer className="idt-footer">
-                      <button
-                        type="button"
-                        className="idt-footer-btn is-danger"
-                        onClick={() => {
-                          const target = inspectionView.summary
-                          requestClose()
-                          setInspectionDeleteError('')
-                          setInspectionDelete(target)
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                        </svg>
-                        ลบผลตรวจ
-                      </button>
                       <div className="idt-footer-right">
                         <button
                           type="button"
@@ -8525,67 +8487,6 @@ function StaffMain() {
             onClose={() => setInspectionViewPhoto(null)}
           />,
           document.body,
-        )}
-
-        {inspectionDelete && (
-          <Modal title="ยืนยันการลบผลตรวจห้อง" onClose={() => setInspectionDelete(null)} variant="confirm">
-            {(requestClose) => (
-              <div className="staff-confirm-body">
-                <div className="staff-confirm-icon is-warning">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 9v4M12 17h.01" />
-                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                  </svg>
-                </div>
-                <p className="staff-confirm-message">ลบผลตรวจห้องนี้? ผลตรวจจะถูกซ่อนจากหน้าระบบ แต่ข้อมูลและรูปยังเก็บไว้</p>
-                <div className="staff-confirm-details">
-                  <div className="staff-confirm-detail-row">
-                    <span>ห้อง</span>
-                    <strong>{inspectionDelete.room_number}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>ผู้เช่า</span>
-                    <strong>{inspectionDelete.tenant_name}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>วันที่ตรวจ</span>
-                    <strong>{formatDateTime(inspectionDelete.created_at)}</strong>
-                  </div>
-                </div>
-                {inspectionDeleteError && (
-                  <p className="staff-form-error" role="alert">
-                    {inspectionDeleteError}
-                  </p>
-                )}
-                <div className="staff-form-actions">
-                  <button
-                    type="button"
-                    className="staff-action-btn is-ghost"
-                    disabled={inspectionDeleting}
-                    onClick={requestClose}
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-danger"
-                    disabled={inspectionDeleting}
-                    onClick={() => confirmDeleteInspection(requestClose)}
-                  >
-                    {inspectionDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </Modal>
         )}
 
         {inspectionModal && (
@@ -9327,16 +9228,6 @@ function StaffMain() {
                                   onClick={() => openEditInspection(inspection)}
                                 >
                                   {inspectionLoadingId === inspection.id ? 'กำลังโหลด...' : 'แก้ไข'}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="staff-action-btn is-danger"
-                                  onClick={() => {
-                                    setInspectionDeleteError('')
-                                    setInspectionDelete(inspection)
-                                  }}
-                                >
-                                  ลบ
                                 </button>
                               </div>
                               <span className="insp-actions-hint" aria-hidden="true">
