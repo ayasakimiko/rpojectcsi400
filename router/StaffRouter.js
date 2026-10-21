@@ -330,7 +330,7 @@ router.get("/move-out-inspections", async (_req, res) => {
   try {
     const pool = getPool();
     const [inspections] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
               moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.inspected_by_name,
               JSON_LENGTH(moi.photos) AS photo_count, moi.status, moi.created_at
        FROM MoveOutInspection moi
@@ -356,7 +356,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number, moi.tenant_name, moi.tenant_phone,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number, moi.tenant_name, moi.tenant_phone,
               moi.checklist, moi.damage_note, moi.photos, moi.status, moi.inspected_by_name,
               moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
@@ -437,10 +437,10 @@ router.post("/move-out-inspections", async (req, res) => {
     const pool = getPool();
     const tenantRequestId = req.body?.tenant_request_id == null ? null : Number(req.body.tenant_request_id);
     if (tenantRequestId !== null && !isPositiveId(tenantRequestId)) {
-      return res.status(400).json({ message: "รหัสคำขอย้ายห้องไม่ถูกต้อง" });
+      return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
     const [tenantRows] = await pool.query(
-      `SELECT c.first_name, c.last_name, c.phone
+      `SELECT c.id, c.first_name, c.last_name, c.phone
        FROM Room r
        JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
        WHERE r.room_number = ? AND r.is_booked = TRUE
@@ -455,18 +455,19 @@ router.post("/move-out-inspections", async (req, res) => {
 
     if (tenantRequestId !== null) {
       const [requestRows] = await pool.query(
-        `SELECT id, room_number, type, status
+        `SELECT id, customer_id, room_number, type, status
          FROM TenantRequest WHERE id = ?`,
         [tenantRequestId],
       );
       const tenantRequest = requestRows[0];
       if (
         !tenantRequest
-        || tenantRequest.type !== "move_room"
+        || !["move_room", "moveout"].includes(tenantRequest.type)
         || !["pending", "in_progress"].includes(tenantRequest.status)
         || tenantRequest.room_number !== value.roomNumber
+        || tenantRequest.customer_id !== tenant.id
       ) {
-        return res.status(409).json({ message: "ไม่พบคำขอย้ายห้องที่ตรงกับห้องที่ตรวจ" });
+        return res.status(409).json({ message: "ไม่พบคำขอที่ตรงกับห้องและผู้เช่าที่ตรวจ" });
       }
       const [existingInspections] = await pool.query(
         `SELECT id FROM MoveOutInspection WHERE tenant_request_id = ?`,
@@ -479,25 +480,28 @@ router.post("/move-out-inspections", async (req, res) => {
     const staffName = await getActingStaffName(pool, req.user);
     const photos = await savePublicImages("move-out-inspections", value.photos);
     const connection = await pool.getConnection();
+    let linkedRequestType = null;
     try {
       await connection.beginTransaction();
       if (tenantRequestId !== null) {
         const [requestRows] = await connection.query(
-          `SELECT id, room_number, type, status
+          `SELECT id, customer_id, room_number, type, status
            FROM TenantRequest WHERE id = ? FOR UPDATE`,
           [tenantRequestId],
         );
         const tenantRequest = requestRows[0];
         if (
           !tenantRequest
-          || tenantRequest.type !== "move_room"
+          || !["move_room", "moveout"].includes(tenantRequest.type)
           || !["pending", "in_progress"].includes(tenantRequest.status)
           || tenantRequest.room_number !== value.roomNumber
+          || tenantRequest.customer_id !== tenant.id
         ) {
           await connection.rollback();
           await deletePublicImages(photos.map((photo) => photo.url));
-          return res.status(409).json({ message: "ไม่พบคำขอย้ายห้องที่ตรงกับห้องที่ตรวจ" });
+          return res.status(409).json({ message: "ไม่พบคำขอที่ตรงกับห้องและผู้เช่าที่ตรวจ" });
         }
+        linkedRequestType = tenantRequest.type;
       }
 
       const [result] = await connection.query(
@@ -528,7 +532,11 @@ router.post("/move-out-inspections", async (req, res) => {
       }
       await connection.commit();
       return res.status(201).json({
-        message: tenantRequestId === null ? "ส่งผลตรวจห้องให้ Admin แล้ว" : "บันทึกผลตรวจแล้ว สามารถอนุมัติย้ายห้องได้ทันที",
+        message: tenantRequestId === null
+          ? "ส่งผลตรวจห้องให้ Admin แล้ว"
+          : linkedRequestType === "moveout"
+            ? "บันทึกผลตรวจแล้ว สามารถอนุมัติการย้ายออกได้"
+            : "บันทึกผลตรวจแล้ว สามารถอนุมัติย้ายห้องได้ทันที",
         inspectionId: result.insertId,
       });
     } catch (error) {
@@ -892,6 +900,7 @@ router.get("/requests", async (req, res) => {
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
               moi.id AS inspection_id, moi.status AS inspection_status, moi.reviewed_at AS inspection_reviewed_at,
+              moi.inspected_by_name AS inspection_by_name,
               moi.updated_at AS inspection_updated_at,
               sr.price AS source_room_price, sr.rental_end_date AS source_rental_end_date,
               sr.prepaid_until AS source_prepaid_until,
@@ -964,7 +973,9 @@ router.get("/requests/history", async (req, res) => {
               tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone,
-              moi.id AS inspection_id, sr.price AS source_room_price, tg.price AS target_room_price
+              moi.id AS inspection_id, moi.inspected_by_name AS inspection_by_name,
+              moi.reviewed_at AS inspection_reviewed_at,
+              sr.price AS source_room_price, tg.price AS target_room_price
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
        LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
@@ -1218,6 +1229,17 @@ router.post("/requests/:id/approve", async (req, res) => {
     }
 
     if (tenantRequest.type === "moveout") {
+      const [inspectionRows] = await connection.query(
+        `SELECT id FROM MoveOutInspection
+         WHERE tenant_request_id = ? AND room_number = ? AND status = 'reviewed' AND hidden_at IS NULL
+         FOR UPDATE`,
+        [tenantRequest.id, tenantRequest.room_number],
+      );
+      if (!inspectionRows[0]) {
+        await connection.rollback();
+        return res.status(409).json({ message: "กรุณาตรวจสภาพห้องก่อนอนุมัติการย้ายออก" });
+      }
+
       const [roomBeforeReset] = await connection.query(
         `SELECT id, rental_start_date, rental_end_date FROM Room WHERE room_number = ? FOR UPDATE`,
         [tenantRequest.room_number],

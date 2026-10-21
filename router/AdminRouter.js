@@ -191,7 +191,7 @@ router.get("/move-out-inspections", async (_req, res) => {
   try {
     const pool = getPool();
     const [inspections] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
               moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, JSON_LENGTH(moi.photos) AS photo_count,
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
@@ -354,7 +354,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.target_room_number,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
               moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.photos,
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
        FROM MoveOutInspection moi

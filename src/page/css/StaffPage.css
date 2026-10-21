@@ -3800,6 +3800,23 @@
   box-shadow: 0 6px 16px rgba(100, 116, 139, 0.1);
 }
 
+.staff-req-card.type-move_room.is-structured.status-cancelled {
+  --req-accent: #809fc4;
+  border-color: #d3e0ee;
+  border-left-width: 1.5px;
+  border-left-color: #bfd2e7;
+}
+
+.staff-req-card.type-move_room.is-structured.status-cancelled::before {
+  content: none;
+}
+
+.staff-req-card.type-move_room.is-structured.status-cancelled:hover {
+  border-color: #b8cee6;
+  border-left-color: #a6c1df;
+  box-shadow: 0 6px 16px rgba(66, 110, 164, 0.08);
+}
+
 .staff-req-card .staff-badge.status-cancelled.staff-req-status {
   padding: 3px 10px;
   border: 1.5px solid #cbd5e1;
@@ -5652,6 +5669,50 @@
 .staff-modal.staff-modal-wide {
   width: 820px;
   height: 580px;
+}
+
+.staff-modal-overlay:has(> .staff-modal-payment-history) {
+  padding: 12px;
+}
+
+.staff-modal.staff-modal-payment-history {
+  box-sizing: border-box;
+  width: min(1120px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  height: min(820px, calc(100dvh - 24px));
+  max-height: calc(100dvh - 24px);
+  min-height: 0;
+  padding: clamp(14px, 2.5vw, 26px);
+  border-radius: 18px;
+}
+
+.staff-modal-payment-history .staff-modal-body {
+  min-width: 0;
+  min-height: 0;
+}
+
+.staff-modal-payment-history .staff-modal-body:has(> .table-responsive) {
+  overflow: hidden;
+}
+
+.staff-modal-payment-history .staff-req-filters {
+  flex-shrink: 0;
+}
+
+.staff-modal-payment-history .table-responsive {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.staff-modal-payment-history .staff-pagination {
+  flex-shrink: 0;
+  position: relative;
+  bottom: auto;
+  margin-top: 0;
 }
 
 .staff-modal.staff-modal-history {

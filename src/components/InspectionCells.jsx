@@ -1,4 +1,5 @@
 import { PersonIcon } from './ParcelIcons.jsx'
+import { getInspectionPurposeLabel } from '../utils/inspectionSource.js'
 import './InspectionCells.css'
 
 function HomeIcon() {
@@ -11,7 +12,30 @@ function HomeIcon() {
   )
 }
 
-export function InspectionRoomCell({ roomNumber, targetRoomNumber, isMoveRoom }) {
+export function InspectionPurposeBadge({ inspection, className = '' }) {
+  const type = inspection.tenant_request_type === 'move_room'
+    ? 'move-room'
+    : inspection.tenant_request_type === 'moveout'
+      ? 'moveout'
+      : 'general'
+
+  return (
+    <span className={`insp-purpose is-${type}${className ? ` ${className}` : ''}`}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {type === 'move-room' ? (
+          <><path d="M4 7h15m-4-4 4 4-4 4" /><path d="M20 17H5m4-4-4 4 4 4" /></>
+        ) : type === 'moveout' ? (
+          <><path d="M13 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /><path d="M3 12h12m-4-4 4 4-4 4" /></>
+        ) : (
+          <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1M9 12l2 2 4-4" /></>
+        )}
+      </svg>
+      <span>{getInspectionPurposeLabel(inspection)}</span>
+    </span>
+  )
+}
+
+export function InspectionRoomCell({ roomNumber, targetRoomNumber, isMoveRoom, sourceLabel }) {
   if (isMoveRoom) {
     return (
       <div className="insp-room">
@@ -23,7 +47,7 @@ export function InspectionRoomCell({ roomNumber, targetRoomNumber, isMoveRoom })
           </svg>
           <span className="insp-room-pill is-target">{targetRoomNumber || '-'}</span>
         </span>
-        <small>ตรวจก่อนย้ายห้อง</small>
+        <small>{sourceLabel || 'ตรวจก่อนย้ายห้อง'}</small>
       </div>
     )
   }
@@ -33,7 +57,7 @@ export function InspectionRoomCell({ roomNumber, targetRoomNumber, isMoveRoom })
         <HomeIcon />
         {roomNumber}
       </span>
-      <small>ตรวจย้ายออก</small>
+      <small>{sourceLabel || 'ตรวจย้ายออก'}</small>
     </div>
   )
 }

@@ -661,7 +661,7 @@ const INSPECTION_KINDS = {
     empty: 'ยังไม่มีผลตรวจห้องก่อนย้ายห้อง',
   },
 }
-const inspectionKindOf = (inspection) => (inspection.tenant_request_id ? 'move_room' : 'moveout')
+const inspectionKindOf = (inspection) => (inspection.tenant_request_type === 'move_room' ? 'move_room' : 'moveout')
 const INSPECTION_RESULT_SEGMENTS = [
   { key: 'danger', label: 'พบชำรุด/สูญหาย', className: 'tone-danger' },
   { key: 'warning', label: 'พบสึกหรอ', className: 'tone-warning' },
@@ -1059,7 +1059,7 @@ function buildAnnouncementNotif(item) {
 
 const openModalStack = []
 
-function Modal({ title, onClose, children, variant, stickyFilters = false }) {
+function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -1088,7 +1088,7 @@ function Modal({ title, onClose, children, variant, stickyFilters = false }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'payment-history' ? ' staff-modal-payment-history' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -1110,7 +1110,7 @@ function Modal({ title, onClose, children, variant, stickyFilters = false }) {
             </svg>
           </button>
         </div>
-        <div className="staff-modal-body">
+        <div className="staff-modal-body" ref={bodyRef}>
           {variant === 'confirm' && <h3 className="staff-modal-alert-title">{title}</h3>}
           {typeof children === 'function' ? children(requestClose) : children}
         </div>
@@ -1323,7 +1323,7 @@ const EXPENSE_PAYMENT_METHOD_LABEL = {
 const EXPENSE_MAX_PHOTOS = 6
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 30
-const PAYMENT_HISTORY_PAGE_SIZE = 5
+const PAYMENT_HISTORY_INITIAL_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
   pending: { label: 'คำขอใหม่ รอดำเนินการ', tone: 'pending' },
@@ -1453,10 +1453,12 @@ function getRoomExpiryStatus(room) {
 function buildStaffTenantNotifs(request) {
   const info = STAFF_TENANT_NOTIF_INFO[request.status]
   if (!info) return []
-  const inspectionInfo = request.type === 'move_room' && request.inspection_id
+  const inspectionInfo = ['move_room', 'moveout'].includes(request.type) && request.inspection_id
     ? {
         key: `inspection-${request.inspection_id}-${request.inspection_updated_at || request.inspection_reviewed_at || request.created_at}`,
-        label: 'ตรวจห้องแล้ว สามารถอนุมัติย้ายห้องได้',
+        label: request.type === 'moveout'
+          ? 'ตรวจห้องแล้ว สามารถอนุมัติการย้ายออกได้'
+          : 'ตรวจห้องแล้ว สามารถอนุมัติย้ายห้องได้',
         tone: 'info',
       }
     : null
@@ -1624,6 +1626,11 @@ function RouteArrowIcon() {
 
 function getTenantRequestFacts(request) {
   const facts = []
+  if (request.type === 'moveout' && ['pending', 'in_progress'].includes(request.status)) {
+    facts.push(request.inspection_id
+      ? { label: 'ตรวจห้องแล้ว', tone: 'success' }
+      : { label: 'รอตรวจสภาพห้อง', tone: 'warning' })
+  }
   if (request.type === 'renew') {
     facts.push({
       label: `ขอต่อ ${RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}`,
@@ -1665,7 +1672,18 @@ const TENANT_HOME_EXTRA_FILTERS = {
       match: (request, value) => request.renew_payment_type === value,
     },
   ],
-  moveout: [],
+  moveout: [
+    {
+      key: 'inspection',
+      label: 'การตรวจห้อง',
+      all: 'ทุกสถานะการตรวจห้อง',
+      options: [
+        ['done', 'ตรวจห้องแล้ว'],
+        ['waiting', 'รอตรวจสภาพห้อง'],
+      ],
+      match: (request, value) => (value === 'done') === Boolean(request.inspection_id),
+    },
+  ],
   move_room: [
     {
       key: 'inspection',
@@ -1863,13 +1881,12 @@ const MAINTENANCE_NEXT_STEP = {
   in_progress: { label: 'กำลังดำเนินการซ่อม', tone: 'is-info' },
 }
 
-const MOVEOUT_NEXT_STEP = {
-  pending: 'รับเรื่อง',
-  in_progress: 'ตรวจห้องและอนุมัติ',
-}
-
 function MoveoutRequestBody({ request }) {
-  const nextStep = MOVEOUT_NEXT_STEP[request.status]
+  const nextStep = request.status === 'pending'
+    ? 'รับเรื่อง'
+    : request.status === 'in_progress'
+      ? request.inspection_id ? 'อนุมัติการย้ายออก' : 'ตรวจสภาพห้อง'
+      : null
   return (
     <>
       <div className="staff-req-route">
@@ -1877,6 +1894,11 @@ function MoveoutRequestBody({ request }) {
           <small>ห้องที่แจ้งย้ายออก</small>
           <strong>{request.room_number}</strong>
         </div>
+        {['pending', 'in_progress'].includes(request.status) && (
+          <span className={`staff-req-route-check ${request.inspection_id ? 'is-done' : 'is-waiting'}`}>
+            {request.inspection_id ? 'ตรวจห้องแล้ว' : 'รอตรวจสภาพห้อง'}
+          </span>
+        )}
       </div>
       <TenantRequestDetails
         details={[
@@ -2432,6 +2454,16 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
       icon: 'user',
       pendingText: 'กำลังรอดำเนินการ',
     },
+    ...(request.type === 'moveout' && (['pending', 'in_progress', 'approved'].includes(request.status) || request.inspection_id)
+      ? [{
+          key: 'inspection',
+          label: 'ตรวจสภาพห้อง',
+          by: request.inspection_by_name,
+          date: request.inspection_id ? request.inspection_reviewed_at : null,
+          icon: 'check',
+          pendingText: 'ยังไม่ได้ตรวจ',
+        }]
+      : []),
     {
       key: 'done',
       label: cancelled ? 'ยกเลิกคำขอ' : rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
@@ -2611,6 +2643,14 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                         )}
                       </>
                     )}
+                    {request.type === 'moveout' && isOpen && (
+                      <div>
+                        <dt>ตรวจสภาพห้อง</dt>
+                        <dd className={request.inspection_id ? 'is-success' : 'is-warning'}>
+                          {request.inspection_id ? 'ตรวจแล้ว' : 'ยังไม่ได้ตรวจ'}
+                        </dd>
+                      </div>
+                    )}
                     {request.type === 'renew' && (
                       <>
                         <div>
@@ -2684,7 +2724,8 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
               </section>
             )}
 
-            {isMove && (request.inspection_id || ['pending', 'in_progress'].includes(request.status)) && (
+            {['move_room', 'moveout'].includes(request.type)
+              && (request.inspection_id || ['pending', 'in_progress'].includes(request.status)) && (
               <InspectionSummary
                 inspectionId={request.inspection_id}
                 roomNumber={request.room_number}
@@ -6139,6 +6180,8 @@ function StaffMain() {
   const [historySearch, setHistorySearch] = useState('')
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all')
   const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(PAYMENT_HISTORY_INITIAL_PAGE_SIZE)
+  const historyBodyRef = useRef(null)
 
   const [collectRoom, setCollectRoom] = useState(null)
   const [collectSubmitting, setCollectSubmitting] = useState(false)
@@ -6512,7 +6555,7 @@ function StaffMain() {
     setInspectionModal(true)
   }
 
-  const openMoveRoomInspection = (request) => {
+  const openTenantRequestInspection = (request) => {
     setInspectionForm({
       room_number: String(request.room_number),
       checklist: {},
@@ -6560,6 +6603,7 @@ function StaffMain() {
         tenant_name: detail.tenant_name,
         tenant_phone: detail.tenant_phone,
         tenant_request_id: detail.tenant_request_id,
+        tenant_request_type: detail.tenant_request_type,
       })
       setInspectionTenantRequest(null)
       setInspectionError('')
@@ -7133,7 +7177,16 @@ function StaffMain() {
           ปฏิเสธ
         </button>
         {request.type === 'moveout' ? (
-          request.status === 'in_progress' ? (
+          request.status === 'pending' ? (
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              disabled={isProcessing}
+              onClick={() => openAction(setMoveoutAcknowledgeConfirm)}
+            >
+              {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
+            </button>
+          ) : request.inspection_id ? (
             <button
               type="button"
               className="staff-action-btn is-primary"
@@ -7147,9 +7200,9 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => openAction(setMoveoutAcknowledgeConfirm)}
+              onClick={() => openAction(openTenantRequestInspection)}
             >
-              {isProcessing ? 'กำลังดำเนินการ...' : 'รับเรื่อง'}
+              ตรวจสภาพห้องก่อนย้ายออก
             </button>
           )
         ) : request.type === 'move_room' ? (
@@ -7167,7 +7220,7 @@ function StaffMain() {
               type="button"
               className="staff-action-btn is-primary"
               disabled={isProcessing}
-              onClick={() => openAction(openMoveRoomInspection)}
+              onClick={() => openAction(openTenantRequestInspection)}
             >
               ตรวจห้องก่อนย้าย
             </button>
@@ -7866,12 +7919,35 @@ function StaffMain() {
     })
   }, [historyPayments, historyStatusFilter, historySearch])
 
-  const historyTotalPages = Math.max(1, Math.ceil(filteredHistoryPayments.length / PAYMENT_HISTORY_PAGE_SIZE))
+  useEffect(() => {
+    const body = historyBodyRef.current
+    if (!historyRoom || historyLoading || !historyData?.length || !body) return undefined
+
+    const filters = body.querySelector('.staff-req-filters')
+    const updatePageSize = () => {
+      const rows = [...body.querySelectorAll('.staff-table tbody tr')]
+      const rowHeight = Math.max(56, ...rows.map((row) => row.getBoundingClientRect().height))
+      const headerHeight = body.querySelector('.staff-table thead')?.getBoundingClientRect().height || 42
+      const paginationHeight = body.querySelector('.staff-pagination')?.getBoundingClientRect().height || 68
+      const availableHeight = body.clientHeight - (filters?.getBoundingClientRect().height || 0)
+        - headerHeight - paginationHeight - 28
+      const nextSize = Math.max(1, Math.min(20, Math.floor(availableHeight / rowHeight)))
+      setHistoryPageSize((current) => current === nextSize ? current : nextSize)
+    }
+
+    const observer = new ResizeObserver(updatePageSize)
+    observer.observe(body)
+    if (filters) observer.observe(filters)
+    updatePageSize()
+    return () => observer.disconnect()
+  }, [historyRoom, historyLoading, historyData, filteredHistoryPayments.length])
+
+  const historyTotalPages = Math.max(1, Math.ceil(filteredHistoryPayments.length / historyPageSize))
   const currentHistoryPage = Math.min(historyPage, historyTotalPages)
   const paginatedHistoryPayments = useMemo(() => {
-    const start = (currentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE
-    return filteredHistoryPayments.slice(start, start + PAYMENT_HISTORY_PAGE_SIZE)
-  }, [filteredHistoryPayments, currentHistoryPage])
+    const start = (currentHistoryPage - 1) * historyPageSize
+    return filteredHistoryPayments.slice(start, start + historyPageSize)
+  }, [filteredHistoryPayments, currentHistoryPage, historyPageSize])
 
   if (loading) {
     return (
@@ -8514,7 +8590,9 @@ function StaffMain() {
               inspectionEditing
                 ? `แก้ไขผลตรวจห้อง ${inspectionEditing.room_number}`
                 : inspectionTenantRequest
-                  ? `ตรวจห้อง ${inspectionTenantRequest.room_number} ก่อนย้ายไปห้อง ${inspectionTenantRequest.target_room_number}`
+                  ? inspectionTenantRequest.type === 'moveout'
+                    ? `ตรวจสภาพห้อง ${inspectionTenantRequest.room_number} ก่อนย้ายออก`
+                    : `ตรวจห้อง ${inspectionTenantRequest.room_number} ก่อนย้ายไปห้อง ${inspectionTenantRequest.target_room_number}`
                   : 'Checklist ตรวจสภาพห้อง'
             }
             onClose={() => {
@@ -8719,7 +8797,9 @@ function StaffMain() {
                   )}
                   <p className="inspection-footer-note">
                     {inspectionTenantRequest || inspectionEditing?.tenant_request_id
-                      ? 'บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติย้ายห้องได้ทันที'
+                      ? inspectionTenantRequest?.type === 'moveout' || inspectionEditing?.tenant_request_type === 'moveout'
+                        ? 'บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติการย้ายออกได้'
+                        : 'บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติย้ายห้องได้ทันที'
                       : 'ผลตรวจและรูปจะถูกบันทึกในระบบและส่งให้ Admin ตรวจสอบ'}
                   </p>
                   <div className="inspection-footer-actions">
@@ -9210,7 +9290,7 @@ function StaffMain() {
                             <InspectionRoomCell
                               roomNumber={inspection.room_number}
                               targetRoomNumber={inspection.target_room_number}
-                              isMoveRoom={Boolean(inspection.tenant_request_id)}
+                              isMoveRoom={inspection.tenant_request_type === 'move_room'}
                             />
                           </td>
                           <td className="staff-insp-tenant">
@@ -10919,7 +10999,8 @@ function StaffMain() {
             setHistoryStatusFilter('all')
             setHistoryPage(1)
           }}
-          variant="wide"
+          variant="payment-history"
+          bodyRef={historyBodyRef}
         >
           {historyLoading ? (
             <p className="staff-empty">กำลังโหลดข้อมูล...</p>
@@ -11034,8 +11115,8 @@ function StaffMain() {
                   {historyTotalPages > 1 && (
                     <div className="staff-pagination">
                       <span className="staff-pagination-info">
-                        แสดง {(currentHistoryPage - 1) * PAYMENT_HISTORY_PAGE_SIZE + 1}-
-                        {Math.min(currentHistoryPage * PAYMENT_HISTORY_PAGE_SIZE, filteredHistoryPayments.length)} จาก{' '}
+                        แสดง {(currentHistoryPage - 1) * historyPageSize + 1}-
+                        {Math.min(currentHistoryPage * historyPageSize, filteredHistoryPayments.length)} จาก{' '}
                         {filteredHistoryPayments.length} รายการ
                       </span>
                       <div className="staff-pagination-controls">
@@ -12013,6 +12094,10 @@ function StaffMain() {
                   <strong>
                     {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}
                   </strong>
+                </div>
+                <div className="staff-confirm-detail-row">
+                  <span>ตรวจสภาพห้อง</span>
+                  <strong>ตรวจแล้ว</strong>
                 </div>
               </div>
               <div className="staff-confirm-warning">

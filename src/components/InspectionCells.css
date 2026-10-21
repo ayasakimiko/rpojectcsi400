@@ -50,6 +50,33 @@
   font-weight: 600;
 }
 
+.insp-purpose {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 6px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.insp-purpose svg {
+  flex: 0 0 15px;
+}
+
+.insp-purpose.is-moveout,
+.insp-purpose.is-general {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .insp-person {
   display: flex;
   align-items: center;

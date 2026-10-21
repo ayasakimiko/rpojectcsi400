@@ -1,5 +1,7 @@
 import { UploadImage } from './UploadMedia.jsx'
 import { PersonIcon } from './ParcelIcons.jsx'
+import { InspectionPurposeBadge } from './InspectionCells.jsx'
+import { getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import './InspectionCells.css'
 import './InspectionDetail.css'
 
@@ -69,10 +71,11 @@ export default function InspectionDetail({
   onOpenPhoto,
   onOpenGallery,
   footer = null,
+  purposeInHeader = false,
 }) {
   const summary = summarize(inspection.checklist)
   const issueCount = summary.counts.damaged + summary.counts.missing
-  const isMoveRoom = Boolean(inspection.tenant_request_id)
+  const isMoveRoom = inspection.tenant_request_type === 'move_room'
   const photos = inspection.photos || []
   const shownPhotos = photoLimit ? photos.slice(0, photoLimit) : photos
   const inspector = inspection.inspected_by || inspection.inspected_by_name
@@ -110,6 +113,10 @@ export default function InspectionDetail({
                 <span className={`insp-status-badge is-${statusTone || 'pending'}`}>{statusLabel}</span>
               </div>
             )}
+          </div>
+          <div className={`idt-source${purposeInHeader ? ' is-reference' : ''}`}>
+            {!purposeInHeader && <><span>ประเภทการตรวจ</span><InspectionPurposeBadge inspection={inspection} /></>}
+            <small>ที่มา: {getInspectionSourceLabel(inspection)}</small>
           </div>
           <dl className="idt-meta">
             <div>

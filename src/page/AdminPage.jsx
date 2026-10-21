@@ -19,8 +19,10 @@ import {
   InspectionInspectorCell,
   InspectionPersonCell,
   InspectionPhotosCell,
+  InspectionPurposeBadge,
   InspectionRoomCell,
 } from '../components/InspectionCells.jsx'
+import { getInspectionPurposeLabel, getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionForm from '../components/InspectionForm.jsx'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
@@ -750,7 +752,7 @@ const ADMIN_INSPECTION_KINDS = {
     empty: 'ยังไม่มีผลตรวจห้องก่อนย้ายห้อง',
   },
 }
-const inspectionKindOf = (inspection) => (inspection.tenant_request_id ? 'move_room' : 'moveout')
+const inspectionKindOf = (inspection) => (inspection.tenant_request_type === 'move_room' ? 'move_room' : 'moveout')
 
 function summarizeInspection(checklist) {
   const counts = Object.fromEntries(INSPECTION_RESULT_ORDER.map((key) => [key, 0]))
@@ -983,7 +985,7 @@ function unlockBodyScroll() {
   }
 }
 
-function Modal({ title, onClose, children, variant }) {
+function Modal({ title, onClose, children, variant, headerExtra = null }) {
   const [isClosing, setIsClosing] = useState(false)
   const requestClose = () => setIsClosing(true)
 
@@ -1019,6 +1021,7 @@ function Modal({ title, onClose, children, variant }) {
       >
         <div className="admin-modal-header">
           <h3>{title}</h3>
+          {headerExtra && <div className="admin-modal-header-extra">{headerExtra}</div>}
           <button type="button" className="admin-modal-close" onClick={requestClose} aria-label="ปิด">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -6852,6 +6855,8 @@ function AdminBackupPage() {
       inspection.tenant_phone,
       inspection.inspected_by,
       inspection.damage_note,
+      getInspectionPurposeLabel(inspection),
+      getInspectionSourceLabel(inspection),
     ]
       .some((value) => String(value ?? '').toLocaleLowerCase('th-TH').includes(inspectionKeyword))
   })
@@ -8303,7 +8308,7 @@ function AdminBackupPage() {
             <div className="admin-card-header">
               <div>
                 <h2>ผลตรวจห้อง ({moveOutInspections.length})</h2>
-                <p className="waiting-list-storage-note">รวมผลตรวจห้องตอนย้ายออก และผลตรวจห้องเดิมก่อนอนุมัติย้ายห้อง</p>
+                <p className="waiting-list-storage-note">ผลตรวจจากคำขอย้ายห้อง คำขอแจ้งย้ายออก และผลตรวจย้ายออกที่ Staff บันทึก</p>
               </div>
               <button type="button" className="admin-action-btn is-primary" onClick={openCreateInspection}>
                 + เพิ่มผลตรวจก่อนย้ายห้อง
@@ -8379,6 +8384,7 @@ function AdminBackupPage() {
                 <thead>
                   <tr>
                     <th>ห้อง</th>
+                    <th className="admin-insp-purpose-column">ประเภทการตรวจ</th>
                     <th className="admin-insp-tenant-column">ผู้เช่า</th>
                     <th className="admin-insp-date-column">วันที่ตรวจ</th>
                     <th>ผลตรวจ</th>
@@ -8391,7 +8397,7 @@ function AdminBackupPage() {
                 <tbody>
                   {filteredInspections.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="admin-empty">
+                      <td colSpan={9} className="admin-empty">
                         {kindInspections.length ? 'ไม่พบผลตรวจตามเงื่อนไข' : inspectionKind === 'all' ? 'ยังไม่มีผลตรวจห้อง' : ADMIN_INSPECTION_KINDS[inspectionKind].empty}
                       </td>
                     </tr>
@@ -8419,8 +8425,12 @@ function AdminBackupPage() {
                             <InspectionRoomCell
                               roomNumber={inspection.room_number}
                               targetRoomNumber={inspection.target_room_number}
-                              isMoveRoom={Boolean(inspection.tenant_request_id)}
+                              isMoveRoom={inspection.tenant_request_type === 'move_room'}
+                              sourceLabel={`ที่มา: ${getInspectionSourceLabel(inspection)}`}
                             />
+                          </td>
+                          <td className="admin-insp-purpose-column">
+                            <InspectionPurposeBadge inspection={inspection} />
                           </td>
                           <td className="admin-insp-tenant-column">
                             <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} />
@@ -8495,14 +8505,16 @@ function AdminBackupPage() {
                         </tr>
                         <ExpandToggleRow
                           open={expandedInspectionRows.has(inspection.id)}
-                          colSpan={8}
+                          colSpan={9}
                           onClick={() => toggleInspectionRow(inspection.id)}
                         />
                         <DetailRow
                           open={expandedInspectionRows.has(inspection.id)}
-                          colSpan={8}
+                          colSpan={9}
                           fields={[
+                            { label: 'ประเภทการตรวจ', value: <InspectionPurposeBadge inspection={inspection} /> },
                             { label: 'ผู้เช่า', value: <InspectionPersonCell name={inspection.tenant_name} phone={inspection.tenant_phone} /> },
+                            { label: 'ที่มาของผลตรวจ', value: getInspectionSourceLabel(inspection) },
                             { label: 'วันที่ตรวจ', value: <InspectionDateCell value={inspection.created_at} /> },
                             {
                               label: 'ผลตรวจ',
@@ -8577,14 +8589,20 @@ function AdminBackupPage() {
       )}
 
       {inspectionDetail && (
-        <Modal title={`ผลตรวจห้อง ${inspectionDetail.room_number}`} onClose={() => { setPhotoPreview(null); setPhotoGalleryPage(null); setInspectionDetail(null) }} variant="inspection-detail">
+        <Modal
+          title={`ผลตรวจห้อง ${inspectionDetail.room_number}`}
+          onClose={() => { setPhotoPreview(null); setPhotoGalleryPage(null); setInspectionDetail(null) }}
+          variant="inspection-detail"
+          headerExtra={<><span>ประเภทการตรวจ</span><InspectionPurposeBadge inspection={inspectionDetail} /></>}
+        >
           {() => {
-            const isMoveRoom = Boolean(inspectionDetail.tenant_request_id)
-            const status = isMoveRoom ? 'reviewed' : inspectionDetail.status || 'pending'
+            const isLinkedRequest = Boolean(inspectionDetail.tenant_request_id)
+            const status = isLinkedRequest ? 'reviewed' : inspectionDetail.status || 'pending'
             return (
               <InspectionDetail
                 inspection={inspectionDetail}
-                statusLabel={isMoveRoom ? 'Staff ตรวจแล้ว' : MOVE_OUT_INSPECTION_STATUS[status]}
+                purposeInHeader
+                statusLabel={isLinkedRequest ? 'Staff ตรวจแล้ว' : MOVE_OUT_INSPECTION_STATUS[status]}
                 statusTone={status}
                 actorClassName="admin-actor-inline"
                 photoLimit={INSPECTION_PHOTO_PREVIEW_COUNT}
@@ -8592,7 +8610,7 @@ function AdminBackupPage() {
                 onOpenGallery={() => setPhotoGalleryPage(1)}
                 footer={
                   <footer className="idt-footer">
-                    {isMoveRoom && (
+                    {isLinkedRequest && (
                       <div className="idt-footer-right">
                         <button type="button" className="idt-footer-btn is-primary" onClick={() => openEditInspectionForm(inspectionDetail)}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -8602,7 +8620,7 @@ function AdminBackupPage() {
                         </button>
                       </div>
                     )}
-                    {!isMoveRoom && (
+                    {!isLinkedRequest && (
                       <div className="idt-footer-right">
                         <div className="idt-footer-actions">
                           <InspectionStatusActions
