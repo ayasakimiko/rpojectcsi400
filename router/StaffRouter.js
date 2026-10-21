@@ -30,6 +30,16 @@ import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 
 const router = Router();
+
+async function cancelStaleTenantRequests(connection, customerId, currentRoomNumber) {
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE customer_id = ? AND status IN ('pending', 'in_progress')
+       AND (? IS NULL OR room_number <> ?)`,
+    [customerId, currentRoomNumber, currentRoomNumber],
+  );
+}
 const VEHICLE_MAX_PHOTOS = 6;
 
 const STAFF_ROLE_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
@@ -893,7 +903,7 @@ router.get("/requests", async (req, res) => {
        LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
        LEFT JOIN Room sr ON sr.room_number = tr.room_number
        LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
-       WHERE tr.status IN ('pending', 'in_progress')
+       WHERE tr.status IN ('pending', 'in_progress') AND tr.room_number = c.room_number
        ORDER BY tr.created_at ASC`,
     ), pool.query(
       `SELECT mr.id, mr.description, mr.category, mr.contact_phone, mr.preferred_time, mr.status, mr.created_at,
@@ -919,10 +929,10 @@ router.get("/requests/history", async (req, res) => {
     const page = parsePage(req.query.page);
     const offset = (page - 1) * REQUEST_HISTORY_PAGE_SIZE;
 
-    const conditions = [`tr.status IN ('approved', 'rejected')`];
+    const conditions = [`tr.status IN ('approved', 'rejected', 'cancelled')`];
     const params = [];
 
-    if (["approved", "rejected"].includes(req.query.status)) {
+    if (["approved", "rejected", "cancelled"].includes(req.query.status)) {
       conditions.push(`tr.status = ?`);
       params.push(req.query.status);
     }
@@ -1040,7 +1050,10 @@ router.post("/requests/:id/acknowledge", async (req, res) => {
 
     const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `UPDATE TenantRequest SET status = 'in_progress', accepted_at = NOW(), accepted_by_name = ? WHERE id = ? AND status = 'pending'`,
+      `UPDATE TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id AND c.room_number = tr.room_number
+       SET tr.status = 'in_progress', tr.accepted_at = NOW(), tr.accepted_by_name = ?
+       WHERE tr.id = ? AND tr.status = 'pending'`,
       [staffName, requestId],
     );
     if (result.affectedRows === 0) {
@@ -1087,9 +1100,14 @@ router.post("/requests/:id/approve", async (req, res) => {
         `SELECT room_number FROM Customer WHERE id = ? FOR UPDATE`,
         [tenantRequest.customer_id],
       );
-      if (!customerRows[0] || customerRows[0].room_number !== tenantRequest.room_number) {
+      if (!customerRows[0]) {
         await connection.rollback();
-        return res.status(409).json({ message: "ห้องปัจจุบันของผู้เช่าเปลี่ยนแปลงแล้ว กรุณาตรวจสอบคำขอใหม่" });
+        return res.status(404).json({ message: "ไม่พบผู้เช่า" });
+      }
+      if (customerRows[0].room_number !== tenantRequest.room_number) {
+        await cancelStaleTenantRequests(connection, tenantRequest.customer_id, customerRows[0].room_number);
+        await connection.commit();
+        return res.status(410).json({ message: "คำขอถูกนำออกจากรายการแล้ว เนื่องจากผู้เช่าเปลี่ยนห้อง" });
       }
     }
 
@@ -1127,9 +1145,14 @@ router.post("/requests/:id/approve", async (req, res) => {
         `SELECT room_number FROM Customer WHERE id = ? FOR UPDATE`,
         [tenantRequest.customer_id],
       );
-      if (!customerRows[0] || customerRows[0].room_number !== tenantRequest.room_number) {
+      if (!customerRows[0]) {
         await connection.rollback();
-        return res.status(409).json({ message: "ห้องปัจจุบันของผู้เช่าเปลี่ยนแปลงแล้ว กรุณาตรวจสอบคำขอใหม่" });
+        return res.status(404).json({ message: "ไม่พบผู้เช่า" });
+      }
+      if (customerRows[0].room_number !== tenantRequest.room_number) {
+        await cancelStaleTenantRequests(connection, tenantRequest.customer_id, customerRows[0].room_number);
+        await connection.commit();
+        return res.status(410).json({ message: "คำขอถูกนำออกจากรายการแล้ว เนื่องจากผู้เช่าเปลี่ยนห้อง" });
       }
 
       const [rooms] = await connection.query(
@@ -1213,7 +1236,7 @@ router.post("/requests/:id/approve", async (req, res) => {
 
       await connection.query(`UPDATE TenantRequest SET move_in_date = ? WHERE id = ?`, [moveInDate, requestId]);
 
-      await connection.query(`UPDATE Customer SET is_suspended = TRUE WHERE id = ?`, [tenantRequest.customer_id]);
+      await connection.query(`UPDATE Customer SET is_suspended = TRUE, room_number = NULL WHERE id = ?`, [tenantRequest.customer_id]);
 
       await connection.query(
         `UPDATE Room
@@ -1240,6 +1263,43 @@ router.post("/requests/:id/approve", async (req, res) => {
       [staffName, staffName, requestId],
     );
 
+    if (tenantRequest.type === "move_room" || tenantRequest.type === "moveout") {
+      await cancelStaleTenantRequests(
+        connection,
+        tenantRequest.customer_id,
+        tenantRequest.type === "move_room" ? tenantRequest.target_room_number : null,
+      );
+    }
+
+    if (tenantRequest.type === "moveout") {
+      await connection.query(
+        `UPDATE ResidentVisitRequest
+         SET status = 'cancelled', cancelled_by_name = 'ระบบ (ผู้เช่าย้ายออก)', cancelled_at = NOW()
+         WHERE customer_id = ? AND (status = 'pending'
+           OR (status = 'approved' AND (end_at IS NULL OR end_at > NOW())))`,
+        [tenantRequest.customer_id],
+      );
+      await connection.query(
+        `UPDATE SafetyIncident
+         SET status = 'cancelled', cancelled_by_name = 'ระบบ (ผู้เช่าย้ายออก)',
+             cancelled_at = NOW(), cancel_reason = 'ผู้แจ้งเหตุย้ายออกจากห้อง'
+         WHERE reporter_role = 'Customer' AND reporter_id = ? AND status = 'pending'`,
+        [tenantRequest.customer_id],
+      );
+    }
+
+    if (tenantRequest.type === "move_room" || tenantRequest.type === "moveout") {
+      const currentRoomNumber = tenantRequest.type === "move_room" ? tenantRequest.target_room_number : null;
+      await connection.query(
+        `UPDATE MaintenanceRequest
+         SET status = 'cancelled', completed_at = NOW(), completed_by_name = ?
+         WHERE customer_id = ? AND status IN ('pending', 'in_progress')
+           AND (? IS NULL OR room_number <> ?)`,
+        [tenantRequest.type === "moveout" ? "ระบบ (ผู้เช่าย้ายออก)" : "ระบบ (เปลี่ยนห้อง)",
+          tenantRequest.customer_id, currentRoomNumber, currentRoomNumber],
+      );
+    }
+
     await connection.commit();
     return res.json({ message: "อนุมัติคำขอสำเร็จ" });
   } catch (error) {
@@ -1261,13 +1321,14 @@ router.post("/requests/:id/reject", async (req, res) => {
 
     const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `UPDATE TenantRequest
-       SET status = 'rejected',
-           accepted_at = COALESCE(accepted_at, NOW()),
-           accepted_by_name = COALESCE(accepted_by_name, ?),
-           completed_at = NOW(),
-           completed_by_name = ?
-       WHERE id = ? AND status IN ('pending', 'in_progress')`,
+      `UPDATE TenantRequest tr
+       JOIN Customer c ON c.id = tr.customer_id AND c.room_number = tr.room_number
+       SET tr.status = 'rejected',
+           tr.accepted_at = COALESCE(tr.accepted_at, NOW()),
+           tr.accepted_by_name = COALESCE(tr.accepted_by_name, ?),
+           tr.completed_at = NOW(),
+           tr.completed_by_name = ?
+       WHERE tr.id = ? AND tr.status IN ('pending', 'in_progress')`,
       [staffName, staffName, requestId],
     );
     if (result.affectedRows === 0) {

@@ -789,6 +789,7 @@ const TENANT_REQUEST_STATUS_LABEL = {
   in_progress: 'รับเรื่องแล้ว',
   approved: 'อนุมัติแล้ว',
   rejected: 'ปฏิเสธ',
+  cancelled: 'ยกเลิกแล้ว',
 }
 
 const RENEW_DURATION_OPTIONS = [
@@ -986,6 +987,7 @@ const MOVEOUT_STATUS_POPUP_CONTENT = {
   in_progress: { title: 'เจ้าหน้าที่รับเรื่องแล้ว', message: MOVEOUT_IN_PROGRESS_CONTACT_MESSAGE, icon: 'info' },
   approved: { title: 'แจ้งย้ายออกได้รับการอนุมัติ', message: MOVEOUT_APPROVED_CONTACT_MESSAGE, icon: 'success' },
   rejected: { title: 'คำขอแจ้งย้ายออกไม่ได้รับการอนุมัติ', message: MOVEOUT_REJECTED_CONTACT_MESSAGE, icon: 'danger' },
+  cancelled: { title: 'คำขอแจ้งย้ายออกถูกยกเลิก', message: 'คำขอเดิมถูกยกเลิกเนื่องจากสถานะห้องหรือบัญชีผู้เช่าเปลี่ยนแปลง', icon: 'danger' },
 }
 
 const MOVE_ROOM_STATUS_POPUP_CONTENT = {
@@ -1010,6 +1012,7 @@ const MOVE_ROOM_STATUS_POPUP_CONTENT = {
     message: 'คำขอย้ายห้องไม่ได้รับการอนุมัติ กรุณาติดต่อเจ้าหน้าที่หากต้องการสอบถามเพิ่มเติม',
     icon: 'danger',
   },
+  cancelled: { title: 'คำขอย้ายห้องถูกยกเลิก', message: 'คำขอเดิมถูกยกเลิกเนื่องจากสถานะห้องหรือบัญชีผู้เช่าเปลี่ยนแปลง', icon: 'danger' },
 }
 
 const RENEW_RESUBMIT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000
@@ -1035,6 +1038,7 @@ const RENEW_STATUS_POPUP_CONTENT = {
     message: 'คำขอต่อสัญญาของคุณไม่ได้รับการอนุมัติ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อสอบถามรายละเอียดเพิ่มเติม',
     icon: 'danger',
   },
+  cancelled: { title: 'คำขอต่อสัญญาถูกยกเลิก', message: 'คำขอเดิมถูกยกเลิกเนื่องจากสถานะห้องหรือบัญชีผู้เช่าเปลี่ยนแปลง', icon: 'danger' },
 }
 
 const MAINTENANCE_STATUS_POPUP_CONTENT = {
@@ -1055,7 +1059,7 @@ const MAINTENANCE_STATUS_POPUP_CONTENT = {
   },
   cancelled: {
     title: 'รายการแจ้งซ่อมถูกยกเลิก',
-    message: 'รายการแจ้งซ่อมของคุณถูกยกเลิกโดยเจ้าหน้าที่ กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์หากต้องการสอบถามเพิ่มเติม',
+    message: 'รายการแจ้งซ่อมของคุณถูกยกเลิกแล้ว กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์หากต้องการสอบถามเพิ่มเติม',
     icon: 'danger',
   },
 }
@@ -1106,6 +1110,7 @@ const TENANT_REQUEST_NOTIF_INFO = {
   in_progress: { label: 'เจ้าหน้าที่รับเรื่องแล้ว', tone: 'info' },
   approved: { label: 'อนุมัติแล้ว', tone: 'success' },
   rejected: { label: 'ถูกปฏิเสธ', tone: 'danger' },
+  cancelled: { label: 'ถูกยกเลิก', tone: 'danger' },
 }
 
 const MAINTENANCE_NOTIF_INFO = {
@@ -1123,6 +1128,7 @@ const UTILITY_BILL_NOTIF_INFO = {
 const TENANT_REQUEST_FINAL_LOG_LABEL = {
   approved: 'อนุมัติคำขอ',
   rejected: 'ปฏิเสธคำขอ',
+  cancelled: 'ยกเลิกคำขอ',
 }
 
 const MAINTENANCE_FINAL_LOG_LABEL = {
@@ -1313,7 +1319,7 @@ function getRequestTimeline(kind, request) {
 const REQUEST_PROGRESS_VISIBLE_MS = 10 * 60 * 1000
 
 function isRequestSettled(request) {
-  if (!request || !['approved', 'rejected'].includes(request.status)) return false
+  if (!request || !['approved', 'rejected', 'cancelled'].includes(request.status)) return false
   const finishedAt = new Date(request.completed_at || request.accepted_at || request.created_at).getTime()
   return Date.now() - finishedAt > REQUEST_PROGRESS_VISIBLE_MS
 }
@@ -4805,6 +4811,7 @@ function CustomerDashbord() {
   const canResubmitRenew =
     !renewRequest
     || renewRequest.status === 'rejected'
+    || renewRequest.status === 'cancelled'
     || (renewRequest.status === 'approved' && msLeft !== null && msLeft <= RENEW_RESUBMIT_WINDOW_MS)
 
   const buildTenantRequestNotifs = (request) => {
@@ -5889,6 +5896,7 @@ function CustomerDashbord() {
                   { key: 'in_progress', label: 'รับเรื่องแล้ว', tone: 'info' },
                   { key: 'approved', label: 'อนุมัติแล้ว', tone: 'success' },
                   { key: 'rejected', label: 'ปฏิเสธ', tone: 'danger' },
+                  { key: 'cancelled', label: 'ยกเลิกแล้ว', tone: 'danger' },
                 ]
                   .map((segment) => ({
                     ...segment,
@@ -7307,7 +7315,7 @@ function CustomerDashbord() {
             </div>
 
             <div className="row g-3 mt-1">
-              {(room?.is_booked || moveoutRequest?.status === 'approved') && (
+              {(room?.is_booked || tenantRequests.length > 0) && (
                 <div className="col-12 col-lg-5">
                   <div className="dashboard-card">
                     <h2>แจ้งปัญหาต่างๆ</h2>
@@ -7354,11 +7362,11 @@ function CustomerDashbord() {
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">แจ้งย้ายออก</p>
                           <p className="dashboard-request-desc">
-                            {(moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
+                            {(!['rejected', 'cancelled'].includes(moveoutRequest?.status) && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
                               || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
                           </p>
                         </div>
-                        {moveoutRequest?.status !== 'rejected' && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status] ? (
+                        {!['rejected', 'cancelled'].includes(moveoutRequest?.status) && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status] ? (
                           <button
                             type="button"
                             className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)} dashboard-badge-btn`}
@@ -7779,7 +7787,7 @@ function CustomerDashbord() {
                               )}
                             </div>
                           </div>
-                          {item.status !== 'cancelled' && <RequestTimeline kind="maintenance" request={item} compact />}
+                          <RequestTimeline kind="maintenance" request={item} compact />
                           <div className="dashboard-maintenance-foot">
                             <span className="dashboard-maintenance-date">
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

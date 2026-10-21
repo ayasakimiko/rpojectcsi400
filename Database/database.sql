@@ -412,6 +412,22 @@ UPDATE TenantRequest tr
        AND tr.status IN ('pending', 'in_progress')
        AND (tr.status = 'pending' OR tr.accepted_at IS NULL OR tr.accepted_by_name IS NULL);
 
+-- Keep stale requests and their inspection links for audit, but remove them from active workflows.
+UPDATE TenantRequest tr
+     JOIN Customer c ON c.id = tr.customer_id
+     SET tr.status = 'cancelled', tr.completed_at = NOW(),
+         tr.completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE tr.status IN ('pending', 'in_progress')
+       AND (c.room_number IS NULL OR tr.room_number <> c.room_number);
+
+UPDATE MaintenanceRequest mr
+     JOIN Customer c ON c.id = mr.customer_id
+     SET mr.status = 'cancelled', mr.completed_at = NOW(),
+         mr.completed_by_name = CASE WHEN c.is_suspended = TRUE
+           THEN 'ระบบ (ระงับผู้เช่า)' ELSE 'ระบบ (เปลี่ยนห้อง)' END
+     WHERE mr.status IN ('pending', 'in_progress')
+       AND (c.is_suspended = TRUE OR c.room_number IS NULL OR mr.room_number <> c.room_number);
+
 UPDATE Parcel p
      SET p.customer_id = (
        SELECT c.id FROM Customer c
@@ -535,6 +551,17 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- Close active vehicle and visitor requests for tenants who no longer occupy a room.
+-- Completed visits remain unchanged in the request history.
+UPDATE ResidentVisitRequest r
+     JOIN Customer c ON c.id = r.customer_id
+     SET r.status = 'cancelled', r.cancelled_at = NOW(),
+         r.cancelled_by_name = CASE WHEN c.is_suspended = TRUE
+           THEN 'ระบบ (ระงับผู้เช่า)' ELSE 'ระบบ (ผู้เช่าย้ายออก)' END
+     WHERE (c.is_suspended = TRUE OR c.room_number IS NULL)
+       AND (r.status = 'pending'
+         OR (r.status = 'approved' AND (r.end_at IS NULL OR r.end_at > NOW())));
 
 CREATE TABLE IF NOT EXISTS SafetyIncident (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -750,6 +777,16 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- Preserve resolved incidents and move pending reports from former tenants into the existing log.
+UPDATE SafetyIncident s
+     JOIN Customer c ON s.reporter_role = 'Customer' AND c.id = s.reporter_id
+     SET s.status = 'cancelled', s.cancelled_at = NOW(),
+         s.cancelled_by_name = CASE WHEN c.is_suspended = TRUE
+           THEN 'ระบบ (ระงับผู้เช่า)' ELSE 'ระบบ (ผู้เช่าย้ายออก)' END,
+         s.cancel_reason = CASE WHEN c.is_suspended = TRUE
+           THEN 'ผู้แจ้งเหตุถูกระงับการใช้งาน' ELSE 'ผู้แจ้งเหตุย้ายออกจากห้อง' END
+     WHERE s.status = 'pending' AND (c.is_suspended = TRUE OR c.room_number IS NULL);
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS

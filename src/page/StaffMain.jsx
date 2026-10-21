@@ -1059,7 +1059,7 @@ function buildAnnouncementNotif(item) {
 
 const openModalStack = []
 
-function Modal({ title, onClose, children, variant }) {
+function Modal({ title, onClose, children, variant, stickyFilters = false }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -1088,7 +1088,7 @@ function Modal({ title, onClose, children, variant }) {
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -1150,6 +1150,7 @@ const TENANT_REQUEST_STATUS_LABEL = {
   in_progress: 'รับเรื่องแล้ว',
   approved: 'อนุมัติแล้ว',
   rejected: 'ปฏิเสธแล้ว',
+  cancelled: 'ยกเลิกแล้ว',
 }
 
 const RENEW_DURATION_LABEL = {
@@ -1954,7 +1955,7 @@ const TENANT_REQUEST_NOTE_LABEL = {
 function TenantRequestCard({ request, steps = [], children }) {
   const Body = TENANT_REQUEST_BODY[request.type] || RenewRequestBody
   return (
-    <article className={`staff-req-card type-${request.type} is-structured`}>
+    <article className={`staff-req-card type-${request.type} is-structured status-${request.status}`}>
       <div className="staff-req-head is-identity">
         <span className="staff-req-avatar" aria-hidden="true">
           <WaitingDetailIcon type="user" size={18} />
@@ -2419,7 +2420,8 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
   const bedCount = Number(request.target_room_bed)
   const hasTargetDetails = isMove && (request.target_room_electricity_unit_price != null || amenities.length > 0)
   const rejected = request.status === 'rejected'
-  const finished = request.status === 'approved' || rejected
+  const cancelled = request.status === 'cancelled'
+  const finished = request.status === 'approved' || rejected || cancelled
   const progressSteps = [
     { key: 'request', label: 'ส่งคำขอ', by: `${request.first_name || ''} ${request.last_name || ''}`.trim(), date: request.created_at, icon: 'note' },
     {
@@ -2432,11 +2434,11 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
     },
     {
       key: 'done',
-      label: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
+      label: cancelled ? 'ยกเลิกคำขอ' : rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
       by: request.completed_by_name,
       date: finished ? request.completed_at : null,
-      icon: rejected ? 'x' : 'check',
-      tone: rejected ? 'danger' : undefined,
+      icon: rejected || cancelled ? 'x' : 'check',
+      tone: rejected || cancelled ? 'danger' : undefined,
       pendingText: 'ยังไม่ถึงขั้นตอนนี้',
     },
   ]
@@ -7004,6 +7006,11 @@ function StaffMain() {
       await Promise.all([loadRequests(), loadRooms()])
       return true
     } catch (err) {
+      if (err.response?.status === 410) {
+        await loadRequests()
+        setActionSuccess(err.response?.data?.message || 'คำขอเก่าถูกนำออกจากรายการแล้ว')
+        return true
+      }
       setRequestsError(err.response?.data?.message || 'อนุมัติคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
       return false
     } finally {
@@ -7707,6 +7714,17 @@ function StaffMain() {
     },
     status: tenantFilterStatus,
     onStatus: (value) => {
+      if (value === 'cancelled') {
+        setViewAllRequests(null)
+        resetTenantFilters()
+        setShowTenantHistory(true)
+        setTenantHistoryPage(1)
+        setTenantHistorySearch(tenantFilterSearch)
+        setTenantHistoryStatusFilter('cancelled')
+        setTenantHistoryType(tenantFilterType)
+        loadTenantHistory(1, tenantFilterSearch, 'cancelled', tenantFilterType)
+        return
+      }
       setTenantFilterStatus(value)
       setTenantModalPage(1)
     },
@@ -7714,6 +7732,7 @@ function StaffMain() {
       { value: 'all', label: 'ทุกสถานะ' },
       { value: 'pending', label: 'รอดำเนินการ' },
       { value: 'in_progress', label: 'รับเรื่องแล้ว' },
+      { value: 'cancelled', label: 'ยกเลิกแล้ว' },
     ],
     sort: tenantFilterSort,
     onSort: (value) => {
@@ -10369,6 +10388,7 @@ function StaffMain() {
 
       {viewAllRequests === 'tenant' && (
         <Modal
+          stickyFilters
           title={`${TENANT_HOME_CARDS.find((card) => card.type === tenantFilterType)?.title ?? 'คำขอผู้เช่า'} (ทั้งหมด)`}
           onClose={() => {
             setViewAllRequests(null)
@@ -10419,6 +10439,7 @@ function StaffMain() {
 
       {viewAllRequests === 'maintenance' && (
         <Modal
+          stickyFilters
           title="คำขอแจ้งซ่อม (ทั้งหมด)"
           onClose={() => {
             setViewAllRequests(null)
@@ -10473,6 +10494,7 @@ function StaffMain() {
 
       {showTenantHistory && (
         <Modal
+          stickyFilters
           title="ประวัติคำขอต่อสัญญา / แจ้งย้ายออก"
           variant="history"
           onClose={() => {
@@ -10510,6 +10532,7 @@ function StaffMain() {
               { value: 'all', label: 'ทุกผลลัพธ์' },
               { value: 'approved', label: 'อนุมัติแล้ว' },
               { value: 'rejected', label: 'ปฏิเสธแล้ว' },
+              { value: 'cancelled', label: 'ยกเลิกแล้ว' },
             ]}
             resultText={`พบ ${tenantHistoryTotal} คำขอ`}
             canClear={tenantHistoryType !== 'all' || tenantHistoryStatusFilter !== 'all' || Boolean(tenantHistorySearch)}
@@ -10544,7 +10567,7 @@ function StaffMain() {
                         ? [
                             {
                               key: 'completed',
-                              label: request.status === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ',
+                              label: request.status === 'approved' ? 'อนุมัติ' : request.status === 'cancelled' ? 'ยกเลิก' : 'ปฏิเสธ',
                               by: request.completed_by_name,
                               date: request.completed_at,
                               tone: request.status === 'approved' ? 'success' : 'danger',
@@ -10607,6 +10630,7 @@ function StaffMain() {
 
       {showMaintenanceHistory && (
         <Modal
+          stickyFilters
           title="ประวัติคำขอแจ้งซ่อม"
           variant="history"
           onClose={() => {
@@ -10886,6 +10910,7 @@ function StaffMain() {
 
       {historyRoom && (
         <Modal
+          stickyFilters
           title={`ประวัติการจ่ายเงิน - ห้อง ${historyRoom.room_number}`}
           onClose={() => {
             setHistorySlip(null)

@@ -2024,37 +2024,73 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
+  width: 100%;
+  min-width: 0;
   margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1.5px solid #e6f0fd;
+  padding: 11px 14px;
+  border: 1px solid #dbe7f5;
+  border-radius: 14px;
+  background: #f8fbff;
+  box-sizing: border-box;
+  container-type: inline-size;
 }
 
 .staff-modal-body .staff-pagination {
   position: sticky;
   bottom: 0;
   z-index: 2;
-  background: #ffffff;
+  background: rgba(248, 251, 255, 0.97);
   margin-top: auto;
-  padding-bottom: 2px;
-  border-top: var(--staff-modal-divider);
+  box-shadow: 0 -8px 24px rgba(15, 43, 82, 0.07);
+  backdrop-filter: blur(8px);
+}
+
+.staff-modal-body .staff-requests-list:has(+ .staff-pagination) {
+  margin-bottom: 18px;
 }
 
 .staff-pagination-info {
-  font-size: 12.5px;
-  color: #6b859e;
-  font-weight: 600;
+  font-size: 13px;
+  color: #47617d;
+  font-weight: 700;
 }
 
 .staff-pagination-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 3px;
+  border: 1px solid #dbe7f5;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.staff-pagination-controls .staff-action-btn {
+  min-width: 82px;
+  min-height: 36px;
+  border-radius: 9px;
+}
+
+.staff-pagination-controls .staff-action-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.staff-pagination-controls .staff-action-btn:disabled {
+  opacity: 0.5;
 }
 
 .staff-pagination-page {
   font-size: 13px;
   font-weight: 700;
-  color: #0f2b52;
+  color: #1d4ed8;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: #eff6ff;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -3456,6 +3492,20 @@
   background: #ffffff;
 }
 
+.staff-modal-sticky-filters > .staff-modal-header {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.staff-modal.staff-modal-sticky-filters > .staff-modal-body {
+  padding-top: 0;
+}
+
+.staff-modal-sticky-filters .staff-modal-body > .staff-req-filters.is-sticky {
+  flex-shrink: 0;
+  padding-top: 8px;
+}
+
 .staff-req-segments {
   display: inline-flex;
   flex-wrap: wrap;
@@ -3735,6 +3785,26 @@
 
 .staff-req-card.is-structured:hover {
   border-left-color: #bfdbfe;
+}
+
+.staff-req-card.is-structured.status-cancelled {
+  --req-accent: #64748b;
+  border-color: #cbd5e1;
+  border-left-color: #94a3b8;
+  background: #ffffff;
+}
+
+.staff-req-card.is-structured.status-cancelled:hover {
+  border-color: #94a3b8;
+  border-left-color: #64748b;
+  box-shadow: 0 6px 16px rgba(100, 116, 139, 0.1);
+}
+
+.staff-req-card .staff-badge.status-cancelled.staff-req-status {
+  padding: 3px 10px;
+  border: 1.5px solid #cbd5e1;
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .staff-req-head.is-identity {
@@ -5585,8 +5655,38 @@
 }
 
 .staff-modal.staff-modal-history {
-  width: 960px;
-  height: 820px;
+  width: min(1120px, calc(100vw - 32px));
+  height: min(920px, calc(100dvh - 32px));
+  border-radius: 18px;
+}
+
+.staff-modal-history .staff-modal-body {
+  min-width: 0;
+  min-height: 0;
+  padding: 2px 8px 2px 2px;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: #9db4d1 #f1f5fb;
+}
+
+.staff-modal-history .staff-modal-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.staff-modal-history .staff-modal-body::-webkit-scrollbar-track {
+  background: #f1f5fb;
+  border-radius: 999px;
+}
+
+.staff-modal-history .staff-modal-body::-webkit-scrollbar-thumb {
+  background: #9db4d1;
+  border: 2px solid #f1f5fb;
+  border-radius: 999px;
+}
+
+.staff-modal-history .staff-modal-body::-webkit-scrollbar-thumb:hover {
+  background: #6d91bd;
 }
 
 .staff-modal.staff-modal-form {
@@ -13444,13 +13544,102 @@ tr.staff-focus-row.is-fading > td {
 }
 
 @media (max-width: 700px) {
-  .staff-pagination {
-    align-items: stretch;
-    gap: 8px;
-    margin-top: 12px;
-    padding-top: 12px;
+  .staff-modal.staff-modal-history {
+    box-sizing: border-box;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    padding: 14px;
+    border-radius: 14px;
   }
 
+  .staff-modal-history .staff-modal-body > .staff-req-filters,
+  .staff-modal-history .staff-requests-list,
+  .staff-modal-history .staff-req-card {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .staff-modal-history .staff-requests-list,
+  .staff-modal-history .staff-req-card {
+    width: 100%;
+  }
+
+  .staff-pagination {
+    margin-top: 12px;
+    padding: 10px;
+  }
+
+  .staff-req-card .staff-req-meta {
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .staff-req-card .staff-req-meta-step {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr);
+    grid-template-areas:
+      'dot label'
+      '. time';
+    gap: 2px 8px;
+    flex: 0 0 auto;
+    max-width: none;
+    padding-right: 0;
+  }
+
+  .staff-req-card .staff-req-meta-dot {
+    grid-area: dot;
+    align-self: center;
+    margin-bottom: 0;
+  }
+
+  .staff-req-card .staff-req-meta-label {
+    grid-area: label;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .staff-req-card .staff-req-meta-step time {
+    grid-area: time;
+    white-space: normal;
+  }
+
+  .staff-req-card .staff-req-meta-step:not(:last-child)::after {
+    top: 14px;
+    bottom: -12px;
+    left: 4px;
+    right: auto;
+    width: 2px;
+    height: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .staff-modal-history .staff-req-segments {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    overflow-x: visible;
+    padding: 8px 0 0;
+  }
+
+  .staff-modal-history .staff-req-segment {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 36px;
+    height: auto;
+    justify-content: center;
+    padding: 6px;
+    text-align: center;
+    white-space: normal;
+  }
+}
+
+@container (max-width: 520px) {
   .staff-pagination-info {
     width: 100%;
     font-size: 12px;
@@ -13477,5 +13666,26 @@ tr.staff-focus-row.is-fading > td {
   .staff-pagination-page {
     font-size: 12px;
     text-align: center;
+  }
+}
+
+@container (max-width: 320px) {
+  .staff-pagination-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-pagination-page {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .staff-pagination-controls .staff-action-btn:first-child {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .staff-pagination-controls .staff-action-btn:last-child {
+    grid-column: 2;
+    grid-row: 2;
   }
 }

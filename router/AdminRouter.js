@@ -28,6 +28,16 @@ import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
 // ตั้งค่า Router ตรวจสอบสิทธิ์ผู้ดูแล และเชื่อมส่วนรายจ่ายกับประกาศ
 const router = Router();
 
+async function cancelStaleTenantRequests(connection, customerId, currentRoomNumber) {
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE customer_id = ? AND status IN ('pending', 'in_progress')
+       AND (? IS NULL OR room_number <> ?)`,
+    [customerId, currentRoomNumber, currentRoomNumber],
+  );
+}
+
 router.use(authenticate, requireAdminRole, createRequireActiveAccount(getPool));
 router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
@@ -207,7 +217,8 @@ router.get("/move-out-inspections/move-room-candidates", async (_req, res) => {
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
        LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
-       WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND moi.id IS NULL
+       WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+         AND tr.room_number = c.room_number AND moi.id IS NULL
        ORDER BY tr.created_at ASC, tr.id ASC`,
     );
     return res.json({ requests });
@@ -237,7 +248,8 @@ router.post("/move-out-inspections", async (req, res) => {
     await connection.beginTransaction();
 
     const [requestRows] = await connection.query(
-      `SELECT tr.id, tr.room_number, tr.type, tr.status, c.first_name, c.last_name, c.phone
+      `SELECT tr.id, tr.room_number, tr.type, tr.status, c.room_number AS current_room_number,
+              c.first_name, c.last_name, c.phone
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id
        WHERE tr.id = ? FOR UPDATE`,
@@ -249,6 +261,7 @@ router.post("/move-out-inspections", async (req, res) => {
       || tenantRequest.type !== "move_room"
       || !["pending", "in_progress"].includes(tenantRequest.status)
       || tenantRequest.room_number !== value.roomNumber
+      || tenantRequest.current_room_number !== value.roomNumber
     ) {
       await connection.rollback();
       await deletePublicImages(photos.map((photo) => photo.url));
@@ -1174,6 +1187,29 @@ router.patch("/customers/:id/suspend", async (req, res) => {
         : `UPDATE Customer SET is_suspended = ? WHERE id = ?`,
       [is_suspended, customerId],
     );
+    await cancelStaleTenantRequests(connection, customerId, is_suspended || wasSuspended ? null : roomNumber);
+    if (is_suspended || wasSuspended) {
+      await connection.query(
+        `UPDATE ResidentVisitRequest
+         SET status = 'cancelled', cancelled_by_name = 'ระบบ (ระงับผู้เช่า)', cancelled_at = NOW()
+         WHERE customer_id = ? AND (status = 'pending'
+           OR (status = 'approved' AND (end_at IS NULL OR end_at > NOW())))`,
+        [customerId],
+      );
+      await connection.query(
+        `UPDATE SafetyIncident
+         SET status = 'cancelled', cancelled_by_name = 'ระบบ (ระงับผู้เช่า)',
+             cancelled_at = NOW(), cancel_reason = 'ผู้แจ้งเหตุถูกระงับการใช้งาน'
+         WHERE reporter_role = 'Customer' AND reporter_id = ? AND status = 'pending'`,
+        [customerId],
+      );
+      await connection.query(
+        `UPDATE MaintenanceRequest
+         SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (ระงับผู้เช่า)'
+         WHERE customer_id = ? AND status IN ('pending', 'in_progress')`,
+        [customerId],
+      );
+    }
     await connection.commit();
     const message = is_suspended
       ? roomNumber != null
@@ -1208,7 +1244,7 @@ router.get("/logs/requests", async (req, res) => {
     const conditions = [];
     const params = [];
 
-    if (["pending", "in_progress", "approved", "rejected"].includes(req.query.status)) {
+    if (["pending", "in_progress", "approved", "rejected", "cancelled"].includes(req.query.status)) {
       conditions.push(`tr.status = ?`);
       params.push(req.query.status);
     }

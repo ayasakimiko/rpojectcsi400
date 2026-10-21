@@ -1184,6 +1184,7 @@ const REQUEST_STATUS_LABEL = {
   in_progress: 'รับเรื่องแล้ว',
   approved: 'อนุมัติแล้ว',
   rejected: 'ปฏิเสธแล้ว',
+  cancelled: 'ยกเลิกแล้ว',
 }
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
@@ -1684,7 +1685,7 @@ function getAdminRequestSteps(request) {
     steps.push({
       key: 'completed',
       icon: approved ? 'approved' : 'rejected',
-      label: approved ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว',
+      label: approved ? 'อนุมัติแล้ว' : request.status === 'cancelled' ? 'ยกเลิกแล้ว' : 'ปฏิเสธแล้ว',
       by: request.completed_by_name,
       date: request.completed_at,
       tone: approved ? 'success' : 'danger',
@@ -2799,7 +2800,8 @@ function MoveoutSteps({ moveout }) {
 
 function RequestSteps({ request }) {
   const rejected = request.status === 'rejected'
-  const finished = request.status === 'approved' || rejected
+  const cancelled = request.status === 'cancelled'
+  const finished = request.status === 'approved' || rejected || cancelled
   return (
     <ProcessSteps
       actorClassName="admin-actor-inline"
@@ -2817,11 +2819,11 @@ function RequestSteps({ request }) {
         },
         {
           key: 'done',
-          label: rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
+          label: cancelled ? 'ยกเลิกคำขอ' : rejected ? 'ปฏิเสธคำขอ' : finished ? 'อนุมัติคำขอ' : 'รอผลการพิจารณา',
           by: request.completed_by_name,
           date: finished ? request.completed_at : null,
-          icon: rejected ? 'x' : 'check',
-          tone: rejected ? 'danger' : undefined,
+          icon: rejected || cancelled ? 'x' : 'check',
+          tone: rejected || cancelled ? 'danger' : undefined,
           pendingText: 'ยังไม่ถึงขั้นตอนนี้',
         },
       ]}
@@ -4733,11 +4735,13 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                 ? { key: 'review', label: 'รออนุมัติ', date: null, icon: 'check', pendingText: 'กำลังรอพิจารณา' }
                 : detail.status === 'rejected'
                   ? { key: 'review', label: 'ไม่อนุมัติ', by: reviewer, date: reviewedAt, icon: 'x', tone: 'danger' }
-                  : { key: 'review', label: 'อนุมัติแล้ว', by: reviewer, date: reviewedAt, icon: 'check' },
+                  : reviewedAt
+                    ? { key: 'review', label: 'อนุมัติแล้ว', by: reviewer, date: reviewedAt, icon: 'check' }
+                    : null,
               ...(detail.status === 'cancelled'
                 ? [{ key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' }]
                 : []),
-            ]
+            ].filter(Boolean)
             const stepsEnd = detail.status === 'cancelled' ? cancelledAt : detail.status === 'pending' ? null : reviewedAt
             return (
               <div className="admin-incident-detail">
@@ -7963,6 +7967,7 @@ function AdminBackupPage() {
                   <option value="in_progress">รับเรื่องแล้ว</option>
                   <option value="approved">อนุมัติแล้ว</option>
                   <option value="rejected">ปฏิเสธแล้ว</option>
+                  <option value="cancelled">ยกเลิกแล้ว</option>
                 </select>
               </div>
             </div>
@@ -9102,7 +9107,7 @@ function AdminBackupPage() {
                       <dd><StaffActionCell name={request.accepted_by_name} date={request.accepted_at} /></dd>
                     </div>
                     <div>
-                      <dt><RoomDetailIcon type="check" size={14} />{request.status === 'rejected' ? 'ปฏิเสธโดย' : 'เสร็จสิ้นโดย'}</dt>
+                      <dt><RoomDetailIcon type="check" size={14} />{request.status === 'cancelled' ? 'ยกเลิกโดย' : request.status === 'rejected' ? 'ปฏิเสธโดย' : 'เสร็จสิ้นโดย'}</dt>
                       <dd><StaffActionCell name={request.completed_by_name} date={request.completed_at} /></dd>
                     </div>
                   </dl>

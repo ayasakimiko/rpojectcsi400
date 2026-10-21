@@ -426,7 +426,8 @@ router.get("/me", async (req, res) => {
          LEFT JOIN Room sr ON sr.room_number = tr.room_number
          LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
          LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
-         WHERE tr.customer_id = ? ORDER BY tr.created_at DESC, tr.id DESC`,
+         WHERE tr.customer_id = ?
+         ORDER BY tr.created_at DESC, tr.id DESC`,
         [customer.id],
       ),
       pool.query(`SELECT announcement_id FROM AnnouncementAcknowledgement WHERE customer_id = ?`, [customer.id]),
