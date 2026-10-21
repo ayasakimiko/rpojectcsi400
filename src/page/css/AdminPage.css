@@ -77,6 +77,7 @@
 }
 
 .admin-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -140,7 +141,7 @@
 }
 
 .admin-notif-wrap {
-  position: relative;
+  position: static;
 }
 
 .admin-notif-btn {
@@ -269,8 +270,9 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 420px;
-  max-width: min(420px, 92vw);
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 140px);
   overflow: hidden;
   background: #fff;
   border-radius: 16px;
@@ -355,6 +357,8 @@
 
 .admin-notif-empty {
   height: 420px;
+  min-height: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -381,6 +385,8 @@
 
 .admin-notif-list {
   height: 460px;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -3275,6 +3281,18 @@ tr.admin-focus-flash.is-fading > td {
   }
 }
 
+@media (max-width: 768px) {
+  .admin-notif-panel {
+    position: fixed;
+    inset: 12px;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-radius: 16px;
+    z-index: 1000;
+  }
+}
+
 @media (max-width: 480px) {
   .admin-page {
     padding: 20px 10px 36px;
@@ -3327,8 +3345,9 @@ tr.admin-focus-flash.is-fading > td {
     right: 0;
     bottom: 0;
     width: 100%;
-    height: 100%;
+    height: 100dvh;
     max-width: 100%;
+    max-height: 100dvh;
     border-radius: 0;
     z-index: 1000;
   }
@@ -14662,6 +14681,11 @@ tr.admin-focus-flash.is-fading > td {
   align-content: start;
   margin: 0 -6px;
   padding: 4px 6px 8px;
+}
+
+.admin-request-history > .admin-req-empty {
+  display: grid;
+  place-items: center;
 }
 
 .admin-req-grid {

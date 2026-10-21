@@ -14,6 +14,7 @@
 }
 
 .staff-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -59,7 +60,7 @@
 }
 
 .staff-notif-wrap {
-  position: relative;
+  position: static;
 }
 
 .staff-notif-btn {
@@ -190,8 +191,9 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 420px;
-  max-width: min(420px, 92vw);
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 140px);
   overflow: hidden;
   background: #fff;
   border-radius: 16px;
@@ -276,6 +278,8 @@
 
 .staff-notif-empty {
   height: 420px;
+  min-height: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -302,6 +306,8 @@
 
 .staff-notif-list {
   height: 460px;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -5798,6 +5804,18 @@
   }
 }
 
+@media (max-width: 768px) {
+  .staff-notif-panel {
+    position: fixed;
+    inset: 12px;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-radius: 16px;
+    z-index: 1000;
+  }
+}
+
 @media (max-width: 576px) {
   .staff-notif-panel {
     position: fixed;
@@ -5807,8 +5825,9 @@
     right: 0;
     bottom: 0;
     width: 100%;
-    height: 100%;
+    height: 100dvh;
     max-width: 100%;
+    max-height: 100dvh;
     border-radius: 0;
     z-index: 1000;
   }

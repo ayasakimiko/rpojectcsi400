@@ -12,6 +12,7 @@
 }
 
 .dashboard-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -59,7 +60,7 @@
 }
 
 .dashboard-notif-wrap {
-  position: relative;
+  position: static;
 }
 
 .dashboard-notif-btn {
@@ -191,9 +192,10 @@
 .dashboard-notif-panel {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
-  width: 420px;
-  max-width: min(420px, 92vw);
+  right: 0;
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 140px);
   background: #fff;
   border-radius: 16px;
   border: 1px solid #dce9fb;
@@ -204,7 +206,7 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  transform-origin: top left;
+  transform-origin: top right;
   animation: dashboard-notif-panel-in 0.09s ease-out;
 }
 
@@ -278,6 +280,8 @@
 
 .dashboard-notif-empty {
   height: 420px;
+  min-height: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -302,6 +306,8 @@
 
 .dashboard-notif-list {
   height: 460px;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -5942,6 +5948,18 @@
   }
 }
 
+@media (max-width: 768px) {
+  .dashboard-notif-panel {
+    position: fixed;
+    inset: 12px;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-radius: 16px;
+    z-index: 1000;
+  }
+}
+
 @media (max-width: 576px) {
   .dashboard-notif-panel {
     position: fixed;
@@ -5951,8 +5969,9 @@
     right: 0;
     bottom: 0;
     width: 100%;
-    height: 100%;
+    height: 100dvh;
     max-width: 100%;
+    max-height: 100dvh;
     border-radius: 0;
     z-index: 1000;
   }

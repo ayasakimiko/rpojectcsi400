@@ -17,6 +17,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
 import { formatPromptPayId, isValidPromptPayId } from '../utils/promptpay.js'
 import readSlipQrPayload from '../utils/slipQr.js'
+import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -4136,28 +4137,29 @@ function CustomerDashbord() {
       Boolean(statusPopup) ||
       Boolean(moveRoomReminder) ||
       Boolean(successPopup) ||
+      Boolean(blockedRequestPopup) ||
+      expiredVehicles.length > 0 ||
       showMaintenanceForm ||
       confirmCancelId !== null ||
+      Boolean(parcelReceiveConfirm) ||
       notifOpen ||
       Boolean(notifDetail) ||
       Boolean(maintenanceDetail) ||
       Boolean(slipPreview)
 
     if (!isAnyOverlayOpen) return
-
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
+    return lockBodyScroll()
   }, [
     showPaymentForm,
     activeRequestType,
     statusPopup,
     moveRoomReminder,
     successPopup,
+    blockedRequestPopup,
+    expiredVehicles,
     showMaintenanceForm,
     confirmCancelId,
+    parcelReceiveConfirm,
     notifOpen,
     notifDetail,
     maintenanceDetail,

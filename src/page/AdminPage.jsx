@@ -8064,7 +8064,7 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'moveouts' && (
-          <div className="admin-card">
+          <div className="admin-card admin-request-history">
             <div className="admin-card-header">
               <h2>รายชื่อผู้ย้ายออก</h2>
             </div>
