@@ -1076,7 +1076,51 @@
 
 .announcement-post-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
+  margin-left: auto;
+}
+
+.announcement-post-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 76px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid;
+  border-radius: 9px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.announcement-post-actions > button.is-ghost {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.announcement-post-actions > button.is-ghost:hover {
+  border-color: #93c5fd;
+  background: #dbeafe;
+  color: #1d4ed8;
+  filter: none;
+}
+
+.announcement-post-actions > button.is-danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.announcement-post-actions > button.is-danger:hover {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b91c1c;
+  filter: none;
 }
 
 .announcement-feed-more {
@@ -1674,6 +1718,7 @@
   .announcement-post-actions > button {
     width: 100%;
     min-width: 0;
+    height: 40px;
     justify-content: center;
   }
 }
