@@ -9887,6 +9887,7 @@ function AdminBackupPage() {
               </div>
               <p className="admin-confirm-message">ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?</p>
               <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
                 <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteRoom(requestClose)}>
                   ลบห้องพัก
                 </button>
@@ -10054,6 +10055,7 @@ function AdminBackupPage() {
                   </div>
                 </div>
                 <div className="admin-form-actions">
+                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>ปิด</button>
                   <button type="button" className="admin-action-btn is-primary" onClick={() => handleCreateParcel(requestClose)} disabled={parcelSubmitting}>
                     {parcelSubmitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
                   </button>
@@ -10193,6 +10195,7 @@ function AdminBackupPage() {
                 ต้องการลบพนักงาน {staffDeleteConfirm.first_name} {staffDeleteConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
                 <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteStaff(requestClose)}>
                   ลบพนักงาน
                 </button>
@@ -10221,6 +10224,7 @@ function AdminBackupPage() {
                 {staffSuspendConfirm.last_name} ใช่หรือไม่?
               </p>
               <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
                 <button
                   type="button"
                   className={`admin-action-btn ${staffSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
@@ -10390,6 +10394,7 @@ function AdminBackupPage() {
                 )}
               </p>
               <div className="admin-form-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
                 <button
                   type="button"
                   className={`admin-action-btn ${customerSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
