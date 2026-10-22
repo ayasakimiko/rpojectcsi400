@@ -24,8 +24,8 @@ export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 export async function requireActiveCustomer(req, res, next) {
   try {
-    const [rows] = await getPool().query("SELECT is_suspended FROM Customer WHERE id = ?", [req.user.id]);
-    if (!rows[0] || rows[0].is_suspended) {
+    const [rows] = await getPool().query("SELECT is_suspended, room_number FROM Customer WHERE id = ?", [req.user.id]);
+    if (!rows[0] || rows[0].is_suspended || rows[0].room_number == null) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
     }
     return next();

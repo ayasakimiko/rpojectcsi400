@@ -106,7 +106,9 @@ export function createParcelRouter(getActorName) {
       const pool = getPool();
       const [parcels] = await pool.query(
         `SELECT p.id, p.room_number, p.tracking_number, p.sender_name, p.description, p.status,
-                p.staff_name, p.received_at, p.created_at, c.first_name, c.last_name, c.phone
+                p.staff_name, p.received_at, p.created_at, c.first_name, c.last_name, c.phone,
+                (c.id IS NOT NULL AND (c.is_suspended = TRUE OR c.room_number IS NULL OR c.room_number <> p.room_number
+                  OR p.created_at <= COALESCE(c.history_reset_at, '1000-01-01'))) AS is_previous_tenant
          FROM Parcel p
          LEFT JOIN Customer c ON c.id = p.customer_id
          ORDER BY p.created_at DESC, p.id DESC`,
@@ -206,11 +208,16 @@ customerParcelRouter.post("/:id/receive", async (req, res) => {
     const ownParcel = [parcelId, customer.id, customer.room_number];
     const [result] = await pool.query(
       `UPDATE Parcel SET status = 'received', received_at = NOW()
-       WHERE id = ? AND customer_id = ? AND room_number = ? AND status = 'pending'`,
-      ownParcel,
+       WHERE id = ? AND customer_id = ? AND room_number = ? AND status = 'pending'
+         AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')`,
+      [...ownParcel, customer.id],
     );
     if (result.affectedRows === 0) {
-      const [[parcel]] = await pool.query(`SELECT status FROM Parcel WHERE id = ? AND customer_id = ? AND room_number = ?`, ownParcel);
+      const [[parcel]] = await pool.query(
+        `SELECT status FROM Parcel WHERE id = ? AND customer_id = ? AND room_number = ?
+           AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')`,
+        [...ownParcel, customer.id],
+      );
       if (parcel?.status === "received") return res.status(409).json({ message: "พัสดุรายการนี้ได้รับการยืนยันแล้ว" });
       return res.status(404).json({ message: "ไม่พบพัสดุในห้องนี้" });
     }

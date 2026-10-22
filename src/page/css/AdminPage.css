@@ -2402,6 +2402,16 @@ tr.admin-focus-flash.is-fading > td {
     position: sticky;
     top: 0;
   }
+
+  .admin-modal-customer-profile .customer-profile-rental-contract {
+    align-self: stretch;
+  }
+}
+
+.customer-profile-rental-contract > .contract-gallery-empty {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 160px;
 }
 
 .customer-profile,
@@ -2720,6 +2730,11 @@ tr.admin-focus-flash.is-fading > td {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.customer-profile-history > header > .contract-archived-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .customer-profile-history > header strong {

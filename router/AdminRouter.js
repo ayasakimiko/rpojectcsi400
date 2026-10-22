@@ -24,7 +24,7 @@ import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
-import { loadCustomerContracts } from "./rentalContracts.js";
+import { loadCustomerContracts, resetCustomerHistory } from "./rentalContracts.js";
 
 const router = Router();
 
@@ -1031,9 +1031,13 @@ router.get("/customers", async (req, res) => {
       params,
     );
 
-    const contracts = await loadCustomerContracts(pool, customers.map((customer) => customer.id));
+    const contracts = await loadCustomerContracts(pool, customers.map((customer) => customer.id), { currentOnly: true });
     return res.json({
-      customers: customers.map((customer) => ({ ...customer, contract: contracts.get(customer.id) ?? null })),
+      customers: customers.map((customer) => ({
+        ...customer,
+        deposit_amount: customer.room_number != null ? customer.deposit_amount : null,
+        contract: contracts.get(customer.id) ?? null,
+      })),
     });
   } catch (error) {
     console.error("Admin fetch customers error:", error);
@@ -1058,6 +1062,7 @@ router.get("/customers/:id", async (req, res) => {
     if (!customer) {
       return res.status(404).json({ message: "ไม่พบลูกค้านี้" });
     }
+    if (customer.room_number == null) customer.deposit_amount = null;
 
     const [bookings] = await pool.query(
       `SELECT b.id AS booking_id, r.room_number, b.created_at, b.rental_start_date, b.rental_end_date
@@ -1083,7 +1088,7 @@ router.get("/customers/:id", async (req, res) => {
       payments: payments.filter((payment) => payment.booking_id === booking.booking_id),
     }));
 
-    const contracts = await loadCustomerContracts(pool, [customerId]);
+    const contracts = await loadCustomerContracts(pool, [customerId], { currentOnly: true });
     return res.json({ customer, rentalHistory, contract: contracts.get(customerId) ?? null });
   } catch (error) {
     console.error("Admin fetch customer detail error:", error);
@@ -1112,6 +1117,13 @@ router.put("/customers/:id", async (req, res) => {
     const normalizedBody = normalizePersonUpdate(body);
     if (normalizedBody.deposit_amount != null) normalizedBody.deposit_amount = Number(normalizedBody.deposit_amount);
 
+    const pool = getPool();
+    const [roomRows] = await pool.query(`SELECT room_number FROM Customer WHERE id = ?`, [customerId]);
+    if (!roomRows.length) {
+      return res.status(404).json({ message: "ไม่พบลูกค้านี้" });
+    }
+    if (roomRows[0].room_number == null) delete normalizedBody.deposit_amount;
+
     const { columns, values } = buildUpdate(CUSTOMER_EDITABLE_COLUMNS, normalizedBody);
     if (typeof body.password === "string" && body.password) {
       columns.push("password = ?");
@@ -1121,7 +1133,6 @@ router.put("/customers/:id", async (req, res) => {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }
 
-    const pool = getPool();
     const [result] = await pool.query(`UPDATE Customer SET ${columns.join(", ")} WHERE id = ?`, [
       ...values,
       customerId,
@@ -1200,6 +1211,7 @@ router.patch("/customers/:id/suspend", async (req, res) => {
       }
     }
 
+    if (is_suspended && !wasSuspended) await resetCustomerHistory(connection, customerId);
     await connection.query(
       is_suspended || wasSuspended
         ? `UPDATE Customer SET is_suspended = ?, room_number = NULL WHERE id = ?`

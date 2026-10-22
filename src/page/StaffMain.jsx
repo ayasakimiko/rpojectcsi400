@@ -28,6 +28,7 @@ import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import { StaffCompletedContracts } from '../components/RentalContract.jsx'
 import { addContractMonths } from '../utils/rentalContract.js'
+import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -2329,8 +2330,11 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
 
 function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
   const received = parcel.status === 'received'
+  const cancelled = parcel.status === 'cancelled'
+  const statusInfo = parcelStatusInfo(parcel.status)
   const photos = parcel.photos || []
   const tenantName = parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
+  const previousTenantTag = parcel.is_previous_tenant ? <em className="parcel-prev-tenant">{PREVIOUS_TENANT_LABEL}</em> : null
   return (
     <Modal title="รายละเอียดพัสดุ" onClose={onClose} variant="parcel-detail">
       {() => (
@@ -2346,8 +2350,8 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                   {parcel.tracking_number ? `เลขพัสดุ ${parcel.tracking_number}` : 'ไม่มีเลขพัสดุ'}
                 </p>
               </div>
-              <span className={`parcel-status staff-parcel-detail-status${received ? ' is-received' : ' is-pending'}`}>
-                {received ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+              <span className={`parcel-status staff-parcel-detail-status ${statusInfo.tone}`}>
+                {statusInfo.label}
               </span>
             </div>
             <div className="staff-req-detail-room is-summary">
@@ -2360,7 +2364,10 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
               </div>
               <div className="staff-req-detail-room-tenant">
                 <small>ผู้รับ</small>
-                <span>{tenantName}</span>
+                <span className="parcel-recipient-name">
+                  {tenantName}
+                  {previousTenantTag}
+                </span>
                 {parcel.phone && (
                   <em className="staff-req-detail-room-phone">
                     <WaitingDetailIcon type="phone" size={13} />
@@ -2384,7 +2391,7 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                     </div>
                     <div>
                       <dt>ผู้เช่า</dt>
-                      <dd>{tenantName}</dd>
+                      <dd>{tenantName} {previousTenantTag}</dd>
                     </div>
                     <div>
                       <dt>เบอร์โทร</dt>
@@ -2447,15 +2454,15 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
                 actorClassName="staff-actor"
                 startDate={parcel.created_at}
                 endDate={received ? parcel.received_at : null}
-                waitingText="รอผู้เช่ารับพัสดุ"
+                waitingText={cancelled ? 'ผู้เช่าย้ายออก' : 'รอผู้เช่ารับพัสดุ'}
                 steps={[
                   { key: 'record', label: 'บันทึกพัสดุเข้าห้อง', by: parcel.staff_name || 'เจ้าหน้าที่', date: parcel.created_at, icon: 'box' },
                   {
                     key: 'receive',
-                    label: received ? 'ผู้เช่ารับพัสดุแล้ว' : 'รอผู้เช่ารับพัสดุ',
+                    label: received ? 'ผู้เช่ารับพัสดุแล้ว' : cancelled ? 'ผู้เช่าย้ายออก' : 'รอผู้เช่ารับพัสดุ',
                     date: received ? parcel.received_at : null,
                     icon: 'check',
-                    pendingText: 'ยังไม่ได้รับ',
+                    pendingText: cancelled ? 'ยกเลิก' : 'ยังไม่ได้รับ',
                   },
                 ]}
               />
@@ -3486,6 +3493,10 @@ function StaffPagination({ page, total, onChange, pageSize = STAFF_LIST_PAGE_SIZ
       </div>
     </div>
   )
+}
+
+export function StaffCompletedContractsTab() {
+  return <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} FilterPanel={StaffFilterPanel} />
 }
 
 function flashHighlight(element, className) {
@@ -9084,7 +9095,7 @@ function StaffMain() {
           />
         )}
 
-        {staffTab === 'completed-contracts' && <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} />}
+        {staffTab === 'completed-contracts' && <StaffCompletedContractsTab />}
 
         {staffTab === 'resident-visits' && (
           <StaffResidentVisitsTab
@@ -9152,8 +9163,9 @@ function StaffMain() {
                   }}
                 >
                   <option value="all">ทุกสถานะ</option>
-                  <option value="pending">รอผู้เช่ารับ</option>
-                  <option value="received">รับแล้ว</option>
+                  {PARCEL_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -9204,6 +9216,7 @@ function StaffMain() {
                             <span className="parcel-room-badge">{parcel.room_number}</span>
                             <div className="parcel-ui-stack">
                               <strong>{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</strong>
+                              {parcel.is_previous_tenant ? <em className="parcel-prev-tenant">{PREVIOUS_TENANT_LABEL}</em> : null}
                               <small>
                                 <WaitingDetailIcon type="phone" size={12} />
                                 {parcel.phone || '-'}
@@ -9238,9 +9251,9 @@ function StaffMain() {
                         </td>
                         <td className="staff-parcel-status">
                           <div className="parcel-ui-stack">
-                            <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
+                            <span className={`parcel-ui-status ${parcelStatusInfo(parcel.status).tone}`}>
                               <span className="parcel-ui-status-dot" aria-hidden="true" />
-                              {parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+                              {parcelStatusInfo(parcel.status).label}
                             </span>
                             {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
                           </div>

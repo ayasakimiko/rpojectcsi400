@@ -109,6 +109,26 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'ended_at'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `ended_at` DATETIME NULL AFTER contract_completed_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'deposit_amount'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `deposit_amount` DECIMAL(10,2) NULL AFTER ended_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 CREATE TABLE IF NOT EXISTS ContractImage (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
     booking_id INT NOT NULL,
@@ -154,3 +174,15 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 ALTER TABLE `Customer` ALTER COLUMN `dorm_info_acknowledged_at` SET DEFAULT NULL;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Customer' AND COLUMN_NAME = 'history_reset_at'),
+    'SELECT 1',
+    'ALTER TABLE `Customer` ADD COLUMN `history_reset_at` DATETIME NULL AFTER dorm_info_acknowledged_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+UPDATE `Customer` SET `history_reset_at` = NOW() WHERE `is_suspended` = TRUE AND `history_reset_at` IS NULL;

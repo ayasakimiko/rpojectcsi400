@@ -43,6 +43,7 @@ const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
 const SAFETY_INCIDENT_MAX_PHOTOS = 4;
 const CUSTOMER_OPEN_REPORT_LIMIT = 10;
 const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
+const AFTER_HISTORY_RESET = "> COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')";
 const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
 const URGENT_INCIDENT_KEYWORDS = [
   "ด่วน", "ช่วยด้วย", "ฉุกเฉิน", "ไฟไหม้", "ควัน", "ระเบิด", "แก๊สรั่ว", "ก๊าซรั่ว", "ไฟช็อต", "ไฟดูด",
@@ -246,7 +247,13 @@ export async function loadDepositPayments(db, customerIds) {
   const [rows] = await db.query(
     `SELECT b.customer_id, p.amount, p.status, p.type FROM Payment p
      JOIN Booking b ON b.id = p.booking_id
-     WHERE b.customer_id IN (?) AND p.type = 'deposit'`,
+     WHERE b.customer_id IN (?) AND p.type = 'deposit'
+       AND b.id >= COALESCE((
+         SELECT MAX(lb.id) FROM Booking lb
+         WHERE lb.customer_id = b.customer_id AND lb.contract_completed_at IS NOT NULL
+           AND EXISTS (SELECT 1 FROM Booking eb
+             WHERE eb.customer_id = lb.customer_id AND eb.contract_completed_at IS NOT NULL AND eb.id < lb.id)
+       ), 0)`,
     [ids],
   );
   for (const row of rows) byCustomer.set(row.customer_id, [...(byCustomer.get(row.customer_id) ?? []), row]);
@@ -493,8 +500,8 @@ router.get("/me", async (req, res) => {
       ),
       pool.query(
         `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
-         FROM MaintenanceRequest WHERE customer_id = ? ORDER BY created_at DESC`,
-        [customer.id],
+         FROM MaintenanceRequest WHERE customer_id = ? AND created_at ${AFTER_HISTORY_RESET} ORDER BY created_at DESC`,
+        [customer.id, customer.id],
       ),
       pool.query(
         `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
@@ -508,21 +515,22 @@ router.get("/me", async (req, res) => {
          LEFT JOIN Room sr ON sr.room_number = tr.room_number
          LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
          LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
-         WHERE tr.customer_id = ?
+         WHERE tr.customer_id = ? AND tr.created_at ${AFTER_HISTORY_RESET}
          ORDER BY tr.created_at DESC, tr.id DESC`,
-        [customer.id],
+        [customer.id, customer.id],
       ),
       pool.query(`SELECT announcement_id FROM AnnouncementAcknowledgement WHERE customer_id = ?`, [customer.id]),
       listAnnouncements(pool),
       pool.query(
         `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
-         FROM Parcel WHERE customer_id = ? AND room_number = ? ORDER BY created_at DESC`,
-        [customer.id, customer.room_number],
+         FROM Parcel WHERE customer_id = ? AND room_number = ? AND created_at ${AFTER_HISTORY_RESET}
+         ORDER BY created_at DESC`,
+        [customer.id, customer.room_number, customer.id],
       ),
     ]);
 
     const bookingIds = bookings.map((booking) => booking.booking_id);
-    const [[payments], maintenanceWithPhotos, parcelsWithPhotos] = await Promise.all([
+    const [[payments], maintenanceWithPhotos, parcelsWithPhotos, depositPaymentsByCustomer] = await Promise.all([
       bookingIds.length > 0
         ? pool.query(
             `SELECT id, booking_id, amount, payment_date, status, type, electricity_units, water_units, note, slip_path, created_at
@@ -534,6 +542,7 @@ router.get("/me", async (req, res) => {
         : [[]],
       attachMaintenancePhotos(pool, maintenanceRequests),
       attachParcelPhotos(pool, parcels),
+      loadDepositPayments(pool, [customer.id]),
     ]);
 
     const paymentsByBooking = new Map();
@@ -555,7 +564,12 @@ router.get("/me", async (req, res) => {
 
     const currentRoom = roomRows[0] || null;
     const paymentsForCurrentBooking = paymentsByBooking.get(bookings[0]?.booking_id) || [];
-    const currentDue = computeCurrentDue(currentRoom, paymentsForCurrentBooking, depositAmount, payments);
+    const currentDue = computeCurrentDue(
+      currentRoom,
+      paymentsForCurrentBooking,
+      depositAmount,
+      depositPaymentsByCustomer.get(customer.id) ?? [],
+    );
     const room = currentRoom ? { ...currentRoom } : null;
     if (room) delete room.pending_lump_sum_months;
 
@@ -647,7 +661,7 @@ export async function withThisMonthRent(pool, contracts) {
 router.get("/contract", async (req, res) => {
   try {
     const pool = getPool();
-    const contracts = await loadCustomerContracts(pool, [req.user.id]);
+    const contracts = await loadCustomerContracts(pool, [req.user.id], { currentOnly: true });
     const contract = contracts.get(req.user.id) ?? null;
     if (!contract) return res.json({ contract: null });
     const [withMonth] = await withThisMonthRent(pool, [contract]);
@@ -1172,9 +1186,9 @@ router.get("/parked-vehicles", async (req, res) => {
       `SELECT id, vehicle_plate, vehicle_model, guest_name, start_at, end_at, cancelled_at
        FROM ResidentVisitRequest
        WHERE customer_id = ? AND request_type = 'vehicle' AND status = 'cancelled' AND cancelled_by_name = ?
-         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND created_at ${AFTER_HISTORY_RESET}
        ORDER BY cancelled_at DESC`,
-      [req.user.id, PARKING_EXPIRED_BY],
+      [req.user.id, PARKING_EXPIRED_BY, req.user.id],
     );
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     const roomNumber = customers[0]?.room_number;
@@ -1202,8 +1216,8 @@ router.get("/resident-visit-requests", async (req, res) => {
       `SELECT id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone,
               start_at, end_at, note, status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at,
               updated_by_name, updated_at, cancelled_by_name, cancelled_at, created_at
-       FROM ResidentVisitRequest WHERE customer_id = ? ORDER BY created_at DESC`,
-      [req.user.id],
+       FROM ResidentVisitRequest WHERE customer_id = ? AND created_at ${AFTER_HISTORY_RESET} ORDER BY created_at DESC`,
+      [req.user.id, req.user.id],
     );
     return res.json({ requests: withVehiclePhotos(requests) });
   } catch (error) {
@@ -1290,8 +1304,9 @@ router.get("/safety-incidents", async (req, res) => {
     const [incidents] = await getPool().query(
       `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note,
               cancelled_by_name, cancelled_at, cancel_reason, created_at
-       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? ORDER BY created_at DESC`,
-      [req.user.id],
+       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? AND created_at ${AFTER_HISTORY_RESET}
+       ORDER BY created_at DESC`,
+      [req.user.id, req.user.id],
     );
     return res.json({ incidents: withIncidentPhotos(incidents) });
   } catch (error) {

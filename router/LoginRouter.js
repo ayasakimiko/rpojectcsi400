@@ -36,10 +36,13 @@ router.post("/login", async (req, res) => {
     if (isIdcard) {
       for (const table of selectedRole ? [selectedRole] : roles) {
         const [rows] = await pool.query(
-          `SELECT id, idcard, password, phone, first_name, last_name, is_suspended FROM ${table} WHERE idcard = ?`,
+          `SELECT id, idcard, password, phone, first_name, last_name, is_suspended${table === "Customer" ? ", room_number" : ""}
+           FROM ${table} WHERE idcard = ?`,
           [normalizedUsername],
         );
-        if (rows[0]) candidates.push({ ...rows[0], role: table });
+        if (!rows[0] || rows[0].is_suspended) continue;
+        if (table === "Customer" && rows[0].room_number == null) continue;
+        candidates.push({ ...rows[0], role: table });
       }
     } else {
       const [rows] = await pool.query(
@@ -52,9 +55,12 @@ router.post("/login", async (req, res) => {
       if (rows[0] && (!selectedRole || selectedRole === "Customer")) candidates.push({ ...rows[0], role: "Customer" });
     }
 
+    if (candidates.length === 0) {
+      return res.status(404).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
+    }
+
     const matches = [];
     for (const candidate of candidates) {
-      if (candidate.is_suspended) continue;
       const isPhoneAsPassword = Boolean(candidate.phone) && password === candidate.phone;
       if (isPhoneAsPassword || await bcrypt.compare(password, candidate.password)) matches.push(candidate);
     }

@@ -32,7 +32,7 @@ import {
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
-import { loadCompletedContracts } from "./rentalContracts.js";
+import { loadCompletedContracts, resetCustomerHistory } from "./rentalContracts.js";
 
 const router = Router();
 
@@ -1299,6 +1299,7 @@ router.post("/requests/:id/approve", async (req, res) => {
 
       await connection.query(`UPDATE TenantRequest SET move_in_date = ? WHERE id = ?`, [moveInDate, requestId]);
 
+      await resetCustomerHistory(connection, tenantRequest.customer_id);
       await connection.query(`UPDATE Customer SET is_suspended = TRUE, room_number = NULL WHERE id = ?`, [tenantRequest.customer_id]);
 
       await connection.query(
