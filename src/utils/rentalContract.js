@@ -1,5 +1,4 @@
 export const CONTRACT_DURATION_OPTIONS = [
-  { value: 1, label: '1 เดือน' },
   { value: 3, label: '3 เดือน' },
   { value: 6, label: '6 เดือน' },
   { value: 12, label: '12 เดือน (1 ปี)' },
@@ -48,8 +47,25 @@ export function addContractMonths(date, months) {
   return target
 }
 
-export function firstMonthBreakdown(monthlyPrice, depositAmount) {
+export const DEPOSIT_MONTHS = 2
+
+export function firstMonthBreakdown(monthlyPrice, depositMonths = DEPOSIT_MONTHS) {
   const priceCents = Math.max(0, Math.round(Number(monthlyPrice) * 100) || 0)
-  const depositCents = Math.min(priceCents, Math.max(0, Math.round((Number(depositAmount) || 0) * 100)))
-  return { price: priceCents / 100, depositApplied: depositCents / 100, remaining: (priceCents - depositCents) / 100 }
+  const months = Math.max(0, Number(depositMonths) || 0)
+  const depositCents = priceCents * months
+  return { price: priceCents / 100, depositMonths: months, deposit: depositCents / 100, total: (priceCents + depositCents) / 100 }
+}
+
+export const DEPOSIT_STATUS_LABEL = { paid: 'ชำระแล้ว', pending: 'รอตรวจสลิป', due: 'ยังไม่ชำระ' }
+
+export function formatDepositSummary(contract) {
+  if (!(Number(contract?.deposit_amount) > 0)) return 'ไม่มีมัดจำ'
+  const status = DEPOSIT_STATUS_LABEL[contract.deposit_status]
+  return `${formatContractMoney(contract.deposit_amount)} (${formatDepositMonths(contract)})${status ? ` · ${status}` : ''}`
+}
+
+export function formatDepositMonths(contract) {
+  const months = Number(contract?.deposit_months)
+  if (!(Number(contract?.deposit_amount) > 0)) return 'ไม่มีมัดจำ'
+  return Number.isInteger(months) && months > 0 ? `${months} เดือน` : formatContractMoney(contract.deposit_amount)
 }

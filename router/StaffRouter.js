@@ -23,6 +23,9 @@ import {
   computeCurrentDue,
   createSafetyIncident,
   isPlateRegisteredByOther,
+  loadCustomerOutstanding,
+  loadDepositPayments,
+  RENEW_OUTSTANDING_MESSAGE,
   withThisMonthRent,
   withVehiclePhotos,
 } from "./CustomerDashboardRouter.js";
@@ -111,7 +114,9 @@ router.get("/payment-slips", async (_req, res) => {
               ps.sender_name, ps.receiver_name, ps.slip_path, ps.is_test, ps.reviewed_by_name, ps.created_at,
               c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number,
               (SELECT GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') FROM Payment p
-                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_types
+                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_types,
+              (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) FROM Payment p
+                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_items
        FROM PaymentSlip ps
        JOIN Customer c ON c.id = ps.customer_id
        LEFT JOIN Booking b ON b.id = ps.booking_id
@@ -122,7 +127,9 @@ router.get("/payment-slips", async (_req, res) => {
     const [rejected] = await getPool().query(
       `SELECT sr.id, sr.booking_id, sr.trans_ref, sr.amount, sr.trans_at, sr.sender_name, sr.receiver_name,
               sr.sending_bank, sr.receiving_bank, sr.slip_path, sr.reason, sr.reviewed_by_name, sr.created_at,
-              c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number
+              c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number,
+              (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) FROM Payment p
+                WHERE p.booking_id = sr.booking_id AND p.slip_path = sr.slip_path) AS payment_items
        FROM PaymentSlipRejection sr
        JOIN Customer c ON c.id = sr.customer_id
        LEFT JOIN Booking b ON b.id = sr.booking_id
@@ -146,7 +153,8 @@ router.get("/payment-verifications", async (_req, res) => {
     const [payments] = await pool.query(
       `SELECT MIN(p.id) AS id, p.booking_id, p.slip_path, SUM(p.amount) AS amount,
               MAX(p.payment_date) AS payment_date, c.first_name, c.last_name, c.phone,
-              r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types
+              r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types,
+              JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) AS payment_items
        FROM Payment p
        JOIN Booking b ON b.id = p.booking_id
        JOIN Customer c ON c.id = b.customer_id
@@ -200,7 +208,7 @@ router.patch("/payment-verifications/:id", async (req, res) => {
       }
       await connection.query(
         `UPDATE Payment SET status = 'rejected', note = CONCAT(COALESCE(note, ''), ' (สลิปไม่ผ่านการตรวจสอบ)')
-         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type = 'rent'`,
+         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type IN ('rent', 'deposit')`,
         [payment.booking_id, payment.slip_path],
       );
       await connection.query(
@@ -619,10 +627,13 @@ router.get("/rooms", async (req, res) => {
       }
     }
 
+    const depositPaymentsByCustomer = await loadDepositPayments(pool, rooms.map((room) => room.customer_id).filter(Boolean));
     const result = rooms.map((room) => {
       const booking = latestBookingByRoomId.get(room.id);
       const payments = booking ? paymentsByBookingId.get(booking.id) || [] : [];
-      const currentDue = booking ? computeCurrentDue(room, payments, room.deposit_amount) : null;
+      const currentDue = booking
+        ? computeCurrentDue(room, payments, room.deposit_amount, depositPaymentsByCustomer.get(room.customer_id) ?? [])
+        : null;
 
       return {
         room_number: room.room_number,
@@ -731,7 +742,8 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
       [booking.id],
     );
 
-    const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount);
+    const depositPayments = (await loadDepositPayments(connection, [customer.id])).get(customer.id) ?? [];
+    const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount, depositPayments);
     if (!currentDue) {
       await connection.rollback();
       return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องเก็บในขณะนี้" });
@@ -755,6 +767,13 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
           [currentDue.periodEnd, currentDue.lumpSumMonths - 1, roomNumberValue],
         );
       }
+    }
+
+    if (currentDue.depositAmount > 0 && currentDue.depositStatus === "due") {
+      await connection.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'deposit', 'เจ้าหน้าที่เก็บเงินมัดจำ (เงินสด)')`,
+        [booking.id, currentDue.depositAmount],
+      );
     }
 
     const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
@@ -909,7 +928,7 @@ router.get("/requests", async (req, res) => {
     const pool = getPool();
 
     const [[tenantRequests], [maintenanceRequests]] = await Promise.all([pool.query(
-      `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
+      `SELECT tr.id, tr.customer_id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
               moi.id AS inspection_id, moi.status AS inspection_status, moi.reviewed_at AS inspection_reviewed_at,
@@ -936,7 +955,13 @@ router.get("/requests", async (req, res) => {
        ORDER BY mr.created_at ASC`,
     )]);
 
-    return res.json({ tenantRequests, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
+    const tenantRequestsWithOutstanding = await Promise.all(
+      tenantRequests.map(async (request) =>
+        request.type === "renew" ? { ...request, outstanding: await loadCustomerOutstanding(pool, request.customer_id) } : request,
+      ),
+    );
+
+    return res.json({ tenantRequests: tenantRequestsWithOutstanding, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
   } catch (error) {
     console.error("Fetch staff requests error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -1136,17 +1161,20 @@ router.post("/requests/:id/approve", async (req, res) => {
     }
 
     if (tenantRequest.type === "renew") {
+      const outstanding = await loadCustomerOutstanding(connection, tenantRequest.customer_id);
+      if (outstanding.amount > 0) {
+        await connection.rollback();
+        return res.status(409).json({ code: "RENEW_OUTSTANDING", message: RENEW_OUTSTANDING_MESSAGE(outstanding.amount), outstanding });
+      }
       const durationMonths = tenantRequest.renew_duration_months;
-      const paymentType = tenantRequest.renew_payment_type;
 
       await connection.query(
         `UPDATE Room
          SET
            rental_end_date = DATE_ADD(rental_end_date, INTERVAL ? MONTH),
-           rental_duration_months = TIMESTAMPDIFF(MONTH, rental_start_date, rental_end_date),
-           pending_lump_sum_months = IF(? = 'lump_sum', ?, pending_lump_sum_months)
+           rental_duration_months = TIMESTAMPDIFF(MONTH, rental_start_date, rental_end_date)
          WHERE room_number = ?`,
-        [durationMonths, paymentType, durationMonths, tenantRequest.room_number],
+        [durationMonths, tenantRequest.room_number],
       );
     }
 

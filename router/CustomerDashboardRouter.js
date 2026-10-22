@@ -239,7 +239,38 @@ router.patch("/profile", async (req, res) => {
 
 const GRACE_DAYS = 3;
 
-function computeRentDue(room, paymentsForBooking, depositAmount) {
+export async function loadDepositPayments(db, customerIds) {
+  const ids = [...new Set(customerIds)].filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0);
+  const byCustomer = new Map();
+  if (ids.length === 0) return byCustomer;
+  const [rows] = await db.query(
+    `SELECT b.customer_id, p.amount, p.status, p.type FROM Payment p
+     JOIN Booking b ON b.id = p.booking_id
+     WHERE b.customer_id IN (?) AND p.type = 'deposit'`,
+    [ids],
+  );
+  for (const row of rows) byCustomer.set(row.customer_id, [...(byCustomer.get(row.customer_id) ?? []), row]);
+  return byCustomer;
+}
+
+export function computeDepositDue(paymentsForBooking, depositAmount) {
+  const depositCents = Math.max(0, Math.round((Number(depositAmount) || 0) * 100));
+  if (depositCents === 0) return { amount: 0, total: 0, status: "none" };
+  const depositPayments = paymentsForBooking.filter((payment) => payment.type === "deposit");
+  const paidCents = depositPayments.reduce((total, payment) => {
+    const amount = Math.round(Number(payment.amount) * 100);
+    return payment.status === "paid" && Number.isSafeInteger(amount) ? total + amount : total;
+  }, 0);
+  const outstandingCents = Math.max(0, depositCents - paidCents);
+  const pending = depositPayments.some((payment) => payment.status === "pending" && Number(payment.amount) > 0);
+  return {
+    amount: outstandingCents / 100,
+    total: depositCents / 100,
+    status: outstandingCents === 0 ? "paid" : pending ? "pending" : "due",
+  };
+}
+
+function computeRentDue(room, paymentsForBooking) {
   if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
   const start = new Date(room.rental_start_date);
   const end = new Date(room.rental_end_date);
@@ -259,7 +290,6 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
     const amount = Math.round(Number(payment.amount) * 100);
     return payment.status === "paid" && Number.isSafeInteger(amount) ? total + amount : total;
   }, 0));
-  const depositCents = Math.min(priceCents, Math.max(0, Math.round((Number(depositAmount) || 0) * 100)));
   const periods = [];
   for (let offset = 0; ; offset += 1) {
     const periodStart = periodAt(offset);
@@ -281,7 +311,7 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
       return payment.status === "paid" && Number.isSafeInteger(amount) && paymentDay >= cutoffDay ? total + amount : total;
     }, 0);
   }
-  let creditCents = Math.max(0, Math.max(paidRentCents - receiptsAfterPrepaidCents + depositCents, prepaidCents) + receiptsAfterPrepaidCents);
+  let creditCents = Math.max(0, Math.max(paidRentCents - receiptsAfterPrepaidCents, prepaidCents) + receiptsAfterPrepaidCents);
   const unpaidPeriods = [];
   for (const period of periods) {
     const applied = Math.min(priceCents, creditCents);
@@ -291,7 +321,7 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
   }
   const currentPeriod = periods[periods.length - 1];
   if (unpaidPeriods.length === 0) {
-    return { amount: 0, depositApplied: 0, firstPeriod: false, lumpSumMonths: null, overdueMonths: 0,
+    return { amount: 0, firstPeriod: false, monthlyPrice: priceCents / 100, lumpSumMonths: null, overdueMonths: 0,
       periodStart: currentPeriod.periodStart, periodEnd: currentPeriod.periodEnd, dueDate: null, status: "paid" };
   }
   const earliestUnpaid = unpaidPeriods[0];
@@ -305,7 +335,6 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
     + priceCents * ((lumpSumMonths || 1) - 1);
   return {
     amount: outstandingCents / 100,
-    depositApplied: earliestUnpaid.index === 0 ? depositCents / 100 : 0,
     firstPeriod: earliestUnpaid.index === 0,
     monthlyPrice: priceCents / 100,
     lumpSumMonths,
@@ -319,15 +348,28 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
 
 const UTILITY_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า" };
 
-export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
-  const rentDue = computeRentDue(room, paymentsForBooking, depositAmount);
+export function computeCurrentDue(room, paymentsForBooking, depositAmount, depositPayments = paymentsForBooking) {
+  const rentDue = computeRentDue(room, paymentsForBooking);
   const rentUnpaid = rentDue && rentDue.status !== "paid";
+  const depositDue = room?.is_booked ? computeDepositDue(depositPayments, depositAmount) : { amount: 0, status: "none" };
+  const depositUnpaid = depositDue.status === "due" || depositDue.status === "pending";
 
   const utilityCharges = paymentsForBooking.filter(
     (p) => (p.type === "water" || p.type === "electricity") && p.status === "pending",
   );
 
   const items = [];
+  if (depositUnpaid) {
+    const depositMonths = Number(room.price) > 0 ? depositDue.total / Number(room.price) : 0;
+    items.push({
+      type: "deposit",
+      label: Number.isInteger(depositMonths) && depositMonths > 0
+        ? `เงินมัดจำ ${depositMonths} เดือน (฿${Number(room.price).toLocaleString("th-TH")} × ${depositMonths})`
+        : "เงินมัดจำ",
+      amount: depositDue.amount,
+      status: depositDue.status,
+    });
+  }
   if (rentUnpaid) {
     items.push({
       type: "rent",
@@ -351,13 +393,15 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
   if (items.length === 0) return null;
 
   const rentAmount = rentUnpaid ? rentDue.amount : 0;
+  const depositAmountDue = depositUnpaid ? depositDue.amount : 0;
   const utilityAmount = utilityCharges.reduce((sum, charge) => sum + Number(charge.amount), 0);
 
   return {
-    amount: rentAmount + utilityAmount,
+    amount: rentAmount + depositAmountDue + utilityAmount,
     rentAmount,
+    depositAmount: depositAmountDue,
+    depositStatus: depositDue.status,
     items,
-    depositApplied: rentDue?.depositApplied || 0,
     firstPeriod: Boolean(rentUnpaid && rentDue.firstPeriod),
     monthlyPrice: rentDue?.monthlyPrice ?? null,
     lumpSumMonths: rentDue?.lumpSumMonths || null,
@@ -365,9 +409,40 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
     periodStart: rentDue?.periodStart || null,
     periodEnd: rentDue?.periodEnd || null,
     dueDate: rentDue?.dueDate || null,
-    status: rentUnpaid ? rentDue.status : "due",
+    status: rentUnpaid ? rentDue.status : depositDue.status === "pending" ? "pending" : "due",
   };
 }
+
+export function outstandingFromDue(currentDue) {
+  const items = (currentDue?.items ?? []).filter(
+    (item) => item.status !== "pending" && !(item.type === "rent" && item.status === "due"),
+  );
+  const amount = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0) / 100;
+  return { amount, items: items.map(({ type, label, amount: itemAmount, status }) => ({ type, label, amount: itemAmount, status })) };
+}
+
+export async function loadCustomerOutstanding(db, customerId) {
+  const [customerRows] = await db.query(`SELECT id, room_number, deposit_amount FROM Customer WHERE id = ?`, [customerId]);
+  const customer = customerRows[0];
+  if (!customer?.room_number) return { amount: 0, items: [] };
+  const [[roomRows], [bookingRows]] = await Promise.all([
+    db.query(
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+      [customer.room_number],
+    ),
+    db.query(`SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, [customer.id]),
+  ]);
+  if (!bookingRows[0]) return { amount: 0, items: [] };
+  const [[payments], depositPayments] = await Promise.all([
+    db.query(`SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ?`, [bookingRows[0].id]),
+    loadDepositPayments(db, [customer.id]),
+  ]);
+  const currentDue = computeCurrentDue(roomRows[0], payments, customer.deposit_amount, depositPayments.get(customer.id) ?? []);
+  return outstandingFromDue(currentDue);
+}
+
+export const RENEW_OUTSTANDING_MESSAGE = (amount) =>
+  `มียอดค้างชำระ ฿${amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} กรุณาชำระยอดค้างให้เรียบร้อยก่อนต่อสัญญา`;
 
 router.get("/me", async (req, res) => {
   try {
@@ -426,6 +501,8 @@ router.get("/me", async (req, res) => {
                 tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
                 tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
                 sr.price AS source_room_price, tg.price AS target_room_price,
+                sr.rental_end_date AS source_rental_end_date,
+                (SELECT cu.deposit_amount FROM Customer cu WHERE cu.id = tr.customer_id) AS deposit_amount,
                 (moi.id IS NOT NULL) AS room_inspected
          FROM TenantRequest tr
          LEFT JOIN Room sr ON sr.room_number = tr.room_number
@@ -478,7 +555,7 @@ router.get("/me", async (req, res) => {
 
     const currentRoom = roomRows[0] || null;
     const paymentsForCurrentBooking = paymentsByBooking.get(bookings[0]?.booking_id) || [];
-    const currentDue = computeCurrentDue(currentRoom, paymentsForCurrentBooking, depositAmount);
+    const currentDue = computeCurrentDue(currentRoom, paymentsForCurrentBooking, depositAmount, payments);
     const room = currentRoom ? { ...currentRoom } : null;
     if (room) delete room.pending_lump_sum_months;
 
@@ -491,6 +568,7 @@ router.get("/me", async (req, res) => {
       tenantRequests,
       announcements,
       currentDue,
+      outstanding: outstandingFromDue(currentDue),
       parcels: parcelsWithPhotos,
     });
   } catch (error) {
@@ -500,7 +578,7 @@ router.get("/me", async (req, res) => {
 });
 
 export async function withThisMonthRent(pool, contracts) {
-  const active = contracts.filter((contract) => contract.status !== "ended" && contract.current_room_number != null);
+  const active = contracts.filter((contract) => !["ended", "ended_early"].includes(contract.status) && contract.current_room_number != null);
   if (active.length === 0) return contracts.map((contract) => ({ ...contract, this_month: null }));
   const customerIds = [...new Set(active.map((contract) => contract.customer_id))];
   const [[customers], [rooms], [bookings]] = await Promise.all([
@@ -525,6 +603,7 @@ export async function withThisMonthRent(pool, contracts) {
         [bookingIds],
       )
     : [[]];
+  const depositPaymentsByCustomer = await loadDepositPayments(pool, customerIds);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
   const roomByNumber = new Map(rooms.map((room) => [room.room_number, room]));
   const bookingByCustomer = new Map(bookings.map((booking) => [booking.customer_id, booking.id]));
@@ -534,7 +613,8 @@ export async function withThisMonthRent(pool, contracts) {
     if (!active.includes(contract) || !room) return { ...contract, this_month: null };
     const bookingId = bookingByCustomer.get(contract.customer_id);
     const bookingPayments = payments.filter((payment) => payment.booking_id === bookingId);
-    const rentDue = computeRentDue(room, bookingPayments, customer.deposit_amount);
+    const rentDue = computeRentDue(room, bookingPayments);
+    const depositDue = computeDepositDue(depositPaymentsByCustomer.get(customer.id) ?? [], customer.deposit_amount);
     const lastRentPayment = bookingPayments
       .filter((payment) => !["deposit", "water", "electricity"].includes(payment.type) && ["paid", "pending"].includes(payment.status))
       .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date) || new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)[0];
@@ -553,7 +633,8 @@ export async function withThisMonthRent(pool, contracts) {
             status: rentDue.status,
             amount: rentDue.amount,
             overdue_months: rentDue.overdueMonths,
-            deposit_applied: rentDue.depositApplied,
+            deposit_due: depositDue.amount,
+            deposit_status: depositDue.status,
             period_start: rentDue.periodStart,
             period_end: rentDue.periodEnd,
             due_date: rentDue.dueDate,
@@ -703,7 +784,8 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       [booking.id],
     );
 
-    const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount);
+    const depositPayments = (await loadDepositPayments(pool, [customer.id])).get(customer.id) ?? [];
+    const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount, depositPayments);
     if (!currentDue) throw new SlipVerificationError(400, "ไม่มียอดค่าเช่าที่ต้องชำระในขณะนี้");
 
     if (paymentsForBooking.some((payment) => payment.status === "pending" && payment.slip_path)) {
@@ -733,6 +815,12 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
         await connection.query(
           `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'pending', 'rent', ?, ?)`,
           [booking.id, currentDue.rentAmount, note, manualSlipPath],
+        );
+      }
+      if (currentDue.depositAmount > 0 && currentDue.depositStatus === "due") {
+        await connection.query(
+          `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'pending', 'deposit', ?, ?)`,
+          [booking.id, currentDue.depositAmount, `รอตรวจสอบสลิปเงินมัดจำ · ${manualLabel}`, manualSlipPath],
         );
       }
       const manualUtilityIds = currentDue.items.filter((item) => item.id).map((item) => item.id);
@@ -792,7 +880,8 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       `SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ? FOR UPDATE`,
       [booking.id],
     );
-    const lockedDue = computeCurrentDue(room, lockedPayments, customer.deposit_amount);
+    const lockedDepositPayments = (await loadDepositPayments(connection, [customer.id])).get(customer.id) ?? [];
+    const lockedDue = computeCurrentDue(room, lockedPayments, customer.deposit_amount, lockedDepositPayments);
     if (!lockedDue || Math.round(Number(lockedDue.amount) * 100) !== dueCents) {
       throw new SlipVerificationError(409, "ยอดที่ต้องชำระเปลี่ยนแปลงระหว่างตรวจสอบสลิป กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง");
     }
@@ -805,6 +894,13 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       await connection.query(
         `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'paid', 'rent', ?, ?)`,
         [booking.id, currentDue.rentAmount, note, slipPath],
+      );
+    }
+
+    if (currentDue.depositAmount > 0 && currentDue.depositStatus === "due") {
+      await connection.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note, slip_path) VALUES (?, ?, CURDATE(), 'paid', 'deposit', ?, ?)`,
+        [booking.id, currentDue.depositAmount, `ชำระเงินมัดจำ · ${methodLabel} · ${verifyLabel}`, slipPath],
       );
     }
 
@@ -994,6 +1090,18 @@ router.post("/requests", async (req, res) => {
     if (activeRequests.some((request) => request.type === type)) {
       await connection.rollback();
       return res.status(409).json({ code: "TENANT_REQUEST_ACTIVE", message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
+    }
+
+    if (type === "renew") {
+      const outstanding = await loadCustomerOutstanding(connection, customer.id);
+      if (outstanding.amount > 0) {
+        await connection.rollback();
+        return res.status(409).json({
+          code: "RENEW_OUTSTANDING",
+          message: RENEW_OUTSTANDING_MESSAGE(outstanding.amount),
+          outstanding,
+        });
+      }
     }
 
     if (type === "move_room") {

@@ -32,6 +32,38 @@
   color: #b45309;
 }
 
+.contract-status.is-unpaid {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.contract-first-payment-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid #fecdca;
+  border-radius: 12px;
+  background: #fffbfa;
+  color: #b42318;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.contract-first-payment-note.is-review {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.contract-first-payment-note strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
 .contract-status.is-muted {
   border-color: #e2e8f0;
   background: #f8fafc;
@@ -307,7 +339,7 @@
 .csc-card {
   position: relative;
   display: flex;
-  height: 424px;
+  height: 470px;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
@@ -326,13 +358,22 @@
 
 .csc-main {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
   padding: 16px 16px 12px;
   border: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-width: thin;
+}
+
+.csc-main > * {
+  flex-shrink: 0;
 }
 
 .csc-main:focus-visible {
@@ -423,6 +464,12 @@
   border-color: #e2e8f0;
   background: #f8fafc;
   color: #64748b;
+}
+
+.csc-status.is-unpaid {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .csc-period {
@@ -540,6 +587,12 @@
   color: #b45309;
 }
 
+.csc-period-meta small.is-danger {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
 .csc-money {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -578,9 +631,10 @@
 
 .csc-photos {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 6px;
-  padding: 0 16px 12px;
+  padding: 0 16px 14px;
 }
 
 .csc-label {
@@ -702,7 +756,37 @@
 }
 
 .contract-cell-text b {
-  color: #2563eb;
+  color: #15803d;
+}
+
+.contract-cell-tag {
+  margin-left: 5px;
+  padding: 0 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.contract-cell-deposit {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.contract-cell-deposit.is-paid {
+  color: #15803d;
+}
+
+.contract-cell-deposit.is-pending {
+  color: #b45309;
+}
+
+.contract-cell-deposit.is-due {
+  color: #b42318;
 }
 
 .contract-cell-thumb {
@@ -1242,8 +1326,9 @@
 }
 
 .staff-modal.staff-modal-wide:has(.ccc-modal) {
-  width: 1000px;
-  height: 760px;
+  width: min(1240px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  height: min(860px, calc(100vh - 32px));
 }
 
 .staff-modal-body:has(> .ccc-modal) {
@@ -1339,6 +1424,7 @@
   height: auto;
   min-height: 0;
   flex: 1;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
 }
 
 .ccc-grid {
@@ -1425,6 +1511,29 @@
   color: #b45309;
 }
 
+.ccc-rows [class*='is-date-'] dd {
+  font-weight: 800;
+}
+
+.ccc-rows .is-date-start dd {
+  color: #15803d;
+}
+
+.ccc-rows .is-date-end dd {
+  color: #c2410c;
+}
+
+.ccc-rows .is-date-old dd {
+  color: #94a3b8;
+  font-weight: 600;
+  text-decoration: line-through;
+}
+
+.ccc-rows .is-date-renew dd {
+  color: #1d4ed8;
+  font-size: 14.5px;
+}
+
 .ccc-bill {
   display: flex;
   flex: 0 0 auto;
@@ -1465,6 +1574,72 @@
 
 .ccc-bill h3 span {
   font-size: 11px;
+}
+
+.ccc-bill > .ccc-bill-deposit {
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid #c7b5fb;
+  border-radius: 10px;
+  background: linear-gradient(105deg, #f3efff, #faf8ff 75%);
+  color: #6d28d9;
+  font-weight: 700;
+}
+
+.ccc-bill-deposit > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ccc-bill-deposit em {
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.ccc-bill > .ccc-bill-deposit strong {
+  color: #6d28d9;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-paid {
+  border-color: #86efac;
+  background: linear-gradient(105deg, #dcfce7, #f0fdf4 75%);
+  color: #15803d;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-paid strong {
+  color: #15803d;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-pending {
+  border-color: #fcd34d;
+  background: linear-gradient(105deg, #fef3c7, #fffbeb 75%);
+  color: #b45309;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-pending strong {
+  color: #b45309;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-due {
+  border-color: #fca5a5;
+  background: linear-gradient(105deg, #fee2e2, #fef2f2 75%);
+  color: #b42318;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-due strong {
+  color: #b42318;
 }
 
 .ccc-bill > .ccc-month {
@@ -1578,9 +1753,9 @@
 
 .rent-bill {
   display: flex;
-  width: 460px;
+  width: 820px;
   max-width: 100%;
-  height: 600px;
+  height: 640px;
   max-height: calc(100vh - 32px);
   flex-direction: column;
   overflow: hidden;
@@ -1694,14 +1869,218 @@
 }
 
 .rent-bill-body {
-  display: flex;
+  display: grid;
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 18px 20px;
   scrollbar-width: thin;
+}
+
+.rent-bill-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rent-bill-contract {
+  border: 1px solid #e3ecf8;
+  border-radius: 14px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+.rent-bill-contract > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e8eff8;
+}
+
+.rent-bill-contract > header span {
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.rent-bill-contract > header small {
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rent-bill-contract dl {
+  margin: 0;
+  padding: 4px 14px;
+}
+
+.rent-bill-contract dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #e8eff8;
+}
+
+.rent-bill-contract dl > div:last-child {
+  border-bottom: 0;
+}
+
+.rent-bill-contract dt {
+  min-width: 0;
+  color: #5d728b;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.rent-bill-contract dd {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rent-bill-contract .is-paid dd {
+  color: #15803d;
+}
+
+.rent-bill-contract .is-total dt,
+.rent-bill-contract .is-total dd {
+  color: #b45309;
+  font-size: 13.5px;
+}
+
+.rent-bill-contract > p {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid #e8eff8;
+  background: #fff;
+  color: #8aa0b6;
+  font-size: 11.5px;
+}
+
+.contract-refund-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #f0fdf4;
+  color: #15803d;
+  text-align: left;
+}
+
+.contract-refund-note.is-forfeit {
+  border-color: #fecdca;
+  background: #fffbfa;
+  color: #b42318;
+}
+
+.contract-refund-note.is-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.contract-refund-note.is-warning > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.contract-refund-note.is-warning small {
+  color: #92400e;
+  line-height: 1.5;
+  opacity: 1;
+}
+
+.contract-refund-note > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.contract-refund-note strong {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.contract-refund-note small {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.contract-refund-note.is-compact {
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.contract-refund-note.is-compact > svg {
+  flex: 0 0 auto;
+}
+
+.contract-refund-note.is-compact > span {
+  min-width: 0;
+  flex: 1;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.contract-refund-note.is-compact strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.contract-refund-note.is-compact small {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csc-card:has(.contract-refund-note.is-compact) .csc-main {
+  gap: 10px;
+  padding-bottom: 10px;
+}
+
+.rent-bill-lines .is-deposit dt {
+  color: #6d28d9;
+}
+
+.rent-bill-lines .is-deposit dd {
+  color: #6d28d9;
+}
+
+@media (max-width: 767px) {
+  .rent-bill {
+    width: 520px;
+    height: 680px;
+  }
+
+  .rent-bill-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+  }
 }
 
 .rent-bill-meta {
@@ -1731,7 +2110,7 @@
 .rent-bill-meta b {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1749,10 +2128,13 @@
 
 .rent-bill-slip {
   display: flex;
-  flex: 0 0 auto;
+  min-height: 0;
   flex-direction: column;
   gap: 6px;
-  margin-top: auto;
+  padding: 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 14px;
+  background: #fbfdff;
 }
 
 .rent-bill-slip > header {
@@ -1776,7 +2158,8 @@
 .rent-bill-slip-image {
   position: relative;
   display: flex;
-  height: 150px;
+  min-height: 240px;
+  flex: 1;
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -1812,7 +2195,8 @@
 
 .rent-bill-slip-empty {
   display: flex;
-  height: 150px;
+  min-height: 240px;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1910,7 +2294,7 @@
 
 .rent-bill-total strong {
   color: #b45309;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -1965,7 +2349,12 @@
 
 @media (max-width: 575px) {
   .rent-bill {
-    height: 580px;
+    height: calc(100vh - 32px);
+  }
+
+  .rent-bill-slip-image,
+  .rent-bill-slip-empty {
+    min-height: 180px;
   }
 
   .rent-bill-head > div small {
@@ -2183,6 +2572,7 @@
 
   .ccc-modal .ccc-grid {
     flex: 0 0 auto;
+    grid-template-columns: 1fr;
   }
 
   .ccc-pane {
@@ -2246,4 +2636,148 @@
     flex-direction: column;
     text-align: center;
   }
+}
+
+.ccc-pane > .contract-months {
+  flex-shrink: 0;
+}
+
+.contract-months {
+  --months-tone: #15803d;
+  --months-soft: #dcfce7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.contract-months.is-warning {
+  --months-tone: #b45309;
+  --months-soft: #fef3c7;
+}
+
+.contract-months.is-danger {
+  --months-tone: #b42318;
+  --months-soft: #fee2e2;
+}
+
+.contract-months-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contract-months-head small {
+  display: block;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.contract-months-head strong {
+  color: #0f2b52;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.contract-months-head strong span {
+  color: #8aa0b6;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.contract-months-left {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--months-tone) 30%, transparent);
+  border-radius: 999px;
+  background: var(--months-soft);
+  color: var(--months-tone);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.contract-months-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contract-months-track li {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.contract-months-track li.is-done {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.contract-months-track li.is-current {
+  border: 2px solid #2563eb;
+  background: #2563eb;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+  color: #fff;
+}
+
+.contract-months-track li.is-next.is-renewed {
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.contract-months-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.contract-months-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.contract-months-legend span::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  background: #f1f5f9;
+}
+
+.contract-months-legend .is-done::before {
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.contract-months-legend .is-current::before {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.contract-months-legend .is-renewed::before {
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
 }

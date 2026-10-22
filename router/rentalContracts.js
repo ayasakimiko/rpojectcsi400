@@ -72,12 +72,39 @@ export function contractImageName(file, index) {
   return (decoded || `สัญญาเช่า ${index + 1}`).slice(0, 255);
 }
 
-function contractStatus(contract, now) {
-  if (contract.is_suspended || contract.room_number_current == null) return "ended";
+const dayKey = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+};
+
+function effectiveEndDate(contract) {
+  const ends = [contract.current_end_date, contract.latest_end_date, contract.rental_end_date]
+    .map((value) => (value ? new Date(value) : null))
+    .filter((date) => date && !Number.isNaN(date.getTime()));
+  return ends.length ? new Date(Math.max(...ends.map((date) => date.getTime()))) : null;
+}
+
+function movedOutEarly(contract, now) {
+  const movedOut = dayKey(contract.moved_out_at ?? now);
+  const endDate = effectiveEndDate(contract);
+  const end = endDate ? dayKey(endDate) : null;
+  return movedOut !== null && end !== null && movedOut < end;
+}
+
+function depositRefund(status, depositPaidCents) {
+  if (depositPaidCents <= 0) return null;
+  if (status === "ended_early") return "forfeit";
+  if (status === "ended" || status === "expired") return "refund";
+  return null;
+}
+
+function contractStatus(contract, now, firstPayment) {
+  if (contract.is_suspended || contract.room_number_current == null) return movedOutEarly(contract, now) ? "ended_early" : "ended";
   const start = contract.rental_start_date ? new Date(contract.rental_start_date) : null;
-  const endValue = contract.current_end_date ?? contract.rental_end_date;
-  const end = endValue ? new Date(endValue) : null;
+  const end = effectiveEndDate(contract);
   if (end && end < now) return "expired";
+  if (firstPayment === "pending") return "payment_review";
+  if (firstPayment === "due") return "awaiting_payment";
   if (start && start > now) return "upcoming";
   return "active";
 }
@@ -97,28 +124,48 @@ function countBillingPeriods(startValue, endValue) {
   return count;
 }
 
-function withDepositBreakdown(row, now, rentPaidCents) {
+function depositStatus(depositCents, deposit) {
+  if (depositCents <= 0) return "none";
+  if (deposit.paidCents >= depositCents) return "paid";
+  return deposit.pending ? "pending" : "due";
+}
+
+function withDepositBreakdown(row, now, rentPaidCents, deposit = { paidCents: 0, pending: false }, rentPending = false) {
   const priceCents = Math.max(0, Math.round(Number(row.monthly_price) * 100) || 0);
   const depositRaw = row.deposit_amount == null ? null : Number(row.deposit_amount);
-  const depositCents = Math.min(priceCents, Math.max(0, Math.round((depositRaw || 0) * 100)));
-  const totalPeriods = countBillingPeriods(row.rental_start_date, row.rental_end_date);
+  const depositCents = Math.max(0, Math.round((depositRaw || 0) * 100));
+  const endDate = effectiveEndDate(row);
+  const totalPeriods = countBillingPeriods(row.rental_start_date, endDate);
   const contractTotalCents = priceCents * totalPeriods;
   const paidCents = Math.max(0, rentPaidCents || 0);
+  const depositState = depositStatus(depositCents, deposit);
+  const firstRentPaid = priceCents === 0 || paidCents >= priceCents;
+  const firstPayment = firstRentPaid && ["none", "paid"].includes(depositState)
+    ? "paid"
+    : rentPending || depositState === "pending" ? "pending" : "due";
+  const status = contractStatus(row, now, firstPayment);
+  const depositPaidCents = Math.min(depositCents, deposit.paidCents);
   const { room_number_current, ...contract } = row;
+  delete contract.latest_end_date;
   return {
     ...contract,
     current_room_number: room_number_current,
+    effective_end_date: endDate,
     contract_duration_months: contract.contract_duration_months == null ? null : Number(contract.contract_duration_months),
     monthly_price: priceCents / 100,
     deposit_amount: depositRaw,
+    deposit_months: priceCents > 0 ? Math.round((depositCents / priceCents) * 100) / 100 : 0,
     first_month_amount: priceCents / 100,
-    deposit_applied: depositCents / 100,
-    first_month_remaining: (priceCents - depositCents) / 100,
+    first_month_total: (priceCents + depositCents) / 100,
+    deposit_paid: depositPaidCents / 100,
+    deposit_refund: depositRefund(status, depositPaidCents),
+    deposit_status: depositState,
+    first_payment_status: firstPayment,
     billing_periods: totalPeriods,
     contract_total: contractTotalCents / 100,
     rent_paid: paidCents / 100,
-    contract_remaining: Math.max(0, contractTotalCents - depositCents - paidCents) / 100,
-    status: contractStatus(row, now),
+    contract_remaining: Math.max(0, contractTotalCents - paidCents) / 100,
+    status,
   };
 }
 
@@ -128,7 +175,10 @@ const CONTRACT_COLUMNS = `
   b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
   COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
   b.contract_duration_months IS NOT NULL AS duration_selected,
-  c.deposit_amount, b.contract_completed_at, b.created_at`;
+  c.deposit_amount, b.contract_completed_at, b.created_at,
+  (SELECT MAX(tr.completed_at) FROM TenantRequest tr
+    WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved') AS moved_out_at,
+  (SELECT MAX(b2.rental_end_date) FROM Booking b2 WHERE b2.customer_id = b.customer_id) AS latest_end_date`;
 
 const CONTRACT_JOINS = `
   FROM Booking b
@@ -139,25 +189,53 @@ const CONTRACT_JOINS = `
 async function attachContractImages(pool, contracts, now) {
   if (contracts.length === 0) return [];
   const bookingIds = contracts.map((contract) => contract.booking_id);
-  const [[images], [paidRows]] = await Promise.all([
+  const customerIds = [...new Set(contracts.map((contract) => contract.customer_id))];
+  const [[images], [paidRows], [depositRows]] = await Promise.all([
     pool.query(`SELECT booking_id, name, url FROM ContractImage WHERE booking_id IN (?) ORDER BY id ASC`, [bookingIds]),
     pool.query(
-      `SELECT booking_id, amount FROM Payment
-       WHERE booking_id IN (?) AND status = 'paid' AND (type IS NULL OR type NOT IN ('deposit', 'water', 'electricity'))`,
-      [bookingIds],
+      `SELECT pb.customer_id, p.amount, p.status FROM Payment p
+       JOIN Booking pb ON pb.id = p.booking_id
+       WHERE pb.customer_id IN (?) AND p.status IN ('paid', 'pending')
+         AND (p.type IS NULL OR p.type NOT IN ('deposit', 'water', 'electricity'))`,
+      [customerIds],
+    ),
+    pool.query(
+      `SELECT pb.customer_id, p.amount, p.status FROM Payment p
+       JOIN Booking pb ON pb.id = p.booking_id
+       WHERE pb.customer_id IN (?) AND p.type = 'deposit' AND p.status IN ('paid', 'pending')`,
+      [customerIds],
     ),
   ]);
+  const depositByCustomer = new Map();
+  for (const { customer_id, amount, status } of depositRows) {
+    const entry = depositByCustomer.get(customer_id) ?? { paidCents: 0, pending: false };
+    const cents = Math.round(Number(amount) * 100);
+    if (status === "paid" && Number.isSafeInteger(cents)) entry.paidCents += cents;
+    if (status === "pending" && cents > 0) entry.pending = true;
+    depositByCustomer.set(customer_id, entry);
+  }
   const imagesByBooking = new Map();
   for (const { booking_id, name, url } of images) {
     imagesByBooking.set(booking_id, [...(imagesByBooking.get(booking_id) ?? []), { name, url }]);
   }
-  const paidByBooking = new Map();
-  for (const { booking_id, amount } of paidRows) {
+  const paidByCustomer = new Map();
+  const rentPendingCustomers = new Set();
+  for (const { customer_id, amount, status } of paidRows) {
     const cents = Math.round(Number(amount) * 100);
-    if (Number.isSafeInteger(cents)) paidByBooking.set(booking_id, (paidByBooking.get(booking_id) ?? 0) + cents);
+    if (status === "pending") {
+      if (cents > 0) rentPendingCustomers.add(customer_id);
+      continue;
+    }
+    if (Number.isSafeInteger(cents)) paidByCustomer.set(customer_id, (paidByCustomer.get(customer_id) ?? 0) + cents);
   }
   return contracts.map((row) => {
-    const contract = withDepositBreakdown(row, now, paidByBooking.get(row.booking_id) ?? 0);
+    const contract = withDepositBreakdown(
+      row,
+      now,
+      paidByCustomer.get(row.customer_id) ?? 0,
+      depositByCustomer.get(row.customer_id),
+      rentPendingCustomers.has(row.customer_id),
+    );
     const contractImages = imagesByBooking.get(row.booking_id) ?? [];
     return { ...contract, duration_selected: Boolean(row.duration_selected), images: contractImages, image_count: contractImages.length };
   });

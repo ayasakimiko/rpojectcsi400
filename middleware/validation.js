@@ -297,7 +297,8 @@ export function parseMaintenanceInput(body = {}) {
 
 const REQUEST_TYPES = new Set(["renew", "moveout", "move_room"]);
 export const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
-const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
+export const CONTRACT_DURATION_MONTHS = new Set([3, 6, 12]);
+export const DEPOSIT_MONTHS = 2;
 const MOVE_ROOM_REASONS = new Set(["room_problem", "price", "amenities", "location", "noise", "other"]);
 const MOVE_ROOM_MAX_DAYS_AHEAD = 60;
 
@@ -357,13 +358,7 @@ export function parseTenantRequestInput(body = {}) {
   if (!RENEW_DURATION_MONTHS.has(renewDurationMonths)) {
     return { error: "กรุณาเลือกระยะเวลาที่ต้องการต่อสัญญา" };
   }
-  const renewPaymentType = body.renew_payment_type;
-  if (!RENEW_PAYMENT_TYPES.has(renewPaymentType)) {
-    return { error: "กรุณาเลือกรูปแบบการชำระเงิน" };
-  }
-  if (renewPaymentType === "lump_sum" && renewDurationMonths <= 1) {
-    return { error: "จ่ายล่วงหน้าทั้งก้อนเลือกได้เฉพาะระยะเวลาต่อสัญญามากกว่า 1 เดือน" };
-  }
+  const renewPaymentType = "monthly";
   return {
     value: {
       type, note, targetRoomNumber: null, renewDurationMonths, renewPaymentType, moveReason: null, preferredMoveDate: null,

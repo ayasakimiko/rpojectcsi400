@@ -5,18 +5,25 @@ import { UploadImage } from './UploadMedia.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
 import './RentalContract.css'
 import {
+  addContractMonths,
   CONTRACT_MAX_IMAGES,
   CONTRACT_MIN_IMAGES,
   formatContractDate,
   formatContractLength,
   formatContractMoney,
+  formatDepositMonths,
+  formatDepositSummary,
+  DEPOSIT_STATUS_LABEL,
 } from '../utils/rentalContract.js'
 
 const CONTRACT_STATUS = {
   active: { label: 'สัญญามีผล', tone: 'active' },
+  awaiting_payment: { label: 'รอชำระงวดแรก', tone: 'unpaid' },
+  payment_review: { label: 'รอตรวจสลิปงวดแรก', tone: 'warning' },
   upcoming: { label: 'ยังไม่เริ่มสัญญา', tone: 'info' },
   expired: { label: 'หมดอายุสัญญา', tone: 'warning' },
   ended: { label: 'สิ้นสุดการเช่า', tone: 'muted' },
+  ended_early: { label: 'ออกก่อนสัญญา', tone: 'unpaid' },
 }
 
 const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
@@ -49,9 +56,93 @@ function ContractLightbox({ images, index, title, subtitle, onClose }) {
   )
 }
 
+function remainingRentMonthsLabel(contract) {
+  const price = Number(contract?.monthly_price) || 0
+  const remaining = Number(contract?.contract_remaining) || 0
+  if (price <= 0) return ''
+  const months = Math.ceil(Math.round((remaining / price) * 100) / 100)
+  return ` (${months} เดือน)`
+}
+
+export function ContractMonthTrack({ start, end, originalEnd, now }) {
+  const startDate = start ? new Date(start) : null
+  const endDate = end ? new Date(end) : null
+  if (!startDate || !endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) return null
+  const renewFrom = originalEnd ? new Date(originalEnd) : null
+  const periods = []
+  for (let index = 0; index < 120; index += 1) {
+    const periodStart = addContractMonths(startDate, index)
+    if (periodStart >= endDate) break
+    periods.push({ index, periodStart, renewed: Boolean(renewFrom && periodStart >= renewFrom && renewFrom < endDate) })
+  }
+  if (periods.length === 0) return null
+  const daysLeft = Math.ceil((endDate.getTime() - now) / 86400000)
+  const tone = daysLeft < 0 ? 'danger' : daysLeft <= 30 ? 'warning' : 'success'
+  const leftLabel = daysLeft < 0 ? `หมดสัญญาแล้ว ${Math.abs(daysLeft)} วัน` : daysLeft === 0 ? 'ครบสัญญาวันนี้' : `เหลืออีก ${daysLeft} วัน`
+  const elapsed = periods.filter((period) => period.periodStart.getTime() <= now).length
+  const current = Math.min(periods.length, Math.max(1, elapsed))
+  const finished = now >= endDate.getTime()
+  return (
+    <div className={`contract-months is-${tone}`}>
+      <div className="contract-months-head">
+        <div>
+          <small>รอบบิล</small>
+          <strong>
+            {finished ? `ครบ ${periods.length}` : `เดือนที่ ${current}`}
+            <span> / {periods.length} เดือน</span>
+          </strong>
+        </div>
+        <span className="contract-months-left">{leftLabel}</span>
+      </div>
+      <ol className="contract-months-track" aria-label={`รอบบิลเดือนที่ ${current} จาก ${periods.length}`}>
+        {periods.map((period) => {
+          const state = finished || period.index < current - 1 ? 'is-done' : period.index === current - 1 ? 'is-current' : 'is-next'
+          return (
+            <li
+              key={period.index}
+              className={`${state}${period.renewed ? ' is-renewed' : ''}`}
+              title={`เดือนที่ ${period.index + 1} · ${period.periodStart.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}${period.renewed ? ' · ช่วงต่อสัญญา' : ''}`}
+            >
+              <span>{period.periodStart.toLocaleDateString('th-TH', { month: 'short' })}</span>
+            </li>
+          )
+        })}
+      </ol>
+      <div className="contract-months-legend">
+        <span className="is-done">ผ่านแล้ว</span>
+        <span className="is-current">เดือนนี้</span>
+        <span className="is-next">ที่เหลือ</span>
+        {periods.some((period) => period.renewed) && <span className="is-renewed">ช่วงต่อสัญญา</span>}
+      </div>
+    </div>
+  )
+}
+
 export function ContractStatusBadge({ status }) {
   const info = CONTRACT_STATUS[status] || CONTRACT_STATUS.active
   return <span className={`contract-status is-${info.tone}`}>{info.label}</span>
+}
+
+export function ContractFirstPaymentNote({ contract, viewer = 'staff' }) {
+  if (!contract || !['awaiting_payment', 'payment_review'].includes(contract.status)) return null
+  const review = contract.status === 'payment_review'
+  const amount = formatContractMoney(contract.first_month_total)
+  const detail = Number(contract.deposit_amount) > 0
+    ? `ค่าห้อง ${formatContractMoney(contract.first_month_amount)} + มัดจำ ${formatContractMoney(contract.deposit_amount)}`
+    : `ค่าห้อง ${formatContractMoney(contract.first_month_amount)}`
+  return (
+    <div className={`contract-first-payment-note${review ? ' is-review' : ''}`} role="status">
+      <ContractIcon type="wallet" size={18} />
+      <span>
+        <strong>{review ? 'ส่งสลิปงวดแรกแล้ว รอเจ้าหน้าที่ตรวจสอบ' : 'สัญญายังไม่มีผล'}</strong>
+        {review
+          ? `สัญญาจะมีผลเมื่ออนุมัติสลิปงวดแรก ${amount} (${detail})`
+          : viewer === 'customer'
+            ? `กรุณาชำระงวดแรก ${amount} (${detail}) ผ่านระบบหรือที่เจ้าหน้าที่ สัญญาจะมีผลหลังชำระครบ`
+            : `สัญญาจะมีผลเมื่อผู้เช่าชำระงวดแรก ${amount} (${detail}) หรือเจ้าหน้าที่เก็บเงินแล้ว`}
+      </span>
+    </div>
+  )
 }
 
 export function ContractGallery({ images = [], title = 'รูปสัญญาเช่า', subtitle }) {
@@ -101,7 +192,7 @@ export function ContractFacts({ contract }) {
       ? [{ label: 'สัญญาปัจจุบันถึง', value: formatContractDate(contract.current_end_date, true), hint: 'รวมการต่อสัญญา/ย้ายห้อง' }]
       : []),
     { label: 'ค่าเช่าห้องต่อเดือน', value: formatContractMoney(contract.monthly_price) },
-    { label: 'เงินมัดจำที่ชำระแล้ว', value: contract.deposit_amount != null ? formatContractMoney(contract.deposit_amount) : 'ไม่มีมัดจำ' },
+    { label: 'เงินมัดจำ', value: formatDepositSummary(contract) },
     {
       label: 'ทำสัญญาสำเร็จเมื่อ',
       value: contract.contract_completed_at ? formatContractDate(contract.contract_completed_at, true) : formatContractDate(contract.created_at, true),
@@ -129,20 +220,24 @@ export function ContractFirstMonth({ contract }) {
         <span>ค่าเช่าเดือนแรก</span>
         <strong>{formatContractMoney(contract.first_month_amount)}</strong>
       </div>
-      <div className="is-deduct">
-        <span>หักเงินมัดจำ</span>
-        <strong>− {formatContractMoney(contract.deposit_applied)}</strong>
+      <div>
+        <span>เงินมัดจำ ({formatDepositMonths(contract)})</span>
+        <strong>+ {formatContractMoney(contract.deposit_amount || 0)}</strong>
       </div>
       <div className="is-total">
-        <span>คงเหลือชำระเดือนแรก</span>
-        <strong>{formatContractMoney(contract.first_month_remaining)}</strong>
+        <span>รวมชำระเดือนแรก</span>
+        <strong>{formatContractMoney(contract.first_month_total)}</strong>
       </div>
-      <p>หักเงินมัดจำจากค่าเช่าเดือนแรกเพียงครั้งเดียว เดือนถัดไปชำระเต็มราคาห้อง</p>
+      <p>
+        เดือนแรกชำระค่าห้องพร้อมเงินมัดจำ เดือนถัดไปชำระเฉพาะค่าห้อง
+        {DEPOSIT_STATUS_LABEL[contract.deposit_status] ? ` · มัดจำ${DEPOSIT_STATUS_LABEL[contract.deposit_status]}` : ''}
+      </p>
     </div>
   )
 }
 
 export function ContractDetail({ contract, showPerson = false }) {
+  const [now] = useState(() => Date.now())
   if (!contract) {
     return (
       <div className="contract-gallery-empty">
@@ -162,6 +257,18 @@ export function ContractDetail({ contract, showPerson = false }) {
         </div>
         <ContractStatusBadge status={contract.status} />
       </div>
+      <ContractFirstPaymentNote contract={contract} />
+      <DepositRefundNote contract={contract} />
+      <ContractMonthTrack
+        start={contract.rental_start_date}
+        end={contract.effective_end_date || contract.current_end_date || contract.rental_end_date}
+        originalEnd={
+          contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
+            ? contract.rental_end_date
+            : null
+        }
+        now={now}
+      />
       <ContractFacts contract={contract} />
       <ContractFirstMonth contract={contract} />
       <section className="contract-detail-images">
@@ -178,13 +285,31 @@ export function ContractDetail({ contract, showPerson = false }) {
 
 export function ContractCell({ contract }) {
   if (!contract) return <span className="contract-cell-empty">-</span>
+  const start = contract.rental_start_date ? new Date(contract.rental_start_date) : null
+  const endValue = contract.effective_end_date || contract.current_end_date || contract.rental_end_date
+  const end = endValue ? new Date(endValue) : null
+  const extended = Boolean(end && contract.rental_end_date && end.getTime() > new Date(contract.rental_end_date).getTime())
+  const totalMonths = extended && start
+    ? Math.max(1, Math.round((end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()))
+    : null
+  const hasDeposit = Number(contract.deposit_amount) > 0
+  const depositState = contract.deposit_refund === 'forfeit'
+    ? { label: 'ริบ', tone: 'due' }
+    : contract.deposit_refund === 'refund'
+      ? { label: 'ต้องคืน', tone: 'pending' }
+      : DEPOSIT_STATUS_LABEL[contract.deposit_status]
+        ? { label: DEPOSIT_STATUS_LABEL[contract.deposit_status], tone: contract.deposit_status }
+        : null
   return (
     <div className="contract-cell">
       <div className="contract-cell-text">
-        <strong>{formatContractMoney(contract.monthly_price)} · {formatContractLength(contract)}</strong>
+        <strong>
+          {formatContractMoney(contract.monthly_price)} · {totalMonths ? `${totalMonths} เดือน` : formatContractLength(contract)}
+          {extended && <em className="contract-cell-tag">ต่อแล้ว</em>}
+        </strong>
         <small>
-          มัดจำ {contract.deposit_amount != null ? formatContractMoney(contract.deposit_amount) : '-'} · เหลือ{' '}
-          <b>{formatContractMoney(contract.first_month_remaining)}</b>
+          {hasDeposit ? <>มัดจำ <b>{formatContractMoney(contract.deposit_amount)}</b></> : 'ไม่มีมัดจำ'}
+          {hasDeposit && depositState && <i className={`contract-cell-deposit is-${depositState.tone}`}> · {depositState.label}</i>}
         </small>
       </div>
       <ContractThumb contract={contract} />
@@ -315,11 +440,55 @@ export function ContractImagePicker({ files, onChange, error }) {
 
 const STAFF_CARD_STATUS = {
   active: { label: 'สัญญามีผล', tone: 'is-active' },
+  awaiting_payment: { label: 'รอชำระงวดแรก', tone: 'is-unpaid' },
+  payment_review: { label: 'รอตรวจสลิปงวดแรก', tone: 'is-warning' },
   upcoming: { label: 'ยังไม่เริ่ม', tone: 'is-info' },
   expired: { label: 'หมดอายุ', tone: 'is-warning' },
   ended: { label: 'สิ้นสุดการเช่า', tone: 'is-muted' },
+  ended_early: { label: 'ออกก่อนสัญญา', tone: 'is-unpaid' },
 }
 const STAFF_CARD_PHOTOS = 4
+
+export function DepositEarlyLeaveWarning({ contract }) {
+  if (!contract || !(Number(contract.deposit_amount) > 0)) return null
+  if (['ended', 'ended_early', 'expired'].includes(contract.status)) return null
+  const endValue = contract.current_end_date || contract.rental_end_date
+  return (
+    <div className="contract-refund-note is-warning" role="note">
+      <ContractIcon type="wallet" size={18} />
+      <span>
+        <strong>ย้ายออกก่อนสัญญาหมด จะไม่ได้รับเงินมัดจำคืน</strong>
+        <small>
+          เงินมัดจำ {formatContractMoney(contract.deposit_amount)} ({formatDepositMonths(contract)}) จะคืนให้เมื่อพักอยู่ครบสัญญาถึง {formatContractDate(endValue)}
+          {' '}หากย้ายออกก่อนวันดังกล่าว ทางหอพักจะไม่คืนเงินมัดจำ
+        </small>
+      </span>
+    </div>
+  )
+}
+
+export function DepositRefundNote({ contract, viewer = 'staff', compact = false }) {
+  if (!contract?.deposit_refund) return null
+  const amount = formatContractMoney(contract.deposit_paid)
+  const refund = contract.deposit_refund === 'refund'
+  const title = refund
+    ? viewer === 'customer' ? `ได้รับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
+    : 'ไม่ต้องคืนเงินมัดจำ'
+  const detail = refund
+    ? contract.status === 'expired'
+      ? compact ? 'ครบสัญญา พักอยู่ตามกำหนด' : 'สัญญาครบกำหนดแล้วและผู้เช่าพักอยู่ตามกำหนด'
+      : compact ? 'พักอยู่ครบตามสัญญา' : 'ผู้เช่าพักอยู่ครบตามสัญญา'
+    : compact ? `ออกก่อนสัญญา · ริบมัดจำ ${amount}` : `ผู้เช่าออกก่อนสัญญาสิ้นสุด · ริบเงินมัดจำ ${amount}`
+  return (
+    <span className={`contract-refund-note ${refund ? 'is-refund' : 'is-forfeit'}${compact ? ' is-compact' : ''}`} role="note">
+      <ContractIcon type="wallet" size={compact ? 14 : 18} />
+      <span>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+    </span>
+  )
+}
 
 function contractPeriodPosition(contract, now) {
   const periods = Math.max(1, Number(contract.billing_periods) || 1)
@@ -334,6 +503,12 @@ function contractPeriodPosition(contract, now) {
 function ContractPeriodTimeline({ contract, now, endLabel = 'สิ้นสุด', endValue }) {
   const { daysLeft } = contractTimeline(contract, now)
   const { periods, currentPeriod } = contractPeriodPosition(contract, now)
+  const left = ['ended', 'ended_early'].includes(contract.status)
+  const leftAt = contract.moved_out_at ? new Date(contract.moved_out_at) : null
+  const endAt = contract.rental_end_date ? new Date(contract.rental_end_date) : null
+  const earlyDays = contract.status === 'ended_early' && endAt
+    ? Math.max(0, Math.ceil((endAt - (leftAt ?? new Date(now))) / 86400000))
+    : 0
   return (
     <>
       <span className="csc-period-row">
@@ -349,12 +524,21 @@ function ContractPeriodTimeline({ contract, now, endLabel = 'สิ้นสุ�
           <b>{formatContractDate(endValue ?? contract.rental_end_date)}</b>
         </span>
       </span>
-      <span className="csc-period-meta">
-        <small>{currentPeriod >= periods ? `ครบ ${periods} รอบบิล` : `เดือนที่ ${currentPeriod + 1}/${periods}`}</small>
-        <small className={daysLeft !== null && daysLeft <= 30 ? 'is-warning' : ''}>
-          {daysLeft > 0 ? `เหลือ ${daysLeft} วัน` : formatDaysLeft(daysLeft)}
-        </small>
-      </span>
+      {left ? (
+        <span className="csc-period-meta">
+          <small>{leftAt ? `ออกเมื่อ ${formatContractDate(leftAt)}` : 'ไม่ได้พักอยู่แล้ว'}</small>
+          <small className={earlyDays > 0 ? 'is-danger' : ''}>
+            {earlyDays > 0 ? `ออกก่อนครบ ${earlyDays} วัน` : 'สิ้นสุดการเช่า'}
+          </small>
+        </span>
+      ) : (
+        <span className="csc-period-meta">
+          <small>{currentPeriod >= periods ? `ครบ ${periods} รอบบิล` : `เดือนที่ ${currentPeriod + 1}/${periods}`}</small>
+          <small className={daysLeft !== null && daysLeft <= 30 ? 'is-warning' : ''}>
+            {daysLeft > 0 ? `เหลือ ${daysLeft} วัน` : formatDaysLeft(daysLeft)}
+          </small>
+        </span>
+      )}
     </>
   )
 }
@@ -392,13 +576,14 @@ function StaffContractCard({ contract, onOpen }) {
           </span>
           <span>
             <small>มัดจำ</small>
-            <b>{contract.deposit_amount != null ? formatContractMoney(contract.deposit_amount) : '-'}</b>
+            <b>{formatDepositMonths(contract)}</b>
           </span>
           <span className="is-total">
             <small>เดือนแรก</small>
-            <b>{formatContractMoney(contract.first_month_remaining)}</b>
+            <b>{formatContractMoney(contract.first_month_total)}</b>
           </span>
         </span>
+        <DepositRefundNote contract={contract} compact />
       </button>
 
       <div className="csc-photos">
@@ -547,7 +732,7 @@ export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
               </div>
               <ContractStatusBadge status={detail.status} />
             </div>
-            <CustomerContractBody contract={detail} />
+            <CustomerContractBody contract={detail} viewer="staff" />
           </div>
         </Modal>
       )}
@@ -634,7 +819,7 @@ export function CustomerContractPanel() {
           )}
         </div>
       ) : (
-        <CustomerContractBody contract={contract} />
+        <CustomerContractBody contract={contract} viewer="customer" />
       )}
     </section>
   )
@@ -667,7 +852,7 @@ const THIS_MONTH_STATUS = {
 
 const billDate = (value) => (value ? new Date(value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-')
 
-function RentBillModal({ contract, thisMonth, onClose }) {
+function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
   const [closing, setClosing] = useState(false)
   const [slipOpen, setSlipOpen] = useState(false)
   const slipOpenRef = useRef(false)
@@ -693,19 +878,36 @@ function RentBillModal({ contract, thisMonth, onClose }) {
     return () => clearTimeout(timer)
   }, [closing, onClose])
 
-  const info = THIS_MONTH_STATUS[thisMonth.status] || THIS_MONTH_STATUS.due
-  const paid = thisMonth.status === 'paid'
+  const depositOpen = ['due', 'pending'].includes(thisMonth.deposit_status)
+  const deposit = depositOpen ? Number(thisMonth.deposit_due) || 0 : 0
+  const rentPaid = thisMonth.status === 'paid'
+  const paid = rentPaid && deposit === 0
+  const billStatus = rentPaid && deposit > 0 ? thisMonth.deposit_status : thisMonth.status
+  const info = THIS_MONTH_STATUS[billStatus] || THIS_MONTH_STATUS.due
   const months = (thisMonth.overdue_months || 0) + 1
   const price = Number(contract.monthly_price) || 0
-  const gross = price * months
-  const deposit = Number(thisMonth.deposit_applied) || 0
-  const amount = Number(thisMonth.amount) || 0
-  const adjustment = Math.round((amount - (gross - deposit)) * 100) / 100
+  const gross = rentPaid ? 0 : price * months
+  const rentAmount = rentPaid ? 0 : Number(thisMonth.amount) || 0
+  const amount = rentAmount + deposit
+  const adjustment = Math.round((rentAmount - gross) * 100) / 100
+  const depositMonths = price > 0 ? Number(contract.deposit_amount) / price : 0
+  const depositLabel = Number.isInteger(depositMonths) && depositMonths > 0
+    ? `เงินมัดจำ ${depositMonths} เดือน (${formatContractMoney(price)} × ${depositMonths})`
+    : 'เงินมัดจำ'
+  const firstBill = ['awaiting_payment', 'payment_review'].includes(contract.status)
   const lines = paid
-    ? [{ label: `ค่าเช่ารอบนี้`, value: formatContractMoney(price) }, { label: 'ชำระแล้ว', value: `− ${formatContractMoney(price)}`, tone: 'is-paid' }]
+    ? [{ label: 'ค่าเช่ารอบนี้', value: formatContractMoney(price) }, { label: 'ชำระแล้ว', value: `− ${formatContractMoney(price)}`, tone: 'is-paid' }]
     : [
-        { label: months > 1 ? `ค่าเช่า ${months} เดือน (${formatContractMoney(price)} × ${months})` : 'ค่าเช่ารอบนี้', value: formatContractMoney(gross) },
-        ...(deposit > 0 ? [{ label: 'หักเงินมัดจำ', value: `− ${formatContractMoney(deposit)}`, tone: 'is-deduct' }] : []),
+        ...(rentPaid
+          ? [{ label: 'ค่าเช่ารอบนี้', value: 'ชำระแล้ว', tone: 'is-paid' }]
+          : [{ label: months > 1 ? `ค่าเช่า ${months} เดือน (${formatContractMoney(price)} × ${months})` : firstBill ? 'ค่าเช่าเดือนแรก' : 'ค่าเช่ารอบนี้', value: formatContractMoney(gross) }]),
+        ...(deposit > 0
+          ? [{
+              label: thisMonth.deposit_status === 'pending' ? `${depositLabel} · รอตรวจสลิป` : depositLabel,
+              value: formatContractMoney(deposit),
+              tone: 'is-deposit',
+            }]
+          : []),
         ...(adjustment < 0 ? [{ label: 'หักยอดที่ชำระไปแล้ว', value: `− ${formatContractMoney(-adjustment)}`, tone: 'is-paid' }] : []),
         ...(adjustment > 0 ? [{ label: 'ค่าเช่าล่วงหน้า (ทบยอด)', value: formatContractMoney(adjustment) }] : []),
       ]
@@ -732,6 +934,9 @@ function RentBillModal({ contract, thisMonth, onClose }) {
         </header>
 
         <div className="rent-bill-body">
+          <div className="rent-bill-main">
+          <ContractFirstPaymentNote contract={contract} viewer={viewer} />
+          <DepositRefundNote contract={contract} viewer={viewer} />
           <div className="rent-bill-meta">
             <div>
               <small>รอบบิล</small>
@@ -740,7 +945,7 @@ function RentBillModal({ contract, thisMonth, onClose }) {
             <div>
               <small>{paid ? 'ชำระเมื่อ' : 'ครบกำหนด'}</small>
               <b className={paid ? '' : 'is-due'}>
-                {paid ? (payment ? billDate(payment.payment_date) : 'หักจากมัดจำ/ยอดล่วงหน้า') : billDate(thisMonth.due_date)}
+                {paid ? (payment ? billDate(payment.payment_date) : 'ยอดล่วงหน้า') : billDate(thisMonth.due_date)}
               </b>
             </div>
           </div>
@@ -758,6 +963,44 @@ function RentBillModal({ contract, thisMonth, onClose }) {
               <span>{paid ? 'ยอดคงค้าง' : 'ยอดที่ต้องชำระ'}</span>
               <strong>{formatContractMoney(amount)}</strong>
             </div>
+          </div>
+          <section className="rent-bill-contract" aria-label="ราคาตามสัญญา">
+            <header>
+              <span>ราคาตามสัญญา</span>
+              <small>{formatContractLength(contract)} · {contract.billing_periods || 0} รอบบิล</small>
+            </header>
+            <dl>
+              <div>
+                <dt>ช่วงสัญญา</dt>
+                <dd>{billDate(contract.rental_start_date)} – {billDate(contract.current_end_date || contract.rental_end_date)}</dd>
+              </div>
+              <div>
+                <dt>ค่าห้อง/เดือน</dt>
+                <dd>{formatContractMoney(contract.monthly_price)}</dd>
+              </div>
+              <div>
+                <dt>เงินมัดจำ</dt>
+                <dd>{formatDepositSummary(contract)}</dd>
+              </div>
+              <div>
+                <dt>งวดแรก (ค่าห้อง + มัดจำ)</dt>
+                <dd>{formatContractMoney(contract.first_month_total)}</dd>
+              </div>
+              <div>
+                <dt>ยอดค่าเช่าตามสัญญา ({formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0})</dt>
+                <dd>{formatContractMoney(contract.contract_total)}</dd>
+              </div>
+              <div className="is-paid">
+                <dt>ค่าเช่าที่ชำระแล้ว</dt>
+                <dd>− {formatContractMoney(contract.rent_paid)}</dd>
+              </div>
+              <div className="is-total">
+                <dt>ค่าเช่าที่เหลือ{remainingRentMonthsLabel(contract)}</dt>
+                <dd>{formatContractMoney(contract.contract_remaining)}</dd>
+              </div>
+            </dl>
+            <p>เงินมัดจำไม่ถูกหักจากค่าเช่า · คืนเมื่อพักครบสัญญา ไม่คืนหากออกก่อนสัญญา</p>
+          </section>
           </div>
 
           <section className="rent-bill-slip">
@@ -782,7 +1025,13 @@ function RentBillModal({ contract, thisMonth, onClose }) {
         </div>
 
         <footer className="rent-bill-foot">
-          <small>{paid ? 'ชำระค่าเช่ารอบนี้ครบแล้ว' : 'ไม่รวมค่าน้ำค่าไฟ · ชำระได้ที่หน้าแรก'}</small>
+          <small>
+            {paid
+              ? 'ชำระค่าเช่ารอบนี้ครบแล้ว'
+              : firstBill
+                ? 'งวดแรก = ค่าห้อง + เงินมัดจำ · เดือนถัดไปชำระเฉพาะค่าห้อง · ไม่รวมค่าน้ำค่าไฟ'
+                : 'ไม่รวมค่าน้ำค่าไฟ · ชำระได้ที่หน้าแรก'}
+          </small>
           <button type="button" onClick={requestClose}>ปิด</button>
         </footer>
       </div>
@@ -800,7 +1049,7 @@ function RentBillModal({ contract, thisMonth, onClose }) {
   )
 }
 
-function ThisMonthRent({ thisMonth, contract }) {
+function ThisMonthRent({ thisMonth, contract, viewer }) {
   const [billOpen, setBillOpen] = useState(false)
   if (!thisMonth) {
     return (
@@ -812,18 +1061,21 @@ function ThisMonthRent({ thisMonth, contract }) {
       </div>
     )
   }
-  const info = THIS_MONTH_STATUS[thisMonth.status] || THIS_MONTH_STATUS.due
-  const paid = thisMonth.status === 'paid'
+  const deposit = ['due', 'pending'].includes(thisMonth.deposit_status) ? Number(thisMonth.deposit_due) || 0 : 0
+  const rentPaid = thisMonth.status === 'paid'
+  const paid = rentPaid && deposit === 0
+  const info = THIS_MONTH_STATUS[rentPaid && deposit > 0 ? thisMonth.deposit_status : thisMonth.status] || THIS_MONTH_STATUS.due
+  const total = (rentPaid ? 0 : Number(thisMonth.amount) || 0) + deposit
   const shortDate = (value) =>
     value ? new Date(value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : '-'
   return (
     <div className={`ccc-month ${info.tone}`}>
       <div className="ccc-month-top">
         <span>
-          ค่าเช่าเดือนนี้
+          {deposit > 0 ? 'ค่าเช่า + เงินมัดจำ' : 'ค่าเช่าเดือนนี้'}
           <em>{info.label}</em>
         </span>
-        <strong>{paid ? '✓' : formatContractMoney(thisMonth.amount)}</strong>
+        <strong>{paid ? '✓' : formatContractMoney(total)}</strong>
       </div>
       <div className="ccc-month-facts">
         <div>
@@ -842,17 +1094,23 @@ function ThisMonthRent({ thisMonth, contract }) {
             <b>{thisMonth.overdue_months + 1} เดือน</b>
           </div>
         )}
+        {deposit > 0 && (
+          <div className="is-due">
+            <small>รวมมัดจำ</small>
+            <b>{formatContractMoney(deposit)}</b>
+          </div>
+        )}
       </div>
       <button type="button" className="ccc-month-bill" onClick={() => setBillOpen(true)}>
         <ContractIcon type="file" size={14} />
         ดูบิล
       </button>
-      {billOpen && <RentBillModal contract={contract} thisMonth={thisMonth} onClose={() => setBillOpen(false)} />}
+      {billOpen && <RentBillModal contract={contract} thisMonth={thisMonth} viewer={viewer} onClose={() => setBillOpen(false)} />}
     </div>
   )
 }
 
-function CustomerContractBody({ contract }) {
+function CustomerContractBody({ contract, viewer = 'customer' }) {
   const [now] = useState(() => Date.now())
   const { daysLeft, totalDays, usedDays } = contractTimeline(contract, now)
   const extended = contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
@@ -860,14 +1118,30 @@ function CustomerContractBody({ contract }) {
   const rows = [
     { label: 'ผู้เช่า', value: `${contract.first_name} ${contract.last_name}` },
     { label: 'ระยะสัญญา', value: formatContractLength(contract) },
-    { label: 'เริ่มสัญญา', value: formatContractDate(contract.rental_start_date, true) },
-    { label: 'สิ้นสุดสัญญา', value: formatContractDate(contract.rental_end_date, true) },
-    ...(extended ? [{ label: 'ต่อสัญญาถึง', value: formatContractDate(contract.current_end_date, true) }] : []),
+    { label: 'เริ่มสัญญา', value: formatContractDate(contract.rental_start_date, true), tone: 'is-date-start' },
+    {
+      label: 'สิ้นสุดสัญญา',
+      value: formatContractDate(contract.rental_end_date, true),
+      tone: extended ? 'is-date-old' : 'is-date-end',
+    },
+    ...(extended ? [{ label: 'ต่อสัญญาถึง', value: formatContractDate(contract.current_end_date, true), tone: 'is-date-renew' }] : []),
     { label: 'ระยะเวลาทั้งหมด', value: totalDays === null ? '-' : `${totalDays} วัน` },
     { label: 'ผ่านไปแล้ว', value: usedDays === null ? '-' : `${usedDays} วัน` },
     { label: 'เหลืออีก', value: formatDaysLeft(daysLeft), tone: daysLeft !== null && daysLeft <= 30 ? 'is-warning' : 'is-accent' },
     { label: 'ค่าเช่า/เดือน', value: formatContractMoney(contract.monthly_price) },
+    {
+      label: 'เงินมัดจำ',
+      value: formatDepositSummary(contract),
+    },
+    { label: 'ชำระเดือนแรก', value: formatContractMoney(contract.first_month_total), tone: 'is-accent' },
+    {
+      label: 'สถานะสัญญา',
+      value: (CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.active).label,
+      tone: contract.status === 'active' ? 'is-accent' : ['awaiting_payment', 'payment_review'].includes(contract.status) ? 'is-warning' : undefined,
+    },
   ]
+  const depositStatus = contract.deposit_status
+  const depositStatusLabel = DEPOSIT_STATUS_LABEL[depositStatus]
 
   return (
     <>
@@ -889,6 +1163,15 @@ function CustomerContractBody({ contract }) {
       <div className="ccc-grid">
         <div className="ccc-pane">
           <h3>รายละเอียดสัญญา</h3>
+          <ContractFirstPaymentNote contract={contract} viewer={viewer} />
+          <DepositRefundNote contract={contract} viewer={viewer} />
+          {viewer === 'customer' && <DepositEarlyLeaveWarning contract={contract} />}
+          <ContractMonthTrack
+            start={contract.rental_start_date}
+            end={contract.effective_end_date || contract.current_end_date || contract.rental_end_date}
+            originalEnd={extended ? contract.rental_end_date : null}
+            now={now}
+          />
           <dl className="ccc-rows">
             {rows.map((row) => (
               <div key={row.label} className={row.tone}>
@@ -906,20 +1189,25 @@ function CustomerContractBody({ contract }) {
               <span>ค่าเช่า {formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0}</span>
               <strong>{formatContractMoney(contract.contract_total)}</strong>
             </div>
-            <div className="is-deduct">
-              <span>หักมัดจำ</span>
-              <strong>− {formatContractMoney(contract.deposit_applied)}</strong>
-            </div>
             <div className="is-paid">
               <span>ชำระแล้ว</span>
               <strong>− {formatContractMoney(contract.rent_paid)}</strong>
             </div>
             <div className="is-total">
-              <span>คงเหลือตามสัญญา</span>
+              <span>ค่าเช่าที่เหลือ{remainingRentMonthsLabel(contract)}</span>
               <strong>{formatContractMoney(contract.contract_remaining)}</strong>
             </div>
-            <ThisMonthRent thisMonth={contract.this_month ?? null} contract={contract} />
-            <p>เดือนแรกหลังหักมัดจำ {formatContractMoney(contract.first_month_remaining)} · มัดจำหักครั้งเดียว</p>
+            {Number(contract.deposit_amount) > 0 && (
+              <div className={`ccc-bill-deposit is-${depositStatus || 'none'}`}>
+                <span>
+                  เงินมัดจำ {formatDepositMonths(contract)}
+                  {depositStatusLabel && <em>{depositStatusLabel}</em>}
+                </span>
+                <strong>{formatContractMoney(contract.deposit_amount)}</strong>
+              </div>
+            )}
+            <ThisMonthRent thisMonth={contract.this_month ?? null} contract={contract} viewer={viewer} />
+            <p>เงินมัดจำ {formatDepositMonths(contract)} {formatContractMoney(contract.deposit_amount || 0)} ชำระพร้อมค่าห้องเดือนแรก · เดือนแรก {formatContractMoney(contract.first_month_total)}</p>
           </div>
         </div>
         <div className="ccc-pane ccc-gallery-pane">

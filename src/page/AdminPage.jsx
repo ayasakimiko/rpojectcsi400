@@ -11,7 +11,8 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import { ContractCell, ContractDetail } from '../components/RentalContract.jsx'
+import { ContractCell, ContractDetail, ContractFirstPaymentNote, ContractMonthTrack, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
+import { DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -1774,7 +1775,9 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
   const [now] = useState(() => Date.now())
   const payments = (rentalHistory || []).flatMap((booking) => booking.payments || [])
   const paidTotal = payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-  const outstanding = payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length
+  const outstanding =
+    payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length +
+    (contract?.deposit_status === 'due' ? 1 : 0)
   const movedOut = Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date
   const facts = [
     { icon: 'phone', label: 'เบอร์โทร', value: customer.phone ? <a href={`tel:${customer.phone}`}>{customer.phone}</a> : '-' },
@@ -1788,7 +1791,11 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
         </button>
       ),
     },
-    { icon: 'wallet', label: 'เงินมัดจำ', value: customer.deposit_amount != null ? `฿${formatCurrency(customer.deposit_amount)}` : '-' },
+    {
+      icon: 'wallet',
+      label: 'เงินมัดจำ',
+      value: formatDepositSummary(contract ?? { deposit_amount: customer.deposit_amount }),
+    },
   ]
   const registeredAt = customer.registered_at || customer.created_at
   const contractStart = customer.rental_start_date ? new Date(customer.rental_start_date) : null
@@ -3591,7 +3598,14 @@ function RoomTenantHistory({ tenants, roomNumber, loading, error, onRetry, onOpe
           <div className="tenant-history-list">
             {filtered.map((tenant) => {
               const status = describeTenantStatus(tenant, roomNumber)
-              const stay = formatStayLength(tenant.rental_start_date, tenant.rental_end_date)
+              const tenantContract = tenant.contract
+              const effectiveEnd = tenantContract?.effective_end_date || tenant.rental_end_date
+              const tenantExtended = Boolean(
+                tenantContract?.rental_end_date
+                && effectiveEnd
+                && new Date(effectiveEnd).getTime() > new Date(tenantContract.rental_end_date).getTime(),
+              )
+              const stay = formatStayLength(tenant.rental_start_date, effectiveEnd)
               const request = tenant.last_request
               const totalPayments = tenant.payments.paid.count + tenant.payments.pending.count + tenant.payments.overdue.count
               return (
@@ -3604,7 +3618,12 @@ function RoomTenantHistory({ tenants, roomNumber, loading, error, onRetry, onOpe
                     <span className="tenant-card-avatar" aria-hidden="true"><PersonIcon size={20} /></span>
                     <div className="tenant-card-name">
                       <strong>{tenant.first_name} {tenant.last_name}</strong>
-                      <span className={`tenant-card-status is-${status.tone}`}>{status.label}</span>
+                      <span className="tenant-card-badges">
+                        <span className={`tenant-card-status is-${status.tone}`}>{status.label}</span>
+                        {tenantContract && ['awaiting_payment', 'payment_review', 'ended_early', 'expired'].includes(tenantContract.status) && (
+                          <ContractStatusBadge status={tenantContract.status} />
+                        )}
+                      </span>
                     </div>
                     {tenant.phone && (
                       <a className="room-detail-row-phone" href={`tel:${tenant.phone}`}>
@@ -3615,7 +3634,7 @@ function RoomTenantHistory({ tenants, roomNumber, loading, error, onRetry, onOpe
                   </header>
 
                   <div className="tenant-card-period">
-                    <div>
+                    <div className="is-start">
                       <span>เริ่มสัญญา</span>
                       <strong>{formatDate(tenant.rental_start_date || tenant.created_at)}</strong>
                     </div>
@@ -3623,19 +3642,40 @@ function RoomTenantHistory({ tenants, roomNumber, loading, error, onRetry, onOpe
                       <line x1="4" y1="12" x2="20" y2="12" />
                       <polyline points="14 6 20 12 14 18" />
                     </svg>
-                    <div>
-                      <span>สิ้นสุดสัญญา</span>
-                      <strong>{formatDate(tenant.rental_end_date)}</strong>
-                    </div>
+                    {tenantExtended ? (
+                      <div className="is-renew">
+                        <span>ต่อสัญญาถึง</span>
+                        <strong>{formatDate(effectiveEnd)}</strong>
+                        <small>สิ้นสุดเดิม <s>{formatDate(tenantContract.rental_end_date)}</s></small>
+                      </div>
+                    ) : (
+                      <div className="is-end">
+                        <span>สิ้นสุดสัญญา</span>
+                        <strong>{formatDate(effectiveEnd)}</strong>
+                      </div>
+                    )}
                     {stay && <span className="room-detail-chip is-stay"><RoomDetailIcon type="clock" size={11} />อยู่ {stay}</span>}
                   </div>
 
                   <dl className="tenant-card-facts">
                     <div><dt>อายุ</dt><dd>{tenant.age ? `${tenant.age} ปี` : '-'}</dd></div>
-                    <div><dt>เงินมัดจำ</dt><dd>{tenant.deposit_amount != null ? `฿${formatCurrency(tenant.deposit_amount)}` : '-'}</dd></div>
+                    <div>
+                      <dt>เงินมัดจำ</dt>
+                      <dd>
+                        {Number(tenant.deposit_amount) > 0
+                          ? `฿${formatCurrency(tenant.deposit_amount)}${tenantContract ? ` (${formatDepositMonths(tenantContract)})` : ''}`
+                          : 'ไม่มีมัดจำ'}
+                        {tenantContract && DEPOSIT_STATUS_LABEL[tenantContract.deposit_status] && (
+                          <small className={`room-detail-deposit-status is-${tenantContract.deposit_status}`}>
+                            {DEPOSIT_STATUS_LABEL[tenantContract.deposit_status]}
+                          </small>
+                        )}
+                      </dd>
+                    </div>
                     <div><dt>ลงทะเบียนเมื่อ</dt><dd>{formatDate(tenant.registered_at)}</dd></div>
                     <div><dt>ทำสัญญาเมื่อ</dt><dd>{formatDate(tenant.created_at)}</dd></div>
                   </dl>
+                  {tenantContract?.deposit_refund && <DepositRefundNote contract={tenantContract} compact />}
 
                   <div className="tenant-card-payments">
                     <div className="tenant-card-payments-head">
@@ -3868,6 +3908,12 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
   const data = detail?.room ? { ...room, ...detail.room } : room
   const tenant = detail ? detail.tenant : room.customer_id ? { first_name: room.first_name, last_name: room.last_name, phone: room.phone } : null
   const contract = describeContract(data.rental_start_date, data.rental_end_date, now)
+  const roomContract = detail?.contract ?? null
+  const roomExtended = Boolean(
+    roomContract?.rental_end_date
+    && data.rental_end_date
+    && new Date(data.rental_end_date).getTime() > new Date(roomContract.rental_end_date).getTime(),
+  )
   const heroTone = !data.is_booked
     ? 'vacant'
     : contract?.tone === 'danger'
@@ -3971,7 +4017,17 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
               {detail?.tenant && (
                 <dl className="room-detail-facts">
                   <div><dt>อายุ</dt><dd>{tenant.age ? `${tenant.age} ปี` : '-'}</dd></div>
-                  <div><dt>เงินมัดจำ</dt><dd>{tenant.deposit_amount != null ? `฿${formatCurrency(tenant.deposit_amount)}` : '-'}</dd></div>
+                  <div>
+                    <dt>เงินมัดจำ</dt>
+                    <dd>
+                      {Number(tenant.deposit_amount) > 0 ? `฿${formatCurrency(tenant.deposit_amount)}` : 'ไม่มีมัดจำ'}
+                      {roomContract && DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
+                        <small className={`room-detail-deposit-status is-${roomContract.deposit_status}`}>
+                          {formatDepositMonths(roomContract)} · {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
+                        </small>
+                      )}
+                    </dd>
+                  </div>
                   <div><dt>ลงทะเบียนเมื่อ</dt><dd>{formatDate(tenant.created_at)}</dd></div>
                 </dl>
               )}
@@ -3988,32 +4044,77 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
         </section>
 
         <section className="room-detail-section">
-          <h4><RoomDetailIcon type="calendar" size={17} />สัญญาเช่า</h4>
+          <h4 className="room-detail-contract-title">
+            <RoomDetailIcon type="calendar" size={17} />สัญญาเช่า
+            {roomContract && <ContractStatusBadge status={roomContract.status} />}
+          </h4>
           {data.rental_start_date || data.rental_end_date ? (
             <>
+              {roomContract && <ContractFirstPaymentNote contract={roomContract} />}
+              {roomContract && <DepositRefundNote contract={roomContract} />}
               <div className="room-detail-contract-dates">
-                <div><span>เริ่มสัญญา</span><strong>{formatDate(data.rental_start_date)}</strong></div>
+                <div className="is-start"><span>เริ่มสัญญา</span><strong>{formatDate(data.rental_start_date)}</strong></div>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="4" y1="12" x2="20" y2="12" />
                   <polyline points="14 6 20 12 14 18" />
                 </svg>
-                <div><span>สิ้นสุดสัญญา</span><strong>{formatDate(data.rental_end_date)}</strong></div>
+                {roomExtended ? (
+                  <div className="is-renew">
+                    <span>ต่อสัญญาถึง</span>
+                    <strong>{formatDate(data.rental_end_date)}</strong>
+                    <small>สิ้นสุดเดิม <s>{formatDate(roomContract.rental_end_date)}</s></small>
+                  </div>
+                ) : (
+                  <div className="is-end"><span>สิ้นสุดสัญญา</span><strong>{formatDate(data.rental_end_date)}</strong></div>
+                )}
               </div>
-              {contract && contract.tone !== 'danger' && (
-                <div className={`room-detail-progress is-${contract.tone}`}>
-                  <div className="room-detail-progress-track">
-                    <span style={{ width: `${contract.percent}%` }} />
-                  </div>
-                  <div className="room-detail-progress-meta">
-                    <span>ผ่านไป {Math.round(contract.percent)}%</span>
-                    <strong>{contract.label}</strong>
-                  </div>
-                </div>
+              {contract && (
+                <ContractMonthTrack
+                  start={data.rental_start_date}
+                  end={data.rental_end_date}
+                  originalEnd={roomExtended ? roomContract.rental_end_date : null}
+                  now={now}
+                />
               )}
               <dl className="room-detail-facts">
-                <div><dt>ระยะสัญญา</dt><dd>{data.rental_duration_months ? `${data.rental_duration_months} เดือน` : '-'}</dd></div>
-                <div><dt>ชำระล่วงหน้าถึง</dt><dd>{formatDate(data.prepaid_until)}</dd></div>
-                {data.pending_lump_sum_months ? <div><dt>รอชำระก้อน</dt><dd>{data.pending_lump_sum_months} เดือน</dd></div> : null}
+                <div>
+                  <dt>ระยะสัญญา</dt>
+                  <dd>
+                    {data.rental_duration_months ? `${data.rental_duration_months} เดือน` : '-'}
+                    {roomExtended && <small className="room-detail-fact-note">รวมที่ต่อสัญญาแล้ว</small>}
+                  </dd>
+                </div>
+                <div><dt>ค่าเช่า/เดือน</dt><dd>฿{formatCurrency(data.price)} · รายเดือน</dd></div>
+                {roomContract && (
+                  <>
+                    <div>
+                      <dt>เงินมัดจำ</dt>
+                      <dd>
+                        {Number(roomContract.deposit_amount) > 0
+                          ? `฿${formatCurrency(roomContract.deposit_amount)} (${formatDepositMonths(roomContract)})`
+                          : 'ไม่มีมัดจำ'}
+                        {DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
+                          <small className={`room-detail-deposit-status is-${roomContract.deposit_status}`}>
+                            {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
+                          </small>
+                        )}
+                      </dd>
+                    </div>
+                    <div><dt>งวดแรก (ค่าห้อง + มัดจำ)</dt><dd>฿{formatCurrency(roomContract.first_month_total)}</dd></div>
+                    <div>
+                      <dt>ค่าเช่าที่เหลือ</dt>
+                      <dd className="is-remaining">
+                        ฿{formatCurrency(roomContract.contract_remaining)}
+                        {Number(roomContract.monthly_price) > 0 && (
+                          <small className="room-detail-fact-note">
+                            {Math.ceil(Math.round((roomContract.contract_remaining / roomContract.monthly_price) * 100) / 100)} เดือน
+                          </small>
+                        )}
+                      </dd>
+                    </div>
+                  </>
+                )}
+                {data.prepaid_until && <div><dt>ชำระล่วงหน้าถึง</dt><dd>{formatDate(data.prepaid_until)}</dd></div>}
               </dl>
             </>
           ) : (
@@ -9091,7 +9192,7 @@ function AdminBackupPage() {
               { icon: 'user', label: 'ชื่อผู้เช่า', value: `${request.first_name || ''} ${request.last_name || ''}`.trim() || '-' },
               { icon: 'phone', label: 'เบอร์โทร', value: request.phone ? <a className="maintenance-detail-tel" href={`tel:${request.phone}`}>{request.phone}</a> : '-' },
               { icon: 'door', label: 'ห้องปัจจุบัน', value: `ห้อง ${request.room_number}` },
-              { icon: 'wallet', label: 'เงินประกัน', value: request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-' },
+              { icon: 'wallet', label: 'เงินมัดจำ', value: request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-' },
             ]
             const requestFacts = [
               { icon: 'calendar', label: 'วันที่ส่งคำขอ', value: formatDateTime(request.created_at) },

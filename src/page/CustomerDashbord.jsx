@@ -21,6 +21,7 @@ import readSlipQrPayload from '../utils/slipQr.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
+import { addContractMonths } from '../utils/rentalContract.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -400,7 +401,7 @@ function SlipDropZone({ id, file, onChange, onError }) {
 
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
-  deposit: 'เงินประกัน',
+  deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
 }
@@ -801,15 +802,7 @@ const RENEW_DURATION_OPTIONS = [
   { value: '12', label: '1 ปี (12 เดือน)' },
 ]
 
-const RENEW_PAYMENT_TYPE_OPTIONS = [
-  { value: 'monthly', label: 'จ่ายรายเดือน' },
-  { value: 'lump_sum', label: 'จ่ายล่วงหน้าทั้งก้อน' },
-]
-
 const RENEW_DURATION_LABEL = Object.fromEntries(RENEW_DURATION_OPTIONS.map((option) => [option.value, option.label]))
-const RENEW_PAYMENT_TYPE_LABEL = Object.fromEntries(
-  RENEW_PAYMENT_TYPE_OPTIONS.map((option) => [option.value, option.label]),
-)
 
 const MOVE_ROOM_REASON_OPTIONS = [
   { value: 'room_problem', label: 'ห้องเดิมมีปัญหา/ชำรุด' },
@@ -1167,6 +1160,68 @@ function StatusAlert({ content }) {
   )
 }
 
+function contractMonthsBetween(startValue, endValue) {
+  const start = startValue ? new Date(startValue) : null
+  const end = endValue ? new Date(endValue) : null
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null
+  return Math.max(1, Math.round((end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()))
+}
+
+function RenewContractPreview({ room, months, depositAmount }) {
+  const currentEnd = room.rental_end_date
+  const newEnd = addContractMonths(currentEnd, months)
+  const currentMonths = contractMonthsBetween(room.rental_start_date, currentEnd)
+  const newMonths = currentMonths == null ? null : currentMonths + months
+  const price = Number(room.price) || 0
+  const deposit = Number(depositAmount) || 0
+  const depositMonths = price > 0 && deposit > 0 && Number.isInteger(deposit / price) ? deposit / price : null
+  const rows = [
+    { label: 'วันเริ่มสัญญา', before: formatDate(room.rental_start_date), after: formatDate(room.rental_start_date) },
+    { label: 'วันสิ้นสุดสัญญา', before: formatDate(currentEnd), after: formatDate(newEnd), changed: true },
+    {
+      label: 'ระยะสัญญารวม',
+      before: currentMonths == null ? '-' : `${currentMonths} เดือน`,
+      after: newMonths == null ? `+${months} เดือน` : `${newMonths} เดือน`,
+      changed: true,
+    },
+    { label: 'ค่าเช่า', before: `฿${formatCurrency(price)}/เดือน`, after: `฿${formatCurrency(price)}/เดือน` },
+    { label: 'การชำระ', before: 'รายเดือน', after: 'รายเดือน' },
+    {
+      label: 'เงินมัดจำ',
+      before: deposit > 0 ? `฿${formatCurrency(deposit)}${depositMonths ? ` (${depositMonths} เดือน)` : ''}` : 'ไม่มี',
+      after: deposit > 0 ? 'ยังอยู่ครบ' : 'ไม่มี',
+    },
+  ]
+  return (
+    <div className="dashboard-renew-preview">
+      <div className="dashboard-renew-preview-head">
+        <span>รายละเอียด</span>
+        <span>สัญญาตอนนี้</span>
+        <span>หลังต่อสัญญา</span>
+      </div>
+      {rows.map((row) => (
+        <div key={row.label} className={`dashboard-renew-preview-row${row.changed ? ' is-changed' : ''}`}>
+          <span>{row.label}</span>
+          <span>{row.before}</span>
+          <strong>{row.after}</strong>
+        </div>
+      ))}
+      <ul className="dashboard-renew-preview-notes">
+        <li>ต่อจากวันสิ้นสุดเดิม {formatDate(currentEnd)} อีก {months} เดือน ไม่เริ่มนับสัญญาใหม่</li>
+        <li>ช่วงที่ต่อชำระค่าเช่ารายเดือนตามปกติ ฿{formatCurrency(price)}/เดือน ไม่มีค่าใช้จ่ายเพิ่มตอนต่อสัญญา</li>
+        {deposit > 0 ? (
+          <li className="is-deposit">
+            เงินมัดจำ ฿{formatCurrency(deposit)} ยังอยู่กับหอพัก ไม่ต้องจ่ายเพิ่ม และจะคืนให้เมื่อพักครบถึง {formatDate(newEnd)}
+            {' '}— หากย้ายออกก่อนวันดังกล่าว จะไม่ได้รับเงินมัดจำคืน
+          </li>
+        ) : (
+          <li>สัญญานี้ไม่มีเงินมัดจำ</li>
+        )}
+      </ul>
+    </div>
+  )
+}
+
 function TenantRequestDetailCard({ request, roomNumber }) {
   return (
     <div className="dashboard-maintenance-detail-card">
@@ -1219,18 +1274,58 @@ function TenantRequestDetailCard({ request, roomNumber }) {
           )}
         </>
       )}
-      {request.type === 'renew' && (
-        <>
-          <div className="dashboard-maintenance-detail-row">
-            <span>ระยะเวลาที่ขอต่อ</span>
-            <strong>{RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}</strong>
-          </div>
-          <div className="dashboard-maintenance-detail-row">
-            <span>รูปแบบการชำระ</span>
-            <strong>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</strong>
-          </div>
-        </>
-      )}
+      {request.type === 'renew' && (() => {
+        const waiting = ['pending', 'in_progress'].includes(request.status)
+        const currentEnd = request.source_rental_end_date
+        const newEnd = waiting && currentEnd ? addContractMonths(currentEnd, Number(request.renew_duration_months)) : null
+        const hasDeposit = Number(request.deposit_amount) > 0
+        return (
+          <>
+            <div className="dashboard-maintenance-detail-row">
+              <span>ระยะเวลาที่ขอต่อ</span>
+              <strong className="is-accent">+{RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}</strong>
+            </div>
+            {currentEnd && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>{waiting ? 'สิ้นสุดสัญญาเดิม' : 'สิ้นสุดสัญญาปัจจุบัน'}</span>
+                <strong className={waiting ? 'is-old' : 'is-accent'}>{formatDate(currentEnd)}</strong>
+              </div>
+            )}
+            {newEnd && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>สิ้นสุดสัญญาใหม่ (หลังอนุมัติ)</span>
+                <strong className="is-success">{formatDate(newEnd)}</strong>
+              </div>
+            )}
+            <div className="dashboard-maintenance-detail-row">
+              <span>รูปแบบการชำระ</span>
+              <strong>
+                จ่ายรายเดือน
+                {request.source_room_price != null && (
+                  <span className="dashboard-detail-money"> · ฿{formatCurrency(request.source_room_price)}/เดือน</span>
+                )}
+              </strong>
+            </div>
+            {hasDeposit && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>เงินมัดจำ</span>
+                <strong className="is-success">฿{formatCurrency(request.deposit_amount)} · ยังอยู่ครบ</strong>
+              </div>
+            )}
+            <p className="dashboard-renew-summary">
+              <strong>ต่อจากวันสิ้นสุดสัญญาเดิม</strong> ไม่เริ่มนับใหม่ · ช่วงที่ต่อชำระ<strong>ค่าเช่ารายเดือนตามปกติ</strong>{' '}
+              <span className="is-good">ไม่เก็บมัดจำเพิ่ม</span>
+              {hasDeposit && (
+                <>
+                  {' '}· <span className="is-alert">
+                    หากย้ายออกก่อนวันสิ้นสุดสัญญา{newEnd ? `ใหม่ (${formatDate(newEnd)})` : ''} จะไม่ได้รับเงินมัดจำ ฿{formatCurrency(request.deposit_amount)} คืน
+                  </span>
+                </>
+              )}
+            </p>
+          </>
+        )
+      })()}
       <div className="dashboard-maintenance-detail-row">
         <span>วันที่ส่งคำขอ</span>
         <strong>{formatDateTime(request.created_at)}</strong>
@@ -2895,8 +2990,15 @@ function getRequestDetail(kind, request) {
     if (kind === 'renew') {
       fields.push(
         ['ระยะเวลาที่ขอต่อ', RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`],
-        ['รูปแบบการชำระ', RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type],
+        ['รูปแบบการชำระ', `จ่ายรายเดือน${request.source_room_price != null ? ` · ฿${formatCurrency(request.source_room_price)}/เดือน` : ''}`],
       )
+      if (request.source_rental_end_date) {
+        const waiting = ['pending', 'in_progress'].includes(request.status)
+        fields.push([waiting ? 'สิ้นสุดสัญญาเดิม' : 'สิ้นสุดสัญญาปัจจุบัน', formatDate(request.source_rental_end_date)])
+        if (waiting) {
+          fields.push(['สิ้นสุดสัญญาใหม่ (หลังอนุมัติ)', formatDate(addContractMonths(request.source_rental_end_date, Number(request.renew_duration_months)))])
+        }
+      }
     }
     if (kind === 'move_room') {
       fields.push(['ห้องที่ย้ายไป', request.target_room_number])
@@ -4070,7 +4172,6 @@ function CustomerDashbord() {
   const [activeRequestType, setActiveRequestType] = useState(null)
   const [requestNote, setRequestNote] = useState('')
   const [renewDurationMonths, setRenewDurationMonths] = useState(RENEW_DURATION_OPTIONS[2].value)
-  const [renewPaymentType, setRenewPaymentType] = useState(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
   const [targetRoomNumber, setTargetRoomNumber] = useState('')
   const [moveReason, setMoveReason] = useState('')
   const [preferredMoveDate, setPreferredMoveDate] = useState('')
@@ -4500,7 +4601,6 @@ function CustomerDashbord() {
       max: new Date(today.getFullYear(), today.getMonth(), today.getDate() + MOVE_ROOM_MAX_DAYS_AHEAD),
     })
     setRenewDurationMonths(RENEW_DURATION_OPTIONS[2].value)
-    setRenewPaymentType(RENEW_PAYMENT_TYPE_OPTIONS[0].value)
     setRequestError('')
   }
 
@@ -4535,7 +4635,7 @@ function CustomerDashbord() {
       const payload = { type: activeRequestType, note: requestNote.trim() || undefined }
       if (activeRequestType === 'renew') {
         payload.renew_duration_months = Number(renewDurationMonths)
-        payload.renew_payment_type = renewPaymentType
+        payload.renew_payment_type = 'monthly'
       }
       if (activeRequestType === 'move_room') {
         payload.target_room_number = Number(targetRoomNumber)
@@ -4552,6 +4652,9 @@ function CustomerDashbord() {
       if (err.response?.data?.code === 'TENANT_REQUEST_ACTIVE') {
         setBlockedRequestPopup({ message: err.response.data.message, type: activeRequestType })
         setActiveRequestType(null)
+        loadDashboard()
+      } else if (err.response?.data?.code === 'RENEW_OUTSTANDING') {
+        setRequestError(err.response.data.message)
         loadDashboard()
       } else {
         setRequestError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -4808,6 +4911,7 @@ function CustomerDashbord() {
 
   const latestRequestByType = (type) => tenantRequests.find((request) => request.type === type)
   const renewRequest = latestRequestByType('renew')
+  const renewOutstanding = Number(data?.outstanding?.amount) || 0
   const moveoutRequest = latestRequestByType('moveout')
   const moveRoomRequest = latestRequestByType('move_room')
 
@@ -5013,12 +5117,23 @@ function CustomerDashbord() {
     maintenanceCurrentPage * MAINTENANCE_PAGE_SIZE,
   )
 
-  const currentDueRentItem = currentDue?.items?.find((item) => item.type === 'rent')
+  const currentDueRentItem = currentDue?.items?.find((item) => item.type === 'rent' && item.status !== 'pending')
+  const currentDueDepositItem = currentDue?.items?.find((item) => item.type === 'deposit' && item.status !== 'pending')
   const rentalHistoryWithDue =
-    currentDueRentItem && rentalHistory.length > 0
+    (currentDueRentItem || currentDueDepositItem) && rentalHistory.length > 0
       ? rentalHistory.map((entry, index) => {
           if (index !== 0) return entry
-          const pendingRentPayment = {
+          const pendingDepositPayment = currentDueDepositItem && {
+            id: `due-deposit-${entry.booking_id}`,
+            booking_id: entry.booking_id,
+            created_at: currentDue.dueDate || currentDue.periodStart || entry.rental_start_date,
+            payment_date: currentDue.dueDate || currentDue.periodStart || entry.rental_start_date,
+            type: 'deposit',
+            amount: currentDueDepositItem.amount,
+            status: 'pending',
+            note: `เงินมัดจำ ชำระครั้งเดียวพร้อมค่าเช่าเดือนแรก${currentDue.monthlyPrice ? ` (${Math.round(currentDueDepositItem.amount / currentDue.monthlyPrice)} เดือน × ฿${formatCurrency(currentDue.monthlyPrice)})` : ''}`,
+          }
+          const pendingRentPayment = currentDueRentItem && {
             id: `due-rent-${entry.booking_id}`,
             booking_id: entry.booking_id,
             created_at: currentDue.dueDate || currentDue.periodStart,
@@ -5028,9 +5143,9 @@ function CustomerDashbord() {
             status: currentDueRentItem.status === 'overdue' ? 'overdue' : 'pending',
             note: [
               currentDue.firstPeriod
-                ? currentDue.depositApplied > 0
-                  ? `ค่าเช่าเดือนแรก ฿${formatCurrency(currentDue.monthlyPrice)} หักมัดจำ ฿${formatCurrency(currentDue.depositApplied)}`
-                  : 'ค่าเช่าเดือนแรกหลังลงทะเบียน (ไม่มีเงินมัดจำ)'
+                ? currentDue.depositAmount > 0
+                  ? `ค่าเช่าเดือนแรก · ชำระพร้อมเงินมัดจำ รวม ฿${formatCurrency(currentDueRentItem.amount + currentDue.depositAmount)}`
+                  : 'ค่าเช่าเดือนแรกหลังลงทะเบียน'
                 : currentDue.periodStart && currentDue.periodEnd
                   ? `รอบบิล ${formatDate(currentDue.periodStart)} – ${formatDate(currentDue.periodEnd)}`
                   : null,
@@ -5038,7 +5153,7 @@ function CustomerDashbord() {
               currentDue.lumpSumMonths ? `จ่ายล่วงหน้า ${currentDue.lumpSumMonths} เดือน` : null,
             ].filter(Boolean).join(' · ') || null,
           }
-          return { ...entry, payments: [pendingRentPayment, ...entry.payments] }
+          return { ...entry, payments: [pendingDepositPayment, pendingRentPayment, ...entry.payments].filter(Boolean) }
         })
       : rentalHistory
 
@@ -7120,9 +7235,9 @@ function CustomerDashbord() {
                               ))}
                             </div>
                           )}
-                          {currentDue.depositApplied > 0 && (
+                          {currentDue.depositAmount > 0 && (
                             <p className="dashboard-due-deposit-note is-deposit-applied">
-                              หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
+                              รวมเงินมัดจำ ฿{formatCurrency(currentDue.depositAmount)} ชำระครั้งเดียวพร้อมค่าห้องเดือนแรก
                             </p>
                           )}
                           {currentDue.overdueMonths > 0 && (
@@ -7337,10 +7452,12 @@ function CustomerDashbord() {
                         <div data-customer-focus="tenant-renew" className={`dashboard-request-row${renewRequest && RENEW_STATUS_POPUP_CONTENT[renewRequest.status] ? ' has-detail-link' : ''}`}>
                           <div className="dashboard-request-info">
                             <p className="dashboard-request-title">ต่อสัญญา</p>
-                            <p className="dashboard-request-desc">
-                              {(!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
+                            <p className={`dashboard-request-desc${canResubmitRenew && renewOutstanding > 0 ? ' is-warning' : ''}`}>
+                              {(canResubmitRenew && renewOutstanding > 0
+                                && `มียอดค้างชำระ ฿${formatCurrency(renewOutstanding)} (${data.outstanding.items.map((item) => item.label).join(', ')}) กรุณาชำระก่อนต่อสัญญา`)
+                                || (!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
                                 || (renewRequest?.status === 'pending'
-                                  ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · ${RENEW_PAYMENT_TYPE_LABEL[renewRequest.renew_payment_type] || renewRequest.renew_payment_type}`
+                                  ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · จ่ายรายเดือน`
                                   : 'ขอต่ออายุสัญญาเช่าห้องนี้เมื่อใกล้ครบกำหนด')}
                             </p>
                           </div>
@@ -7351,6 +7468,10 @@ function CustomerDashbord() {
                               onClick={() => setStatusPopup({ kind: 'renew', status: renewRequest.status, request: renewRequest })}
                             >
                               {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
+                            </button>
+                          ) : renewOutstanding > 0 ? (
+                            <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
+                              ชำระยอดค้าง
                             </button>
                           ) : (
                             <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
@@ -7457,35 +7578,20 @@ function CustomerDashbord() {
                             {activeRequestType === 'renew' && (
                               <>
                                 <label>ระยะเวลาที่ต้องการต่อ</label>
-                                <select
-                                  value={renewDurationMonths}
-                                  onChange={(event) => {
-                                    const value = event.target.value
-                                    setRenewDurationMonths(value)
-                                    if (Number(value) <= 1 && renewPaymentType === 'lump_sum') {
-                                      setRenewPaymentType('monthly')
-                                    }
-                                  }}
-                                >
+                                <select value={renewDurationMonths} onChange={(event) => setRenewDurationMonths(event.target.value)}>
                                   {RENEW_DURATION_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>
                                       {option.label}
                                     </option>
                                   ))}
                                 </select>
-                                <label>รูปแบบการชำระ</label>
-                                <select
-                                  value={renewPaymentType}
-                                  onChange={(event) => setRenewPaymentType(event.target.value)}
-                                >
-                                  {RENEW_PAYMENT_TYPE_OPTIONS.filter(
-                                    (option) => option.value !== 'lump_sum' || Number(renewDurationMonths) > 1,
-                                  ).map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                {room?.rental_end_date && (
+                                  <RenewContractPreview
+                                    room={room}
+                                    months={Number(renewDurationMonths)}
+                                    depositAmount={data?.customer?.deposit_amount}
+                                  />
+                                )}
                               </>
                             )}
                             {activeRequestType === 'move_room' && (
