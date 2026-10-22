@@ -8346,55 +8346,6 @@ tr.admin-focus-flash.is-fading > td {
   color: #b45309;
 }
 
-.room-detail-progress {
-  --room-progress: #16a34a;
-  --room-progress-soft: #dcfce7;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.room-detail-progress.is-warning {
-  --room-progress: #d97706;
-  --room-progress-soft: #fef3c7;
-}
-
-.room-detail-progress-track {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #eef3fa;
-}
-
-.room-detail-progress-track > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--room-progress);
-  transition: width 0.4s ease;
-}
-
-.room-detail-progress-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11.5px;
-}
-
-.room-detail-progress-meta span {
-  color: #6b859e;
-  font-weight: 600;
-}
-
-.room-detail-progress-meta strong {
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--room-progress-soft);
-  color: var(--room-progress);
-  font-weight: 700;
-}
-
 .room-detail-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

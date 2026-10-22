@@ -11,7 +11,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import { ContractCell, ContractDetail, ContractFirstPaymentNote, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
+import { ContractCell, ContractDetail, ContractFirstPaymentNote, ContractMonthTrack, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
 import { DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
@@ -4047,16 +4047,13 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                   <div className="is-end"><span>สิ้นสุดสัญญา</span><strong>{formatDate(data.rental_end_date)}</strong></div>
                 )}
               </div>
-              {contract && contract.tone !== 'danger' && (
-                <div className={`room-detail-progress is-${contract.tone}`}>
-                  <div className="room-detail-progress-track">
-                    <span style={{ width: `${contract.percent}%` }} />
-                  </div>
-                  <div className="room-detail-progress-meta">
-                    <span>ผ่านไป {Math.round(contract.percent)}%</span>
-                    <strong>{contract.label}</strong>
-                  </div>
-                </div>
+              {contract && (
+                <ContractMonthTrack
+                  start={data.rental_start_date}
+                  end={data.rental_end_date}
+                  originalEnd={roomExtended ? roomContract.rental_end_date : null}
+                  now={now}
+                />
               )}
               <dl className="room-detail-facts">
                 <div>

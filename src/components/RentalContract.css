@@ -756,7 +756,37 @@
 }
 
 .contract-cell-text b {
-  color: #2563eb;
+  color: #15803d;
+}
+
+.contract-cell-tag {
+  margin-left: 5px;
+  padding: 0 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.contract-cell-deposit {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.contract-cell-deposit.is-paid {
+  color: #15803d;
+}
+
+.contract-cell-deposit.is-pending {
+  color: #b45309;
+}
+
+.contract-cell-deposit.is-due {
+  color: #b42318;
 }
 
 .contract-cell-thumb {
@@ -2606,4 +2636,148 @@
     flex-direction: column;
     text-align: center;
   }
+}
+
+.ccc-pane > .contract-months {
+  flex-shrink: 0;
+}
+
+.contract-months {
+  --months-tone: #15803d;
+  --months-soft: #dcfce7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.contract-months.is-warning {
+  --months-tone: #b45309;
+  --months-soft: #fef3c7;
+}
+
+.contract-months.is-danger {
+  --months-tone: #b42318;
+  --months-soft: #fee2e2;
+}
+
+.contract-months-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contract-months-head small {
+  display: block;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.contract-months-head strong {
+  color: #0f2b52;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.contract-months-head strong span {
+  color: #8aa0b6;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.contract-months-left {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--months-tone) 30%, transparent);
+  border-radius: 999px;
+  background: var(--months-soft);
+  color: var(--months-tone);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.contract-months-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contract-months-track li {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.contract-months-track li.is-done {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.contract-months-track li.is-current {
+  border: 2px solid #2563eb;
+  background: #2563eb;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+  color: #fff;
+}
+
+.contract-months-track li.is-next.is-renewed {
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.contract-months-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.contract-months-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.contract-months-legend span::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  background: #f1f5f9;
+}
+
+.contract-months-legend .is-done::before {
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.contract-months-legend .is-current::before {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.contract-months-legend .is-renewed::before {
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
 }
