@@ -23,7 +23,9 @@ import {
   computeCurrentDue,
   createSafetyIncident,
   isPlateRegisteredByOther,
+  loadCustomerOutstanding,
   loadDepositPayments,
+  RENEW_OUTSTANDING_MESSAGE,
   withThisMonthRent,
   withVehiclePhotos,
 } from "./CustomerDashboardRouter.js";
@@ -926,7 +928,7 @@ router.get("/requests", async (req, res) => {
     const pool = getPool();
 
     const [[tenantRequests], [maintenanceRequests]] = await Promise.all([pool.query(
-      `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
+      `SELECT tr.id, tr.customer_id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
               moi.id AS inspection_id, moi.status AS inspection_status, moi.reviewed_at AS inspection_reviewed_at,
@@ -953,7 +955,13 @@ router.get("/requests", async (req, res) => {
        ORDER BY mr.created_at ASC`,
     )]);
 
-    return res.json({ tenantRequests, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
+    const tenantRequestsWithOutstanding = await Promise.all(
+      tenantRequests.map(async (request) =>
+        request.type === "renew" ? { ...request, outstanding: await loadCustomerOutstanding(pool, request.customer_id) } : request,
+      ),
+    );
+
+    return res.json({ tenantRequests: tenantRequestsWithOutstanding, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
   } catch (error) {
     console.error("Fetch staff requests error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -1153,17 +1161,20 @@ router.post("/requests/:id/approve", async (req, res) => {
     }
 
     if (tenantRequest.type === "renew") {
+      const outstanding = await loadCustomerOutstanding(connection, tenantRequest.customer_id);
+      if (outstanding.amount > 0) {
+        await connection.rollback();
+        return res.status(409).json({ code: "RENEW_OUTSTANDING", message: RENEW_OUTSTANDING_MESSAGE(outstanding.amount), outstanding });
+      }
       const durationMonths = tenantRequest.renew_duration_months;
-      const paymentType = tenantRequest.renew_payment_type;
 
       await connection.query(
         `UPDATE Room
          SET
            rental_end_date = DATE_ADD(rental_end_date, INTERVAL ? MONTH),
-           rental_duration_months = TIMESTAMPDIFF(MONTH, rental_start_date, rental_end_date),
-           pending_lump_sum_months = IF(? = 'lump_sum', ?, pending_lump_sum_months)
+           rental_duration_months = TIMESTAMPDIFF(MONTH, rental_start_date, rental_end_date)
          WHERE room_number = ?`,
-        [durationMonths, paymentType, durationMonths, tenantRequest.room_number],
+        [durationMonths, tenantRequest.room_number],
       );
     }
 

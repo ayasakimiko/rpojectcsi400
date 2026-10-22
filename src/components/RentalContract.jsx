@@ -55,6 +55,14 @@ function ContractLightbox({ images, index, title, subtitle, onClose }) {
   )
 }
 
+function remainingRentMonthsLabel(contract) {
+  const price = Number(contract?.monthly_price) || 0
+  const remaining = Number(contract?.contract_remaining) || 0
+  if (price <= 0) return ''
+  const months = Math.ceil(Math.round((remaining / price) * 100) / 100)
+  return ` (${months} เดือน)`
+}
+
 export function ContractStatusBadge({ status }) {
   const info = CONTRACT_STATUS[status] || CONTRACT_STATUS.active
   return <span className={`contract-status is-${info.tone}`}>{info.label}</span>
@@ -356,6 +364,24 @@ const STAFF_CARD_STATUS = {
   ended_early: { label: 'ออกก่อนสัญญา', tone: 'is-unpaid' },
 }
 const STAFF_CARD_PHOTOS = 4
+
+export function DepositEarlyLeaveWarning({ contract }) {
+  if (!contract || !(Number(contract.deposit_amount) > 0)) return null
+  if (['ended', 'ended_early', 'expired'].includes(contract.status)) return null
+  const endValue = contract.current_end_date || contract.rental_end_date
+  return (
+    <div className="contract-refund-note is-warning" role="note">
+      <ContractIcon type="wallet" size={18} />
+      <span>
+        <strong>ย้ายออกก่อนสัญญาหมด จะไม่ได้รับเงินมัดจำคืน</strong>
+        <small>
+          เงินมัดจำ {formatContractMoney(contract.deposit_amount)} ({formatDepositMonths(contract)}) จะคืนให้เมื่อพักอยู่ครบสัญญาถึง {formatContractDate(endValue)}
+          {' '}หากย้ายออกก่อนวันดังกล่าว ทางหอพักจะไม่คืนเงินมัดจำ
+        </small>
+      </span>
+    </div>
+  )
+}
 
 export function DepositRefundNote({ contract, viewer = 'staff', compact = false }) {
   if (!contract?.deposit_refund) return null
@@ -885,7 +911,7 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
                 <dd>− {formatContractMoney(contract.rent_paid)}</dd>
               </div>
               <div className="is-total">
-                <dt>คงเหลือตามสัญญา</dt>
+                <dt>ค่าเช่าที่เหลือ{remainingRentMonthsLabel(contract)}</dt>
                 <dd>{formatContractMoney(contract.contract_remaining)}</dd>
               </div>
             </dl>
@@ -1008,9 +1034,13 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
   const rows = [
     { label: 'ผู้เช่า', value: `${contract.first_name} ${contract.last_name}` },
     { label: 'ระยะสัญญา', value: formatContractLength(contract) },
-    { label: 'เริ่มสัญญา', value: formatContractDate(contract.rental_start_date, true) },
-    { label: 'สิ้นสุดสัญญา', value: formatContractDate(contract.rental_end_date, true) },
-    ...(extended ? [{ label: 'ต่อสัญญาถึง', value: formatContractDate(contract.current_end_date, true) }] : []),
+    { label: 'เริ่มสัญญา', value: formatContractDate(contract.rental_start_date, true), tone: 'is-date-start' },
+    {
+      label: 'สิ้นสุดสัญญา',
+      value: formatContractDate(contract.rental_end_date, true),
+      tone: extended ? 'is-date-old' : 'is-date-end',
+    },
+    ...(extended ? [{ label: 'ต่อสัญญาถึง', value: formatContractDate(contract.current_end_date, true), tone: 'is-date-renew' }] : []),
     { label: 'ระยะเวลาทั้งหมด', value: totalDays === null ? '-' : `${totalDays} วัน` },
     { label: 'ผ่านไปแล้ว', value: usedDays === null ? '-' : `${usedDays} วัน` },
     { label: 'เหลืออีก', value: formatDaysLeft(daysLeft), tone: daysLeft !== null && daysLeft <= 30 ? 'is-warning' : 'is-accent' },
@@ -1051,6 +1081,7 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
           <h3>รายละเอียดสัญญา</h3>
           <ContractFirstPaymentNote contract={contract} viewer={viewer} />
           <DepositRefundNote contract={contract} viewer={viewer} />
+          {viewer === 'customer' && <DepositEarlyLeaveWarning contract={contract} />}
           <dl className="ccc-rows">
             {rows.map((row) => (
               <div key={row.label} className={row.tone}>
@@ -1073,12 +1104,15 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
               <strong>− {formatContractMoney(contract.rent_paid)}</strong>
             </div>
             <div className="is-total">
-              <span>คงเหลือตามสัญญา</span>
+              <span>ค่าเช่าที่เหลือ{remainingRentMonthsLabel(contract)}</span>
               <strong>{formatContractMoney(contract.contract_remaining)}</strong>
             </div>
             {Number(contract.deposit_amount) > 0 && (
-              <div className={depositStatus === 'paid' ? 'is-paid' : ''}>
-                <span>เงินมัดจำ {formatDepositMonths(contract)}{depositStatusLabel ? ` · ${depositStatusLabel}` : ''}</span>
+              <div className={`ccc-bill-deposit is-${depositStatus || 'none'}`}>
+                <span>
+                  เงินมัดจำ {formatDepositMonths(contract)}
+                  {depositStatusLabel && <em>{depositStatusLabel}</em>}
+                </span>
                 <strong>{formatContractMoney(contract.deposit_amount)}</strong>
               </div>
             )}

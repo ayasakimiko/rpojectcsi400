@@ -77,9 +77,17 @@ const dayKey = (value) => {
   return Number.isNaN(date.getTime()) ? null : date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
 };
 
+function effectiveEndDate(contract) {
+  const ends = [contract.current_end_date, contract.latest_end_date, contract.rental_end_date]
+    .map((value) => (value ? new Date(value) : null))
+    .filter((date) => date && !Number.isNaN(date.getTime()));
+  return ends.length ? new Date(Math.max(...ends.map((date) => date.getTime()))) : null;
+}
+
 function movedOutEarly(contract, now) {
   const movedOut = dayKey(contract.moved_out_at ?? now);
-  const end = contract.rental_end_date ? dayKey(contract.rental_end_date) : null;
+  const endDate = effectiveEndDate(contract);
+  const end = endDate ? dayKey(endDate) : null;
   return movedOut !== null && end !== null && movedOut < end;
 }
 
@@ -93,8 +101,7 @@ function depositRefund(status, depositPaidCents) {
 function contractStatus(contract, now, firstPayment) {
   if (contract.is_suspended || contract.room_number_current == null) return movedOutEarly(contract, now) ? "ended_early" : "ended";
   const start = contract.rental_start_date ? new Date(contract.rental_start_date) : null;
-  const endValue = contract.current_end_date ?? contract.rental_end_date;
-  const end = endValue ? new Date(endValue) : null;
+  const end = effectiveEndDate(contract);
   if (end && end < now) return "expired";
   if (firstPayment === "pending") return "payment_review";
   if (firstPayment === "due") return "awaiting_payment";
@@ -127,7 +134,8 @@ function withDepositBreakdown(row, now, rentPaidCents, deposit = { paidCents: 0,
   const priceCents = Math.max(0, Math.round(Number(row.monthly_price) * 100) || 0);
   const depositRaw = row.deposit_amount == null ? null : Number(row.deposit_amount);
   const depositCents = Math.max(0, Math.round((depositRaw || 0) * 100));
-  const totalPeriods = countBillingPeriods(row.rental_start_date, row.rental_end_date);
+  const endDate = effectiveEndDate(row);
+  const totalPeriods = countBillingPeriods(row.rental_start_date, endDate);
   const contractTotalCents = priceCents * totalPeriods;
   const paidCents = Math.max(0, rentPaidCents || 0);
   const depositState = depositStatus(depositCents, deposit);
@@ -138,9 +146,11 @@ function withDepositBreakdown(row, now, rentPaidCents, deposit = { paidCents: 0,
   const status = contractStatus(row, now, firstPayment);
   const depositPaidCents = Math.min(depositCents, deposit.paidCents);
   const { room_number_current, ...contract } = row;
+  delete contract.latest_end_date;
   return {
     ...contract,
     current_room_number: room_number_current,
+    effective_end_date: endDate,
     contract_duration_months: contract.contract_duration_months == null ? null : Number(contract.contract_duration_months),
     monthly_price: priceCents / 100,
     deposit_amount: depositRaw,
@@ -167,7 +177,8 @@ const CONTRACT_COLUMNS = `
   b.contract_duration_months IS NOT NULL AS duration_selected,
   c.deposit_amount, b.contract_completed_at, b.created_at,
   (SELECT MAX(tr.completed_at) FROM TenantRequest tr
-    WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved') AS moved_out_at`;
+    WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved') AS moved_out_at,
+  (SELECT MAX(b2.rental_end_date) FROM Booking b2 WHERE b2.customer_id = b.customer_id) AS latest_end_date`;
 
 const CONTRACT_JOINS = `
   FROM Booking b
@@ -178,48 +189,52 @@ const CONTRACT_JOINS = `
 async function attachContractImages(pool, contracts, now) {
   if (contracts.length === 0) return [];
   const bookingIds = contracts.map((contract) => contract.booking_id);
+  const customerIds = [...new Set(contracts.map((contract) => contract.customer_id))];
   const [[images], [paidRows], [depositRows]] = await Promise.all([
     pool.query(`SELECT booking_id, name, url FROM ContractImage WHERE booking_id IN (?) ORDER BY id ASC`, [bookingIds]),
     pool.query(
-      `SELECT booking_id, amount, status FROM Payment
-       WHERE booking_id IN (?) AND status IN ('paid', 'pending') AND (type IS NULL OR type NOT IN ('deposit', 'water', 'electricity'))`,
-      [bookingIds],
+      `SELECT pb.customer_id, p.amount, p.status FROM Payment p
+       JOIN Booking pb ON pb.id = p.booking_id
+       WHERE pb.customer_id IN (?) AND p.status IN ('paid', 'pending')
+         AND (p.type IS NULL OR p.type NOT IN ('deposit', 'water', 'electricity'))`,
+      [customerIds],
     ),
     pool.query(
-      `SELECT booking_id, amount, status FROM Payment
-       WHERE booking_id IN (?) AND type = 'deposit' AND status IN ('paid', 'pending')`,
-      [bookingIds],
+      `SELECT pb.customer_id, p.amount, p.status FROM Payment p
+       JOIN Booking pb ON pb.id = p.booking_id
+       WHERE pb.customer_id IN (?) AND p.type = 'deposit' AND p.status IN ('paid', 'pending')`,
+      [customerIds],
     ),
   ]);
-  const depositByBooking = new Map();
-  for (const { booking_id, amount, status } of depositRows) {
-    const entry = depositByBooking.get(booking_id) ?? { paidCents: 0, pending: false };
+  const depositByCustomer = new Map();
+  for (const { customer_id, amount, status } of depositRows) {
+    const entry = depositByCustomer.get(customer_id) ?? { paidCents: 0, pending: false };
     const cents = Math.round(Number(amount) * 100);
     if (status === "paid" && Number.isSafeInteger(cents)) entry.paidCents += cents;
     if (status === "pending" && cents > 0) entry.pending = true;
-    depositByBooking.set(booking_id, entry);
+    depositByCustomer.set(customer_id, entry);
   }
   const imagesByBooking = new Map();
   for (const { booking_id, name, url } of images) {
     imagesByBooking.set(booking_id, [...(imagesByBooking.get(booking_id) ?? []), { name, url }]);
   }
-  const paidByBooking = new Map();
-  const rentPendingBookings = new Set();
-  for (const { booking_id, amount, status } of paidRows) {
+  const paidByCustomer = new Map();
+  const rentPendingCustomers = new Set();
+  for (const { customer_id, amount, status } of paidRows) {
     const cents = Math.round(Number(amount) * 100);
     if (status === "pending") {
-      if (cents > 0) rentPendingBookings.add(booking_id);
+      if (cents > 0) rentPendingCustomers.add(customer_id);
       continue;
     }
-    if (Number.isSafeInteger(cents)) paidByBooking.set(booking_id, (paidByBooking.get(booking_id) ?? 0) + cents);
+    if (Number.isSafeInteger(cents)) paidByCustomer.set(customer_id, (paidByCustomer.get(customer_id) ?? 0) + cents);
   }
   return contracts.map((row) => {
     const contract = withDepositBreakdown(
       row,
       now,
-      paidByBooking.get(row.booking_id) ?? 0,
-      depositByBooking.get(row.booking_id),
-      rentPendingBookings.has(row.booking_id),
+      paidByCustomer.get(row.customer_id) ?? 0,
+      depositByCustomer.get(row.customer_id),
+      rentPendingCustomers.has(row.customer_id),
     );
     const contractImages = imagesByBooking.get(row.booking_id) ?? [];
     return { ...contract, duration_selected: Boolean(row.duration_selected), images: contractImages, image_count: contractImages.length };

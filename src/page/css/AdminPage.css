@@ -8288,6 +8288,64 @@ tr.admin-focus-flash.is-fading > td {
   font-weight: 800;
 }
 
+.room-detail-contract-dates > .is-start strong {
+  color: #15803d;
+}
+
+.room-detail-contract-dates > .is-end strong {
+  color: #c2410c;
+}
+
+.room-detail-contract-dates > .is-renew {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.room-detail-contract-dates > .is-renew strong {
+  color: #1d4ed8;
+}
+
+.room-detail-contract-dates > .is-renew small {
+  color: #8aa0b6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.room-detail-contract-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-detail-contract-title > .contract-status {
+  margin-left: auto;
+}
+
+.room-detail-deposit-status,
+.room-detail-fact-note {
+  display: block;
+  margin-top: 2px;
+  color: #8aa0b6;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.room-detail-deposit-status.is-paid {
+  color: #15803d;
+}
+
+.room-detail-deposit-status.is-pending {
+  color: #b45309;
+}
+
+.room-detail-deposit-status.is-due {
+  color: #b42318;
+}
+
+.room-detail-facts dd.is-remaining {
+  color: #b45309;
+}
+
 .room-detail-progress {
   --room-progress: #16a34a;
   --room-progress-soft: #dcfce7;
@@ -10476,6 +10534,36 @@ tr.admin-focus-flash.is-fading > td {
   color: #0f2b52;
   font-size: 13.5px;
   font-weight: 800;
+}
+
+.tenant-card-period > .is-start strong {
+  color: #15803d;
+}
+
+.tenant-card-period > .is-end strong {
+  color: #c2410c;
+}
+
+.tenant-card-period > .is-renew {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.tenant-card-period > .is-renew strong {
+  color: #1d4ed8;
+}
+
+.tenant-card-period > .is-renew small {
+  color: #8aa0b6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tenant-card-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .tenant-card-facts {

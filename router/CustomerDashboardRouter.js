@@ -413,6 +413,37 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount, depos
   };
 }
 
+export function outstandingFromDue(currentDue) {
+  const items = (currentDue?.items ?? []).filter(
+    (item) => item.status !== "pending" && !(item.type === "rent" && item.status === "due"),
+  );
+  const amount = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0) / 100;
+  return { amount, items: items.map(({ type, label, amount: itemAmount, status }) => ({ type, label, amount: itemAmount, status })) };
+}
+
+export async function loadCustomerOutstanding(db, customerId) {
+  const [customerRows] = await db.query(`SELECT id, room_number, deposit_amount FROM Customer WHERE id = ?`, [customerId]);
+  const customer = customerRows[0];
+  if (!customer?.room_number) return { amount: 0, items: [] };
+  const [[roomRows], [bookingRows]] = await Promise.all([
+    db.query(
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+      [customer.room_number],
+    ),
+    db.query(`SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, [customer.id]),
+  ]);
+  if (!bookingRows[0]) return { amount: 0, items: [] };
+  const [[payments], depositPayments] = await Promise.all([
+    db.query(`SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ?`, [bookingRows[0].id]),
+    loadDepositPayments(db, [customer.id]),
+  ]);
+  const currentDue = computeCurrentDue(roomRows[0], payments, customer.deposit_amount, depositPayments.get(customer.id) ?? []);
+  return outstandingFromDue(currentDue);
+}
+
+export const RENEW_OUTSTANDING_MESSAGE = (amount) =>
+  `มียอดค้างชำระ ฿${amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} กรุณาชำระยอดค้างให้เรียบร้อยก่อนต่อสัญญา`;
+
 router.get("/me", async (req, res) => {
   try {
     const pool = getPool();
@@ -470,6 +501,8 @@ router.get("/me", async (req, res) => {
                 tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
                 tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
                 sr.price AS source_room_price, tg.price AS target_room_price,
+                sr.rental_end_date AS source_rental_end_date,
+                (SELECT cu.deposit_amount FROM Customer cu WHERE cu.id = tr.customer_id) AS deposit_amount,
                 (moi.id IS NOT NULL) AS room_inspected
          FROM TenantRequest tr
          LEFT JOIN Room sr ON sr.room_number = tr.room_number
@@ -535,6 +568,7 @@ router.get("/me", async (req, res) => {
       tenantRequests,
       announcements,
       currentDue,
+      outstanding: outstandingFromDue(currentDue),
       parcels: parcelsWithPhotos,
     });
   } catch (error) {
@@ -1056,6 +1090,18 @@ router.post("/requests", async (req, res) => {
     if (activeRequests.some((request) => request.type === type)) {
       await connection.rollback();
       return res.status(409).json({ code: "TENANT_REQUEST_ACTIVE", message: "คุณมีคำขอประเภทนี้ที่รอดำเนินการอยู่แล้ว" });
+    }
+
+    if (type === "renew") {
+      const outstanding = await loadCustomerOutstanding(connection, customer.id);
+      if (outstanding.amount > 0) {
+        await connection.rollback();
+        return res.status(409).json({
+          code: "RENEW_OUTSTANDING",
+          message: RENEW_OUTSTANDING_MESSAGE(outstanding.amount),
+          outstanding,
+        });
+      }
     }
 
     if (type === "move_room") {

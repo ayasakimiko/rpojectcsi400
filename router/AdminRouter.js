@@ -534,9 +534,12 @@ router.get("/rooms/:room_number/detail", async (req, res) => {
       [roomNumberValue],
     );
 
+    const contracts = tenant ? await loadCustomerContracts(pool, [tenant.id]) : new Map();
+
     return res.json({
       room,
       tenant,
+      contract: tenant ? contracts.get(tenant.id) ?? null : null,
       payments,
       history,
       maintenance,
@@ -637,6 +640,25 @@ router.get("/rooms/:room_number/tenants", async (req, res) => {
       if (!latestBookingByCustomer.has(booking.customer_id)) latestBookingByCustomer.set(booking.customer_id, booking.booking_id);
     }
 
+    const contracts = await loadCustomerContracts(pool, customerIds);
+    const contractSummary = (customerId) => {
+      const contract = contracts.get(customerId);
+      if (!contract) return null;
+      return {
+        status: contract.status,
+        rental_end_date: contract.rental_end_date,
+        effective_end_date: contract.effective_end_date,
+        monthly_price: contract.monthly_price,
+        deposit_amount: contract.deposit_amount,
+        deposit_months: contract.deposit_months,
+        deposit_status: contract.deposit_status,
+        deposit_paid: contract.deposit_paid,
+        deposit_refund: contract.deposit_refund,
+        first_month_total: contract.first_month_total,
+        contract_remaining: contract.contract_remaining,
+      };
+    };
+
     const tenants = bookings.map((booking) => {
       const payments = { paid: { count: 0, total: 0 }, pending: { count: 0, total: 0 }, overdue: { count: 0, total: 0 } };
       let lastPaymentDate = null;
@@ -655,6 +677,7 @@ router.get("/rooms/:room_number/tenants", async (req, res) => {
       return {
         ...booking,
         is_current: isCurrent,
+        contract: contractSummary(booking.customer_id),
         payments,
         last_payment_date: lastPaymentDate,
         maintenance: { total: Number(maintenance?.total ?? 0), open: Number(maintenance?.open_count ?? 0) },

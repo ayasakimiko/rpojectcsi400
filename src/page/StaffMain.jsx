@@ -27,6 +27,7 @@ import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import { StaffCompletedContracts } from '../components/RentalContract.jsx'
+import { addContractMonths } from '../utils/rentalContract.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1936,6 +1937,13 @@ const RENEW_NEXT_STEP = {
 
 function RenewRequestBody({ request }) {
   const nextStep = RENEW_NEXT_STEP[request.status]
+  const isOpen = ['pending', 'in_progress'].includes(request.status)
+  const months = Number(request.renew_duration_months) || 0
+  const currentEnd = request.source_rental_end_date
+  const newEnd = isOpen && currentEnd ? addContractMonths(currentEnd, months) : null
+  const price = Number(request.source_room_price) || 0
+  const deposit = Number(request.deposit_amount) || 0
+  const outstanding = Number(request.outstanding?.amount) || 0
   return (
     <>
       <div className="staff-req-route">
@@ -1954,12 +1962,41 @@ function RenewRequestBody({ request }) {
             label: 'ระยะเวลา',
             value: RENEW_DURATION_LABEL[request.renew_duration_months] || (request.renew_duration_months ? `${request.renew_duration_months} เดือน` : '-'),
           },
+          ...(currentEnd
+            ? [{
+                key: 'end',
+                icon: 'calendar',
+                label: newEnd ? 'สิ้นสุดสัญญา' : 'สิ้นสุดปัจจุบัน',
+                value: newEnd ? (
+                  <span className="staff-req-renew-end">
+                    <s>{formatDate(currentEnd)}</s>
+                    <span aria-hidden="true">→</span>
+                    <b>{formatDate(newEnd)}</b>
+                  </span>
+                ) : formatDate(currentEnd),
+              }]
+            : []),
           {
             key: 'payment',
             icon: 'wallet',
             label: 'การชำระเงิน',
-            value: RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type || '-',
+            value: `รายเดือน${price ? ` · ฿${formatCurrency(price)}` : ''}`,
           },
+          ...(isOpen
+            ? [{
+                key: 'outstanding',
+                icon: 'info',
+                label: 'ยอดค้าง',
+                value: (
+                  <span className={`staff-req-renew-due ${outstanding > 0 ? 'is-danger' : 'is-success'}`}>
+                    {outstanding > 0 ? `฿${formatCurrency(outstanding)} · ต้องชำระก่อน` : 'ไม่มี'}
+                  </span>
+                ),
+              }]
+            : []),
+          ...(deposit > 0
+            ? [{ key: 'deposit', icon: 'wallet', label: 'เงินมัดจำ', value: `฿${formatCurrency(deposit)} · ยังอยู่ครบ` }]
+            : []),
         ]}
       />
     </>
@@ -2431,6 +2468,99 @@ function ParcelDetailModal({ parcel, onPreviewPhoto, onClose }) {
   )
 }
 
+function RenewRequestOverview({ request, contractEnd, contractMsLeft, isOpen }) {
+  const months = Number(request.renew_duration_months) || 0
+  const price = Number(request.source_room_price) || 0
+  const deposit = Number(request.deposit_amount) || 0
+  const depositMonths = price > 0 && deposit > 0 && Number.isInteger(deposit / price) ? deposit / price : null
+  const newEnd = isOpen && contractEnd ? addContractMonths(contractEnd, months) : null
+  const outstanding = Number(request.outstanding?.amount) || 0
+  const expiringSoon = contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS
+  const rows = [
+    { label: 'วันสิ้นสุดสัญญา', before: formatDate(contractEnd), after: newEnd ? formatDate(newEnd) : '-', changed: true },
+    { label: 'ค่าเช่า', before: price ? `฿${formatCurrency(price)}/เดือน` : '-', after: price ? `฿${formatCurrency(price)}/เดือน` : '-' },
+    { label: 'การชำระ', before: 'รายเดือน', after: 'รายเดือน' },
+    {
+      label: 'เงินมัดจำ',
+      before: deposit > 0 ? `฿${formatCurrency(deposit)}${depositMonths ? ` (${depositMonths} เดือน)` : ''}` : 'ไม่มี',
+      after: deposit > 0 ? 'ยังอยู่ครบ' : 'ไม่มี',
+    },
+  ]
+  return (
+    <div className="staff-renew-overview">
+      {isOpen && (
+        <div className="staff-renew-stats">
+          <div className={outstanding > 0 ? 'is-danger' : 'is-success'}>
+            <small>ยอดค้างชำระ</small>
+            <strong>{outstanding > 0 ? `฿${formatCurrency(outstanding)}` : 'ไม่มี'}</strong>
+          </div>
+          <div className={expiringSoon ? 'is-warning' : ''}>
+            <small>สัญญาเหลือ</small>
+            <strong>{contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}</strong>
+          </div>
+          <div className="is-accent">
+            <small>ขอต่อ</small>
+            <strong>{RENEW_DURATION_LABEL[request.renew_duration_months] || `${months} เดือน`}</strong>
+          </div>
+        </div>
+      )}
+
+      {isOpen && contractEnd && (
+        <div className="staff-renew-compare">
+          <div className="staff-renew-compare-head">
+            <span>รายละเอียด</span>
+            <span>สัญญาตอนนี้</span>
+            <span>หลังอนุมัติ</span>
+          </div>
+          {rows.map((row) => (
+            <div key={row.label} className={`staff-renew-compare-row${row.changed ? ' is-changed' : ''}`}>
+              <span>{row.label}</span>
+              <span>{row.before}</span>
+              <strong>{row.after}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {outstanding > 0 && isOpen && (
+        <ul className="staff-renew-outstanding-list">
+          {request.outstanding.items.map((item, index) => (
+            <li key={`${item.type}-${index}`}>
+              <span>{item.label}{item.status === 'overdue' ? ' · เกินกำหนด' : ''}</span>
+              <b>฿{formatCurrency(item.amount)}</b>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <dl className="staff-renew-info">
+        <div>
+          <dt>ระยะที่ขอต่อ</dt>
+          <dd>{RENEW_DURATION_LABEL[request.renew_duration_months] || `${months} เดือน`}</dd>
+        </div>
+        <div>
+          <dt>การชำระ</dt>
+          <dd>รายเดือน</dd>
+        </div>
+        <div>
+          <dt>ส่งคำขอ</dt>
+          <dd>{formatDateTime(request.created_at)}</dd>
+        </div>
+        <div>
+          <dt>สถานะ</dt>
+          <dd>{TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}</dd>
+        </div>
+      </dl>
+
+      {deposit > 0 && isOpen && (
+        <p className="staff-renew-deposit-note">
+          เงินมัดจำ ฿{formatCurrency(deposit)} ยังอยู่ ไม่เก็บเพิ่ม · คืนเมื่อผู้เช่าพักครบถึง {newEnd ? formatDate(newEnd) : 'วันสิ้นสุดใหม่'} · ริบหากออกก่อน
+        </p>
+      )}
+    </div>
+  )
+}
+
 function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
   const isMove = request.type === 'move_room'
   const isOpen = ['pending', 'in_progress'].includes(request.status)
@@ -2565,6 +2695,17 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
               </div>
             )}
 
+            {request.type === 'renew' ? (
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">ผู้เช่าและคำขอ</h4>
+                <RenewRequestOverview request={request} contractEnd={contractEnd} contractMsLeft={contractMsLeft} isOpen={isOpen} />
+                {request.note && (
+                  <p className="staff-transfer-note">
+                    <span>หมายเหตุ:</span> {request.note}
+                  </p>
+                )}
+              </section>
+            ) : (
             <section className="staff-transfer-section">
               <h4 className="staff-transfer-section-title">ผู้เช่าและคำขอ</h4>
               <div className="staff-transfer-columns">
@@ -2653,20 +2794,6 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                         </dd>
                       </div>
                     )}
-                    {request.type === 'renew' && (
-                      <>
-                        <div>
-                          <dt>ขอต่อ</dt>
-                          <dd>
-                            {RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>การชำระ</dt>
-                          <dd>{RENEW_PAYMENT_TYPE_LABEL[request.renew_payment_type] || request.renew_payment_type}</dd>
-                        </div>
-                      </>
-                    )}
                     <div>
                       <dt>ส่งคำขอ</dt>
                       <dd>{formatDateTime(request.created_at)}</dd>
@@ -2684,6 +2811,7 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                 </p>
               )}
             </section>
+            )}
 
             {hasTargetDetails && (
               <section className="staff-transfer-section">
@@ -7156,7 +7284,13 @@ function StaffMain() {
     if (!renewApproveConfirm) return
     const success = await handleApproveTenantRequest(renewApproveConfirm)
     if (success) setRenewApproveConfirm(null)
+    else loadRequests()
   }
+
+  const renewOutstandingAmount = renewApproveConfirm?.type === 'renew' ? Number(renewApproveConfirm.outstanding?.amount) || 0 : 0
+  const renewOutstandingRoom = renewOutstandingAmount > 0
+    ? rooms.find((room) => String(room.room_number) === String(renewApproveConfirm.room_number))
+    : null
 
   const handleConfirmMoveoutAcknowledge = async () => {
     if (!moveoutAcknowledgeConfirm) return
@@ -7491,7 +7625,7 @@ function StaffMain() {
       )
       setActionSuccess(data.message || 'บันทึกการเก็บเงินสำเร็จ')
       setCollectRoom(null)
-      await loadRooms()
+      await Promise.all([loadRooms(), loadRequests()])
     } catch (err) {
       setCollectError(err.response?.data?.message || 'บันทึกการเก็บเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
@@ -12284,19 +12418,47 @@ function StaffMain() {
                   <strong>{renewApproveConfirm.note || '-'}</strong>
                 </div>
               </div>
+              {renewOutstandingAmount > 0 && (
+                <div className="staff-renew-outstanding" role="alert">
+                  <strong>มียอดค้างชำระ ฿{formatCurrency(renewOutstandingAmount)} · ต้องชำระก่อนอนุมัติต่อสัญญา</strong>
+                  <ul>
+                    {renewApproveConfirm.outstanding.items.map((item, index) => (
+                      <li key={`${item.type}-${index}`}>
+                        <span>{item.label}{item.status === 'overdue' ? ' (เกินกำหนด)' : ''}</span>
+                        <b>฿{formatCurrency(item.amount)}</b>
+                      </li>
+                    ))}
+                  </ul>
+                  <small>ให้ผู้เช่าชำระผ่านระบบ หรือกดเก็บเงินสดด้านล่าง แล้วกลับมาอนุมัติอีกครั้ง</small>
+                </div>
+              )}
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
                 </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
-                  onClick={handleConfirmRenewApproval}
-                >
-                  {processingRequestKey === `tenant-${renewApproveConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
-                </button>
+                {renewOutstandingAmount > 0 ? (
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    disabled={!renewOutstandingRoom}
+                    onClick={() => {
+                      setRenewApproveConfirm(null)
+                      openCollect(renewOutstandingRoom)
+                    }}
+                  >
+                    เก็บเงินสดยอดค้าง
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    disabled={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
+                    onClick={handleConfirmRenewApproval}
+                  >
+                    {processingRequestKey === `tenant-${renewApproveConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
+                  </button>
+                )}
               </div>
             </div>
           )}
