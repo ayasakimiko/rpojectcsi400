@@ -257,18 +257,20 @@ export function ContractDetail({ contract, showPerson = false }) {
         </div>
         <ContractStatusBadge status={contract.status} />
       </div>
-      <ContractFirstPaymentNote contract={contract} />
+      {!contract.is_archived && <ContractFirstPaymentNote contract={contract} />}
       <DepositRefundNote contract={contract} />
-      <ContractMonthTrack
-        start={contract.rental_start_date}
-        end={contract.effective_end_date || contract.current_end_date || contract.rental_end_date}
-        originalEnd={
-          contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
-            ? contract.rental_end_date
-            : null
-        }
-        now={now}
-      />
+      {!contract.is_archived && (
+        <ContractMonthTrack
+          start={contract.rental_start_date}
+          end={contract.effective_end_date || contract.current_end_date || contract.rental_end_date}
+          originalEnd={
+            contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
+              ? contract.rental_end_date
+              : null
+          }
+          now={now}
+        />
+      )}
       <ContractFacts contract={contract} />
       <ContractFirstMonth contract={contract} />
       <section className="contract-detail-images">
@@ -467,12 +469,37 @@ export function DepositEarlyLeaveWarning({ contract }) {
   )
 }
 
+function SettledDepositNote({ contract, viewer, compact }) {
+  const refunded = contract.deposit_settlement === 'refunded'
+  const deduction = Number(contract.deposit_deduction) || 0
+  const title = refunded
+    ? viewer === 'customer'
+      ? `ได้รับเงินมัดจำคืนแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
+      : `คืนเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
+    : `ริบเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_paid)}`
+  const parts = [
+    refunded && deduction > 0 ? `หักค่าเสียหาย ${formatContractMoney(deduction)}` : null,
+    compact ? null : contract.deposit_settlement_note,
+    `${compact ? '' : 'บันทึกโดย '}${contract.deposit_settled_by_name || '-'} · ${formatContractDate(contract.deposit_settled_at)}`,
+  ].filter(Boolean)
+  return (
+    <span className={`contract-refund-note ${refunded ? 'is-refund' : 'is-forfeit'} is-settled${compact ? ' is-compact' : ''}`} role="note">
+      <ContractIcon type="check" size={compact ? 14 : 18} />
+      <span>
+        <strong>{title}</strong>
+        <small>{parts.join(' · ')}</small>
+      </span>
+    </span>
+  )
+}
+
 export function DepositRefundNote({ contract, viewer = 'staff', compact = false }) {
+  if (contract?.deposit_settlement) return <SettledDepositNote contract={contract} viewer={viewer} compact={compact} />
   if (!contract?.deposit_refund) return null
   const amount = formatContractMoney(contract.deposit_paid)
   const refund = contract.deposit_refund === 'refund'
   const title = refund
-    ? viewer === 'customer' ? `ได้รับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
+    ? viewer === 'customer' ? `รอรับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
     : 'ไม่ต้องคืนเงินมัดจำ'
   const detail = refund
     ? contract.status === 'expired'
@@ -543,6 +570,17 @@ function ContractPeriodTimeline({ contract, now, endLabel = 'สิ้นสุ�
   )
 }
 
+export function ArchivedContractBadge({ contract }) {
+  return (
+    <span
+      className="contract-archived-badge"
+      title={contract.has_newer_contract ? 'ผู้เช่าคนนี้ทำสัญญาใหม่แล้ว สัญญานี้เก็บไว้เป็นประวัติ' : 'สัญญานี้สิ้นสุดแล้ว เก็บไว้เป็นประวัติ'}
+    >
+      {contract.has_newer_contract ? 'สัญญาเก่า · มีสัญญาใหม่แล้ว' : 'สัญญาเก่า'}
+    </span>
+  )
+}
+
 function StaffContractCard({ contract, onOpen }) {
   const [openIndex, setOpenIndex] = useState(null)
   const [now] = useState(() => Date.now())
@@ -551,7 +589,7 @@ function StaffContractCard({ contract, onOpen }) {
   const tenantName = `${contract.first_name || ''} ${contract.last_name || ''}`.trim() || '-'
   const extra = images.length - STAFF_CARD_PHOTOS
   return (
-    <li className={`csc-card is-${contract.status}`}>
+    <li className={`csc-card is-${contract.status}${contract.is_archived ? ' is-archived' : ''}`}>
       <button type="button" className="csc-main" onClick={onOpen} aria-label={`ดูสัญญาห้อง ${contract.room_number}`}>
         <span className="csc-head">
           <span className="csc-room">
@@ -562,7 +600,10 @@ function StaffContractCard({ contract, onOpen }) {
             <strong title={tenantName}>{tenantName}</strong>
             <small>{contract.phone || '-'}</small>
           </span>
-          <span className={`csc-status ${status.tone}`}>{status.label}</span>
+          <span className="csc-badges">
+            {contract.is_archived && <ArchivedContractBadge contract={contract} />}
+            <span className={`csc-status ${status.tone}`}>{status.label}</span>
+          </span>
         </span>
 
         <span className="csc-period">
@@ -628,11 +669,37 @@ function StaffContractCard({ contract, onOpen }) {
   )
 }
 
-export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
+const COMPLETED_CONTRACT_SORTS = [
+  { value: 'newest', label: 'ทำสัญญาล่าสุดก่อน' },
+  { value: 'oldest', label: 'ทำสัญญาเก่าสุดก่อน' },
+  { value: 'ending', label: 'ใกล้หมดสัญญาก่อน' },
+  { value: 'room', label: 'เรียงตามเลขห้อง' },
+]
+
+const contractDayKey = (value) => {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+const contractTime = (value) => (value ? new Date(value).getTime() : 0)
+
+const COMPLETED_CONTRACT_SORTERS = {
+  newest: (a, b) => contractTime(b.contract_completed_at) - contractTime(a.contract_completed_at),
+  oldest: (a, b) => contractTime(a.contract_completed_at) - contractTime(b.contract_completed_at),
+  ending: (a, b) =>
+    (contractTime(a.current_end_date || a.rental_end_date) || Infinity) - (contractTime(b.current_end_date || b.rental_end_date) || Infinity),
+  room: (a, b) => String(a.room_number || '').localeCompare(String(b.room_number || ''), 'th', { numeric: true }),
+}
+
+export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSize = 12 }) {
   const [contracts, setContracts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('all')
+  const [sort, setSort] = useState('newest')
+  const [scope, setScope] = useState('all')
+  const [dates, setDates] = useState({ from: '', to: '' })
   const [page, setPage] = useState(1)
   const [detail, setDetail] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -657,19 +724,49 @@ export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
     }
   }, [reloadKey])
 
+  const statusCounts = useMemo(
+    () => contracts.reduce((counts, contract) => ({ ...counts, [contract.status]: (counts[contract.status] || 0) + 1 }), {}),
+    [contracts],
+  )
   const keyword = search.trim().toLowerCase()
-  const filtered = keyword
-    ? contracts.filter((contract) =>
-        [contract.first_name, contract.last_name, `${contract.first_name} ${contract.last_name}`, contract.phone, contract.room_number]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword),
-      )
-    : contracts
+  const filtered = useMemo(
+    () =>
+      contracts
+        .filter((contract) => status === 'all' || contract.status === status)
+        .filter((contract) =>
+          scope === 'all'
+            ? true
+            : scope === 'deposit'
+              ? contract.can_settle_deposit
+              : (scope === 'archived') === Boolean(contract.is_archived),
+        )
+        .filter((contract) => {
+          if (!dates.from && !dates.to) return true
+          if (!contract.contract_completed_at) return false
+          const key = contractDayKey(contract.contract_completed_at)
+          return (!dates.from || key >= dates.from) && (!dates.to || key <= dates.to)
+        })
+        .filter(
+          (contract) =>
+            !keyword ||
+            [contract.first_name, contract.last_name, `${contract.first_name} ${contract.last_name}`, contract.phone, contract.room_number]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase()
+              .includes(keyword),
+        )
+        .sort(COMPLETED_CONTRACT_SORTERS[sort]),
+    [contracts, status, scope, dates, keyword, sort],
+  )
+  const archivedCount = contracts.filter((contract) => contract.is_archived).length
+  const filtersActive = Boolean(keyword || dates.from || dates.to || status !== 'all' || scope !== 'all' || sort !== 'newest')
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const resetPage = (setter) => (value) => {
+    setter(value)
+    setPage(1)
+  }
 
   return (
     <div className="staff-card staff-tab-card contract-panel">
@@ -681,21 +778,44 @@ export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
           <p className="waiting-list-storage-note">สัญญาเช่าที่ลงทะเบียนผู้เช่าและแนบรูปสัญญาครบแล้ว</p>
         </div>
       </div>
-      <div className="contract-toolbar">
-        <label className="contract-search">
-          <ContractIcon type="search" size={15} />
-          <input
-            type="search"
-            placeholder="ค้นหาชื่อผู้เช่า เบอร์โทร หรือเลขห้อง"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value)
-              setPage(1)
-            }}
-          />
-        </label>
-        <span className="contract-toolbar-count">พบ {filtered.length} จาก {contracts.length} สัญญา</span>
-      </div>
+      <FilterPanel
+        segments={[
+          { key: 'all', label: 'ทั้งหมด', count: contracts.length },
+          ...Object.entries(STAFF_CARD_STATUS)
+            .filter(([key]) => statusCounts[key])
+            .map(([key, info]) => ({ key, label: info.label, count: statusCounts[key] })),
+        ]}
+        active={status}
+        onSegment={resetPage(setStatus)}
+        search={search}
+        onSearch={resetPage(setSearch)}
+        searchPlaceholder="ค้นหาชื่อผู้เช่า เบอร์โทร หรือเลขห้อง"
+        resultText={`พบ ${filtered.length} จาก ${contracts.length} สัญญา`}
+        dateRange={{ label: 'วันที่ทำสัญญา', from: dates.from, to: dates.to, onChange: resetPage(setDates) }}
+        canClear={filtersActive}
+        onClear={() => {
+          setSearch('')
+          setStatus('all')
+          setScope('all')
+          setSort('newest')
+          setDates({ from: '', to: '' })
+          setPage(1)
+        }}
+      >
+        <select className="staff-filter-select" value={scope} onChange={(event) => resetPage(setScope)(event.target.value)} aria-label="ประเภทสัญญา">
+          <option value="all">ทุกสัญญา</option>
+          <option value="current">สัญญาปัจจุบัน ({contracts.length - archivedCount})</option>
+          <option value="archived">สัญญาเก่า ({archivedCount})</option>
+          <option value="deposit">รอคืน/ริบมัดจำ ({contracts.filter((contract) => contract.can_settle_deposit).length})</option>
+        </select>
+        <select className="staff-filter-select" value={sort} onChange={(event) => resetPage(setSort)(event.target.value)} aria-label="เรียงลำดับ">
+          {COMPLETED_CONTRACT_SORTS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </FilterPanel>
       {loading ? (
         <p className="staff-empty">กำลังโหลดรายการสัญญา...</p>
       ) : error ? (
@@ -706,7 +826,7 @@ export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
           </button>
         </p>
       ) : filtered.length === 0 ? (
-        <p className="staff-empty">{contracts.length ? 'ไม่พบสัญญาตามคำค้นหา' : 'ยังไม่มีสัญญาที่เสร็จสมบูรณ์'}</p>
+        <p className="staff-empty">{contracts.length ? 'ไม่พบสัญญาตามเงื่อนไขที่เลือก' : 'ยังไม่มีสัญญาที่เสร็จสมบูรณ์'}</p>
       ) : (
         <ul className="csc-grid">
           {pageItems.map((contract) => (
@@ -730,13 +850,156 @@ export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
                   </span>
                 </div>
               </div>
-              <ContractStatusBadge status={detail.status} />
+              <span className="csc-badges">
+                {detail.is_archived && <ArchivedContractBadge contract={detail} />}
+                <ContractStatusBadge status={detail.status} />
+              </span>
             </div>
+            {detail.is_archived && (
+              <div className="contract-refund-note is-archived" role="note">
+                <ContractIcon type="file" size={18} />
+                <span>
+                  <strong>{detail.has_newer_contract ? 'นี่คือสัญญาเก่า ผู้เช่าคนนี้มีสัญญาใหม่แล้ว' : 'นี่คือสัญญาเก่าที่สิ้นสุดแล้ว'}</strong>
+                  <small>
+                    {detail.moved_out_at ? `สิ้นสุดเมื่อ ${formatContractDate(detail.moved_out_at)} · ` : ''}เก็บไว้เป็นประวัติ ข้อมูลยอดชำระนับเฉพาะของสัญญานี้
+                  </small>
+                </span>
+              </div>
+            )}
+            {detail.can_settle_deposit && (
+              <DepositSettlementForm
+                contract={detail}
+                onSaved={(contract) => {
+                  setContracts((current) => current.map((item) => (item.booking_id === contract.booking_id ? contract : item)))
+                  setDetail(contract)
+                }}
+              />
+            )}
             <CustomerContractBody contract={detail} viewer="staff" />
           </div>
         </Modal>
       )}
     </div>
+  )
+}
+
+function DepositSettlementForm({ contract, onSaved }) {
+  const suggested = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
+  const [action, setAction] = useState(suggested)
+  const [deduction, setDeduction] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const paid = Number(contract.deposit_paid) || 0
+  const deductionValue = Number(deduction) || 0
+  const refundAmount = Math.max(0, paid - deductionValue)
+  const noteRequired = action === 'forfeit' || deductionValue > 0
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (action === 'refund' && (deductionValue < 0 || deductionValue > paid)) {
+      setError('จำนวนเงินที่หักต้องอยู่ระหว่าง 0 ถึงเงินมัดจำที่ชำระไว้')
+      return
+    }
+    if (noteRequired && !note.trim()) {
+      setError(action === 'forfeit' ? 'กรุณาระบุเหตุผลที่ริบเงินมัดจำ' : 'กรุณาระบุรายการค่าเสียหายที่หัก')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const { data } = await axios.post(
+        `/api/staff/contracts/${contract.booking_id}/deposit-settlement`,
+        { action, deduction: action === 'refund' ? deductionValue : undefined, note: note.trim() || undefined },
+        { headers: authHeaders() },
+      )
+      onSaved(data.contract)
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="deposit-settle" onSubmit={submit}>
+      <div className="deposit-settle-head">
+        <ContractIcon type="wallet" size={18} />
+        <div>
+          <strong>จัดการเงินมัดจำ {formatContractMoney(paid)}</strong>
+          <small>
+            ระบบแนะนำ: {suggested === 'forfeit' ? 'ริบเงินมัดจำ (ผู้เช่าออกก่อนครบสัญญา)' : 'คืนเงินมัดจำ (ผู้เช่าพักครบสัญญา)'}
+          </small>
+        </div>
+      </div>
+      {contract.moveout_damage_note && (
+        <p className="deposit-settle-damage">
+          <b>ผลตรวจห้องตอนย้ายออก:</b> {contract.moveout_damage_note}
+        </p>
+      )}
+      <div className="deposit-settle-actions" role="radiogroup" aria-label="การจัดการเงินมัดจำ">
+        {[
+          { key: 'refund', label: 'คืนเงินมัดจำ' },
+          { key: 'forfeit', label: 'ริบเงินมัดจำ' },
+        ].map((option) => (
+          <button
+            type="button"
+            role="radio"
+            key={option.key}
+            aria-checked={action === option.key}
+            className={`deposit-settle-option is-${option.key}${action === option.key ? ' is-active' : ''}`}
+            onClick={() => {
+              setAction(option.key)
+              setError('')
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {action === 'refund' && (
+        <label className="deposit-settle-field">
+          <span>หักค่าเสียหาย (บาท)</span>
+          <input
+            type="number"
+            min="0"
+            max={paid}
+            step="0.01"
+            inputMode="decimal"
+            placeholder="0"
+            value={deduction}
+            onChange={(event) => {
+              setDeduction(event.target.value)
+              setError('')
+            }}
+          />
+        </label>
+      )}
+      <label className="deposit-settle-field">
+        <span>
+          {action === 'forfeit' ? 'เหตุผลที่ริบ' : 'รายการค่าเสียหาย / หมายเหตุ'}
+          {noteRequired && <em> *</em>}
+        </span>
+        <textarea
+          rows={2}
+          maxLength={500}
+          value={note}
+          placeholder={action === 'forfeit' ? 'เช่น ย้ายออกก่อนครบสัญญา' : 'เช่น ผนังเป็นรู 1 จุด ค่าซ่อม 500 บาท'}
+          onChange={(event) => {
+            setNote(event.target.value)
+            setError('')
+          }}
+        />
+      </label>
+      <div className="deposit-settle-summary">
+        <span>{action === 'refund' ? 'ยอดที่คืนให้ผู้เช่า' : 'ยอดที่ริบ'}</span>
+        <strong>{formatContractMoney(action === 'refund' ? refundAmount : paid)}</strong>
+      </div>
+      {error && <p className="deposit-settle-error">{error}</p>}
+      <button type="submit" className="staff-action-btn is-primary" disabled={saving}>
+        {saving ? 'กำลังบันทึก...' : action === 'refund' ? 'บันทึกว่าคืนเงินแล้ว' : 'บันทึกการริบเงินมัดจำ'}
+      </button>
+    </form>
   )
 }
 

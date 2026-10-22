@@ -316,6 +316,32 @@ export function parseTenantRequestInput(body = {}) {
   if (type === "moveout" && !note) {
     return { error: "กรุณากรอกรายละเอียดการย้ายออก" };
   }
+  const parsePreferredMoveDate = () => {
+    const preferredMoveDate = typeof body.preferred_move_date === "string" ? body.preferred_move_date : "";
+    const today = new Date();
+    const latest = new Date(today.getFullYear(), today.getMonth(), today.getDate() + MOVE_ROOM_MAX_DAYS_AHEAD);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(preferredMoveDate)
+      || Number.isNaN(new Date(`${preferredMoveDate}T00:00:00`).getTime())
+      || preferredMoveDate < toLocalDateString(today)
+      || preferredMoveDate > toLocalDateString(latest)
+    ) {
+      return null;
+    }
+    return preferredMoveDate;
+  };
+  if (type === "moveout") {
+    const preferredMoveDate = parsePreferredMoveDate();
+    if (!preferredMoveDate) {
+      return { error: `กรุณาเลือกวันที่ต้องการย้ายออกภายใน ${MOVE_ROOM_MAX_DAYS_AHEAD} วันนับจากวันนี้` };
+    }
+    return {
+      value: {
+        type, note, targetRoomNumber: null, renewDurationMonths: null, renewPaymentType: null,
+        moveReason: null, preferredMoveDate,
+      },
+    };
+  }
   if (type === "move_room") {
     const targetRoomNumber = Number(body.target_room_number);
     if (!Number.isInteger(targetRoomNumber) || targetRoomNumber < 100 || targetRoomNumber > 999) {
@@ -328,28 +354,13 @@ export function parseTenantRequestInput(body = {}) {
     if (moveReason === "other" && !note) {
       return { error: "กรุณาระบุเหตุผลเพิ่มเติมในหมายเหตุ" };
     }
-    const preferredMoveDate = typeof body.preferred_move_date === "string" ? body.preferred_move_date : "";
-    const today = new Date();
-    const latest = new Date(today.getFullYear(), today.getMonth(), today.getDate() + MOVE_ROOM_MAX_DAYS_AHEAD);
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(preferredMoveDate)
-      || Number.isNaN(new Date(`${preferredMoveDate}T00:00:00`).getTime())
-      || preferredMoveDate < toLocalDateString(today)
-      || preferredMoveDate > toLocalDateString(latest)
-    ) {
+    const preferredMoveDate = parsePreferredMoveDate();
+    if (!preferredMoveDate) {
       return { error: `กรุณาเลือกวันที่ต้องการย้ายภายใน ${MOVE_ROOM_MAX_DAYS_AHEAD} วันนับจากวันนี้` };
     }
     return {
       value: {
         type, note, targetRoomNumber, renewDurationMonths: null, renewPaymentType: null, moveReason, preferredMoveDate,
-      },
-    };
-  }
-  if (type !== "renew") {
-    return {
-      value: {
-        type, note, targetRoomNumber: null, renewDurationMonths: null, renewPaymentType: null,
-        moveReason: null, preferredMoveDate: null,
       },
     };
   }
@@ -579,4 +590,31 @@ export function parseMoveOutInspectionUpdate(body = {}, existingPhotos = []) {
     return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
   }
   return { value: { ...core.value, keptPhotos, newPhotos: newPhotos.value } };
+}
+
+const DEPOSIT_SETTLEMENT_ACTIONS = new Set(["refund", "forfeit"]);
+
+export function parseDepositSettlementInput(body = {}, depositPaid = 0) {
+  const action = body.action;
+  if (!DEPOSIT_SETTLEMENT_ACTIONS.has(action)) {
+    return { error: "กรุณาเลือกว่าจะคืนหรือริบเงินมัดจำ" };
+  }
+  const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
+  const paidCents = Math.max(0, Math.round(Number(depositPaid) * 100) || 0);
+  if (action === "forfeit") {
+    if (!note) return { error: "กรุณาระบุเหตุผลที่ริบเงินมัดจำ" };
+    return { value: { action, deductionCents: paidCents, refundCents: 0, note } };
+  }
+  const rawDeduction = body.deduction === undefined || body.deduction === null || body.deduction === "" ? 0 : Number(body.deduction);
+  const deductionCents = Math.round(rawDeduction * 100);
+  if (!Number.isFinite(rawDeduction) || !Number.isSafeInteger(deductionCents) || deductionCents < 0) {
+    return { error: "จำนวนเงินที่หักต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" };
+  }
+  if (deductionCents > paidCents) {
+    return { error: "จำนวนเงินที่หักต้องไม่เกินเงินมัดจำที่ชำระไว้" };
+  }
+  if (deductionCents > 0 && !note) {
+    return { error: "กรุณาระบุรายการค่าเสียหายที่หักจากเงินมัดจำ" };
+  }
+  return { value: { action, deductionCents, refundCents: paidCents - deductionCents, note } };
 }

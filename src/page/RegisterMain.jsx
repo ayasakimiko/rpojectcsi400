@@ -111,6 +111,7 @@ function RegisterMain() {
   const [roomsLoading, setRoomsLoading] = useState(true)
   const [contractImages, setContractImages] = useState([])
   const [contractImageError, setContractImageError] = useState('')
+  const [idcardLookup, setIdcardLookup] = useState(null)
   const selectedRoom = availableRooms.find((room) => String(room.room_number) === String(registerForm.room_number))
   const selectedRoomPrice = selectedRoom ? Number(selectedRoom.price) : null
   const contractEndDate =
@@ -162,6 +163,42 @@ function RegisterMain() {
     const { name, value } = e.target
     setRegisterForm((prev) => ({ ...prev, [name]: value }))
   }
+
+  const handleIdcardChange = (e) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 13)
+    setRegisterForm((prev) => ({ ...prev, idcard: digitsOnly }))
+    setIdcardLookup(null)
+  }
+
+  useEffect(() => {
+    const idcard = registerForm.idcard
+    if (idcard.length !== 13) return
+    let isActive = true
+    axios
+      .get(`/api/auth/register/lookup/${idcard}`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      })
+      .then(({ data }) => {
+        if (!isActive) return
+        if (!data.found) {
+          setIdcardLookup({ found: false })
+          return
+        }
+        const { first_name, last_name, phone, age, room_number } = data.customer
+        setRegisterForm((prev) => ({
+          ...prev,
+          first_name: first_name || prev.first_name,
+          last_name: last_name || prev.last_name,
+          phone: phone || prev.phone,
+          age: age !== '' && age != null ? String(age) : prev.age,
+        }))
+        setIdcardLookup({ found: true, room_number })
+      })
+      .catch(() => {})
+    return () => {
+      isActive = false
+    }
+  }, [registerForm.idcard])
 
   const handlePhoneChange = (e) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10)
@@ -345,10 +382,18 @@ function RegisterMain() {
                       className="form-control"
                       placeholder="เลขบัตรประชาชน 13 หลัก"
                       value={registerForm.idcard}
-                      onChange={handleRegisterChange}
+                      onChange={handleIdcardChange}
                       autoComplete="username"
                     />
-                    <div className="form-text">ใช้เป็นชื่อผู้ใช้สำหรับเข้าสู่ระบบ</div>
+                    {idcardLookup?.found ? (
+                      <div className={`form-text ${idcardLookup.room_number != null ? 'text-danger' : 'text-success'}`}>
+                        {idcardLookup.room_number != null
+                          ? `ผู้เช่าเดิม · มีสัญญาเช่าห้อง ${idcardLookup.room_number} อยู่แล้ว`
+                          : 'ผู้เช่าเดิม · ดึงชื่อ นามสกุล เบอร์โทร และอายุให้แล้ว'}
+                      </div>
+                    ) : (
+                      <div className="form-text">ใช้เป็นชื่อผู้ใช้สำหรับเข้าสู่ระบบ</div>
+                    )}
                   </div>
                   <div className="col-7 col-md-3">
                     <label className="form-label" htmlFor="register-phone">

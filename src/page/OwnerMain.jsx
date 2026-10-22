@@ -7,7 +7,7 @@ import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts'
 import './css/OwnerPage.css'
 import './css/StaffPage.css'
-import { StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
+import { StaffCompletedContractsTab, StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
 import { DEMO_PAYMENT_CHANNELS, formatPromptPayId, isValidPromptPayId, normalizePromptPayId } from '../utils/promptpay.js'
@@ -1730,6 +1730,7 @@ const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
     { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
+  { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
@@ -3576,6 +3577,8 @@ function OwnerMain() {
             <OwnerDormInfoSettings />
           </>
         )}
+
+        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab />}
 
         {activeTab === 'parking' && (
           <StaffResidentVisitsTab onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />

@@ -49,3 +49,12 @@ UPDATE Parcel p
          SELECT 1 FROM Customer c
          WHERE c.room_number = p.room_number AND c.is_suspended = FALSE
        );
+
+UPDATE Parcel p
+SET p.status = 'cancelled'
+WHERE p.status = 'pending'
+  AND EXISTS (
+    SELECT 1 FROM Customer c
+    WHERE c.id = p.customer_id
+      AND (c.is_suspended = TRUE OR c.room_number IS NULL OR c.room_number <> p.room_number)
+  );

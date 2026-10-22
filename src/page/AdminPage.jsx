@@ -11,11 +11,12 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import { ContractCell, ContractDetail, ContractFirstPaymentNote, ContractMonthTrack, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
+import { ArchivedContractBadge, ContractCell, ContractDetail, ContractFirstPaymentNote, ContractMonthTrack, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
 import { DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
+import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import {
   InspectionDateCell,
   InspectionInspectorCell,
@@ -30,6 +31,7 @@ import InspectionForm from '../components/InspectionForm.jsx'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
+import { StaffCompletedContractsTab } from './StaffMain.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1162,6 +1164,7 @@ const TABS = [
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
+  { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'moveouts', label: 'ผู้ย้ายออก' },
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
@@ -1176,6 +1179,7 @@ const TABS = [
 
 const TAB_GROUPS = [
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
@@ -1778,7 +1782,7 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
   const outstanding =
     payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length +
     (contract?.deposit_status === 'due' ? 1 : 0)
-  const movedOut = Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date
+  const movedOut = (Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date
   const facts = [
     { icon: 'phone', label: 'เบอร์โทร', value: customer.phone ? <a href={`tel:${customer.phone}`}>{customer.phone}</a> : '-' },
     { icon: 'user', label: 'อายุ', value: customer.age ? `${customer.age} ปี` : '-' },
@@ -1912,6 +1916,7 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
               <strong>สัญญาเช่าและรูปสัญญา</strong>
               <small>ข้อมูลการลงทะเบียน มัดจำ และค่าเช่าเดือนแรก</small>
             </div>
+            {contract?.is_archived && <ArchivedContractBadge contract={contract} />}
           </header>
           {loading && !contract ? (
             <p className="customer-profile-state">กำลังโหลดข้อมูล...</p>
@@ -6906,7 +6911,7 @@ function AdminBackupPage() {
     const totalRooms = rooms.length
     const vacantRooms = rooms.filter((room) => !room.is_booked).length
     const activeStaff = staffList.filter((member) => !member.is_suspended).length
-    const activeCustomers = customers.filter((customer) => !customer.is_suspended).length
+    const activeCustomers = customers.filter((customer) => !customer.is_suspended && customer.room_number != null).length
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
 
@@ -6915,13 +6920,13 @@ function AdminBackupPage() {
     setLastTabByGroup((current) => ({ ...current, [TAB_GROUP_OF[tabKey]]: tabKey }))
     setAnnouncementFocus(null)
   }
-  const pendingParcelCount = parcels.filter((parcel) => parcel.status !== 'received').length
+  const pendingParcelCount = parcels.filter((parcel) => parcel.status === 'pending').length
   const todayParcelKey = new Date().toDateString()
   const parcelsArrivedToday = parcels.filter((parcel) => new Date(parcel.created_at).toDateString() === todayParcelKey).length
   const parcelsPickedToday = parcels.filter((parcel) => parcel.received_at && new Date(parcel.received_at).toDateString() === todayParcelKey).length
-  const roomsWithPendingParcels = new Set(parcels.filter((parcel) => parcel.status !== 'received').map((parcel) => parcel.room_number)).size
+  const roomsWithPendingParcels = new Set(parcels.filter((parcel) => parcel.status === 'pending').map((parcel) => parcel.room_number)).size
   const oldestPendingParcelDays = parcels
-    .filter((parcel) => parcel.status !== 'received')
+    .filter((parcel) => parcel.status === 'pending')
     .reduce((max, parcel) => Math.max(max, Math.floor((Date.now() - new Date(parcel.created_at).getTime()) / 86400000)), 0)
   const waitingQueueCount = waitingList.filter((item) => (WAITING_UI_STATUSES[item.status] ? item.status : 'waiting') === 'waiting').length
   const scheduledAnnouncementCount = announcements.filter((item) => item.expires_at).length
@@ -7405,6 +7410,8 @@ function AdminBackupPage() {
 
         {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/admin/dorm-info" />}
 
+        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab />}
+
         {activeTab === 'vehicle-requests' && (
           <AdminVehicleRequestsTab
             key={tabFocus?.tab === 'vehicle-requests' ? tabFocus.nonce : 'vehicle-requests'}
@@ -7469,8 +7476,9 @@ function AdminBackupPage() {
                   }}
                 >
                   <option value="all">ทุกสถานะ</option>
-                  <option value="pending">รอผู้เช่ารับ</option>
-                  <option value="received">รับแล้ว</option>
+                  {PARCEL_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -7520,6 +7528,7 @@ function AdminBackupPage() {
                           <span className="parcel-room-badge">{parcel.room_number}</span>
                           <div className="parcel-ui-stack">
                             <strong>{parcel.first_name ? `${parcel.first_name} ${parcel.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'}</strong>
+                            {parcel.is_previous_tenant ? <em className="parcel-prev-tenant">{PREVIOUS_TENANT_LABEL}</em> : null}
                             <small>
                               <RoomDetailIcon type="phone" size={12} />
                               {parcel.phone || '-'}
@@ -7555,9 +7564,9 @@ function AdminBackupPage() {
                       </td>
                       <td className="admin-parcel-status">
                         <div className="parcel-ui-stack">
-                          <span className={`parcel-ui-status${parcel.status === 'received' ? ' is-received' : ' is-pending'}`}>
+                          <span className={`parcel-ui-status ${parcelStatusInfo(parcel.status).tone}`}>
                             <span className="parcel-ui-status-dot" aria-hidden="true" />
-                            {parcel.status === 'received' ? 'รับแล้ว' : 'รอผู้เช่ารับ'}
+                            {parcelStatusInfo(parcel.status).label}
                           </span>
                           {parcel.received_at && <small>{formatDateTime(parcel.received_at)}</small>}
                         </div>
@@ -8014,7 +8023,7 @@ function AdminBackupPage() {
                             <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                             </span>
-                            {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
+                            {(Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date && (
                               <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
                             )}
                           </td>
@@ -8058,7 +8067,7 @@ function AdminBackupPage() {
                                   <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                                     {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                                   </span>
-                                  {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
+                                  {(Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date && (
                                     <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
                                   )}
                                 </>
@@ -9046,13 +9055,14 @@ function AdminBackupPage() {
         <Modal title="รายละเอียดพัสดุ" onClose={() => setParcelDetail(null)} variant="expense">
           {() => {
             const received = parcelDetail.status === 'received'
+            const statusInfo = parcelStatusInfo(parcelDetail.status)
             const photos = parcelDetail.photos || []
             const tenantName = parcelDetail.first_name ? `${parcelDetail.first_name} ${parcelDetail.last_name}` : 'ไม่มีผู้เช่าปัจจุบัน'
             return (
               <div className="exp-ui-body">
                 <div className="exp-ui-top">
                   <div className="exp-ui-detail-head">
-                    <span className={`parcel-status${received ? ' is-received' : ' is-pending'}`}>{received ? 'รับแล้ว' : 'รอผู้เช่ารับ'}</span>
+                    <span className={`parcel-status ${statusInfo.tone}`}>{statusInfo.label}</span>
                     <span className="exp-ui-detail-date">
                       <RoomDetailIcon type="calendar" size={16} />
                       <span>
@@ -9071,7 +9081,10 @@ function AdminBackupPage() {
                     </div>
                     <div className="exp-ui-summary-vendor">
                       <small>ผู้รับ</small>
-                      <span>{tenantName}</span>
+                      <span className="parcel-recipient-name">
+                        {tenantName}
+                        {parcelDetail.is_previous_tenant ? <em className="parcel-prev-tenant">{PREVIOUS_TENANT_LABEL}</em> : null}
+                      </span>
                       {parcelDetail.phone && (
                         <em>
                           <RoomDetailIcon type="phone" size={13} />
@@ -9089,7 +9102,7 @@ function AdminBackupPage() {
                         { key: 'sender', icon: 'user', label: 'ผู้ส่ง', value: parcelDetail.sender_name || 'พัสดุทั่วไป' },
                         { key: 'tracking', icon: 'receipt', label: 'เลขพัสดุ', value: parcelDetail.tracking_number || '-' },
                         { key: 'by', icon: 'user', label: 'บันทึกโดย', value: parcelDetail.staff_name || 'เจ้าหน้าที่' },
-                        { key: 'received', icon: 'clock', label: 'วันที่รับ', value: received ? formatDateTime(parcelDetail.received_at) : 'ยังไม่ได้รับ' },
+                        { key: 'received', icon: 'clock', label: 'วันที่รับ', value: received ? formatDateTime(parcelDetail.received_at) : parcelDetail.status === 'cancelled' ? 'ผู้เช่าย้ายออก' : 'ยังไม่ได้รับ' },
                       ].map((fact) => (
                         <div key={fact.key}>
                           <dt>
@@ -9138,15 +9151,15 @@ function AdminBackupPage() {
                     actorClassName="admin-actor-inline"
                     startDate={parcelDetail.created_at}
                     endDate={received ? parcelDetail.received_at : null}
-                    waitingText="รอผู้เช่ารับพัสดุ"
+                    waitingText={parcelDetail.status === 'cancelled' ? 'ผู้เช่าย้ายออก' : 'รอผู้เช่ารับพัสดุ'}
                     steps={[
                       { key: 'record', label: 'บันทึกพัสดุเข้าห้อง', by: parcelDetail.staff_name || 'เจ้าหน้าที่', date: parcelDetail.created_at, icon: 'box' },
                       {
                         key: 'receive',
-                        label: received ? 'ผู้เช่ารับพัสดุแล้ว' : 'รอผู้เช่ารับพัสดุ',
+                        label: received ? 'ผู้เช่ารับพัสดุแล้ว' : parcelDetail.status === 'cancelled' ? 'ผู้เช่าย้ายออก' : 'รอผู้เช่ารับพัสดุ',
                         date: received ? parcelDetail.received_at : null,
                         icon: 'check',
-                        pendingText: 'ยังไม่ได้รับ',
+                        pendingText: parcelDetail.status === 'cancelled' ? 'ยกเลิก' : 'ยังไม่ได้รับ',
                       },
                     ]}
                   />
