@@ -93,6 +93,8 @@ npm run server:all   # รัน gateway + ทั้ง 9 service พร้อ�
 
 แต่ละ API service เชื่อมต่อฐานของตัวเอง ตารางจริงอยู่ในฐานของเจ้าของตาม [`Database/connection.js`](Database/connection.js) โดย `MaintenanceRequest`/`MaintenancePhoto` อยู่ในฐาน maintenance และ `Payment`/`PaymentSlip`/`PaymentSlipRejection` อยู่ในฐาน payment ส่วน query รวมข้อมูลของ API เดิมใช้ MySQL view ชี้ไปยังตารางจริง จึงยังใช้เส้นทาง API และ transaction เดิมได้ Foreign key ข้ามฐานถูกสร้างโดย migration บน MySQL server เดียวกัน ผู้ใช้ฐานข้อมูลที่ตั้งใน `DB_USER` ต้องมีสิทธิ์สร้างฐาน ตาราง view และเข้าถึงทั้ง 9 ฐาน
 
+Connection pool เปิดสูงสุด `DB_POOL_SIZE` ต่อ service (ค่าเริ่มต้น 4) และเก็บ connection ว่างไว้สูงสุด 1 รายการเป็นเวลา 10 วินาที เพื่อลด RAM ของ MySQL เมื่อไม่มีคำขอ Schema ของ maintenance/payment มี index สำหรับรายการตามลูกค้า ห้อง สถานะ วันที่ และรายการชำระเงินตามประเภท/สัญญาเช่า; migration เพิ่ม index ให้ฐานเดิมโดยไม่ลบข้อมูล
+
 ถ้ามีฐานเดิมชื่อ `DB_NAME` ให้หยุด backend รุ่นเก่าและสำรองฐานข้อมูลก่อน แล้วรัน migration เพื่อคัดลอกข้อมูลและ ID ไปยังฐานใหม่ ตัว migration ไม่ลบฐานเดิมเอง การคัดลอกจะบันทึกสถานะใน `DB_NAME_auth.SchemaCutover` และรันซ้ำได้ หากเริ่มจากระบบ 7 ฐานเดิม migration จะย้ายตาราง Maintenance และ Payment จาก `DB_NAME_customer` ไปยังสองฐานใหม่โดยรักษาข้อมูลและ foreign key ไว้ ต้องหยุด API รุ่นเก่าก่อนย้าย เพื่อไม่ให้มีการเขียนลงตารางระหว่างย้าย โครงสร้างฐานทั้งหมดเก็บเป็นโค้ดใน `Database/schema/` หลัง migration สำเร็จให้เริ่ม API ทั้ง 9 service ด้วยโค้ดรุ่นนี้พร้อมกัน หากรันโดยไม่ใช้ Docker ให้รัน `npm run db:migrate` ก่อนเริ่ม API
 
 ข้อมูลตัวอย่างใน `Database/seed.sql` เป็นทางเลือกเท่านั้น หากต้องใช้ให้รันหลัง migration โดยเลือกฐาน `DB_NAME_auth` ก่อน

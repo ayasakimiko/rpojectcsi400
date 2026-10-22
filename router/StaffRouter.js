@@ -836,7 +836,8 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
     const [existingPending] = await connection.query(
       `SELECT type FROM Payment
        WHERE booking_id = ? AND status = 'pending' AND type IN ('water', 'electricity')
-         AND YEAR(payment_date) = YEAR(CURDATE()) AND MONTH(payment_date) = MONTH(CURDATE()) FOR UPDATE`,
+         AND payment_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND payment_date < DATE_FORMAT(CURDATE() + INTERVAL 1 MONTH, '%Y-%m-01') FOR UPDATE`,
       [booking.id],
     );
     const existingTypes = new Set(existingPending.map((row) => row.type));

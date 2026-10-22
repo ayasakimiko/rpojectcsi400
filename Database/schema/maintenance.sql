@@ -40,6 +40,36 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MaintenanceRequest' AND INDEX_NAME = 'idx_maintenance_customer_created'),
+    'SELECT 1',
+    'CREATE INDEX `idx_maintenance_customer_created` ON `MaintenanceRequest` (customer_id, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MaintenanceRequest' AND INDEX_NAME = 'idx_maintenance_room_created'),
+    'SELECT 1',
+    'CREATE INDEX `idx_maintenance_room_created` ON `MaintenanceRequest` (room_number, created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MaintenanceRequest' AND INDEX_NAME = 'idx_maintenance_status_completed'),
+    'SELECT 1',
+    'CREATE INDEX `idx_maintenance_status_completed` ON `MaintenanceRequest` (status, completed_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 UPDATE MaintenanceRequest mr
      JOIN Customer c ON c.id = mr.customer_id
      SET mr.status = 'cancelled', mr.completed_at = NOW(),

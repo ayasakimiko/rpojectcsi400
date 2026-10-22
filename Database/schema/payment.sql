@@ -27,6 +27,26 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND INDEX_NAME = 'idx_payment_status_type_date'),
+    'SELECT 1',
+    'CREATE INDEX `idx_payment_status_type_date` ON `Payment` (status, type, payment_date)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND INDEX_NAME = 'idx_payment_booking_date'),
+    'SELECT 1',
+    'CREATE INDEX `idx_payment_booking_date` ON `Payment` (booking_id, payment_date)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Payment' AND COLUMN_NAME = 'electricity_units'),
     'SELECT 1',
     'ALTER TABLE `Payment` ADD COLUMN `electricity_units` DECIMAL(10,2) NULL AFTER `type`'
@@ -82,6 +102,16 @@ CREATE TABLE IF NOT EXISTS PaymentSlipRejection (
     KEY idx_payment_slip_rejection_created (created_at),
     KEY idx_payment_slip_rejection_path (slip_path)
 );
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentSlip' AND INDEX_NAME = 'idx_payment_slip_created'),
+    'SELECT 1',
+    'CREATE INDEX `idx_payment_slip_created` ON `PaymentSlip` (created_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentSlip' AND COLUMN_NAME = 'is_test'),
