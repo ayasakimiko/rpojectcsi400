@@ -27,6 +27,8 @@ import { getInspectionPurposeLabel, getInspectionSourceLabel } from '../utils/in
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionForm from '../components/InspectionForm.jsx'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
+import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
+import { parseRoomAmenities } from '../utils/roomAmenities.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1017,7 +1019,7 @@ function Modal({ title, onClose, children, variant, headerExtra = null }) {
       }}
     >
       <div
-        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${variant === 'expense' ? ' admin-modal-expense' : ''}${variant === 'customer-profile' ? ' admin-modal-customer-profile' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`admin-modal${variant === 'confirm' ? ' admin-modal-confirm' : ''}${variant === 'amenity' ? ' admin-modal-amenity' : ''}${variant === 'form' ? ' admin-modal-form' : ''}${variant === 'wide' ? ' admin-modal-wide' : ''}${variant === 'gallery' ? ' admin-modal-gallery' : ''}${variant === 'waiting-detail' ? ' admin-modal-waiting-detail' : ''}${variant === 'waiting-form' ? ' admin-modal-waiting-form' : ''}${variant === 'room-detail' ? ' admin-modal-room-detail' : ''}${variant === 'room-history' ? ' admin-modal-room-history' : ''}${variant === 'payment-detail' ? ' admin-modal-payment-detail' : ''}${variant === 'rental-history' ? ' admin-modal-rental-history' : ''}${variant === 'moveout-detail' ? ' admin-modal-moveout-detail' : ''}${variant === 'inspection-detail' ? ' admin-modal-inspection-detail' : ''}${variant === 'inspection-form' ? ' admin-modal-inspection-form' : ''}${variant === 'expense' ? ' admin-modal-expense' : ''}${variant === 'customer-profile' ? ' admin-modal-customer-profile' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="admin-modal-header">
@@ -1934,16 +1936,15 @@ function StaffActionCell({ name, date }) {
 function AmenitiesList({ room }) {
   const amenities = [
     room.air_conditioner && 'แอร์',
-    room.wifi && 'ไวไฟ',
     room.refrigerator && 'ตู้เย็น',
-    room.bathroom && 'ห้องน้ำในตัว',
+    ...parseRoomAmenities(room.custom_amenities),
   ].filter(Boolean)
   if (amenities.length === 0) return '-'
   return (
     <div className="admin-amenities-list">
       {amenities.map((amenity) => (
-        <span key={amenity} className="admin-amenity-item">
-          {amenity}
+        <span key={typeof amenity === 'string' ? amenity : amenity.name} className="admin-amenity-item">
+          {typeof amenity === 'string' ? amenity : <><CustomAmenityIcon name={amenity.icon} size={14} />{amenity.name}</>}
         </span>
       ))}
     </div>
@@ -1952,9 +1953,26 @@ function AmenitiesList({ room }) {
 
 const ROOM_AMENITIES = [
   { key: 'air_conditioner', label: 'เครื่องปรับอากาศ' },
-  { key: 'wifi', label: 'ไวไฟ' },
   { key: 'refrigerator', label: 'ตู้เย็น' },
-  { key: 'bathroom', label: 'ห้องน้ำในตัว' },
+]
+
+const ROOM_AMENITY_ICONS = [
+  { key: 'sparkle', label: 'ทั่วไป' },
+  { key: 'desk', label: 'โต๊ะ' },
+  { key: 'wardrobe', label: 'ตู้' },
+  { key: 'shower', label: 'น้ำอุ่น' },
+  { key: 'tv', label: 'ทีวี' },
+  { key: 'balcony', label: 'ระเบียง' },
+  { key: 'sofa', label: 'โซฟา' },
+]
+
+const ROOM_AMENITY_SUGGESTIONS = [
+  { name: 'โต๊ะทำงาน', icon: 'desk' },
+  { name: 'ตู้เสื้อผ้า', icon: 'wardrobe' },
+  { name: 'เครื่องทำน้ำอุ่น', icon: 'shower' },
+  { name: 'โทรทัศน์', icon: 'tv' },
+  { name: 'ระเบียง', icon: 'balcony' },
+  { name: 'โซฟา', icon: 'sofa' },
 ]
 
 function RoomDetailIcon({ type, size = 16 }) {
@@ -3928,6 +3946,9 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                 </span>
               )
             })}
+            {parseRoomAmenities(data.custom_amenities).map((amenity) => (
+              <span key={amenity.name} className="is-on"><CustomAmenityIcon name={amenity.icon} size={14} />{amenity.name}</span>
+            ))}
           </div>
         </section>
 
@@ -4286,7 +4307,7 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
           <RoomDetailIcon type="wallet" size={15} />
           ประวัติการจ่ายเงิน
         </button>
-        <button type="button" className="admin-action-btn is-primary" onClick={onEdit}>
+        <button type="button" className="admin-action-btn is-primary" onClick={onEdit} disabled={Boolean(data.is_booked)} title={data.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
           <RoomDetailIcon type="edit" size={15} />
           แก้ไขข้อมูลห้อง
         </button>
@@ -4316,6 +4337,7 @@ const emptyRoomForm = {
   electricity_unit_price: '8',
   water_unit_price: '100',
   water_price: '100',
+  custom_amenities: [],
   air_conditioner: false,
   wifi: false,
   refrigerator: false,
@@ -5479,6 +5501,10 @@ function AdminBackupPage() {
   const [roomsPage, setRoomsPage] = useState(1)
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
+  const [amenityDraft, setAmenityDraft] = useState('')
+  const [amenityIcon, setAmenityIcon] = useState('sparkle')
+  const [addingAmenity, setAddingAmenity] = useState(false)
+  const [amenityModalError, setAmenityModalError] = useState('')
   const [roomSubmitting, setRoomSubmitting] = useState(false)
   const [roomFormError, setRoomFormError] = useState('')
   const [roomDeleteConfirm, setRoomDeleteConfirm] = useState(null)
@@ -6025,12 +6051,21 @@ function AdminBackupPage() {
   }
 
   const openCreateRoom = () => {
-    setRoomForm(emptyRoomForm)
+    setRoomForm({ ...emptyRoomForm, custom_amenities: [] })
+    setAmenityDraft('')
+    setAmenityIcon('sparkle')
+    setAddingAmenity(false)
+    setAmenityModalError('')
     setRoomFormError('')
     setRoomModal({ mode: 'create' })
   }
 
   const openEditRoom = (room) => {
+    if (room.is_booked) return
+    setAmenityDraft('')
+    setAmenityIcon('sparkle')
+    setAddingAmenity(false)
+    setAmenityModalError('')
     setRoomForm({
       room_number: String(room.room_number),
       price: String(room.price),
@@ -6038,6 +6073,7 @@ function AdminBackupPage() {
       electricity_unit_price: String(room.electricity_unit_price),
       water_unit_price: String(room.water_unit_price ?? 100),
       water_price: String(room.water_price),
+      custom_amenities: parseRoomAmenities(room.custom_amenities),
       air_conditioner: Boolean(room.air_conditioner),
       wifi: Boolean(room.wifi),
       refrigerator: Boolean(room.refrigerator),
@@ -6138,6 +6174,20 @@ function AdminBackupPage() {
     setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
+  const addRoomAmenity = (requestClose) => {
+    const name = amenityDraft.trim()
+    if (!name) {
+      setAmenityModalError('กรุณากรอกชื่อสิ่งอำนวยความสะดวก')
+      return
+    }
+    if (name.length > 60 || roomForm.custom_amenities.length >= 12 || roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      setAmenityModalError('รายการซ้ำ ยาวเกิน 60 ตัวอักษร หรือครบ 12 รายการแล้ว')
+      return
+    }
+    setRoomForm((prev) => ({ ...prev, custom_amenities: [...prev.custom_amenities, { name, icon: amenityIcon }] }))
+    requestClose()
+  }
+
   const submitRoomForm = async (event, requestClose) => {
     event.preventDefault()
     if (roomModal.mode === 'create' && !/^[1-9][0-9]{2}$/.test(roomForm.room_number)) {
@@ -6173,6 +6223,7 @@ function AdminBackupPage() {
       electricity_unit_price: Number(roomForm.electricity_unit_price),
       water_unit_price: Number(roomForm.water_unit_price),
       water_price: Number(roomForm.water_price),
+      custom_amenities: roomForm.custom_amenities,
       air_conditioner: roomForm.air_conditioner,
       wifi: roomForm.wifi,
       refrigerator: roomForm.refrigerator,
@@ -7535,7 +7586,7 @@ function AdminBackupPage() {
                               <button type="button" className="admin-action-btn is-view" onClick={() => openRoomDetail(room)}>
                                 รายละเอียด
                               </button>
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                 แก้ไข
                               </button>
                               <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
@@ -7569,7 +7620,7 @@ function AdminBackupPage() {
                                   <button type="button" className="admin-action-btn is-view" onClick={() => openRoomDetail(room)}>
                                     รายละเอียด
                                   </button>
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)}>
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                     แก้ไข
                                   </button>
                                   <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
@@ -9853,7 +9904,7 @@ function AdminBackupPage() {
                   <small>กดเพื่อเลือกหรือยกเลิก</small>
                 </div>
                 <span className="admin-room-form-count">
-                  เลือกแล้ว {['air_conditioner', 'wifi', 'refrigerator', 'bathroom'].filter((field) => roomForm[field]).length}/4
+                  เลือกแล้ว {['air_conditioner', 'refrigerator'].filter((field) => roomForm[field]).length + roomForm.custom_amenities.length}
                 </span>
               </header>
               <div className="admin-toggle-grid">
@@ -9864,16 +9915,6 @@ function AdminBackupPage() {
                     <path key="ac" d="M12 3v18M5.6 6.5 18.4 17.5M18.4 6.5 5.6 17.5" />,
                   ],
                   [
-                    'wifi',
-                    'ไวไฟ',
-                    <g key="wifi">
-                      <path d="M2 8.5a16 16 0 0 1 20 0" />
-                      <path d="M5.5 12.5a11 11 0 0 1 13 0" />
-                      <path d="M9 16.5a5.5 5.5 0 0 1 6 0" />
-                      <circle cx="12" cy="19.5" r="0.5" fill="currentColor" />
-                    </g>,
-                  ],
-                  [
                     'refrigerator',
                     'ตู้เย็น',
                     <g key="fridge">
@@ -9881,15 +9922,6 @@ function AdminBackupPage() {
                       <line x1="5" y1="10.5" x2="19" y2="10.5" />
                       <line x1="8.5" y1="5.5" x2="8.5" y2="8" />
                       <line x1="8.5" y1="13.5" x2="8.5" y2="16" />
-                    </g>,
-                  ],
-                  [
-                    'bathroom',
-                    'ห้องน้ำในตัว',
-                    <g key="bath">
-                      <path d="M4 12h16v3a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-3Z" />
-                      <path d="M7 12V6a2.5 2.5 0 0 1 4.6-1.4" />
-                      <line x1="3" y1="12" x2="21" y2="12" />
                     </g>,
                   ],
                 ].map(([field, label, icon]) => (
@@ -9906,6 +9938,13 @@ function AdminBackupPage() {
                     </span>
                   </label>
                 ))}
+                {roomForm.custom_amenities.map((amenity) => (
+                  <span className="admin-custom-amenity" key={amenity.name}>
+                    <CustomAmenityIcon name={amenity.icon} size={15} />{amenity.name}
+                    <button type="button" onClick={() => setRoomForm((prev) => ({ ...prev, custom_amenities: prev.custom_amenities.filter((item) => item.name !== amenity.name) }))} aria-label={`ลบ ${amenity.name}`}>×</button>
+                  </span>
+                ))}
+                <button type="button" className="admin-custom-amenity-add" onClick={() => { setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError(''); setAddingAmenity(true) }} disabled={roomForm.custom_amenities.length >= 12}>+ เพิ่มเอง</button>
               </div>
             </section>
 
@@ -9918,6 +9957,40 @@ function AdminBackupPage() {
               </button>
             </div>
           </form>
+          )}
+        </Modal>
+      )}
+
+      {roomModal && addingAmenity && (
+        <Modal title="เพิ่มสิ่งอำนวยความสะดวก" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError('') }}>
+          {(requestClose) => (
+            <form className="admin-amenity-modal-form" onSubmit={(event) => { event.preventDefault(); addRoomAmenity(requestClose) }}>
+              <div className="admin-amenity-modal-content">
+                <label htmlFor="admin-new-amenity">ชื่อสิ่งอำนวยความสะดวก</label>
+                <input id="admin-new-amenity" type="text" className="form-control" maxLength={60} value={amenityDraft} onChange={(event) => { setAmenityDraft(event.target.value); setAmenityModalError('') }} placeholder="เช่น โต๊ะทำงาน" autoFocus />
+                <div className="admin-amenity-suggestions">
+                  <span>รายการแนะนำ · กดเพื่อเลือก</span>
+                  <div>
+                    {ROOM_AMENITY_SUGGESTIONS.filter((suggestion) => !roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === suggestion.name.toLocaleLowerCase())).map((suggestion) => (
+                      <button type="button" key={suggestion.name} className={amenityDraft === suggestion.name ? 'is-selected' : ''} onClick={() => { setAmenityDraft(suggestion.name); setAmenityIcon(suggestion.icon); setAmenityModalError('') }} aria-pressed={amenityDraft === suggestion.name}><CustomAmenityIcon name={suggestion.icon} size={15} />{suggestion.name}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="admin-amenity-icon-picker">
+                  <span>เลือกไอคอน</span>
+                  <div>
+                    {ROOM_AMENITY_ICONS.map((option) => (
+                      <button type="button" key={option.key} className={amenityIcon === option.key ? 'is-selected' : ''} onClick={() => setAmenityIcon(option.key)} aria-label={option.label} aria-pressed={amenityIcon === option.key} title={option.label}><CustomAmenityIcon name={option.key} size={20} /></button>
+                    ))}
+                  </div>
+                </div>
+                {amenityModalError && <p className="admin-amenity-modal-error" role="alert">{amenityModalError}</p>}
+              </div>
+              <div className="admin-amenity-modal-actions">
+                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
+                <button type="submit" className="admin-action-btn is-primary">บันทึก</button>
+              </div>
+            </form>
           )}
         </Modal>
       )}

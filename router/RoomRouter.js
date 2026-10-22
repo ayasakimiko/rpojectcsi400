@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
 import { isPositiveId, validateRoomFields } from "../middleware/validation.js";
+import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
 
 // ตั้งค่า Router และการตรวจสอบบัญชีสำหรับจัดการห้องพัก
 const router = Router();
@@ -19,6 +20,7 @@ router.post("/create", authenticate, requireAdminRole, requireActiveAccount, asy
       bed = 0,
       bathroom = false,
       cctv = false,
+      custom_amenities = [],
       electricity_unit_price = 8.0,
       water_unit_price = 100.0,
       water_price = 100.0,
@@ -33,6 +35,7 @@ router.post("/create", authenticate, requireAdminRole, requireActiveAccount, asy
       bed,
       bathroom,
       cctv,
+      custom_amenities,
       electricity_unit_price,
       water_unit_price,
       water_price,
@@ -43,8 +46,8 @@ router.post("/create", authenticate, requireAdminRole, requireActiveAccount, asy
 
     const pool = getPool();
     const [result] = await pool.query(
-      `INSERT INTO Room (room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO Room (room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         Number(room_number),
         Number(price),
@@ -54,6 +57,7 @@ router.post("/create", authenticate, requireAdminRole, requireActiveAccount, asy
         Number(bed),
         Boolean(bathroom),
         Boolean(cctv),
+        JSON.stringify(custom_amenities.map(normalizeRoomAmenity)),
         Number(electricity_unit_price),
         Number(water_unit_price),
         Number(water_price),
@@ -77,7 +81,7 @@ router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req
     const [rooms] = await pool.query(
       `SELECT
          r.id, r.room_number, r.is_booked, r.price,
-         r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv,
+         r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv, r.custom_amenities,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
          c.id AS customer_id, c.first_name, c.last_name, c.phone
@@ -122,7 +126,7 @@ router.get("/:room_number", async (req, res) => {
 
     const pool = getPool();
     const [rooms] = await pool.query(
-      `SELECT id, room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date
+      `SELECT id, room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date
        FROM Room WHERE room_number = ?`,
       [roomNumberValue],
     );

@@ -25,6 +25,7 @@ import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
 import { loadCustomerContracts } from "./rentalContracts.js";
+import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
 
 const router = Router();
 
@@ -435,7 +436,7 @@ router.get("/rooms", async (req, res) => {
     const [rooms] = await pool.query(
       `SELECT
          r.id, r.room_number, r.is_booked, r.price,
-         r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv,
+         r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv, r.custom_amenities,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
          c.id AS customer_id, c.first_name, c.last_name, c.phone
@@ -465,7 +466,7 @@ router.get("/rooms/:room_number/detail", async (req, res) => {
     const pool = getPool();
     const [roomRows] = await pool.query(
       `SELECT id, room_number, is_booked, price,
-         air_conditioner, wifi, refrigerator, bed, bathroom, cctv,
+         air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
          electricity_unit_price, water_unit_price, water_price,
          rental_duration_months, rental_start_date, rental_end_date,
          prepaid_until, pending_lump_sum_months, created_at
@@ -721,6 +722,7 @@ router.post("/rooms", async (req, res) => {
       bed = 0,
       bathroom = false,
       cctv = false,
+      custom_amenities = [],
       electricity_unit_price = 8.0,
       water_unit_price = 100.0,
       water_price = 100.0,
@@ -735,6 +737,7 @@ router.post("/rooms", async (req, res) => {
       bed,
       bathroom,
       cctv,
+      custom_amenities,
       electricity_unit_price,
       water_unit_price,
       water_price,
@@ -745,8 +748,8 @@ router.post("/rooms", async (req, res) => {
 
     const pool = getPool();
     const [result] = await pool.query(
-      `INSERT INTO Room (room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO Room (room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         Number(room_number),
         Number(price),
@@ -756,6 +759,7 @@ router.post("/rooms", async (req, res) => {
         Number(bed),
         Boolean(bathroom),
         Boolean(cctv),
+        JSON.stringify(custom_amenities.map(normalizeRoomAmenity)),
         Number(electricity_unit_price),
         Number(water_unit_price),
         Number(water_price),
@@ -781,6 +785,7 @@ const ROOM_EDITABLE_COLUMNS = [
   "bed",
   "bathroom",
   "cctv",
+  "custom_amenities",
   "electricity_unit_price",
   "water_unit_price",
   "water_price",
@@ -799,17 +804,24 @@ router.put("/rooms/:room_number", async (req, res) => {
       return res.status(400).json({ message: validationError });
     }
 
-    const { columns, values } = buildUpdate(ROOM_EDITABLE_COLUMNS, body);
+    const normalizedBody = hasField(body, "custom_amenities")
+      ? { ...body, custom_amenities: JSON.stringify(body.custom_amenities.map(normalizeRoomAmenity)) }
+      : body;
+    const { columns, values } = buildUpdate(ROOM_EDITABLE_COLUMNS, normalizedBody);
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });
     }
 
     const pool = getPool();
-    const [result] = await pool.query(`UPDATE Room SET ${columns.join(", ")} WHERE room_number = ?`, [
+    const [result] = await pool.query(`UPDATE Room SET ${columns.join(", ")} WHERE room_number = ? AND is_booked = FALSE`, [
       ...values,
       roomNumberValue,
     ]);
     if (result.affectedRows === 0) {
+      const [roomRows] = await pool.query("SELECT is_booked FROM Room WHERE room_number = ?", [roomNumberValue]);
+      if (roomRows[0]?.is_booked) {
+        return res.status(409).json({ message: "ไม่สามารถแก้ไขห้องที่มีผู้เช่าอยู่ได้" });
+      }
       return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
     }
 

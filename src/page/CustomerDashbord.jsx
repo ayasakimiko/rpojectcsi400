@@ -19,6 +19,8 @@ import PromptPayQr from '../components/PromptPayQr.jsx'
 import { formatPromptPayId, isValidPromptPayId } from '../utils/promptpay.js'
 import readSlipQrPayload from '../utils/slipQr.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
+import { parseRoomAmenities } from '../utils/roomAmenities.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -405,10 +407,9 @@ const PAYMENT_TYPE_LABEL = {
 
 const AMENITIES = [
   { key: 'air_conditioner', label: 'แอร์', color: 'blue' },
-  { key: 'wifi', label: 'ไวไฟ', color: 'purple' },
   { key: 'refrigerator', label: 'ตู้เย็น', color: 'teal' },
-  { key: 'bathroom', label: 'ห้องน้ำในตัว', color: 'amber' },
 ]
+
 
 const AMENITY_ICON_PATHS = {
   air_conditioner: (
@@ -7047,6 +7048,9 @@ function CustomerDashbord() {
                             <AmenityIcon name={amenity.key} />
                             {amenity.label}
                           </span>
+                        ))}
+                        {parseRoomAmenities(room.custom_amenities).map((amenity) => (
+                          <span key={amenity.name} className="dashboard-amenity is-teal"><CustomAmenityIcon name={amenity.icon} size={16} />{amenity.name}</span>
                         ))}
                         <span className="dashboard-amenity is-indigo">
                           <AmenityIcon name="bed" />

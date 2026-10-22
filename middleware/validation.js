@@ -1,3 +1,5 @@
+import { ROOM_AMENITY_ICON_KEYS } from "../src/utils/roomAmenities.js";
+
 export const MAX_MONEY = 99_999_999.99;
 export const MAX_NAME_LENGTH = 100;
 const MAX_SEARCH_LENGTH = 100;
@@ -162,6 +164,17 @@ const ROOM_FIELD_VALIDATORS = {
     return value !== null && value !== "" && Number.isFinite(num) && num >= 0 && num <= 999.99
       ? null
       : "ค่าน้ำ/เดือนต้องเป็นตัวเลข 3 หลัก (0-999.99)";
+  },
+  custom_amenities: (value) => {
+    if (!Array.isArray(value) || value.length > 12) return "สิ่งอำนวยความสะดวกเพิ่มเติมต้องเป็นรายการไม่เกิน 12 รายการ";
+    const names = value.map((item) => typeof item === "string" ? item.trim() : typeof item?.name === "string" ? item.name.trim() : "");
+    if (names.some((name) => !name || name.length > 60) || new Set(names.map((name) => name.toLocaleLowerCase())).size !== names.length) {
+      return "สิ่งอำนวยความสะดวกเพิ่มเติมต้องไม่ซ้ำกันและยาวไม่เกิน 60 ตัวอักษรต่อรายการ";
+    }
+    if (value.some((item) => typeof item !== "string" && (!item || typeof item !== "object" || !ROOM_AMENITY_ICON_KEYS.includes(item.icon || "sparkle")))) {
+      return "ไอคอนสิ่งอำนวยความสะดวกไม่ถูกต้อง";
+    }
+    return null;
   },
 };
 
