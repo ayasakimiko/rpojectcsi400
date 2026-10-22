@@ -1,5 +1,5 @@
-export const SERVICE_PORTS = { auth: 4001, rooms: 4002, customer: 4003, staff: 4004, admin: 4005, owner: 4006, parcels: 4007 }
-export const SERVICE_HEALTH_NAMES = { auth: 'auth', rooms: 'room', customer: 'customer', staff: 'staff', admin: 'admin', owner: 'owner', parcels: 'parcel' }
+export const SERVICE_PORTS = { auth: 4001, rooms: 4002, customer: 4003, staff: 4004, admin: 4005, owner: 4006, parcels: 4007, maintenance: 4008, payment: 4009 }
+export const SERVICE_HEALTH_NAMES = { auth: 'auth', rooms: 'room', customer: 'customer', staff: 'staff', admin: 'admin', owner: 'owner', parcels: 'parcel', maintenance: 'maintenance', payment: 'payment' }
 
 // Keep this order in sync with the gateway: parcel paths and files are more
 // specific than the role prefixes.
@@ -8,6 +8,16 @@ const ROUTES = [
   ['/api/admin/parcels', 'parcels'],
   ['/api/staff/parcels', 'parcels'],
   ['/api/customer/parcels', 'parcels'],
+  ['/api/customer/maintenance', 'maintenance'],
+  ['/api/staff/maintenance', 'maintenance'],
+  ['/api/admin/logs/maintenance', 'maintenance'],
+  ['/api/customer/payment-channels', 'payment'],
+  ['/api/customer/payments', 'payment'],
+  ['/api/staff/payment-slips', 'payment'],
+  ['/api/staff/payment-verifications', 'payment'],
+  ['/api/owner/income', 'payment'],
+  ['/api/owner/utility-receipts', 'payment'],
+  ['/api/owner/logs/payments', 'payment'],
   ['/api/auth', 'auth'],
   ['/api/rooms', 'rooms'],
   ['/api/customer', 'customer'],
@@ -18,5 +28,7 @@ const ROUTES = [
 
 export function serviceForPath(url = '') {
   const pathname = url.split(/[?#]/, 1)[0].toLowerCase()
+  if (/^\/api\/staff\/rooms\/[^/]+\/(collect-payment|utility-bill)(\/|$)/.test(pathname)) return 'payment'
+  if (/^\/api\/admin\/rooms\/[^/]+\/maintenance(\/|$)/.test(pathname)) return 'maintenance'
   return ROUTES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || null
 }

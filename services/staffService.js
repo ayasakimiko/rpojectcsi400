@@ -4,6 +4,7 @@ import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import staffRouter from "../router/StaffRouter.js";
+import { withoutDomainRoutes } from "./domainRoutes.js";
 
 configureDatabaseService("staff");
 
@@ -18,7 +19,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "staff" });
 });
 
-app.use("/api/staff", staffRouter);
+app.use("/api/staff", withoutDomainRoutes(staffRouter, "staff"));
 
 const server = app.listen(PORT, () => {
   console.log(`Staff service is running on http://localhost:${PORT}`);

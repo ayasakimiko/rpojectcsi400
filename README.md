@@ -35,10 +35,12 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 | `/api/admin` | `services/adminService.js` | 4005 |
 | `/api/owner` | `services/ownerService.js` | 4006 |
 | `/api/admin/parcels`, `/api/staff/parcels`, `/api/customer/parcels` | `services/parcelService.js` | 4007 |
+| `/api/customer/maintenance`, `/api/staff/maintenance`, `/api/admin/rooms/:room/maintenance`, `/api/admin/logs/maintenance` | `services/maintenanceService.js` | 4008 |
+| `/api/customer/payments`, `/api/customer/payment-channels`, `/api/staff/payment-*`, `/api/staff/rooms/:room/collect-payment`, `/api/staff/rooms/:room/utility-bill`, `/api/owner/income`, `/api/owner/utility-receipts`, `/api/owner/logs/payments` | `services/paymentService.js` | 4009 |
 
 path ของพัสดุถูกจับก่อน prefix `/api/admin`, `/api/staff`, `/api/customer` ใน gateway จึงไปที่ parcel service แทน
 
-Frontend ใช้ API Gateway เป็นปลายทางหลัก หาก gateway ติดต่อไม่ได้ จะเลือก service ที่รับ path นั้นโดยตรงตามพอร์ตในตาราง บน VPS ให้ Nginx รับ HTTPS และส่ง `/__api/direct/<service>/api/...` ไปยังพอร์ต 4001–4007 โดยไม่ผ่าน gateway
+Frontend ใช้ API Gateway เป็นปลายทางหลัก หาก gateway ติดต่อไม่ได้ จะเลือก service ที่รับ path นั้นโดยตรงตามพอร์ตในตาราง บน VPS ให้ Nginx รับ HTTPS และส่ง `/__api/direct/<service>/api/...` ไปยังพอร์ต 4001–4009 โดยไม่ผ่าน gateway
 
 ## การรันโปรเจกต์
 
@@ -48,7 +50,7 @@ Frontend ใช้ API Gateway เป็นปลายทางหลัก ห
 docker compose up -d --build
 ```
 
-รวม 10 container:
+รวม 12 container สำหรับบริการที่ทำงานต่อเนื่อง (และ `migrate` ที่ทำงานครั้งเดียว):
 | Service | Container | Port |
 |---|---|---|
 | MySQL | `projectcsi400-mysql` | 3308 |
@@ -61,6 +63,8 @@ docker compose up -d --build
 | Admin service | `projectcsi400-admin` | 4005 |
 | Owner service | `projectcsi400-owner` | 4006 |
 | Parcel service | `projectcsi400-parcel` | 4007 |
+| Maintenance service | `projectcsi400-maintenance` | 4008 |
+| Payment service | `projectcsi400-payment` | 4009 |
 
 Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
 
@@ -79,17 +83,17 @@ docker compose up -d phpmyadmin
 ### รัน backend แบบ dev (ไม่ผ่าน Docker)
 
 ```bash
-npm run server:all   # รัน gateway + ทั้ง 7 service พร้อมกัน (ต้องเปิด MySQL ก่อน)
+npm run server:all   # รัน gateway + ทั้ง 9 service พร้อมกัน (ต้องเปิด MySQL ก่อน)
 ```
-หรือรันทีละตัวด้วย `npm run server`, `server:auth`, `server:room`, `server:customer`, `server:staff`, `server:admin`, `server:owner`, `server:parcel`
+หรือรันทีละตัวด้วย `npm run server`, `server:auth`, `server:room`, `server:customer`, `server:staff`, `server:admin`, `server:owner`, `server:parcel`, `server:maintenance`, `server:payment`
 
 ### ตั้งค่าฐานข้อมูลครั้งแรก
 
-รัน `npm run db:migrate` ก่อนเริ่ม backend (Docker มี container `migrate` ทำขั้นตอนนี้ให้) ตัวรัน [`Database/migrate.js`](Database/migrate.js) จะ `CREATE DATABASE IF NOT EXISTS` แยก 7 ฐานตามชื่อ `DB_NAME_room`, `DB_NAME_auth`, `DB_NAME_customer`, `DB_NAME_staff`, `DB_NAME_admin`, `DB_NAME_owner`, `DB_NAME_parcel` แล้วรัน SQL ใน [`Database/schema`](Database/schema) ตามลำดับนี้ภายใต้ MySQL lock เดียว ตัวอย่างเมื่อ `DB_NAME=projectcsi400` จะได้ `projectcsi400_room` ถึง `projectcsi400_parcel`
+รัน `npm run db:migrate` ก่อนเริ่ม backend (Docker มี container `migrate` ทำขั้นตอนนี้ให้) ตัวรัน [`Database/migrate.js`](Database/migrate.js) จะ `CREATE DATABASE IF NOT EXISTS` แยก 9 ฐานตามชื่อ `DB_NAME_room`, `DB_NAME_auth`, `DB_NAME_customer`, `DB_NAME_maintenance`, `DB_NAME_payment`, `DB_NAME_staff`, `DB_NAME_admin`, `DB_NAME_owner`, `DB_NAME_parcel` แล้วรัน SQL ใน [`Database/schema`](Database/schema) ตามลำดับนี้ภายใต้ MySQL lock เดียว
 
-แต่ละ API service เชื่อมต่อฐานของตัวเอง ตารางจริงอยู่ในฐานของเจ้าของตาม [`Database/connection.js`](Database/connection.js) ส่วนตารางที่ API อื่นต้อง JOIN หรือแก้ไขร่วมกันจะมี MySQL view ชี้ไปยังตารางจริง จึงยังใช้ query และ transaction เดิมได้ Foreign key ข้ามฐานถูกสร้างโดย migration บน MySQL server เดียวกัน ผู้ใช้ฐานข้อมูลที่ตั้งใน `DB_USER` ต้องมีสิทธิ์สร้างฐาน ตาราง view และเข้าถึงทั้ง 7 ฐาน
+แต่ละ API service เชื่อมต่อฐานของตัวเอง ตารางจริงอยู่ในฐานของเจ้าของตาม [`Database/connection.js`](Database/connection.js) โดย `MaintenanceRequest`/`MaintenancePhoto` อยู่ในฐาน maintenance และ `Payment`/`PaymentSlip`/`PaymentSlipRejection` อยู่ในฐาน payment ส่วน query รวมข้อมูลของ API เดิมใช้ MySQL view ชี้ไปยังตารางจริง จึงยังใช้เส้นทาง API และ transaction เดิมได้ Foreign key ข้ามฐานถูกสร้างโดย migration บน MySQL server เดียวกัน ผู้ใช้ฐานข้อมูลที่ตั้งใน `DB_USER` ต้องมีสิทธิ์สร้างฐาน ตาราง view และเข้าถึงทั้ง 9 ฐาน
 
-ถ้ามีฐานเดิมชื่อ `DB_NAME` ให้หยุด backend รุ่นเก่าและสำรองฐานข้อมูลก่อน แล้วรัน migration เพื่อคัดลอกข้อมูลและ ID ไปยังฐานใหม่ ตัว migration ไม่ลบฐานเดิมเอง การคัดลอกจะบันทึกสถานะใน `DB_NAME_auth.SchemaCutover` และรันซ้ำได้ เมื่อตรวจว่าฐานใหม่มีข้อมูลครบและมีไฟล์สำรองแล้วจึงลบฐานเดิมแยกต่างหากได้ โครงสร้างฐานทั้งหมดเก็บเป็นโค้ดใน `Database/schema/` หลัง migration สำเร็จให้เริ่ม API ทั้ง 7 service ด้วยโค้ดรุ่นนี้พร้อมกัน อย่าให้ backend รุ่นเก่าเขียนลงฐานเดิมต่อหลังคัดลอกเสร็จ หากรันโดยไม่ใช้ Docker ให้รัน `npm run db:migrate` ก่อนเริ่ม API
+ถ้ามีฐานเดิมชื่อ `DB_NAME` ให้หยุด backend รุ่นเก่าและสำรองฐานข้อมูลก่อน แล้วรัน migration เพื่อคัดลอกข้อมูลและ ID ไปยังฐานใหม่ ตัว migration ไม่ลบฐานเดิมเอง การคัดลอกจะบันทึกสถานะใน `DB_NAME_auth.SchemaCutover` และรันซ้ำได้ หากเริ่มจากระบบ 7 ฐานเดิม migration จะย้ายตาราง Maintenance และ Payment จาก `DB_NAME_customer` ไปยังสองฐานใหม่โดยรักษาข้อมูลและ foreign key ไว้ ต้องหยุด API รุ่นเก่าก่อนย้าย เพื่อไม่ให้มีการเขียนลงตารางระหว่างย้าย โครงสร้างฐานทั้งหมดเก็บเป็นโค้ดใน `Database/schema/` หลัง migration สำเร็จให้เริ่ม API ทั้ง 9 service ด้วยโค้ดรุ่นนี้พร้อมกัน หากรันโดยไม่ใช้ Docker ให้รัน `npm run db:migrate` ก่อนเริ่ม API
 
 ข้อมูลตัวอย่างใน `Database/seed.sql` เป็นทางเลือกเท่านั้น หากต้องใช้ให้รันหลัง migration โดยเลือกฐาน `DB_NAME_auth` ก่อน
 
@@ -115,7 +119,7 @@ npm run server:all
 
 ### เปิด fallback บน VPS
 
-เพิ่ม location จาก [`docker/nginx/direct-services.conf`](docker/nginx/direct-services.conf) ภายใน `server {}` ของ HTTPS virtual host `backend.ayasakimioweb.com` แล้วทดสอบและ reload Nginx (`nginx -t && systemctl reload nginx`) ไฟล์นี้ส่งแต่ละเส้นทางไปพอร์ต service บน host โดยตรง จึงใช้ได้เมื่อ gateway 4000 หยุดทำงาน หาก Nginx รันใน container ให้เปลี่ยน upstream `127.0.0.1` เป็นชื่อ service ใน Docker network ตาม `docker-compose.yml` ก่อนติดตั้ง ตั้งค่า `client_max_body_size` ของ HTTPS virtual host ให้รองรับไฟล์อัปโหลดตามที่ gateway เดิมใช้ แล้วตรวจ `https://backend.ayasakimioweb.com/__api/direct/auth/api/health` ว่าตอบ `{"status":"ok","service":"auth"}` และตรวจครบทั้งเจ็ด service
+เพิ่ม location จาก [`docker/nginx/direct-services.conf`](docker/nginx/direct-services.conf) ภายใน `server {}` ของ HTTPS virtual host `backend.ayasakimioweb.com` แล้วทดสอบและ reload Nginx (`nginx -t && systemctl reload nginx`) ไฟล์นี้ส่งแต่ละเส้นทางไปพอร์ต service บน host โดยตรง จึงใช้ได้เมื่อ gateway 4000 หยุดทำงาน หาก Nginx รันใน container ให้เปลี่ยน upstream `127.0.0.1` เป็นชื่อ service ใน Docker network ตาม `docker-compose.yml` ก่อนติดตั้ง ตั้งค่า `client_max_body_size` ของ HTTPS virtual host ให้รองรับไฟล์อัปโหลดตามที่ gateway เดิมใช้ แล้วตรวจ `https://backend.ayasakimioweb.com/__api/direct/auth/api/health` ว่าตอบ `{"status":"ok","service":"auth"}` และตรวจครบทั้งเก้า service
 
 ต้อง deploy backend และ frontend เวอร์ชันนี้พร้อมกันเพื่อให้ audit log ของคำขอผ่าน gateway และคำขอที่วิ่งตรงถูกบันทึกโดย service เพียงครั้งเดียว จากนั้นทดสอบหยุดเฉพาะ gateway แล้วเรียก login, รายการพัสดุ, และรูปอัปโหลดผ่าน frontend ก่อนเปิดใช้จริง
 

@@ -1,36 +1,30 @@
 import http from "node:http";
 import "dotenv/config";
 import { createCorsMiddleware } from "./middleware/cors.js";
+import { serviceForPath } from "./src/config/serviceRoutes.js";
 
 const PORT = process.env.PORT || 4000;
 
-const PARCEL_SERVICE_URL = process.env.PARCEL_SERVICE_URL || "http://localhost:4007";
 const serviceAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 10000, maxSockets: 64, maxFreeSockets: 16, timeout: 60000 });
 
-const ROUTES = Object.entries({
-  "/api/files": process.env.CUSTOMER_SERVICE_URL || "http://localhost:4003",
-  "/api/admin/parcels": PARCEL_SERVICE_URL,
-  "/api/staff/parcels": PARCEL_SERVICE_URL,
-  "/api/customer/parcels": PARCEL_SERVICE_URL,
-  "/api/auth": process.env.AUTH_SERVICE_URL || "http://localhost:4001",
-  "/api/rooms": process.env.ROOM_SERVICE_URL || "http://localhost:4002",
-  "/api/customer": process.env.CUSTOMER_SERVICE_URL || "http://localhost:4003",
-  "/api/staff": process.env.STAFF_SERVICE_URL || "http://localhost:4004",
-  "/api/admin": process.env.ADMIN_SERVICE_URL || "http://localhost:4005",
-  "/api/owner": process.env.OWNER_SERVICE_URL || "http://localhost:4006",
-}).map(([prefix, target]) => [prefix, new URL(target)]);
+const SERVICE_TARGETS = Object.fromEntries(Object.entries({
+  auth: [process.env.AUTH_SERVICE_URL, 4001],
+  rooms: [process.env.ROOM_SERVICE_URL, 4002],
+  customer: [process.env.CUSTOMER_SERVICE_URL, 4003],
+  staff: [process.env.STAFF_SERVICE_URL, 4004],
+  admin: [process.env.ADMIN_SERVICE_URL, 4005],
+  owner: [process.env.OWNER_SERVICE_URL, 4006],
+  parcels: [process.env.PARCEL_SERVICE_URL, 4007],
+  maintenance: [process.env.MAINTENANCE_SERVICE_URL, 4008],
+  payment: [process.env.PAYMENT_SERVICE_URL, 4009],
+}).map(([service, [url, port]]) => [service, new URL(url || `http://localhost:${port}`)]));
 
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-connection", "proxy-authenticate", "proxy-authorization", "te", "trailer", "upgrade"]);
 
 const cors = createCorsMiddleware();
 
 function findTarget(url) {
-  const end = url.search(/[?#]/);
-  const pathname = (end === -1 ? url : url.slice(0, end)).toLowerCase();
-  for (const [prefix, target] of ROUTES) {
-    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return target;
-  }
-  return null;
+  return SERVICE_TARGETS[serviceForPath(url)] || null;
 }
 
 function stripHopByHop(headers) {

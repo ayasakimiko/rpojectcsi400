@@ -7,11 +7,12 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY server.js ./
+COPY src/config/serviceRoutes.js ./src/config/serviceRoutes.js
 COPY services ./services
 COPY router ./router
 COPY Database ./Database
 COPY middleware ./middleware
 
-EXPOSE 4001 4002 4003 4004 4005 4006 4007
+EXPOSE 4001 4002 4003 4004 4005 4006 4007 4008 4009
 
 CMD ["node", "server.js"]

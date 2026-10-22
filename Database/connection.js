@@ -1,12 +1,14 @@
 import mysql from "mysql2/promise";
 import "dotenv/config";
 
-export const SCHEMA_SERVICES = ["room", "auth", "customer", "staff", "admin", "owner", "parcel"];
+export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "payment", "staff", "admin", "owner", "parcel"];
 
 export const TABLES_BY_SERVICE = {
   room: ["Room"],
   auth: ["Customer", "Staff", "Admin", "Owner", "Booking"],
-  customer: ["Payment", "MaintenanceRequest", "TenantRequest", "MaintenancePhoto", "ResidentVisitRequest", "SafetyIncident", "PaymentSlip", "PaymentSlipRejection"],
+  customer: ["TenantRequest", "ResidentVisitRequest", "SafetyIncident"],
+  maintenance: ["MaintenanceRequest", "MaintenancePhoto"],
+  payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],
   staff: ["MoveOutInspection"],
   admin: ["Announcement", "AnnouncementAcknowledgement", "WaitingList"],
   owner: ["Expense", "RoomOccupancySnapshot", "AuditLog", "DormConfig"],

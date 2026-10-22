@@ -111,6 +111,8 @@ services:
       ADMIN_SERVICE_URL: http://admin-service:4005
       OWNER_SERVICE_URL: http://owner-service:4006
       PARCEL_SERVICE_URL: http://parcel-service:4007
+      MAINTENANCE_SERVICE_URL: http://maintenance-service:4008
+      PAYMENT_SERVICE_URL: http://payment-service:4009
       NODE_OPTIONS: --max-old-space-size=48 --max-semi-space-size=1
       UV_THREADPOOL_SIZE: 1
       TZ: Asia/Bangkok
@@ -124,6 +126,8 @@ services:
       - admin-service
       - owner-service
       - parcel-service
+      - maintenance-service
+      - payment-service
 
   auth-service: &service-defaults
     build:
@@ -206,6 +210,30 @@ services:
       PARCEL_PORT: 4007
     ports:
       - "${PARCEL_PORT:-4007}:4007"
+    volumes:
+      - ./public/uploads:/app/public/uploads
+
+  maintenance-service:
+    <<: *service-defaults
+    container_name: projectcsi400-maintenance
+    command: ["node", "services/maintenanceService.js"]
+    environment:
+      <<: *upload-env
+      MAINTENANCE_PORT: 4008
+    ports:
+      - "${MAINTENANCE_PORT:-4008}:4008"
+    volumes:
+      - ./public/uploads:/app/public/uploads
+
+  payment-service:
+    <<: *service-defaults
+    container_name: projectcsi400-payment
+    command: ["node", "services/paymentService.js"]
+    environment:
+      <<: *upload-env
+      PAYMENT_PORT: 4009
+    ports:
+      - "${PAYMENT_PORT:-4009}:4009"
     volumes:
       - ./public/uploads:/app/public/uploads
 

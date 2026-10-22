@@ -4,6 +4,7 @@ import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import adminRouter from "../router/AdminRouter.js";
+import { withoutDomainRoutes } from "./domainRoutes.js";
 
 configureDatabaseService("admin");
 
@@ -18,7 +19,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "admin" });
 });
 
-app.use("/api/admin", adminRouter);
+app.use("/api/admin", withoutDomainRoutes(adminRouter, "admin"));
 
 const server = app.listen(PORT, () => {
   console.log(`Admin service is running on http://localhost:${PORT}`);

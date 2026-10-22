@@ -5,6 +5,7 @@ import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import customerDashboardRouter from "../router/CustomerDashboardRouter.js";
 import { createUploadRouter } from "../router/UploadRouter.js";
 import { configureDatabaseService, getPool } from "../Database/connection.js";
+import { withoutDomainRoutes } from "./domainRoutes.js";
 
 configureDatabaseService("customer");
 
@@ -20,7 +21,7 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/files", createUploadRouter(getPool));
-app.use("/api/customer", customerDashboardRouter);
+app.use("/api/customer", withoutDomainRoutes(customerDashboardRouter, "customer"));
 
 const server = app.listen(PORT, () => {
   console.log(`Customer service is running on http://localhost:${PORT}`);

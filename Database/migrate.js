@@ -7,6 +7,29 @@ import { savePublicImages } from "../middleware/publicUploads.js";
 const PHOTO_BATCH_SIZE = 20;
 const databaseFor = (service) => serviceDatabaseName(DB_CONFIG.database, service);
 
+async function relocateCustomerTables(connection) {
+  for (const [table, service] of [
+    ["MaintenanceRequest", "maintenance"], ["MaintenancePhoto", "maintenance"],
+    ["Payment", "payment"], ["PaymentSlip", "payment"], ["PaymentSlipRejection", "payment"],
+  ]) {
+    const source = databaseFor("customer");
+    const target = databaseFor(service);
+    const [rows] = await connection.query(
+      "SELECT TABLE_SCHEMA, TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_NAME = ? AND TABLE_SCHEMA IN (?, ?)",
+      [table, source, target],
+    );
+    const sourceType = rows.find((row) => row.TABLE_SCHEMA === source)?.TABLE_TYPE;
+    const targetType = rows.find((row) => row.TABLE_SCHEMA === target)?.TABLE_TYPE;
+    if (sourceType === "BASE TABLE") {
+      if (targetType === "BASE TABLE") throw new Error(`Both customer and ${service} own ${table}; refusing to overwrite data`);
+      if (targetType === "VIEW") await connection.query("DROP VIEW ??.??", [target, table]);
+      await connection.query("RENAME TABLE ??.?? TO ??.??", [source, table, target, table]);
+    } else if (sourceType === "VIEW" && targetType !== "BASE TABLE") {
+      throw new Error(`Missing physical ${service}.${table} table`);
+    }
+  }
+}
+
 async function createServiceDatabases(connection) {
   for (const service of SCHEMA_SERVICES) {
     await connection.query(
@@ -156,10 +179,11 @@ async function migrate() {
     if (acquired !== 1) throw new Error(`Could not acquire schema lock for database "${database}"`);
     locked = true;
     await createServiceDatabases(connection);
+    await relocateCustomerTables(connection);
     await applySchema(connection);
     const copied = await copyLegacyData(connection);
     if (copied) await applySchema(connection, true);
-    await connection.changeUser({ database: databaseFor("customer") });
+    await connection.changeUser({ database: databaseFor("maintenance") });
     const moved = await moveMaintenancePhotosToFiles(connection);
     console.log(`Service databases for "${database}" are ready.${copied ? " Legacy data copied." : ""}${moved ? ` Moved ${moved} maintenance photos to files.` : ""}`);
   } finally {
