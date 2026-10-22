@@ -1,8 +1,11 @@
 import express from "express";
 import "dotenv/config";
+import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import ownerRouter from "../router/OwnerRouter.js";
+
+configureDatabaseService("owner");
 
 const app = express();
 const PORT = process.env.OWNER_PORT || 4006;

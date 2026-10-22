@@ -1,8 +1,11 @@
 import express from "express";
 import "dotenv/config";
+import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import adminRouter from "../router/AdminRouter.js";
+
+configureDatabaseService("admin");
 
 const app = express();
 const PORT = process.env.ADMIN_PORT || 4005;

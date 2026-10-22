@@ -4,7 +4,9 @@ import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import customerDashboardRouter from "../router/CustomerDashboardRouter.js";
 import { createUploadRouter } from "../router/UploadRouter.js";
-import { getPool } from "../Database/connection.js";
+import { configureDatabaseService, getPool } from "../Database/connection.js";
+
+configureDatabaseService("customer");
 
 const app = express();
 const PORT = process.env.CUSTOMER_PORT || 4003;

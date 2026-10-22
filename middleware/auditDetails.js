@@ -1,9 +1,10 @@
 import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
+import jwt from "jsonwebtoken";
 import { PUBLIC_UPLOAD_DIR } from "./publicUploads.js";
+import { getPool } from "../Database/connection.js";
 
-// สรุปข้อมูลที่ผู้ใช้ส่งมาแบบย่อ เพื่อให้ gateway บันทึกลงประวัติการใช้งาน
-export const AUDIT_DETAILS_HEADER = "x-audit-details";
+// สรุปข้อมูลคำขอใน service เดียวกัน เพื่อให้การบันทึกประวัติทำงานได้แม้ gateway หยุดทำงาน
 
 const auditContext = new AsyncLocalStorage();
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -11,7 +12,6 @@ const HIDDEN_KEY = /pass(word)?|otp|token|secret|idcard|qr_?payload|data_?url|ph
 const MAX_FIELDS = 24;
 const MAX_IMAGES = 12;
 const MAX_TEXT = 160;
-const MAX_HEADER_LENGTH = 6000;
 
 export function recordAuditImages(urls) {
   auditContext.getStore()?.images.push(...urls.filter((url) => typeof url === "string"));
@@ -69,29 +69,6 @@ export function buildAuditDetails(body, extraImages = [], { extraFields = [], re
   return { fields, images };
 }
 
-export function encodeAuditDetails(details) {
-  if (!details) return null;
-  const copy = { fields: [...details.fields], images: [...details.images] };
-  for (;;) {
-    const encoded = Buffer.from(JSON.stringify(copy), "utf8").toString("base64url");
-    if (encoded.length <= MAX_HEADER_LENGTH) return encoded;
-    if (copy.fields.length > 0) copy.fields.pop();
-    else if (copy.images.length > 0) copy.images.pop();
-    else return null;
-  }
-}
-
-export function decodeAuditDetails(value) {
-  if (typeof value !== "string" || !value || value.length > MAX_HEADER_LENGTH) return null;
-  try {
-    const details = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
-    if (!Array.isArray(details?.fields) || !Array.isArray(details?.images)) return null;
-    return JSON.stringify(details);
-  } catch {
-    return null;
-  }
-}
-
 function uploadedFileUrl(file) {
   if (!file?.path) return null;
   const relative = path.relative(PUBLIC_UPLOAD_DIR, path.resolve(file.path));
@@ -103,6 +80,26 @@ function uploadedFileUrl(file) {
 export function auditDetailsMiddleware(req, res, next) {
   if (!MUTATING_METHODS.has(req.method)) return next();
   const store = { images: [], fields: [], resultMessage: null };
+  let details = null;
+  res.on("finish", () => {
+    if (res.statusCode < 200 || res.statusCode >= 300) return;
+    const authorization = req.headers.authorization;
+    if (!authorization?.startsWith("Bearer ")) return;
+    let actor;
+    try {
+      actor = jwt.verify(authorization.slice(7), process.env.JWT_SECRET || "dev-secret-change-me");
+    } catch {
+      return;
+    }
+    if (!Number.isSafeInteger(actor.id) || !["Customer", "Staff", "Admin", "Owner"].includes(actor.role)) return;
+    const endpoint = req.originalUrl.split("?")[0].slice(0, 255);
+    const ipAddress = (req.socket.remoteAddress || "").slice(0, 45);
+    getPool().query(
+      `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address, details)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [actor.id, actor.role, req.method, endpoint, res.statusCode, ipAddress || null, details],
+    ).catch((error) => console.error("Audit log write error:", error));
+  });
   const json = res.json;
   res.json = function jsonWithAuditMessage(body) {
     if (body && typeof body.message === "string") store.resultMessage = body.message;
@@ -114,11 +111,11 @@ export function auditDetailsMiddleware(req, res, next) {
       try {
         const files = [req.file, ...(Array.isArray(req.files) ? req.files : [])];
         const fileUrls = files.map(uploadedFileUrl).filter(Boolean);
-        const encoded = encodeAuditDetails(buildAuditDetails(req.body, [...store.images, ...fileUrls], {
+        const audit = buildAuditDetails(req.body, [...store.images, ...fileUrls], {
           extraFields: store.fields,
           resultMessage: store.resultMessage,
-        }));
-        if (encoded) res.setHeader(AUDIT_DETAILS_HEADER, encoded);
+        });
+        details = audit ? JSON.stringify(audit) : null;
       } catch (error) {
         console.error("Audit details build error:", error);
       }

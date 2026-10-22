@@ -1,5 +1,6 @@
 import express from "express";
 import "dotenv/config";
+import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import {
@@ -15,6 +16,8 @@ import {
   requireActiveStaff,
 } from "../middleware/accounts.js";
 import { createParcelRouter, customerParcelRouter } from "../router/ParcelRouter.js";
+
+configureDatabaseService("parcel");
 
 const app = express();
 const PORT = process.env.PARCEL_PORT || 4007;

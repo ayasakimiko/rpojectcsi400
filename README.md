@@ -38,7 +38,7 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 
 path ของพัสดุถูกจับก่อน prefix `/api/admin`, `/api/staff`, `/api/customer` ใน gateway จึงไปที่ parcel service แทน
 
-Frontend คุยผ่าน API Gateway เท่านั้น ไม่รู้จัก service ย่อยโดยตรง โดย VPS เปิดผ่าน HTTPS และ Nginx ส่งต่อเข้า gateway ที่ port 4000
+Frontend ใช้ API Gateway เป็นปลายทางหลัก หาก gateway ติดต่อไม่ได้ จะเลือก service ที่รับ path นั้นโดยตรงตามพอร์ตในตาราง บน VPS ให้ Nginx รับ HTTPS และส่ง `/__api/direct/<service>/api/...` ไปยังพอร์ต 4001–4007 โดยไม่ผ่าน gateway
 
 ## การรันโปรเจกต์
 
@@ -85,11 +85,13 @@ npm run server:all   # รัน gateway + ทั้ง 7 service พร้อ�
 
 ### ตั้งค่าฐานข้อมูลครั้งแรก
 
-เมื่อเริ่ม backend ไฟล์ `Database/connection.js` จะสร้างฐานข้อมูลตามค่า `DB_NAME` ถ้ายังไม่มี และรัน [`Database/database.sql`](Database/database.sql) อัตโนมัติก่อนบริการเริ่มรับคำขอ เพื่อสร้างตารางและเพิ่มคอลัมน์หรือ index ที่ขาด
+รัน `npm run db:migrate` ก่อนเริ่ม backend (Docker มี container `migrate` ทำขั้นตอนนี้ให้) ตัวรัน [`Database/migrate.js`](Database/migrate.js) จะ `CREATE DATABASE IF NOT EXISTS` แยก 7 ฐานตามชื่อ `DB_NAME_room`, `DB_NAME_auth`, `DB_NAME_customer`, `DB_NAME_staff`, `DB_NAME_admin`, `DB_NAME_owner`, `DB_NAME_parcel` แล้วรัน SQL ใน [`Database/schema`](Database/schema) ตามลำดับนี้ภายใต้ MySQL lock เดียว ตัวอย่างเมื่อ `DB_NAME=projectcsi400` จะได้ `projectcsi400_room` ถึง `projectcsi400_parcel`
 
-ไฟล์ SQL ไม่เติมบัญชีหรือห้องตัวอย่างอัตโนมัติ หากเพิ่มตารางใหม่ให้เขียน `CREATE TABLE IF NOT EXISTS` ใน `database.sql` แล้วรีสตาร์ต backend ส่วนการเพิ่มคอลัมน์ในตารางเดิมต้องเพิ่มคำสั่งอัปเดตแบบตรวจว่ามีคอลัมน์แล้วหรือยัง เช่นส่วนท้ายของไฟล์
+แต่ละ API service เชื่อมต่อฐานของตัวเอง ตารางจริงอยู่ในฐานของเจ้าของตาม [`Database/connection.js`](Database/connection.js) ส่วนตารางที่ API อื่นต้อง JOIN หรือแก้ไขร่วมกันจะมี MySQL view ชี้ไปยังตารางจริง จึงยังใช้ query และ transaction เดิมได้ Foreign key ข้ามฐานถูกสร้างโดย migration บน MySQL server เดียวกัน ผู้ใช้ฐานข้อมูลที่ตั้งใน `DB_USER` ต้องมีสิทธิ์สร้างฐาน ตาราง view และเข้าถึงทั้ง 7 ฐาน
 
-บริการที่เริ่มพร้อมกันจะรอคิวอัปเดตโครงสร้างผ่าน MySQL lock และเรียกใช้งานฐานข้อมูลผ่าน `getPool()` หลังอัปเดตเสร็จ
+ถ้ามีฐานเดิมชื่อ `DB_NAME` ให้หยุด backend รุ่นเก่าและสำรองฐานข้อมูลก่อน แล้วรัน migration เพื่อคัดลอกข้อมูลและ ID ไปยังฐานใหม่ ตัว migration ไม่ลบฐานเดิมเอง การคัดลอกจะบันทึกสถานะใน `DB_NAME_auth.SchemaCutover` และรันซ้ำได้ เมื่อตรวจว่าฐานใหม่มีข้อมูลครบและมีไฟล์สำรองแล้วจึงลบฐานเดิมแยกต่างหากได้ โครงสร้างฐานทั้งหมดเก็บเป็นโค้ดใน `Database/schema/` หลัง migration สำเร็จให้เริ่ม API ทั้ง 7 service ด้วยโค้ดรุ่นนี้พร้อมกัน อย่าให้ backend รุ่นเก่าเขียนลงฐานเดิมต่อหลังคัดลอกเสร็จ หากรันโดยไม่ใช้ Docker ให้รัน `npm run db:migrate` ก่อนเริ่ม API
+
+ข้อมูลตัวอย่างใน `Database/seed.sql` เป็นทางเลือกเท่านั้น หากต้องใช้ให้รันหลัง migration โดยเลือกฐาน `DB_NAME_auth` ก่อน
 
 ### รัน Frontend โดยเลือก VPS ก่อน และใช้ Backend ในเครื่องเป็นสำรอง
 
@@ -99,7 +101,7 @@ npm run server:all   # รัน gateway + ทั้ง 7 service พร้อ�
 npm run dev
 ```
 
-Frontend ตรวจ `/api/health` ของ VPS ก่อน หากติดต่อไม่ได้หรือไม่พร้อมใช้งาน จะลอง gateway ในเครื่อง และตรวจปลายทางใหม่ทุก 5 วินาทีเมื่อมีคำขอถัดไป ผลตรวจพร้อมกันใช้ร่วมกันและมี timeout ต่อปลายทาง 1.8 วินาที
+Frontend ตรวจ `/api/health` ของ gateway ก่อน หากติดต่อไม่ได้ จะตรวจ `/api/health` ของ service ที่รับ API path นั้นบน VPS แล้วจึงลอง gateway/service ในเครื่อง การเลือกปลายทางแยกตาม service และตรวจ gateway ใหม่เมื่อ cache หมด (5 วินาที) โดยมี timeout ต่อการตรวจ 1.8 วินาที คำขออ่านที่ล้มระหว่างส่งจะลอง service ตรงอีกหนึ่งครั้ง ส่วนคำขอเขียนจะตรวจ gateway ก่อนส่งและจะไม่ส่งซ้ำหลังเกิดข้อผิดพลาดกลางคำขอ
 
 ถ้าต้องการให้ Local พร้อมรับงานสำรอง ให้เปิดฐานข้อมูลเดิมในเครื่อง แล้วเปิดอีก Terminal รัน:
 
@@ -109,11 +111,17 @@ npm run server:all
 
 `npm run server` เปิดเฉพาะ gateway ส่วน API ที่ใช้ฐานข้อมูลยังต้องมี service ย่อยทำงานด้วย
 
-ตอนพัฒนา คำขอผ่าน Vite proxy สองปลายทางเพื่อใช้ localhost ได้โดยไม่ติด Origin ของเบราว์เซอร์ ตอน build เว็บจริงจะเรียกปลายทางโดยตรง และแต่ละ Backend ต้องอนุญาตโดเมน Frontend ใน `CLIENT_URL` การเรียก Local จากเว็บจริงยังขึ้นกับสิทธิ์เข้าถึงเครือข่ายในเครื่องของเบราว์เซอร์
+ตอนพัฒนา คำขอผ่าน Vite proxy โดยมีเส้นทางแยกสำหรับ service ในเครื่อง ตอน build เว็บจริง fallback ของ VPS ใช้ HTTPS origin เดียวกับ gateway ผ่าน Nginx แต่ละ Backend ต้องอนุญาตโดเมน Frontend ใน `CLIENT_URL` การเรียก Local จากเว็บจริงยังขึ้นกับสิทธิ์เข้าถึงเครือข่ายในเครื่องของเบราว์เซอร์
 
-VPS และ Local ใช้ฐานข้อมูลและไฟล์ของตนเอง ไม่ได้ซิงก์กันอัตโนมัติ เมื่อสลับปลายทาง ระบบจะล้างเซสชันเดิมและให้เข้าสู่ระบบใหม่ จึงไม่ส่ง token ของอีกฐานข้อมูลข้ามไปใช้งาน
+### เปิด fallback บน VPS
 
-การล็อกอินผิด ข้อมูลไม่พบ หรือ API ตอบข้อผิดพลาดทั่วไปจะไม่ทำให้สลับ Backend อัตโนมัติ คำขอเพิ่ม แก้ไข ลบ และอัปโหลดจะไม่ถูกส่งซ้ำไปอีกฝั่งเมื่อเครือข่ายขาดกลางคำขอ เพราะฝั่งแรกอาจบันทึกข้อมูลสำเร็จไปแล้ว
+เพิ่ม location จาก [`docker/nginx/direct-services.conf`](docker/nginx/direct-services.conf) ภายใน `server {}` ของ HTTPS virtual host `backend.ayasakimioweb.com` แล้วทดสอบและ reload Nginx (`nginx -t && systemctl reload nginx`) ไฟล์นี้ส่งแต่ละเส้นทางไปพอร์ต service บน host โดยตรง จึงใช้ได้เมื่อ gateway 4000 หยุดทำงาน หาก Nginx รันใน container ให้เปลี่ยน upstream `127.0.0.1` เป็นชื่อ service ใน Docker network ตาม `docker-compose.yml` ก่อนติดตั้ง ตั้งค่า `client_max_body_size` ของ HTTPS virtual host ให้รองรับไฟล์อัปโหลดตามที่ gateway เดิมใช้ แล้วตรวจ `https://backend.ayasakimioweb.com/__api/direct/auth/api/health` ว่าตอบ `{"status":"ok","service":"auth"}` และตรวจครบทั้งเจ็ด service
+
+ต้อง deploy backend และ frontend เวอร์ชันนี้พร้อมกันเพื่อให้ audit log ของคำขอผ่าน gateway และคำขอที่วิ่งตรงถูกบันทึกโดย service เพียงครั้งเดียว จากนั้นทดสอบหยุดเฉพาะ gateway แล้วเรียก login, รายการพัสดุ, และรูปอัปโหลดผ่าน frontend ก่อนเปิดใช้จริง
+
+VPS และ Local ใช้ฐานข้อมูลและไฟล์ของตนเอง ไม่ได้ซิงก์กันอัตโนมัติ เมื่อสลับระหว่าง VPS กับ Local ระบบจะล้างเซสชันเดิมและให้เข้าสู่ระบบใหม่ จึงไม่ส่ง token ของอีกฐานข้อมูลข้ามไปใช้งาน
+
+การล็อกอินผิด ข้อมูลไม่พบ หรือ API ตอบข้อผิดพลาดทั่วไปจะไม่ทำให้สลับ Backend อัตโนมัติ การสลับจาก gateway ไปยัง service ของ VPS เดียวกันยังใช้ session เดิม คำขอเพิ่ม แก้ไข ลบ และอัปโหลดจะไม่ถูกส่งซ้ำเมื่อเครือข่ายขาดกลางคำขอ เพราะฝั่งแรกอาจบันทึกข้อมูลสำเร็จไปแล้ว
 
 ใช้ `npm run build` เพื่อสร้าง `dist` และเริ่ม dev server ใหม่หลังแก้ค่าปลายทาง
 
@@ -176,7 +184,7 @@ VPS และ Local ใช้ฐานข้อมูลและไฟล์ข
 
 หากเจ้าหน้าที่อนุมัติหรือปฏิเสธคำขอโดยตรงก่อนกดรับเรื่อง ระบบจะบันทึกเจ้าหน้าที่ผู้ดำเนินการเป็นผู้รับเรื่องด้วย เพื่อให้ประวัติแสดงข้อมูล “รับเรื่องโดย” ครบถ้วน
 
-หลังอัปเดตโปรเจกต์เดิม ให้รีสตาร์ต backend (หากใช้ Docker ให้ build ใหม่) ระบบจะรัน `Database/database.sql` เพื่อเพิ่มคอลัมน์สำหรับคำขอย้ายห้อง, ผลตรวจที่เชื่อมกับคำขอ และเก็บประวัติสัญญาอัตโนมัติ
+หลังอัปเดตโปรเจกต์เดิม ให้รัน `npm run db:migrate` แล้วรีสตาร์ต backend (หากใช้ Docker ให้ build ใหม่) เพื่อเพิ่มคอลัมน์สำหรับคำขอย้ายห้อง, ผลตรวจที่เชื่อมกับคำขอ และเก็บประวัติสัญญาอัตโนมัติ
 
 ```json
 {
@@ -193,7 +201,7 @@ VPS และ Local ใช้ฐานข้อมูลและไฟล์ข
 - เพิ่มคำขอ **ย้ายห้อง** จากหน้าลูกค้า พร้อมให้เจ้าหน้าที่ตรวจสอบ/อนุมัติหรือปฏิเสธ โดยคงประวัติการเช่าเดิมไว้
 - เพิ่ม **`RoomRouter.js`** สำหรับสร้างห้อง/ดูห้องว่าง
 - Containerize backend ด้วย **Dockerfile + docker-compose** ให้รันพร้อมกับ MySQL/phpMyAdmin ได้ในคำสั่งเดียว
-- แก้ schema ที่มีปัญหาใน `database.sql`:
+- แก้ schema ที่มีปัญหาในไฟล์ SQL ภายใต้ `Database/schema/`:
   - `UNSIGNED` ต้องอยู่ติดกับ type (`INT UNSIGNED` ไม่ใช่ `INT ... UNSIGNED` หลัง `AUTO_INCREMENT`)
   - เปลี่ยน `phone` จาก `NUMBER(15)` (ไม่มีจริงใน MySQL) เป็น `VARCHAR(20)` กันปัญหาเลข 0 นำหน้าเบอร์โทรหาย
   - เพิ่ม `UNIQUE` ให้ `phone`, ปรับ `Booking.customer_id` เป็น `UNSIGNED` ให้ type ตรงกับ FK
@@ -213,7 +221,7 @@ VPS และ Local ใช้ฐานข้อมูลและไฟล์ข
 5. พอครบกำหนดที่จ่ายทบไว้ ระบบกลับมาขึ้นยอดชำระรายเดือนให้อัตโนมัติ
 
 **ไฟล์ที่แก้:**
-- `Database/database.sql`, `Database/connection.js` — เพิ่มคอลัมน์ `Room.prepaid_until` (วันที่จ่ายล่วงหน้าครอบคลุมถึง) และ `Room.pending_lump_sum_months` (จำนวนเดือนที่รอคูณยอดในรอบบิลถัดไป)
+- `Database/schema/room.sql`, `Database/connection.js` — เพิ่มคอลัมน์ `Room.prepaid_until` (วันที่จ่ายล่วงหน้าครอบคลุมถึง) และ `Room.pending_lump_sum_months` (จำนวนเดือนที่รอคูณยอดในรอบบิลถัดไป)
 - `router/StaffRouter.js` (ใหม่) — mount ที่ `/api/staff`, มี `POST /tenant-requests/:id/approve` (ขยายสัญญา + ตั้ง `pending_lump_sum_months` ถ้าเป็น lump sum) และ `POST /tenant-requests/:id/reject` กันด้วย header `x-staff-key` ชั่วคราว (`STAFF_API_KEY` env) เพราะยังไม่มีระบบ login staff จริง — มี `TODO` ให้แทนที่ด้วย auth จริงทีหลัง
 - `router/CustomerDashboardRouter.js` — `computeCurrentDue()` เช็ค `prepaid_until` (ซ่อนยอดถ้าอยู่ในช่วงจ่ายล่วงหน้า) และคำนวณ `lumpSumMonths` (คูณยอดถ้ามี `pending_lump_sum_months` ค้างอยู่); `POST /payments/confirm` ตั้ง `prepaid_until`/เคลียร์ `pending_lump_sum_months` หลังจ่ายยอดทบสำเร็จ
 - `server.js` — mount `staffRouter`

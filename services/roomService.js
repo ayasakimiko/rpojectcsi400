@@ -1,8 +1,11 @@
 import express from "express";
 import "dotenv/config";
+import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import roomRouter from "../router/RoomRouter.js";
+
+configureDatabaseService("room");
 
 const app = express();
 const PORT = process.env.ROOM_PORT || 4002;

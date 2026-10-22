@@ -49,7 +49,6 @@ services:
       - --skip-log-bin
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
-      MYSQL_DATABASE: ${DB_NAME:-projectcsi400}
       TZ: Asia/Bangkok
     ports:
       - "${DB_PORT:-3308}:3306"
@@ -102,12 +101,6 @@ services:
     command: ["node", "server.js"]
     restart: unless-stopped
     environment:
-      DB_HOST: db
-      DB_PORT: 3306
-      DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
-      DB_NAME: ${DB_NAME:-projectcsi400}
-      DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       PORT: 4000
       CLIENT_URL: ${CLIENT_URL:-}

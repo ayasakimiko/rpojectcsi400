@@ -12,6 +12,7 @@ dist-ssr
 BackupPage
 *.local
 .env
+Database/backups/
 uploads
 
 .vscode/*

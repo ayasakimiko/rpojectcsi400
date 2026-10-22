@@ -4,6 +4,7 @@ import { cp } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { API_ORIGIN, LOCAL_API_ORIGIN } from './src/config/api.js'
+import { SERVICE_PORTS } from './src/config/serviceRoutes.js'
 
 function copyPublicAssets() {
   let config
@@ -42,6 +43,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/__api/vps': backendProxy(API_ORIGIN, '/__api/vps', { keepOrigin: true }),
+      ...Object.fromEntries(Object.entries(SERVICE_PORTS).map(([name, port]) => [
+        `/__api/local/direct/${name}`,
+        backendProxy(`http://127.0.0.1:${port}`, `/__api/local/direct/${name}`),
+      ])),
       '/__api/local': backendProxy(LOCAL_API_ORIGIN, '/__api/local'),
       '/api': backendProxy(API_ORIGIN, '', { keepOrigin: true }),
     },

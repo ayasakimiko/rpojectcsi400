@@ -1,3 +1,6 @@
+-- Optional sample data. Run only after migration, with DB_NAME_auth as the selected database.
+-- Room is an updatable view here; its rows are stored in DB_NAME_room.
+
 INSERT INTO Room
     (room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until)
 VALUES
