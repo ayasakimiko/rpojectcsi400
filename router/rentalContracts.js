@@ -76,13 +76,17 @@ export async function endCustomerContracts(connection, customerId) {
   );
 }
 
-export async function resetCustomerHistory(connection, customerId) {
+export async function closeCustomerTenancy(connection, customerId) {
   await endCustomerContracts(connection, customerId);
+  await connection.query(`UPDATE Parcel SET status = 'cancelled' WHERE customer_id = ? AND status = 'pending'`, [customerId]);
+}
+
+export async function resetCustomerHistory(connection, customerId) {
+  await closeCustomerTenancy(connection, customerId);
   await connection.query(
     `UPDATE Customer SET history_reset_at = NOW() WHERE id = ?`,
     [customerId],
   );
-  await connection.query(`UPDATE Parcel SET status = 'cancelled' WHERE customer_id = ? AND status = 'pending'`, [customerId]);
 }
 
 export function contractImageName(file, index) {
@@ -109,7 +113,9 @@ function movedOutEarly(contract, now) {
   return movedOut !== null && end !== null && movedOut < end;
 }
 
-function depositRefund(status, depositPaidCents) {
+function depositRefund(status, depositPaidCents, settlement) {
+  if (settlement === "refunded") return "refund";
+  if (settlement === "forfeited") return "forfeit";
   if (depositPaidCents <= 0) return null;
   if (status === "ended_early") return "forfeit";
   if (status === "ended" || status === "expired") return "refund";
@@ -185,7 +191,10 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
     first_month_amount: priceCents / 100,
     first_month_total: (priceCents + depositCents) / 100,
     deposit_paid: depositPaidCents / 100,
-    deposit_refund: depositRefund(status, depositPaidCents),
+    deposit_refund: depositRefund(status, depositPaidCents, contract.deposit_settlement),
+    deposit_deduction: contract.deposit_deduction == null ? null : Number(contract.deposit_deduction),
+    deposit_refunded_amount: contract.deposit_refunded_amount == null ? null : Number(contract.deposit_refunded_amount),
+    can_settle_deposit: archived && depositPaidCents > 0 && !contract.deposit_settlement,
     deposit_status: depositState,
     first_payment_status: firstPayment,
     billing_periods: totalPeriods,
@@ -203,6 +212,13 @@ const CONTRACT_COLUMNS = `
   COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
   b.contract_duration_months IS NOT NULL AS duration_selected,
   COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+  b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+  b.deposit_settled_at, b.deposit_settled_by_name,
+  (SELECT moi.damage_note FROM MoveOutInspection moi
+    JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+    WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+      AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+    ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
   (SELECT MIN(nb.id) FROM Booking nb
     WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
   (SELECT MAX(pb.id) FROM Booking pb
@@ -291,6 +307,16 @@ export async function loadCustomerContracts(pool, customerIds, { currentOnly = f
   rows.forEach((row) => delete row.contract_rank);
   const contracts = await attachContractImages(pool, rows, new Date());
   return new Map(contracts.map((contract) => [contract.customer_id, contract]));
+}
+
+export async function loadContractByBooking(pool, bookingId) {
+  const [rows] = await pool.query(
+    `SELECT ${CONTRACT_COLUMNS}
+     ${CONTRACT_JOINS}
+     WHERE b.id = ? AND b.contract_completed_at IS NOT NULL`,
+    [bookingId],
+  );
+  return (await attachContractImages(pool, rows, new Date()))[0] ?? null;
 }
 
 export async function loadCompletedContracts(pool) {

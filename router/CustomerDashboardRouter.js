@@ -428,10 +428,35 @@ export function outstandingFromDue(currentDue) {
   return { amount, items: items.map(({ type, label, amount: itemAmount, status }) => ({ type, label, amount: itemAmount, status })) };
 }
 
+export function moveOutBalanceFromDue(currentDue) {
+  const items = (currentDue?.items ?? []).filter((item) => item.type !== "deposit");
+  const amount = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0) / 100;
+  return {
+    amount,
+    pendingReview: items.some((item) => item.status === "pending"),
+    items: items.map(({ type, label, amount: itemAmount, status }) => ({ type, label, amount: itemAmount, status })),
+  };
+}
+
+export const MOVEOUT_OUTSTANDING_MESSAGE = (balance) =>
+  balance.items.every((item) => item.status === "pending")
+    ? "ผู้เช่ามีสลิปที่รอตรวจสอบ กรุณาตรวจสลิปให้เรียบร้อยก่อนอนุมัติการย้ายออก"
+    : `ผู้เช่ามียอดค้างชำระ ฿${balance.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} (${balance.items
+      .map((item) => item.label)
+      .join(", ")}) กรุณาเก็บเงินให้ครบก่อนอนุมัติการย้ายออก`;
+
+export async function loadMoveOutBalance(db, customerId) {
+  return moveOutBalanceFromDue(await loadCustomerCurrentDue(db, customerId));
+}
+
 export async function loadCustomerOutstanding(db, customerId) {
+  return outstandingFromDue(await loadCustomerCurrentDue(db, customerId));
+}
+
+async function loadCustomerCurrentDue(db, customerId) {
   const [customerRows] = await db.query(`SELECT id, room_number, deposit_amount FROM Customer WHERE id = ?`, [customerId]);
   const customer = customerRows[0];
-  if (!customer?.room_number) return { amount: 0, items: [] };
+  if (!customer?.room_number) return null;
   const [[roomRows], [bookingRows]] = await Promise.all([
     db.query(
       `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
@@ -439,13 +464,12 @@ export async function loadCustomerOutstanding(db, customerId) {
     ),
     db.query(`SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, [customer.id]),
   ]);
-  if (!bookingRows[0]) return { amount: 0, items: [] };
+  if (!bookingRows[0]) return null;
   const [[payments], depositPayments] = await Promise.all([
     db.query(`SELECT id, amount, status, type, note, payment_date, slip_path FROM Payment WHERE booking_id = ?`, [bookingRows[0].id]),
     loadDepositPayments(db, [customer.id]),
   ]);
-  const currentDue = computeCurrentDue(roomRows[0], payments, customer.deposit_amount, depositPayments.get(customer.id) ?? []);
-  return outstandingFromDue(currentDue);
+  return computeCurrentDue(roomRows[0], payments, customer.deposit_amount, depositPayments.get(customer.id) ?? []);
 }
 
 export const RENEW_OUTSTANDING_MESSAGE = (amount) =>
@@ -506,7 +530,7 @@ router.get("/me", async (req, res) => {
       pool.query(
         `SELECT tr.id, tr.type, tr.note, tr.room_number, tr.target_room_number, tr.renew_duration_months, tr.renew_payment_type,
                 tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
-                tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at,
+                tr.status, tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.created_at, tr.reject_reason,
                 sr.price AS source_room_price, tg.price AS target_room_price,
                 sr.rental_end_date AS source_rental_end_date,
                 (SELECT cu.deposit_amount FROM Customer cu WHERE cu.id = tr.customer_id) AS deposit_amount,
@@ -583,6 +607,11 @@ router.get("/me", async (req, res) => {
       announcements,
       currentDue,
       outstanding: outstandingFromDue(currentDue),
+      moveOutBalance: moveOutBalanceFromDue(currentDue),
+      depositPaid: (depositPaymentsByCustomer.get(customer.id) ?? []).reduce((total, payment) => {
+        const cents = Math.round(Number(payment.amount) * 100);
+        return payment.status === "paid" && Number.isSafeInteger(cents) ? total + cents : total;
+      }, 0) / 100,
       parcels: parcelsWithPhotos,
     });
   } catch (error) {

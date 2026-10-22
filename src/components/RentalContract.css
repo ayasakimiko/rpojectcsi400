@@ -2842,3 +2842,129 @@
   border: 1px dashed #93c5fd;
   background: #eff6ff;
 }
+
+.deposit-settle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+  background: #fffdf5;
+}
+
+.deposit-settle-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #b45309;
+}
+
+.deposit-settle-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deposit-settle-head strong {
+  color: #0f2b52;
+  font-size: 15px;
+}
+
+.deposit-settle-head small {
+  color: #92400e;
+  font-size: 12.5px;
+}
+
+.deposit-settle-damage {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fffbfa;
+  color: #7a271a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.deposit-settle-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deposit-settle-option {
+  padding: 9px 12px;
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.deposit-settle-option.is-refund.is-active {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.deposit-settle-option.is-forfeit.is-active {
+  border-color: #fda29b;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.deposit-settle-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.deposit-settle-field em {
+  color: #dc2626;
+  font-style: normal;
+}
+
+.deposit-settle-field input,
+.deposit-settle-field textarea {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid #d6e2f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.deposit-settle-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+}
+
+.deposit-settle-summary strong {
+  color: #0f2b52;
+  font-size: 18px;
+}
+
+.deposit-settle-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.deposit-settle > .staff-action-btn {
+  align-self: flex-end;
+}

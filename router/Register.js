@@ -6,9 +6,9 @@ import { CONTRACT_DURATION_MONTHS, DEPOSIT_MONTHS, isValidDateTimeString, valida
 import {
   contractImageName,
   contractImageUrl,
-  endCustomerContracts,
   parseContractImages,
   removeContractFiles,
+  resetCustomerHistory,
 } from "./rentalContracts.js";
 
 const router = Router();
@@ -140,7 +140,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     let customerId;
     if (returningCustomer) {
       customerId = returningCustomer.id;
-      await endCustomerContracts(connection, customerId);
+      await resetCustomerHistory(connection, customerId);
       await connection.query(
         `UPDATE Customer SET password = ?, phone = ?, first_name = ?, last_name = ?, age = ?, room_number = ?,
                              deposit_amount = ?, is_suspended = FALSE, dorm_info_acknowledged_at = NULL

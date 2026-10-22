@@ -568,7 +568,7 @@ function flashHighlight(element, className) {
   )
 }
 
-function Modal({ title, onClose, children, variant, onBack }) {
+function Modal({ title, onClose, children, variant, onBack, headerAction }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -604,6 +604,7 @@ function Modal({ title, onClose, children, variant, onBack }) {
             )}
             <h3>{title}</h3>
           </div>
+          {headerAction && <div className="dashboard-modal-header-actions">{headerAction}</div>}
           <button type="button" className="dashboard-modal-close" onClick={requestClose} aria-label="ปิด">
             <svg
               width="16"
@@ -1221,6 +1222,80 @@ function RenewContractPreview({ room, months, depositAmount }) {
   )
 }
 
+function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, balance }) {
+  const price = Number(room.price) || 0
+  const deposit = Number(depositAmount) || 0
+  const paidDeposit = Math.min(deposit, Number(depositPaid) || 0)
+  const endDay = room.rental_end_date ? new Date(room.rental_end_date) : null
+  if (endDay) endDay.setHours(0, 0, 0, 0)
+  const moveDay = moveDate ? new Date(`${moveDate}T00:00:00`) : null
+  const daysEarly = moveDay && endDay ? Math.ceil((endDay - moveDay) / 86400000) : null
+  const leavesEarly = daysEarly !== null && daysEarly > 0
+  const totalMonths = contractMonthsBetween(room.rental_start_date, room.rental_end_date)
+  const balanceItems = balance?.items ?? []
+  const unpaidItems = balanceItems.filter((item) => item.status !== 'pending')
+  const pendingItems = balanceItems.filter((item) => item.status === 'pending')
+  const rows = [
+    { label: 'ห้อง', value: `ห้อง ${room.room_number}` },
+    { label: 'วันเริ่มสัญญา', value: formatDate(room.rental_start_date) },
+    { label: 'วันสิ้นสุดสัญญา', value: formatDate(room.rental_end_date) },
+    { label: 'ระยะสัญญา', value: totalMonths == null ? '-' : `${totalMonths} เดือน` },
+    { label: 'ค่าเช่า', value: `฿${formatCurrency(price)}/เดือน` },
+    {
+      label: 'เงินมัดจำที่ชำระไว้',
+      value: deposit > 0 ? `฿${formatCurrency(paidDeposit)}${paidDeposit < deposit ? ` จาก ฿${formatCurrency(deposit)}` : ''}` : 'ไม่มี',
+    },
+    {
+      label: 'วันที่ต้องการย้ายออก',
+      value: moveDay ? formatDateOnly(moveDate) : 'ยังไม่ได้เลือก',
+      tone: moveDay ? (leavesEarly ? 'danger' : 'ok') : null,
+    },
+  ]
+  return (
+    <div className="dashboard-renew-preview dashboard-moveout-impact">
+      <div className="dashboard-moveout-impact-title">รายละเอียดสัญญาของคุณ</div>
+      {rows.map((row) => (
+        <div key={row.label} className={`dashboard-moveout-impact-row${row.tone ? ` is-${row.tone}` : ''}`}>
+          <span>{row.label}</span>
+          <strong>{row.value}</strong>
+        </div>
+      ))}
+      <div className="dashboard-moveout-impact-title">ผลกระทบถ้าย้ายออก{moveDay ? `วันที่ ${formatDateOnly(moveDate)}` : 'ตอนนี้'}</div>
+      <ul className="dashboard-renew-preview-notes dashboard-moveout-impact-notes">
+        {!moveDay ? (
+          <li>เลือกวันที่ต้องการย้ายออกเพื่อดูผลกระทบกับเงินมัดจำ</li>
+        ) : paidDeposit <= 0 ? (
+          <li>{deposit > 0 ? 'คุณยังไม่ได้ชำระเงินมัดจำ จึงไม่มีเงินมัดจำที่จะได้รับคืน' : 'สัญญานี้ไม่มีเงินมัดจำ'}</li>
+        ) : leavesEarly ? (
+          <li className="is-danger">
+            ย้ายออกก่อนสิ้นสุดสัญญา {daysEarly} วัน — <b>จะไม่ได้รับเงินมัดจำ ฿{formatCurrency(paidDeposit)} คืน</b>
+            {' '}ถ้าต้องการได้มัดจำคืน ให้ย้ายออกตั้งแต่วันที่ {formatDate(room.rental_end_date)} เป็นต้นไป
+          </li>
+        ) : (
+          <li className="is-ok">
+            พักครบสัญญาแล้ว — ได้รับเงินมัดจำคืน ฿{formatCurrency(paidDeposit)} หลังเจ้าหน้าที่ตรวจสภาพห้อง
+            {' '}(ถ้าพบความเสียหาย อาจถูกหักค่าซ่อมจากเงินมัดจำ)
+          </li>
+        )}
+        {unpaidItems.length > 0 && (
+          <li className="is-danger">
+            มียอดค้างชำระ {unpaidItems.map((item) => `${item.label} ฿${formatCurrency(item.amount)}`).join(', ')}
+            {' '}— ต้องชำระให้ครบก่อน เจ้าหน้าที่จึงจะอนุมัติการย้ายออกได้
+          </li>
+        )}
+        {pendingItems.length > 0 && (
+          <li className="is-warning">มีสลิปที่รอเจ้าหน้าที่ตรวจ ({pendingItems.map((item) => item.label).join(', ')}) ต้องตรวจผ่านก่อนอนุมัติย้ายออก</li>
+        )}
+        {balanceItems.length === 0 && <li className="is-ok">ไม่มียอดค้างชำระ</li>}
+        <li>ไม่มีค่าเช่าของเดือนถัดไปหลังวันที่ย้ายออกได้รับอนุมัติ</li>
+        <li>เจ้าหน้าที่จะนัดตรวจสภาพห้องก่อนอนุมัติ ค่าเสียหายที่พบอาจหักจากเงินมัดจำ</li>
+        <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ยังไม่ได้รับจะถูกยกเลิกเมื่ออนุมัติ — รับพัสดุให้เรียบร้อยก่อนย้าย</li>
+        <li>หลังย้ายออก ยังเข้าสู่ระบบเพื่อดูประวัติการเช่า ใบเสร็จ และสัญญาเก่าได้ แต่ทำรายการใหม่ไม่ได้</li>
+      </ul>
+    </div>
+  )
+}
+
 function TenantRequestDetailCard({ request, roomNumber }) {
   return (
     <div className="dashboard-maintenance-detail-card">
@@ -1273,6 +1348,90 @@ function TenantRequestDetailCard({ request, roomNumber }) {
           )}
         </>
       )}
+      {request.type === 'moveout' && (() => {
+        const waiting = ['pending', 'in_progress'].includes(request.status)
+        const voided = ['rejected', 'cancelled'].includes(request.status)
+        const contractEnd = request.source_rental_end_date
+        const deposit = Number(request.deposit_amount) || 0
+        const moveDay = request.preferred_move_date ? new Date(`${request.preferred_move_date}T00:00:00`) : null
+        const endDay = contractEnd ? new Date(contractEnd) : null
+        if (endDay) endDay.setHours(0, 0, 0, 0)
+        const daysEarly = moveDay && endDay ? Math.ceil((endDay - moveDay) / 86400000) : null
+        const leavesEarly = daysEarly !== null && daysEarly > 0
+        return (
+          <>
+            <div className="dashboard-maintenance-detail-row">
+              <span>วันที่ต้องการย้ายออก</span>
+              <strong className="is-accent">{moveDay ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ'}</strong>
+            </div>
+            {contractEnd && !voided && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>สิ้นสุดสัญญา</span>
+                <strong>{formatDate(contractEnd)}</strong>
+              </div>
+            )}
+            {waiting && daysEarly !== null && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>ย้ายออกเทียบกับสัญญา</span>
+                <strong className={leavesEarly ? 'is-danger' : 'is-success'}>
+                  {leavesEarly ? `ก่อนครบสัญญา ${daysEarly} วัน` : 'ครบสัญญาแล้ว'}
+                </strong>
+              </div>
+            )}
+            {waiting && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>ตรวจสภาพห้อง</span>
+                <strong className={request.room_inspected ? 'is-success' : 'is-pending'}>
+                  {request.room_inspected ? 'ตรวจเรียบร้อยแล้ว' : 'รอเจ้าหน้าที่ตรวจห้อง'}
+                </strong>
+              </div>
+            )}
+            {deposit > 0 && (
+              <div className="dashboard-maintenance-detail-row">
+                <span>เงินมัดจำ</span>
+                <strong className={voided ? 'is-success' : waiting && daysEarly !== null ? (leavesEarly ? 'is-danger' : 'is-success') : ''}>
+                  ฿{formatCurrency(deposit)}
+                  {voided
+                    ? ' · ยังอยู่ครบ'
+                    : waiting && daysEarly !== null
+                      ? leavesEarly ? ' · จะถูกริบ' : ' · คืนหลังตรวจห้อง'
+                      : request.status === 'approved' ? ' · ดูผลในเมนูสัญญาเช่าของฉัน' : ''}
+                </strong>
+              </div>
+            )}
+            {voided ? (
+              <p className="dashboard-renew-summary is-warning">
+                <strong>คำขอนี้ไม่มีผล</strong> สัญญาเช่าและเงินมัดจำของคุณยังเหมือนเดิม
+                {' '}หากยังต้องการย้ายออก สามารถแจ้งย้ายออกใหม่ได้
+              </p>
+            ) : waiting ? (
+              <div className="dashboard-moveout-summary">
+                {deposit > 0 && (
+                  <div className={`dashboard-moveout-summary-item ${leavesEarly ? 'is-danger' : 'is-ok'}`}>
+                    <strong>{leavesEarly ? 'ไม่ได้รับเงินมัดจำคืน' : 'ได้รับเงินมัดจำคืน'}</strong>
+                    <span>
+                      {leavesEarly
+                        ? `ย้ายออกก่อนสิ้นสุดสัญญา ${daysEarly} วัน เงินมัดจำ ฿${formatCurrency(deposit)} จะถูกริบ`
+                        : `พักครบสัญญา ได้รับเงินมัดจำ ฿${formatCurrency(deposit)} คืน (อาจหักค่าเสียหายจากผลตรวจห้อง)`}
+                    </span>
+                  </div>
+                )}
+                <div className="dashboard-moveout-summary-item">
+                  <strong>ก่อนเจ้าหน้าที่อนุมัติ</strong>
+                  <ul>
+                    <li>เจ้าหน้าที่ต้องตรวจสภาพห้องก่อน</li>
+                    <li>ต้องไม่มียอดค้างชำระ</li>
+                  </ul>
+                </div>
+              </div>
+            ) : request.status === 'approved' ? (
+              <p className="dashboard-renew-summary">
+                ย้ายออกเรียบร้อยแล้ว · ยังเข้าสู่ระบบเพื่อดูประวัติการเช่า ใบเสร็จ และสัญญาเก่าได้
+              </p>
+            ) : null}
+          </>
+        )
+      })()}
       {request.type === 'renew' && (() => {
         const waiting = ['pending', 'in_progress'].includes(request.status)
         const currentEnd = request.source_rental_end_date
@@ -3011,6 +3170,8 @@ function getRequestDetail(kind, request) {
       ['วันที่ส่งคำขอ', formatVisitDateTime(request.created_at)],
       [kind === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ', request.note],
     )
+    if (kind === 'moveout' && request.preferred_move_date) fields.push(['วันที่ต้องการย้ายออก', formatDateOnly(request.preferred_move_date)])
+    if (request.status === 'rejected' && request.reject_reason) fields.push(['เหตุผลที่ไม่อนุมัติ', request.reject_reason])
   }
 
   return { title, heading, icon, iconClass, meta, statusLabel, badge, heroStatus, fields, photos }
@@ -4605,6 +4766,10 @@ function CustomerDashbord() {
 
   const handleRequestSubmit = async (event) => {
     event.preventDefault()
+    if (activeRequestType === 'moveout' && !preferredMoveDate) {
+      setRequestError('กรุณาเลือกวันที่ต้องการย้ายออก')
+      return
+    }
     if (activeRequestType === 'moveout' && !requestNote.trim()) {
       setRequestError('กรุณากรอกรายละเอียดการย้ายออก')
       return
@@ -4641,6 +4806,7 @@ function CustomerDashbord() {
         payload.move_reason = moveReason
         payload.preferred_move_date = preferredMoveDate
       }
+      if (activeRequestType === 'moveout') payload.preferred_move_date = preferredMoveDate
       const { data: result } = await axios.post('/api/customer/requests', payload, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -4911,7 +5077,12 @@ function CustomerDashbord() {
   const latestRequestByType = (type) => tenantRequests.find((request) => request.type === type)
   const renewRequest = latestRequestByType('renew')
   const renewOutstanding = Number(data?.outstanding?.amount) || 0
+  const moveOutUnpaidItems = (data?.moveOutBalance?.items ?? []).filter((item) => item.status !== 'pending')
+  const moveOutOutstanding = moveOutUnpaidItems.reduce((total, item) => total + (Number(item.amount) || 0), 0)
   const moveoutRequest = latestRequestByType('moveout')
+  const moveoutActive = Boolean(
+    moveoutRequest && !['rejected', 'cancelled'].includes(moveoutRequest.status) && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status],
+  )
   const moveRoomRequest = latestRequestByType('move_room')
 
   const canResubmitRenew =
@@ -5970,6 +6141,28 @@ function CustomerDashbord() {
             onClose={() => setStatusPopup(null)}
             variant="request"
             onBack={statusPopup.showLog ? () => setStatusPopup({ ...statusPopup, showLog: false }) : undefined}
+            headerAction={(() => {
+              const historyCount = TENANT_REQUEST_TYPE_LABEL[statusPopup.kind]
+                ? tenantRequests.filter((request) => request.type === statusPopup.kind).length
+                : 0
+              if (statusPopup.showLog || historyCount === 0) return null
+              return (
+                <button
+                  type="button"
+                  className="dashboard-modal-history-btn"
+                  onClick={() => setStatusPopup({ ...statusPopup, showLog: true })}
+                  aria-label={`ประวัติคำขอทั้งหมด ${historyCount} รายการ`}
+                  title="ประวัติคำขอทั้งหมด"
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                    <path d="M3 3v5h5M12 7v5l3 2" />
+                  </svg>
+                  <span className="dashboard-modal-history-text">ประวัติคำขอ</span>
+                  <span className="dashboard-modal-history-count">{historyCount}</span>
+                </button>
+              )
+            })()}
           >
             {() => {
               const content = getStatusPopupContent(statusPopup)
@@ -6181,24 +6374,13 @@ function CustomerDashbord() {
                       <p className="dashboard-confirm-message">{content.message}</p>
                     </div>
                   </div>
-                  {sameTypeRequests.length > 0 && (
-                    <button
-                      type="button"
-                      className="dashboard-status-log-btn"
-                      onClick={() => setStatusPopup({ ...statusPopup, showLog: true })}
-                    >
-                      <span className="dashboard-status-log-btn-icon" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                          <path d="M3 3v5h5M12 7v5l3 2" />
-                        </svg>
+                  {statusPopup.status === 'rejected' && statusPopup.request?.reject_reason && (
+                    <div className="dashboard-reject-reason">
+                      <span className="dashboard-reject-reason-label">
+                        ข้อความจากเจ้าหน้าที่{statusPopup.request.completed_by_name ? ` (${statusPopup.request.completed_by_name})` : ''}
                       </span>
-                      <span className="dashboard-status-log-btn-text">ประวัติคำขอทั้งหมด</span>
-                      <span className="dashboard-status-log-btn-count">{sameTypeRequests.length}</span>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                    </button>
+                      <p>{statusPopup.request.reject_reason}</p>
+                    </div>
                   )}
                   <div className="dashboard-status-scroll" key={statusPopup.request?.id ?? statusPopup.kind}>
                     {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
@@ -6511,6 +6693,13 @@ function CustomerDashbord() {
               </div>
             )}
           </Modal>
+        )}
+
+        {!room && (
+          <div className="dashboard-former-tenant" role="status">
+            <strong>คุณย้ายออกจากหอพักแล้ว</strong>
+            <span>บัญชีนี้ใช้ดูประวัติการเช่า ใบเสร็จ และสัญญาเก่าได้อย่างเดียว ถ้าต้องการเช่าอีกครั้ง กรุณาติดต่อเจ้าหน้าที่</span>
+          </div>
         )}
 
         <DashboardReminders reminders={reminders} />
@@ -7491,18 +7680,24 @@ function CustomerDashbord() {
                       <div data-customer-focus="tenant-moveout" className={`dashboard-request-row${moveoutRequest && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status] ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">แจ้งย้ายออก</p>
-                          <p className="dashboard-request-desc">
-                            {(!['rejected', 'cancelled'].includes(moveoutRequest?.status) && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
+                          <p className={`dashboard-request-desc${!moveoutActive && moveOutOutstanding > 0 ? ' is-warning' : ''}`}>
+                            {(moveoutActive && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
+                              || (room?.is_booked && moveOutOutstanding > 0
+                                && `มียอดค้างชำระ ฿${formatCurrency(moveOutOutstanding)} (${moveOutUnpaidItems.map((item) => item.label).join(', ')}) กรุณาชำระก่อนแจ้งย้ายออก`)
                               || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
                           </p>
                         </div>
-                        {!['rejected', 'cancelled'].includes(moveoutRequest?.status) && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status] ? (
+                        {moveoutActive ? (
                           <button
                             type="button"
                             className={`dashboard-badge status-${tenantRequestBadgeClass(moveoutRequest.status)} dashboard-badge-btn`}
                             onClick={() => setStatusPopup({ kind: 'moveout', status: moveoutRequest.status, request: moveoutRequest })}
                           >
                             {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
+                          </button>
+                        ) : room?.is_booked && moveOutOutstanding > 0 ? (
+                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
+                            ชำระยอดค้าง
                           </button>
                         ) : (
                           room?.is_booked && (
@@ -7661,6 +7856,32 @@ function CustomerDashbord() {
                                 </p>
                               </>
                             )}
+                            {activeRequestType === 'moveout' && (
+                              <>
+                                <FieldLabel required>
+                                  วันที่ต้องการย้ายออก
+                                </FieldLabel>
+                                <ThaiDatePicker
+                                  className="dashboard-date-input"
+                                  value={preferredMoveDate}
+                                  onChange={(date) => {
+                                    setPreferredMoveDate(date)
+                                    if (requestError) setRequestError('')
+                                  }}
+                                  minDate={moveDateRange.min}
+                                  maxDate={moveDateRange.max}
+                                />
+                                {room && (
+                                  <MoveOutImpactPreview
+                                    room={room}
+                                    moveDate={preferredMoveDate}
+                                    depositAmount={data?.customer?.deposit_amount}
+                                    depositPaid={data?.depositPaid}
+                                    balance={data?.moveOutBalance}
+                                  />
+                                )}
+                              </>
+                            )}
                             <label>
                               {activeRequestType === 'moveout' ? (
                                 <>
@@ -7684,7 +7905,7 @@ function CustomerDashbord() {
                               }}
                               placeholder={
                                 activeRequestType === 'moveout'
-                                  ? 'เช่น เหตุผลที่ย้ายออก และวันที่ต้องการย้ายออก'
+                                  ? 'เช่น เหตุผลที่ย้ายออก และช่วงเวลาที่สะดวกให้เจ้าหน้าที่ตรวจห้อง'
                                   : activeRequestType === 'move_room'
                                     ? 'เช่น ปัญหาของห้องเดิม หรือสิ่งที่ต้องการในห้องใหม่'
                                     : 'ระบุรายละเอียดเพิ่มเติม...'
@@ -7701,7 +7922,7 @@ function CustomerDashbord() {
                                 className="dashboard-action-btn is-primary"
                                 disabled={
                                   requestSubmitting
-                                  || (activeRequestType === 'moveout' && !requestNote.trim())
+                                  || (activeRequestType === 'moveout' && (!requestNote.trim() || !preferredMoveDate))
                                   || (activeRequestType === 'move_room'
                                     && (!targetRoomNumber || availableRooms.length === 0 || !moveReason || !preferredMoveDate
                                       || (moveReason === 'other' && !requestNote.trim())))
@@ -7722,9 +7943,11 @@ function CustomerDashbord() {
                 <div className="dashboard-card">
                   <div className="dashboard-card-header">
                     <h2>แจ้งซ่อม</h2>
-                    <button type="button" className="dashboard-action-btn is-primary" onClick={openMaintenanceForm}>
-                      แจ้งซ่อม
-                    </button>
+                    {room && (
+                      <button type="button" className="dashboard-action-btn is-primary" onClick={openMaintenanceForm}>
+                        แจ้งซ่อม
+                      </button>
+                    )}
                   </div>
                   {maintenanceRequests.length > 0 && (
                     <DashboardFilterPanel

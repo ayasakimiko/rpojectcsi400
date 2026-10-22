@@ -1780,7 +1780,7 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
   const outstanding =
     payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length +
     (contract?.deposit_status === 'due' ? 1 : 0)
-  const movedOut = Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date
+  const movedOut = (Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date
   const facts = [
     { icon: 'phone', label: 'เบอร์โทร', value: customer.phone ? <a href={`tel:${customer.phone}`}>{customer.phone}</a> : '-' },
     { icon: 'user', label: 'อายุ', value: customer.age ? `${customer.age} ปี` : '-' },
@@ -6860,7 +6860,7 @@ function AdminBackupPage() {
     const totalRooms = rooms.length
     const vacantRooms = rooms.filter((room) => !room.is_booked).length
     const activeStaff = staffList.filter((member) => !member.is_suspended).length
-    const activeCustomers = customers.filter((customer) => !customer.is_suspended).length
+    const activeCustomers = customers.filter((customer) => !customer.is_suspended && customer.room_number != null).length
     return { totalRooms, vacantRooms, activeStaff, activeCustomers }
   }, [rooms, staffList, customers])
 
@@ -7972,7 +7972,7 @@ function AdminBackupPage() {
                             <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                             </span>
-                            {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
+                            {(Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date && (
                               <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
                             )}
                           </td>
@@ -8016,7 +8016,7 @@ function AdminBackupPage() {
                                   <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                                     {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                                   </span>
-                                  {Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date && (
+                                  {(Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date && (
                                     <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
                                   )}
                                 </>

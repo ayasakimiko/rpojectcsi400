@@ -5,6 +5,7 @@ import { getActingStaffName, requireActiveStaff } from "../middleware/accounts.j
 import {
   isPositiveId,
   lookup,
+  parseDepositSettlementInput,
   parseMoveOutInspectionInput,
   parseMoveOutInspectionUpdate,
   parsePage,
@@ -25,6 +26,8 @@ import {
   isPlateRegisteredByOther,
   loadCustomerOutstanding,
   loadDepositPayments,
+  loadMoveOutBalance,
+  MOVEOUT_OUTSTANDING_MESSAGE,
   RENEW_OUTSTANDING_MESSAGE,
   withThisMonthRent,
   withVehiclePhotos,
@@ -32,7 +35,7 @@ import {
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
-import { loadCompletedContracts, resetCustomerHistory } from "./rentalContracts.js";
+import { closeCustomerTenancy, loadCompletedContracts, loadContractByBooking } from "./rentalContracts.js";
 
 const router = Router();
 
@@ -104,6 +107,48 @@ router.get("/contracts/completed", async (_req, res) => {
   } catch (error) {
     console.error("Fetch completed contracts error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดรายการสัญญาที่เสร็จสมบูรณ์ได้" });
+  }
+});
+
+router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
+  try {
+    const bookingId = Number(req.params.bookingId);
+    if (!isPositiveId(bookingId)) return res.status(400).json({ message: "รหัสสัญญาไม่ถูกต้อง" });
+    const pool = getPool();
+    const contract = await loadContractByBooking(pool, bookingId);
+    if (!contract) return res.status(404).json({ message: "ไม่พบสัญญานี้" });
+    if (!contract.is_archived) return res.status(409).json({ message: "สัญญานี้ยังไม่สิ้นสุด จึงยังจัดการเงินมัดจำไม่ได้" });
+    if (contract.deposit_settlement) return res.status(409).json({ message: "บันทึกการคืน/ริบเงินมัดจำของสัญญานี้ไปแล้ว" });
+    if (!(contract.deposit_paid > 0)) return res.status(409).json({ message: "สัญญานี้ไม่มีเงินมัดจำที่ชำระไว้" });
+
+    const { error, value } = parseDepositSettlementInput(req.body ?? {}, contract.deposit_paid);
+    if (error) return res.status(400).json({ message: error });
+
+    const staffName = await getActingStaffName(pool, req.user);
+    const [result] = await pool.query(
+      `UPDATE Booking SET deposit_settlement = ?, deposit_deduction = ?, deposit_refunded_amount = ?,
+                          deposit_settlement_note = ?, deposit_settled_at = NOW(), deposit_settled_by_name = ?
+       WHERE id = ? AND deposit_settlement IS NULL`,
+      [
+        value.action === "refund" ? "refunded" : "forfeited",
+        value.deductionCents / 100,
+        value.refundCents / 100,
+        value.note,
+        staffName || req.user.role,
+        bookingId,
+      ],
+    );
+    if (!result.affectedRows) return res.status(409).json({ message: "บันทึกการคืน/ริบเงินมัดจำของสัญญานี้ไปแล้ว" });
+    const [updated] = await withThisMonthRent(pool, [await loadContractByBooking(pool, bookingId)]);
+    return res.json({
+      message: value.action === "refund"
+        ? `บันทึกคืนเงินมัดจำ ฿${(value.refundCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} แล้ว`
+        : "บันทึกริบเงินมัดจำแล้ว",
+      contract: updated,
+    });
+  } catch (error) {
+    console.error("Settle deposit error:", error);
+    return res.status(500).json({ message: "ไม่สามารถบันทึกการคืนเงินมัดจำได้" });
   }
 });
 
@@ -929,6 +974,7 @@ router.get("/requests", async (req, res) => {
 
     const [[tenantRequests], [maintenanceRequests]] = await Promise.all([pool.query(
       `SELECT tr.id, tr.customer_id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
+              tr.accepted_at, tr.accepted_by_name,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
               moi.id AS inspection_id, moi.status AS inspection_status, moi.reviewed_at AS inspection_reviewed_at,
@@ -955,10 +1001,22 @@ router.get("/requests", async (req, res) => {
        ORDER BY mr.created_at ASC`,
     )]);
 
+    const moveoutCustomerIds = tenantRequests.filter((request) => request.type === "moveout").map((request) => request.customer_id);
+    const depositPaymentsByCustomer = moveoutCustomerIds.length ? await loadDepositPayments(pool, moveoutCustomerIds) : new Map();
     const tenantRequestsWithOutstanding = await Promise.all(
-      tenantRequests.map(async (request) =>
-        request.type === "renew" ? { ...request, outstanding: await loadCustomerOutstanding(pool, request.customer_id) } : request,
-      ),
+      tenantRequests.map(async (request) => {
+        if (request.type === "renew") return { ...request, outstanding: await loadCustomerOutstanding(pool, request.customer_id) };
+        if (request.type !== "moveout") return request;
+        const depositPaidCents = (depositPaymentsByCustomer.get(request.customer_id) ?? []).reduce((total, payment) => {
+          const cents = Math.round(Number(payment.amount) * 100);
+          return payment.status === "paid" && Number.isSafeInteger(cents) ? total + cents : total;
+        }, 0);
+        return {
+          ...request,
+          outstanding: await loadMoveOutBalance(pool, request.customer_id),
+          deposit_paid: depositPaidCents / 100,
+        };
+      }),
     );
 
     return res.json({ tenantRequests: tenantRequestsWithOutstanding, maintenanceRequests: await attachMaintenancePhotos(pool, maintenanceRequests) });
@@ -1008,7 +1066,7 @@ router.get("/requests/history", async (req, res) => {
 
     const [requests] = await pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
-              tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
+              tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.reject_reason,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone,
               moi.id AS inspection_id, moi.inspected_by_name AS inspection_by_name,
@@ -1281,6 +1339,12 @@ router.post("/requests/:id/approve", async (req, res) => {
         return res.status(409).json({ message: "กรุณาตรวจสภาพห้องก่อนอนุมัติการย้ายออก" });
       }
 
+      const balance = await loadMoveOutBalance(connection, tenantRequest.customer_id);
+      if (balance.items.length > 0) {
+        await connection.rollback();
+        return res.status(409).json({ code: "MOVEOUT_OUTSTANDING", message: MOVEOUT_OUTSTANDING_MESSAGE(balance), outstanding: balance });
+      }
+
       const [roomBeforeReset] = await connection.query(
         `SELECT id, rental_start_date, rental_end_date FROM Room WHERE room_number = ? FOR UPDATE`,
         [tenantRequest.room_number],
@@ -1299,8 +1363,8 @@ router.post("/requests/:id/approve", async (req, res) => {
 
       await connection.query(`UPDATE TenantRequest SET move_in_date = ? WHERE id = ?`, [moveInDate, requestId]);
 
-      await resetCustomerHistory(connection, tenantRequest.customer_id);
-      await connection.query(`UPDATE Customer SET is_suspended = TRUE, room_number = NULL WHERE id = ?`, [tenantRequest.customer_id]);
+      await closeCustomerTenancy(connection, tenantRequest.customer_id);
+      await connection.query(`UPDATE Customer SET room_number = NULL WHERE id = ?`, [tenantRequest.customer_id]);
 
       await connection.query(
         `UPDATE Room
@@ -1383,6 +1447,14 @@ router.post("/requests/:id/reject", async (req, res) => {
       return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     }
 
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!reason) {
+      return res.status(400).json({ message: "กรุณาระบุเหตุผลที่ปฏิเสธเพื่อแจ้งผู้เช่า" });
+    }
+    if (reason.length > 500) {
+      return res.status(400).json({ message: "เหตุผลที่ปฏิเสธต้องไม่เกิน 500 ตัวอักษร" });
+    }
+
     const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
       `UPDATE TenantRequest tr
@@ -1391,9 +1463,10 @@ router.post("/requests/:id/reject", async (req, res) => {
            tr.accepted_at = COALESCE(tr.accepted_at, NOW()),
            tr.accepted_by_name = COALESCE(tr.accepted_by_name, ?),
            tr.completed_at = NOW(),
-           tr.completed_by_name = ?
+           tr.completed_by_name = ?,
+           tr.reject_reason = ?
        WHERE tr.id = ? AND tr.status IN ('pending', 'in_progress')`,
-      [staffName, staffName, requestId],
+      [staffName, staffName, reason, requestId],
     );
     if (result.affectedRows === 0) {
       return res.status(409).json({ message: "ไม่พบคำขอที่รอดำเนินการนี้" });

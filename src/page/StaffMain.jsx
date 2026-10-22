@@ -2219,16 +2219,63 @@ const REJECT_OUTCOME = {
   move_room: 'ผู้เช่ายังอยู่ห้องเดิม และห้องปลายทางยังว่างให้คนอื่นเลือกได้',
 }
 
+const REJECT_REASON_PRESETS = {
+  moveout: ['ยังมียอดค้างชำระ กรุณาชำระให้ครบก่อนแจ้งย้ายออก', 'วันที่ต้องการย้ายออกไม่สะดวก กรุณาติดต่อเจ้าหน้าที่เพื่อนัดวันใหม่', 'ข้อมูลไม่ครบ กรุณาแจ้งย้ายออกใหม่อีกครั้ง'],
+  renew: ['ยังมียอดค้างชำระ กรุณาชำระให้ครบก่อนต่อสัญญา', 'ห้องนี้มีกำหนดปรับปรุง ไม่สามารถต่อสัญญาได้'],
+  move_room: ['ห้องปลายทางไม่ว่างแล้ว กรุณาเลือกห้องอื่น', 'ยังมียอดค้างชำระ กรุณาชำระให้ครบก่อนย้ายห้อง'],
+}
+
 function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
+  const [reason, setReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
   const typeLabel = TENANT_REQUEST_TYPE_LABEL[request.type] || ''
   const facts = getTenantRequestFacts(request)
+  const contractEnd = request.source_rental_end_date
+  const msLeft = contractEnd ? new Date(contractEnd).getTime() - Date.now() : null
+  const deposit = Number(request.deposit_amount) || 0
+  const depositPaid = request.deposit_paid == null ? null : Number(request.deposit_paid) || 0
+  const outstanding = Number(request.outstanding?.amount) || 0
+  const details = [
+    { label: 'เบอร์โทร', value: request.phone || '-' },
+    { label: 'ส่งคำขอ', value: formatDateTime(request.created_at) },
+    request.accepted_by_name && { label: 'รับเรื่องโดย', value: request.accepted_by_name },
+    request.type === 'renew' && {
+      label: 'ขอต่อสัญญา',
+      value: RENEW_DURATION_LABEL[request.renew_duration_months] || `${request.renew_duration_months} เดือน`,
+    },
+    request.type === 'move_room' && { label: 'ห้องที่ขอย้ายไป', value: request.target_room_number || '-' },
+    ['moveout', 'move_room'].includes(request.type) && {
+      label: request.type === 'moveout' ? 'ต้องการย้ายออก' : 'ต้องการย้าย',
+      value: request.preferred_move_date ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ',
+    },
+    contractEnd && { label: 'สิ้นสุดสัญญา', value: formatDate(contractEnd) },
+    msLeft !== null && {
+      label: 'สัญญาเหลือ',
+      value: msLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(msLeft),
+      tone: msLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'warning' : null,
+    },
+    deposit > 0 && {
+      label: 'เงินมัดจำ',
+      value: depositPaid === null
+        ? `฿${formatCurrency(deposit)}`
+        : depositPaid > 0 ? `฿${formatCurrency(depositPaid)} (ชำระแล้ว)` : `฿${formatCurrency(deposit)} (ยังไม่ชำระ)`,
+    },
+    request.outstanding && {
+      label: 'ยอดค้างชำระ',
+      value: outstanding > 0 ? `฿${formatCurrency(outstanding)}` : 'ไม่มี',
+      tone: outstanding > 0 ? 'danger' : 'success',
+    },
+  ].filter(Boolean)
   const outcomes = [
     'คำขอนี้จะถูกปิดและเปลี่ยนสถานะเป็น "ปฏิเสธแล้ว"',
     REJECT_OUTCOME[request.type],
+    request.type === 'moveout' && contractEnd && `สัญญาเช่ายังมีผลต่อถึง ${formatDate(contractEnd)} ผู้เช่าต้องจ่ายค่าเช่ารายเดือนตามปกติ`,
+    request.type === 'moveout' && deposit > 0 && `เงินมัดจำ ฿${formatCurrency(deposit)} ยังอยู่ครบ ไม่มีการคืนหรือริบ`,
+    ['moveout', 'move_room'].includes(request.type) && request.inspection_id && 'ผลตรวจห้องที่บันทึกไว้ยังเก็บเป็นประวัติ',
     'ผู้เช่าจะเห็นผลในหน้าของตัวเอง และส่งคำขอใหม่ได้',
   ].filter(Boolean)
   return (
-    <Modal title="ยืนยันการปฏิเสธคำขอ" onClose={onClose} variant="transfer">
+    <Modal title="ยืนยันการปฏิเสธคำขอ" onClose={onClose} variant="transfer-approval">
       {(requestClose) => (
         <div className="staff-transfer-body">
           <div className="staff-transfer-top">
@@ -2273,14 +2320,12 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
             <section className="staff-transfer-section">
               <h4 className="staff-transfer-section-title">รายละเอียดคำขอ</h4>
               <dl className="staff-transfer-list">
-                <div>
-                  <dt>เบอร์โทร</dt>
-                  <dd>{request.phone || '-'}</dd>
-                </div>
-                <div>
-                  <dt>ส่งคำขอ</dt>
-                  <dd>{formatDateTime(request.created_at)}</dd>
-                </div>
+                {details.map((detail) => (
+                  <div key={detail.label}>
+                    <dt>{detail.label}</dt>
+                    <dd className={detail.tone ? `is-${detail.tone}` : undefined}>{detail.value}</dd>
+                  </div>
+                ))}
               </dl>
               {facts.length > 0 && (
                 <div className="staff-req-facts">
@@ -2294,6 +2339,44 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
               <p className="staff-transfer-note">
                 <span>{request.type === 'moveout' ? 'เหตุผลการย้ายออก:' : 'หมายเหตุ:'}</span> {request.note || '-'}
               </p>
+            </section>
+
+            <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">
+                เหตุผลที่ปฏิเสธ <span className="staff-reject-required">* ผู้เช่าจะเห็นข้อความนี้</span>
+              </h4>
+              {REJECT_REASON_PRESETS[request.type] && (
+                <div className="staff-reject-presets">
+                  {REJECT_REASON_PRESETS[request.type].map((preset) => (
+                    <button
+                      type="button"
+                      key={preset}
+                      className={`staff-reject-preset${reason === preset ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setReason(preset)
+                        setReasonError('')
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea
+                className="staff-reject-reason"
+                rows={3}
+                maxLength={500}
+                value={reason}
+                placeholder="พิมพ์เหตุผลหรือสิ่งที่ผู้เช่าต้องทำต่อ เช่น กรุณาชำระค่าเช่าเดือนนี้ก่อน แล้วแจ้งย้ายออกใหม่"
+                onChange={(event) => {
+                  setReason(event.target.value)
+                  setReasonError('')
+                }}
+              />
+              <div className="staff-reject-reason-meta">
+                {reasonError ? <span className="is-error">{reasonError}</span> : <span>เลือกข้อความด้านบนหรือพิมพ์เองก็ได้</span>}
+                <span>{reason.length}/500</span>
+              </div>
             </section>
 
             <section className="staff-transfer-section is-danger">
@@ -2316,7 +2399,13 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
                 type="button"
                 className="staff-action-btn is-danger-solid"
                 disabled={processing}
-                onClick={onConfirm}
+                onClick={() => {
+                  if (!reason.trim()) {
+                    setReasonError('กรุณาระบุเหตุผลที่ปฏิเสธเพื่อแจ้งผู้เช่า')
+                    return
+                  }
+                  onConfirm(reason.trim())
+                }}
               >
                 {processing ? 'กำลังดำเนินการ...' : 'ยืนยันปฏิเสธ'}
               </button>
@@ -2568,6 +2657,103 @@ function RenewRequestOverview({ request, contractEnd, contractMsLeft, isOpen }) 
   )
 }
 
+function MoveOutRequestOverview({ request, contractEnd, contractMsLeft, isOpen }) {
+  const deposit = Number(request.deposit_amount) || 0
+  const depositPaid = request.deposit_paid == null ? deposit : Math.min(deposit, Number(request.deposit_paid) || 0)
+  const balance = request.outstanding
+  const balanceItems = balance?.items ?? []
+  const outstanding = Number(balance?.amount) || 0
+  const inspected = Boolean(request.inspection_id)
+  const moveDay = request.preferred_move_date ? new Date(`${request.preferred_move_date}T00:00:00`) : null
+  const endDay = contractEnd ? new Date(contractEnd) : null
+  if (endDay) endDay.setHours(0, 0, 0, 0)
+  const daysEarly = moveDay && endDay ? Math.ceil((endDay - moveDay) / 86400000) : null
+  const leavesEarly = daysEarly !== null && daysEarly > 0
+  const expiringSoon = contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS
+  const ready = inspected && balanceItems.length === 0
+  return (
+    <div className="staff-renew-overview">
+      <div className="staff-renew-stats">
+        <div className="is-accent">
+          <small>ต้องการย้ายออก</small>
+          <strong>{moveDay ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ'}</strong>
+        </div>
+        <div className={expiringSoon ? 'is-warning' : ''}>
+          <small>สัญญาเหลือ</small>
+          <strong>{contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}</strong>
+        </div>
+        {isOpen && balance ? (
+          <div className={outstanding > 0 ? 'is-danger' : balanceItems.length ? 'is-warning' : 'is-success'}>
+            <small>ยอดค้างที่ต้องเคลียร์</small>
+            <strong>{outstanding > 0 ? `฿${formatCurrency(outstanding)}` : balanceItems.length ? 'รอตรวจสลิป' : 'ไม่มี'}</strong>
+          </div>
+        ) : (
+          <div>
+            <small>สถานะ</small>
+            <strong>{TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}</strong>
+          </div>
+        )}
+      </div>
+
+      {contractEnd && (
+        <div className="staff-moveout-impact">
+          <div className="staff-moveout-impact-row">
+            <span>วันสิ้นสุดสัญญา</span>
+            <strong>{formatDate(contractEnd)}</strong>
+          </div>
+          <div className="staff-moveout-impact-row">
+            <span>ย้ายออกเทียบกับสัญญา</span>
+            <strong className={leavesEarly ? 'is-danger' : moveDay ? 'is-success' : ''}>
+              {!moveDay ? '-' : leavesEarly ? `ก่อนครบสัญญา ${daysEarly} วัน` : 'ครบสัญญาแล้ว'}
+            </strong>
+          </div>
+          <div className="staff-moveout-impact-row">
+            <span>เงินมัดจำที่ชำระไว้</span>
+            <strong>
+              {deposit > 0 ? `฿${formatCurrency(depositPaid)}${depositPaid < deposit ? ` จาก ฿${formatCurrency(deposit)}` : ''}` : 'ไม่มี'}
+            </strong>
+          </div>
+          <div className="staff-moveout-impact-row">
+            <span>เงินมัดจำหลังย้ายออก</span>
+            <strong className={depositPaid > 0 && moveDay ? (leavesEarly ? 'is-danger' : 'is-success') : ''}>
+              {depositPaid <= 0
+                ? deposit > 0 ? 'ยังไม่ได้ชำระ · ไม่มียอดต้องคืน' : 'ไม่มีเงินมัดจำ'
+                : !moveDay ? '-' : leavesEarly ? 'ริบ (ออกก่อนสัญญา)' : 'คืนหลังตรวจห้อง'}
+            </strong>
+          </div>
+        </div>
+      )}
+
+      {isOpen && balanceItems.length > 0 && (
+        <ul className="staff-renew-outstanding-list">
+          {balanceItems.map((item, index) => (
+            <li key={`${item.type}-${index}`}>
+              <span>
+                {item.label}
+                {item.status === 'overdue' ? ' · เกินกำหนด' : item.status === 'pending' ? ' · รอตรวจสลิป' : ''}
+              </span>
+              <b>฿{formatCurrency(item.amount)}</b>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isOpen && (
+        <div className={`staff-moveout-checklist${ready ? ' is-ready' : ''}`}>
+          <strong>{ready ? 'พร้อมอนุมัติย้ายออก' : 'ก่อนอนุมัติย้ายออกต้องครบ'}</strong>
+          <ul>
+            <li className={inspected ? 'is-done' : ''}>{inspected ? 'ตรวจสภาพห้องแล้ว' : 'ยังไม่ได้ตรวจสภาพห้อง'}</li>
+            <li className={balanceItems.length === 0 ? 'is-done' : ''}>
+              {balanceItems.length === 0 ? 'ไม่มียอดค้างชำระ' : 'ผู้เช่ายังมียอดค้างหรือสลิปรอตรวจ'}
+            </li>
+          </ul>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
 function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
   const isMove = request.type === 'move_room'
   const isOpen = ['pending', 'in_progress'].includes(request.status)
@@ -2682,6 +2868,11 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                 </div>
               </div>
             )}
+            {request.type === 'moveout' && request.note && (
+              <p className="staff-transfer-note">
+                <span>เหตุผลการย้ายออก:</span> {request.note}
+              </p>
+            )}
           </div>
 
           <div className="staff-transfer-scroll">
@@ -2711,6 +2902,11 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                     <span>หมายเหตุ:</span> {request.note}
                   </p>
                 )}
+              </section>
+            ) : request.type === 'moveout' ? (
+              <section className="staff-transfer-section">
+                <h4 className="staff-transfer-section-title">สัญญาและผลกระทบการย้ายออก</h4>
+                <MoveOutRequestOverview request={request} contractEnd={contractEnd} contractMsLeft={contractMsLeft} isOpen={isOpen} />
               </section>
             ) : (
             <section className="staff-transfer-section">
@@ -2963,62 +3159,63 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
         <p className="staff-form-error">{loadError}</p>
       ) : inspection ? (
         <>
+          <p className="staff-insp-meta">
+            ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
+            {inspection.inspected_by_name && (
+              <>
+                {' · โดย '}
+                <span className="staff-actor">{inspection.inspected_by_name}</span>
+              </>
+            )}
+          </p>
           {resultCounts.length > 0 && (
-            <div className="staff-transfer-tags">
+            <div className="staff-insp-summary">
               {resultCounts.map((option) => (
-                <span key={option.key} className={`staff-transfer-tag result-${option.key}`}>
-                  {option.label} {option.count}
+                <span key={option.key} className={`staff-insp-count result-${option.key}`}>
+                  <strong>{option.count}</strong>
+                  <small>{option.label}</small>
                 </span>
               ))}
             </div>
           )}
-          {issueItems.length > 0 && (
-            <ul className="staff-transfer-issues">
-              {issueItems.map((item, index) => {
-                const [title, detail] = item.label.split(' (')
-                return (
-                  <li key={item.key} className={`is-${checklist[item.key]}`}>
-                    <span className="staff-transfer-issue-number" aria-hidden="true">{index + 1}</span>
-                    <div className="staff-transfer-issue-content">
-                      <span className="staff-transfer-issue-title">{title}</span>
-                      {detail && <small>{detail.replace(/\)$/, '')}</small>}
-                    </div>
-                    <strong className="staff-transfer-issue-status">{CHECKLIST_RESULT_LABEL[checklist[item.key]]}</strong>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+          <ul className="staff-insp-checklist">
+            {MOVE_OUT_CHECKLIST.map((item) => {
+              const [title, detail] = item.label.split(' (')
+              const result = checklist[item.key]
+              return (
+                <li key={item.key} className={`result-${result || 'none'}`}>
+                  <span className="staff-insp-item">
+                    <span>{title}</span>
+                    {detail && <small>{detail.replace(/\)$/, '')}</small>}
+                  </span>
+                  <strong className={`staff-insp-badge result-${result || 'none'}`}>{CHECKLIST_RESULT_LABEL[result] || '-'}</strong>
+                </li>
+              )
+            })}
+          </ul>
           {inspection.damage_note && (
-            <div className="staff-transfer-note is-damage">
-              <span className="staff-transfer-note-icon" aria-hidden="true">!</span>
-              <div className="staff-transfer-note-content">
-                <strong>รายละเอียดความเสียหาย</strong>
-                <p>{inspection.damage_note}</p>
-              </div>
+            <div className={`staff-insp-note${issueItems.length > 0 ? ' is-issue' : ''}`}>
+              <strong>{issueItems.length > 0 ? 'รายละเอียดความเสียหาย' : 'หมายเหตุจากการตรวจ'}</strong>
+              <p>{inspection.damage_note}</p>
             </div>
           )}
           {photos.length > 0 ? (
-            <div className="staff-transfer-inspection-gallery">
-              <div className="staff-transfer-gallery-heading">
-                <h5>รูปประกอบผลตรวจ <span>{photos.length} รูป</span></h5>
+            <div className="staff-insp-gallery">
+              <div className="staff-insp-gallery-head">
+                <strong>รูปประกอบ <span>{photos.length} รูป</span></strong>
                 <small>คลิกรูปเพื่อดูขนาดเต็ม</small>
               </div>
-              <div className="staff-transfer-photos">
+              <div className="staff-insp-photos">
                 {photos.slice(0, 8).map((photo, index) => (
                   <button
                     type="button"
                     key={photo.url}
-                    className="staff-transfer-photo"
+                    className="staff-insp-photo"
                     onClick={() => setPhotoIndex(index)}
                     aria-label={`ดูรูปตรวจห้อง ${index + 1}`}
                   >
                     <UploadImage src={photo.url} alt="" />
-                    {index === 7 && photos.length > 8 ? (
-                      <span>+{photos.length - 8}</span>
-                    ) : (
-                      <small className="staff-transfer-photo-caption">รูปที่ {index + 1}</small>
-                    )}
+                    {index === 7 && photos.length > 8 && <span>+{photos.length - 8}</span>}
                   </button>
                 ))}
               </div>
@@ -3026,15 +3223,6 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
           ) : (
             <p className="staff-transfer-muted">ไม่มีรูปถ่าย</p>
           )}
-          <p className="staff-transfer-muted">
-            ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
-            {inspection.inspected_by_name && (
-              <>
-                {' โดย '}
-                <span className="staff-actor">{inspection.inspected_by_name}</span>
-              </>
-            )}
-          </p>
         </>
       ) : null}
       {photoIndex !== null &&
@@ -7327,12 +7515,12 @@ function StaffMain() {
     if (success) setMaintenanceCompleteConfirm(null)
   }
 
-  const handleRejectTenantRequest = async (request) => {
+  const handleRejectTenantRequest = async (request, reason) => {
     const key = `tenant-${request.id}`
     setProcessingRequestKey(key)
     setRequestsError('')
     try {
-      const { data } = await axios.post(`/api/staff/requests/${request.id}/reject`, {}, { headers: authHeaders() })
+      const { data } = await axios.post(`/api/staff/requests/${request.id}/reject`, { reason }, { headers: authHeaders() })
       setActionSuccess(data.message || 'ปฏิเสธคำขอสำเร็จ')
       await loadRequests()
       return true
@@ -7344,9 +7532,9 @@ function StaffMain() {
     }
   }
 
-  const handleConfirmTenantReject = async () => {
+  const handleConfirmTenantReject = async (reason) => {
     if (!tenantRejectConfirm) return
-    const success = await handleRejectTenantRequest(tenantRejectConfirm)
+    const success = await handleRejectTenantRequest(tenantRejectConfirm, reason)
     if (success) setTenantRejectConfirm(null)
   }
 
@@ -12299,40 +12487,85 @@ function StaffMain() {
                   <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
                 </svg>
               </div>
-              <p className="staff-confirm-message">ยืนยันอนุมัติการย้ายออก</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{moveoutConfirmRequest.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ตรวจสภาพห้อง</span>
-                  <strong>ตรวจแล้ว</strong>
-                </div>
-              </div>
-              <div className="staff-confirm-warning">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 9v4M12 17h.01" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-                <p>การดำเนินการนี้จะระงับบัญชีผู้เช่ารายนี้ และเปลี่ยนสถานะห้องเป็นว่างทันที</p>
-              </div>
+              <p className="staff-confirm-message">
+                อนุมัติย้ายออกห้อง {moveoutConfirmRequest.room_number}
+                <small className="staff-moveout-confirm-sub">
+                  {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}
+                  {moveoutConfirmRequest.phone ? ` · ${moveoutConfirmRequest.phone}` : ''}
+                </small>
+              </p>
+              {(() => {
+                const request = moveoutConfirmRequest
+                const balanceItems = request.outstanding?.items ?? []
+                const outstanding = Number(request.outstanding?.amount) || 0
+                const deposit = Number(request.deposit_amount) || 0
+                const depositPaid = request.deposit_paid == null ? deposit : Math.min(deposit, Number(request.deposit_paid) || 0)
+                const contractEnd = request.source_rental_end_date
+                const endDay = contractEnd ? new Date(contractEnd) : null
+                if (endDay) endDay.setHours(0, 0, 0, 0)
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const daysEarly = endDay ? Math.ceil((endDay - today) / 86400000) : null
+                const leavesEarly = daysEarly !== null && daysEarly > 0
+                return (
+                  <>
+                    <div className="staff-confirm-details">
+                      <div className="staff-confirm-detail-row">
+                        <span>ต้องการย้ายออก</span>
+                        <strong>{request.preferred_move_date ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ'}</strong>
+                      </div>
+                      <div className="staff-confirm-detail-row">
+                        <span>สิ้นสุดสัญญา</span>
+                        <strong>
+                          {formatDate(contractEnd)}
+                          {leavesEarly && <em className="staff-moveout-confirm-tag is-danger">ก่อนครบ {daysEarly} วัน</em>}
+                        </strong>
+                      </div>
+                      <div className="staff-confirm-detail-row">
+                        <span>ตรวจสภาพห้อง</span>
+                        <strong className={request.inspection_id ? 'is-success' : 'is-danger'}>
+                          {request.inspection_id ? '✓ ตรวจแล้ว' : '✕ ยังไม่ได้ตรวจ'}
+                        </strong>
+                      </div>
+                      <div className="staff-confirm-detail-row">
+                        <span>ยอดค้างชำระ</span>
+                        <strong className={balanceItems.length ? 'is-danger' : 'is-success'}>
+                          {outstanding > 0 ? `฿${formatCurrency(outstanding)}` : balanceItems.length ? 'มีสลิปรอตรวจ' : '✓ ไม่มี'}
+                        </strong>
+                      </div>
+                      <div className="staff-confirm-detail-row">
+                        <span>เงินมัดจำ</span>
+                        <strong className={depositPaid > 0 ? (leavesEarly ? 'is-danger' : 'is-success') : ''}>
+                          {depositPaid > 0
+                            ? `฿${formatCurrency(depositPaid)} · ${leavesEarly ? 'ริบ' : 'คืนให้ผู้เช่า'}`
+                            : deposit > 0 ? 'ยังไม่ได้ชำระ · ไม่มียอดต้องคืน' : 'ไม่มี'}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="staff-moveout-confirm-effects">
+                      <strong>เมื่อกดยืนยันจะเกิดขึ้นทันที</strong>
+                      <ul>
+                        <li>ห้อง {request.room_number} กลับเป็นห้องว่าง พร้อมให้เช่าต่อ</li>
+                        <li>สัญญาของผู้เช่าเปลี่ยนเป็น "สัญญาเก่า"</li>
+                        <li>ผู้เช่ายังเข้าระบบดูประวัติได้ แต่ทำรายการใหม่ไม่ได้</li>
+                        <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ค้างอยู่จะถูกยกเลิก</li>
+                      </ul>
+                      {depositPaid > 0 && (
+                        <p>ขั้นต่อไป: บันทึก{leavesEarly ? 'การริบ' : 'การคืน'}เงินมัดจำที่เมนู "สัญญาที่เสร็จสมบูรณ์"</p>
+                      )}
+                    </div>
+                    {balanceItems.length > 0 && (
+                      <div className="staff-confirm-warning">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 9v4M12 17h.01" />
+                          <circle cx="12" cy="12" r="9" />
+                        </svg>
+                        <p>ยังอนุมัติไม่ได้ ต้องเก็บเงิน {balanceItems.map((item) => item.label).join(', ')} ให้ครบก่อน</p>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
               {requestsError && <p className="staff-form-error">{requestsError}</p>}
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
@@ -12341,7 +12574,10 @@ function StaffMain() {
                 <button
                   type="button"
                   className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `tenant-${moveoutConfirmRequest.id}`}
+                  disabled={
+                    processingRequestKey === `tenant-${moveoutConfirmRequest.id}`
+                    || (moveoutConfirmRequest.outstanding?.items?.length ?? 0) > 0
+                  }
                   onClick={handleConfirmMoveoutApproval}
                 >
                   {processingRequestKey === `tenant-${moveoutConfirmRequest.id}`

@@ -1295,7 +1295,7 @@ router.get("/logs/requests", async (req, res) => {
 
     const [requests] = await pool.query(
       `SELECT tr.id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
-              tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name,
+              tr.accepted_at, tr.accepted_by_name, tr.completed_at, tr.completed_by_name, tr.reject_reason,
               tr.room_number, tr.target_room_number, tr.move_reason,
               DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               c.first_name, c.last_name, c.phone, c.deposit_amount,

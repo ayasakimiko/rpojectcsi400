@@ -52,6 +52,16 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'TenantRequest' AND COLUMN_NAME = 'reject_reason'),
+    'SELECT 1',
+    'ALTER TABLE `TenantRequest` ADD COLUMN `reject_reason` VARCHAR(500) NULL AFTER preferred_move_date'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 CREATE TABLE IF NOT EXISTS ResidentVisitRequest (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
     customer_id INT UNSIGNED NULL,

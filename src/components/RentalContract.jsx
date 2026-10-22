@@ -469,12 +469,37 @@ export function DepositEarlyLeaveWarning({ contract }) {
   )
 }
 
+function SettledDepositNote({ contract, viewer, compact }) {
+  const refunded = contract.deposit_settlement === 'refunded'
+  const deduction = Number(contract.deposit_deduction) || 0
+  const title = refunded
+    ? viewer === 'customer'
+      ? `ได้รับเงินมัดจำคืนแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
+      : `คืนเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
+    : `ริบเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_paid)}`
+  const parts = [
+    refunded && deduction > 0 ? `หักค่าเสียหาย ${formatContractMoney(deduction)}` : null,
+    compact ? null : contract.deposit_settlement_note,
+    `${compact ? '' : 'บันทึกโดย '}${contract.deposit_settled_by_name || '-'} · ${formatContractDate(contract.deposit_settled_at)}`,
+  ].filter(Boolean)
+  return (
+    <span className={`contract-refund-note ${refunded ? 'is-refund' : 'is-forfeit'} is-settled${compact ? ' is-compact' : ''}`} role="note">
+      <ContractIcon type="check" size={compact ? 14 : 18} />
+      <span>
+        <strong>{title}</strong>
+        <small>{parts.join(' · ')}</small>
+      </span>
+    </span>
+  )
+}
+
 export function DepositRefundNote({ contract, viewer = 'staff', compact = false }) {
+  if (contract?.deposit_settlement) return <SettledDepositNote contract={contract} viewer={viewer} compact={compact} />
   if (!contract?.deposit_refund) return null
   const amount = formatContractMoney(contract.deposit_paid)
   const refund = contract.deposit_refund === 'refund'
   const title = refund
-    ? viewer === 'customer' ? `ได้รับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
+    ? viewer === 'customer' ? `รอรับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
     : 'ไม่ต้องคืนเงินมัดจำ'
   const detail = refund
     ? contract.status === 'expired'
@@ -708,7 +733,13 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
     () =>
       contracts
         .filter((contract) => status === 'all' || contract.status === status)
-        .filter((contract) => scope === 'all' || (scope === 'archived') === Boolean(contract.is_archived))
+        .filter((contract) =>
+          scope === 'all'
+            ? true
+            : scope === 'deposit'
+              ? contract.can_settle_deposit
+              : (scope === 'archived') === Boolean(contract.is_archived),
+        )
         .filter((contract) => {
           if (!dates.from && !dates.to) return true
           if (!contract.contract_completed_at) return false
@@ -775,6 +806,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
           <option value="all">ทุกสัญญา</option>
           <option value="current">สัญญาปัจจุบัน ({contracts.length - archivedCount})</option>
           <option value="archived">สัญญาเก่า ({archivedCount})</option>
+          <option value="deposit">รอคืน/ริบมัดจำ ({contracts.filter((contract) => contract.can_settle_deposit).length})</option>
         </select>
         <select className="staff-filter-select" value={sort} onChange={(event) => resetPage(setSort)(event.target.value)} aria-label="เรียงลำดับ">
           {COMPLETED_CONTRACT_SORTS.map((option) => (
@@ -834,11 +866,140 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
                 </span>
               </div>
             )}
+            {detail.can_settle_deposit && (
+              <DepositSettlementForm
+                contract={detail}
+                onSaved={(contract) => {
+                  setContracts((current) => current.map((item) => (item.booking_id === contract.booking_id ? contract : item)))
+                  setDetail(contract)
+                }}
+              />
+            )}
             <CustomerContractBody contract={detail} viewer="staff" />
           </div>
         </Modal>
       )}
     </div>
+  )
+}
+
+function DepositSettlementForm({ contract, onSaved }) {
+  const suggested = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
+  const [action, setAction] = useState(suggested)
+  const [deduction, setDeduction] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const paid = Number(contract.deposit_paid) || 0
+  const deductionValue = Number(deduction) || 0
+  const refundAmount = Math.max(0, paid - deductionValue)
+  const noteRequired = action === 'forfeit' || deductionValue > 0
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (action === 'refund' && (deductionValue < 0 || deductionValue > paid)) {
+      setError('จำนวนเงินที่หักต้องอยู่ระหว่าง 0 ถึงเงินมัดจำที่ชำระไว้')
+      return
+    }
+    if (noteRequired && !note.trim()) {
+      setError(action === 'forfeit' ? 'กรุณาระบุเหตุผลที่ริบเงินมัดจำ' : 'กรุณาระบุรายการค่าเสียหายที่หัก')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const { data } = await axios.post(
+        `/api/staff/contracts/${contract.booking_id}/deposit-settlement`,
+        { action, deduction: action === 'refund' ? deductionValue : undefined, note: note.trim() || undefined },
+        { headers: authHeaders() },
+      )
+      onSaved(data.contract)
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="deposit-settle" onSubmit={submit}>
+      <div className="deposit-settle-head">
+        <ContractIcon type="wallet" size={18} />
+        <div>
+          <strong>จัดการเงินมัดจำ {formatContractMoney(paid)}</strong>
+          <small>
+            ระบบแนะนำ: {suggested === 'forfeit' ? 'ริบเงินมัดจำ (ผู้เช่าออกก่อนครบสัญญา)' : 'คืนเงินมัดจำ (ผู้เช่าพักครบสัญญา)'}
+          </small>
+        </div>
+      </div>
+      {contract.moveout_damage_note && (
+        <p className="deposit-settle-damage">
+          <b>ผลตรวจห้องตอนย้ายออก:</b> {contract.moveout_damage_note}
+        </p>
+      )}
+      <div className="deposit-settle-actions" role="radiogroup" aria-label="การจัดการเงินมัดจำ">
+        {[
+          { key: 'refund', label: 'คืนเงินมัดจำ' },
+          { key: 'forfeit', label: 'ริบเงินมัดจำ' },
+        ].map((option) => (
+          <button
+            type="button"
+            role="radio"
+            key={option.key}
+            aria-checked={action === option.key}
+            className={`deposit-settle-option is-${option.key}${action === option.key ? ' is-active' : ''}`}
+            onClick={() => {
+              setAction(option.key)
+              setError('')
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {action === 'refund' && (
+        <label className="deposit-settle-field">
+          <span>หักค่าเสียหาย (บาท)</span>
+          <input
+            type="number"
+            min="0"
+            max={paid}
+            step="0.01"
+            inputMode="decimal"
+            placeholder="0"
+            value={deduction}
+            onChange={(event) => {
+              setDeduction(event.target.value)
+              setError('')
+            }}
+          />
+        </label>
+      )}
+      <label className="deposit-settle-field">
+        <span>
+          {action === 'forfeit' ? 'เหตุผลที่ริบ' : 'รายการค่าเสียหาย / หมายเหตุ'}
+          {noteRequired && <em> *</em>}
+        </span>
+        <textarea
+          rows={2}
+          maxLength={500}
+          value={note}
+          placeholder={action === 'forfeit' ? 'เช่น ย้ายออกก่อนครบสัญญา' : 'เช่น ผนังเป็นรู 1 จุด ค่าซ่อม 500 บาท'}
+          onChange={(event) => {
+            setNote(event.target.value)
+            setError('')
+          }}
+        />
+      </label>
+      <div className="deposit-settle-summary">
+        <span>{action === 'refund' ? 'ยอดที่คืนให้ผู้เช่า' : 'ยอดที่ริบ'}</span>
+        <strong>{formatContractMoney(action === 'refund' ? refundAmount : paid)}</strong>
+      </div>
+      {error && <p className="deposit-settle-error">{error}</p>}
+      <button type="submit" className="staff-action-btn is-primary" disabled={saving}>
+        {saving ? 'กำลังบันทึก...' : action === 'refund' ? 'บันทึกว่าคืนเงินแล้ว' : 'บันทึกการริบเงินมัดจำ'}
+      </button>
+    </form>
   )
 }
 
