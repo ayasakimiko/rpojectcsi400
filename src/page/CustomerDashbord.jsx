@@ -398,7 +398,7 @@ function SlipDropZone({ id, file, onChange, onError }) {
 
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
-  deposit: 'เงินประกัน',
+  deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
 }
@@ -5012,12 +5012,23 @@ function CustomerDashbord() {
     maintenanceCurrentPage * MAINTENANCE_PAGE_SIZE,
   )
 
-  const currentDueRentItem = currentDue?.items?.find((item) => item.type === 'rent')
+  const currentDueRentItem = currentDue?.items?.find((item) => item.type === 'rent' && item.status !== 'pending')
+  const currentDueDepositItem = currentDue?.items?.find((item) => item.type === 'deposit' && item.status !== 'pending')
   const rentalHistoryWithDue =
-    currentDueRentItem && rentalHistory.length > 0
+    (currentDueRentItem || currentDueDepositItem) && rentalHistory.length > 0
       ? rentalHistory.map((entry, index) => {
           if (index !== 0) return entry
-          const pendingRentPayment = {
+          const pendingDepositPayment = currentDueDepositItem && {
+            id: `due-deposit-${entry.booking_id}`,
+            booking_id: entry.booking_id,
+            created_at: currentDue.dueDate || currentDue.periodStart || entry.rental_start_date,
+            payment_date: currentDue.dueDate || currentDue.periodStart || entry.rental_start_date,
+            type: 'deposit',
+            amount: currentDueDepositItem.amount,
+            status: 'pending',
+            note: `เงินมัดจำ ชำระครั้งเดียวพร้อมค่าเช่าเดือนแรก${currentDue.monthlyPrice ? ` (${Math.round(currentDueDepositItem.amount / currentDue.monthlyPrice)} เดือน × ฿${formatCurrency(currentDue.monthlyPrice)})` : ''}`,
+          }
+          const pendingRentPayment = currentDueRentItem && {
             id: `due-rent-${entry.booking_id}`,
             booking_id: entry.booking_id,
             created_at: currentDue.dueDate || currentDue.periodStart,
@@ -5027,9 +5038,9 @@ function CustomerDashbord() {
             status: currentDueRentItem.status === 'overdue' ? 'overdue' : 'pending',
             note: [
               currentDue.firstPeriod
-                ? currentDue.depositApplied > 0
-                  ? `ค่าเช่าเดือนแรก ฿${formatCurrency(currentDue.monthlyPrice)} หักมัดจำ ฿${formatCurrency(currentDue.depositApplied)}`
-                  : 'ค่าเช่าเดือนแรกหลังลงทะเบียน (ไม่มีเงินมัดจำ)'
+                ? currentDue.depositAmount > 0
+                  ? `ค่าเช่าเดือนแรก · ชำระพร้อมเงินมัดจำ รวม ฿${formatCurrency(currentDueRentItem.amount + currentDue.depositAmount)}`
+                  : 'ค่าเช่าเดือนแรกหลังลงทะเบียน'
                 : currentDue.periodStart && currentDue.periodEnd
                   ? `รอบบิล ${formatDate(currentDue.periodStart)} – ${formatDate(currentDue.periodEnd)}`
                   : null,
@@ -5037,7 +5048,7 @@ function CustomerDashbord() {
               currentDue.lumpSumMonths ? `จ่ายล่วงหน้า ${currentDue.lumpSumMonths} เดือน` : null,
             ].filter(Boolean).join(' · ') || null,
           }
-          return { ...entry, payments: [pendingRentPayment, ...entry.payments] }
+          return { ...entry, payments: [pendingDepositPayment, pendingRentPayment, ...entry.payments].filter(Boolean) }
         })
       : rentalHistory
 
@@ -7116,9 +7127,9 @@ function CustomerDashbord() {
                               ))}
                             </div>
                           )}
-                          {currentDue.depositApplied > 0 && (
+                          {currentDue.depositAmount > 0 && (
                             <p className="dashboard-due-deposit-note is-deposit-applied">
-                              หักมัดจำ ฿{formatCurrency(currentDue.depositApplied)} แล้ว
+                              รวมเงินมัดจำ ฿{formatCurrency(currentDue.depositAmount)} ชำระครั้งเดียวพร้อมค่าห้องเดือนแรก
                             </p>
                           )}
                           {currentDue.overdueMonths > 0 && (

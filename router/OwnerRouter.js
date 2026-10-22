@@ -927,15 +927,11 @@ router.get("/logs/payments", async (req, res) => {
 
       SELECT CONCAT('room-', c.id) AS id,
              NULL AS payment_id,
-             ABS(COALESCE(r.price, 0) - COALESCE(c.deposit_amount, 0)) AS amount,
+             COALESCE(r.price, 0) AS amount,
              CURDATE() AS payment_date,
-             CASE WHEN (COALESCE(r.price, 0) - COALESCE(c.deposit_amount, 0)) > 0 THEN 'pending' ELSE 'paid' END AS status,
+             'pending' AS status,
              'room' AS type,
-             CASE
-               WHEN (COALESCE(r.price, 0) - COALESCE(c.deposit_amount, 0)) > 0
-                 THEN CONCAT('ค่าห้องประจำเดือน ฿', FORMAT(r.price, 0), ' หักเงินมัดจำ ฿', FORMAT(COALESCE(c.deposit_amount, 0), 0), ' คงเหลือค้างชำระ')
-               ELSE CONCAT('ค่าห้องประจำเดือน ฿', FORMAT(r.price, 0), ' หักเงินมัดจำ ฿', FORMAT(COALESCE(c.deposit_amount, 0), 0), ' ครอบคลุมครบแล้ว')
-             END AS note,
+             CONCAT('ค่าห้องประจำเดือน ฿', FORMAT(r.price, 0)) AS note,
              NULL AS slip_path,
              NOW() AS created_at,
              c.first_name, c.last_name, c.room_number

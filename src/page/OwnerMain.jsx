@@ -1773,7 +1773,7 @@ const AUDIT_METHOD_BADGES = {
 const AUDIT_FIELD_LABELS = {
   roomNumber: 'ห้อง', room_number: 'ห้อง', targetRoomNumber: 'ห้องปลายทาง', target_room_number: 'ห้องปลายทาง',
   first_name: 'ชื่อ', firstName: 'ชื่อ', last_name: 'นามสกุล', lastName: 'นามสกุล', phone: 'เบอร์โทร', age: 'อายุ', role: 'ตำแหน่ง',
-  amount: 'จำนวนเงิน', price: 'ราคา', rent: 'ค่าเช่า', monthly_rent: 'ค่าเช่ารายเดือน', deposit: 'เงินประกัน',
+  amount: 'จำนวนเงิน', price: 'ราคา', rent: 'ค่าเช่า', monthly_rent: 'ค่าเช่ารายเดือน', deposit: 'เงินมัดจำ',
   category: 'หมวดหมู่', description: 'รายละเอียด', vendor: 'ร้านค้า/ผู้รับเงิน', payment_method: 'ช่องทางชำระ', paymentMethod: 'ช่องทางชำระ',
   receipt_number: 'เลขที่ใบเสร็จ', expense_date: 'วันที่จ่าย', payment_date: 'วันที่ชำระ', type: 'ประเภท', types: 'ประเภท',
   title: 'หัวข้อ', message: 'ข้อความ', tone: 'ระดับประกาศ', expiresAt: 'ลบอัตโนมัติเมื่อ', popupUntil: 'แสดงป๊อปอัปถึง',

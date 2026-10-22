@@ -23,6 +23,7 @@ import {
   computeCurrentDue,
   createSafetyIncident,
   isPlateRegisteredByOther,
+  loadDepositPayments,
   withThisMonthRent,
   withVehiclePhotos,
 } from "./CustomerDashboardRouter.js";
@@ -111,7 +112,9 @@ router.get("/payment-slips", async (_req, res) => {
               ps.sender_name, ps.receiver_name, ps.slip_path, ps.is_test, ps.reviewed_by_name, ps.created_at,
               c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number,
               (SELECT GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') FROM Payment p
-                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_types
+                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_types,
+              (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) FROM Payment p
+                WHERE p.booking_id = ps.booking_id AND p.slip_path = ps.slip_path) AS payment_items
        FROM PaymentSlip ps
        JOIN Customer c ON c.id = ps.customer_id
        LEFT JOIN Booking b ON b.id = ps.booking_id
@@ -122,7 +125,9 @@ router.get("/payment-slips", async (_req, res) => {
     const [rejected] = await getPool().query(
       `SELECT sr.id, sr.booking_id, sr.trans_ref, sr.amount, sr.trans_at, sr.sender_name, sr.receiver_name,
               sr.sending_bank, sr.receiving_bank, sr.slip_path, sr.reason, sr.reviewed_by_name, sr.created_at,
-              c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number
+              c.first_name, c.last_name, c.phone, COALESCE(r.room_number, c.room_number) AS room_number,
+              (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) FROM Payment p
+                WHERE p.booking_id = sr.booking_id AND p.slip_path = sr.slip_path) AS payment_items
        FROM PaymentSlipRejection sr
        JOIN Customer c ON c.id = sr.customer_id
        LEFT JOIN Booking b ON b.id = sr.booking_id
@@ -146,7 +151,8 @@ router.get("/payment-verifications", async (_req, res) => {
     const [payments] = await pool.query(
       `SELECT MIN(p.id) AS id, p.booking_id, p.slip_path, SUM(p.amount) AS amount,
               MAX(p.payment_date) AS payment_date, c.first_name, c.last_name, c.phone,
-              r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types
+              r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types,
+              JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) AS payment_items
        FROM Payment p
        JOIN Booking b ON b.id = p.booking_id
        JOIN Customer c ON c.id = b.customer_id
@@ -200,7 +206,7 @@ router.patch("/payment-verifications/:id", async (req, res) => {
       }
       await connection.query(
         `UPDATE Payment SET status = 'rejected', note = CONCAT(COALESCE(note, ''), ' (สลิปไม่ผ่านการตรวจสอบ)')
-         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type = 'rent'`,
+         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type IN ('rent', 'deposit')`,
         [payment.booking_id, payment.slip_path],
       );
       await connection.query(
@@ -619,10 +625,13 @@ router.get("/rooms", async (req, res) => {
       }
     }
 
+    const depositPaymentsByCustomer = await loadDepositPayments(pool, rooms.map((room) => room.customer_id).filter(Boolean));
     const result = rooms.map((room) => {
       const booking = latestBookingByRoomId.get(room.id);
       const payments = booking ? paymentsByBookingId.get(booking.id) || [] : [];
-      const currentDue = booking ? computeCurrentDue(room, payments, room.deposit_amount) : null;
+      const currentDue = booking
+        ? computeCurrentDue(room, payments, room.deposit_amount, depositPaymentsByCustomer.get(room.customer_id) ?? [])
+        : null;
 
       return {
         room_number: room.room_number,
@@ -731,7 +740,8 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
       [booking.id],
     );
 
-    const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount);
+    const depositPayments = (await loadDepositPayments(connection, [customer.id])).get(customer.id) ?? [];
+    const currentDue = computeCurrentDue(room, paymentsForBooking, customer.deposit_amount, depositPayments);
     if (!currentDue) {
       await connection.rollback();
       return res.status(400).json({ message: "ไม่มียอดค่าเช่าที่ต้องเก็บในขณะนี้" });
@@ -755,6 +765,13 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
           [currentDue.periodEnd, currentDue.lumpSumMonths - 1, roomNumberValue],
         );
       }
+    }
+
+    if (currentDue.depositAmount > 0 && currentDue.depositStatus === "due") {
+      await connection.query(
+        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'deposit', 'เจ้าหน้าที่เก็บเงินมัดจำ (เงินสด)')`,
+        [booking.id, currentDue.depositAmount],
+      );
     }
 
     const utilityPaymentIds = currentDue.items.filter((item) => item.id).map((item) => item.id);

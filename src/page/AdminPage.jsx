@@ -12,6 +12,7 @@ import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { ContractCell, ContractDetail } from '../components/RentalContract.jsx'
+import { formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -1772,7 +1773,9 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
   const [now] = useState(() => Date.now())
   const payments = (rentalHistory || []).flatMap((booking) => booking.payments || [])
   const paidTotal = payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-  const outstanding = payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length
+  const outstanding =
+    payments.filter((payment) => payment.status === 'pending' || payment.status === 'overdue').length +
+    (contract?.deposit_status === 'due' ? 1 : 0)
   const movedOut = Boolean(customer.is_suspended) && !customer.rental_start_date && !customer.rental_end_date
   const facts = [
     { icon: 'phone', label: 'เบอร์โทร', value: customer.phone ? <a href={`tel:${customer.phone}`}>{customer.phone}</a> : '-' },
@@ -1786,7 +1789,11 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
         </button>
       ),
     },
-    { icon: 'wallet', label: 'เงินมัดจำ', value: customer.deposit_amount != null ? `฿${formatCurrency(customer.deposit_amount)}` : '-' },
+    {
+      icon: 'wallet',
+      label: 'เงินมัดจำ',
+      value: formatDepositSummary(contract ?? { deposit_amount: customer.deposit_amount }),
+    },
   ]
   const registeredAt = customer.registered_at || customer.created_at
   const contractStart = customer.rental_start_date ? new Date(customer.rental_start_date) : null
@@ -9040,7 +9047,7 @@ function AdminBackupPage() {
               { icon: 'user', label: 'ชื่อผู้เช่า', value: `${request.first_name || ''} ${request.last_name || ''}`.trim() || '-' },
               { icon: 'phone', label: 'เบอร์โทร', value: request.phone ? <a className="maintenance-detail-tel" href={`tel:${request.phone}`}>{request.phone}</a> : '-' },
               { icon: 'door', label: 'ห้องปัจจุบัน', value: `ห้อง ${request.room_number}` },
-              { icon: 'wallet', label: 'เงินประกัน', value: request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-' },
+              { icon: 'wallet', label: 'เงินมัดจำ', value: request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-' },
             ]
             const requestFacts = [
               { icon: 'calendar', label: 'วันที่ส่งคำขอ', value: formatDateTime(request.created_at) },

@@ -12,6 +12,7 @@ import {
   CONTRACT_DURATION_OPTIONS,
   CONTRACT_MAX_IMAGES,
   CONTRACT_MIN_IMAGES,
+  DEPOSIT_MONTHS,
   firstMonthBreakdown,
   formatContractDate,
   formatContractMoney,
@@ -92,7 +93,7 @@ const initialRegisterForm = {
   room_number: '',
   rental_start_date: getNow(),
   contract_duration_months: '',
-  deposit_amount: '',
+  deposit_months: DEPOSIT_MONTHS,
   password: '',
   confirmPassword: '',
 }
@@ -116,7 +117,7 @@ function RegisterMain() {
     registerForm.rental_start_date && registerForm.contract_duration_months
       ? addContractMonths(registerForm.rental_start_date, registerForm.contract_duration_months)
       : null
-  const firstMonth = selectedRoomPrice !== null ? firstMonthBreakdown(selectedRoomPrice, registerForm.deposit_amount) : null
+  const firstMonth = selectedRoomPrice !== null ? firstMonthBreakdown(selectedRoomPrice, registerForm.deposit_months) : null
 
   const handleContractImagesChange = (files) => {
     const invalid = files.map(validateImageFile).find(Boolean)
@@ -172,27 +173,8 @@ function RegisterMain() {
     setRegisterForm((prev) => ({ ...prev, age: digitsOnly }))
   }
 
-  const handleDepositChange = (e) => {
-    const cleaned = e.target.value.replace(/[^\d.]/g, '')
-    if (!/^\d*(?:\.\d{0,2})?$/.test(cleaned)) return
-    const amount = Number(cleaned)
-    setRegisterForm((prev) => ({
-      ...prev,
-      deposit_amount: Number.isFinite(selectedRoomPrice) && cleaned && amount > selectedRoomPrice
-        ? String(selectedRoomPrice)
-        : cleaned,
-    }))
-  }
-
   const handleRoomChange = (e) => {
-    const roomNumber = e.target.value
-    const room = availableRooms.find((item) => String(item.room_number) === roomNumber)
-    const price = room ? Number(room.price) : null
-    setRegisterForm((prev) => ({
-      ...prev,
-      room_number: roomNumber,
-      deposit_amount: room && Number(prev.deposit_amount) <= price ? prev.deposit_amount : '',
-    }))
+    setRegisterForm((prev) => ({ ...prev, room_number: e.target.value }))
   }
 
   const handleRentalStartChange = (date) => {
@@ -213,7 +195,7 @@ function RegisterMain() {
       room_number,
       rental_start_date,
       contract_duration_months,
-      deposit_amount,
+      deposit_months,
       password,
       confirmPassword,
     } = registerForm
@@ -246,13 +228,8 @@ function RegisterMain() {
       return
     }
 
-    if (deposit_amount && (!Number.isFinite(Number(deposit_amount)) || Number(deposit_amount) < 0)) {
-      setError('จำนวนเงินมัดจำไม่ถูกต้อง')
-      return
-    }
-
-    if (deposit_amount && selectedRoomPrice !== null && Number(deposit_amount) > selectedRoomPrice) {
-      setError('เงินมัดจำต้องไม่เกินราคาห้องที่เลือก')
+    if (Number(deposit_months) !== DEPOSIT_MONTHS) {
+      setError(`เงินมัดจำต้องเป็น ${DEPOSIT_MONTHS} เดือน`)
       return
     }
 
@@ -273,7 +250,7 @@ function RegisterMain() {
         room_number,
         rental_start_date: formatDateTimeLocal(rental_start_date),
         contract_duration_months,
-        deposit_amount,
+        deposit_months,
         password,
       }).forEach(([key, value]) => {
         if (value !== '' && value !== undefined && value !== null) payload.append(key, value)
@@ -438,23 +415,21 @@ function RegisterMain() {
 
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-deposit">
-                      เงินมัดจำ <span className="register-optional">ไม่บังคับ</span>
+                      เงินมัดจำ <Required />
                     </label>
                     <input
                       id="register-deposit"
                       type="text"
-                      inputMode="decimal"
-                      name="deposit_amount"
+                      name="deposit_months"
                       className="form-control"
-                      placeholder="เว้นว่างไว้หากไม่มีมัดจำ"
-                      value={registerForm.deposit_amount}
-                      onChange={handleDepositChange}
-                      disabled={!selectedRoom}
+                      value={`${DEPOSIT_MONTHS} เดือน${selectedRoomPrice !== null ? ` · ${formatContractMoney(selectedRoomPrice * DEPOSIT_MONTHS)}` : ''}`}
+                      readOnly
+                      required
                     />
                     <div className="form-text">
-                      {selectedRoomPrice !== null
-                        ? `ไม่เกิน ${formatContractMoney(selectedRoomPrice)} · หักจากค่าเช่าเดือนแรกครั้งเดียว`
-                        : 'เลือกห้องก่อนกรอกเงินมัดจำ'}
+                      {selectedRoom
+                        ? `มัดจำ ${DEPOSIT_MONTHS} เดือนทุกสัญญา · ชำระพร้อมค่าห้องเดือนแรก`
+                        : `มัดจำ ${DEPOSIT_MONTHS} เดือนของราคาห้อง · เลือกห้องเพื่อดูยอด`}
                     </div>
                   </div>
 
@@ -513,18 +488,18 @@ function RegisterMain() {
                       </div>
                       <div className="rcs-calc">
                         <div className="rcs-item">
-                          <span>ค่าเช่า</span>
+                          <span>ค่าห้อง</span>
                           <strong>{firstMonth ? formatContractMoney(firstMonth.price) : '-'}</strong>
                         </div>
-                        <span className="rcs-op" aria-hidden="true">−</span>
-                        <div className="rcs-item is-deduct">
-                          <span>มัดจำ</span>
-                          <strong>{firstMonth ? formatContractMoney(firstMonth.depositApplied) : '-'}</strong>
+                        <span className="rcs-op" aria-hidden="true">+</span>
+                        <div className="rcs-item">
+                          <span>มัดจำ{firstMonth?.depositMonths ? ` ${firstMonth.depositMonths} เดือน` : ''}</span>
+                          <strong>{firstMonth ? formatContractMoney(firstMonth.deposit) : '-'}</strong>
                         </div>
                         <span className="rcs-op" aria-hidden="true">=</span>
                         <div className="rcs-item is-total">
                           <span>เดือนแรก</span>
-                          <strong>{firstMonth ? formatContractMoney(firstMonth.remaining) : '-'}</strong>
+                          <strong>{firstMonth ? formatContractMoney(firstMonth.total) : '-'}</strong>
                         </div>
                       </div>
                     </div>
@@ -591,7 +566,7 @@ function RegisterMain() {
                       {selectedRoom ? (
                         <>
                           <span>ห้อง {selectedRoom.room_number}{registerForm.contract_duration_months ? ` · ${registerForm.contract_duration_months} เดือน` : ''}</span>
-                          <strong>เดือนแรก {firstMonth ? formatContractMoney(firstMonth.remaining) : '-'}</strong>
+                          <strong>เดือนแรก {firstMonth ? formatContractMoney(firstMonth.total) : '-'} · ถัดไป {firstMonth ? formatContractMoney(firstMonth.price) : '-'}/เดือน</strong>
                         </>
                       ) : (
                         <span>ยังไม่ได้เลือกห้อง</span>

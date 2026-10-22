@@ -284,6 +284,8 @@ export function parseMaintenanceInput(body = {}) {
 
 const REQUEST_TYPES = new Set(["renew", "moveout", "move_room"]);
 export const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
+export const CONTRACT_DURATION_MONTHS = new Set([3, 6, 12]);
+export const DEPOSIT_MONTHS = 2;
 const RENEW_PAYMENT_TYPES = new Set(["monthly", "lump_sum"]);
 const MOVE_ROOM_REASONS = new Set(["room_problem", "price", "amenities", "location", "noise", "other"]);
 const MOVE_ROOM_MAX_DAYS_AHEAD = 60;

@@ -1362,7 +1362,7 @@ const PAYMENT_STATUS_LABEL = {
 
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
-  deposit: 'เงินประกัน',
+  deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
 }
@@ -3261,7 +3261,69 @@ function SummaryIcon({ type }) {
   )
 }
 
-const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ' }
+const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟ' }
+const PAYMENT_ITEM_ORDER = ['deposit', 'rent', 'water', 'electricity']
+
+function slipPaymentItems(payment) {
+  let items = payment.payment_items
+  if (typeof items === 'string') {
+    try {
+      items = JSON.parse(items)
+    } catch {
+      items = []
+    }
+  }
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item && item.type)
+    .sort((a, b) => PAYMENT_ITEM_ORDER.indexOf(a.type) - PAYMENT_ITEM_ORDER.indexOf(b.type))
+}
+
+function SlipItemsBreakdown({ payment }) {
+  const items = slipPaymentItems(payment)
+  if (items.length === 0) return null
+  return (
+    <span className="staff-slip-breakdown" aria-label="รายการที่ชำระ">
+      {items.map((item, index) => (
+        <span key={`${item.type}-${index}`} className={`staff-slip-breakdown-row is-${item.type}`}>
+          <span>{PAYMENT_REVIEW_LABEL[item.type] || item.type}</span>
+          <b>฿{Number(item.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</b>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function SlipPaymentItems({ payment }) {
+  const items = slipPaymentItems(payment)
+  if (items.length === 0) return null
+  const money = (value) => `฿${Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const total = items.reduce((sum, item) => sum + Math.round(Number(item.amount || 0) * 100), 0) / 100
+  return (
+    <section className="payment-slip-items" aria-label="รายการที่ชำระในสลิปนี้">
+      <header className="payment-slip-items-head">
+        <span>รายการที่ชำระ</span>
+        <span>{items.length} รายการ</span>
+      </header>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${item.type}-${index}`}>
+            <span>
+              {PAYMENT_REVIEW_LABEL[item.type] || item.type}
+              {item.note && <small>{item.note}</small>}
+            </span>
+            <strong>{money(item.amount)}</strong>
+          </li>
+        ))}
+      </ul>
+      {items.length > 1 && (
+        <div className="payment-slip-items-total">
+          <span>รวม</span>
+          <span>{money(total)}</span>
+        </div>
+      )}
+    </section>
+  )
+}
 
 function StaffPagination({ page, total, onChange, pageSize = STAFF_LIST_PAGE_SIZE }) {
   if (total <= pageSize) return null
@@ -3519,7 +3581,7 @@ function slipDetailRows({ payment, isHistory, isFailed }) {
     { icon: 'room', label: 'ห้อง', value: payment.room_number ? `ห้อง ${payment.room_number}` : '' },
     { icon: 'user', label: 'ผู้เช่า', value: tenantName },
     { icon: 'phone', label: 'เบอร์โทร', value: payment.phone },
-    { icon: 'list', label: 'รายการ', value: types },
+    { icon: 'list', label: 'รายการ', value: slipPaymentItems(payment).length > 0 ? '' : types },
   ]
   if (!isHistory) {
     rows.push({
@@ -3800,6 +3862,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                       </strong>
                     </span>
                   </span>
+                  <SlipItemsBreakdown payment={payment} />
                 </button>
                 <div className="staff-ic-photos">
                   <span className="staff-ic-label">สลิปโอนเงิน</span>
@@ -3910,6 +3973,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                       </strong>
                     </span>
                   </span>
+                  <SlipItemsBreakdown payment={slip} />
                   {isFailedView && <SlipReason slip={slip} compact />}
                 </button>
                 <div className="staff-ic-photos">
@@ -4164,6 +4228,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
                   </div>
                 ))}
               </dl>
+              <SlipPaymentItems payment={preview.payment} />
               </div>
             </div>
 
@@ -11218,11 +11283,11 @@ function StaffMain() {
                         </li>
                       ))}
                     </ul>
-                    {(Number(due.depositApplied) > 0 || Number(due.overdueMonths) > 0 || due.lumpSumMonths) && (
+                    {(Number(due.depositAmount) > 0 || Number(due.overdueMonths) > 0 || due.lumpSumMonths) && (
                       <div className="collect-receipt-notes">
                         {Number(due.overdueMonths) > 0 && <span className="is-late">ค้างชำระ {due.overdueMonths} เดือน</span>}
                         {due.lumpSumMonths && <span>จ่ายล่วงหน้า {due.lumpSumMonths} เดือน</span>}
-                        {Number(due.depositApplied) > 0 && <span>หักเงินประกันแล้ว ฿{formatCurrency(due.depositApplied)}</span>}
+                        {Number(due.depositAmount) > 0 && <span>รวมเงินมัดจำ ฿{formatCurrency(due.depositAmount)}</span>}
                       </div>
                     )}
                     <div className="collect-receipt-total">

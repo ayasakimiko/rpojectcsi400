@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireStaffRole } from "../middleware/authMiddleware.js";
-import { isValidDateTimeString, RENEW_DURATION_MONTHS, validateRegisterInput } from "../middleware/validation.js";
+import { CONTRACT_DURATION_MONTHS, DEPOSIT_MONTHS, isValidDateTimeString, validateRegisterInput } from "../middleware/validation.js";
 import {
   contractImageName,
   contractImageUrl,
@@ -39,13 +39,17 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       room_number,
       rental_start_date,
       contract_duration_months,
-      deposit_amount,
+      deposit_months,
     } = req.body ?? {};
 
     const durationMonths = Number(contract_duration_months);
-    if (!RENEW_DURATION_MONTHS.has(durationMonths)) {
+    if (!CONTRACT_DURATION_MONTHS.has(durationMonths)) {
       await removeContractFiles(files);
-      return res.status(400).json({ message: "กรุณาเลือกระยะเวลาสัญญาเช่า 1, 3, 6 หรือ 12 เดือน" });
+      return res.status(400).json({ message: "ระยะเวลาสัญญาเช่าขั้นต่ำ 3 เดือน กรุณาเลือก 3, 6 หรือ 12 เดือน" });
+    }
+    if (Number(deposit_months) !== DEPOSIT_MONTHS) {
+      await removeContractFiles(files);
+      return res.status(400).json({ message: `เงินมัดจำต้องเป็น ${DEPOSIT_MONTHS} เดือน` });
     }
     const rental_end_date = isValidDateTimeString(rental_start_date)
       ? addContractMonths(rental_start_date, durationMonths)
@@ -61,7 +65,6 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       room_number,
       rental_start_date,
       rental_end_date,
-      deposit_amount,
     });
     if (validationError) {
       await removeContractFiles(files);
@@ -70,10 +73,6 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
 
     const normalizedIdcard = idcard.trim();
     const normalizedRoomNumber = Number(room_number);
-    const normalizedDepositAmount =
-      deposit_amount !== undefined && deposit_amount !== null && deposit_amount !== ""
-        ? Number(deposit_amount)
-        : null;
 
     connection = await getPool().getConnection();
     await connection.beginTransaction();
@@ -101,11 +100,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       await removeContractFiles(files);
       return res.status(409).json({ message: "ห้องพักนี้ถูกจองแล้ว" });
     }
-    if (normalizedDepositAmount !== null && normalizedDepositAmount > Number(room.price)) {
-      await connection.rollback();
-      await removeContractFiles(files);
-      return res.status(400).json({ message: "เงินมัดจำต้องไม่เกินราคาห้องที่เลือก" });
-    }
+    const normalizedDepositAmount = Math.round(Number(room.price) * DEPOSIT_MONTHS * 100) / 100;
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -136,13 +131,6 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       `INSERT INTO ContractImage (booking_id, customer_id, name, url) VALUES ?`,
       [files.map((file, index) => [bookingResult.insertId, customerResult.insertId, contractImageName(file, index), contractImageUrl(file)])],
     );
-
-    if (normalizedDepositAmount && normalizedDepositAmount > 0) {
-      await connection.query(
-        `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'paid', 'deposit', 'เงินมัดจำ (จ่ายหน้าเคาน์เตอร์)')`,
-        [bookingResult.insertId, normalizedDepositAmount],
-      );
-    }
 
     await connection.query(
       `UPDATE Room SET
