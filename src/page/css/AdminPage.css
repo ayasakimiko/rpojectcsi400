@@ -2378,7 +2378,30 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-modal.admin-modal-customer-profile {
-  max-width: 600px;
+  width: 100%;
+  max-width: 1040px;
+  max-height: 92vh;
+}
+
+.customer-profile-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (min-width: 992px) {
+  .admin-modal-customer-profile .customer-profile-scroll {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    gap: 16px;
+  }
+
+  .admin-modal-customer-profile .customer-profile-column {
+    position: sticky;
+    top: 0;
+  }
 }
 
 .customer-profile,

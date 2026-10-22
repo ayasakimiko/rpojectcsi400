@@ -12,6 +12,7 @@ import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import { CustomerContractPanel } from '../components/RentalContract.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
@@ -1859,6 +1860,7 @@ const NOTIF_PAGE_SIZE = 30
 const CUSTOMER_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'rental-history', label: 'ประวัติการเช่า' },
+  { key: 'contract', label: 'สัญญาเช่าของฉัน' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'vehicles', label: 'รถของฉัน' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
@@ -5023,12 +5025,17 @@ function CustomerDashbord() {
             type: 'rent',
             amount: currentDueRentItem.amount,
             status: currentDueRentItem.status === 'overdue' ? 'overdue' : 'pending',
-            note:
-              currentDue.overdueMonths > 0
-                ? `ค้างสะสมจากเดือนก่อนหน้า ${currentDue.overdueMonths} เดือน`
-                : currentDue.depositApplied > 0
-                  ? `หักมัดจำ ฿${formatCurrency(currentDue.depositApplied)} แล้ว`
+            note: [
+              currentDue.firstPeriod
+                ? currentDue.depositApplied > 0
+                  ? `ค่าเช่าเดือนแรก ฿${formatCurrency(currentDue.monthlyPrice)} หักมัดจำ ฿${formatCurrency(currentDue.depositApplied)}`
+                  : 'ค่าเช่าเดือนแรกหลังลงทะเบียน (ไม่มีเงินมัดจำ)'
+                : currentDue.periodStart && currentDue.periodEnd
+                  ? `รอบบิล ${formatDate(currentDue.periodStart)} – ${formatDate(currentDue.periodEnd)}`
                   : null,
+              currentDue.overdueMonths > 0 ? `ค้างสะสม ${currentDue.overdueMonths + 1} เดือน` : null,
+              currentDue.lumpSumMonths ? `จ่ายล่วงหน้า ${currentDue.lumpSumMonths} เดือน` : null,
+            ].filter(Boolean).join(' · ') || null,
           }
           return { ...entry, payments: [pendingRentPayment, ...entry.payments] }
         })
@@ -6911,6 +6918,8 @@ function CustomerDashbord() {
         )}
 
         {customerTab === 'vehicles' && <CustomerParkingTab />}
+
+        {customerTab === 'contract' && <CustomerContractPanel />}
 
         {customerTab === 'rental-history' && (
           <section className="dashboard-card dashboard-rental-history-card">

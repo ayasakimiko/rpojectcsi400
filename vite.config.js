@@ -22,7 +22,26 @@ function copyPublicAssets() {
   }
 }
 
-// keepOrigin: ส่ง Origin ต่อไปให้ server ตรวจกับ CLIENT_URL (ใช้กับ VPS)
+function blockPrivateUploads() {
+  return {
+    name: 'block-private-uploads',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        let pathname = (req.url || '').split(/[?#]/, 1)[0]
+        try {
+          pathname = decodeURIComponent(pathname)
+        } catch {
+          pathname = ''
+        }
+        if (!/^\/+uploads\/+contracts(\/|$)/i.test(pathname.replaceAll('\\', '/')) && pathname) return next()
+        res.statusCode = 404
+        res.end()
+      })
+    },
+  }
+}
+
 function backendProxy(target, prefix = '', { keepOrigin = false } = {}) {
   return {
     target,
@@ -38,7 +57,7 @@ function backendProxy(target, prefix = '', { keepOrigin = false } = {}) {
 }
 
 export default defineConfig({
-  plugins: [react(), copyPublicAssets()],
+  plugins: [react(), copyPublicAssets(), blockPrivateUploads()],
   build: { copyPublicDir: false },
   server: {
     proxy: {

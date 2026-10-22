@@ -15,6 +15,15 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 - ผู้เช่าดูราคาน้ำต่อหน่วยและกราฟประวัติค่าน้ำค่าไฟที่ชำระแล้วในหน้าประวัติการเช่า
 - รัน `npm run db:migrate` ก่อนเริ่ม backend เพื่อเพิ่มคอลัมน์โดยไม่เปลี่ยนรหัสผ่านหรือข้อมูลห้องเดิม
 
+## สัญญาเช่า มัดจำ และรูปสัญญา
+
+- ตอนลงทะเบียนผู้เช่า Staff/Admin เลือกระยะสัญญา 1, 3, 6 หรือ 12 เดือน ระบบคำนวณวันสิ้นสุดจากวันเริ่มเช่าเอง (ถ้าเดือนปลายทางไม่มีวันที่เดียวกัน จะใช้วันสุดท้ายของเดือนนั้น) และเก็บระยะสัญญาไว้ใน `Booking.contract_duration_months`
+- ต้องแนบรูปสัญญาอย่างน้อย 3 รูป สูงสุด 10 รูป (JPG, PNG, WebP ไม่เกิน 5 MB ต่อรูป) ส่งเป็น `multipart/form-data` ที่ฟิลด์ `contract_images` ไปยัง `POST /api/auth/register` backend ใช้ multer ตรวจจำนวนรูปและชนิดไฟล์จริง (magic bytes) แล้วเก็บไฟล์ใน `uploads/contracts` ส่วนฐานข้อมูลเก็บแค่ path ในตาราง `ContractImage` ที่ผูกกับ `booking_id` และ `customer_id` หากลงทะเบียนไม่สำเร็จ ไฟล์ที่อัปโหลดจะถูกลบทิ้ง
+- ค่าเช่าเดือนแรก = `Room.price` ลบเงินมัดจำ (หักได้ไม่เกินราคาห้อง) ใช้สูตรเดียวกับ `computeRentDue` เดิม จึงหักมัดจำครั้งเดียวต่อสัญญา
+- Admin ดูข้อมูลสัญญาและรูปได้ในตารางลูกค้าและหน้ารายละเอียดลูกค้า Staff ดูได้ที่เมนู **สัญญาที่เสร็จสมบูรณ์** (`GET /api/staff/contracts/completed`) ผู้เช่าดูของตัวเองได้ที่เมนู **สัญญาเช่าของฉัน** (`GET /api/customer/contract`)
+- รูปสัญญาเปิดได้ผ่าน `/api/files/contracts/...` เท่านั้น ผู้เช่าเปิดได้เฉพาะรูปของตนเอง ส่วน Vite dev server จะไม่เสิร์ฟ `/uploads/contracts` ตรงๆ
+- auth-service ใน Docker เมานต์ `./public/uploads` เพิ่มเพื่อบันทึกรูปสัญญา หลังอัปเดตให้รัน `npm run db:migrate` (หรือ `docker compose up -d --build`)
+
 ## Tech Stack
 
 - **Frontend:** React 19, Vite, React Router, Bootstrap, Axios

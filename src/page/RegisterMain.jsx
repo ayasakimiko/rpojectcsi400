@@ -5,6 +5,17 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/RegisterPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
+import { ContractImagePicker } from '../components/RentalContract.jsx'
+import {
+  addContractMonths,
+  CONTRACT_DURATION_OPTIONS,
+  CONTRACT_MAX_IMAGES,
+  CONTRACT_MIN_IMAGES,
+  firstMonthBreakdown,
+  formatContractDate,
+  formatContractMoney,
+} from '../utils/rentalContract.js'
 
 const formatDateTimeLocal = (date) => {
   const pad = (n) => String(n).padStart(2, '0')
@@ -13,20 +24,46 @@ const formatDateTimeLocal = (date) => {
 
 const getNow = () => new Date()
 
-const addDefaultRentalPeriod = (date) => {
-  const next = new Date(date)
-  next.setDate(next.getDate() + 7)
-  return next
+const SECTION_ICONS = {
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" /><path d="M10 21v-6h4v6" /></>,
+  image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></>,
+  lock: <><rect x="4" y="11" width="16" height="10" rx="2.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
+  back: <path d="M15 18l-6-6 6-6" />,
+  alert: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5h.01" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>,
 }
 
-const isSameDay = (a, b) => {
-  const dateA = new Date(a)
-  const dateB = new Date(b)
+function RegisterIcon({ type, size = 18 }) {
   return (
-    dateA.getFullYear() === dateB.getFullYear() &&
-    dateA.getMonth() === dateB.getMonth() &&
-    dateA.getDate() === dateB.getDate()
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SECTION_ICONS[type]}
+    </svg>
   )
+}
+
+function RegisterSection({ step, icon, title, hint, children }) {
+  return (
+    <section className="register-section">
+      <header className="register-section-head">
+        <span className="register-section-icon"><RegisterIcon type={icon} /></span>
+        <div>
+          <small>ขั้นตอนที่ {step}</small>
+          <strong>{title}</strong>
+          {hint && <span>{hint}</span>}
+        </div>
+      </header>
+      <div className="row g-3">{children}</div>
+    </section>
+  )
+}
+
+const Required = () => <span className="register-required" aria-hidden="true">*</span>
+
+const dataUrlToFile = async (dataUrl, name) => {
+  const blob = await (await fetch(dataUrl)).blob()
+  const baseName = String(name || 'contract').replace(/\.[^.]+$/, '') || 'contract'
+  return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' })
 }
 
 const MOBILE_QUERY = '(max-width: 576px)'
@@ -54,7 +91,7 @@ const initialRegisterForm = {
   age: '',
   room_number: '',
   rental_start_date: getNow(),
-  rental_end_date: addDefaultRentalPeriod(getNow()),
+  contract_duration_months: '',
   deposit_amount: '',
   password: '',
   confirmPassword: '',
@@ -71,8 +108,29 @@ function RegisterMain() {
   const [success, setSuccess] = useState('')
   const [availableRooms, setAvailableRooms] = useState([])
   const [roomsLoading, setRoomsLoading] = useState(true)
+  const [contractImages, setContractImages] = useState([])
+  const [contractImageError, setContractImageError] = useState('')
   const selectedRoom = availableRooms.find((room) => String(room.room_number) === String(registerForm.room_number))
   const selectedRoomPrice = selectedRoom ? Number(selectedRoom.price) : null
+  const contractEndDate =
+    registerForm.rental_start_date && registerForm.contract_duration_months
+      ? addContractMonths(registerForm.rental_start_date, registerForm.contract_duration_months)
+      : null
+  const firstMonth = selectedRoomPrice !== null ? firstMonthBreakdown(selectedRoomPrice, registerForm.deposit_amount) : null
+
+  const handleContractImagesChange = (files) => {
+    const invalid = files.map(validateImageFile).find(Boolean)
+    if (invalid) {
+      setContractImageError(invalid)
+      return
+    }
+    if (files.length > CONTRACT_MAX_IMAGES) {
+      setContractImageError(`แนบรูปสัญญาได้ไม่เกิน ${CONTRACT_MAX_IMAGES} รูป`)
+      return
+    }
+    setContractImageError('')
+    setContractImages(files)
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -137,20 +195,8 @@ function RegisterMain() {
     }))
   }
 
-  const handleRentalDateChange = (name, date) => {
-    setRegisterForm((prev) => {
-      const next = { ...prev, [name]: date }
-      if (name === 'rental_start_date' && date) {
-        next.rental_end_date = addDefaultRentalPeriod(date)
-      }
-      return next
-    })
-  }
-
-  const filterEndTime = (time) => {
-    const start = registerForm.rental_start_date
-    if (!start || !isSameDay(time, start)) return true
-    return time.getTime() > new Date(start).getTime()
+  const handleRentalStartChange = (date) => {
+    setRegisterForm((prev) => ({ ...prev, rental_start_date: date }))
   }
 
   const handleRegisterSubmit = async (e) => {
@@ -166,7 +212,7 @@ function RegisterMain() {
       age,
       room_number,
       rental_start_date,
-      rental_end_date,
+      contract_duration_months,
       deposit_amount,
       password,
       confirmPassword,
@@ -180,11 +226,11 @@ function RegisterMain() {
       !age ||
       !room_number ||
       !rental_start_date ||
-      !rental_end_date ||
+      !contract_duration_months ||
       !password ||
       !confirmPassword
     ) {
-      setError('กรุณากรอกข้อมูลให้ครบทุกช่อง')
+      setError(contract_duration_months ? 'กรุณากรอกข้อมูลให้ครบทุกช่อง' : 'กรุณาเลือกระยะเวลาสัญญาเช่า')
       return
     }
 
@@ -193,8 +239,10 @@ function RegisterMain() {
       return
     }
 
-    if (rental_end_date <= rental_start_date) {
-      setError('วันที่สิ้นสุดสัญญาต้องอยู่หลังวันที่เริ่มเช่า')
+    if (contractImages.length < CONTRACT_MIN_IMAGES) {
+      const message = `กรุณาแนบรูปสัญญาเช่าอย่างน้อย ${CONTRACT_MIN_IMAGES} รูป (แนบแล้ว ${contractImages.length} รูป)`
+      setContractImageError(message)
+      setError(message)
       return
     }
 
@@ -215,73 +263,70 @@ function RegisterMain() {
 
     try {
       setLoading(true)
-      const { data } = await axios.post(
-        '/api/auth/register',
-        {
-          idcard,
-          first_name,
-          last_name,
-          phone,
-          age,
-          room_number,
-          rental_start_date: formatDateTimeLocal(rental_start_date),
-          rental_end_date: formatDateTimeLocal(rental_end_date),
-          deposit_amount: deposit_amount || undefined,
-          password,
-        },
-        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } },
-      )
-      setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
-      setRegisterForm({
-        ...initialRegisterForm,
-        rental_start_date: getNow(),
-        rental_end_date: addDefaultRentalPeriod(getNow()),
+      const payload = new FormData()
+      Object.entries({
+        idcard,
+        first_name,
+        last_name,
+        phone,
+        age,
+        room_number,
+        rental_start_date: formatDateTimeLocal(rental_start_date),
+        contract_duration_months,
+        deposit_amount,
+        password,
+      }).forEach(([key, value]) => {
+        if (value !== '' && value !== undefined && value !== null) payload.append(key, value)
       })
+      const compressed = await Promise.all(contractImages.map((file) => compressImageFile(file)))
+      const files = await Promise.all(compressed.map(({ name, dataUrl }) => dataUrlToFile(dataUrl, name)))
+      files.forEach((file) => payload.append('contract_images', file))
+      const { data } = await axios.post('/api/auth/register', payload, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      })
+      setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
+      setRegisterForm({ ...initialRegisterForm, rental_start_date: getNow() })
+      setContractImages([])
       setTimeout(() => navigate('/staff'), 1200)
     } catch (err) {
-      setError(err.response?.data?.message || 'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      setError(err.response?.data?.message || err.message || 'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-page register-page">
       <div className="container">
         <div className="row justify-content-center">
-          <div className="col-12 col-sm-10 col-md-9 col-lg-7 col-xl-6">
-            <div className="auth-card">
-              <div className="auth-brand">
-                <div className="auth-icon">
-                  <svg
-                    width="26"
-                    height="26"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M19 8v6" />
-                    <path d="M22 11h-6" />
-                  </svg>
+          <div className="col-12 col-lg-10 col-xl-9">
+            <div className="auth-card register-card">
+              <div className="register-head">
+                <button type="button" className="register-back" onClick={() => navigate(-1)} disabled={loading}>
+                  <RegisterIcon type="back" size={16} />
+                  <span>กลับ</span>
+                </button>
+                <div className="register-head-main">
+                  <span className="register-head-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M19 8v6" />
+                      <path d="M22 11h-6" />
+                    </svg>
+                  </span>
+                  <div className="register-head-text">
+                    <h1>ลงทะเบียนลูกค้าใหม่</h1>
+                    <p>กรอก 4 ขั้นตอน · ช่องที่มี <Required /> ต้องกรอก</p>
+                  </div>
                 </div>
-                <h1>ลงทะเบียนลูกค้าใหม่</h1>
-                <p>กรอกข้อมูลลูกค้าที่เข้าพักเพื่อสร้างบัญชีและห้องพัก</p>
               </div>
 
-              {error && <div className="alert alert-danger py-2 px-3">{error}</div>}
-              {success && <div className="alert alert-success py-2 px-3">{success}</div>}
-
-              <form onSubmit={handleRegisterSubmit} noValidate>
-                <div className="row g-3">
+              <form onSubmit={handleRegisterSubmit} noValidate className="register-form">
+                <RegisterSection step={1} icon="user" title="ข้อมูลผู้เช่า" hint="ชื่อ เลขบัตรประชาชน และช่องทางติดต่อ">
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-firstname">
-                      ชื่อจริง
+                      ชื่อจริง <Required />
                     </label>
                     <input
                       id="register-firstname"
@@ -296,7 +341,7 @@ function RegisterMain() {
                   </div>
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-lastname">
-                      นามสกุล
+                      นามสกุล <Required />
                     </label>
                     <input
                       id="register-lastname"
@@ -310,9 +355,9 @@ function RegisterMain() {
                     />
                   </div>
 
-                  <div className="col-12">
+                  <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-idcard">
-                      เลขบัตรประชาชน
+                      เลขบัตรประชาชน <Required />
                     </label>
                     <input
                       id="register-idcard"
@@ -326,11 +371,48 @@ function RegisterMain() {
                       onChange={handleRegisterChange}
                       autoComplete="username"
                     />
+                    <div className="form-text">ใช้เป็นชื่อผู้ใช้สำหรับเข้าสู่ระบบ</div>
                   </div>
+                  <div className="col-7 col-md-3">
+                    <label className="form-label" htmlFor="register-phone">
+                      เบอร์โทรศัพท์ <Required />
+                    </label>
+                    <input
+                      id="register-phone"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      name="phone"
+                      className="form-control"
+                      placeholder="0812345678"
+                      value={registerForm.phone}
+                      onChange={handlePhoneChange}
+                      autoComplete="tel"
+                    />
+                  </div>
+                  <div className="col-5 col-md-3">
+                    <label className="form-label" htmlFor="register-age">
+                      อายุ <Required />
+                    </label>
+                    <input
+                      id="register-age"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={99}
+                      name="age"
+                      className="form-control"
+                      placeholder="ปี"
+                      value={registerForm.age}
+                      onChange={handleAgeChange}
+                    />
+                  </div>
+                </RegisterSection>
 
-                  <div className="col-12">
+                <RegisterSection step={2} icon="home" title="ห้องพักและสัญญาเช่า" hint="ราคาห้องดึงจากข้อมูลห้องจริง วันสิ้นสุดคำนวณให้อัตโนมัติ">
+                  <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-room-number">
-                      เลขห้อง
+                      ห้องพัก <Required />
                     </label>
                     <select
                       id="register-room-number"
@@ -345,7 +427,7 @@ function RegisterMain() {
                       </option>
                       {availableRooms.map((room) => (
                         <option key={room.id} value={room.room_number}>
-                          ห้อง {room.room_number}
+                          ห้อง {room.room_number} · {formatContractMoney(room.price)}/เดือน
                         </option>
                       ))}
                     </select>
@@ -354,9 +436,9 @@ function RegisterMain() {
                     )}
                   </div>
 
-                  <div className="col-12">
+                  <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-deposit">
-                      เงินมัดจำ (ถ้ามี)
+                      เงินมัดจำ <span className="register-optional">ไม่บังคับ</span>
                     </label>
                     <input
                       id="register-deposit"
@@ -371,14 +453,33 @@ function RegisterMain() {
                     />
                     <div className="form-text">
                       {selectedRoomPrice !== null
-                        ? `กรอกได้ไม่เกินราคาห้อง ฿${selectedRoomPrice.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ยอดมัดจำจะถูกหักจากค่าเช่าเดือนแรก`
+                        ? `ไม่เกิน ${formatContractMoney(selectedRoomPrice)} · หักจากค่าเช่าเดือนแรกครั้งเดียว`
                         : 'เลือกห้องก่อนกรอกเงินมัดจำ'}
                     </div>
                   </div>
 
                   <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="register-contract-duration">
+                      ระยะเวลาสัญญาเช่า <Required />
+                    </label>
+                    <select
+                      id="register-contract-duration"
+                      name="contract_duration_months"
+                      className="form-select"
+                      value={registerForm.contract_duration_months}
+                      onChange={handleRegisterChange}
+                    >
+                      <option value="">เลือกระยะเวลาสัญญา</option>
+                      {CONTRACT_DURATION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-rental-start">
-                      วันเวลาที่เริ่มเช่า
+                      วันเวลาที่เริ่มเช่า <Required />
                     </label>
                     <ThaiDatePicker
                       id="register-rental-start"
@@ -386,27 +487,7 @@ function RegisterMain() {
                       valueType="date"
                       placeholder="เลือกวันเวลา"
                       value={registerForm.rental_start_date}
-                      onChange={(date) => handleRentalDateChange('rental_start_date', date)}
-                      showTimeSelect
-                      timeIntervals={15}
-                      withPortal={isMobile}
-                      portalId="rental-date-portal"
-                    />
-                  </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label" htmlFor="register-rental-end">
-                      วันเวลาที่สิ้นสุดสัญญา
-                    </label>
-                    <ThaiDatePicker
-                      id="register-rental-end"
-                      name="rental_end_date"
-                      valueType="date"
-                      placeholder="เลือกวันเวลา"
-                      value={registerForm.rental_end_date}
-                      onChange={(date) => handleRentalDateChange('rental_end_date', date)}
-                      minDate={registerForm.rental_start_date || getNow()}
-                      openToDate={getNow()}
-                      filterTime={filterEndTime}
+                      onChange={handleRentalStartChange}
                       showTimeSelect
                       timeIntervals={15}
                       withPortal={isMobile}
@@ -414,51 +495,65 @@ function RegisterMain() {
                     />
                   </div>
 
-                  <div className="col-12 col-md-6">
-                    <label className="form-label" htmlFor="register-phone">
-                      เบอร์โทรศัพท์
-                    </label>
-                    <input
-                      id="register-phone"
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={10}
-                      name="phone"
-                      className="form-control"
-                      placeholder="เบอร์โทรศัพท์ เช่น 0812345678"
-                      value={registerForm.phone}
-                      onChange={handlePhoneChange}
-                      autoComplete="tel"
-                    />
-                  </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label" htmlFor="register-age">
-                      อายุ
-                    </label>
-                    <input
-                      id="register-age"
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      max={99}
-                      name="age"
-                      className="form-control"
-                      placeholder="อายุ"
-                      value={registerForm.age}
-                      onChange={handleAgeChange}
-                    />
+                  <div className="col-12">
+                    <div className="register-contract-summary">
+                      <div className="rcs-date">
+                        <span className="rcs-date-icon" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="5" width="18" height="16" rx="3" />
+                            <path d="M16 3v4M8 3v4M3 11h18" />
+                          </svg>
+                        </span>
+                        <div>
+                          <span>สิ้นสุดสัญญา</span>
+                          <strong className={contractEndDate ? '' : 'is-empty'}>
+                            {contractEndDate ? formatContractDate(contractEndDate, true) : 'เลือกระยะสัญญา'}
+                          </strong>
+                        </div>
+                      </div>
+                      <div className="rcs-calc">
+                        <div className="rcs-item">
+                          <span>ค่าเช่า</span>
+                          <strong>{firstMonth ? formatContractMoney(firstMonth.price) : '-'}</strong>
+                        </div>
+                        <span className="rcs-op" aria-hidden="true">−</span>
+                        <div className="rcs-item is-deduct">
+                          <span>มัดจำ</span>
+                          <strong>{firstMonth ? formatContractMoney(firstMonth.depositApplied) : '-'}</strong>
+                        </div>
+                        <span className="rcs-op" aria-hidden="true">=</span>
+                        <div className="rcs-item is-total">
+                          <span>เดือนแรก</span>
+                          <strong>{firstMonth ? formatContractMoney(firstMonth.remaining) : '-'}</strong>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
+                </RegisterSection>
+
+                <RegisterSection
+                  step={3}
+                  icon="image"
+                  title={<>รูปสัญญาเช่า <Required /></>}
+                  hint="ถ่ายสัญญาทุกหน้าให้อ่านออกชัดเจน"
+                >
+                  <div className="col-12">
+                    <ContractImagePicker files={contractImages} onChange={handleContractImagesChange} error={contractImageError} />
+                  </div>
+                </RegisterSection>
+
+                <RegisterSection step={4} icon="lock" title="บัญชีเข้าใช้งาน" hint="ผู้เช่าใช้เลขบัตรประชาชนหรือเลขห้องคู่กับรหัสผ่านนี้เข้าสู่ระบบ">
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-password">
-                      รหัสผ่าน
+                      รหัสผ่าน <Required />
                     </label>
                     <input
                       id="register-password"
                       type="password"
                       name="password"
                       className="form-control"
-                      placeholder="กรอกรหัสผ่าน"
+                      placeholder="อย่างน้อย 6 ตัวอักษร"
                       value={registerForm.password}
                       onChange={handleRegisterChange}
                       autoComplete="new-password"
@@ -466,7 +561,7 @@ function RegisterMain() {
                   </div>
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-confirm-password">
-                      ยืนยันรหัสผ่าน
+                      ยืนยันรหัสผ่าน <Required />
                     </label>
                     <input
                       id="register-confirm-password"
@@ -478,20 +573,38 @@ function RegisterMain() {
                       onChange={handleRegisterChange}
                       autoComplete="new-password"
                     />
+                    {registerForm.confirmPassword && registerForm.password !== registerForm.confirmPassword && (
+                      <div className="form-text text-danger">รหัสผ่านไม่ตรงกัน</div>
+                    )}
+                  </div>
+                </RegisterSection>
+
+                <div className="register-actions">
+                  {(error || success) && (
+                    <div className={`auth-alert ${success ? 'is-success' : ''}`} role={error ? 'alert' : 'status'}>
+                      <span className="auth-alert-icon"><RegisterIcon type={success ? 'check' : 'alert'} size={18} /></span>
+                      <span>{success || error}</span>
+                    </div>
+                  )}
+                  <div className="register-actions-row">
+                    <div className="register-actions-meta">
+                      {selectedRoom ? (
+                        <>
+                          <span>ห้อง {selectedRoom.room_number}{registerForm.contract_duration_months ? ` · ${registerForm.contract_duration_months} เดือน` : ''}</span>
+                          <strong>เดือนแรก {firstMonth ? formatContractMoney(firstMonth.remaining) : '-'}</strong>
+                        </>
+                      ) : (
+                        <span>ยังไม่ได้เลือกห้อง</span>
+                      )}
+                    </div>
+                    <button type="button" className="auth-secondary-btn register-cancel" disabled={loading} onClick={() => navigate(-1)}>
+                      ยกเลิก
+                    </button>
+                    <button type="submit" className="auth-submit-btn register-submit" disabled={loading}>
+                      {loading ? 'กำลังลงทะเบียน...' : 'ลงทะเบียนลูกค้า'}
+                    </button>
                   </div>
                 </div>
-
-                <button type="submit" className="auth-submit-btn" disabled={loading}>
-                  {loading ? 'กำลังลงทะเบียน...' : 'ลงทะเบียนลูกค้า'}
-                </button>
-                <button
-                  type="button"
-                  className="auth-secondary-btn"
-                  disabled={loading}
-                  onClick={() => navigate(-1)}
-                >
-                  ยกเลิก
-                </button>
               </form>
             </div>
           </div>

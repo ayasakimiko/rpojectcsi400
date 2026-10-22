@@ -137,10 +137,12 @@ services:
     command: ["node", "services/authService.js"]
     restart: unless-stopped
     environment:
-      <<: *service-env
+      <<: *upload-env
       AUTH_PORT: 4001
     ports:
       - "${AUTH_PORT:-4001}:4001"
+    volumes:
+      - ./public/uploads:/app/public/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -154,6 +156,7 @@ services:
       ROOM_PORT: 4002
     ports:
       - "${ROOM_PORT:-4002}:4002"
+    volumes: []
 
   customer-service:
     <<: *service-defaults
@@ -200,6 +203,7 @@ services:
       OWNER_PORT: 4006
     ports:
       - "${OWNER_PORT:-4006}:4006"
+    volumes: []
 
   parcel-service:
     <<: *service-defaults

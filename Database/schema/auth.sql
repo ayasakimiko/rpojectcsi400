@@ -90,6 +90,50 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'contract_duration_months'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `contract_duration_months` INT UNSIGNED NULL AFTER rental_end_date'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'contract_completed_at'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `contract_completed_at` DATETIME NULL AFTER contract_duration_months'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+CREATE TABLE IF NOT EXISTS ContractImage (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    booking_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    name VARCHAR(255) NULL,
+    url VARCHAR(255) NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_contract_image_booking FOREIGN KEY (booking_id) REFERENCES Booking(id),
+    CONSTRAINT fk_contract_image_customer FOREIGN KEY (customer_id) REFERENCES Customer(id),
+    INDEX idx_contract_image_booking (booking_id, id),
+    INDEX idx_contract_image_customer (customer_id)
+);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND INDEX_NAME = 'idx_booking_contract_completed'),
+    'SELECT 1',
+    'CREATE INDEX `idx_booking_contract_completed` ON `Booking` (contract_completed_at)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND INDEX_NAME = 'idx_booking_customer_created'),
     'SELECT 1',

@@ -23,11 +23,13 @@ import {
   computeCurrentDue,
   createSafetyIncident,
   isPlateRegisteredByOther,
+  withThisMonthRent,
   withVehiclePhotos,
 } from "./CustomerDashboardRouter.js";
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
+import { loadCompletedContracts } from "./rentalContracts.js";
 
 const router = Router();
 
@@ -89,6 +91,16 @@ router.get("/me", async (req, res) => {
   } catch (error) {
     console.error("Fetch staff profile error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/contracts/completed", async (_req, res) => {
+  try {
+    const pool = getPool();
+    return res.json({ contracts: await withThisMonthRent(pool, await loadCompletedContracts(pool)) });
+  } catch (error) {
+    console.error("Fetch completed contracts error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายการสัญญาที่เสร็จสมบูรณ์ได้" });
   }
 });
 

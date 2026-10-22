@@ -24,8 +24,8 @@ import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
+import { loadCustomerContracts } from "./rentalContracts.js";
 
-// ตั้งค่า Router ตรวจสอบสิทธิ์ผู้ดูแล และเชื่อมส่วนรายจ่ายกับประกาศ
 const router = Router();
 
 async function cancelStaleTenantRequests(connection, customerId, currentRoomNumber) {
@@ -43,7 +43,6 @@ router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
 
-// ฟังก์ชันกลางสำหรับอัปเดตเฉพาะคอลัมน์ที่อนุญาต
 function buildUpdate(allowedColumns, body) {
   const columns = [];
   const values = [];
@@ -56,7 +55,6 @@ function buildUpdate(allowedColumns, body) {
   return { columns, values };
 }
 
-// รายงานเหตุด้านความปลอดภัยและการบันทึกผลตรวจสอบ
 const SAFETY_REVIEWER_TABLE = { Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 
 export async function listSafetyIncidents(_req, res) {
@@ -100,11 +98,9 @@ export async function reviewSafetyIncident(req, res) {
 router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
-// ตรวจสอบและอนุมัติคำขอเกี่ยวกับผู้มาติดต่อและยานพาหนะของผู้เช่า
 router.get("/resident-visit-requests", listResidentVisitRequests);
 router.post("/resident-visit-requests/:id/:decision", createResidentVisitReview(getActingAdminName));
 
-// จัดการรายชื่อผู้สนใจเข้าพักและคิวรอห้อง
 router.get("/waiting-list", async (_req, res) => {
   try {
     const pool = getPool();
@@ -186,7 +182,6 @@ router.delete("/waiting-list/:id", async (req, res) => {
   }
 });
 
-// จัดการผลตรวจสภาพห้อง รูปประกอบ และการเชื่อมกับคำขอย้ายห้อง
 router.get("/move-out-inspections", async (_req, res) => {
   try {
     const pool = getPool();
@@ -434,7 +429,6 @@ router.delete("/move-out-inspections/:id", async (req, res) => {
   }
 });
 
-// จัดการห้องพัก รายละเอียดผู้เช่า ประวัติการเช่า และประวัติแจ้งซ่อมของห้อง
 router.get("/rooms", async (req, res) => {
   try {
     const pool = getPool();
@@ -857,7 +851,6 @@ router.delete("/rooms/:room_number", async (req, res) => {
   }
 });
 
-// จัดการบัญชีพนักงาน เพิ่ม แก้ไข ระงับการใช้งาน และลบ
 router.get("/staff", async (req, res) => {
   try {
     const pool = getPool();
@@ -989,7 +982,6 @@ router.delete("/staff/:id", async (req, res) => {
   }
 });
 
-// จัดการข้อมูลผู้เช่า รายละเอียดการเข้าพัก และสถานะการใช้งานบัญชี
 router.get("/customers", async (req, res) => {
   try {
     const pool = getPool();
@@ -1016,7 +1008,10 @@ router.get("/customers", async (req, res) => {
       params,
     );
 
-    return res.json({ customers });
+    const contracts = await loadCustomerContracts(pool, customers.map((customer) => customer.id));
+    return res.json({
+      customers: customers.map((customer) => ({ ...customer, contract: contracts.get(customer.id) ?? null })),
+    });
   } catch (error) {
     console.error("Admin fetch customers error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -1065,7 +1060,8 @@ router.get("/customers/:id", async (req, res) => {
       payments: payments.filter((payment) => payment.booking_id === booking.booking_id),
     }));
 
-    return res.json({ customer, rentalHistory });
+    const contracts = await loadCustomerContracts(pool, [customerId]);
+    return res.json({ customer, rentalHistory, contract: contracts.get(customerId) ?? null });
   } catch (error) {
     console.error("Admin fetch customer detail error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -1232,7 +1228,6 @@ router.patch("/customers/:id/suspend", async (req, res) => {
   }
 });
 
-// ประวัติคำขอผู้เช่า พร้อมการค้นหา กรองสถานะ และแบ่งหน้า
 const LOG_PAGE_SIZE = 20;
 
 router.get("/logs/requests", async (req, res) => {
@@ -1289,7 +1284,6 @@ router.get("/logs/requests", async (req, res) => {
   }
 });
 
-// ประวัติแจ้งซ่อมและรูปประกอบ พร้อมการค้นหา กรองสถานะ และแบ่งหน้า
 router.get("/logs/maintenance", async (req, res) => {
   try {
     const pool = getPool();
@@ -1337,7 +1331,6 @@ router.get("/logs/maintenance", async (req, res) => {
   }
 });
 
-// ประวัติผู้ย้ายออกและรายละเอียดการตรวจห้อง การชำระเงิน และงานซ่อม
 router.get("/logs/moveouts", async (req, res) => {
   try {
     const pool = getPool();

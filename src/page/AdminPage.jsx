@@ -11,6 +11,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import { ContractCell, ContractDetail } from '../components/RentalContract.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -1767,7 +1768,7 @@ function AdminRequestCard({ request, onOpen }) {
   )
 }
 
-function CustomerProfile({ customer, rentalHistory, loading, error, idcardRevealed, onToggleIdCard, onRetry, onOpenHistory, onEdit, onToggleSuspend }) {
+function CustomerProfile({ customer, contract, rentalHistory, loading, error, idcardRevealed, onToggleIdCard, onRetry, onOpenHistory, onEdit, onToggleSuspend }) {
   const [now] = useState(() => Date.now())
   const payments = (rentalHistory || []).flatMap((booking) => booking.payments || [])
   const paidTotal = payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
@@ -1797,6 +1798,7 @@ function CustomerProfile({ customer, rentalHistory, loading, error, idcardReveal
   return (
     <div className="customer-profile">
       <div className="customer-profile-scroll">
+        <div className="customer-profile-column">
         <div className={`customer-profile-hero${customer.is_suspended ? ' is-suspended' : ''}`}>
           <span className="customer-profile-avatar" aria-hidden="true"><RoomDetailIcon type="user" size={24} /></span>
           <div className="customer-profile-name">
@@ -1863,6 +1865,7 @@ function CustomerProfile({ customer, rentalHistory, loading, error, idcardReveal
           )}
         </section>
 
+
         <section className="customer-profile-history">
           <header>
             <span className="admin-room-form-icon"><RoomDetailIcon type="history" size={16} /></span>
@@ -1890,6 +1893,22 @@ function CustomerProfile({ customer, rentalHistory, loading, error, idcardReveal
             <RoomDetailIcon type="history" size={15} />
             ดูประวัติการเช่า
           </button>
+        </section>
+        </div>
+
+        <section className="customer-profile-history customer-profile-rental-contract">
+          <header>
+            <span className="admin-room-form-icon"><RoomDetailIcon type="note" size={16} /></span>
+            <div>
+              <strong>สัญญาเช่าและรูปสัญญา</strong>
+              <small>ข้อมูลการลงทะเบียน มัดจำ และค่าเช่าเดือนแรก</small>
+            </div>
+          </header>
+          {loading && !contract ? (
+            <p className="customer-profile-state">กำลังโหลดข้อมูล...</p>
+          ) : (
+            <ContractDetail contract={contract} />
+          )}
         </section>
       </div>
       <div className="customer-profile-actions">
@@ -7762,6 +7781,7 @@ function AdminBackupPage() {
                     <th className="admin-col-optional">บัตรประชาชน</th>
                     <th className="admin-customer-room-column">ห้อง</th>
                     <th className="admin-col-optional">ระยะเวลาสัญญา</th>
+                    <th className="admin-col-optional admin-customer-contract-column">สัญญาเช่า / มัดจำ</th>
                     <th className="admin-customer-status-column">สถานะ</th>
                     <th className="admin-col-optional">การดำเนินการ</th>
                     <th className="admin-customer-profile-column" aria-hidden="true" />
@@ -7770,13 +7790,13 @@ function AdminBackupPage() {
                 <tbody>
                   {customersLoading ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="admin-empty">
+                      <td colSpan={8} className="admin-empty">
                         ไม่พบข้อมูลลูกค้า
                       </td>
                     </tr>
@@ -7835,6 +7855,9 @@ function AdminBackupPage() {
                           <td className="admin-col-optional">
                             <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />
                           </td>
+                          <td className="admin-col-optional admin-customer-contract-column">
+                            <ContractCell contract={customer.contract} />
+                          </td>
                           <td className="admin-customer-status-column">
                             <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
@@ -7868,12 +7891,12 @@ function AdminBackupPage() {
                         </tr>
                         <ExpandToggleRow
                           open={expandedCustomerRows.has(customer.id)}
-                          colSpan={7}
+                          colSpan={8}
                           onClick={() => toggleCustomerRow(customer.id)}
                         />
                         <DetailRow
                           open={expandedCustomerRows.has(customer.id)}
-                          colSpan={7}
+                          colSpan={8}
                           fields={[
                             { label: 'ห้อง', value: customer.room_number || '-' },
                             {
@@ -7901,6 +7924,10 @@ function AdminBackupPage() {
                             {
                               label: 'ระยะเวลาสัญญา',
                               value: <RentalPeriodCell start={customer.rental_start_date} end={customer.rental_end_date} />,
+                            },
+                            {
+                              label: 'สัญญาเช่า / มัดจำ',
+                              value: <ContractCell contract={customer.contract} />,
                             },
                             {
                               label: 'การดำเนินการ',
@@ -10267,6 +10294,7 @@ function AdminBackupPage() {
           <Modal title="รายละเอียดลูกค้า" onClose={() => setCustomerProfile(null)} variant="customer-profile">
             <CustomerProfile
               customer={{ ...customerProfile.detail?.customer, ...profileCustomer }}
+              contract={customerProfile.detail?.contract ?? profileCustomer.contract ?? null}
               rentalHistory={customerProfile.detail?.rentalHistory}
               loading={customerProfile.loading}
               error={customerProfile.error}

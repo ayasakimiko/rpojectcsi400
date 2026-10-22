@@ -5,7 +5,7 @@ export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "paym
 
 export const TABLES_BY_SERVICE = {
   room: ["Room"],
-  auth: ["Customer", "Staff", "Admin", "Owner", "Booking"],
+  auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage"],
   customer: ["TenantRequest", "ResidentVisitRequest", "SafetyIncident"],
   maintenance: ["MaintenanceRequest", "MaintenancePhoto"],
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],

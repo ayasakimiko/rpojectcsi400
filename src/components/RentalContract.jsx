@@ -1,0 +1,937 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import axios from 'axios'
+import { UploadImage } from './UploadMedia.jsx'
+import PhotoLightbox from './PhotoLightbox.jsx'
+import './RentalContract.css'
+import {
+  CONTRACT_MAX_IMAGES,
+  CONTRACT_MIN_IMAGES,
+  formatContractDate,
+  formatContractLength,
+  formatContractMoney,
+} from '../utils/rentalContract.js'
+
+const CONTRACT_STATUS = {
+  active: { label: 'สัญญามีผล', tone: 'active' },
+  upcoming: { label: 'ยังไม่เริ่มสัญญา', tone: 'info' },
+  expired: { label: 'หมดอายุสัญญา', tone: 'warning' },
+  ended: { label: 'สิ้นสุดการเช่า', tone: 'muted' },
+}
+
+const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+
+function ContractIcon({ type, size = 16 }) {
+  const paths = {
+    file: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>,
+    image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
+    wallet: <><rect x="3" y="6" width="18" height="14" rx="3" /><path d="M3 10h18M16 15h2" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+    chevron: <path d="m9 6 6 6-6 6" />,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
+    check: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="m9 14 2 2 4-4" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[type]}
+    </svg>
+  )
+}
+
+function ContractLightbox({ images, index, title, subtitle, onClose }) {
+  return createPortal(
+    <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+      <PhotoLightbox photos={images} initialIndex={index} title={title} subtitle={subtitle} label="รูปสัญญาเช่า" onClose={onClose} />
+    </div>,
+    document.body,
+  )
+}
+
+export function ContractStatusBadge({ status }) {
+  const info = CONTRACT_STATUS[status] || CONTRACT_STATUS.active
+  return <span className={`contract-status is-${info.tone}`}>{info.label}</span>
+}
+
+export function ContractGallery({ images = [], title = 'รูปสัญญาเช่า', subtitle }) {
+  const [openIndex, setOpenIndex] = useState(null)
+  if (images.length === 0) {
+    return (
+      <div className="contract-gallery-empty">
+        <ContractIcon type="image" size={22} />
+        <strong>ไม่มีรูปสัญญาเช่า</strong>
+        <span>สัญญาที่ลงทะเบียนก่อนเปิดใช้ระบบแนบรูปจะไม่มีรูปสัญญาในระบบ</span>
+      </div>
+    )
+  }
+  return (
+    <>
+      <ul className="contract-gallery" aria-label={title}>
+        {images.map((image, index) => (
+          <li key={image.url}>
+            <button
+              type="button"
+              className="contract-gallery-item"
+              onClick={(event) => {
+                event.stopPropagation()
+                setOpenIndex(index)
+              }}
+              aria-label={`ดูรูปสัญญาเช่า ${index + 1} จาก ${images.length}`}
+            >
+              <UploadImage src={image.url} alt="" loading="lazy" />
+              <span className="contract-gallery-index">{index + 1}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {openIndex !== null && (
+        <ContractLightbox images={images} index={openIndex} title={title} subtitle={subtitle} onClose={() => setOpenIndex(null)} />
+      )}
+    </>
+  )
+}
+
+export function ContractFacts({ contract }) {
+  const facts = [
+    { label: 'ระยะเวลาสัญญา', value: formatContractLength(contract) },
+    { label: 'วันเริ่มสัญญา', value: formatContractDate(contract.rental_start_date, true) },
+    { label: 'วันสิ้นสุดสัญญา', value: formatContractDate(contract.rental_end_date, true) },
+    ...(contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
+      ? [{ label: 'สัญญาปัจจุบันถึง', value: formatContractDate(contract.current_end_date, true), hint: 'รวมการต่อสัญญา/ย้ายห้อง' }]
+      : []),
+    { label: 'ค่าเช่าห้องต่อเดือน', value: formatContractMoney(contract.monthly_price) },
+    { label: 'เงินมัดจำที่ชำระแล้ว', value: contract.deposit_amount != null ? formatContractMoney(contract.deposit_amount) : 'ไม่มีมัดจำ' },
+    {
+      label: 'ทำสัญญาสำเร็จเมื่อ',
+      value: contract.contract_completed_at ? formatContractDate(contract.contract_completed_at, true) : formatContractDate(contract.created_at, true),
+    },
+  ]
+  return (
+    <dl className="contract-facts">
+      {facts.map((fact) => (
+        <div key={fact.label}>
+          <dt>{fact.label}</dt>
+          <dd>
+            {fact.value}
+            {fact.hint && <small>{fact.hint}</small>}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+export function ContractFirstMonth({ contract }) {
+  return (
+    <div className="contract-first-month" aria-label="การคำนวณค่าเช่าเดือนแรก">
+      <div>
+        <span>ค่าเช่าเดือนแรก</span>
+        <strong>{formatContractMoney(contract.first_month_amount)}</strong>
+      </div>
+      <div className="is-deduct">
+        <span>หักเงินมัดจำ</span>
+        <strong>− {formatContractMoney(contract.deposit_applied)}</strong>
+      </div>
+      <div className="is-total">
+        <span>คงเหลือชำระเดือนแรก</span>
+        <strong>{formatContractMoney(contract.first_month_remaining)}</strong>
+      </div>
+      <p>หักเงินมัดจำจากค่าเช่าเดือนแรกเพียงครั้งเดียว เดือนถัดไปชำระเต็มราคาห้อง</p>
+    </div>
+  )
+}
+
+export function ContractDetail({ contract, showPerson = false }) {
+  if (!contract) {
+    return (
+      <div className="contract-gallery-empty">
+        <ContractIcon type="file" size={22} />
+        <strong>ยังไม่มีข้อมูลสัญญาเช่า</strong>
+      </div>
+    )
+  }
+  const name = `${contract.first_name || ''} ${contract.last_name || ''}`.trim()
+  return (
+    <div className="contract-detail">
+      <div className="contract-detail-head">
+        <span className="contract-detail-icon"><ContractIcon type="file" size={18} /></span>
+        <div>
+          <strong>{showPerson && name ? name : 'สัญญาเช่า'}</strong>
+          <small>ห้อง {contract.room_number || '-'} · {formatContractLength(contract)}</small>
+        </div>
+        <ContractStatusBadge status={contract.status} />
+      </div>
+      <ContractFacts contract={contract} />
+      <ContractFirstMonth contract={contract} />
+      <section className="contract-detail-images">
+        <header>
+          <ContractIcon type="image" size={15} />
+          <strong>รูปสัญญาเช่า</strong>
+          <span>{contract.image_count || 0} รูป</span>
+        </header>
+        <ContractGallery images={contract.images || []} subtitle={`ห้อง ${contract.room_number || '-'}${name ? ` · ${name}` : ''}`} />
+      </section>
+    </div>
+  )
+}
+
+export function ContractCell({ contract }) {
+  if (!contract) return <span className="contract-cell-empty">-</span>
+  return (
+    <div className="contract-cell">
+      <div className="contract-cell-text">
+        <strong>{formatContractMoney(contract.monthly_price)} · {formatContractLength(contract)}</strong>
+        <small>
+          มัดจำ {contract.deposit_amount != null ? formatContractMoney(contract.deposit_amount) : '-'} · เหลือ{' '}
+          <b>{formatContractMoney(contract.first_month_remaining)}</b>
+        </small>
+      </div>
+      <ContractThumb contract={contract} />
+    </div>
+  )
+}
+
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+
+export function ContractImagePicker({ files, onChange, error }) {
+  const previews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files])
+  useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews])
+  const [dragging, setDragging] = useState(false)
+  const dragDepth = useRef(0)
+  const inputRef = useRef(null)
+  const full = files.length >= CONTRACT_MAX_IMAGES
+  const remaining = Math.max(0, CONTRACT_MIN_IMAGES - files.length)
+  const progress = Math.min(100, (files.length / CONTRACT_MIN_IMAGES) * 100)
+
+  const addFiles = (selected) => {
+    if (selected.length) onChange([...files, ...selected])
+  }
+  const replaceFile = (index, event) => {
+    const [file] = event.target.files || []
+    event.target.value = ''
+    if (file) onChange(files.map((item, itemIndex) => (itemIndex === index ? file : item)))
+  }
+  const hasFiles = (event) => [...(event.dataTransfer?.types || [])].includes('Files')
+  const dragHandlers = {
+    onDragEnter: (event) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      dragDepth.current += 1
+      setDragging(true)
+    },
+    onDragOver: (event) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = full ? 'none' : 'copy'
+    },
+    onDragLeave: (event) => {
+      if (!hasFiles(event)) return
+      dragDepth.current = Math.max(0, dragDepth.current - 1)
+      if (dragDepth.current === 0) setDragging(false)
+    },
+    onDrop: (event) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      dragDepth.current = 0
+      setDragging(false)
+      if (!full) addFiles([...(event.dataTransfer.files || [])])
+    },
+  }
+
+  return (
+    <div className={`contract-picker${error ? ' is-invalid' : ''}${dragging ? ' is-dragging' : ''}`} {...dragHandlers}>
+      <div className="contract-picker-head">
+        <div className="contract-picker-progress">
+          <span>
+            <strong>{files.length}</strong>/{CONTRACT_MAX_IMAGES} รูป
+            <em className={remaining > 0 ? 'is-pending' : 'is-done'}>{remaining > 0 ? `ขาดอีก ${remaining}` : 'ครบขั้นต่ำ'}</em>
+          </span>
+          <i aria-hidden="true"><b style={{ width: `${progress}%` }} /></i>
+        </div>
+        <button type="button" className="contract-picker-add" disabled={full} onClick={() => inputRef.current?.click()}>
+          + เพิ่มรูป
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          hidden
+          onChange={(event) => {
+            const selected = [...(event.target.files || [])]
+            event.target.value = ''
+            addFiles(selected)
+          }}
+        />
+      </div>
+      <div className="contract-picker-body">
+        {previews.length > 0 ? (
+          <ul className="contract-gallery contract-picker-grid">
+            {previews.map((preview, index) => (
+              <li key={preview.url}>
+                <div className="contract-gallery-item is-static">
+                  <img src={preview.url} alt={`รูปสัญญาเช่า ${index + 1}`} />
+                  <span className="contract-gallery-index">{index + 1}</span>
+                </div>
+                <div className="contract-picker-actions">
+                  <label>
+                    เปลี่ยน
+                    <input type="file" accept={IMAGE_ACCEPT} hidden onChange={(event) => replaceFile(index, event)} />
+                  </label>
+                  <button type="button" onClick={() => onChange(files.filter((_, itemIndex) => itemIndex !== index))}>
+                    ลบ
+                  </button>
+                </div>
+              </li>
+            ))}
+            {!full && (
+              <li>
+                <button type="button" className="contract-picker-tile" onClick={() => inputRef.current?.click()}>
+                  <span>+</span>
+                  เพิ่มรูป
+                </button>
+              </li>
+            )}
+          </ul>
+        ) : (
+          <button type="button" className="contract-picker-drop" onClick={() => inputRef.current?.click()}>
+            <ContractIcon type="image" size={26} />
+            <strong>ลากรูปมาวาง หรือคลิกเพื่อเลือก</strong>
+            <span>อย่างน้อย {CONTRACT_MIN_IMAGES} รูป · JPG, PNG, WebP · ไม่เกิน 5 MB/รูป</span>
+          </button>
+        )}
+      </div>
+      {dragging && (
+        <div className="contract-picker-overlay" aria-hidden="true">
+          <ContractIcon type="image" size={28} />
+          <strong>{full ? `แนบครบ ${CONTRACT_MAX_IMAGES} รูปแล้ว` : 'ปล่อยเพื่อเพิ่มรูปสัญญา'}</strong>
+        </div>
+      )}
+      {error && <div className="contract-picker-error">{error}</div>}
+    </div>
+  )
+}
+
+const STAFF_CARD_STATUS = {
+  active: { label: 'สัญญามีผล', tone: 'is-active' },
+  upcoming: { label: 'ยังไม่เริ่ม', tone: 'is-info' },
+  expired: { label: 'หมดอายุ', tone: 'is-warning' },
+  ended: { label: 'สิ้นสุดการเช่า', tone: 'is-muted' },
+}
+const STAFF_CARD_PHOTOS = 4
+
+function contractPeriodPosition(contract, now) {
+  const periods = Math.max(1, Number(contract.billing_periods) || 1)
+  const start = contract.rental_start_date ? new Date(contract.rental_start_date) : null
+  const today = new Date(now)
+  const elapsed = start
+    ? (today.getFullYear() - start.getFullYear()) * 12 + today.getMonth() - start.getMonth() - (today.getDate() < start.getDate() ? 1 : 0)
+    : 0
+  return { periods, currentPeriod: Math.min(periods, Math.max(0, elapsed)) }
+}
+
+function ContractPeriodTimeline({ contract, now, endLabel = 'สิ้นสุด', endValue }) {
+  const { daysLeft } = contractTimeline(contract, now)
+  const { periods, currentPeriod } = contractPeriodPosition(contract, now)
+  return (
+    <>
+      <span className="csc-period-row">
+        <span className="csc-date">
+          <small>เริ่มสัญญา</small>
+          <b>{formatContractDate(contract.rental_start_date)}</b>
+        </span>
+        <span className="csc-period-line" aria-hidden="true">
+          <em>{formatContractLength(contract)}</em>
+        </span>
+        <span className="csc-date is-end">
+          <small>{endLabel}</small>
+          <b>{formatContractDate(endValue ?? contract.rental_end_date)}</b>
+        </span>
+      </span>
+      <span className="csc-period-meta">
+        <small>{currentPeriod >= periods ? `ครบ ${periods} รอบบิล` : `เดือนที่ ${currentPeriod + 1}/${periods}`}</small>
+        <small className={daysLeft !== null && daysLeft <= 30 ? 'is-warning' : ''}>
+          {daysLeft > 0 ? `เหลือ ${daysLeft} วัน` : formatDaysLeft(daysLeft)}
+        </small>
+      </span>
+    </>
+  )
+}
+
+function StaffContractCard({ contract, onOpen }) {
+  const [openIndex, setOpenIndex] = useState(null)
+  const [now] = useState(() => Date.now())
+  const images = contract.images || []
+  const status = STAFF_CARD_STATUS[contract.status] || STAFF_CARD_STATUS.active
+  const tenantName = `${contract.first_name || ''} ${contract.last_name || ''}`.trim() || '-'
+  const extra = images.length - STAFF_CARD_PHOTOS
+  return (
+    <li className={`csc-card is-${contract.status}`}>
+      <button type="button" className="csc-main" onClick={onOpen} aria-label={`ดูสัญญาห้อง ${contract.room_number}`}>
+        <span className="csc-head">
+          <span className="csc-room">
+            <small>ห้อง</small>
+            <strong>{contract.room_number || '-'}</strong>
+          </span>
+          <span className="csc-person">
+            <strong title={tenantName}>{tenantName}</strong>
+            <small>{contract.phone || '-'}</small>
+          </span>
+          <span className={`csc-status ${status.tone}`}>{status.label}</span>
+        </span>
+
+        <span className="csc-period">
+          <ContractPeriodTimeline contract={contract} now={now} />
+        </span>
+
+        <span className="csc-money">
+          <span>
+            <small>ค่าเช่า/เดือน</small>
+            <b>{formatContractMoney(contract.monthly_price)}</b>
+          </span>
+          <span>
+            <small>มัดจำ</small>
+            <b>{contract.deposit_amount != null ? formatContractMoney(contract.deposit_amount) : '-'}</b>
+          </span>
+          <span className="is-total">
+            <small>เดือนแรก</small>
+            <b>{formatContractMoney(contract.first_month_remaining)}</b>
+          </span>
+        </span>
+      </button>
+
+      <div className="csc-photos">
+        <span className="csc-label">รูปสัญญา <b>{images.length}</b></span>
+        <span className="csc-photo-row">
+          {images.length === 0 ? (
+            <span className="contract-cell-nophoto">ไม่มีรูปสัญญา</span>
+          ) : (
+            images.slice(0, STAFF_CARD_PHOTOS).map((image, index) => (
+              <button
+                type="button"
+                key={image.url}
+                className="csc-photo"
+                onClick={() => setOpenIndex(index)}
+                aria-label={`ดูรูปสัญญาห้อง ${contract.room_number} รูปที่ ${index + 1}`}
+              >
+                <UploadImage src={image.url} alt="" loading="lazy" />
+                {index === STAFF_CARD_PHOTOS - 1 && extra > 0 && <span>+{extra}</span>}
+              </button>
+            ))
+          )}
+        </span>
+      </div>
+
+      <div className="csc-foot">
+        <span>ทำสัญญา {formatContractDate(contract.contract_completed_at, true)}</span>
+        <button type="button" className="csc-btn" onClick={onOpen}>
+          ดูสัญญา
+          <ContractIcon type="chevron" size={14} />
+        </button>
+      </div>
+      {openIndex !== null && (
+        <ContractLightbox
+          images={images}
+          index={openIndex}
+          title="รูปสัญญาเช่า"
+          subtitle={`ห้อง ${contract.room_number || '-'} · ${tenantName}`}
+          onClose={() => setOpenIndex(null)}
+        />
+      )}
+    </li>
+  )
+}
+
+export function StaffCompletedContracts({ Modal, Pagination, pageSize = 12 }) {
+  const [contracts, setContracts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [detail, setDetail] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/staff/contracts/completed', { headers: authHeaders() })
+      .then(({ data }) => {
+        if (cancelled) return
+        setContracts(data.contracts || [])
+        setError('')
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(requestError.response?.data?.message || 'ไม่สามารถโหลดรายการสัญญาได้')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  const keyword = search.trim().toLowerCase()
+  const filtered = keyword
+    ? contracts.filter((contract) =>
+        [contract.first_name, contract.last_name, `${contract.first_name} ${contract.last_name}`, contract.phone, contract.room_number]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword),
+      )
+    : contracts
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  return (
+    <div className="staff-card staff-tab-card contract-panel">
+      <div className="staff-card-header">
+        <div>
+          <h2>
+            สัญญาที่เสร็จสมบูรณ์ <span className="staff-count-pill">{contracts.length}</span>
+          </h2>
+          <p className="waiting-list-storage-note">สัญญาเช่าที่ลงทะเบียนผู้เช่าและแนบรูปสัญญาครบแล้ว</p>
+        </div>
+      </div>
+      <div className="contract-toolbar">
+        <label className="contract-search">
+          <ContractIcon type="search" size={15} />
+          <input
+            type="search"
+            placeholder="ค้นหาชื่อผู้เช่า เบอร์โทร หรือเลขห้อง"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+          />
+        </label>
+        <span className="contract-toolbar-count">พบ {filtered.length} จาก {contracts.length} สัญญา</span>
+      </div>
+      {loading ? (
+        <p className="staff-empty">กำลังโหลดรายการสัญญา...</p>
+      ) : error ? (
+        <p className="staff-empty">
+          {error}{' '}
+          <button type="button" className="staff-action-btn is-ghost" onClick={() => { setLoading(true); setReloadKey((key) => key + 1) }}>
+            ลองใหม่
+          </button>
+        </p>
+      ) : filtered.length === 0 ? (
+        <p className="staff-empty">{contracts.length ? 'ไม่พบสัญญาตามคำค้นหา' : 'ยังไม่มีสัญญาที่เสร็จสมบูรณ์'}</p>
+      ) : (
+        <ul className="csc-grid">
+          {pageItems.map((contract) => (
+            <StaffContractCard key={contract.booking_id} contract={contract} onOpen={() => setDetail(contract)} />
+          ))}
+        </ul>
+      )}
+      {Pagination && <Pagination page={currentPage} total={filtered.length} onChange={setPage} pageSize={pageSize} />}
+      {detail && Modal && (
+        <Modal title={`สัญญาเช่า ห้อง ${detail.room_number || '-'}`} onClose={() => setDetail(null)} variant="wide">
+          <div className="ccc-modal">
+            <div className="ccc-header ccc-person-header">
+              <span className="ccc-avatar" aria-hidden="true"><ContractIcon type="user" size={22} /></span>
+              <div className="ccc-person">
+                <h2>{detail.first_name} {detail.last_name}</h2>
+                <div className="ccc-person-meta">
+                  <span className="ccc-phone"><ContractIcon type="phone" size={13} />{detail.phone || '-'}</span>
+                  <span className="ccc-signed">
+                    <ContractIcon type="check" size={13} />
+                    ทำสัญญา {formatContractDate(detail.contract_completed_at, true)}
+                  </span>
+                </div>
+              </div>
+              <ContractStatusBadge status={detail.status} />
+            </div>
+            <CustomerContractBody contract={detail} />
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function ContractThumb({ contract }) {
+  const [openIndex, setOpenIndex] = useState(null)
+  const images = contract.images || []
+  if (images.length === 0) return <span className="contract-cell-nophoto">ไม่มีรูป</span>
+  return (
+    <>
+      <button
+        type="button"
+        className="contract-cell-thumb"
+        onClick={(event) => {
+          event.stopPropagation()
+          setOpenIndex(0)
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+        aria-label={`ดูรูปสัญญาเช่า ${images.length} รูป`}
+      >
+        <UploadImage src={images[0].url} alt="" loading="lazy" />
+        <span>{images.length} รูป</span>
+      </button>
+      {openIndex !== null && (
+        <ContractLightbox
+          images={images}
+          index={openIndex}
+          title="รูปสัญญาเช่า"
+          subtitle={`ห้อง ${contract.room_number || '-'} · ${contract.first_name || ''} ${contract.last_name || ''}`}
+          onClose={() => setOpenIndex(null)}
+        />
+      )}
+    </>
+  )
+}
+
+export function CustomerContractPanel() {
+  const [contract, setContract] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/customer/contract', { headers: authHeaders() })
+      .then(({ data }) => {
+        if (!cancelled) setContract(data.contract || null)
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(requestError.response?.data?.message || 'ไม่สามารถโหลดข้อมูลสัญญาเช่าได้')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <section className="dashboard-card contract-panel contract-customer-card" aria-labelledby="customer-contract-title">
+      <div className="ccc-header">
+        <div>
+          <h2 id="customer-contract-title">สัญญาเช่าของฉัน</h2>
+          <p>ข้อมูลจากวันลงทะเบียนเข้าพัก</p>
+        </div>
+        {contract && <ContractStatusBadge status={contract.status} />}
+      </div>
+      {loading || error || !contract ? (
+        <div className="ccc-state">
+          {loading ? (
+            <span>กำลังโหลดข้อมูลสัญญาเช่า...</span>
+          ) : error ? (
+            <span className="is-error">{error}</span>
+          ) : (
+            <>
+              <ContractIcon type="file" size={26} />
+              <strong>ยังไม่มีข้อมูลสัญญาเช่า</strong>
+              <span>กรุณาติดต่อเจ้าหน้าที่หากคุณลงทะเบียนเข้าพักแล้ว</span>
+            </>
+          )}
+        </div>
+      ) : (
+        <CustomerContractBody contract={contract} />
+      )}
+    </section>
+  )
+}
+
+function contractTimeline(contract, now) {
+  const start = contract.rental_start_date ? new Date(contract.rental_start_date).getTime() : null
+  const endValue = contract.current_end_date || contract.rental_end_date
+  const end = endValue ? new Date(endValue).getTime() : null
+  if (!start || !end || end <= start) return { percent: 0, daysLeft: null, totalDays: null, usedDays: null }
+  const percent = Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100))
+  const totalDays = Math.max(1, Math.round((end - start) / 86400000))
+  const daysLeft = Math.ceil((end - now) / 86400000)
+  return { percent, daysLeft, totalDays, usedDays: Math.min(totalDays, Math.max(0, totalDays - Math.max(0, daysLeft))) }
+}
+
+function formatDaysLeft(daysLeft) {
+  if (daysLeft === null) return '-'
+  if (daysLeft > 0) return `${daysLeft} วัน`
+  if (daysLeft === 0) return 'ครบวันนี้'
+  return `ครบแล้ว (${Math.abs(daysLeft)} วันก่อน)`
+}
+
+const THIS_MONTH_STATUS = {
+  paid: { label: 'ชำระแล้ว', tone: 'is-paid' },
+  due: { label: 'รอชำระ', tone: 'is-due' },
+  pending: { label: 'รอตรวจสลิป', tone: 'is-pending' },
+  overdue: { label: 'เกินกำหนด', tone: 'is-overdue' },
+}
+
+const billDate = (value) => (value ? new Date(value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-')
+
+function RentBillModal({ contract, thisMonth, onClose }) {
+  const [closing, setClosing] = useState(false)
+  const [slipOpen, setSlipOpen] = useState(false)
+  const slipOpenRef = useRef(false)
+  const requestClose = () => setClosing(true)
+
+  useEffect(() => {
+    slipOpenRef.current = slipOpen
+  }, [slipOpen])
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || slipOpenRef.current) return
+      event.stopImmediatePropagation()
+      setClosing(true)
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [])
+
+  useEffect(() => {
+    if (!closing) return undefined
+    const timer = setTimeout(onClose, 110)
+    return () => clearTimeout(timer)
+  }, [closing, onClose])
+
+  const info = THIS_MONTH_STATUS[thisMonth.status] || THIS_MONTH_STATUS.due
+  const paid = thisMonth.status === 'paid'
+  const months = (thisMonth.overdue_months || 0) + 1
+  const price = Number(contract.monthly_price) || 0
+  const gross = price * months
+  const deposit = Number(thisMonth.deposit_applied) || 0
+  const amount = Number(thisMonth.amount) || 0
+  const adjustment = Math.round((amount - (gross - deposit)) * 100) / 100
+  const lines = paid
+    ? [{ label: `ค่าเช่ารอบนี้`, value: formatContractMoney(price) }, { label: 'ชำระแล้ว', value: `− ${formatContractMoney(price)}`, tone: 'is-paid' }]
+    : [
+        { label: months > 1 ? `ค่าเช่า ${months} เดือน (${formatContractMoney(price)} × ${months})` : 'ค่าเช่ารอบนี้', value: formatContractMoney(gross) },
+        ...(deposit > 0 ? [{ label: 'หักเงินมัดจำ', value: `− ${formatContractMoney(deposit)}`, tone: 'is-deduct' }] : []),
+        ...(adjustment < 0 ? [{ label: 'หักยอดที่ชำระไปแล้ว', value: `− ${formatContractMoney(-adjustment)}`, tone: 'is-paid' }] : []),
+        ...(adjustment > 0 ? [{ label: 'ค่าเช่าล่วงหน้า (ทบยอด)', value: formatContractMoney(adjustment) }] : []),
+      ]
+
+  const payment = thisMonth.last_payment
+  const showSlip = ['paid', 'pending'].includes(thisMonth.status)
+  const slipPhotos = payment?.slip_path ? [{ name: 'สลิปค่าเช่า', url: payment.slip_path }] : []
+
+  return createPortal(
+    <div className={`rent-bill-overlay${closing ? ' is-closing' : ''}`} onClick={requestClose} role="presentation">
+      <div className="rent-bill" role="dialog" aria-modal="true" aria-label="ใบแจ้งค่าเช่า" onClick={(event) => event.stopPropagation()}>
+        <header className="rent-bill-head">
+          <span className="rent-bill-icon"><ContractIcon type="file" size={18} /></span>
+          <div>
+            <strong>ใบแจ้งค่าเช่า</strong>
+            <small>ห้อง {contract.current_room_number || contract.room_number || '-'} · {contract.first_name} {contract.last_name}</small>
+          </div>
+          <em className={`rent-bill-status ${info.tone}`}>{info.label}</em>
+          <button type="button" className="rent-bill-close" onClick={requestClose} aria-label="ปิด">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+
+        <div className="rent-bill-body">
+          <div className="rent-bill-meta">
+            <div>
+              <small>รอบบิล</small>
+              <b>{billDate(thisMonth.period_start)} ถึง {billDate(thisMonth.period_end)}</b>
+            </div>
+            <div>
+              <small>{paid ? 'ชำระเมื่อ' : 'ครบกำหนด'}</small>
+              <b className={paid ? '' : 'is-due'}>
+                {paid ? (payment ? billDate(payment.payment_date) : 'หักจากมัดจำ/ยอดล่วงหน้า') : billDate(thisMonth.due_date)}
+              </b>
+            </div>
+          </div>
+
+          <div className="rent-bill-sheet">
+            <dl className="rent-bill-lines">
+              {lines.map((line) => (
+                <div key={line.label} className={line.tone}>
+                  <dt>{line.label}</dt>
+                  <dd>{line.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className={`rent-bill-total ${info.tone}`}>
+              <span>{paid ? 'ยอดคงค้าง' : 'ยอดที่ต้องชำระ'}</span>
+              <strong>{formatContractMoney(amount)}</strong>
+            </div>
+          </div>
+
+          <section className="rent-bill-slip">
+            <header>
+              <span>สลิปการชำระ</span>
+              {payment && showSlip && <small>{formatContractMoney(payment.amount)} · {billDate(payment.payment_date)}</small>}
+            </header>
+            {showSlip && slipPhotos.length > 0 ? (
+              <button type="button" className="rent-bill-slip-image" onClick={() => setSlipOpen(true)} aria-label="ดูสลิปขนาดใหญ่">
+                <UploadImage src={slipPhotos[0].url} alt="สลิปการชำระค่าเช่า" />
+                <span>แตะเพื่อขยาย</span>
+              </button>
+            ) : (
+              <div className="rent-bill-slip-empty">
+                <ContractIcon type="image" size={22} />
+                <span>
+                  {!showSlip ? 'ยังไม่มีการชำระในรอบนี้' : payment ? 'ชำระที่เคาน์เตอร์ ไม่มีสลิปแนบ' : 'ไม่มีสลิปสำหรับรอบนี้'}
+                </span>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <footer className="rent-bill-foot">
+          <small>{paid ? 'ชำระค่าเช่ารอบนี้ครบแล้ว' : 'ไม่รวมค่าน้ำค่าไฟ · ชำระได้ที่หน้าแรก'}</small>
+          <button type="button" onClick={requestClose}>ปิด</button>
+        </footer>
+      </div>
+      {slipOpen && (
+        <ContractLightbox
+          images={slipPhotos}
+          index={0}
+          title="สลิปค่าเช่า"
+          subtitle={`ห้อง ${contract.current_room_number || contract.room_number || '-'}`}
+          onClose={() => setSlipOpen(false)}
+        />
+      )}
+    </div>,
+    document.body,
+  )
+}
+
+function ThisMonthRent({ thisMonth, contract }) {
+  const [billOpen, setBillOpen] = useState(false)
+  if (!thisMonth) {
+    return (
+      <div className="ccc-month is-none">
+        <div>
+          <span>ค่าเช่าเดือนนี้</span>
+          <small>ไม่มีรอบบิลที่ต้องชำระ</small>
+        </div>
+      </div>
+    )
+  }
+  const info = THIS_MONTH_STATUS[thisMonth.status] || THIS_MONTH_STATUS.due
+  const paid = thisMonth.status === 'paid'
+  const shortDate = (value) =>
+    value ? new Date(value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : '-'
+  return (
+    <div className={`ccc-month ${info.tone}`}>
+      <div className="ccc-month-top">
+        <span>
+          ค่าเช่าเดือนนี้
+          <em>{info.label}</em>
+        </span>
+        <strong>{paid ? '✓' : formatContractMoney(thisMonth.amount)}</strong>
+      </div>
+      <div className="ccc-month-facts">
+        <div>
+          <small>รอบบิล</small>
+          <b>{shortDate(thisMonth.period_start)} ถึง {shortDate(thisMonth.period_end)}</b>
+        </div>
+        {!paid && thisMonth.due_date && (
+          <div className="is-due">
+            <small>ครบกำหนด</small>
+            <b>{shortDate(thisMonth.due_date)}</b>
+          </div>
+        )}
+        {!paid && thisMonth.overdue_months > 0 && (
+          <div className="is-due">
+            <small>ค้างรวม</small>
+            <b>{thisMonth.overdue_months + 1} เดือน</b>
+          </div>
+        )}
+      </div>
+      <button type="button" className="ccc-month-bill" onClick={() => setBillOpen(true)}>
+        <ContractIcon type="file" size={14} />
+        ดูบิล
+      </button>
+      {billOpen && <RentBillModal contract={contract} thisMonth={thisMonth} onClose={() => setBillOpen(false)} />}
+    </div>
+  )
+}
+
+function CustomerContractBody({ contract }) {
+  const [now] = useState(() => Date.now())
+  const { daysLeft, totalDays, usedDays } = contractTimeline(contract, now)
+  const extended = contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
+  const images = contract.images || []
+  const rows = [
+    { label: 'ผู้เช่า', value: `${contract.first_name} ${contract.last_name}` },
+    { label: 'ระยะสัญญา', value: formatContractLength(contract) },
+    { label: 'เริ่มสัญญา', value: formatContractDate(contract.rental_start_date, true) },
+    { label: 'สิ้นสุดสัญญา', value: formatContractDate(contract.rental_end_date, true) },
+    ...(extended ? [{ label: 'ต่อสัญญาถึง', value: formatContractDate(contract.current_end_date, true) }] : []),
+    { label: 'ระยะเวลาทั้งหมด', value: totalDays === null ? '-' : `${totalDays} วัน` },
+    { label: 'ผ่านไปแล้ว', value: usedDays === null ? '-' : `${usedDays} วัน` },
+    { label: 'เหลืออีก', value: formatDaysLeft(daysLeft), tone: daysLeft !== null && daysLeft <= 30 ? 'is-warning' : 'is-accent' },
+    { label: 'ค่าเช่า/เดือน', value: formatContractMoney(contract.monthly_price) },
+  ]
+
+  return (
+    <>
+      <div className="ccc-hero">
+        <div className="ccc-room">
+          <span>ห้อง</span>
+          <strong>{contract.current_room_number || contract.room_number || '-'}</strong>
+        </div>
+        <div className="ccc-period csc-period">
+          <ContractPeriodTimeline
+            contract={contract}
+            now={now}
+            endLabel={extended ? 'ต่อสัญญาถึง' : 'สิ้นสุด'}
+            endValue={contract.current_end_date || contract.rental_end_date}
+          />
+        </div>
+      </div>
+
+      <div className="ccc-grid">
+        <div className="ccc-pane">
+          <h3>รายละเอียดสัญญา</h3>
+          <dl className="ccc-rows">
+            {rows.map((row) => (
+              <div key={row.label} className={row.tone}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="ccc-bill">
+            <h3>
+              ยอดตามสัญญา
+              <span>{contract.billing_periods || 0} รอบบิล</span>
+            </h3>
+            <div>
+              <span>ค่าเช่า {formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0}</span>
+              <strong>{formatContractMoney(contract.contract_total)}</strong>
+            </div>
+            <div className="is-deduct">
+              <span>หักมัดจำ</span>
+              <strong>− {formatContractMoney(contract.deposit_applied)}</strong>
+            </div>
+            <div className="is-paid">
+              <span>ชำระแล้ว</span>
+              <strong>− {formatContractMoney(contract.rent_paid)}</strong>
+            </div>
+            <div className="is-total">
+              <span>คงเหลือตามสัญญา</span>
+              <strong>{formatContractMoney(contract.contract_remaining)}</strong>
+            </div>
+            <ThisMonthRent thisMonth={contract.this_month ?? null} contract={contract} />
+            <p>เดือนแรกหลังหักมัดจำ {formatContractMoney(contract.first_month_remaining)} · มัดจำหักครั้งเดียว</p>
+          </div>
+        </div>
+        <div className="ccc-pane ccc-gallery-pane">
+          <h3>
+            รูปสัญญา
+            <span>{images.length} รูป</span>
+          </h3>
+          <div className="ccc-gallery-scroll">
+            <ContractGallery images={images} subtitle={`ห้อง ${contract.room_number || '-'}`} />
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}

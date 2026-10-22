@@ -7,13 +7,12 @@ import { getPool } from "../Database/connection.js";
 import { PUBLIC_UPLOAD_DIR, deletePublicImages } from "../middleware/publicUploads.js";
 import { isPositiveId } from "../middleware/validation.js";
 
-// ตั้งค่าการอัปโหลดรูปพัสดุ ขนาดไฟล์ และชนิดรูปภาพที่รองรับ
 const MAX_PARCEL_PHOTOS = 6;
 const PARCEL_UPLOAD_DIR = path.join(PUBLIC_UPLOAD_DIR, "parcels");
 const SERVER_ERROR = "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง";
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-const IMAGE_TYPES = {
+export const IMAGE_TYPES = {
   "image/jpeg": { ext: ".jpg", matches: (header) => header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff },
   "image/png": { ext: ".png", matches: (header) => header.subarray(0, 8).equals(PNG_SIGNATURE) },
   "image/webp": {
@@ -49,7 +48,6 @@ const parcelUpload = multer({
   },
 }).array("photos", MAX_PARCEL_PHOTOS);
 
-// ฟังก์ชันกลางสำหรับรับและตรวจรูปภาพ ตรวจข้อความ และล้างรูปที่ไม่ใช้
 function uploadPhotos(req, res) {
   return new Promise((resolve, reject) => {
     parcelUpload(req, res, (error) => {
@@ -60,7 +58,7 @@ function uploadPhotos(req, res) {
   });
 }
 
-async function isRealImage(file) {
+export async function isRealImage(file) {
   const handle = await fs.promises.open(file.path, "r");
   try {
     const { buffer, bytesRead } = await handle.read(Buffer.alloc(12), 0, 12, 0);
@@ -87,7 +85,6 @@ async function removePhotos(urls) {
   }
 }
 
-// แนบรายการรูปประกอบให้ข้อมูลพัสดุ
 export async function attachParcelPhotos(pool, parcels) {
   if (parcels.length === 0) return parcels;
   const [photos] = await pool.query(
@@ -101,7 +98,6 @@ export async function attachParcelPhotos(pool, parcels) {
   return parcels.map((parcel) => ({ ...parcel, photos: photosByParcel.get(parcel.id) ?? [] }));
 }
 
-// จัดการพัสดุสำหรับเจ้าหน้าที่และผู้ดูแล แสดงรายการ บันทึกพัสดุ และลบ
 export function createParcelRouter(getActorName) {
   const router = Router();
 
@@ -197,7 +193,6 @@ export function createParcelRouter(getActorName) {
   return router;
 }
 
-// ผู้เช่ายืนยันรับพัสดุที่เป็นของตนเองและห้องพักปัจจุบัน
 export const customerParcelRouter = Router();
 
 customerParcelRouter.post("/:id/receive", async (req, res) => {

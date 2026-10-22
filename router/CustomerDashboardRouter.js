@@ -36,6 +36,7 @@ import {
 } from "../middleware/slipVerification.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
 import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.js";
+import { loadCustomerContracts } from "./rentalContracts.js";
 
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
@@ -290,7 +291,7 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
   }
   const currentPeriod = periods[periods.length - 1];
   if (unpaidPeriods.length === 0) {
-    return { amount: 0, depositApplied: 0, lumpSumMonths: null, overdueMonths: 0,
+    return { amount: 0, depositApplied: 0, firstPeriod: false, lumpSumMonths: null, overdueMonths: 0,
       periodStart: currentPeriod.periodStart, periodEnd: currentPeriod.periodEnd, dueDate: null, status: "paid" };
   }
   const earliestUnpaid = unpaidPeriods[0];
@@ -305,6 +306,8 @@ function computeRentDue(room, paymentsForBooking, depositAmount) {
   return {
     amount: outstandingCents / 100,
     depositApplied: earliestUnpaid.index === 0 ? depositCents / 100 : 0,
+    firstPeriod: earliestUnpaid.index === 0,
+    monthlyPrice: priceCents / 100,
     lumpSumMonths,
     overdueMonths: unpaidPeriods.length - 1,
     periodStart: earliestUnpaid.periodStart,
@@ -355,6 +358,8 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount) {
     rentAmount,
     items,
     depositApplied: rentDue?.depositApplied || 0,
+    firstPeriod: Boolean(rentUnpaid && rentDue.firstPeriod),
+    monthlyPrice: rentDue?.monthlyPrice ?? null,
     lumpSumMonths: rentDue?.lumpSumMonths || null,
     overdueMonths: rentUnpaid ? rentDue.overdueMonths || 0 : 0,
     periodStart: rentDue?.periodStart || null,
@@ -491,6 +496,84 @@ router.get("/me", async (req, res) => {
   } catch (error) {
     console.error("Customer dashboard error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+export async function withThisMonthRent(pool, contracts) {
+  const active = contracts.filter((contract) => contract.status !== "ended" && contract.current_room_number != null);
+  if (active.length === 0) return contracts.map((contract) => ({ ...contract, this_month: null }));
+  const customerIds = [...new Set(active.map((contract) => contract.customer_id))];
+  const [[customers], [rooms], [bookings]] = await Promise.all([
+    pool.query(`SELECT id, room_number, deposit_amount FROM Customer WHERE id IN (?)`, [customerIds]),
+    pool.query(
+      `SELECT room_number, is_booked, price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+       FROM Room WHERE room_number IN (?)`,
+      [[...new Set(active.map((contract) => contract.current_room_number))]],
+    ),
+    pool.query(
+      `SELECT customer_id, id FROM (
+         SELECT customer_id, id, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at DESC, id DESC) AS booking_rank
+         FROM Booking WHERE customer_id IN (?)
+       ) ranked WHERE booking_rank = 1`,
+      [customerIds],
+    ),
+  ]);
+  const bookingIds = bookings.map((booking) => booking.id);
+  const [payments] = bookingIds.length
+    ? await pool.query(
+        `SELECT id, booking_id, amount, payment_date, status, type, slip_path, created_at FROM Payment WHERE booking_id IN (?)`,
+        [bookingIds],
+      )
+    : [[]];
+  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+  const roomByNumber = new Map(rooms.map((room) => [room.room_number, room]));
+  const bookingByCustomer = new Map(bookings.map((booking) => [booking.customer_id, booking.id]));
+  return contracts.map((contract) => {
+    const customer = customerById.get(contract.customer_id);
+    const room = customer ? roomByNumber.get(customer.room_number) : null;
+    if (!active.includes(contract) || !room) return { ...contract, this_month: null };
+    const bookingId = bookingByCustomer.get(contract.customer_id);
+    const bookingPayments = payments.filter((payment) => payment.booking_id === bookingId);
+    const rentDue = computeRentDue(room, bookingPayments, customer.deposit_amount);
+    const lastRentPayment = bookingPayments
+      .filter((payment) => !["deposit", "water", "electricity"].includes(payment.type) && ["paid", "pending"].includes(payment.status))
+      .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date) || new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)[0];
+    return {
+      ...contract,
+      this_month: rentDue
+        ? {
+            last_payment: lastRentPayment
+              ? {
+                  amount: Number(lastRentPayment.amount),
+                  status: lastRentPayment.status,
+                  payment_date: lastRentPayment.payment_date,
+                  slip_path: lastRentPayment.slip_path || null,
+                }
+              : null,
+            status: rentDue.status,
+            amount: rentDue.amount,
+            overdue_months: rentDue.overdueMonths,
+            deposit_applied: rentDue.depositApplied,
+            period_start: rentDue.periodStart,
+            period_end: rentDue.periodEnd,
+            due_date: rentDue.dueDate,
+          }
+        : null,
+    };
+  });
+}
+
+router.get("/contract", async (req, res) => {
+  try {
+    const pool = getPool();
+    const contracts = await loadCustomerContracts(pool, [req.user.id]);
+    const contract = contracts.get(req.user.id) ?? null;
+    if (!contract) return res.json({ contract: null });
+    const [withMonth] = await withThisMonthRent(pool, [contract]);
+    return res.json({ contract: withMonth });
+  } catch (error) {
+    console.error("Fetch customer contract error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลสัญญาเช่าได้" });
   }
 });
 

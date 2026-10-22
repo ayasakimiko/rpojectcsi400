@@ -26,6 +26,7 @@ import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
+import { StaffCompletedContracts } from '../components/RentalContract.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1190,6 +1191,7 @@ const MAINTENANCE_STATUS_LABEL = {
 const STAFF_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'payment-review', label: 'ประวัติสลิป' },
+  { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
@@ -8882,6 +8884,8 @@ function StaffMain() {
             focusId={tabFocus?.tab === 'payment-review' ? tabFocus.id : null}
           />
         )}
+
+        {staffTab === 'completed-contracts' && <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} />}
 
         {staffTab === 'resident-visits' && (
           <StaffResidentVisitsTab
