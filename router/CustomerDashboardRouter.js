@@ -393,12 +393,12 @@ router.get("/me", async (req, res) => {
       [parcels],
     ] = await Promise.all([
       pool.query(
-        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
          FROM Room WHERE room_number = ?`,
         [customer.room_number],
       ),
       pool.query(
-        `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, electricity_unit_price, water_unit_price, water_price
+        `SELECT room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price
          FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
       ),
       pool.query(
