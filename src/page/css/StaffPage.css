@@ -3561,33 +3561,13 @@
 
 .staff-req-segments:is(.staff-waiting-segments, .staff-inspection-segments) {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   flex: 0 0 auto;
   align-items: center;
   box-sizing: border-box;
   width: 100%;
-  min-height: 56px;
   min-width: 0;
-  overflow-x: auto;
-  padding: 5px 2px 10px;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #82b3f3 #edf4ff;
-  -webkit-overflow-scrolling: touch;
-}
-
-.staff-req-segments:is(.staff-waiting-segments, .staff-inspection-segments)::-webkit-scrollbar {
-  height: 7px;
-}
-
-.staff-req-segments:is(.staff-waiting-segments, .staff-inspection-segments)::-webkit-scrollbar-track {
-  border-radius: 999px;
-  background: #edf4ff;
-}
-
-.staff-req-segments:is(.staff-waiting-segments, .staff-inspection-segments)::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: #82b3f3;
+  padding: 2px 0;
 }
 
 .staff-req-segments:is(.staff-waiting-segments, .staff-inspection-segments) .staff-req-segment {
@@ -4902,6 +4882,36 @@
   margin: 8px 0 0;
 }
 
+.staff-transfer-footer-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin: 8px 0 0;
+  padding: 9px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.staff-transfer-footer-warning strong {
+  color: #b45309;
+  font-weight: 800;
+}
+
+.staff-transfer-footer-warning span {
+  color: #92400e;
+  font-weight: 600;
+}
+
+.staff-modal.staff-modal-transfer-approval:has(.is-move-approval) {
+  width: min(1040px, calc(100vw - 32px));
+  max-height: min(960px, calc(100vh - 24px));
+  max-height: min(960px, calc(100dvh - 24px));
+}
+
 .staff-transfer-footer {
   position: sticky;
   bottom: 0;
@@ -4939,20 +4949,24 @@
 
 .staff-transfer-room {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 14px;
-  border: 1.5px solid #e3e9f3;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid #e3e9f3;
   background: #f7f9fc;
   text-align: center;
+}
+
+.staff-transfer-room .staff-transfer-chip {
+  align-self: center;
 }
 
 .staff-transfer-room.is-target {
   border-color: #bfdbfe;
   background: linear-gradient(160deg, #eff6ff 0%, #ffffff 100%);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 .staff-transfer-room.is-target.is-unavailable {
@@ -4968,9 +4982,9 @@
 }
 
 .staff-transfer-room-number {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.2;
   color: #0f2b52;
   font-variant-numeric: tabular-nums;
 }
@@ -5001,17 +5015,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: linear-gradient(135deg, #60a5fa, #2563eb);
   color: #fff;
-  box-shadow: 0 0 0 5px #eff6ff;
+  box-shadow: 0 0 0 3px #eff6ff;
 }
 
 .staff-transfer-arrow svg {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
 }
 
 .staff-transfer-summary,
@@ -5732,13 +5746,279 @@
   color: #1e3a8a;
 }
 
+.staff-transfer-outcomes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  border: 1px solid #e3e9f3;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #33506f;
+}
+
+.staff-transfer-section.is-warning {
+  border-color: #fde68a;
+  background: #fffdf5;
+}
+
+.staff-transfer-section-title .staff-transfer-chip,
+.staff-transfer-section-title .contract-status {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.staff-transfer-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.staff-transfer-checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e3e9f3;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.staff-transfer-checks li.is-ok {
+  border-color: #bbf7d0;
+  background: #f6fef9;
+}
+
+.staff-transfer-checks li.is-todo {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.staff-transfer-check-icon {
+  display: inline-flex;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+  background: #16a34a;
+}
+
+.staff-transfer-checks li.is-todo .staff-transfer-check-icon {
+  background: #d97706;
+}
+
+.staff-transfer-checks li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.staff-transfer-checks strong {
+  font-size: 13.5px;
+  color: #0f2b52;
+}
+
+.staff-transfer-checks small {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4b6584;
+  overflow-wrap: anywhere;
+}
+
+.staff-transfer-checks li.is-todo small {
+  color: #b45309;
+}
+
+.staff-transfer-checks small.is-hint {
+  font-weight: 500;
+  color: #6b859e;
+}
+
+.staff-transfer-compare {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #e3e9f3;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 13.5px;
+}
+
+.staff-transfer-compare th,
+.staff-transfer-compare td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: center;
+}
+
+.staff-transfer-compare tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.staff-transfer-compare thead th {
+  background: #f5f9ff;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b859e;
+}
+
+.staff-transfer-compare thead th:nth-child(3),
+.staff-transfer-compare td.is-target {
+  background: #f3f8ff;
+}
+
+.staff-transfer-compare thead th:nth-child(3) {
+  color: #1d4ed8;
+}
+
+.staff-transfer-compare th:first-child {
+  width: 24%;
+  text-align: left;
+}
+
+.staff-transfer-compare tbody th {
+  font-weight: 600;
+  color: #33506f;
+}
+
+.staff-transfer-compare tbody th small {
+  margin-left: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #8aa0b6;
+}
+
+.staff-transfer-compare td {
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.staff-transfer-compare td.is-target {
+  color: #1d4ed8;
+}
+
+.staff-transfer-amenities {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.staff-transfer-amenities-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6b859e;
+}
+
+@media (max-width: 480px) {
+  .staff-transfer-compare {
+    font-size: 12.5px;
+  }
+
+  .staff-transfer-compare th,
+  .staff-transfer-compare td {
+    padding: 7px 6px;
+  }
+}
+
+.staff-transfer-contract-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.staff-transfer-contract-facts > div {
+  padding: 8px 10px;
+  border: 1px solid #e3e9f3;
+  border-radius: 10px;
+  background: #f8fbff;
+  min-width: 0;
+}
+
+.staff-transfer-contract-facts dt {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b859e;
+}
+
+.staff-transfer-contract-facts dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f2b52;
+  overflow-wrap: anywhere;
+}
+
+.staff-transfer-contract-facts dd.is-success {
+  color: #15803d;
+}
+
+.staff-transfer-contract-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #1e3a8a;
+}
+
+.staff-transfer-contract-change b {
+  color: #1d4ed8;
+}
+
+.staff-transfer-contract-images .staff-transfer-subtitle {
+  margin: 0 0 8px;
+}
+
+.staff-transfer-contract-images .staff-transfer-subtitle small {
+  margin-left: 6px;
+  font-weight: 600;
+  color: #6b859e;
+}
+
+.staff-transfer-list dd.is-accent {
+  color: #1d4ed8;
+}
+
+@media (max-width: 640px) {
+  .staff-transfer-contract-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.staff-transfer-list dd small {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b859e;
+}
+
 @media (max-width: 480px) {
   .staff-transfer-section {
     padding: 14px;
   }
 
   .staff-transfer-room-number {
-    font-size: 20px;
+    font-size: 17px;
   }
 
   .staff-transfer-list {
@@ -9085,32 +9365,13 @@
 @media (max-width: 768px) {
   .staff-req-segments {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     flex: 0 0 auto;
     align-items: center;
     box-sizing: border-box;
     width: 100%;
-    min-height: 56px;
     min-width: 0;
-    overflow-x: auto;
-    padding: 5px 2px 10px;
-    overscroll-behavior-x: contain;
-    scrollbar-width: thin;
-    scrollbar-color: #b9d4f5 #f4f8fd;
-  }
-
-  .staff-req-segments::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .staff-req-segments::-webkit-scrollbar-track {
-    border-radius: 999px;
-    background: #f4f8fd;
-  }
-
-  .staff-req-segments::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: #b9d4f5;
+    padding: 2px 0;
   }
 
   .staff-req-segment {

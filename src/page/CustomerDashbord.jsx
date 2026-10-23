@@ -404,6 +404,7 @@ const PAYMENT_TYPE_LABEL = {
   deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
+  room_transfer: 'ส่วนต่างค่าเช่า (ย้ายห้อง)',
 }
 
 const AMENITIES = [
@@ -1223,10 +1224,11 @@ function RenewContractPreview({ room, months, depositAmount }) {
   )
 }
 
-function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, balance }) {
+function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, depositDeducted, balance }) {
   const price = Number(room.price) || 0
   const deposit = Number(depositAmount) || 0
   const paidDeposit = Math.min(deposit, Number(depositPaid) || 0)
+  const deductedDeposit = Number(depositDeducted) || 0
   const endDay = room.rental_end_date ? new Date(room.rental_end_date) : null
   if (endDay) endDay.setHours(0, 0, 0, 0)
   const moveDay = moveDate ? new Date(`${moveDate}T00:00:00`) : null
@@ -1237,14 +1239,19 @@ function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, bala
   const unpaidItems = balanceItems.filter((item) => item.status !== 'pending')
   const pendingItems = balanceItems.filter((item) => item.status === 'pending')
   const rows = [
-    { label: 'ห้อง', value: `ห้อง ${room.room_number}` },
+    { label: 'ห้อง', value: `ห้อง ${room.room_number}`, tone: 'brand' },
     { label: 'วันเริ่มสัญญา', value: formatDate(room.rental_start_date) },
-    { label: 'วันสิ้นสุดสัญญา', value: formatDate(room.rental_end_date) },
+    { label: 'วันสิ้นสุดสัญญา', value: formatDate(room.rental_end_date), tone: 'warning' },
     { label: 'ระยะสัญญา', value: totalMonths == null ? '-' : `${totalMonths} เดือน` },
-    { label: 'ค่าเช่า', value: `฿${formatCurrency(price)}/เดือน` },
+    { label: 'ค่าเช่า', value: `฿${formatCurrency(price)}/เดือน`, tone: 'brand' },
     {
-      label: 'เงินมัดจำที่ชำระไว้',
-      value: deposit > 0 ? `฿${formatCurrency(paidDeposit)}${paidDeposit < deposit ? ` จาก ฿${formatCurrency(deposit)}` : ''}` : 'ไม่มี',
+      label: deductedDeposit > 0 ? 'เงินมัดจำคงเหลือ' : 'เงินมัดจำที่ชำระไว้',
+      value: deposit <= 0
+        ? 'ไม่มี'
+        : deductedDeposit > 0
+          ? `฿${formatCurrency(paidDeposit)} (หักส่วนต่างย้ายห้อง ฿${formatCurrency(deductedDeposit)})`
+          : `฿${formatCurrency(paidDeposit)}${paidDeposit < deposit ? ` จาก ฿${formatCurrency(deposit)}` : ''}`,
+      tone: deposit <= 0 ? 'muted' : paidDeposit >= deposit ? 'ok' : paidDeposit > 0 ? 'warning' : 'danger',
     },
     {
       label: 'วันที่ต้องการย้ายออก',
@@ -1269,7 +1276,7 @@ function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, bala
           <li>{deposit > 0 ? 'คุณยังไม่ได้ชำระเงินมัดจำ จึงไม่มีเงินมัดจำที่จะได้รับคืน' : 'สัญญานี้ไม่มีเงินมัดจำ'}</li>
         ) : leavesEarly ? (
           <li className="is-danger">
-            ย้ายออกก่อนสิ้นสุดสัญญา {daysEarly} วัน — <b>จะไม่ได้รับเงินมัดจำ ฿{formatCurrency(paidDeposit)} คืน</b>
+            ย้ายออกก่อนสิ้นสุดสัญญา {daysEarly} วัน <b>จะไม่ได้รับเงินมัดจำ ฿{formatCurrency(paidDeposit)} คืน</b>
             {' '}ถ้าต้องการได้มัดจำคืน ให้ย้ายออกตั้งแต่วันที่ {formatDate(room.rental_end_date)} เป็นต้นไป
           </li>
         ) : (
@@ -1290,8 +1297,175 @@ function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, bala
         {balanceItems.length === 0 && <li className="is-ok">ไม่มียอดค้างชำระ</li>}
         <li>ไม่มีค่าเช่าของเดือนถัดไปหลังวันที่ย้ายออกได้รับอนุมัติ</li>
         <li>เจ้าหน้าที่จะนัดตรวจสภาพห้องก่อนอนุมัติ ค่าเสียหายที่พบอาจหักจากเงินมัดจำ</li>
-        <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ยังไม่ได้รับจะถูกยกเลิกเมื่ออนุมัติ — รับพัสดุให้เรียบร้อยก่อนย้าย</li>
+        <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ยังไม่ได้รับจะถูกยกเลิกเมื่ออนุมัติ รับพัสดุให้เรียบร้อยก่อนย้าย</li>
         <li>หลังย้ายออก ยังเข้าสู่ระบบเพื่อดูประวัติการเช่า ใบเสร็จ และสัญญาเก่าได้ แต่ทำรายการใหม่ไม่ได้</li>
+      </ul>
+    </div>
+  )
+}
+
+function OutstandingNotice({ amount, items, action }) {
+  return (
+    <>
+      <span className="dashboard-request-desc-alert">
+        <strong>ค้างชำระ ฿{formatCurrency(amount)}</strong>
+        <span>{items.map((item) => item.label).join(', ')}</span>
+      </span>
+      <span className="dashboard-request-desc-next">ชำระให้ครบก่อน จึงจะ{action}ได้</span>
+    </>
+  )
+}
+
+function MoveRoomOutcome({ currentRoom, targetRoom, depositRemaining, balance }) {
+  if (!currentRoom) return null
+  const currentNumber = currentRoom.room_number
+  const fromPrice = Number(currentRoom.price) || 0
+  const balanceItems = balance?.items ?? []
+  if (!targetRoom) {
+    return (
+      <p className="dashboard-move-hint">
+        <FieldIcon name="info" size={16} />
+        <span>เลือกห้องที่ต้องการย้ายไป เพื่อดูว่าสัญญา ค่าเช่า และเงินมัดจำของคุณจะเปลี่ยนอย่างไร</span>
+      </p>
+    )
+  }
+  const toPrice = Number(targetRoom.price) || 0
+  const diff = toPrice - fromPrice
+  const deposit = Math.max(0, Number(depositRemaining) || 0)
+  const deducted = diff > 0 ? Math.min(diff, deposit) : 0
+  const charge = diff > 0 ? diff - deducted : 0
+  const steps = [
+    { tone: 'is-info', text: `เจ้าหน้าที่จะนัดตรวจสภาพห้อง ${currentNumber} ก่อนอนุมัติ` },
+    balanceItems.length > 0 && {
+      tone: 'is-danger',
+      text: `ต้องชำระยอดค้างให้ครบก่อนจึงจะอนุมัติได้: ${balanceItems.map((item) => `${item.label} ฿${formatCurrency(item.amount)}`).join(', ')}`,
+    },
+    { tone: 'is-info', text: `เมื่ออนุมัติ คุณย้ายเข้าห้อง ${targetRoom.room_number} ได้ทันที และห้อง ${currentNumber} จะกลายเป็นห้องว่าง` },
+    {
+      tone: 'is-info',
+      text: `ใช้สัญญาฉบับเดิมต่อ${currentRoom.rental_end_date ? ` วันสิ้นสุดสัญญายังเป็น ${formatDate(currentRoom.rental_end_date)}` : ''} ระบบบันทึกการย้ายแนบท้ายสัญญา`,
+    },
+    diff === 0
+      ? { tone: 'is-ok', text: 'ค่าเช่าเท่าเดิม ไม่หักเงินมัดจำและไม่มียอดเพิ่ม' }
+      : diff < 0
+        ? { tone: 'is-ok', text: `ค่าเช่าลดลงเหลือ ฿${formatCurrency(toPrice)}/เดือน ตั้งแต่รอบบิลถัดไป ไม่หักเงินมัดจำ (รอบที่จ่ายไปแล้วไม่คืนส่วนต่าง)` }
+        : { tone: 'is-warning', text: `ค่าเช่าเพิ่มเป็น ฿${formatCurrency(toPrice)}/เดือน ตั้งแต่รอบบิลถัดไป` },
+    diff > 0 && {
+      tone: 'is-warning',
+      text: deducted > 0
+        ? `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} หักจากเงินมัดจำ ฿${formatCurrency(deducted)} (มัดจำเหลือ ฿${formatCurrency(deposit - deducted)})${charge > 0 ? ` และเพิ่มในยอดชำระเดือนนี้ ฿${formatCurrency(charge)}` : ''}`
+        : `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} จะเพิ่มในยอดชำระเดือนนี้ (ไม่มีเงินมัดจำให้หัก)`,
+    },
+    { tone: 'is-info', text: `คำขอและแจ้งซ่อมที่ยังค้างของห้อง ${currentNumber} จะถูกยกเลิก ส่งใหม่ได้จากห้องใหม่` },
+  ].filter(Boolean)
+  return (
+    <div className="dashboard-move-impact">
+      <div className="dashboard-move-impact-title">จะเกิดอะไรขึ้นถ้าเจ้าหน้าที่อนุมัติ</div>
+      <ol className="dashboard-move-outcome">
+        {steps.map((step) => (
+          <li key={step.text} className={step.tone}>
+            {step.text}
+          </li>
+        ))}
+      </ol>
+      <p className="dashboard-move-outcome-note">
+        ตัวเลขเป็นการประมาณจากข้อมูลตอนนี้ ยอดจริงคำนวณตอนเจ้าหน้าที่อนุมัติ
+      </p>
+    </div>
+  )
+}
+
+function MoveRoomContractImpact({ request }) {
+  const tracked = ['pending', 'in_progress', 'approved'].includes(request.status)
+  const [state, setState] = useState({ impact: null, loading: tracked, error: '' })
+
+  useEffect(() => {
+    if (!tracked) return undefined
+    let active = true
+    axios
+      .get(`/api/customer/requests/${request.id}/transfer-impact`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      })
+      .then(({ data }) => {
+        if (active) setState({ impact: data.impact, loading: false, error: '' })
+      })
+      .catch((err) => {
+        if (active) setState({ impact: null, loading: false, error: err.response?.data?.message || 'ไม่สามารถคำนวณผลกระทบต่อสัญญาได้' })
+      })
+    return () => {
+      active = false
+    }
+  }, [request.id, request.status, tracked])
+
+  if (!tracked) return null
+  const { impact, loading, error } = state
+  if (loading) return <p className="dashboard-move-impact-muted">กำลังคำนวณผลกระทบต่อสัญญา...</p>
+  if (error) return <p className="dashboard-move-impact-muted is-danger">{error}</p>
+  if (!impact) return null
+
+  const diff = Number(impact.to_price) - Number(impact.from_price)
+  const deducted = Number(impact.deposit_deducted) || 0
+  const charge = Number(impact.additional_charge) || 0
+  const total = Number(impact.total_difference) || 0
+  const rows = [
+    { label: 'ห้องในสัญญา', value: `ห้อง ${impact.from_room_number} → ห้อง ${impact.to_room_number}`, tone: 'is-accent' },
+    {
+      label: 'ค่าเช่าต่อเดือน',
+      value: `฿${formatCurrency(impact.from_price)} → ฿${formatCurrency(impact.to_price)}`,
+      tone: diff > 0 ? 'is-warning' : diff < 0 ? 'is-ok' : null,
+    },
+    impact.new_price_from && { label: 'ราคาใหม่เริ่มรอบ', value: formatDate(impact.new_price_from) },
+    impact.contract_end_date && { label: 'วันสิ้นสุดสัญญา', value: `${formatDate(impact.contract_end_date)} (เท่าเดิม)` },
+    {
+      label: 'ส่วนต่างที่ต้องชำระ',
+      value: total > 0 ? `฿${formatCurrency(total)} (ครั้งเดียว)` : 'ไม่มี',
+      tone: total > 0 ? 'is-warning' : 'is-ok',
+    },
+    total > 0 && {
+      label: 'หักจากเงินมัดจำ',
+      value: deducted > 0 ? `฿${formatCurrency(deducted)}` : 'ไม่หัก',
+      tone: deducted > 0 ? 'is-warning' : null,
+    },
+    { label: 'เงินมัดจำคงเหลือ', value: `฿${formatCurrency(impact.deposit_remaining_after)}`, tone: 'is-brand' },
+    total > 0 && {
+      label: impact.final ? 'เพิ่มในยอดชำระ' : 'ต้องชำระเพิ่มเดือนนี้',
+      value: charge > 0
+        ? `฿${formatCurrency(charge)}${impact.final ? (impact.charge_status === 'paid' ? ' (ชำระแล้ว)' : ' (รอชำระ)') : ''}`
+        : 'ไม่มี',
+      tone: charge > 0 ? (impact.charge_status === 'paid' ? 'is-ok' : 'is-danger') : 'is-ok',
+    },
+  ].filter(Boolean)
+  const outstanding = impact.outstanding ?? []
+
+  return (
+    <div className="dashboard-move-impact">
+      <div className="dashboard-move-impact-title">
+        {impact.final ? 'สัญญาของคุณหลังย้ายห้อง' : 'ผลกระทบต่อสัญญาถ้าได้รับอนุมัติ'}
+      </div>
+      {rows.map((row) => (
+        <div key={row.label} className={`dashboard-moveout-impact-row${row.tone ? ` ${row.tone}` : ''}`}>
+          <span>{row.label}</span>
+          <strong>{row.value}</strong>
+        </div>
+      ))}
+      <ul className="dashboard-renew-preview-notes dashboard-moveout-impact-notes">
+        {diff > 0 && total > 0 && (
+          <li>
+            ห้องใหม่แพงกว่า ฿{formatCurrency(diff)}/เดือน ระบบหักส่วนต่างจากเงินมัดจำก่อน
+            {charge > 0 ? ` ส่วนที่มัดจำไม่พอ ฿${formatCurrency(charge)} จะเพิ่มในยอดชำระเดือนนี้` : ''}
+          </li>
+        )}
+        {diff <= 0 && <li className="is-ok">{diff === 0 ? 'ค่าเช่าเท่าเดิม' : 'ห้องใหม่ถูกกว่า'} ไม่หักเงินมัดจำและไม่มียอดเพิ่ม</li>}
+        <li>สัญญาฉบับเดิมยังใช้ต่อ ระบบบันทึกการย้ายห้องแนบท้ายสัญญา ดูได้ที่เมนูสัญญาเช่าของฉัน</li>
+        {outstanding.length > 0 && (
+          <li className="is-danger">
+            ต้องชำระยอดค้างก่อนจึงจะอนุมัติได้: {outstanding.map((item) => `${item.label} ฿${formatCurrency(item.amount)}`).join(', ')}
+          </li>
+        )}
+        {!impact.final && impact.target_available === false && (
+          <li className="is-danger">ห้อง {impact.to_room_number} ไม่ว่างแล้ว กรุณาติดต่อเจ้าหน้าที่</li>
+        )}
+        {!impact.final && <li>ตัวเลขคำนวณจากข้อมูลปัจจุบัน ยอดจริงยืนยันตอนเจ้าหน้าที่อนุมัติ</li>}
       </ul>
     </div>
   )
@@ -1347,6 +1521,7 @@ function TenantRequestDetailCard({ request, roomNumber }) {
               </strong>
             </div>
           )}
+          <MoveRoomContractImpact request={request} />
         </>
       )}
       {request.type === 'moveout' && (() => {
@@ -1488,10 +1663,6 @@ function TenantRequestDetailCard({ request, roomNumber }) {
       <div className="dashboard-maintenance-detail-row">
         <span>วันที่ส่งคำขอ</span>
         <strong>{formatDateTime(request.created_at)}</strong>
-      </div>
-      <div className="dashboard-maintenance-detail-row is-note">
-        <span>{request.type === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
-        <strong>{request.note || '-'}</strong>
       </div>
     </div>
   )
@@ -4819,7 +4990,7 @@ function CustomerDashbord() {
         setBlockedRequestPopup({ message: err.response.data.message, type: activeRequestType })
         setActiveRequestType(null)
         loadDashboard()
-      } else if (err.response?.data?.code === 'RENEW_OUTSTANDING') {
+      } else if (['RENEW_OUTSTANDING', 'MOVE_ROOM_OUTSTANDING'].includes(err.response?.data?.code)) {
         setRequestError(err.response.data.message)
         loadDashboard()
       } else {
@@ -5085,6 +5256,7 @@ function CustomerDashbord() {
     moveoutRequest && !['rejected', 'cancelled'].includes(moveoutRequest.status) && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest.status],
   )
   const moveRoomRequest = latestRequestByType('move_room')
+  const moveRoomActive = Boolean(moveRoomRequest && ['pending', 'in_progress'].includes(moveRoomRequest.status))
 
   const canResubmitRenew =
     !renewRequest
@@ -6385,6 +6557,12 @@ function CustomerDashbord() {
                   )}
                   <div className="dashboard-status-scroll" key={statusPopup.request?.id ?? statusPopup.kind}>
                     {statusPopup.request && <RequestTimeline kind={statusPopup.kind} request={statusPopup.request} />}
+                    {statusPopup.request && ['renew', 'moveout', 'move_room'].includes(statusPopup.kind) && (
+                      <div className="dashboard-maintenance-detail-row is-note">
+                        <span>{statusPopup.kind === 'moveout' ? 'เหตุผล/รายละเอียดการย้ายออก' : 'หมายเหตุ'}</span>
+                        <strong>{statusPopup.request.note || '-'}</strong>
+                      </div>
+                    )}
                     {statusPopup.request && (statusPopup.kind === 'renew' || statusPopup.kind === 'moveout' || statusPopup.kind === 'move_room') && (
                       <TenantRequestDetailCard
                         request={{ ...statusPopup.request, type: statusPopup.kind }}
@@ -7643,7 +7821,7 @@ function CustomerDashbord() {
                             <p className="dashboard-request-title">ต่อสัญญา</p>
                             <p className={`dashboard-request-desc${canResubmitRenew && renewOutstanding > 0 ? ' is-warning' : ''}`}>
                               {(canResubmitRenew && renewOutstanding > 0
-                                && `มียอดค้างชำระ ฿${formatCurrency(renewOutstanding)} (${data.outstanding.items.map((item) => item.label).join(', ')}) กรุณาชำระก่อนต่อสัญญา`)
+                                && <OutstandingNotice amount={renewOutstanding} items={data.outstanding.items} action="ต่อสัญญา" />)
                                 || (!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
                                 || (renewRequest?.status === 'pending'
                                   ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · จ่ายรายเดือน`
@@ -7687,7 +7865,7 @@ function CustomerDashbord() {
                           <p className={`dashboard-request-desc${!moveoutActive && moveOutOutstanding > 0 ? ' is-warning' : ''}`}>
                             {(moveoutActive && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
                               || (room?.is_booked && moveOutOutstanding > 0
-                                && `มียอดค้างชำระ ฿${formatCurrency(moveOutOutstanding)} (${moveOutUnpaidItems.map((item) => item.label).join(', ')}) กรุณาชำระก่อนแจ้งย้ายออก`)
+                                && <OutstandingNotice amount={moveOutOutstanding} items={moveOutUnpaidItems} action="แจ้งย้ายออก" />)
                               || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
                           </p>
                         </div>
@@ -7726,21 +7904,27 @@ function CustomerDashbord() {
                       <div data-customer-focus="tenant-move_room" className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">ย้ายห้อง</p>
-                          <p className="dashboard-request-desc">
-                            {moveRoomRequest && ['pending', 'in_progress'].includes(moveRoomRequest.status)
+                          <p className={`dashboard-request-desc${!moveRoomActive && room?.is_booked && moveOutOutstanding > 0 ? ' is-warning' : ''}`}>
+                            {moveRoomActive
                               ? `กำลังขอย้ายไปห้อง ${moveRoomRequest.target_room_number}`
-                              : availableRooms.length > 0
-                                ? 'ส่งคำขอย้ายไปยังห้องพักที่ว่าง'
-                                : 'ขณะนี้ไม่มีห้องว่างให้เลือก'}
+                              : room?.is_booked && moveOutOutstanding > 0
+                                ? <OutstandingNotice amount={moveOutOutstanding} items={moveOutUnpaidItems} action="ขอย้ายห้อง" />
+                                : availableRooms.length > 0
+                                  ? 'ส่งคำขอย้ายไปยังห้องพักที่ว่าง'
+                                  : 'ขณะนี้ไม่มีห้องว่างให้เลือก'}
                           </p>
                         </div>
-                        {moveRoomRequest && ['pending', 'in_progress'].includes(moveRoomRequest.status) ? (
+                        {moveRoomActive ? (
                           <button
                             type="button"
                             className={`dashboard-badge status-${tenantRequestBadgeClass(moveRoomRequest.status)} dashboard-badge-btn`}
                             onClick={() => setStatusPopup({ kind: 'move_room', status: moveRoomRequest.status, request: moveRoomRequest })}
                           >
                             {TENANT_REQUEST_STATUS_LABEL[moveRoomRequest.status]}
+                          </button>
+                        ) : room?.is_booked && moveOutOutstanding > 0 ? (
+                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
+                            ชำระยอดค้าง
                           </button>
                         ) : (
                           room?.is_booked && availableRooms.length > 0 && (
@@ -7851,13 +8035,14 @@ function CustomerDashbord() {
                                   minDate={moveDateRange.min}
                                   maxDate={moveDateRange.max}
                                 />
-                                <p className="dashboard-move-hint">
-                                  <FieldIcon name="info" size={16} />
-                                  <span>
-                                  สัญญาเช่าเดิม{room?.rental_end_date ? ` (สิ้นสุด ${formatDate(room.rental_end_date)})` : ''} จะย้ายไปใช้กับห้องใหม่
-                                  และเจ้าหน้าที่จะตรวจสภาพห้องปัจจุบันก่อนอนุมัติ
-                                  </span>
-                                </p>
+                                <MoveRoomOutcome
+                                  currentRoom={room}
+                                  targetRoom={availableRooms.find(
+                                    (availableRoom) => String(availableRoom.room_number) === targetRoomNumber,
+                                  )}
+                                  depositRemaining={data?.depositPaid}
+                                  balance={data?.moveOutBalance}
+                                />
                               </>
                             )}
                             {activeRequestType === 'moveout' && (
@@ -7881,6 +8066,7 @@ function CustomerDashbord() {
                                     moveDate={preferredMoveDate}
                                     depositAmount={data?.customer?.deposit_amount}
                                     depositPaid={data?.depositPaid}
+                                    depositDeducted={data?.depositTransferDeducted}
                                     balance={data?.moveOutBalance}
                                   />
                                 )}

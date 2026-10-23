@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { UploadImage } from './UploadMedia.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
+import ThaiDatePicker from './ThaiDatePicker.jsx'
 import './RentalContract.css'
 import {
   addContractMonths,
@@ -272,6 +273,7 @@ export function ContractDetail({ contract, showPerson = false }) {
         />
       )}
       <ContractFacts contract={contract} />
+      <ContractTransferHistory contract={contract} />
       <ContractFirstMonth contract={contract} />
       <section className="contract-detail-images">
         <header>
@@ -321,15 +323,15 @@ export function ContractCell({ contract }) {
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
 
-export function ContractImagePicker({ files, onChange, error }) {
+export function ContractImagePicker({ files, onChange, error, min = CONTRACT_MIN_IMAGES }) {
   const previews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files])
   useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews])
   const [dragging, setDragging] = useState(false)
   const dragDepth = useRef(0)
   const inputRef = useRef(null)
   const full = files.length >= CONTRACT_MAX_IMAGES
-  const remaining = Math.max(0, CONTRACT_MIN_IMAGES - files.length)
-  const progress = Math.min(100, (files.length / CONTRACT_MIN_IMAGES) * 100)
+  const remaining = Math.max(0, min - files.length)
+  const progress = Math.min(100, (files.length / min) * 100)
 
   const addFiles = (selected) => {
     if (selected.length) onChange([...files, ...selected])
@@ -425,7 +427,7 @@ export function ContractImagePicker({ files, onChange, error }) {
           <button type="button" className="contract-picker-drop" onClick={() => inputRef.current?.click()}>
             <ContractIcon type="image" size={26} />
             <strong>ลากรูปมาวาง หรือคลิกเพื่อเลือก</strong>
-            <span>อย่างน้อย {CONTRACT_MIN_IMAGES} รูป · JPG, PNG, WebP · ไม่เกิน 5 MB/รูป</span>
+            <span>อย่างน้อย {min} รูป · JPG, PNG, WebP · ไม่เกิน 5 MB/รูป</span>
           </button>
         )}
       </div>
@@ -442,6 +444,7 @@ export function ContractImagePicker({ files, onChange, error }) {
 
 const STAFF_CARD_STATUS = {
   active: { label: 'สัญญามีผล', tone: 'is-active' },
+  transferred: { label: 'ย้ายห้องแล้ว', tone: 'is-transferred' },
   awaiting_payment: { label: 'รอชำระงวดแรก', tone: 'is-unpaid' },
   payment_review: { label: 'รอตรวจสลิปงวดแรก', tone: 'is-warning' },
   upcoming: { label: 'ยังไม่เริ่ม', tone: 'is-info' },
@@ -476,7 +479,7 @@ function SettledDepositNote({ contract, viewer, compact }) {
     ? viewer === 'customer'
       ? `ได้รับเงินมัดจำคืนแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
       : `คืนเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
-    : `ริบเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_paid)}`
+    : `ริบเงินมัดจำแล้ว ${formatContractMoney(contract.deposit_remaining ?? contract.deposit_paid)}`
   const parts = [
     refunded && deduction > 0 ? `หักค่าเสียหาย ${formatContractMoney(deduction)}` : null,
     compact ? null : contract.deposit_settlement_note,
@@ -496,7 +499,7 @@ function SettledDepositNote({ contract, viewer, compact }) {
 export function DepositRefundNote({ contract, viewer = 'staff', compact = false }) {
   if (contract?.deposit_settlement) return <SettledDepositNote contract={contract} viewer={viewer} compact={compact} />
   if (!contract?.deposit_refund) return null
-  const amount = formatContractMoney(contract.deposit_paid)
+  const amount = formatContractMoney(contract.deposit_remaining ?? contract.deposit_paid)
   const refund = contract.deposit_refund === 'refund'
   const title = refund
     ? viewer === 'customer' ? `รอรับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
@@ -572,11 +575,57 @@ function ContractPeriodTimeline({ contract, now, endLabel = 'สิ้นสุ�
 
 export function ArchivedContractBadge({ contract }) {
   return (
-    <span
-      className="contract-archived-badge"
-      title={contract.has_newer_contract ? 'ผู้เช่าคนนี้ทำสัญญาใหม่แล้ว สัญญานี้เก็บไว้เป็นประวัติ' : 'สัญญานี้สิ้นสุดแล้ว เก็บไว้เป็นประวัติ'}
-    >
-      {contract.has_newer_contract ? 'สัญญาเก่า · มีสัญญาใหม่แล้ว' : 'สัญญาเก่า'}
+    <>
+      <span className="contract-archived-badge" title="สัญญานี้สิ้นสุดแล้ว เก็บไว้เป็นประวัติ">
+        สัญญาเก่า
+      </span>
+      {contract.has_newer_contract && (
+        <span className="contract-newer-badge" title="ผู้เช่าคนนี้ทำสัญญาใหม่แล้ว สัญญานี้เก็บไว้เป็นประวัติ">
+          มีสัญญาใหม่แล้ว
+        </span>
+      )}
+    </>
+  )
+}
+
+const contractTransfers = (contract) => contract?.room_transfers ?? []
+
+const contractCardStatus = (contract) =>
+  !contract.is_archived && contractTransfers(contract).length > 0 ? 'transferred' : contract.status
+
+export function ContractRoomBadge({ contract, size = 'card' }) {
+  const moved = contractTransfers(contract).length > 0
+  const roomNumber = (size === 'hero' ? contract.current_room_number : null) || contract.room_number || '-'
+  return size === 'hero' ? (
+    <div className={`ccc-room${moved ? ' is-moved' : ''}`}>
+      <span>ห้อง</span>
+      <strong>{roomNumber}</strong>
+    </div>
+  ) : (
+    <span className={`csc-room${moved ? ' is-moved' : ''}`}>
+      <small>ห้อง</small>
+      <strong>{roomNumber}</strong>
+    </span>
+  )
+}
+
+function ContractTransferSummary({ contract }) {
+  const transfers = contractTransfers(contract)
+  if (transfers.length === 0) return null
+  const last = transfers.at(-1)
+  const fromPrice = Number(last.from_price)
+  const toPrice = Number(last.to_price)
+  return (
+    <span className="csc-transfer-route" title={`ย้ายล่าสุด ${formatContractDate(last.transferred_at)}`}>
+      <span>
+        ย้ายจาก <b>{last.from_room_number}</b>
+      </span>
+      <span className={fromPrice === toPrice ? 'is-same' : toPrice > fromPrice ? 'is-up' : 'is-down'}>
+        {fromPrice === toPrice
+          ? 'ค่าเช่าเท่าเดิม'
+          : `${toPrice > fromPrice ? '▲' : '▼'} ${formatContractMoney(toPrice)}`}
+      </span>
+      {transfers.length > 1 && <span className="is-count">ย้ายแล้ว {transfers.length} ครั้ง</span>}
     </span>
   )
 }
@@ -585,26 +634,32 @@ function StaffContractCard({ contract, onOpen }) {
   const [openIndex, setOpenIndex] = useState(null)
   const [now] = useState(() => Date.now())
   const images = contract.images || []
-  const status = STAFF_CARD_STATUS[contract.status] || STAFF_CARD_STATUS.active
+  const cardStatus = contractCardStatus(contract)
+  const status = STAFF_CARD_STATUS[cardStatus] || STAFF_CARD_STATUS.active
+  const underlying = cardStatus === 'transferred' && contract.status !== 'active' ? STAFF_CARD_STATUS[contract.status] : null
   const tenantName = `${contract.first_name || ''} ${contract.last_name || ''}`.trim() || '-'
   const extra = images.length - STAFF_CARD_PHOTOS
   return (
-    <li className={`csc-card is-${contract.status}${contract.is_archived ? ' is-archived' : ''}`}>
+    <li className={`csc-card is-${cardStatus}${contract.is_archived ? ' is-archived' : ''}`}>
       <button type="button" className="csc-main" onClick={onOpen} aria-label={`ดูสัญญาห้อง ${contract.room_number}`}>
         <span className="csc-head">
-          <span className="csc-room">
-            <small>ห้อง</small>
-            <strong>{contract.room_number || '-'}</strong>
-          </span>
+          <ContractRoomBadge contract={contract} />
           <span className="csc-person">
             <strong title={tenantName}>{tenantName}</strong>
             <small>{contract.phone || '-'}</small>
+            {contract.is_archived && (
+              <span className="csc-archive-note">
+                <span>สัญญาเก่า</span>
+                {contract.has_newer_contract && <span className="is-newer">มีสัญญาใหม่แล้ว</span>}
+              </span>
+            )}
           </span>
           <span className="csc-badges">
-            {contract.is_archived && <ArchivedContractBadge contract={contract} />}
             <span className={`csc-status ${status.tone}`}>{status.label}</span>
+            {underlying && <span className={`csc-status ${underlying.tone}`}>{underlying.label}</span>}
           </span>
         </span>
+        <ContractTransferSummary contract={contract} />
 
         <span className="csc-period">
           <ContractPeriodTimeline contract={contract} now={now} />
@@ -725,14 +780,18 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
   }, [reloadKey])
 
   const statusCounts = useMemo(
-    () => contracts.reduce((counts, contract) => ({ ...counts, [contract.status]: (counts[contract.status] || 0) + 1 }), {}),
+    () =>
+      contracts.reduce((counts, contract) => {
+        const key = contractCardStatus(contract)
+        return { ...counts, [key]: (counts[key] || 0) + 1 }
+      }, {}),
     [contracts],
   )
   const keyword = search.trim().toLowerCase()
   const filtered = useMemo(
     () =>
       contracts
-        .filter((contract) => status === 'all' || contract.status === status)
+        .filter((contract) => status === 'all' || contractCardStatus(contract) === status)
         .filter((contract) =>
           scope === 'all'
             ? true
@@ -749,7 +808,14 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
         .filter(
           (contract) =>
             !keyword ||
-            [contract.first_name, contract.last_name, `${contract.first_name} ${contract.last_name}`, contract.phone, contract.room_number]
+            [
+              contract.first_name,
+              contract.last_name,
+              `${contract.first_name} ${contract.last_name}`,
+              contract.phone,
+              contract.room_number,
+              ...contractTransfers(contract).map((transfer) => transfer.from_room_number),
+            ]
               .filter(Boolean)
               .join(' ')
               .toLowerCase()
@@ -852,6 +918,9 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
               </div>
               <span className="csc-badges">
                 {detail.is_archived && <ArchivedContractBadge contract={detail} />}
+                {contractCardStatus(detail) === 'transferred' && (
+                  <span className="csc-status is-transferred">ย้ายห้องแล้ว</span>
+                )}
                 <ContractStatusBadge status={detail.status} />
               </span>
             </div>
@@ -890,7 +959,7 @@ function DepositSettlementForm({ contract, onSaved }) {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const paid = Number(contract.deposit_paid) || 0
+  const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
   const deductionValue = Number(deduction) || 0
   const refundAmount = Math.max(0, paid - deductionValue)
   const noteRequired = action === 'forfeit' || deductionValue > 0
@@ -1035,10 +1104,188 @@ function ContractThumb({ contract }) {
   )
 }
 
+const TIMELINE_THUMBS = 4
+
+const dayKeyDate = (key) => (key ? new Date(`${key}T00:00:00`) : undefined)
+
+function ContractTransferTimeline({ contract, viewer }) {
+  const [openId, setOpenId] = useState(null)
+  const [search, setSearch] = useState('')
+  const [dates, setDates] = useState({ from: '', to: '' })
+  const transfers = contractTransfers(contract)
+  const keyword = search.trim().toLowerCase()
+  const filtersActive = Boolean(keyword || dates.from || dates.to)
+  if (transfers.length === 0) {
+    return (
+      <div className="ccc-state">
+        <ContractIcon type="file" size={26} />
+        <strong>ยังไม่มีประวัติการย้ายห้อง</strong>
+        <span>เมื่อย้ายห้องในสัญญานี้ ประวัติจะแสดงที่นี่</span>
+      </div>
+    )
+  }
+  const allItems = transfers.map((transfer, index) => ({ transfer, order: index + 1 })).reverse()
+  const items = allItems.filter(({ transfer, order }) => {
+    if (dates.from || dates.to) {
+      if (!transfer.transferred_at) return false
+      const key = contractDayKey(transfer.transferred_at)
+      if ((dates.from && key < dates.from) || (dates.to && key > dates.to)) return false
+    }
+    if (!keyword) return true
+    return [
+      `ครั้งที่ ${order}`,
+      transfer.from_room_number,
+      transfer.to_room_number,
+      formatContractDate(transfer.transferred_at, true),
+      formatContractMoney(transfer.from_price),
+      formatContractMoney(transfer.to_price),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(keyword)
+  })
+  const lastDeposit = Math.max(0, Number(transfers.at(-1).deposit_before) - Number(transfers.at(-1).deposit_deducted))
+  return (
+    <div className="ctl">
+      <div className="ctl-summary">
+        <div>
+          <span>ห้องปัจจุบัน</span>
+          <strong>{contract.current_room_number || contract.room_number || '-'}</strong>
+        </div>
+        <div>
+          <span>ย้ายแล้ว</span>
+          <strong>{transfers.length} ครั้ง</strong>
+        </div>
+        <div>
+          <span>ค่าเช่าปัจจุบัน</span>
+          <strong>{formatContractMoney(contract.monthly_price)}</strong>
+        </div>
+        <div>
+          <span>เงินมัดจำคงเหลือ</span>
+          <strong>{formatContractMoney(contract.deposit_remaining ?? lastDeposit)}</strong>
+        </div>
+      </div>
+      <div className="ctl-toolbar">
+        <input
+          type="search"
+          className="ctl-search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="ค้นหาเลขห้อง ราคา หรือ ครั้งที่"
+          aria-label="ค้นหาประวัติการย้ายห้อง"
+        />
+        <div className="ctl-date-field">
+          <ContractIcon type="calendar" size={14} />
+          <ThaiDatePicker
+            className="ctl-date-input"
+            placeholder="ตั้งแต่วันที่"
+            value={dates.from}
+            maxDate={dayKeyDate(dates.to)}
+            isClearable
+            portalId="ctl-date-portal"
+            onChange={(value) => setDates((current) => ({ ...current, from: value }))}
+          />
+          <span>ถึง</span>
+          <ThaiDatePicker
+            className="ctl-date-input"
+            placeholder="ถึงวันที่"
+            value={dates.to}
+            minDate={dayKeyDate(dates.from)}
+            isClearable
+            portalId="ctl-date-portal"
+            onChange={(value) => setDates((current) => ({ ...current, to: value }))}
+          />
+        </div>
+        {filtersActive && (
+          <button
+            type="button"
+            className="ctl-clear"
+            onClick={() => {
+              setSearch('')
+              setDates({ from: '', to: '' })
+            }}
+          >
+            ล้างตัวกรอง
+          </button>
+        )}
+        <span className="ctl-result">พบ {items.length} จาก {allItems.length} ครั้ง</span>
+      </div>
+      <ol className="ctl-list">
+        {items.length === 0 && <li className="ctl-empty">ไม่พบการย้ายห้องที่ตรงกับตัวกรอง</li>}
+        {items.map(({ transfer, order }) => {
+          const fromPrice = Number(transfer.from_price) || 0
+          const toPrice = Number(transfer.to_price) || 0
+          const deducted = Number(transfer.deposit_deducted) || 0
+          const charged = Number(transfer.amount_charged) || 0
+          const date = transfer.transferred_at ? new Date(transfer.transferred_at) : null
+          return (
+            <li key={transfer.id}>
+              <span className="ctl-order">ครั้งที่ {order}</span>
+              <button type="button" className="ctl-item" onClick={() => setOpenId(transfer.id)}>
+                <span className="ctl-date" aria-hidden="true">
+                  <b>{date ? date.toLocaleDateString('th-TH', { day: 'numeric' }) : '-'}</b>
+                  <small>{date ? date.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' }) : ''}</small>
+                </span>
+                <span className="ctl-body">
+                  <span className="ctl-title">
+                    ห้อง {transfer.from_room_number} <i>→</i> ห้อง {transfer.to_room_number}
+                  </span>
+                  <span className="ctl-facts">
+                    <span className={toPrice > fromPrice ? 'is-up' : toPrice < fromPrice ? 'is-down' : ''}>
+                      ค่าเช่า {formatContractMoney(fromPrice)} → {formatContractMoney(toPrice)}
+                    </span>
+                    <span className={deducted > 0 ? 'is-up' : 'is-down'}>
+                      {deducted > 0 ? `หักมัดจำ ${formatContractMoney(deducted)}` : 'ไม่หักมัดจำ'}
+                    </span>
+                    {charged > 0 && (
+                      <span className={transfer.charge_status === 'paid' ? 'is-down' : 'is-danger'}>
+                        จ่ายเพิ่ม {formatContractMoney(charged)} · {TRANSFER_CHARGE_STATUS[transfer.charge_status] || 'รอชำระ'}
+                      </span>
+                    )}
+                  </span>
+                  <span className="ctl-time">ย้ายเมื่อ {formatContractDate(transfer.transferred_at, true)}</span>
+                </span>
+                <span className="ctl-thumbs">
+                  {(transfer.new_images ?? []).length > 0 ? (
+                    <>
+                      <small>รูปสัญญาใหม่ {transfer.new_images.length} รูป</small>
+                      <span className="ctl-thumb-row">
+                        {transfer.new_images.slice(0, TIMELINE_THUMBS).map((image, index) => (
+                          <span key={image.url} className="ctl-thumb">
+                            <UploadImage src={image.url} alt="" loading="lazy" />
+                            {index === TIMELINE_THUMBS - 1 && transfer.new_images.length > TIMELINE_THUMBS && (
+                              <em>+{transfer.new_images.length - TIMELINE_THUMBS}</em>
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                    </>
+                  ) : (
+                    <small className="is-empty">ไม่มีรูปสัญญาใหม่</small>
+                  )}
+                </span>
+                <span className="ctl-more">
+                  ดูรายละเอียด
+                  <ContractIcon type="chevron" size={14} />
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+      {openId !== null && (
+        <ContractTransfersModal contract={contract} viewer={viewer} focusId={openId} onClose={() => setOpenId(null)} />
+      )}
+    </div>
+  )
+}
+
 export function CustomerContractPanel() {
   const [contract, setContract] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [tab, setTab] = useState('detail')
+  const transferCount = contractTransfers(contract).length
 
   useEffect(() => {
     let cancelled = false
@@ -1082,7 +1329,36 @@ export function CustomerContractPanel() {
           )}
         </div>
       ) : (
-        <CustomerContractBody contract={contract} viewer="customer" />
+        <>
+          <nav className="ccc-tabs" role="tablist" aria-label="ส่วนของสัญญาเช่า">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'detail'}
+              className={tab === 'detail' ? 'is-active' : ''}
+              onClick={() => setTab('detail')}
+            >
+              <ContractIcon type="file" size={15} />
+              รายละเอียดสัญญา
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'history'}
+              className={tab === 'history' ? 'is-active' : ''}
+              onClick={() => setTab('history')}
+            >
+              <ContractIcon type="calendar" size={15} />
+              ประวัติการย้ายห้อง
+              <em>{transferCount}</em>
+            </button>
+          </nav>
+          {tab === 'detail' ? (
+            <CustomerContractBody contract={contract} viewer="customer" />
+          ) : (
+            <ContractTransferTimeline contract={contract} viewer="customer" />
+          )}
+        </>
       )}
     </section>
   )
@@ -1250,7 +1526,11 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
                 <dd>{formatContractMoney(contract.first_month_total)}</dd>
               </div>
               <div>
-                <dt>ยอดค่าเช่าตามสัญญา ({formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0})</dt>
+                <dt>
+                  {contract.room_transfers?.length > 0
+                    ? `ยอดค่าเช่าตามสัญญา (${contract.billing_periods || 0} รอบ รวมส่วนต่างย้ายห้อง)`
+                    : `ยอดค่าเช่าตามสัญญา (${formatContractMoney(contract.monthly_price)} × ${contract.billing_periods || 0})`}
+                </dt>
                 <dd>{formatContractMoney(contract.contract_total)}</dd>
               </div>
               <div className="is-paid">
@@ -1373,11 +1653,362 @@ function ThisMonthRent({ thisMonth, contract, viewer }) {
   )
 }
 
+const TRANSFER_CHARGE_STATUS = { paid: 'ชำระแล้ว', pending: 'รอชำระ', rejected: 'รอชำระ' }
+const TRANSFER_PREVIEW_COUNT = 2
+
+function ContractTransferEntry({ transfer, order, viewer, detailed = false, depositAmount = null, focused = false }) {
+  const imagesOpen = detailed
+  const fromPrice = Number(transfer.from_price) || 0
+  const toPrice = Number(transfer.to_price) || 0
+  const diff = toPrice - fromPrice
+  const periods = Number(transfer.chargeable_periods) || 0
+  const totalDiff = Number(transfer.price_difference_total) || 0
+  const depositBefore = Number(transfer.deposit_before) || 0
+  const deducted = Number(transfer.deposit_deducted) || 0
+  const depositAfter = Math.max(0, depositBefore - deducted)
+  const charged = Number(transfer.amount_charged) || 0
+  const contractDeposit = Number(depositAmount) || 0
+  const yours = viewer === 'customer' ? 'ของคุณ' : ''
+  const diffText = diff === 0 ? 'เท่าเดิม' : `${diff > 0 ? '+' : '−'}${formatContractMoney(Math.abs(diff))}/เดือน`
+  const tiles = [
+    {
+      label: 'ค่าเช่าห้องใหม่',
+      value: formatContractMoney(toPrice),
+      note: diff === 0 ? 'เท่าห้องเดิม' : `${diff > 0 ? 'แพงขึ้น' : 'ถูกลง'} ${formatContractMoney(Math.abs(diff))}`,
+      tone: diff > 0 ? 'is-warning' : diff < 0 ? 'is-success' : '',
+    },
+    {
+      label: `มัดจำ${yours}หลังย้าย`,
+      value: formatContractMoney(depositAfter),
+      note: deducted > 0 ? `หักไป ${formatContractMoney(deducted)}` : 'ไม่ถูกหัก',
+      tone: deducted > 0 ? 'is-warning' : 'is-success',
+    },
+    {
+      label: 'ต้องจ่ายเพิ่ม',
+      value: charged > 0 ? formatContractMoney(charged) : '฿0',
+      note: charged > 0 ? TRANSFER_CHARGE_STATUS[transfer.charge_status] || 'รอชำระ' : 'ไม่มียอดเพิ่ม',
+      tone: charged > 0 ? (transfer.charge_status === 'paid' ? 'is-success' : 'is-danger') : 'is-success',
+    },
+  ]
+  const groups = [
+    {
+      title: 'ค่าเช่า',
+      rows: [
+        { label: 'ห้องเดิม', value: `${formatContractMoney(fromPrice)}/เดือน` },
+        { label: 'ห้องใหม่', value: `${formatContractMoney(toPrice)}/เดือน`, tone: 'is-accent' },
+        { label: 'ส่วนต่าง', value: diffText, tone: diff > 0 ? 'is-warning' : diff < 0 ? 'is-success' : '' },
+        transfer.new_price_from && { label: 'เริ่มคิดราคาใหม่', value: `รอบ ${formatContractDate(transfer.new_price_from)}` },
+      ],
+    },
+    {
+      title: 'เงินมัดจำ',
+      rows: [
+        contractDeposit > 0 && { label: 'ตามสัญญา', value: formatContractMoney(contractDeposit) },
+        { label: 'ก่อนย้าย', value: formatContractMoney(depositBefore) },
+        { label: 'หักส่วนต่าง', value: deducted > 0 ? `− ${formatContractMoney(deducted)}` : 'ไม่หัก', tone: deducted > 0 ? 'is-warning' : 'is-success' },
+        { label: 'หลังย้าย', value: formatContractMoney(depositAfter), tone: 'is-strong' },
+        contractDeposit > 0 && depositAfter < contractDeposit && {
+          label: 'ขาดจากที่สัญญากำหนด',
+          value: formatContractMoney(contractDeposit - depositAfter),
+          tone: 'is-muted',
+        },
+      ],
+    },
+    {
+      title: 'ยอดชำระจากการย้าย',
+      rows: [
+        {
+          label: 'ส่วนต่างที่ต้องชำระ',
+          value: diff > 0
+            ? `${formatContractMoney(totalDiff)} (${periods} รอบที่จ่ายแล้ว)`
+            : diff === 0 ? 'ไม่มี · ราคาเท่าเดิม' : 'ไม่มี · ห้องใหม่ถูกกว่า',
+          tone: totalDiff > 0 ? 'is-warning' : '',
+        },
+        totalDiff > 0 && { label: 'จ่ายด้วยเงินมัดจำ', value: formatContractMoney(deducted) },
+        totalDiff > 0 && {
+          label: 'เพิ่มในยอดชำระ',
+          value: charged > 0 ? `${formatContractMoney(charged)} · ${TRANSFER_CHARGE_STATUS[transfer.charge_status] || 'รอชำระ'}` : 'ไม่มี',
+          tone: charged > 0 ? (transfer.charge_status === 'paid' ? 'is-success' : 'is-danger') : 'is-success',
+        },
+        viewer !== 'customer' && transfer.approved_by_name && { label: 'อนุมัติโดย', value: transfer.approved_by_name },
+      ],
+    },
+  ]
+  return (
+    <li data-transfer-id={transfer.id} className={focused ? 'is-focused' : undefined}>
+      <div className="contract-transfer-route">
+        <strong>
+          <span className="contract-transfer-order">ครั้งที่ {order}</span>
+          ห้อง {transfer.from_room_number} → ห้อง {transfer.to_room_number}
+        </strong>
+        <span className="contract-transfer-date">
+          <ContractIcon type="calendar" size={13} />
+          <span>ย้ายเมื่อ</span>
+          <b>{formatContractDate(transfer.transferred_at, true)}</b>
+        </span>
+      </div>
+      {detailed ? (
+        <>
+          <div className="contract-transfer-tiles">
+            {tiles.map((tile) => (
+              <div key={tile.label}>
+                <span>{tile.label}</span>
+                <strong>{tile.value}</strong>
+                <small className={tile.tone}>{tile.note}</small>
+              </div>
+            ))}
+          </div>
+          <div className="contract-transfer-groups">
+            {groups.map((group) => (
+              <section key={group.title}>
+                <h5>{group.title}</h5>
+                <dl>
+                  {group.rows.filter(Boolean).map((row) => (
+                    <div key={row.label}>
+                      <dt>{row.label}</dt>
+                      <dd className={row.tone}>{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+          </div>
+        </>
+      ) : (
+        <dl>
+          <div>
+            <dt>ค่าเช่า/เดือน</dt>
+            <dd>
+              {formatContractMoney(fromPrice)} → <b className="is-accent">{formatContractMoney(toPrice)}</b>
+            </dd>
+          </div>
+          {transfer.new_price_from && (
+            <div>
+              <dt>เริ่มคิดราคาใหม่</dt>
+              <dd>รอบ {formatContractDate(transfer.new_price_from)}</dd>
+            </div>
+          )}
+          <div>
+            <dt>ส่วนต่างที่ต้องชำระ</dt>
+            <dd className={totalDiff > 0 ? 'is-warning' : ''}>
+              {diff > 0 ? formatContractMoney(totalDiff) : diff === 0 ? 'ราคาเท่าเดิม' : 'ห้องใหม่ถูกกว่า ไม่มีส่วนต่าง'}
+            </dd>
+          </div>
+          <div>
+            <dt>เงินมัดจำ{yours}</dt>
+            <dd className="contract-transfer-deposit">
+              <span className={deducted > 0 ? 'is-warning' : 'is-success'}>
+                {deducted > 0 ? `หักส่วนต่าง ${formatContractMoney(deducted)}` : 'ไม่หักส่วนต่าง'}
+              </span>
+              <span className="is-strong">เหลือ {formatContractMoney(depositAfter)}</span>
+            </dd>
+          </div>
+          {charged > 0 && (
+            <div>
+              <dt>เพิ่มในยอดชำระ</dt>
+              <dd className={transfer.charge_status === 'paid' ? 'is-success' : 'is-danger'}>
+                {formatContractMoney(charged)} · {TRANSFER_CHARGE_STATUS[transfer.charge_status] || 'รอชำระ'}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+      {transfer.new_images?.length > 0 && (
+        <details className="contract-transfer-images" open={imagesOpen}>
+          <summary>
+            <span>รูปสัญญาใหม่หลังย้าย</span>
+            <em>{transfer.new_images.length} รูป</em>
+          </summary>
+          <ContractGallery images={transfer.new_images} title="รูปสัญญาใหม่หลังย้ายห้อง" subtitle={`ห้อง ${transfer.to_room_number}`} />
+        </details>
+      )}
+      {transfer.previous_images?.length > 0 && (
+        <details className="contract-transfer-images is-old" open={imagesOpen}>
+          <summary>
+            <span>รูปสัญญาเดิมก่อนย้าย · เก็บไว้เป็นประวัติ</span>
+            <em>{transfer.previous_images.length} รูป</em>
+          </summary>
+          <ContractGallery images={transfer.previous_images} title="รูปสัญญาเดิมก่อนย้ายห้อง" subtitle={`ห้อง ${transfer.from_room_number}`} />
+        </details>
+      )}
+    </li>
+  )
+}
+
+function ContractTransfersModal({ contract, viewer, onClose, focusId = null }) {
+  const [closing, setClosing] = useState(false)
+  const [search, setSearch] = useState('')
+  const requestClose = () => setClosing(true)
+  const transfers = contractTransfers(contract)
+  const single = focusId !== null
+  const keyword = search.trim().toLowerCase()
+  const entries = transfers
+    .map((transfer, index) => ({ transfer, order: index + 1 }))
+    .reverse()
+    .filter(({ transfer }) => !single || transfer.id === focusId)
+    .filter(({ transfer, order }) =>
+      single ||
+      !keyword ||
+      [
+        `ครั้งที่ ${order}`,
+        transfer.from_room_number,
+        transfer.to_room_number,
+        transfer.approved_by_name,
+        formatContractDate(transfer.transferred_at, true),
+        formatContractMoney(transfer.from_price),
+        formatContractMoney(transfer.to_price),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(keyword),
+    )
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || document.querySelector('.photo-lightbox, .photo-viewer')) return
+      event.stopImmediatePropagation()
+      setClosing(true)
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [])
+
+  useEffect(() => {
+    if (!closing) return undefined
+    const timer = setTimeout(onClose, 110)
+    return () => clearTimeout(timer)
+  }, [closing, onClose])
+
+  const name = `${contract.first_name || ''} ${contract.last_name || ''}`.trim()
+  return createPortal(
+    <div className={`rent-bill-overlay${closing ? ' is-closing' : ''}`} onClick={requestClose} role="presentation">
+      <div
+        className="rent-bill contract-transfers-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={single ? 'รายละเอียดการย้ายห้อง' : 'ประวัติการย้ายห้องทั้งหมด'}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="rent-bill-head">
+          <span className="rent-bill-icon"><ContractIcon type="file" size={18} /></span>
+          <div>
+            <strong>
+              {single && entries[0]
+                ? `รายละเอียดการย้ายห้อง ครั้งที่ ${entries[0].order}`
+                : 'ประวัติการย้ายห้องทั้งหมด'}
+            </strong>
+            <span className="contract-transfers-modal-meta">
+              <span>
+                <i>ห้องปัจจุบัน</i>
+                <b>{contract.room_number || '-'}</b>
+              </span>
+              {name && (
+                <span>
+                  <i>ผู้เช่า</i>
+                  <b>{name}</b>
+                </span>
+              )}
+              <span className="is-count">
+                <i>ย้ายทั้งหมด</i>
+                <b>{transfers.length} ครั้ง</b>
+              </span>
+            </span>
+          </div>
+          <button type="button" className="rent-bill-close" onClick={requestClose} aria-label="ปิด">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+        {!single && (
+          <div className="contract-transfers-modal-search">
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="ค้นหาเลขห้อง ผู้อนุมัติ วันที่ หรือ ครั้งที่"
+              aria-label="ค้นหาประวัติการย้ายห้อง"
+            />
+            <span>พบ {entries.length} จาก {transfers.length} ครั้ง</span>
+          </div>
+        )}
+        <div className="contract-transfers-modal-body contract-transfers">
+          {entries.length === 0 ? (
+            <p className="contract-transfers-empty">ไม่พบการย้ายห้องที่ตรงกับคำค้นหา</p>
+          ) : (
+            <ol>
+              {entries.map(({ transfer, order }) => (
+                <ContractTransferEntry
+                  key={transfer.id}
+                  transfer={transfer}
+                  order={order}
+                  viewer={viewer}
+                  depositAmount={contract.deposit_amount}
+                  detailed
+                />
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+export function ContractTransferHistory({ contract, viewer = 'staff' }) {
+  const [showAll, setShowAll] = useState(false)
+  const transfers = contractTransfers(contract)
+  if (transfers.length === 0) return null
+  const recent = transfers
+    .map((transfer, index) => ({ transfer, order: index + 1 }))
+    .slice(-TRANSFER_PREVIEW_COUNT)
+    .reverse()
+  const hidden = transfers.length - recent.length
+  return (
+    <section className="contract-transfers" aria-label="ประวัติการย้ายห้อง">
+      <header>
+        <ContractIcon type="file" size={15} />
+        <strong>การย้ายห้อง (บันทึกแนบท้ายสัญญา)</strong>
+        <span className="contract-transfers-count">ย้ายแล้ว {transfers.length} ครั้ง</span>
+        <button type="button" className="contract-transfers-all" onClick={() => setShowAll(true)}>
+          ดูทั้งหมด
+        </button>
+      </header>
+      <p className="contract-transfers-note">
+        {viewer === 'customer'
+          ? 'สัญญาฉบับที่เซ็นไว้ยังใช้ต่อ ระบบบันทึกการย้ายห้องและการเปลี่ยนค่าเช่าไว้เป็นเอกสารแนบ'
+          : 'รูปสัญญาฉบับเดิมไม่ถูกแก้ไข การเปลี่ยนห้องและค่าเช่าบันทึกเป็นประวัติแนบท้ายสัญญา'}
+        {hidden > 0 ? ` · แสดงล่าสุด ${recent.length} ครั้ง` : ''}
+      </p>
+      <ol>
+        {recent.map(({ transfer, order }) => (
+          <ContractTransferEntry
+            key={transfer.id}
+            transfer={transfer}
+            order={order}
+            viewer={viewer}
+            depositAmount={contract.deposit_amount}
+          />
+        ))}
+      </ol>
+      {hidden > 0 && (
+        <button type="button" className="contract-transfers-more" onClick={() => setShowAll(true)}>
+          ดูการย้ายก่อนหน้าอีก {hidden} ครั้ง
+        </button>
+      )}
+      {showAll && <ContractTransfersModal contract={contract} viewer={viewer} onClose={() => setShowAll(false)} />}
+    </section>
+  )
+}
+
 function CustomerContractBody({ contract, viewer = 'customer' }) {
   const [now] = useState(() => Date.now())
   const { daysLeft, totalDays, usedDays } = contractTimeline(contract, now)
   const extended = contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
   const images = contract.images || []
+  const transferred = (contract.room_transfers?.length ?? 0) > 0
   const rows = [
     { label: 'ผู้เช่า', value: `${contract.first_name} ${contract.last_name}` },
     { label: 'ระยะสัญญา', value: formatContractLength(contract) },
@@ -1391,11 +2022,17 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
     { label: 'ระยะเวลาทั้งหมด', value: totalDays === null ? '-' : `${totalDays} วัน` },
     { label: 'ผ่านไปแล้ว', value: usedDays === null ? '-' : `${usedDays} วัน` },
     { label: 'เหลืออีก', value: formatDaysLeft(daysLeft), tone: daysLeft !== null && daysLeft <= 30 ? 'is-warning' : 'is-accent' },
-    { label: 'ค่าเช่า/เดือน', value: formatContractMoney(contract.monthly_price) },
+    { label: 'ค่าเช่า/เดือน', value: formatContractMoney(contract.monthly_price), tone: transferred ? 'is-accent' : undefined },
     {
       label: 'เงินมัดจำ',
       value: formatDepositSummary(contract),
     },
+    ...(Number(contract.deposit_transfer_deducted) > 0
+      ? [
+          { label: 'หักส่วนต่างย้ายห้อง', value: `− ${formatContractMoney(contract.deposit_transfer_deducted)}`, tone: 'is-warning' },
+          { label: 'มัดจำคงเหลือ', value: formatContractMoney(contract.deposit_remaining), tone: 'is-accent' },
+        ]
+      : []),
     { label: 'ชำระเดือนแรก', value: formatContractMoney(contract.first_month_total), tone: 'is-accent' },
     {
       label: 'สถานะสัญญา',
@@ -1409,10 +2046,7 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
   return (
     <>
       <div className="ccc-hero">
-        <div className="ccc-room">
-          <span>ห้อง</span>
-          <strong>{contract.current_room_number || contract.room_number || '-'}</strong>
-        </div>
+        <ContractRoomBadge contract={contract} size="hero" />
         <div className="ccc-period csc-period">
           <ContractPeriodTimeline
             contract={contract}
@@ -1443,13 +2077,18 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
               </div>
             ))}
           </dl>
+          <ContractTransferHistory contract={contract} viewer={viewer} />
           <div className="ccc-bill">
             <h3>
               ยอดตามสัญญา
               <span>{contract.billing_periods || 0} รอบบิล</span>
             </h3>
             <div>
-              <span>ค่าเช่า {formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0}</span>
+              <span>
+                {transferred
+                  ? `ค่าเช่า ${contract.billing_periods || 0} รอบ (รวมส่วนต่างย้ายห้อง)`
+                  : `ค่าเช่า ${formatContractMoney(contract.monthly_price)} × ${contract.billing_periods || 0}`}
+              </span>
               <strong>{formatContractMoney(contract.contract_total)}</strong>
             </div>
             <div className="is-paid">

@@ -1215,7 +1215,8 @@ router.patch("/customers/:id/suspend", async (req, res) => {
       if (!otherTenants.length) {
         const [roomUpdate] = await connection.query(
           `UPDATE Room SET is_booked = FALSE, rental_start_date = NULL, rental_end_date = NULL,
-                           rental_duration_months = NULL, prepaid_until = NULL, pending_lump_sum_months = NULL
+                           rental_duration_months = NULL, prepaid_until = NULL, billing_start_date = NULL,
+                           pending_lump_sum_months = NULL
            WHERE room_number = ?`,
           [roomNumber],
         );

@@ -36,7 +36,7 @@ import {
 } from "../middleware/slipVerification.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
 import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.js";
-import { loadCustomerContracts } from "./rentalContracts.js";
+import { loadCustomerContracts, loadRoomTransferPreview } from "./rentalContracts.js";
 
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
@@ -240,24 +240,50 @@ router.patch("/profile", async (req, res) => {
 
 const GRACE_DAYS = 3;
 
+const DEPOSIT_CYCLE_START = (bookingIdColumn, customerIdColumn) => `${bookingIdColumn} >= COALESCE((
+         SELECT MAX(lb.id) FROM Booking lb
+         WHERE lb.customer_id = ${customerIdColumn} AND lb.contract_completed_at IS NOT NULL
+           AND EXISTS (SELECT 1 FROM Booking eb
+             WHERE eb.customer_id = lb.customer_id AND eb.contract_completed_at IS NOT NULL AND eb.id < lb.id)
+       ), 0)`;
+
+const validCustomerIds = (customerIds) =>
+  [...new Set(customerIds)].filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0);
+
 export async function loadDepositPayments(db, customerIds) {
-  const ids = [...new Set(customerIds)].filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0);
+  const ids = validCustomerIds(customerIds);
   const byCustomer = new Map();
   if (ids.length === 0) return byCustomer;
   const [rows] = await db.query(
     `SELECT b.customer_id, p.amount, p.status, p.type FROM Payment p
      JOIN Booking b ON b.id = p.booking_id
      WHERE b.customer_id IN (?) AND p.type = 'deposit'
-       AND b.id >= COALESCE((
-         SELECT MAX(lb.id) FROM Booking lb
-         WHERE lb.customer_id = b.customer_id AND lb.contract_completed_at IS NOT NULL
-           AND EXISTS (SELECT 1 FROM Booking eb
-             WHERE eb.customer_id = lb.customer_id AND eb.contract_completed_at IS NOT NULL AND eb.id < lb.id)
-       ), 0)`,
+       AND ${DEPOSIT_CYCLE_START("b.id", "b.customer_id")}`,
     [ids],
   );
   for (const row of rows) byCustomer.set(row.customer_id, [...(byCustomer.get(row.customer_id) ?? []), row]);
   return byCustomer;
+}
+
+export async function loadTransferDepositDeductions(db, customerIds) {
+  const ids = validCustomerIds(customerIds);
+  const byCustomer = new Map();
+  if (ids.length === 0) return byCustomer;
+  const [rows] = await db.query(
+    `SELECT rt.customer_id, SUM(rt.deposit_deducted) AS deducted FROM RoomTransfer rt
+     WHERE rt.customer_id IN (?) AND ${DEPOSIT_CYCLE_START("rt.from_booking_id", "rt.customer_id")}
+     GROUP BY rt.customer_id`,
+    [ids],
+  );
+  for (const row of rows) byCustomer.set(row.customer_id, Math.round(Number(row.deducted) * 100) || 0);
+  return byCustomer;
+}
+
+export function paidDepositCents(depositPayments) {
+  return (depositPayments ?? []).reduce((total, payment) => {
+    const cents = Math.round(Number(payment.amount) * 100);
+    return payment.status === "paid" && Number.isSafeInteger(cents) ? total + cents : total;
+  }, 0);
 }
 
 export function computeDepositDue(paymentsForBooking, depositAmount) {
@@ -277,34 +303,24 @@ export function computeDepositDue(paymentsForBooking, depositAmount) {
   };
 }
 
-function computeRentDue(room, paymentsForBooking) {
-  if (!room || !room.is_booked || !room.rental_start_date || !room.rental_end_date) return null;
-  const start = new Date(room.rental_start_date);
-  const end = new Date(room.rental_end_date);
-  const now = new Date();
-  const priceCents = Math.round(Number(room.price) * 100);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
-  if (now < start || now > end) return null;
+export const ROOM_TRANSFER_PAYMENT_TYPE = "room_transfer";
+export const CHARGE_PAYMENT_TYPES = ["water", "electricity", ROOM_TRANSFER_PAYMENT_TYPE];
+const NON_RENT_PAYMENT_TYPES = ["deposit", ...CHARGE_PAYMENT_TYPES];
 
-  const periodAt = (offset) => {
-    const date = new Date(start.getFullYear(), start.getMonth() + offset, 1, start.getHours(), start.getMinutes(), start.getSeconds());
-    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    date.setDate(Math.min(start.getDate(), lastDay));
-    return date;
-  };
-  const rentPayments = paymentsForBooking.filter((payment) => !["deposit", "water", "electricity"].includes(payment.type));
+export const isRentPayment = (payment) => !NON_RENT_PAYMENT_TYPES.includes(payment.type);
+
+function billingPeriodAt(start, offset) {
+  const date = new Date(start.getFullYear(), start.getMonth() + offset, 1, start.getHours(), start.getMinutes(), start.getSeconds());
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(start.getDate(), lastDay));
+  return date;
+}
+
+function rentCreditCents(room, rentPayments, periods, priceCents) {
   const paidRentCents = Math.max(0, rentPayments.reduce((total, payment) => {
     const amount = Math.round(Number(payment.amount) * 100);
     return payment.status === "paid" && Number.isSafeInteger(amount) ? total + amount : total;
   }, 0));
-  const periods = [];
-  for (let offset = 0; ; offset += 1) {
-    const periodStart = periodAt(offset);
-    if (periodStart > now || periodStart >= end) break;
-    periods.push({ periodStart, periodEnd: periodAt(offset + 1), index: offset });
-  }
-  if (periods.length === 0) return null;
-
   const prepaidUntil = room.prepaid_until ? new Date(room.prepaid_until) : null;
   const prepaidCents = prepaidUntil && !Number.isNaN(prepaidUntil.getTime())
     ? periods.filter((period) => period.periodEnd <= prepaidUntil).length * priceCents : 0;
@@ -318,7 +334,60 @@ function computeRentDue(room, paymentsForBooking) {
       return payment.status === "paid" && Number.isSafeInteger(amount) && paymentDay >= cutoffDay ? total + amount : total;
     }, 0);
   }
-  let creditCents = Math.max(0, Math.max(paidRentCents - receiptsAfterPrepaidCents, prepaidCents) + receiptsAfterPrepaidCents);
+  return Math.max(0, Math.max(paidRentCents - receiptsAfterPrepaidCents, prepaidCents) + receiptsAfterPrepaidCents);
+}
+
+const billingStartOf = (room) => room?.billing_start_date ?? room?.rental_start_date;
+
+export function computeRentCoverage(room, paymentsForBooking, now = new Date()) {
+  if (!billingStartOf(room) || !room?.rental_end_date) return null;
+  const start = new Date(billingStartOf(room));
+  const end = new Date(room.rental_end_date);
+  const priceCents = Math.round(Number(room.price) * 100);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
+  const periods = [];
+  for (let offset = 0; offset < 600; offset += 1) {
+    const periodStart = billingPeriodAt(start, offset);
+    if (periodStart >= end) break;
+    periods.push({ periodStart, periodEnd: billingPeriodAt(start, offset + 1), index: offset });
+  }
+  if (periods.length === 0) return null;
+  const currentIndex = Math.max(0, periods.filter((period) => period.periodStart <= now).length - 1);
+  let creditCents = rentCreditCents(room, paymentsForBooking.filter(isRentPayment), periods, priceCents);
+  let coveredThroughIndex = -1;
+  for (const period of periods) {
+    if (creditCents < priceCents) break;
+    creditCents -= priceCents;
+    coveredThroughIndex = period.index;
+  }
+  return {
+    priceCents,
+    currentIndex,
+    coveredThroughIndex,
+    paidThrough: coveredThroughIndex >= 0 ? periods[coveredThroughIndex].periodEnd : null,
+    paidPeriodsFromCurrent: Math.max(0, coveredThroughIndex - currentIndex + 1),
+  };
+}
+
+function computeRentDue(room, paymentsForBooking) {
+  if (!room || !room.is_booked || !billingStartOf(room) || !room.rental_end_date) return null;
+  const start = new Date(billingStartOf(room));
+  const end = new Date(room.rental_end_date);
+  const now = new Date();
+  const priceCents = Math.round(Number(room.price) * 100);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
+  if (now < start || now > end) return null;
+
+  const rentPayments = paymentsForBooking.filter(isRentPayment);
+  const periods = [];
+  for (let offset = 0; ; offset += 1) {
+    const periodStart = billingPeriodAt(start, offset);
+    if (periodStart > now || periodStart >= end) break;
+    periods.push({ periodStart, periodEnd: billingPeriodAt(start, offset + 1), index: offset });
+  }
+  if (periods.length === 0) return null;
+
+  let creditCents = rentCreditCents(room, rentPayments, periods, priceCents);
   const unpaidPeriods = [];
   for (const period of periods) {
     const applied = Math.min(priceCents, creditCents);
@@ -353,7 +422,7 @@ function computeRentDue(room, paymentsForBooking) {
   };
 }
 
-const UTILITY_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า" };
+const CHARGE_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า", [ROOM_TRANSFER_PAYMENT_TYPE]: "ส่วนต่างค่าเช่า (ย้ายห้อง)" };
 
 export function computeCurrentDue(room, paymentsForBooking, depositAmount, depositPayments = paymentsForBooking) {
   const rentDue = computeRentDue(room, paymentsForBooking);
@@ -362,7 +431,7 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount, depos
   const depositUnpaid = depositDue.status === "due" || depositDue.status === "pending";
 
   const utilityCharges = paymentsForBooking.filter(
-    (p) => (p.type === "water" || p.type === "electricity") && p.status === "pending",
+    (p) => CHARGE_PAYMENT_TYPES.includes(p.type) && p.status === "pending",
   );
 
   const items = [];
@@ -389,7 +458,7 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount, depos
     items.push({
       id: charge.id,
       type: charge.type,
-      label: UTILITY_LABEL[charge.type] || charge.type,
+      label: CHARGE_LABEL[charge.type] || charge.type,
       amount: Number(charge.amount),
       status: "due",
       note: charge.note || null,
@@ -459,7 +528,7 @@ async function loadCustomerCurrentDue(db, customerId) {
   if (!customer?.room_number) return null;
   const [[roomRows], [bookingRows]] = await Promise.all([
     db.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months FROM Room WHERE room_number = ?`,
       [customer.room_number],
     ),
     db.query(`SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, [customer.id]),
@@ -504,7 +573,7 @@ router.get("/me", async (req, res) => {
       [parcels],
     ] = await Promise.all([
       pool.query(
-        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+        `SELECT room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months
          FROM Room WHERE room_number = ?`,
         [customer.room_number],
       ),
@@ -554,7 +623,7 @@ router.get("/me", async (req, res) => {
     ]);
 
     const bookingIds = bookings.map((booking) => booking.booking_id);
-    const [[payments], maintenanceWithPhotos, parcelsWithPhotos, depositPaymentsByCustomer] = await Promise.all([
+    const [[payments], maintenanceWithPhotos, parcelsWithPhotos, depositPaymentsByCustomer, transferDeductions] = await Promise.all([
       bookingIds.length > 0
         ? pool.query(
             `SELECT id, booking_id, amount, payment_date, status, type, electricity_units, water_units, note, slip_path, created_at
@@ -567,6 +636,7 @@ router.get("/me", async (req, res) => {
       attachMaintenancePhotos(pool, maintenanceRequests),
       attachParcelPhotos(pool, parcels),
       loadDepositPayments(pool, [customer.id]),
+      loadTransferDepositDeductions(pool, [customer.id]),
     ]);
 
     const paymentsByBooking = new Map();
@@ -608,10 +678,8 @@ router.get("/me", async (req, res) => {
       currentDue,
       outstanding: outstandingFromDue(currentDue),
       moveOutBalance: moveOutBalanceFromDue(currentDue),
-      depositPaid: (depositPaymentsByCustomer.get(customer.id) ?? []).reduce((total, payment) => {
-        const cents = Math.round(Number(payment.amount) * 100);
-        return payment.status === "paid" && Number.isSafeInteger(cents) ? total + cents : total;
-      }, 0) / 100,
+      depositPaid: Math.max(0, paidDepositCents(depositPaymentsByCustomer.get(customer.id)) - (transferDeductions.get(customer.id) ?? 0)) / 100,
+      depositTransferDeducted: (transferDeductions.get(customer.id) ?? 0) / 100,
       parcels: parcelsWithPhotos,
     });
   } catch (error) {
@@ -627,7 +695,7 @@ export async function withThisMonthRent(pool, contracts) {
   const [[customers], [rooms], [bookings]] = await Promise.all([
     pool.query(`SELECT id, room_number, deposit_amount FROM Customer WHERE id IN (?)`, [customerIds]),
     pool.query(
-      `SELECT room_number, is_booked, price, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months
+      `SELECT room_number, is_booked, price, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months
        FROM Room WHERE room_number IN (?)`,
       [[...new Set(active.map((contract) => contract.current_room_number))]],
     ),
@@ -659,7 +727,7 @@ export async function withThisMonthRent(pool, contracts) {
     const rentDue = computeRentDue(room, bookingPayments);
     const depositDue = computeDepositDue(depositPaymentsByCustomer.get(customer.id) ?? [], customer.deposit_amount);
     const lastRentPayment = bookingPayments
-      .filter((payment) => !["deposit", "water", "electricity"].includes(payment.type) && ["paid", "pending"].includes(payment.status))
+      .filter((payment) => isRentPayment(payment) && ["paid", "pending"].includes(payment.status))
       .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date) || new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)[0];
     return {
       ...contract,
@@ -810,7 +878,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     if (!customer) throw new SlipVerificationError(404, "ไม่พบข้อมูลผู้ใช้");
 
     const [roomRows] = await pool.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months FROM Room WHERE room_number = ?`,
       [customer.room_number],
     );
     const room = roomRows[0];
@@ -1161,6 +1229,19 @@ router.post("/requests", async (req, res) => {
         await connection.rollback();
         return res.status(409).json({ message: "ห้องที่เลือกไม่ว่างแล้ว กรุณาเลือกห้องอื่น" });
       }
+
+      const unpaid = (await loadMoveOutBalance(connection, customer.id)).items.filter((item) => item.status !== "pending");
+      if (unpaid.length > 0) {
+        await connection.rollback();
+        const amount = unpaid.reduce((total, item) => total + Math.round(Number(item.amount) * 100), 0) / 100;
+        return res.status(409).json({
+          code: "MOVE_ROOM_OUTSTANDING",
+          message: `มียอดค้างชำระ ฿${amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} (${unpaid
+            .map((item) => item.label)
+            .join(", ")}) กรุณาชำระให้ครบก่อนขอย้ายห้อง`,
+          outstanding: { amount, items: unpaid },
+        });
+      }
     }
 
     await connection.query(
@@ -1182,6 +1263,84 @@ router.post("/requests", async (req, res) => {
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   } finally {
     connection?.release();
+  }
+});
+
+router.get("/requests/:id/transfer-impact", async (req, res) => {
+  try {
+    const requestId = Number(req.params.id);
+    if (!isPositiveId(requestId)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+    const pool = getPool();
+    const [requestRows] = await pool.query(
+      `SELECT id, status FROM TenantRequest WHERE id = ? AND customer_id = ? AND type = 'move_room'`,
+      [requestId, req.user.id],
+    );
+    const request = requestRows[0];
+    if (!request) return res.status(404).json({ message: "ไม่พบคำขอย้ายห้องนี้" });
+
+    if (request.status === "approved") {
+      const [transfers] = await pool.query(
+        `SELECT rt.from_room_number, rt.to_room_number, rt.from_price, rt.to_price, rt.chargeable_periods,
+                rt.price_difference_total, rt.deposit_before, rt.deposit_deducted, rt.amount_charged, rt.new_price_from,
+                rt.transferred_at, cp.status AS charge_status, tb.rental_end_date
+         FROM RoomTransfer rt
+         LEFT JOIN Payment cp ON cp.id = rt.charge_payment_id
+         LEFT JOIN Booking tb ON tb.id = rt.to_booking_id
+         WHERE rt.tenant_request_id = ?`,
+        [requestId],
+      );
+      const transfer = transfers[0];
+      if (!transfer) return res.json({ impact: null });
+      const depositBefore = Number(transfer.deposit_before);
+      const deducted = Number(transfer.deposit_deducted);
+      return res.json({
+        impact: {
+          final: true,
+          from_room_number: transfer.from_room_number,
+          to_room_number: transfer.to_room_number,
+          from_price: Number(transfer.from_price),
+          to_price: Number(transfer.to_price),
+          contract_end_date: transfer.rental_end_date,
+          new_price_from: transfer.new_price_from,
+          chargeable_periods: Number(transfer.chargeable_periods),
+          total_difference: Number(transfer.price_difference_total),
+          deposit_remaining: depositBefore,
+          deposit_deducted: deducted,
+          deposit_remaining_after: Math.max(0, depositBefore - deducted),
+          additional_charge: Number(transfer.amount_charged),
+          charge_status: transfer.charge_status ?? null,
+          outstanding: [],
+          transferred_at: transfer.transferred_at,
+        },
+      });
+    }
+
+    if (!["pending", "in_progress"].includes(request.status)) return res.json({ impact: null });
+    const preview = await loadRoomTransferPreview(pool, requestId);
+    if (!preview) return res.json({ impact: null });
+    return res.json({
+      impact: {
+        final: false,
+        from_room_number: preview.source_room?.room_number ?? null,
+        to_room_number: preview.target_room?.room_number ?? null,
+        from_price: preview.source_room?.price ?? null,
+        to_price: preview.target_room?.price ?? null,
+        target_available: preview.target_room ? !preview.target_room.is_booked : false,
+        contract_end_date: preview.contract?.effective_end_date ?? preview.contract?.rental_end_date ?? null,
+        new_price_from: preview.new_price_from,
+        chargeable_periods: preview.settlement.chargeable_periods,
+        total_difference: preview.settlement.total_difference,
+        deposit_remaining: preview.deposit.remaining,
+        deposit_deducted: preview.settlement.deposit_deducted,
+        deposit_remaining_after: preview.settlement.deposit_remaining_after,
+        additional_charge: preview.settlement.additional_charge,
+        charge_status: null,
+        outstanding: preview.outstanding?.items ?? [],
+      },
+    });
+  } catch (error) {
+    console.error("Customer transfer impact error:", error);
+    return res.status(500).json({ message: "ไม่สามารถคำนวณผลกระทบต่อสัญญาได้" });
   }
 });
 

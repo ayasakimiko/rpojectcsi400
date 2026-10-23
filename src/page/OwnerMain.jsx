@@ -1608,6 +1608,7 @@ const PAYMENT_TYPE_LABELS = {
   deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟ',
+  room_transfer: 'ส่วนต่างย้ายห้อง',
 }
 
 function formatPaymentType(type) {

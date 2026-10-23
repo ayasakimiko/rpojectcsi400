@@ -159,6 +159,59 @@ CREATE TABLE IF NOT EXISTS ContractImage (
     INDEX idx_contract_image_customer (customer_id)
 );
 
+CREATE TABLE IF NOT EXISTS RoomTransfer (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    tenant_request_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    from_booking_id INT NOT NULL,
+    to_booking_id INT NOT NULL,
+    from_room_number INT UNSIGNED NOT NULL,
+    to_room_number INT UNSIGNED NOT NULL,
+    from_price DECIMAL(10,2) NOT NULL,
+    to_price DECIMAL(10,2) NOT NULL,
+    chargeable_periods INT UNSIGNED NOT NULL DEFAULT 0,
+    price_difference_total DECIMAL(10,2) NOT NULL DEFAULT 0,
+    deposit_before DECIMAL(10,2) NOT NULL DEFAULT 0,
+    deposit_deducted DECIMAL(10,2) NOT NULL DEFAULT 0,
+    amount_charged DECIMAL(10,2) NOT NULL DEFAULT 0,
+    charge_payment_id INT UNSIGNED NULL,
+    new_price_from DATETIME NULL,
+    approved_by_name VARCHAR(255) NULL,
+    transferred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    contract_booking_id INT NULL,
+
+    UNIQUE KEY uq_room_transfer_request (tenant_request_id),
+    CONSTRAINT fk_room_transfer_customer FOREIGN KEY (customer_id) REFERENCES Customer(id),
+    CONSTRAINT fk_room_transfer_from_booking FOREIGN KEY (from_booking_id) REFERENCES Booking(id),
+    CONSTRAINT fk_room_transfer_to_booking FOREIGN KEY (to_booking_id) REFERENCES Booking(id),
+    INDEX idx_room_transfer_customer (customer_id, id)
+);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'RoomTransfer' AND COLUMN_NAME = 'contract_booking_id'),
+    'SELECT 1',
+    'ALTER TABLE `RoomTransfer` ADD COLUMN `contract_booking_id` INT NULL AFTER transferred_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ContractImage' AND COLUMN_NAME = 'replaced_at'),
+    'SELECT 1',
+    'ALTER TABLE `ContractImage`
+       ADD COLUMN `room_transfer_id` INT UNSIGNED NULL AFTER url,
+       ADD COLUMN `replaced_at` DATETIME NULL AFTER room_transfer_id,
+       ADD COLUMN `replaced_by_transfer_id` INT UNSIGNED NULL AFTER replaced_at,
+       ADD INDEX `idx_contract_image_replaced_by` (replaced_by_transfer_id)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND INDEX_NAME = 'idx_booking_contract_completed'),

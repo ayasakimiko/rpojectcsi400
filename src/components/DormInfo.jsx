@@ -320,6 +320,8 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
               )}
             </section>
 
+            <ContractRulesCard />
+
             <section className="dorm-menu-card">
               <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>
               <div className="dorm-menu-contacts">
@@ -487,6 +489,69 @@ export function SettingsDialog({
   )
 }
 
+const CONTRACT_RULES = [
+  {
+    title: 'การทำสัญญา',
+    items: [
+      'สัญญาเช่ามีระยะ 3, 6 หรือ 12 เดือน และต้องแนบรูปสัญญาที่เซ็นแล้วอย่างน้อย 3 รูป',
+      'งวดแรกชำระค่าเช่าเดือนแรกพร้อมเงินมัดจำ 2 เดือนของค่าเช่า สัญญาจะมีผลเมื่อชำระงวดแรกครบ',
+    ],
+  },
+  {
+    title: 'การชำระค่าเช่า',
+    items: [
+      'ชำระค่าเช่าทุกเดือนตามวันที่เริ่มสัญญา มีเวลาผ่อนผัน 3 วัน หลังจากนั้นถือว่าค้างชำระ',
+      'ค่าน้ำและค่าไฟแจ้งแยกเป็นรายการในยอดชำระเดือนนั้น',
+    ],
+  },
+  {
+    title: 'การต่อสัญญา',
+    items: ['ขอต่อสัญญาได้ครั้งละ 1, 3, 6 หรือ 12 เดือน และต้องไม่มียอดค้างชำระ'],
+  },
+  {
+    title: 'การย้ายห้อง',
+    items: [
+      'ต้องชำระยอดค้างให้ครบก่อนขอย้ายห้อง และเจ้าหน้าที่จะตรวจสภาพห้องเดิมก่อนอนุมัติ',
+      'ใช้สัญญาฉบับเดิมต่อ วันสิ้นสุดสัญญาเท่าเดิม และต้องเซ็นสัญญาใหม่อย่างน้อย 5 รูปตอนอนุมัติ',
+      'ห้องใหม่แพงกว่า: หักส่วนต่างของรอบที่จ่ายแล้วจากเงินมัดจำก่อน ส่วนที่ไม่พอจะเพิ่มในยอดชำระเดือนนั้น',
+      'ห้องใหม่ราคาเท่ากันหรือถูกกว่า: ไม่หักเงินมัดจำ และไม่คืนส่วนต่างของรอบที่จ่ายไปแล้ว',
+      'ค่าเช่าราคาใหม่เริ่มคิดตั้งแต่รอบบิลถัดไป',
+    ],
+  },
+  {
+    title: 'การย้ายออกและเงินมัดจำ',
+    items: [
+      'แจ้งย้ายออกล่วงหน้าได้ไม่เกิน 60 วัน ต้องชำระยอดค้างให้ครบและให้เจ้าหน้าที่ตรวจสภาพห้องก่อนอนุมัติ',
+      'อยู่ครบสัญญา: ได้รับเงินมัดจำคงเหลือคืน หักค่าเสียหายที่ตรวจพบ (ถ้ามี)',
+      'ย้ายออกก่อนสิ้นสุดสัญญา: ไม่ได้รับเงินมัดจำคืน',
+    ],
+  },
+]
+
+function ContractRulesCard() {
+  const total = CONTRACT_RULES.reduce((sum, group) => sum + group.items.length, 0)
+  return (
+    <section className="dorm-menu-card dorm-contract-rules">
+      <h3>
+        <Icon name="book" size={18} />
+        เงื่อนไขสัญญาเช่า
+        <span className="dorm-menu-count">{total} ข้อ</span>
+      </h3>
+      <p className="dorm-contract-rules-note">ระบบใช้เงื่อนไขเหล่านี้คำนวณยอดชำระและเงินมัดจำโดยอัตโนมัติ</p>
+      {CONTRACT_RULES.map((group) => (
+        <div key={group.title} className="dorm-contract-group">
+          <h4>{group.title}</h4>
+          <ul>
+            {group.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 function EmptyState({ icon, text }) {
   return (
     <div className="dorm-menu-empty">
@@ -622,6 +687,8 @@ export function DormInfoMenu({ apiBase, onManage, requireAck = false, onAcknowle
                       <EmptyState icon="rules" text="ยังไม่ได้ระบุกฎระเบียบหอพัก" />
                     )}
                   </section>
+
+                  <ContractRulesCard />
 
                   <section className="dorm-menu-card">
                     <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>

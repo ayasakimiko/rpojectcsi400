@@ -21,13 +21,16 @@ import announcementRouter from "./AnnouncementRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import {
   attachMaintenancePhotos,
+  CHARGE_PAYMENT_TYPES,
   computeCurrentDue,
   createSafetyIncident,
   isPlateRegisteredByOther,
   loadCustomerOutstanding,
   loadDepositPayments,
   loadMoveOutBalance,
+  loadTransferDepositDeductions,
   MOVEOUT_OUTSTANDING_MESSAGE,
+  paidDepositCents,
   RENEW_OUTSTANDING_MESSAGE,
   withThisMonthRent,
   withVehiclePhotos,
@@ -35,7 +38,20 @@ import {
 import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
-import { closeCustomerTenancy, loadCompletedContracts, loadContractByBooking } from "./rentalContracts.js";
+import {
+  applyRoomTransfer,
+  buildRoomTransferPlan,
+  closeCustomerTenancy,
+  contractImageName,
+  contractImageUrl,
+  loadCompletedContracts,
+  loadContractByBooking,
+  loadRoomTransferPreview,
+  parseOptionalContractImages,
+  removeContractFiles,
+  ROOM_TRANSFER_MIN_CONTRACT_IMAGES,
+  roomTransferApprovalMessage,
+} from "./rentalContracts.js";
 
 const router = Router();
 
@@ -119,9 +135,9 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
     if (!contract) return res.status(404).json({ message: "ไม่พบสัญญานี้" });
     if (!contract.is_archived) return res.status(409).json({ message: "สัญญานี้ยังไม่สิ้นสุด จึงยังจัดการเงินมัดจำไม่ได้" });
     if (contract.deposit_settlement) return res.status(409).json({ message: "บันทึกการคืน/ริบเงินมัดจำของสัญญานี้ไปแล้ว" });
-    if (!(contract.deposit_paid > 0)) return res.status(409).json({ message: "สัญญานี้ไม่มีเงินมัดจำที่ชำระไว้" });
+    if (!(contract.deposit_remaining > 0)) return res.status(409).json({ message: "สัญญานี้ไม่มีเงินมัดจำคงเหลือ" });
 
-    const { error, value } = parseDepositSettlementInput(req.body ?? {}, contract.deposit_paid);
+    const { error, value } = parseDepositSettlementInput(req.body ?? {}, contract.deposit_remaining);
     if (error) return res.status(400).json({ message: error });
 
     const staffName = await getActingStaffName(pool, req.user);
@@ -258,8 +274,8 @@ router.patch("/payment-verifications/:id", async (req, res) => {
       );
       await connection.query(
         `UPDATE Payment SET slip_path = NULL, note = CONCAT(COALESCE(note, ''), ' (สลิปไม่ผ่านการตรวจสอบ กรุณาส่งใหม่)')
-         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type IN ('water', 'electricity')`,
-        [payment.booking_id, payment.slip_path],
+         WHERE booking_id = ? AND slip_path = ? AND status = 'pending' AND type IN (?)`,
+        [payment.booking_id, payment.slip_path, CHARGE_PAYMENT_TYPES],
       );
       await connection.commit();
       return res.json({ message: "ปฏิเสธสลิปแล้ว ผู้เช่าสามารถส่งใหม่ได้" });
@@ -267,7 +283,7 @@ router.patch("/payment-verifications/:id", async (req, res) => {
 
     const [bookingRows] = await connection.query(
       `SELECT c.id AS customer_id, c.room_number, c.deposit_amount,
-              r.price, r.is_booked, r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months
+              r.price, r.is_booked, r.rental_start_date, r.rental_end_date, r.prepaid_until, r.billing_start_date, r.pending_lump_sum_months
        FROM Booking b JOIN Customer c ON c.id = b.customer_id JOIN Room r ON r.id = b.room_id
        WHERE b.id = ?`,
       [payment.booking_id],
@@ -627,7 +643,7 @@ router.get("/rooms", async (req, res) => {
     const [rooms] = await pool.query(
       `SELECT
          r.id, r.room_number, r.is_booked, r.price,
-         r.rental_start_date, r.rental_end_date, r.prepaid_until, r.pending_lump_sum_months,
+         r.rental_start_date, r.rental_end_date, r.prepaid_until, r.billing_start_date, r.pending_lump_sum_months,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM Room r
@@ -767,7 +783,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
     }
 
     const [roomRows] = await connection.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, pending_lump_sum_months FROM Room WHERE room_number = ? FOR UPDATE`,
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months FROM Room WHERE room_number = ? FOR UPDATE`,
       [roomNumberValue],
     );
     const room = roomRows[0];
@@ -1002,19 +1018,19 @@ router.get("/requests", async (req, res) => {
     )]);
 
     const moveoutCustomerIds = tenantRequests.filter((request) => request.type === "moveout").map((request) => request.customer_id);
-    const depositPaymentsByCustomer = moveoutCustomerIds.length ? await loadDepositPayments(pool, moveoutCustomerIds) : new Map();
+    const [depositPaymentsByCustomer, transferDeductions] = moveoutCustomerIds.length
+      ? await Promise.all([loadDepositPayments(pool, moveoutCustomerIds), loadTransferDepositDeductions(pool, moveoutCustomerIds)])
+      : [new Map(), new Map()];
     const tenantRequestsWithOutstanding = await Promise.all(
       tenantRequests.map(async (request) => {
         if (request.type === "renew") return { ...request, outstanding: await loadCustomerOutstanding(pool, request.customer_id) };
         if (request.type !== "moveout") return request;
-        const depositPaidCents = (depositPaymentsByCustomer.get(request.customer_id) ?? []).reduce((total, payment) => {
-          const cents = Math.round(Number(payment.amount) * 100);
-          return payment.status === "paid" && Number.isSafeInteger(cents) ? total + cents : total;
-        }, 0);
+        const deductedCents = transferDeductions.get(request.customer_id) ?? 0;
         return {
           ...request,
           outstanding: await loadMoveOutBalance(pool, request.customer_id),
-          deposit_paid: depositPaidCents / 100,
+          deposit_paid: Math.max(0, paidDepositCents(depositPaymentsByCustomer.get(request.customer_id)) - deductedCents) / 100,
+          deposit_transfer_deducted: deductedCents / 100,
         };
       }),
     );
@@ -1174,9 +1190,24 @@ router.post("/requests/:id/acknowledge", async (req, res) => {
   }
 });
 
-router.post("/requests/:id/approve", async (req, res) => {
+router.get("/requests/:id/transfer-preview", async (req, res) => {
+  try {
+    const requestId = Number(req.params.id);
+    if (!isPositiveId(requestId)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+    const preview = await loadRoomTransferPreview(getPool(), requestId);
+    if (!preview) return res.status(404).json({ message: "ไม่พบคำขอย้ายห้องนี้" });
+    return res.json({ preview });
+  } catch (error) {
+    console.error("Room transfer preview error:", error);
+    return res.status(500).json({ message: "ไม่สามารถคำนวณรายละเอียดการย้ายห้องได้" });
+  }
+});
+
+router.post("/requests/:id/approve", parseOptionalContractImages, async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();
+  const uploadedFiles = req.files ?? [];
+  let keepUploadedFiles = false;
   try {
     const requestId = Number(req.params.id);
     if (!isPositiveId(requestId)) {
@@ -1236,94 +1267,34 @@ router.post("/requests/:id/approve", async (req, res) => {
       );
     }
 
+    let transferPlan = null;
     if (tenantRequest.type === "move_room") {
-      if (!tenantRequest.target_room_number || tenantRequest.room_number === tenantRequest.target_room_number) {
-        await connection.rollback();
-        return res.status(409).json({ message: "ข้อมูลห้องที่ต้องการย้ายไม่ถูกต้อง" });
-      }
-
-      const [inspectionRows] = await connection.query(
-        `SELECT id FROM MoveOutInspection WHERE tenant_request_id = ? FOR UPDATE`,
-        [tenantRequest.id],
-      );
-      if (!inspectionRows[0]) {
-        await connection.rollback();
-        return res.status(409).json({ message: "กรุณาตรวจห้องก่อนอนุมัติย้ายห้อง" });
-      }
-
-      const [customerRows] = await connection.query(
-        `SELECT room_number FROM Customer WHERE id = ? FOR UPDATE`,
-        [tenantRequest.customer_id],
-      );
-      if (!customerRows[0]) {
+      transferPlan = await buildRoomTransferPlan(connection, tenantRequest.id, { lock: true });
+      if (!transferPlan?.customer) {
         await connection.rollback();
         return res.status(404).json({ message: "ไม่พบผู้เช่า" });
       }
-      if (customerRows[0].room_number !== tenantRequest.room_number) {
-        await cancelStaleTenantRequests(connection, tenantRequest.customer_id, customerRows[0].room_number);
+      if (transferPlan.stale) {
+        await cancelStaleTenantRequests(connection, tenantRequest.customer_id, transferPlan.customer.room_number);
         await connection.commit();
         return res.status(410).json({ message: "คำขอถูกนำออกจากรายการแล้ว เนื่องจากผู้เช่าเปลี่ยนห้อง" });
       }
-
-      const [rooms] = await connection.query(
-        `SELECT id, room_number, is_booked, rental_duration_months, rental_start_date, rental_end_date,
-                (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active,
-                prepaid_until, pending_lump_sum_months
-         FROM Room WHERE room_number IN (?, ?) ORDER BY room_number FOR UPDATE`,
-        [tenantRequest.room_number, tenantRequest.target_room_number],
-      );
-      const sourceRoom = rooms.find((room) => room.room_number === tenantRequest.room_number);
-      const targetRoom = rooms.find((room) => room.room_number === tenantRequest.target_room_number);
-      if (!sourceRoom || !sourceRoom.is_booked || !targetRoom || targetRoom.is_booked) {
+      if (transferPlan.blockers.length > 0) {
         await connection.rollback();
-        return res.status(409).json({ message: "ห้องต้นทางหรือห้องปลายทางเปลี่ยนแปลงแล้ว กรุณาตรวจสอบสถานะห้อง" });
+        return res.status(409).json({ message: transferPlan.blockers[0], blockers: transferPlan.blockers });
       }
-      if (!sourceRoom.contract_active) {
+      if (uploadedFiles.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
         await connection.rollback();
-        return res.status(409).json({ message: "สัญญาเช่าหมดอายุแล้ว ไม่สามารถย้ายห้องได้" });
+        return res.status(400).json({
+          code: "CONTRACT_IMAGES_REQUIRED",
+          message: `กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูปก่อนอนุมัติย้ายห้อง`,
+        });
       }
-
-      const [bookingRows] = await connection.query(
-        `SELECT id, room_id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
-        [tenantRequest.customer_id],
-      );
-      const activeBooking = bookingRows[0];
-      if (!activeBooking || activeBooking.room_id !== sourceRoom.id) {
-        await connection.rollback();
-        return res.status(409).json({ message: "ไม่พบสัญญาเช่าปัจจุบันของผู้เช่า" });
-      }
-
-      await connection.query(
-        `UPDATE Booking SET rental_start_date = ?, rental_end_date = ? WHERE id = ?`,
-        [sourceRoom.rental_start_date, sourceRoom.rental_end_date, activeBooking.id],
-      );
-      await connection.query(
-        `UPDATE Room
-         SET is_booked = FALSE, rental_duration_months = NULL, rental_start_date = NULL, rental_end_date = NULL,
-             prepaid_until = NULL, pending_lump_sum_months = NULL
-         WHERE room_number = ?`,
-        [tenantRequest.room_number],
-      );
-      await connection.query(
-        `UPDATE Room
-         SET is_booked = TRUE, rental_duration_months = TIMESTAMPDIFF(MONTH, NOW(), ?), rental_start_date = NOW(),
-             rental_end_date = ?, prepaid_until = ?, pending_lump_sum_months = ?
-         WHERE room_number = ?`,
-        [
-          sourceRoom.rental_end_date,
-          sourceRoom.rental_end_date,
-          sourceRoom.prepaid_until,
-          sourceRoom.pending_lump_sum_months,
-          tenantRequest.target_room_number,
-        ],
-      );
-      await connection.query(
-        `UPDATE Customer SET room_number = ? WHERE id = ?`,
-        [tenantRequest.target_room_number, tenantRequest.customer_id],
-      );
-      await connection.query(
-        `INSERT INTO Booking (customer_id, room_id, rental_start_date, rental_end_date) VALUES (?, ?, NOW(), ?)`,
-        [tenantRequest.customer_id, targetRoom.id, sourceRoom.rental_end_date],
+      await applyRoomTransfer(
+        connection,
+        transferPlan,
+        staffName,
+        uploadedFiles.map((file, index) => ({ name: contractImageName(file, index), url: contractImageUrl(file) })),
       );
     }
 
@@ -1374,6 +1345,7 @@ router.post("/requests/:id/approve", async (req, res) => {
            rental_end_date = NULL,
            rental_duration_months = NULL,
            prepaid_until = NULL,
+           billing_start_date = NULL,
            pending_lump_sum_months = NULL
          WHERE room_number = ?`,
         [tenantRequest.room_number],
@@ -1429,13 +1401,16 @@ router.post("/requests/:id/approve", async (req, res) => {
     }
 
     await connection.commit();
-    return res.json({ message: "อนุมัติคำขอสำเร็จ" });
+    keepUploadedFiles = Boolean(transferPlan);
+    return res.json({ message: transferPlan ? roomTransferApprovalMessage(transferPlan) : "อนุมัติคำขอสำเร็จ" });
   } catch (error) {
     await connection.rollback();
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการไปแล้ว" });
     console.error("Approve tenant request error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   } finally {
     connection.release();
+    if (!keepUploadedFiles && uploadedFiles.length > 0) await removeContractFiles(uploadedFiles);
   }
 });
 

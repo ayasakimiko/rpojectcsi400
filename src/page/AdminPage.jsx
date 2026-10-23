@@ -1211,7 +1211,7 @@ const MAINTENANCE_CATEGORY_LABEL = {
   other: 'อื่นๆ',
 }
 const PAYMENT_STATUS_LABEL = { paid: 'ชำระแล้ว', pending: 'รอชำระ', overdue: 'ค้างชำระ' }
-const PAYMENT_TYPE_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟฟ้า' }
+const PAYMENT_TYPE_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟฟ้า', room_transfer: 'ส่วนต่างย้ายห้อง' }
 const PAYMENT_BADGE_CLASS = { paid: 'approved', pending: 'pending', overdue: 'rejected' }
 
 const MAINTENANCE_CATEGORY_ICON = {
