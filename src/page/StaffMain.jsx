@@ -2887,8 +2887,20 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
       onClose={onClose}
       variant="transfer-detail"
     >
-      {() => (
-        <div className={`staff-transfer-body${request.type === 'move_room' ? ' is-move-detail' : ''}`}>
+      {() => isMove ? (
+        <MoveRoomDetailBody
+          request={request}
+          isOpen={isOpen}
+          rentDiff={rentDiff}
+          transferPreview={transferPreview}
+          contractEnd={contractEnd}
+          contractMsLeft={contractMsLeft}
+          progressSteps={progressSteps}
+          finished={finished}
+          actions={actions}
+        />
+      ) : (
+        <div className="staff-transfer-body">
           <div className="staff-transfer-top">
             <div className="staff-req-detail-head">
               <span className={`staff-badge type-${request.type}`}>
@@ -2905,36 +2917,7 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                 </span>
               </span>
             </div>
-            {isMove ? (
-              <div className="staff-transfer-route">
-                <div className="staff-transfer-room is-source">
-                  <span className="staff-transfer-room-icon"><WaitingDetailIcon type="home" size={22} /></span>
-                  <span className="staff-transfer-room-label">ห้องเดิม</span>
-                  <strong className="staff-transfer-room-number">{request.room_number}</strong>
-                  {request.source_room_price != null && (
-                    <span className="staff-transfer-room-price">
-                      ฿{formatCurrency(request.source_room_price)}
-                      <small>/เดือน</small>
-                    </span>
-                  )}
-                </div>
-                <div className="staff-transfer-arrow" aria-hidden="true">
-                  <RouteArrowIcon />
-                </div>
-                <div className="staff-transfer-room is-target">
-                  <span className="staff-transfer-room-icon"><WaitingDetailIcon type="home" size={22} /></span>
-                  <span className="staff-transfer-room-label">ห้องใหม่</span>
-                  <strong className="staff-transfer-room-number">{request.target_room_number || '-'}</strong>
-                  {request.target_room_price != null && (
-                    <span className="staff-transfer-room-price">
-                      ฿{formatCurrency(request.target_room_price)}
-                      <small>/เดือน</small>
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="staff-req-detail-room is-summary">
+            <div className="staff-req-detail-room is-summary">
                 <span className="staff-req-detail-room-icon"><DoorIcon size={22} /></span>
                 <div className="staff-req-detail-room-identity">
                   <small>{request.type === 'moveout' ? 'ห้องที่แจ้งย้ายออก' : 'ห้องพัก'}</small>
@@ -2951,13 +2934,6 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                   )}
                 </div>
               </div>
-            )}
-            {isMove && request.note && (
-              <div className="staff-transfer-group-note">
-                <span>หมายเหตุจากผู้เช่า</span>
-                <p>{request.note}</p>
-              </div>
-            )}
             {request.type === 'moveout' && request.note && (
               <p className="staff-transfer-note">
                 <span>เหตุผลการย้ายออก:</span> {request.note}
@@ -2966,23 +2942,6 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
           </div>
 
           <div className="staff-transfer-scroll">
-            {rentDiff !== null && (
-              <div className="staff-transfer-summary">
-                <span
-                  className={`staff-transfer-chip ${rentDiff > 0 ? 'is-warning' : rentDiff < 0 ? 'is-success' : 'is-muted'}`}
-                >
-                  {rentDiff === 0
-                    ? 'ค่าเช่าเท่าเดิม'
-                    : `ค่าเช่า ${rentDiff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(rentDiff))}/เดือน`}
-                </span>
-                {isOpen && request.target_room_is_booked != null && (
-                  <span className={`staff-transfer-chip ${request.target_room_is_booked ? 'is-danger' : 'is-success'}`}>
-                    {request.target_room_is_booked ? 'ห้องใหม่ไม่ว่างแล้ว' : 'ห้องใหม่ยังว่าง'}
-                  </span>
-                )}
-              </div>
-            )}
-
             {request.type === 'renew' ? (
               <section className="staff-transfer-section">
                 <h4 className="staff-transfer-section-title">ผู้เช่าและคำขอ</h4>
@@ -2993,43 +2952,14 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                   </p>
                 )}
               </section>
-            ) : request.type === 'moveout' ? (
+            ) : (
               <section className="staff-transfer-section">
                 <h4 className="staff-transfer-section-title">สัญญาและผลกระทบการย้ายออก</h4>
                 <MoveOutRequestOverview request={request} contractEnd={contractEnd} contractMsLeft={contractMsLeft} isOpen={isOpen} />
               </section>
-            ) : (
-              <>
-                {isOpen && (
-                  <MoveRoomReadiness
-                    request={request}
-                    preview={transferPreview.preview}
-                    loading={transferPreview.loading}
-                    error={transferPreview.error}
-                  />
-                )}
-                <MoveRoomRequestOverview
-                  request={request}
-                  preview={transferPreview.preview}
-                  isOpen={isOpen}
-                  contractEnd={contractEnd}
-                  contractMsLeft={contractMsLeft}
-                />
-                {isOpen && (
-                  <MoveRoomContractSection request={request} preview={transferPreview.preview} loading={transferPreview.loading} />
-                )}
-                <MoveRoomCompare request={request} preview={transferPreview.preview} />
-                {isOpen && (
-                  <TransferSettlementSection
-                    preview={transferPreview.preview}
-                    loading={transferPreview.loading}
-                    loadError={transferPreview.error}
-                  />
-                )}
-              </>
             )}
 
-            {['move_room', 'moveout'].includes(request.type)
+            {request.type === 'moveout'
               && (request.inspection_id || ['pending', 'in_progress'].includes(request.status)) && (
               <InspectionSummary
                 inspectionId={request.inspection_id}
@@ -3113,23 +3043,7 @@ const TRANSFER_CHARGE_STATUS_TEXT = {
   paid: 'ชำระแล้ว พร้อมทำสัญญา',
 }
 
-function MoveRoomReadiness({ request, preview, loading, error }) {
-  if (loading) {
-    return (
-      <section className="staff-transfer-section">
-        <h4 className="staff-transfer-section-title">ความพร้อมก่อนอนุมัติ</h4>
-        <p className="staff-transfer-muted">กำลังตรวจสอบเงื่อนไขการย้ายห้อง...</p>
-      </section>
-    )
-  }
-  if (error || !preview) {
-    return (
-      <section className="staff-transfer-section is-danger">
-        <h4 className="staff-transfer-section-title">ความพร้อมก่อนอนุมัติ</h4>
-        <p className="staff-form-error">{error || 'ไม่สามารถตรวจสอบเงื่อนไขการย้ายห้องได้'}</p>
-      </section>
-    )
-  }
+function buildMoveRoomChecks(request, preview) {
   const outstandingItems = preview.outstanding?.items ?? []
   const targetNumber = preview.target_room?.room_number ?? request.target_room_number
   const targetFree = preview.target_room ? !preview.target_room.is_booked : false
@@ -3181,18 +3095,139 @@ function MoveRoomReadiness({ request, preview, loading, error }) {
   const knownMessages = ['ตรวจห้อง', 'ยอดค้าง', 'สลิป', 'มีผู้เช่าแล้ว', 'หมดอายุ', 'ห้องปลายทาง']
   const otherBlockers = preview.blockers.filter((message) => !knownMessages.some((word) => message.includes(word)))
   const remaining = checks.filter((check) => !check.ok).length + otherBlockers.length
+  return { checks, otherBlockers, remaining }
+}
+
+function TrdCard({ icon, title, hint, badge, tone, className = '', children }) {
   return (
-    <section className={`staff-transfer-section${preview.can_approve ? '' : ' is-warning'}`}>
-      <h4 className="staff-transfer-section-title">
-        ความพร้อมก่อนอนุมัติ
-        <span className={`staff-transfer-chip ${preview.can_approve ? 'is-success' : 'is-warning'}`}>
-          {preview.can_approve ? 'พร้อมอนุมัติ' : `ยังขาดอีก ${remaining} ข้อ`}
-        </span>
-      </h4>
-      <ul className="staff-transfer-checks">
+    <section className={`trd-card${tone ? ` is-${tone}` : ''}${className ? ` ${className}` : ''}`}>
+      <header className="trd-card-head">
+        <span className="trd-card-icon" aria-hidden="true"><WaitingDetailIcon type={icon} size={16} /></span>
+        <div className="trd-card-title">
+          <h4>{title}</h4>
+          {hint && <small>{hint}</small>}
+        </div>
+        {badge}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function TrdState({ tone = 'muted', children }) {
+  return (
+    <p className={`trd-state is-${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
+      {tone === 'loading' && <span className="trd-spinner" aria-hidden="true" />}
+      {children}
+    </p>
+  )
+}
+
+function TrdSourceTag({ estimate }) {
+  return (
+    <span className={`trd-source${estimate ? ' is-estimate' : ''}`}>
+      {estimate ? 'ประมาณการจากระบบ · ยืนยันตอนอนุมัติ' : 'ข้อมูลที่บันทึกแล้ว'}
+    </span>
+  )
+}
+
+function MoveRoomDetailHero({ request, rentDiff, preview, isOpen }) {
+  const targetBooked = preview?.target_room ? Boolean(preview.target_room.is_booked) : request.target_room_is_booked == null ? null : Boolean(request.target_room_is_booked)
+  const tenantName = [request.first_name, request.last_name].filter(Boolean).join(' ') || '-'
+  return (
+    <header className="trd-hero">
+      <div className="trd-hero-head">
+        <div className="trd-person">
+          <span className="trd-avatar" aria-hidden="true"><WaitingDetailIcon type="user" size={20} /></span>
+          <div>
+            <small>ผู้เช่าที่ขอย้ายห้อง</small>
+            <strong>{tenantName}</strong>
+            {request.phone ? (
+              <a href={`tel:${request.phone}`} className="trd-phone">
+                <WaitingDetailIcon type="phone" size={13} />
+                {request.phone}
+              </a>
+            ) : (
+              <span className="trd-phone is-empty">ไม่มีเบอร์โทร</span>
+            )}
+          </div>
+        </div>
+        <div className="trd-hero-meta">
+          <span className={`staff-badge status-${request.status}`}>
+            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+          </span>
+          <span className="trd-submitted">
+            <WaitingDetailIcon type="clock" size={13} />
+            ส่งคำขอ {formatDateTime(request.created_at)} น.
+          </span>
+        </div>
+      </div>
+      <div className="trd-route">
+        <div className="trd-room is-source">
+          <small>ห้องเดิม</small>
+          <strong>{request.room_number || '-'}</strong>
+          <span>{request.source_room_price != null ? <>฿{formatCurrency(request.source_room_price)}<em>/เดือน</em></> : 'ไม่มีข้อมูลราคา'}</span>
+        </div>
+        <div className="trd-route-mid" aria-hidden={rentDiff === null}>
+          <span className="trd-route-arrow"><RouteArrowIcon /></span>
+          {rentDiff !== null && (
+            <span className={`trd-diff ${rentDiff > 0 ? 'is-up' : rentDiff < 0 ? 'is-down' : 'is-same'}`}>
+              {rentDiff === 0 ? 'ค่าเช่าเท่าเดิม' : `${rentDiff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(rentDiff))}/เดือน`}
+            </span>
+          )}
+        </div>
+        <div className={`trd-room is-target${isOpen && targetBooked ? ' is-blocked' : ''}`}>
+          <small>ห้องใหม่</small>
+          <strong>{request.target_room_number || '-'}</strong>
+          <span>{request.target_room_price != null ? <>฿{formatCurrency(request.target_room_price)}<em>/เดือน</em></> : 'ไม่มีข้อมูลราคา'}</span>
+          {isOpen && targetBooked !== null && (
+            <b className={`trd-availability ${targetBooked ? 'is-danger' : 'is-success'}`}>
+              {targetBooked ? 'ไม่ว่างแล้ว' : 'ยังว่าง'}
+            </b>
+          )}
+        </div>
+      </div>
+    </header>
+  )
+}
+
+function MoveRoomDecision({ request, preview, loading, error }) {
+  if (loading) return <TrdState tone="loading">กำลังตรวจสอบความพร้อมและคำนวณยอด... ตัวเลขด้านล่างจะแสดงเมื่อคำนวณเสร็จ</TrdState>
+  if (error || !preview) return <TrdState tone="danger">{error || 'ไม่สามารถตรวจสอบเงื่อนไขการย้ายห้องได้'}</TrdState>
+  const { checks, otherBlockers, remaining } = buildMoveRoomChecks(request, preview)
+  const alerts = [
+    preview.target_room?.is_booked && { tone: 'danger', icon: 'home', text: `ห้อง ${preview.target_room.room_number} มีผู้เช่าแล้ว` },
+    !request.inspection_id && { tone: 'warning', icon: 'tool', text: `ยังไม่ได้ตรวจห้อง ${request.room_number}` },
+    (preview.outstanding?.items ?? []).length > 0 && { tone: 'danger', icon: 'wallet', text: 'ห้องเดิมมียอดค้างชำระ' },
+    preview.transfer_charge?.required && preview.transfer_charge.status !== 'paid' && {
+      tone: 'danger',
+      icon: 'wallet',
+      text: `ผู้เช่าต้องชำระส่วนต่าง ฿${formatCurrency(preview.transfer_charge.amount)}`,
+    },
+  ].filter(Boolean)
+  return (
+    <section className={`trd-decision ${preview.can_approve ? 'is-ready' : 'is-blocked'}`} aria-live="polite">
+      <div className="trd-decision-head">
+        <span className="trd-decision-icon" aria-hidden="true">{preview.can_approve ? '✓' : '!'}</span>
+        <div>
+          <strong>{preview.can_approve ? 'พร้อมอนุมัติย้ายห้อง' : `ยังอนุมัติไม่ได้ · ขาดอีก ${remaining} ข้อ`}</strong>
+          <small>{preview.can_approve ? 'ผ่านเงื่อนไขครบทุกข้อ กดอนุมัติได้ที่ปุ่มด้านล่าง' : 'ดูรายการที่ต้องจัดการในเช็กลิสต์ด้านล่าง'}</small>
+        </div>
+      </div>
+      {alerts.length > 0 && (
+        <ul className="trd-alerts">
+          {alerts.map((alert) => (
+            <li key={alert.text} className={`is-${alert.tone}`}>
+              <WaitingDetailIcon type={alert.icon} size={14} />
+              {alert.text}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ul className="trd-checks">
         {checks.map((check) => (
           <li key={check.key} className={check.ok ? 'is-ok' : 'is-todo'}>
-            <span className="staff-transfer-check-icon" aria-hidden="true">{check.ok ? '✓' : '!'}</span>
+            <span className="trd-check-icon" aria-hidden="true">{check.ok ? '✓' : '!'}</span>
             <span>
               <strong>{check.label}</strong>
               <small>{check.detail}</small>
@@ -3202,10 +3237,8 @@ function MoveRoomReadiness({ request, preview, loading, error }) {
         ))}
         {otherBlockers.map((message) => (
           <li key={message} className="is-todo">
-            <span className="staff-transfer-check-icon" aria-hidden="true">!</span>
-            <span>
-              <strong>{message}</strong>
-            </span>
+            <span className="trd-check-icon" aria-hidden="true">!</span>
+            <span><strong>{message}</strong></span>
           </li>
         ))}
       </ul>
@@ -3244,229 +3277,264 @@ function MoveRoomCompare({ request, preview }) {
   const lost = amenityState.filter((item) => item.from && !item.to)
   const kept = amenityState.filter((item) => item.to && (item.from || item.from === null))
   return (
-    <section className="staff-transfer-section">
-      <h4 className="staff-transfer-section-title">เปรียบเทียบห้องเดิมกับห้องใหม่</h4>
-      <table className="staff-transfer-compare">
-        <thead>
-          <tr>
-            <th scope="col">รายการ</th>
-            <th scope="col">ห้องเดิม {request.room_number}</th>
-            <th scope="col">ห้องใหม่ {request.target_room_number}</th>
-            <th scope="col">เปลี่ยนแปลง</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const delta = change(row)
-            return (
-              <tr key={row.label}>
-                <th scope="row">
-                  {row.label}
-                  {row.money && <small>{row.unit}</small>}
-                </th>
-                <td>{show(row, row.from)}</td>
-                <td className="is-target">{show(row, row.to)}</td>
-                <td>
-                  <span className={`staff-transfer-chip ${delta.tone}`}>{delta.label}</span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <div className="staff-transfer-amenities">
-        <span className="staff-transfer-amenities-label">สิ่งอำนวยความสะดวกห้องใหม่</span>
-        <div className="staff-transfer-tags">
-          {kept.map((item) => (
-            <span key={item.key} className="staff-transfer-tag">{item.label}</span>
-          ))}
-          {gained.map((item) => (
-            <span key={item.key} className="staff-transfer-chip is-success">+ {item.label}</span>
-          ))}
-          {lost.map((item) => (
-            <span key={item.key} className="staff-transfer-chip is-danger">ไม่มี{item.label}</span>
-          ))}
-          {kept.length + gained.length + lost.length === 0 && <span className="staff-transfer-muted">ไม่มีข้อมูล</span>}
+    <TrdCard icon="home" title="เปรียบเทียบห้องเดิมกับห้องใหม่" hint={source ? undefined : 'ข้อมูลห้องเดิมบางส่วนแสดงได้เฉพาะคำขอที่ยังเปิดอยู่'}>
+      <div className="trd-compare" role="table" aria-label="เปรียบเทียบห้อง">
+        <div className="trd-compare-row is-head" role="row">
+          <span role="columnheader">รายการ</span>
+          <span role="columnheader">ห้อง {request.room_number}</span>
+          <span role="columnheader">ห้อง {request.target_room_number}</span>
+          <span role="columnheader">เปลี่ยนแปลง</span>
         </div>
-        {source && gained.length === 0 && lost.length === 0 && (
-          <small className="staff-transfer-muted">เหมือนห้องเดิมทุกอย่าง</small>
-        )}
+        {rows.map((row) => {
+          const delta = change(row)
+          return (
+            <div className="trd-compare-row" role="row" key={row.label}>
+              <span role="rowheader">{row.label}{row.money && <small>{row.unit}</small>}</span>
+              <span role="cell">{show(row, row.from)}</span>
+              <span role="cell" className="is-target">{show(row, row.to)}</span>
+              <span role="cell"><b className={`trd-delta ${delta.tone}`}>{delta.label}</b></span>
+            </div>
+          )
+        })}
       </div>
-    </section>
+      <div className="trd-amenities">
+        <small>สิ่งอำนวยความสะดวกห้องใหม่</small>
+        <div>
+          {kept.map((item) => <span key={item.key} className="trd-tag">{item.label}</span>)}
+          {gained.map((item) => <span key={item.key} className="trd-tag is-gain">+ {item.label}</span>)}
+          {lost.map((item) => <span key={item.key} className="trd-tag is-loss">ไม่มี{item.label}</span>)}
+          {kept.length + gained.length + lost.length === 0 && <span className="trd-muted">ไม่มีข้อมูล</span>}
+        </div>
+        {source && gained.length === 0 && lost.length === 0 && <small className="trd-muted">เหมือนห้องเดิมทุกอย่าง</small>}
+      </div>
+    </TrdCard>
   )
 }
 
-function MoveRoomContractSection({ request, preview, loading }) {
-  const contract = preview?.contract
+function MoveRoomSettlement({ preview, loading, error }) {
   if (loading) {
     return (
-      <section className="staff-transfer-section">
-        <h4 className="staff-transfer-section-title">สัญญาเช่า</h4>
-        <p className="staff-transfer-muted">กำลังโหลดสัญญาเช่า...</p>
-      </section>
+      <TrdCard icon="wallet" title="เงินมัดจำและยอดที่ต้องชำระ" badge={<TrdSourceTag estimate />}>
+        <TrdState tone="loading">กำลังคำนวณส่วนต่างค่าเช่าและเงินมัดจำ...</TrdState>
+      </TrdCard>
     )
   }
-  if (!contract) {
+  if (error || !preview) {
     return (
-      <section className="staff-transfer-section">
-        <h4 className="staff-transfer-section-title">สัญญาเช่า</h4>
-        <p className="staff-transfer-muted">ไม่พบสัญญาเช่าที่ทำสำเร็จของผู้เช่าคนนี้</p>
-      </section>
+      <TrdCard icon="wallet" title="เงินมัดจำและยอดที่ต้องชำระ" tone="danger">
+        <TrdState tone="danger">{error || 'ไม่สามารถคำนวณรายละเอียดการย้ายห้องได้'}</TrdState>
+      </TrdCard>
     )
   }
-  const images = contract.images || []
-  const targetPrice = preview.target_room?.price
-  const months = contract.contract_duration_months
-  const facts = [
-    { label: 'เลขที่สัญญา', value: `#${contract.booking_id}` },
-    { label: 'ห้องตามสัญญา', value: `ห้อง ${contract.room_number || '-'}` },
-    { label: 'ค่าเช่าตามสัญญา', value: `฿${formatCurrency(contract.monthly_price)}/เดือน` },
-    { label: 'ระยะสัญญา', value: months ? `${months} เดือน` : '-' },
-    { label: 'เริ่มสัญญา', value: formatDate(contract.rental_start_date) },
-    { label: 'สิ้นสุดสัญญา', value: formatDate(contract.effective_end_date || contract.rental_end_date) },
-    { label: 'ทำสัญญาเมื่อ', value: formatDate(contract.contract_completed_at || contract.created_at) },
-    { label: 'ค่าเช่าชำระแล้ว', value: `฿${formatCurrency(contract.rent_paid)}`, tone: 'is-success' },
-    { label: 'ค่าเช่าคงเหลือตามสัญญา', value: `฿${formatCurrency(contract.contract_remaining)}` },
-  ]
+  const { settlement, deposit, coverage } = preview
+  const diff = Number(settlement.price_difference) || 0
+  const periods = Number(settlement.chargeable_periods) || 0
+  const deducted = Number(settlement.deposit_deducted) || 0
+  const charge = Number(settlement.additional_charge) || 0
+  const chargeSent = Boolean(preview.transfer_charge?.required && preview.transfer_charge.status !== 'not_sent')
   return (
-    <section className="staff-transfer-section staff-transfer-contract">
-      <h4 className="staff-transfer-section-title">
-        สัญญาเช่า
-        <ContractStatusBadge status={contract.status} />
-      </h4>
-      <dl className="staff-transfer-contract-facts">
-        {facts.map((fact) => (
-          <div key={fact.label}>
-            <dt>{fact.label}</dt>
-            <dd className={fact.tone}>{fact.value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="staff-transfer-contract-change">
-        <strong>หลังอนุมัติ</strong>
-        <span>
-          สัญญาฉบับนี้จะเปลี่ยนเป็น <b>ห้อง {request.target_room_number}</b>
-          {targetPrice != null && <> ค่าเช่า <b>฿{formatCurrency(targetPrice)}/เดือน</b></>} วันสิ้นสุดสัญญาเท่าเดิม
-          {' '}รูปสัญญาที่เซ็นไว้ไม่ถูกแก้ไข ระบบบันทึกการย้ายแนบท้ายสัญญาให้
-        </span>
-      </p>
-      <div className="staff-transfer-contract-images">
-        <p className="staff-transfer-subtitle">
-          รูปสัญญาที่เซ็นแล้ว <small>{images.length} รูป · คลิกรูปเพื่อดูขนาดเต็ม</small>
-        </p>
-        <ContractGallery images={images} subtitle={`ห้อง ${contract.room_number || '-'} · ${request.first_name || ''} ${request.last_name || ''}`} />
+    <TrdCard
+      icon="wallet"
+      title="เงินมัดจำและยอดที่ต้องชำระ"
+      tone={charge > 0 ? 'danger' : undefined}
+      badge={<TrdSourceTag estimate={!chargeSent} />}
+    >
+      <div className={`trd-due ${charge > 0 ? 'is-danger' : 'is-success'}`}>
+        <small>ผู้เช่าต้องชำระเพิ่มก่อนย้าย</small>
+        <strong>{charge > 0 ? `฿${formatCurrency(charge)}` : 'ไม่ต้องชำระเพิ่ม'}</strong>
+        {charge > 0 && preview.transfer_charge?.status && (
+          <span>{TRANSFER_CHARGE_STATUS_TEXT[preview.transfer_charge.status]}</span>
+        )}
       </div>
-      <ContractTransferHistory contract={contract} />
-    </section>
+      <div className="trd-flow">
+        <div>
+          <small>ส่วนต่าง/เดือน</small>
+          <b className={diff > 0 ? 'is-warning' : diff < 0 ? 'is-success' : ''}>{diff === 0 ? 'ไม่มี' : `${diff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(diff))}`}</b>
+          {diff > 0 && <em>{periods} รอบที่ชำระแล้ว{coverage?.paid_through ? ` (ถึง ${formatDate(coverage.paid_through)})` : ''}</em>}
+        </div>
+        <div>
+          <small>ส่วนต่างรวม</small>
+          <b className={Number(settlement.total_difference) > 0 ? 'is-warning' : ''}>฿{formatCurrency(settlement.total_difference)}</b>
+        </div>
+        <div>
+          <small>หักจากมัดจำ</small>
+          <b className={deducted > 0 ? 'is-warning' : ''}>{deducted > 0 ? `− ฿${formatCurrency(deducted)}` : 'ไม่หัก'}</b>
+        </div>
+      </div>
+      <dl className="trd-deposit">
+        <div>
+          <dt>มัดจำคงเหลือตอนนี้</dt>
+          <dd>
+            ฿{formatCurrency(deposit.remaining)}
+            {Number(deposit.deducted_before) > 0 && <small>เคยหักย้ายห้องแล้ว ฿{formatCurrency(deposit.deducted_before)}</small>}
+          </dd>
+        </div>
+        <div>
+          <dt>มัดจำหลังย้าย</dt>
+          <dd>฿{formatCurrency(settlement.deposit_remaining_after)}</dd>
+        </div>
+        {deposit.amount > 0 && (
+          <div>
+            <dt>ชำระมัดจำแล้ว</dt>
+            <dd className={deposit.paid >= deposit.amount ? 'is-success' : 'is-warning'}>
+              ฿{formatCurrency(deposit.paid)}{deposit.paid < deposit.amount ? ` จาก ฿${formatCurrency(deposit.amount)}` : ''}
+            </dd>
+          </div>
+        )}
+      </dl>
+      {diff > 0 && periods === 0 && (
+        <p className="trd-muted">ผู้เช่ายังไม่ได้ชำระค่าเช่ารอบใด จึงไม่มีส่วนต่างย้อนหลัง รอบแรกจะเรียกเก็บในราคาห้องใหม่</p>
+      )}
+      {diff <= 0 && (
+        <p className="trd-muted">{diff === 0 ? 'ค่าเช่าเท่าเดิม ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ' : 'ห้องใหม่ถูกกว่า ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ'}</p>
+      )}
+    </TrdCard>
   )
 }
 
-function MoveRoomRequestOverview({ request, preview, isOpen, contractEnd, contractMsLeft }) {
-  const deposit = preview?.deposit
-  const endDate = preview?.contract?.effective_end_date || contractEnd
-  const depositAmount = deposit ? deposit.amount : Number(request.deposit_amount) || 0
+function MoveRoomContractCard({ request, preview, loading, contractEnd, contractMsLeft }) {
+  const contract = preview?.contract
+  const targetPrice = preview?.target_room?.price ?? request.target_room_price
+  const endDate = contract?.effective_end_date || contractEnd
+  const changes = [
+    `สัญญาเปลี่ยนเป็นห้อง ${request.target_room_number}${targetPrice != null ? ` ค่าเช่า ฿${formatCurrency(targetPrice)}/เดือน` : ''}`,
+    'วันสิ้นสุดสัญญาเท่าเดิม',
+    preview?.new_price_from ? `เริ่มคิดราคาใหม่ตั้งแต่รอบ ${formatDate(preview.new_price_from)}` : 'เริ่มคิดราคาใหม่ตั้งแต่รอบถัดไป',
+    'รูปสัญญาที่เซ็นไว้ไม่ถูกแก้ไข ระบบบันทึกการย้ายแนบท้ายสัญญาให้',
+  ]
   return (
-    <section className="staff-transfer-section">
-      <h4 className="staff-transfer-section-title">ผู้เช่าและคำขอ</h4>
-      <div className="staff-transfer-route-banner">
-        <div className="staff-transfer-route-banner-rooms">
-          <div className="staff-transfer-route-banner-room">
-            <span className="staff-transfer-route-banner-icon"><WaitingDetailIcon type="home" size={20} /></span>
-            <span>
-              <small>ห้องเดิม</small>
-              <b>{request.room_number}</b>
-            </span>
+    <TrdCard
+      icon="calendar"
+      title="สัญญาปัจจุบันและผลหลังอนุมัติ"
+      className="trd-contract"
+      badge={contract && <ContractStatusBadge status={contract.status} />}
+    >
+      {loading ? (
+        <TrdState tone="loading">กำลังโหลดสัญญาเช่า...</TrdState>
+      ) : !contract ? (
+        <TrdState>ไม่พบสัญญาเช่าที่ทำสำเร็จของผู้เช่าคนนี้</TrdState>
+      ) : (
+        <dl className="trd-facts">
+          <div><dt>เลขที่สัญญา</dt><dd>#{contract.booking_id}</dd></div>
+          <div><dt>ห้องตามสัญญา</dt><dd>ห้อง {contract.room_number || '-'}</dd></div>
+          <div><dt>ค่าเช่าตามสัญญา</dt><dd>฿{formatCurrency(contract.monthly_price)}/เดือน</dd></div>
+          <div><dt>ระยะสัญญา</dt><dd>{contract.contract_duration_months ? `${contract.contract_duration_months} เดือน` : '-'}</dd></div>
+          <div><dt>เริ่ม → สิ้นสุด</dt><dd>{formatDate(contract.rental_start_date)} → {formatDate(contract.effective_end_date || contract.rental_end_date)}</dd></div>
+          <div>
+            <dt>เหลือเวลา</dt>
+            <dd className={contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''}>
+              {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
+            </dd>
           </div>
-          <span className="staff-transfer-route-banner-arrow" aria-label="ย้ายไป">
-            <WaitingDetailIcon type="arrow" size={20} />
-          </span>
-          <div className="staff-transfer-route-banner-room is-target">
-            <span className="staff-transfer-route-banner-icon"><WaitingDetailIcon type="home" size={20} /></span>
-            <span>
-              <small>ห้องใหม่</small>
-              <b>{request.target_room_number || '-'}</b>
-            </span>
-          </div>
-          <span className="staff-transfer-route-banner-status">
-            <WaitingDetailIcon type="clock" size={15} />
-            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
-          </span>
-        </div>
-        <div className="staff-transfer-route-banner-tenant">
-          <span><WaitingDetailIcon type="user" size={17} />ผู้เช่า <b>{request.first_name} {request.last_name}</b></span>
-          <span><WaitingDetailIcon type="phone" size={17} />โทร <b>{request.phone || '-'}</b></span>
-        </div>
+          <div><dt>ค่าเช่าชำระแล้ว</dt><dd className="is-success">฿{formatCurrency(contract.rent_paid)}</dd></div>
+          <div><dt>คงเหลือตามสัญญา</dt><dd>฿{formatCurrency(contract.contract_remaining)}</dd></div>
+          {preview?.coverage?.paid_through && <div><dt>ชำระค่าเช่าถึง</dt><dd className="is-success">{formatDate(preview.coverage.paid_through)}</dd></div>}
+          <div><dt>ทำสัญญาเมื่อ</dt><dd>{formatDate(contract.contract_completed_at || contract.created_at)}</dd></div>
+        </dl>
+      )}
+      {!contract && !loading && endDate && <p className="trd-muted">สิ้นสุดสัญญา {formatDate(endDate)}</p>}
+      <div className="trd-after">
+        <strong>หลังอนุมัติจะเกิดอะไรขึ้น</strong>
+        <ul>
+          {changes.map((text) => <li key={text}>{text}</li>)}
+        </ul>
       </div>
-      <div className="staff-transfer-groups is-readable">
-        <div className="staff-transfer-group">
-          <p className="staff-transfer-group-title">รายละเอียดคำขอ</p>
-          <dl className="staff-transfer-list is-single">
-            <div>
-              <dt>เหตุผล</dt>
-              <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
-            </div>
-            <div>
-              <dt>ต้องการย้าย</dt>
-              <dd>{formatDateOnly(request.preferred_move_date)}</dd>
-            </div>
-            <div>
-              <dt>ส่งคำขอ</dt>
-              <dd>{formatDateTime(request.created_at)}</dd>
-            </div>
-            {request.accepted_by_name && (
-              <div>
-                <dt>รับเรื่องโดย</dt>
-                <dd>{request.accepted_by_name}</dd>
-              </div>
-            )}
-          </dl>
+      {contract && (
+        <>
+          <div className="trd-gallery">
+            <small>รูปสัญญาที่เซ็นแล้ว · {(contract.images || []).length} รูป · คลิกรูปเพื่อดูขนาดเต็ม</small>
+            <ContractGallery images={contract.images || []} subtitle={`ห้อง ${contract.room_number || '-'} · ${request.first_name || ''} ${request.last_name || ''}`} />
+          </div>
+          <ContractTransferHistory contract={contract} />
+        </>
+      )}
+    </TrdCard>
+  )
+}
+
+function MoveRoomDetailBody({ request, isOpen, rentDiff, transferPreview, contractEnd, contractMsLeft, progressSteps, finished, actions }) {
+  const { preview, loading, error } = transferPreview
+  const tenantName = `${request.first_name || ''} ${request.last_name || ''}`.trim()
+  return (
+    <div className="trd">
+      <div className="trd-scroll">
+        <MoveRoomDetailHero request={request} rentDiff={rentDiff} preview={preview} isOpen={isOpen} />
+
+        <div className={`trd-note${request.note ? '' : ' is-empty'}`}>
+          <small>หมายเหตุจากผู้เช่า</small>
+          <p>{request.note || 'ผู้เช่าไม่ได้ระบุหมายเหตุ'}</p>
         </div>
-        <div className="staff-transfer-group">
-          <p className="staff-transfer-group-title">สัญญาและการเงิน</p>
-          <dl className="staff-transfer-list is-single">
-            <div>
-              <dt>สิ้นสุดสัญญา</dt>
-              <dd>{endDate ? formatDate(endDate) : '-'}</dd>
-            </div>
+
+        {isOpen && <MoveRoomDecision request={request} preview={preview} loading={loading} error={error} />}
+
+        <TrdCard icon="clock" title="ขั้นตอนการดำเนินการ">
+          <ProcessSteps
+            actorClassName="staff-actor"
+            startDate={request.created_at}
+            endDate={finished ? request.completed_at : null}
+            steps={progressSteps}
+          />
+        </TrdCard>
+
+        <dl className="trd-request-strip" aria-label="รายละเอียดคำขอ">
+          <div>
+            <dt><WaitingDetailIcon type="info" size={14} />เหตุผล</dt>
+            <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+          </div>
+          <div>
+            <dt><WaitingDetailIcon type="calendar" size={14} />ต้องการย้าย</dt>
+            <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+          </div>
+          <div>
+            <dt><WaitingDetailIcon type="clock" size={14} />ส่งคำขอ</dt>
+            <dd>{formatDateTime(request.created_at)}</dd>
+          </div>
+          <div>
+            <dt><WaitingDetailIcon type="user" size={14} />รับเรื่องโดย</dt>
+            <dd>{request.accepted_by_name || 'ยังไม่มีผู้รับเรื่อง'}</dd>
+          </div>
+        </dl>
+
+        <div className="trd-grid">
+          <div className="trd-col">
+            {isOpen && <MoveRoomSettlement preview={preview} loading={loading} error={error} />}
+            <MoveRoomCompare request={request} preview={preview} />
+          </div>
+          <div className="trd-col">
             {isOpen && (
-              <div>
-                <dt>เหลือเวลา</dt>
-                <dd className={contractMsLeft !== null && contractMsLeft <= ROOM_EXPIRY_WARNING_WINDOW_MS ? 'is-danger' : ''}>
-                  {contractMsLeft === null ? '-' : contractMsLeft < 0 ? 'หมดสัญญาแล้ว' : formatDaysLeft(contractMsLeft)}
-                </dd>
-              </div>
+              <MoveRoomContractCard
+                request={request}
+                preview={preview}
+                loading={loading}
+                contractEnd={contractEnd}
+                contractMsLeft={contractMsLeft}
+              />
             )}
-            {preview?.coverage?.paid_through && (
-              <div>
-                <dt>ชำระค่าเช่าถึง</dt>
-                <dd className="is-success">{formatDate(preview.coverage.paid_through)}</dd>
-              </div>
-            )}
-            <div>
-              <dt>เงินมัดจำ</dt>
-              <dd>{depositAmount > 0 ? `฿${formatCurrency(depositAmount)}` : 'ไม่มี'}</dd>
-            </div>
-            {deposit && depositAmount > 0 && (
-              <div>
-                <dt>ชำระมัดจำแล้ว</dt>
-                <dd className={deposit.paid >= deposit.amount ? 'is-success' : 'is-warning'}>
-                  ฿{formatCurrency(deposit.paid)}
-                  {deposit.paid < deposit.amount ? ` จาก ฿${formatCurrency(deposit.amount)}` : ''}
-                </dd>
-              </div>
-            )}
-            {deposit && Number(deposit.deducted_before) > 0 && (
-              <div>
-                <dt>มัดจำคงเหลือ</dt>
-                <dd>
-                  ฿{formatCurrency(deposit.remaining)} <small>(หักย้ายห้องครั้งก่อน ฿{formatCurrency(deposit.deducted_before)})</small>
-                </dd>
-              </div>
-            )}
-          </dl>
+          </div>
         </div>
+
+        {(request.inspection_id || isOpen) && (
+          <div className={`trd-inspection${!request.inspection_id && isOpen ? ' is-missing' : ''}`}>
+            <InspectionSummary inspectionId={request.inspection_id} roomNumber={request.room_number} tenantName={tenantName} />
+          </div>
+        )}
       </div>
-    </section>
+
+      {isOpen && actions && (
+        <footer className="trd-actions">
+          <span className="trd-actions-hint">
+            {loading
+              ? 'กำลังตรวจสอบเงื่อนไข...'
+              : preview?.can_approve
+                ? 'ผ่านเงื่อนไขครบแล้ว'
+                : !request.inspection_id
+                  ? 'ต้องตรวจห้องก่อนอนุมัติ'
+                  : 'ตรวจเช็กลิสต์ด้านบนก่อนอนุมัติ'}
+          </span>
+          <div className="staff-form-actions">{actions}</div>
+        </footer>
+      )}
+    </div>
   )
 }
 
