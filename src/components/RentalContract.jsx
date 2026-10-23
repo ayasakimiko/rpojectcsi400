@@ -1177,7 +1177,7 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
               />
             </label>
           )}
-          <label className="deposit-settle-field">
+          <label className={`deposit-settle-field${action === 'forfeit' ? ' is-forfeit-note' : ''}`}>
             <span>
               {action === 'forfeit' ? 'เหตุผลที่ริบ' : 'รายการค่าเสียหาย / หมายเหตุ'}
               {noteRequired && <em> *</em>}
