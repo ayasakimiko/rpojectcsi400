@@ -7,7 +7,6 @@ import { createResidentVisitReview, listResidentVisitRequests } from "./resident
 import {
   hasField,
   isPositiveId,
-  isValidMoney,
   MOVE_OUT_INSPECTION_STATUSES,
   normalizePersonUpdate,
   parseMoveOutInspectionInput,
@@ -1108,7 +1107,7 @@ router.get("/customers/:id", async (req, res) => {
   }
 });
 
-const CUSTOMER_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age", "deposit_amount"];
+const CUSTOMER_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age"];
 
 router.put("/customers/:id", async (req, res) => {
   try {
@@ -1122,19 +1121,17 @@ router.put("/customers/:id", async (req, res) => {
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
-    if (hasField(body, "deposit_amount") && body.deposit_amount !== null && !isValidMoney(body.deposit_amount)) {
-      return res.status(400).json({ message: "จำนวนเงินมัดจำไม่ถูกต้อง" });
+    if (hasField(body, "deposit_amount")) {
+      return res.status(400).json({ message: "เงินมัดจำกำหนดตามสัญญาเช่า ไม่สามารถแก้ไขได้" });
     }
 
     const normalizedBody = normalizePersonUpdate(body);
-    if (normalizedBody.deposit_amount != null) normalizedBody.deposit_amount = Number(normalizedBody.deposit_amount);
 
     const pool = getPool();
     const [roomRows] = await pool.query(`SELECT room_number FROM Customer WHERE id = ?`, [customerId]);
     if (!roomRows.length) {
       return res.status(404).json({ message: "ไม่พบลูกค้านี้" });
     }
-    if (roomRows[0].room_number == null) delete normalizedBody.deposit_amount;
 
     const { columns, values } = buildUpdate(CUSTOMER_EDITABLE_COLUMNS, normalizedBody);
     if (typeof body.password === "string" && body.password) {

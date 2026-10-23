@@ -4,7 +4,14 @@ import axios from 'axios'
 import './DormInfo.css'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 
-const PUBLISHED_FIELDS = ['dorm_name', 'dorm_rules', 'gate_close_time', 'caretaker_phone']
+const PUBLISHED_FIELDS = ['dorm_name', 'dorm_rules', 'contract_rules', 'gate_close_time', 'caretaker_phone']
+
+const cleanLines = (lines) => lines.map((line) => line.trim()).filter(Boolean).join('\n')
+
+const cleanContractLines = (lines) => {
+  const kept = lines.map((line) => line.trim()).filter((line) => line && line.replace(/^#+\s*/, ''))
+  return kept.some((line) => !line.startsWith('#')) ? kept.join('\n') : ''
+}
 
 function hasDormInfoChanges(current, saved) {
   if (!saved) return true
@@ -89,10 +96,71 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
     setRuleLines(next, target)
   }
 
+  const contractLines = form?.contract_rules ? form.contract_rules.split(/\r?\n/) : ['# ', '']
+  const contractItemCount = contractLines.filter((line) => line.trim() && !isHeadingLine(line)).length
+  const contractCaptions = contractLines.reduce(
+    (state, line) => {
+      if (isHeadingLine(line)) return { number: 0, list: [...state.list, 'หัวข้อ'] }
+      return { number: state.number + 1, list: [...state.list, `เงื่อนไขข้อ ${state.number + 1}`] }
+    },
+    { number: 0, list: [] },
+  ).list
+  const pendingContractFocusRef = useRef(null)
+  const [activeContractIndex, setActiveContractIndex] = useState(null)
+  const setContractLines = (lines, focusIndex = null) => {
+    pendingContractFocusRef.current = focusIndex
+    setDraft({ ...form, contract_rules: lines.join('\n') })
+    setNotice(null)
+  }
+  const updateContractLine = (index, value) =>
+    setContractLines(contractLines.map((line, lineIndex) => (lineIndex === index ? value : line)))
+  const addContractLine = (afterIndex = contractLines.length - 1, value = '') => {
+    const next = [...contractLines]
+    next.splice(afterIndex + 1, 0, value)
+    setContractLines(next, afterIndex + 1)
+  }
+  const removeContractLine = (index) => {
+    const next = contractLines.filter((_, lineIndex) => lineIndex !== index)
+    setContractLines(next.length ? next : [''], Math.max(0, Math.min(index, next.length - 1)))
+  }
+  const moveContractLine = (index, offset) => {
+    const target = index + offset
+    if (target < 0 || target >= contractLines.length) return
+    const next = [...contractLines]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setContractLines(next, target)
+  }
+  const fillContractFromSystem = () => setContractLines(buildContractRuleLines(form?.contract_system))
+  const headingIndexes = contractLines.map((line, index) => (isHeadingLine(line) ? index : -1)).filter((index) => index >= 0)
+  const sectionHeadingOf = (index) => [...headingIndexes].reverse().find((headingIndex) => headingIndex <= index) ?? -1
+  const activeHeading =
+    activeContractIndex !== null && activeContractIndex < contractLines.length
+      ? sectionHeadingOf(activeContractIndex)
+      : headingIndexes.at(-1) ?? -1
+  const activeHeadingTitle = activeHeading >= 0 ? contractLines[activeHeading].replace(/^#+\s*/, '').trim() : ''
+  const addItemToActiveSection = () => {
+    const nextHeading = headingIndexes.find((headingIndex) => headingIndex > activeHeading)
+    const insertAt = nextHeading ?? contractLines.length
+    const next = [...contractLines]
+    next.splice(insertAt, 0, '')
+    setActiveContractIndex(insertAt)
+    setContractLines(next, insertAt)
+  }
+  const addContractSection = () => {
+    const next = [...contractLines, '# ', '']
+    setActiveContractIndex(next.length - 2)
+    setContractLines(next, next.length - 2)
+  }
+
   useEffect(() => {
-    if (pendingRuleFocusRef.current === null) return
-    document.getElementById(`${formId}-rule-${pendingRuleFocusRef.current}`)?.focus()
-    pendingRuleFocusRef.current = null
+    if (pendingRuleFocusRef.current !== null) {
+      document.getElementById(`${formId}-rule-${pendingRuleFocusRef.current}`)?.focus()
+      pendingRuleFocusRef.current = null
+    }
+    if (pendingContractFocusRef.current !== null) {
+      document.getElementById(`${formId}-contract-${pendingContractFocusRef.current}`)?.focus()
+      pendingContractFocusRef.current = null
+    }
   })
 
   const save = (event) => {
@@ -106,7 +174,7 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
     setSaving(true)
     setNotice(null)
     try {
-      const payload = { ...form, dorm_rules: ruleLines.map((line) => line.trim()).filter(Boolean).join('\n') }
+      const payload = { ...form, dorm_rules: cleanLines(ruleLines), contract_rules: cleanContractLines(contractLines) }
       const { data } = await axios.put(apiBase, payload, { headers: dormInfoHeaders() })
       setConfig(data.config)
       setDraft(null)
@@ -214,6 +282,94 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
 
               <div className="dorm-settings-group">
                 <div className="dorm-settings-group-head">
+                  <Icon name="book" size={16} />
+                  <span>เงื่อนไขสัญญาเช่า</span>
+                  <span className="dorm-settings-count">
+                    {contractItemCount > 0 ? `${contractItemCount} ข้อ` : 'ยังไม่มี'}
+                  </span>
+                </div>
+                <div className="dorm-contract-tools">
+                  <button type="button" className="dorm-contract-auto" onClick={fillContractFromSystem}>
+                    <Icon name="check" size={16} />
+                    เติมอัตโนมัติจากระบบ
+                  </button>
+                  <span>
+                    สร้างเงื่อนไขจากค่าที่ระบบใช้จริง (มัดจำ {form.contract_system?.deposit_months ?? 2} เดือน · ผ่อนผัน{' '}
+                    {form.contract_system?.grace_days ?? 3} วัน · แจ้งย้ายออกล่วงหน้า {form.contract_system?.notice_days ?? 60} วัน)
+                    แล้วแก้ต่อได้
+                  </span>
+                </div>
+                <ol className="dorm-rule-list">
+                  {contractLines.map((line, index) => {
+                    const heading = isHeadingLine(line)
+                    const inActiveSection = sectionHeadingOf(index) === activeHeading
+                    return (
+                      <li
+                        key={index}
+                        className={`dorm-rule-item${heading ? ' is-heading' : ' is-sub'}${inActiveSection ? ' is-active-section' : ''}`}
+                      >
+                        <span className="dorm-rule-no" aria-hidden="true">{heading ? '#' : '•'}</span>
+                        <span className="dorm-contract-field">
+                          <label htmlFor={`${formId}-contract-${index}`}>{contractCaptions[index]}</label>
+                          <input
+                            id={`${formId}-contract-${index}`}
+                            value={heading ? line.replace(/^#+\s?/, '') : line}
+                            maxLength={500}
+                            placeholder={heading ? 'ชื่อหัวข้อ เช่น การชำระค่าเช่า' : 'พิมพ์เงื่อนไข เช่น ชำระค่าเช่าภายในวันที่ 5 ของทุกเดือน'}
+                            onFocus={() => setActiveContractIndex(index)}
+                            onChange={(event) => updateContractLine(index, heading ? `# ${event.target.value}` : event.target.value)}
+                            onKeyDown={(event) => {
+                              const empty = heading ? !line.replace(/^#+\s*/, '') : !line
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                addContractLine(index)
+                              } else if (event.key === 'Backspace' && empty && contractLines.length > 1) {
+                                event.preventDefault()
+                                removeContractLine(index)
+                              }
+                            }}
+                          />
+                        </span>
+                        <span className="dorm-rule-actions">
+                          <button type="button" onClick={() => moveContractLine(index, -1)} disabled={index === 0} aria-label={`เลื่อนบรรทัดที่ ${index + 1} ขึ้น`} title="เลื่อนขึ้น">
+                            <Icon name="up" size={14} strokeWidth={2.4} />
+                          </button>
+                          <button type="button" onClick={() => moveContractLine(index, 1)} disabled={index === contractLines.length - 1} aria-label={`เลื่อนบรรทัดที่ ${index + 1} ลง`} title="เลื่อนลง">
+                            <Icon name="down" size={14} strokeWidth={2.4} />
+                          </button>
+                          <button type="button" className="is-danger" onClick={() => removeContractLine(index)} aria-label={`ลบบรรทัดที่ ${index + 1}`} title="ลบบรรทัดนี้">
+                            <Icon name="trash" size={14} />
+                          </button>
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ol>
+                <div className="dorm-contract-add-row">
+                  <button type="button" className="dorm-rule-add" onClick={addItemToActiveSection}>
+                    <Icon name="plus" size={16} strokeWidth={2.4} />
+                    เพิ่มข้อ
+                    {activeHeading >= 0 && (
+                      <span className="dorm-contract-target">ใน “{activeHeadingTitle || 'หัวข้อที่ยังไม่ตั้งชื่อ'}”</span>
+                    )}
+                  </button>
+                  <button type="button" className="dorm-rule-add" onClick={addContractSection}>
+                    <Icon name="plus" size={16} strokeWidth={2.4} />
+                    เพิ่มหัวข้อ
+                  </button>
+                  {contractItemCount > 0 && (
+                    <button type="button" className="dorm-contract-reset" onClick={() => setContractLines([''])}>
+                      ล้างทั้งหมด
+                    </button>
+                  )}
+                </div>
+                <small className="dorm-settings-hint">
+                  กด Enter เพื่อเพิ่มข้อถัดไป · ถ้าไม่มีเงื่อนไขเลย ส่วนนี้จะไม่แสดงให้ผู้เช่าเห็น
+                </small>
+              </div>
+
+              <div className="dorm-settings-group">
+                <div className="dorm-settings-group-head">
                   <Icon name="phone" size={16} />
                   <span>เบอร์ติดต่อฉุกเฉิน</span>
                 </div>
@@ -253,6 +409,7 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
         details={[
           ['ชื่อหอพัก', form?.dorm_name || '-'],
           ['กฎระเบียบ', `${previewRules.length} ข้อ`],
+          ['เงื่อนไขสัญญาเช่า', contractItemCount > 0 ? `${contractItemCount} ข้อ` : 'ไม่แสดง (ยังไม่มี)'],
           ['ผู้ดูแลหอพัก', form?.caretaker_phone || 'ไม่ระบุ'],
         ]}
         confirmLabel={saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
@@ -320,7 +477,7 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
               )}
             </section>
 
-            <ContractRulesCard />
+            <ContractRulesCard text={cleanContractLines(contractLines)} />
 
             <section className="dorm-menu-card">
               <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>
@@ -489,47 +646,64 @@ export function SettingsDialog({
   )
 }
 
-const CONTRACT_RULES = [
-  {
-    title: 'การทำสัญญา',
-    items: [
-      'สัญญาเช่ามีระยะ 3, 6 หรือ 12 เดือน และต้องแนบรูปสัญญาที่เซ็นแล้วอย่างน้อย 3 รูป',
-      'งวดแรกชำระค่าเช่าเดือนแรกพร้อมเงินมัดจำ 2 เดือนของค่าเช่า สัญญาจะมีผลเมื่อชำระงวดแรกครบ',
-    ],
-  },
-  {
-    title: 'การชำระค่าเช่า',
-    items: [
-      'ชำระค่าเช่าทุกเดือนตามวันที่เริ่มสัญญา มีเวลาผ่อนผัน 3 วัน หลังจากนั้นถือว่าค้างชำระ',
-      'ค่าน้ำและค่าไฟแจ้งแยกเป็นรายการในยอดชำระเดือนนั้น',
-    ],
-  },
-  {
-    title: 'การต่อสัญญา',
-    items: ['ขอต่อสัญญาได้ครั้งละ 1, 3, 6 หรือ 12 เดือน และต้องไม่มียอดค้างชำระ'],
-  },
-  {
-    title: 'การย้ายห้อง',
-    items: [
-      'ต้องชำระยอดค้างให้ครบก่อนขอย้ายห้อง และเจ้าหน้าที่จะตรวจสภาพห้องเดิมก่อนอนุมัติ',
-      'ใช้สัญญาฉบับเดิมต่อ วันสิ้นสุดสัญญาเท่าเดิม และต้องเซ็นสัญญาใหม่อย่างน้อย 5 รูปตอนอนุมัติ',
-      'ห้องใหม่แพงกว่า: หักส่วนต่างของรอบที่จ่ายแล้วจากเงินมัดจำก่อน ส่วนที่ไม่พอจะเพิ่มในยอดชำระเดือนนั้น',
-      'ห้องใหม่ราคาเท่ากันหรือถูกกว่า: ไม่หักเงินมัดจำ และไม่คืนส่วนต่างของรอบที่จ่ายไปแล้ว',
-      'ค่าเช่าราคาใหม่เริ่มคิดตั้งแต่รอบบิลถัดไป',
-    ],
-  },
-  {
-    title: 'การย้ายออกและเงินมัดจำ',
-    items: [
-      'แจ้งย้ายออกล่วงหน้าได้ไม่เกิน 60 วัน ต้องชำระยอดค้างให้ครบและให้เจ้าหน้าที่ตรวจสภาพห้องก่อนอนุมัติ',
-      'อยู่ครบสัญญา: ได้รับเงินมัดจำคงเหลือคืน หักค่าเสียหายที่ตรวจพบ (ถ้ามี)',
-      'ย้ายออกก่อนสิ้นสุดสัญญา: ไม่ได้รับเงินมัดจำคืน',
-    ],
-  },
-]
+const DEFAULT_CONTRACT_SYSTEM = {
+  contract_durations: [3, 6, 12],
+  renew_durations: [1, 3, 6, 12],
+  deposit_months: 2,
+  grace_days: 3,
+  notice_days: 60,
+  contract_min_images: 3,
+  transfer_min_images: 5,
+}
 
-function ContractRulesCard() {
-  const total = CONTRACT_RULES.reduce((sum, group) => sum + group.items.length, 0)
+const joinChoices = (values) =>
+  values.length > 1 ? `${values.slice(0, -1).join(', ')} หรือ ${values.at(-1)}` : String(values[0] ?? '')
+
+function buildContractRuleLines(system) {
+  const rules = { ...DEFAULT_CONTRACT_SYSTEM, ...(system || {}) }
+  return [
+    '# การทำสัญญา',
+    `สัญญาเช่ามีระยะ ${joinChoices(rules.contract_durations)} เดือน และต้องแนบรูปสัญญาที่เซ็นแล้วอย่างน้อย ${rules.contract_min_images} รูป`,
+    `งวดแรกชำระค่าเช่าเดือนแรกพร้อมเงินมัดจำ ${rules.deposit_months} เดือนของค่าเช่า สัญญาจะมีผลเมื่อชำระงวดแรกครบ`,
+    '# การชำระค่าเช่า',
+    `ชำระค่าเช่าทุกเดือนตามวันที่เริ่มสัญญา มีเวลาผ่อนผัน ${rules.grace_days} วัน หลังจากนั้นถือว่าค้างชำระ`,
+    'ค่าน้ำและค่าไฟแจ้งแยกเป็นรายการในยอดชำระเดือนนั้น',
+    '# การต่อสัญญา',
+    `ขอต่อสัญญาได้ครั้งละ ${joinChoices(rules.renew_durations)} เดือน และต้องไม่มียอดค้างชำระ`,
+    '# การย้ายห้อง',
+    'ต้องชำระยอดค้างให้ครบก่อนขอย้ายห้อง และเจ้าหน้าที่จะตรวจสภาพห้องเดิมก่อนอนุมัติ',
+    `ใช้สัญญาฉบับเดิมต่อ วันสิ้นสุดสัญญาเท่าเดิม และต้องเซ็นสัญญาใหม่อย่างน้อย ${rules.transfer_min_images} รูปตอนอนุมัติ`,
+    'ห้องใหม่แพงกว่า: หักส่วนต่างของรอบที่จ่ายแล้วจากเงินมัดจำก่อน ส่วนที่ไม่พอจะเพิ่มในยอดชำระเดือนนั้น',
+    'ห้องใหม่ราคาเท่ากันหรือถูกกว่า: ไม่หักเงินมัดจำ และไม่คืนส่วนต่างของรอบที่จ่ายไปแล้ว',
+    'ค่าเช่าราคาใหม่เริ่มคิดตั้งแต่รอบบิลถัดไป',
+    '# การย้ายออกและเงินมัดจำ',
+    `แจ้งย้ายออกล่วงหน้าได้ไม่เกิน ${rules.notice_days} วัน ต้องชำระยอดค้างให้ครบและให้เจ้าหน้าที่ตรวจสภาพห้องก่อนอนุมัติ`,
+    'อยู่ครบสัญญา: ได้รับเงินมัดจำคงเหลือคืน หักค่าเสียหายที่ตรวจพบ (ถ้ามี)',
+    'ย้ายออกก่อนสิ้นสุดสัญญา: ไม่ได้รับเงินมัดจำคืน',
+  ]
+}
+
+const isHeadingLine = (line) => line.trim().startsWith('#')
+
+function contractRuleGroups(lines) {
+  const groups = []
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) continue
+    if (isHeadingLine(line)) {
+      groups.push({ title: line.replace(/^#+\s*/, ''), items: [] })
+    } else {
+      if (groups.length === 0) groups.push({ title: '', items: [] })
+      groups.at(-1).items.push(line)
+    }
+  }
+  return groups.filter((group) => group.items.length > 0)
+}
+
+function ContractRulesCard({ text }) {
+  const groups = contractRuleGroups((text || '').split(/\r?\n/))
+  const total = groups.reduce((sum, group) => sum + group.items.length, 0)
+  if (total === 0) return null
   return (
     <section className="dorm-menu-card dorm-contract-rules">
       <h3>
@@ -537,10 +711,9 @@ function ContractRulesCard() {
         เงื่อนไขสัญญาเช่า
         <span className="dorm-menu-count">{total} ข้อ</span>
       </h3>
-      <p className="dorm-contract-rules-note">ระบบใช้เงื่อนไขเหล่านี้คำนวณยอดชำระและเงินมัดจำโดยอัตโนมัติ</p>
-      {CONTRACT_RULES.map((group) => (
-        <div key={group.title} className="dorm-contract-group">
-          <h4>{group.title}</h4>
+      {groups.map((group, index) => (
+        <div key={`${index}-${group.title}`} className="dorm-contract-group">
+          {group.title && <h4>{group.title}</h4>}
           <ul>
             {group.items.map((item) => (
               <li key={item}>{item}</li>
@@ -688,7 +861,7 @@ export function DormInfoMenu({ apiBase, onManage, requireAck = false, onAcknowle
                     )}
                   </section>
 
-                  <ContractRulesCard />
+                  <ContractRulesCard text={config.contract_rules} />
 
                   <section className="dorm-menu-card">
                     <h3><Icon name="phone" size={18} />เบอร์ติดต่อฉุกเฉิน</h3>

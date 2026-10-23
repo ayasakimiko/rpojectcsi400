@@ -299,8 +299,23 @@ const REQUEST_TYPES = new Set(["renew", "moveout", "move_room"]);
 export const RENEW_DURATION_MONTHS = new Set([1, 3, 6, 12]);
 export const CONTRACT_DURATION_MONTHS = new Set([3, 6, 12]);
 export const DEPOSIT_MONTHS = 2;
+export const RENT_GRACE_DAYS = 3;
+export const CONTRACT_MIN_IMAGES = 3;
+export const ROOM_TRANSFER_MIN_CONTRACT_IMAGES = 5;
 const MOVE_ROOM_REASONS = new Set(["room_problem", "price", "amenities", "location", "noise", "other"]);
-const MOVE_ROOM_MAX_DAYS_AHEAD = 60;
+export const MOVE_ROOM_MAX_DAYS_AHEAD = 60;
+
+export function contractSystemRules() {
+  return {
+    contract_durations: [...CONTRACT_DURATION_MONTHS],
+    renew_durations: [...RENEW_DURATION_MONTHS],
+    deposit_months: DEPOSIT_MONTHS,
+    grace_days: RENT_GRACE_DAYS,
+    notice_days: MOVE_ROOM_MAX_DAYS_AHEAD,
+    contract_min_images: CONTRACT_MIN_IMAGES,
+    transfer_min_images: ROOM_TRANSFER_MIN_CONTRACT_IMAGES,
+  };
+}
 
 function toLocalDateString(date) {
   const pad = (number) => String(number).padStart(2, "0");

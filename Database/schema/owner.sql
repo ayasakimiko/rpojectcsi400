@@ -137,6 +137,16 @@ CREATE TABLE IF NOT EXISTS DormConfig (
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'contract_rules'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `contract_rules` TEXT NULL AFTER `dorm_rules`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'gate_close_time'),
     'SELECT 1',
     'ALTER TABLE `DormConfig` ADD COLUMN `gate_close_time` VARCHAR(5) NULL'

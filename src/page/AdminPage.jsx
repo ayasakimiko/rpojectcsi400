@@ -11,7 +11,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import { ArchivedContractBadge, ContractCell, ContractDetail, ContractFirstPaymentNote, ContractMonthTrack, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
+import { ArchivedContractBadge, ContractCell, ContractDetail, ContractFirstPaymentNote, ContractFullModal, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
 import { DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
@@ -3910,6 +3910,7 @@ function PaymentDetail({ payment, roomNumber, onSlip }) {
 
 function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHistory, onSelectPayment, onOpenTenants, onOpenMaintenance }) {
   const [now] = useState(() => Date.now())
+  const [contractOpen, setContractOpen] = useState(false)
   const data = detail?.room ? { ...room, ...detail.room } : room
   const tenant = detail ? detail.tenant : room.customer_id ? { first_name: room.first_name, last_name: room.last_name, phone: room.phone } : null
   const contract = describeContract(data.rental_start_date, data.rental_end_date, now)
@@ -4048,56 +4049,63 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
           )}
         </section>
 
-        <section className="room-detail-section">
-          <h4 className="room-detail-contract-title">
-            <RoomDetailIcon type="calendar" size={17} />สัญญาเช่า
+        <section className="room-detail-section room-contract">
+          <header className="room-contract-head">
+            <h4>
+              <RoomDetailIcon type="calendar" size={17} />
+              สัญญาเช่า
+            </h4>
             {roomContract && <ContractStatusBadge status={roomContract.status} />}
-          </h4>
+            {roomContract && (
+              <button type="button" className="room-contract-full" onClick={() => setContractOpen(true)}>
+                ดูสัญญาแบบเต็ม ›
+              </button>
+            )}
+          </header>
           {data.rental_start_date || data.rental_end_date ? (
             <>
               {roomContract && <ContractFirstPaymentNote contract={roomContract} />}
               {roomContract && <DepositRefundNote contract={roomContract} />}
-              <div className="room-detail-contract-dates">
-                <div className="is-start"><span>เริ่มสัญญา</span><strong>{formatDate(data.rental_start_date)}</strong></div>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <line x1="4" y1="12" x2="20" y2="12" />
-                  <polyline points="14 6 20 12 14 18" />
-                </svg>
-                {roomExtended ? (
-                  <div className="is-renew">
-                    <span>ต่อสัญญาถึง</span>
-                    <strong>{formatDate(data.rental_end_date)}</strong>
-                    <small>สิ้นสุดเดิม <s>{formatDate(roomContract.rental_end_date)}</s></small>
+              <div className="room-contract-period">
+                <div className="room-contract-dates">
+                  <span>
+                    <small>เริ่มสัญญา</small>
+                    <b className="is-start">{formatDate(data.rental_start_date)}</b>
+                  </span>
+                  <span className="room-contract-arrow" aria-hidden="true">→</span>
+                  <span>
+                    <small>{roomExtended ? 'ต่อสัญญาถึง' : 'สิ้นสุดสัญญา'}</small>
+                    <b className="is-end">{formatDate(data.rental_end_date)}</b>
+                    {roomExtended && <small className="is-old">เดิม {formatDate(roomContract.rental_end_date)}</small>}
+                  </span>
+                  {contract && <em className={`room-contract-left is-${contract.tone}`}>{contract.label}</em>}
+                </div>
+                {contract && (
+                  <div className={`room-contract-progress is-${contract.tone}`} aria-hidden="true">
+                    <i style={{ width: `${contract.percent}%` }} />
                   </div>
-                ) : (
-                  <div className="is-end"><span>สิ้นสุดสัญญา</span><strong>{formatDate(data.rental_end_date)}</strong></div>
                 )}
               </div>
-              {contract && (
-                <ContractMonthTrack
-                  start={data.rental_start_date}
-                  end={data.rental_end_date}
-                  originalEnd={roomExtended ? roomContract.rental_end_date : null}
-                  now={now}
-                />
-              )}
-              <dl className="room-detail-facts">
+              <dl className="room-contract-facts">
+                <div>
+                  <dt>ค่าเช่า/เดือน</dt>
+                  <dd>฿{formatCurrency(roomContract?.monthly_price ?? data.price)}</dd>
+                </div>
                 <div>
                   <dt>ระยะสัญญา</dt>
                   <dd>
                     {data.rental_duration_months ? `${data.rental_duration_months} เดือน` : '-'}
-                    {roomExtended && <small className="room-detail-fact-note">รวมที่ต่อสัญญาแล้ว</small>}
+                    {roomExtended && <small>รวมที่ต่อแล้ว</small>}
                   </dd>
                 </div>
-                <div><dt>ค่าเช่า/เดือน</dt><dd>฿{formatCurrency(data.price)} · รายเดือน</dd></div>
                 {roomContract && (
                   <>
                     <div>
                       <dt>เงินมัดจำ</dt>
                       <dd>
                         {Number(roomContract.deposit_amount) > 0
-                          ? `฿${formatCurrency(roomContract.deposit_amount)} (${formatDepositMonths(roomContract)})`
-                          : 'ไม่มีมัดจำ'}
+                          ? `฿${formatCurrency(roomContract.deposit_remaining ?? roomContract.deposit_amount)}`
+                          : 'ไม่มี'}
                         {DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
                           <small className={`room-detail-deposit-status is-${roomContract.deposit_status}`}>
                             {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
@@ -4105,25 +4113,26 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                         )}
                       </dd>
                     </div>
-                    <div><dt>งวดแรก (ค่าห้อง + มัดจำ)</dt><dd>฿{formatCurrency(roomContract.first_month_total)}</dd></div>
                     <div>
                       <dt>ค่าเช่าที่เหลือ</dt>
                       <dd className="is-remaining">
                         ฿{formatCurrency(roomContract.contract_remaining)}
                         {Number(roomContract.monthly_price) > 0 && (
-                          <small className="room-detail-fact-note">
-                            {Math.ceil(Math.round((roomContract.contract_remaining / roomContract.monthly_price) * 100) / 100)} เดือน
+                          <small>
+                            ประมาณ {Math.ceil(Math.round((roomContract.contract_remaining / roomContract.monthly_price) * 100) / 100)} เดือน
                           </small>
                         )}
                       </dd>
                     </div>
                   </>
                 )}
-                {data.prepaid_until && <div><dt>ชำระล่วงหน้าถึง</dt><dd>{formatDate(data.prepaid_until)}</dd></div>}
               </dl>
             </>
           ) : (
             <p className="room-detail-muted">ยังไม่มีข้อมูลสัญญาเช่า</p>
+          )}
+          {contractOpen && roomContract && (
+            <ContractFullModal contract={roomContract} onClose={() => setContractOpen(false)} />
           )}
         </section>
 
@@ -6633,7 +6642,6 @@ function AdminBackupPage() {
         last_name: customerForm.last_name,
         phone: customerForm.phone,
         age: Number(customerForm.age),
-        deposit_amount: customerForm.deposit_amount === '' ? null : Number(customerForm.deposit_amount),
         ...(password ? { password } : {}),
       }
       const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload, { headers: authHeaders() })
@@ -7699,7 +7707,7 @@ function AdminBackupPage() {
                               <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                 แก้ไข
                               </button>
-                              <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
+                              <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถลบได้' : undefined}>
                                 ลบ
                               </button>
                             </div>
@@ -7733,7 +7741,7 @@ function AdminBackupPage() {
                                   <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                     แก้ไข
                                   </button>
-                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)}>
+                                  <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถลบได้' : undefined}>
                                     ลบ
                                   </button>
                                 </div>
@@ -10539,17 +10547,18 @@ function AdminBackupPage() {
                 <span className="admin-room-form-icon"><RoomDetailIcon type="wallet" size={16} /></span>
                 <div>
                   <strong>เงินมัดจำ</strong>
-                  <small>ยอดเงินมัดจำที่ผู้เช่าวางไว้</small>
+                  <small>กำหนดตามสัญญาเช่า แก้ไขไม่ได้</small>
                 </div>
               </header>
-              <label className="admin-room-field">
-                <span>จำนวนเงินมัดจำ</span>
-                <div className="admin-room-input has-prefix">
-                  <b>฿</b>
-                  <input type="number" name="deposit_amount" className="form-control" value={customerForm.deposit_amount} onChange={handleCustomerFormChange} />
-                  <em>บาท</em>
-                </div>
-              </label>
+              <div className="admin-deposit-readonly">
+                <span>จำนวนเงินมัดจำตามสัญญา</span>
+                <strong>
+                  {customerForm.deposit_amount !== '' && customerForm.deposit_amount != null
+                    ? `฿${formatCurrency(customerForm.deposit_amount)}`
+                    : 'ไม่มีมัดจำ'}
+                </strong>
+                <small>เปลี่ยนได้เฉพาะตอนทำสัญญาใหม่ ส่วนการหัก คืน หรือริบมัดจำ ระบบคำนวณตามสัญญาให้</small>
+              </div>
             </section>
             <section className="admin-room-form-section">
               <header>

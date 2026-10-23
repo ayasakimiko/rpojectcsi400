@@ -1104,6 +1104,74 @@ function ContractThumb({ contract }) {
   )
 }
 
+export function ContractFullModal({ contract, onClose, viewer = 'staff' }) {
+  const [closing, setClosing] = useState(false)
+  const requestClose = () => setClosing(true)
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      if (document.querySelector('.photo-viewer') || document.querySelectorAll('.rent-bill-overlay').length > 1) return
+      event.stopImmediatePropagation()
+      setClosing(true)
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [])
+
+  useEffect(() => {
+    if (!closing) return undefined
+    const timer = setTimeout(onClose, 110)
+    return () => clearTimeout(timer)
+  }, [closing, onClose])
+
+  const name = `${contract.first_name || ''} ${contract.last_name || ''}`.trim()
+  return createPortal(
+    <div className={`rent-bill-overlay${closing ? ' is-closing' : ''}`} onClick={requestClose} role="presentation">
+      <div
+        className="rent-bill contract-full-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="รายละเอียดสัญญาเช่า"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="rent-bill-head">
+          <span className="rent-bill-icon"><ContractIcon type="file" size={18} /></span>
+          <div>
+            <strong>สัญญาเช่า ห้อง {contract.room_number || '-'}</strong>
+            <span className="contract-transfers-modal-meta">
+              {name && (
+                <span>
+                  <i>ผู้เช่า</i>
+                  <b>{name}</b>
+                </span>
+              )}
+              <span>
+                <i>เบอร์โทร</i>
+                <b>{contract.phone || '-'}</b>
+              </span>
+              <span>
+                <i>ทำสัญญา</i>
+                <b>{formatContractDate(contract.contract_completed_at || contract.created_at)}</b>
+              </span>
+            </span>
+          </div>
+          <ContractStatusBadge status={contract.status} />
+          <button type="button" className="rent-bill-close" onClick={requestClose} aria-label="ปิด">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+        <div className="contract-full-modal-body ccc-modal">
+          <CustomerContractBody contract={contract} viewer={viewer} />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 const TIMELINE_THUMBS = 4
 
 const dayKeyDate = (key) => (key ? new Date(`${key}T00:00:00`) : undefined)

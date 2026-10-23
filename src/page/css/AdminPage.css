@@ -1917,6 +1917,44 @@ tr.admin-focus-flash.is-fading > td {
   transform: none;
 }
 
+.admin-deposit-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px dashed #d5e1f2;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.admin-deposit-readonly span {
+  color: #6b859e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-deposit-readonly strong {
+  color: #0f2b52;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.admin-deposit-readonly small {
+  color: #8a94a6;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.admin-row-actions .admin-action-btn:is(.is-ghost, .is-danger):disabled {
+  border-color: #e5e7eb;
+  background: #f3f4f6;
+  color: #9ca3af;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.75;
+  transform: none;
+}
+
 .admin-action-btn.is-ghost {
   background: #f8fbff;
   color: #33506f;
@@ -8405,6 +8443,204 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-tenant-name a:hover {
   text-decoration: underline;
+}
+
+.room-contract-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-contract-head h4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #0f2b52;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.room-contract-head h4 svg {
+  color: #2563eb;
+}
+
+.room-contract-full {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.room-contract-full:hover {
+  text-decoration: underline;
+}
+
+.room-contract-period {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e6eef9;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.room-contract-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 14px;
+}
+
+.room-contract-dates > span:not(.room-contract-arrow) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.room-contract-dates small {
+  color: #6b859e;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.room-contract-dates small.is-old {
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.room-contract-dates b {
+  color: #0f2b52;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.room-contract-dates b.is-start {
+  color: #15803d;
+}
+
+.room-contract-dates b.is-end {
+  color: #c2410c;
+}
+
+.room-contract-arrow {
+  padding-bottom: 2px;
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.room-contract-left {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.room-contract-left.is-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.room-contract-left.is-warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.room-contract-left.is-danger {
+  background: #fee2e2;
+  color: #b42318;
+}
+
+.room-contract-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8eff8;
+}
+
+.room-contract-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #22c55e;
+}
+
+.room-contract-progress.is-warning i {
+  background: #f59e0b;
+}
+
+.room-contract-progress.is-danger i {
+  background: #ef4444;
+}
+
+.room-contract-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid #e6eef9;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.room-contract-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+}
+
+.room-contract-facts > div + div {
+  border-left: 1px solid #eef3fa;
+}
+
+.room-contract-facts dt {
+  color: #6b859e;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.room-contract-facts dd {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.room-contract-facts dd small {
+  color: #6b859e;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.room-contract-facts dd.is-remaining {
+  color: #b45309;
+}
+
+@media (max-width: 640px) {
+  .room-contract-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .room-contract-facts > div:nth-child(3) {
+    border-left: 0;
+  }
+
+  .room-contract-facts > div:nth-child(n + 3) {
+    border-top: 1px solid #eef3fa;
+  }
 }
 
 .room-detail-facts {

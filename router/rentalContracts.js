@@ -4,6 +4,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { PUBLIC_UPLOAD_DIR, deletePublicImages } from "../middleware/publicUploads.js";
 import { IMAGE_TYPES, isRealImage } from "./ParcelRouter.js";
+import { CONTRACT_MIN_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from "../middleware/validation.js";
 import {
   computeRentCoverage,
   loadDepositPayments,
@@ -14,9 +15,8 @@ import {
 } from "./CustomerDashboardRouter.js";
 
 export const CONTRACT_IMAGE_FOLDER = "contracts";
-export const CONTRACT_MIN_IMAGES = 3;
+export { CONTRACT_MIN_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES };
 export const CONTRACT_MAX_IMAGES = 10;
-export const ROOM_TRANSFER_MIN_CONTRACT_IMAGES = 5;
 const CONTRACT_UPLOAD_DIR = path.join(PUBLIC_UPLOAD_DIR, CONTRACT_IMAGE_FOLDER);
 
 fs.mkdirSync(CONTRACT_UPLOAD_DIR, { recursive: true });

@@ -991,11 +991,136 @@
   font-weight: 700;
 }
 
-.dorm-contract-rules-note {
-  margin: -6px 0 10px;
+.dorm-contract-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.dorm-contract-tools > span {
+  flex: 1 1 240px;
   color: #6b859e;
   font-size: 12.5px;
   line-height: 1.5;
+}
+
+.dorm-contract-auto {
+  display: inline-flex;
+  flex: 0 0 auto;
+  order: 2;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.3);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dorm-contract-auto:hover {
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  transform: translateY(-1px);
+}
+
+.dorm-contract-auto:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.dorm-contract-auto svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dorm-rule-item.is-sub {
+  margin-left: 26px;
+}
+
+.dorm-rule-item.is-heading:not(:first-child) {
+  margin-top: 8px;
+}
+
+.dorm-rule-item.is-active-section {
+  border-color: #bfdbfe;
+}
+
+.dorm-rule-item.is-heading.is-active-section {
+  background: #f5f9ff;
+}
+
+.dorm-contract-target {
+  max-width: 220px;
+  overflow: hidden;
+  color: #2563eb;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dorm-contract-field {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dorm-contract-field > label {
+  padding-left: 4px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dorm-rule-item .dorm-contract-field > input {
+  width: 100%;
+  height: 28px;
+}
+
+.dorm-rule-item.is-heading .dorm-contract-field > label {
+  color: #6b8fd6;
+}
+
+.dorm-rule-item.is-heading input {
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.dorm-rule-item.is-heading .dorm-rule-no {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.dorm-contract-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dorm-contract-reset {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b42318;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dorm-contract-reset:hover {
+  text-decoration: underline;
 }
 
 .dorm-contract-group + .dorm-contract-group {

@@ -22,6 +22,7 @@ import {
   parseMaintenanceInput,
   parsePhotoList,
   parseTenantRequestInput,
+  RENT_GRACE_DAYS,
   validatePersonUpdateInput,
 } from "../middleware/validation.js";
 import {
@@ -238,7 +239,7 @@ router.patch("/profile", async (req, res) => {
   }
 });
 
-const GRACE_DAYS = 3;
+const GRACE_DAYS = RENT_GRACE_DAYS;
 
 const DEPOSIT_CYCLE_START = (bookingIdColumn, customerIdColumn) => `${bookingIdColumn} >= COALESCE((
          SELECT MAX(lb.id) FROM Booking lb
