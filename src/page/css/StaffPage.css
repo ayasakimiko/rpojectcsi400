@@ -15057,7 +15057,7 @@ tr.staff-focus-row.is-fading > td {
   font-weight: 600;
 }
 
-.staff-insp-photos {
+.staff-insp-gallery .staff-insp-photos {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
@@ -15096,7 +15096,7 @@ tr.staff-focus-row.is-fading > td {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .staff-insp-photos {
+  .staff-insp-gallery .staff-insp-photos {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
