@@ -430,6 +430,27 @@ router.post("/waiting-list", async (req, res) => {
   }
 });
 
+router.patch("/waiting-list/:id/status", async (req, res) => {
+  try {
+    const entryId = Number(req.params.id);
+    if (!isPositiveId(entryId)) {
+      return res.status(400).json({ message: "รหัสรายการไม่ถูกต้อง" });
+    }
+    const { error, value } = parseWaitingListInput({ status: req.body?.status }, { partial: true });
+    if (error || !value.status) {
+      return res.status(400).json({ message: error || "กรุณาเลือกสถานะ" });
+    }
+    const [result] = await getPool().query(`UPDATE WaitingList SET status = ? WHERE id = ?`, [value.status, entryId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "ไม่พบรายชื่อผู้สนใจ" });
+    }
+    return res.json({ message: "เปลี่ยนสถานะสำเร็จ" });
+  } catch (error) {
+    console.error("Update waiting list status error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.patch("/waiting-list/:id", async (req, res) => {
   try {
     const entryId = Number(req.params.id);
@@ -721,7 +742,7 @@ router.get("/rooms", async (req, res) => {
 
     const [rooms] = await pool.query(
       `SELECT
-         r.id, r.room_number, r.is_booked, r.price,
+         r.id, r.room_number, r.is_booked, r.price, r.room_size,
          r.rental_start_date, r.rental_end_date, r.prepaid_until, r.billing_start_date, r.pending_lump_sum_months,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
@@ -783,6 +804,7 @@ router.get("/rooms", async (req, res) => {
         is_booked: room.is_booked,
         held_for_transfer: !room.is_booked && heldRooms.has(Number(room.room_number)),
         price: room.price,
+        room_size: room.room_size,
         electricity_unit_price: room.electricity_unit_price,
         water_unit_price: room.water_unit_price,
         water_price: room.water_price,
@@ -1083,8 +1105,8 @@ router.get("/requests", async (req, res) => {
               moi.inspected_by_name AS inspection_by_name,
               moi.updated_at AS inspection_updated_at,
               sr.price AS source_room_price, sr.rental_end_date AS source_rental_end_date,
-              sr.prepaid_until AS source_prepaid_until,
-              tg.price AS target_room_price, tg.is_booked AS target_room_is_booked,
+              sr.prepaid_until AS source_prepaid_until, sr.room_size AS source_room_size,
+              tg.price AS target_room_price, tg.is_booked AS target_room_is_booked, tg.room_size AS target_room_size,
               tg.electricity_unit_price AS target_room_electricity_unit_price, tg.water_price AS target_room_water_price,
               tg.bed AS target_room_bed
        FROM TenantRequest tr

@@ -143,6 +143,11 @@ const ROOM_FIELD_VALIDATORS = {
     return Number.isInteger(num) && num >= 100 && num <= 999 ? null : "เลขห้องต้องเป็นตัวเลข 3 หลัก (100-999)";
   },
   price: (value) => (isValidMoney(value) ? null : "ราคาไม่ถูกต้อง"),
+  room_size: (value) => {
+    if (value === null || value === "") return null;
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 && num <= 9999.99 ? null : "ขนาดห้องต้องเป็นตัวเลขมากกว่า 0 (ไม่เกิน 9,999.99 ตร.ม.)";
+  },
   bed: (value) => {
     const num = Number(value);
     return Number.isInteger(num) && num >= 0 && num <= 99 ? null : "จำนวนเตียงต้องเป็นตัวเลข 2 หลัก (0-99)";

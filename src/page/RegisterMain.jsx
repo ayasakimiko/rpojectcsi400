@@ -545,6 +545,7 @@ function RegisterMain() {
                       {availableRooms.map((room) => (
                         <option key={room.id} value={room.room_number}>
                           ห้อง {room.room_number} · {formatContractMoney(room.price)}/เดือน
+                          {room.room_size != null ? ` · ${Number(room.room_size).toLocaleString('th-TH', { maximumFractionDigits: 2 })} ตร.ม.` : ''}
                           {room.held_for_transfer ? ' · มีผู้เช่ารอย้ายเข้า' : ''}
                         </option>
                       ))}

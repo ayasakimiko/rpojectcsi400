@@ -78,7 +78,7 @@ router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req
     const pool = getPool();
     const [rooms] = await pool.query(
       `SELECT
-         r.id, r.room_number, r.is_booked, r.price,
+         r.id, r.room_number, r.is_booked, r.price, r.room_size,
          r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv, r.custom_amenities,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
@@ -105,7 +105,7 @@ router.get("/available", async (req, res) => {
     const pool = getPool();
     await expireRoomTransferCharges(pool);
     const [[rooms], heldRooms] = await Promise.all([
-      pool.query(`SELECT id, room_number, price, rental_duration_months FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`),
+      pool.query(`SELECT id, room_number, price, room_size, rental_duration_months FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`),
       loadHeldTransferRooms(pool),
     ]);
 
@@ -125,7 +125,7 @@ router.get("/:room_number", async (req, res) => {
 
     const pool = getPool();
     const [rooms] = await pool.query(
-      `SELECT id, room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date
+      `SELECT id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date
        FROM Room WHERE room_number = ?`,
       [roomNumberValue],
     );

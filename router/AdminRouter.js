@@ -434,7 +434,7 @@ router.get("/rooms", async (req, res) => {
     const pool = getPool();
     const [rooms] = await pool.query(
       `SELECT
-         r.id, r.room_number, r.is_booked, r.price,
+         r.id, r.room_number, r.is_booked, r.price, r.room_size,
          r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv, r.custom_amenities,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
@@ -464,7 +464,7 @@ router.get("/rooms/:room_number/detail", async (req, res) => {
 
     const pool = getPool();
     const [roomRows] = await pool.query(
-      `SELECT id, room_number, is_booked, price,
+      `SELECT id, room_number, is_booked, price, room_size,
          air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
          electricity_unit_price, water_unit_price, water_price,
          rental_duration_months, rental_start_date, rental_end_date,
@@ -738,6 +738,7 @@ router.post("/rooms", async (req, res) => {
     const {
       room_number,
       price,
+      room_size = null,
       air_conditioner = false,
       wifi = false,
       refrigerator = false,
@@ -753,6 +754,7 @@ router.post("/rooms", async (req, res) => {
     const validationError = validateRoomFields({
       room_number,
       price,
+      room_size,
       air_conditioner,
       wifi,
       refrigerator,
@@ -770,11 +772,12 @@ router.post("/rooms", async (req, res) => {
 
     const pool = getPool();
     const [result] = await pool.query(
-      `INSERT INTO Room (room_number, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO Room (room_number, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         Number(room_number),
         Number(price),
+        room_size === null || room_size === "" ? null : Number(room_size),
         Boolean(air_conditioner),
         Boolean(wifi),
         Boolean(refrigerator),
@@ -801,6 +804,7 @@ router.post("/rooms", async (req, res) => {
 const ROOM_EDITABLE_COLUMNS = [
   "room_number",
   "price",
+  "room_size",
   "air_conditioner",
   "wifi",
   "refrigerator",
@@ -826,9 +830,12 @@ router.put("/rooms/:room_number", async (req, res) => {
       return res.status(400).json({ message: validationError });
     }
 
-    const normalizedBody = hasField(body, "custom_amenities")
+    const amenityBody = hasField(body, "custom_amenities")
       ? { ...body, custom_amenities: JSON.stringify(body.custom_amenities.map(normalizeRoomAmenity)) }
       : body;
+    const normalizedBody = hasField(amenityBody, "room_size")
+      ? { ...amenityBody, room_size: amenityBody.room_size === null || amenityBody.room_size === "" ? null : Number(amenityBody.room_size) }
+      : amenityBody;
     const { columns, values } = buildUpdate(ROOM_EDITABLE_COLUMNS, normalizedBody);
     if (columns.length === 0) {
       return res.status(400).json({ message: "กรุณาระบุข้อมูลที่ต้องการแก้ไข" });

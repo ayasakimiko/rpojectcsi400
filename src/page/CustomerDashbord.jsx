@@ -862,6 +862,12 @@ const FIELD_ICON_PATHS = {
   ),
   zap: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />,
   water: <path d="M12 2.7s-6 6.4-6 11.3a6 6 0 0 0 12 0c0-4.9-6-11.3-6-11.3z" />,
+  area: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h4M9 3v4M21 15h-4M15 21v-4" />
+    </>
+  ),
   info: (
     <>
       <circle cx="12" cy="12" r="9" />
@@ -933,6 +939,12 @@ function MoveRoomPreview({ currentRoom, targetRoom }) {
         </span>
       )}
       <div className="dashboard-move-preview-tags">
+        {targetRoom.room_size != null && (
+          <span>
+            <FieldIcon name="area" size={13} />
+            ขนาด {formatRoomSize(targetRoom.room_size)}
+          </span>
+        )}
         <span className="is-electric">
           <FieldIcon name="zap" size={13} />
           ไฟ ฿{formatCurrency(targetRoom.electricity_unit_price)}/หน่วย
@@ -2407,6 +2419,10 @@ function formatCurrency(value) {
   return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+function formatRoomSize(value) {
+  return `${formatCurrency(value)} ตร.ม.`
+}
+
 function formatCustomerNote(note) {
   if (!note) return '-'
   const short = note
@@ -2653,7 +2669,7 @@ function formatVisitRange(start, end) {
   return `${new Date(start).toLocaleString('th-TH', options)} – ${end ? new Date(end).toLocaleString('th-TH', options) : 'ไม่จำกัดเวลา'}`
 }
 
-function ResidentVisitRequestRow({ outstanding = 0 }) {
+function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
   const [view, setView] = useState(null)
   const [items, setItems] = useState([])
   const [busy, setBusy] = useState(false)
@@ -2810,19 +2826,25 @@ function ResidentVisitRequestRow({ outstanding = 0 }) {
           ) : 'ลงทะเบียนรถของคุณหรือรถครอบครัวที่มาเยี่ยม'}
         </p>
       </div>
-      <button
-        type="button"
-        className="dashboard-action-btn is-primary"
-        onClick={openModal}
-        disabled={outstanding > 0 || pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT}
-        title={
-          outstanding > 0
-            ? 'ชำระยอดค้างให้ครบก่อนลงทะเบียน'
-            : pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT ? `ส่งได้สูงสุด ${CUSTOMER_OPEN_REPORT_LIMIT} รายการที่รออนุมัติ` : undefined
-        }
-      >
-        ลงทะเบียน
-      </button>
+      {outstanding > 0 && onPayOutstanding ? (
+        <button type="button" className="dashboard-action-btn is-primary" onClick={onPayOutstanding}>
+          ชำระยอดค้าง
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="dashboard-action-btn is-primary"
+          onClick={openModal}
+          disabled={outstanding > 0 || pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT}
+          title={
+            outstanding > 0
+              ? 'ชำระยอดค้างให้ครบก่อนลงทะเบียน'
+              : pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT ? `ส่งได้สูงสุด ${CUSTOMER_OPEN_REPORT_LIMIT} รายการที่รออนุมัติ` : undefined
+          }
+        >
+          ลงทะเบียน
+        </button>
+      )}
       {latestItem && (
         <RequestTimelineDropdown kind="resident_visit" request={items.find((item) => item.status === 'pending') || latestItem} />
       )}
@@ -7570,6 +7592,12 @@ function CustomerDashbord() {
                   {room ? (
                     <>
                       <p className="dashboard-room-number">ห้อง {room.room_number}</p>
+                      {room.room_size != null && (
+                        <p className="dashboard-room-size">
+                          <FieldIcon name="area" size={14} />
+                          ขนาดห้อง {formatRoomSize(room.room_size)}
+                        </p>
+                      )}
                       {Boolean(room.is_booked) && room.rental_start_date && room.rental_end_date && (
                         <>
                           <h3 className="dashboard-section-title">ระยะเวลาการเช่า</h3>
@@ -8041,7 +8069,7 @@ function CustomerDashbord() {
                           </button>
                         )}
                       </div>
-                      {room?.is_booked && <ResidentVisitRequestRow outstanding={renewOutstanding} />}
+                      {room?.is_booked && <ResidentVisitRequestRow outstanding={renewOutstanding} onPayOutstanding={openPaymentForm} />}
                       <SafetyIncidentReportRow />
                     </div>
 
@@ -8095,6 +8123,7 @@ function CustomerDashbord() {
                                   {availableRooms.map((availableRoom) => (
                                     <option key={availableRoom.room_number} value={availableRoom.room_number}>
                                       ห้อง {availableRoom.room_number} · {Number(availableRoom.price).toLocaleString('th-TH')} บาท/เดือน
+                                      {availableRoom.room_size != null ? ` · ${formatRoomSize(availableRoom.room_size)}` : ''}
                                     </option>
                                   ))}
                                 </select>

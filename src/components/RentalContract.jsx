@@ -689,12 +689,6 @@ function StaffContractCard({ contract, onOpen }) {
           <span className="csc-person">
             <strong title={tenantName}>{tenantName}</strong>
             <small>{contract.phone || '-'}</small>
-            {contract.is_archived && (
-              <span className="csc-archive-note">
-                <span>สัญญาเก่า</span>
-                {contract.has_newer_contract && <span className="is-newer">มีสัญญาใหม่แล้ว</span>}
-              </span>
-            )}
           </span>
           <span className="csc-badges">
             <span className={`csc-status ${status.tone}`}>{status.label}</span>
@@ -706,6 +700,12 @@ function StaffContractCard({ contract, onOpen }) {
             )}
           </span>
         </span>
+        {contract.is_archived && (
+          <span className="csc-archive-note">
+            <span>สัญญาเก่า</span>
+            {contract.has_newer_contract && <span className="is-newer">มีสัญญาใหม่แล้ว</span>}
+          </span>
+        )}
         <ContractTransferSummary contract={contract} />
 
         <span className="csc-period">

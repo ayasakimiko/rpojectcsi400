@@ -476,7 +476,7 @@ export async function loadCompletedContracts(pool) {
   return attachContractImages(pool, rows, new Date());
 }
 
-const ROOM_COLUMNS = `id, room_number, is_booked, price, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
+const ROOM_COLUMNS = `id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
   electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until,
   billing_start_date, pending_lump_sum_months, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active`;
 

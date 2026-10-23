@@ -45,6 +45,15 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'room_size'),
+    'SELECT 1',
+    'ALTER TABLE `Room` ADD COLUMN `room_size` DECIMAL(6,2) NULL AFTER `price`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'custom_amenities'),
     'SELECT 1',
     'ALTER TABLE `Room` ADD COLUMN `custom_amenities` TEXT NULL AFTER `cctv`'

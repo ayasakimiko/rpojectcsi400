@@ -1998,6 +1998,18 @@
   color: #2563eb;
 }
 
+.staff-room-size {
+  color: #33506f;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.staff-room-size.is-empty {
+  color: #a3b5ca;
+  font-weight: 500;
+}
+
 .staff-room-mobile-label {
   display: none;
 }

@@ -314,7 +314,7 @@ router.get("/rooms/status", async (req, res) => {
   try {
     const pool = getPool();
     const [rooms] = await pool.query(
-      `SELECT r.room_number, r.is_booked, r.price, r.rental_start_date, r.rental_end_date,
+      `SELECT r.room_number, r.is_booked, r.price, r.room_size, r.rental_start_date, r.rental_end_date,
               c.id AS customer_id, c.first_name, c.last_name, c.phone,
               (SELECT MAX(tr.completed_at) FROM TenantRequest tr
                WHERE tr.room_number = r.room_number AND tr.type = 'moveout' AND tr.status = 'approved') AS vacated_at,
@@ -850,7 +850,7 @@ router.get("/rooms/:roomNumber", async (req, res) => {
 
     const pool = getPool();
     const [roomRows] = await pool.query(
-      `SELECT r.id, r.room_number, r.price, r.rental_start_date, r.rental_end_date,
+      `SELECT r.id, r.room_number, r.price, r.room_size, r.rental_start_date, r.rental_end_date,
               c.id AS customer_id, c.first_name, c.last_name, c.phone, c.deposit_amount
        FROM Room r
        LEFT JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE

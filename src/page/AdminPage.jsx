@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/AdminPage.css'
 import './css/ParcelManagement.css'
+import './css/WaitingDetail.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
@@ -389,138 +390,191 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
 
 function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
   const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
-  const waitingNow = now
   const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+  const statusInfo = WAITING_UI_STATUSES[status]
   const preferences = splitWaitingPreferences(item.room_preference)
   const days = waitingDaysSince(item.created_at, now)
+  const moveIn = item.desired_move_in_date ? describeWaitingMoveIn(item.desired_move_in_date, now) : null
   const formatCurrency = (value) => Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const pricedRooms = vacantRooms.filter((room) => room.price != null)
+  const lowestPrice = pricedRooms.length > 1 ? Math.min(...pricedRooms.map((room) => Number(room.price))) : null
+  const copied = waitingPhoneCopied === item.id
+  const statusBusy = statusBusyId != null
+
   return (
-    <div className="waiting-detail">
-      <div className="waiting-detail-scroll">
-        <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
-          <span className="waiting-avatar is-large" aria-hidden="true">
-            <PersonIcon size={18} />
-          </span>
-          <div className="waiting-detail-name">
-            <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
-            <strong>{item.full_name}</strong>
+    <div className="awd">
+      <div className="awd-scroll">
+        <header className={`awd-hero is-${statusInfo.tone}`}>
+          <div className="awd-hero-person">
+            <span className="awd-avatar" aria-hidden="true"><PersonIcon size={22} /></span>
+            <div className="awd-hero-name">
+              <small>ผู้สนใจเช่าห้อง</small>
+              <strong>{item.full_name}</strong>
+            </div>
+            <span className={`awd-status is-${statusInfo.tone}`}>
+              <span aria-hidden="true" />
+              {statusInfo.label}
+            </span>
           </div>
-          <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
-            {WAITING_UI_STATUSES[status].label}
-          </span>
-        </div>
-
-        <div className="waiting-detail-contact">
-          <div className="waiting-detail-phone">
-            <span>เบอร์ติดต่อ</span>
-            <strong>{item.phone}</strong>
+          <div className="awd-contact">
+            <div className="awd-phone">
+              <small>เบอร์ติดต่อ</small>
+              <strong>{item.phone}</strong>
+            </div>
+            <div className="awd-contact-actions">
+              <a className="awd-btn is-primary" href={`tel:${item.phone}`}>
+                <WaitingDetailIcon type="phone" />
+                โทรติดต่อ
+              </a>
+              <button
+                type="button"
+                className={`awd-btn is-ghost${copied ? ' is-copied' : ''}`}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(item.phone)
+                    setWaitingPhoneCopied(item.id)
+                  } catch {
+                    setWaitingPhoneCopied(null)
+                  }
+                }}
+                aria-live="polite"
+              >
+                {copied ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
+                {copied ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
+              </button>
+            </div>
           </div>
-          <div className="waiting-detail-contact-actions">
-            <a className="waiting-ui-action-btn is-primary" href={`tel:${item.phone}`}>
-              <WaitingDetailIcon type="phone" />
-              โทรติดต่อ
-            </a>
-            <button
-              type="button"
-              className="waiting-ui-action-btn is-ghost"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(item.phone)
-                  setWaitingPhoneCopied(item.id)
-                } catch {
-                  setWaitingPhoneCopied(null)
-                }
-              }}
-            >
-              {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
-              {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
-            </button>
-          </div>
-        </div>
+        </header>
 
-
-        {actionError && <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">{actionError}</p>}
         {onStatusChange && (
-          <label className="waiting-status-control is-detail">
-            <span>จัดการสถานะรายชื่อ</span>
-            <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)}>
-              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
-            </select>
-          </label>
+          <section className="awd-status-panel" aria-label="จัดการสถานะรายชื่อ">
+            <div className="awd-status-head">
+              <strong>จัดการสถานะ</strong>
+              <small>{statusBusy ? 'กำลังบันทึกสถานะ...' : 'กดเพื่อเปลี่ยนสถานะ เจ้าหน้าที่จะเห็นข้อมูลล่าสุด'}</small>
+            </div>
+            <div className="awd-status-options" role="radiogroup" aria-label="สถานะรายชื่อ">
+              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={status === key}
+                  className={`awd-status-option is-${info.tone}${status === key ? ' is-active' : ''}`}
+                  disabled={statusBusy}
+                  onClick={() => {
+                    if (status !== key) onStatusChange(item, key)
+                  }}
+                >
+                  <span aria-hidden="true" />
+                  {info.label}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
-        <dl className="waiting-detail-stats">
+
+        {actionError && (
+          <p className="awd-error" role="alert">
+            <WaitingDetailIcon type="info" />
+            {actionError}
+          </p>
+        )}
+
+        <dl className="awd-stats">
           <div className={days >= 30 ? 'is-long' : ''}>
-            <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
+            <dt><WaitingDetailIcon type="clock" size={14} />รอมาแล้ว</dt>
             <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
+            <small>{days >= 30 ? 'รอนานกว่า 1 เดือน' : 'นับจากวันที่แจ้ง'}</small>
           </div>
           <div>
-            <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
+            <dt><WaitingDetailIcon type="calendar" size={14} />วันที่แจ้ง</dt>
             <dd>{formatWaitingDateTime(item.created_at)}</dd>
+            <small>
+              บันทึกโดย <span className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</span>
+            </small>
           </div>
-          <div>
-            <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
-            <dd className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</dd>
-          </div>
-          <div className={item.desired_move_in_date ? `is-movein-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
-            <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
-            <dd>
-              {item.desired_move_in_date
-                ? formatWaitingDate(item.desired_move_in_date)
-                : 'ไม่ระบุ'}
-            </dd>
-            {item.desired_move_in_date && <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
+          <div className={moveIn ? `is-movein-${moveIn.tone}` : 'is-empty'}>
+            <dt><WaitingDetailIcon type="calendar" size={14} />ต้องการเข้าอยู่</dt>
+            <dd>{item.desired_move_in_date ? formatWaitingDate(item.desired_move_in_date) : 'ไม่ระบุ'}</dd>
+            <small>{moveIn ? moveIn.text : 'ยังไม่ได้ระบุวันที่'}</small>
           </div>
         </dl>
 
-        <section className="waiting-detail-section">
-          <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
-          <div className="waiting-tags">
+        <div className="awd-grid">
+          <section className="awd-card">
+            <header className="awd-card-head">
+              <span className="awd-card-icon"><DoorIcon size={16} /></span>
+              <h4>ประเภทห้องที่สนใจ</h4>
+            </header>
             {preferences.length > 0 ? (
-              preferences.map((preference) => <span key={preference}>{preference}</span>)
-            ) : (
-              <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-            )}
-          </div>
-        </section>
-
-        <section className="waiting-detail-section is-note">
-          <h4><NoteIcon size={17} />หมายเหตุ</h4>
-          <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
-        </section>
-
-        <section className="waiting-detail-section is-vacancies">
-          <h4>
-            <DoorIcon size={17} />
-            ห้องว่างตอนนี้ <span className="waiting-ui-count-pill">{vacantRooms.length}</span>
-          </h4>
-          {vacantRooms.length > 0 ? (
-            <div className="waiting-vacant-rooms">
-              {vacantRooms.map((room) => (
-              <div className="waiting-vacant-room" key={room.room_number}>
-                <span className="waiting-vacant-room-icon" aria-hidden="true"><DoorIcon size={19} /></span>
-                <span className="waiting-vacant-room-info">
-                  <strong>ห้อง {room.room_number}</strong>
-                  {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
-                </span>
-                <span className="waiting-vacant-room-status">ว่าง</span>
+              <div className="awd-tags">
+                {preferences.map((preference) => <span key={preference}>{preference}</span>)}
               </div>
-              ))}
-            </div>
+            ) : (
+              <p className="awd-empty">ไม่ได้ระบุประเภทห้อง แนะนำห้องว่างที่มีได้ทุกห้อง</p>
+            )}
+          </section>
+
+          <section className="awd-card">
+            <header className="awd-card-head">
+              <span className="awd-card-icon"><NoteIcon size={16} /></span>
+              <h4>หมายเหตุ</h4>
+            </header>
+            {item.note ? <p className="awd-note">{item.note}</p> : <p className="awd-empty">ไม่มีหมายเหตุ</p>}
+          </section>
+        </div>
+
+        <section className="awd-card is-vacancies">
+          <header className="awd-card-head">
+            <span className="awd-card-icon is-green"><DoorIcon size={16} /></span>
+            <h4>
+              ห้องว่างตอนนี้
+              <span className="awd-count">{vacantRooms.length}</span>
+            </h4>
+            {vacantRooms.length > 0 && <small>เทียบเลขห้องและราคาต่อเดือน</small>}
+          </header>
+          {vacantRooms.length > 0 ? (
+            <ul className="awd-rooms">
+              {vacantRooms.map((room) => {
+                const cheapest = lowestPrice != null && Number(room.price) === lowestPrice
+                return (
+                  <li key={room.room_number} className={cheapest ? 'is-cheapest' : ''}>
+                    <span className="awd-room-number">
+                      <small>ห้อง</small>
+                      <strong>{room.room_number}</strong>
+                    </span>
+                    <span className="awd-room-price">
+                      {room.price != null ? (
+                        <>
+                          <strong>฿{formatCurrency(room.price)}</strong>
+                          <small>/เดือน</small>
+                        </>
+                      ) : (
+                        <small>ไม่ระบุราคา</small>
+                      )}
+                    </span>
+                    {cheapest && <em>ถูกที่สุด</em>}
+                  </li>
+                )
+              })}
+            </ul>
           ) : (
-            <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
+            <p className="awd-empty">ยังไม่มีห้องว่าง แจ้งผู้สนใจเมื่อมีห้องว่างแล้วเปลี่ยนสถานะเป็น "ติดต่อแล้ว"</p>
           )}
         </section>
-
-        <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
       </div>
 
-      <footer className="waiting-ui-form-actions waiting-detail-actions">
-        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+      <footer className="awd-actions">
+        <span className="awd-actions-hint">
+          <WaitingDetailIcon type="info" size={14} />
+          {onStatusChange ? 'แก้ชื่อ เบอร์ หรือความต้องการได้ที่ปุ่มแก้ไขข้อมูล' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}
+        </span>
+        <button type="button" className="awd-btn is-ghost" onClick={onClose}>
           ปิด
         </button>
         <button
           type="button"
-          className="waiting-ui-action-btn is-primary"
+          className="awd-btn is-primary"
           onClick={() => {
             onEdit(item)
           }}
@@ -1186,6 +1240,8 @@ const TAB_GROUPS = [
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
   { key: 'finance', label: 'รายจ่าย', tabs: ['expenses'] },
 ]
+const formatRoomSize = (value) => `${Number(value).toLocaleString('th-TH', { maximumFractionDigits: 2 })} ตร.ม.`
+
 const isCustomerMovedOut = (customer) =>
   (Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date
 
@@ -2885,6 +2941,39 @@ const INSPECTION_RESULT_INFO = {
   none: { label: 'ไม่ได้ระบุ', tone: 'muted' },
 }
 
+function MoveoutDetailCard({ icon, title, hint, tone, action, children }) {
+  return (
+    <section className={`amd-card${tone ? ` is-${tone}` : ''}`}>
+      <header className="amd-card-head">
+        <span className="amd-card-icon"><RoomDetailIcon type={icon} size={16} /></span>
+        <div className="amd-card-title">
+          <h4>{title}</h4>
+          {hint && <small>{hint}</small>}
+        </div>
+        {action}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function MoveoutDetailEmpty({ icon, title, text }) {
+  return (
+    <div className="amd-empty">
+      <span className="amd-empty-icon"><RoomDetailIcon type={icon} size={18} /></span>
+      <div>
+        <strong>{title}</strong>
+        {text && <span>{text}</span>}
+      </div>
+    </div>
+  )
+}
+
+function splitChecklistLabel(label) {
+  const index = label.indexOf(' (')
+  return index === -1 ? { main: label, sub: '' } : { main: label.slice(0, index), sub: label.slice(index + 2, -1) }
+}
+
 function MoveoutDetail({ row, detail, loading, error, onRetry, onOpenInspection, onSelectPayment, idcardRevealed, onToggleIdCard }) {
   const moveout = detail?.moveout ? { ...row, ...detail.moveout } : row
   const paymentList = detail?.paymentList || []
@@ -2892,240 +2981,288 @@ function MoveoutDetail({ row, detail, loading, error, onRetry, onOpenInspection,
   const inspection = detail?.inspection
   const inspectionSummary = inspection ? summarizeInspection(inspection.checklist) : null
   const idcard = String(moveout.idcard || '')
+  const totals = detail?.payments
+  const unpaidTotal = totals ? Number(totals.pending.total) + Number(totals.overdue.total) : 0
+  const issueCount = inspectionSummary ? inspectionSummary.counts.damaged + inspectionSummary.counts.missing : 0
+  const alerts = detail
+    ? [
+        totals?.overdue.total > 0 && { tone: 'danger', icon: 'wallet', text: `ค้างชำระ ฿${formatCurrency(totals.overdue.total)} (${totals.overdue.count} รายการ)` },
+        totals?.pending.total > 0 && { tone: 'warning', icon: 'clock', text: `รอชำระ ฿${formatCurrency(totals.pending.total)} (${totals.pending.count} รายการ)` },
+        issueCount > 0 && { tone: 'danger', icon: 'clipboard', text: `ตรวจห้องพบชำรุด/สูญหาย ${issueCount} รายการ` },
+        detail.maintenance.open > 0 && { tone: 'warning', icon: 'wrench', text: `แจ้งซ่อมค้าง ${detail.maintenance.open} รายการ` },
+      ].filter(Boolean)
+    : []
   const facts = [
     {
-      icon: 'user',
       label: 'บัตรประชาชน',
       value: (
-        <button type="button" className="admin-idcard-toggle" onClick={onToggleIdCard}>
+        <button type="button" className="admin-idcard-toggle" onClick={onToggleIdCard} aria-label={idcardRevealed ? 'ซ่อนเลขบัตรประชาชน' : 'แสดงเลขบัตรประชาชน'}>
           {idcardRevealed ? idcard || '-' : '•'.repeat(idcard.length || 13)}
         </button>
       ),
     },
-    { icon: 'phone', label: 'เบอร์โทร', value: moveout.phone ? <a className="maintenance-detail-tel" href={`tel:${moveout.phone}`}>{moveout.phone}</a> : '-' },
-    { icon: 'user', label: 'อายุ', value: moveout.age ? `${moveout.age} ปี` : '-' },
-    { icon: 'wallet', label: 'เงินมัดจำ', value: moveout.deposit_amount != null ? `฿${formatCurrency(moveout.deposit_amount)}` : '-' },
-    { icon: 'door', label: 'ค่าเช่าห้อง', value: moveout.room_price != null ? `฿${formatCurrency(moveout.room_price)} / เดือน` : '-' },
-    { icon: 'calendar', label: 'ลงทะเบียนเมื่อ', value: formatDate(moveout.registered_at) },
+    { label: 'เบอร์โทร', value: moveout.phone ? <a className="amd-link" href={`tel:${moveout.phone}`}>{moveout.phone}</a> : '-' },
+    { label: 'อายุ', value: moveout.age ? `${moveout.age} ปี` : '-' },
+    { label: 'ลงทะเบียนเมื่อ', value: formatDate(moveout.registered_at) },
+    { label: 'ค่าเช่าห้อง', value: moveout.room_price != null ? `฿${formatCurrency(moveout.room_price)} / เดือน` : '-' },
+    { label: 'เงินมัดจำ', value: moveout.deposit_amount != null ? `฿${formatCurrency(moveout.deposit_amount)}` : '-' },
   ]
 
   return (
-    <div className="moveout-detail">
-      <div className="moveout-detail-hero">
-        <div className="moveout-detail-hero-top">
-          <span className="tenant-card-avatar" aria-hidden="true"><PersonIcon size={22} /></span>
-          <div className="moveout-detail-hero-text">
-            <span>ผู้เช่าที่ย้ายออก</span>
+    <div className="amd">
+      <header className="amd-hero">
+        <div className="amd-hero-person">
+          <span className="amd-avatar" aria-hidden="true"><PersonIcon size={24} /></span>
+          <div className="amd-hero-name">
+            <small>ผู้เช่าที่ย้ายออก</small>
             <strong>{moveout.first_name} {moveout.last_name}</strong>
+            <div className="amd-hero-tags">
+              <span className="amd-tag is-room">
+                <RoomDetailIcon type="home" size={13} />
+                ห้อง {moveout.room_number}
+              </span>
+              <span className="amd-tag is-done">
+                <RoomDetailIcon type="check" size={13} />
+                ย้ายออกเรียบร้อย
+              </span>
+            </div>
           </div>
-          <span className="moveout-cell-room">
-            <RoomDetailIcon type="home" size={13} />
-            ห้อง {moveout.room_number}
-          </span>
-          <span className="moveout-detail-status">
-            <RoomDetailIcon type="check" size={13} />
-            ย้ายออกเรียบร้อย
-          </span>
         </div>
-        <dl className="moveout-detail-stay">
+        <dl className="amd-stay">
           <div>
-            <dt><RoomDetailIcon type="calendar" size={13} />วันที่เข้าพัก</dt>
+            <dt><RoomDetailIcon type="calendar" size={13} />เข้าพัก</dt>
             <dd>{formatDate(moveout.move_in_date)}</dd>
           </div>
+          <span className="amd-stay-arrow" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </span>
           <div>
-            <dt><RoomDetailIcon type="door" size={13} />วันที่ย้ายออก</dt>
+            <dt><RoomDetailIcon type="door" size={13} />ย้ายออก</dt>
             <dd>{formatDateTime(moveout.completed_at)}</dd>
           </div>
           <div className="is-total">
-            <dt><RoomDetailIcon type="clock" size={13} />รวมวันที่พัก</dt>
+            <dt><RoomDetailIcon type="clock" size={13} />รวมพัก</dt>
             <dd>
               {stayDays !== null ? `${stayDays} วัน` : '-'}
-              {stayDays !== null && stayDays >= 30 && <small> (~{formatDays(stayDays)})</small>}
+              {stayDays !== null && stayDays >= 30 && <small>ประมาณ {formatDays(stayDays)}</small>}
             </dd>
           </div>
         </dl>
-      </div>
+      </header>
 
-      {moveout.note && (
-        <dl className="moveout-detail-extra">
-          <div className="is-note">
-            <dt><RoomDetailIcon type="note" size={14} />หมายเหตุจากผู้เช่า</dt>
-            <dd>{moveout.note}</dd>
-          </div>
-        </dl>
-      )}
-
-      <section className="payment-detail-section">
-        <h4><RoomDetailIcon type="user" size={16} />ข้อมูลผู้เช่า</h4>
-        <dl className="payment-detail-facts is-three">
-          {facts.map((fact) => (
-            <div key={fact.label}>
-              <dt><RoomDetailIcon type={fact.icon} size={14} />{fact.label}</dt>
-              <dd>{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="payment-detail-section">
-        <h4><RoomDetailIcon type="history" size={16} />ขั้นตอนการย้ายออก</h4>
-        <MoveoutSteps moveout={moveout} />
-        {moveout.preferred_move_date && (
-          <dl className="moveout-detail-extra">
-            <div><dt>วันที่ผู้เช่าต้องการย้ายออก</dt><dd>{formatDate(moveout.preferred_move_date)}</dd></div>
-          </dl>
-        )}
+      <section className={`amd-tenant-note${moveout.note ? '' : ' is-empty'}`}>
+        <span className="amd-tenant-note-icon"><RoomDetailIcon type="note" size={16} /></span>
+        <div>
+          <strong>หมายเหตุจากผู้เช่า</strong>
+          <p>{moveout.note || 'ผู้เช่าไม่ได้ระบุเหตุผลหรือรายละเอียดเพิ่มเติม'}</p>
+        </div>
       </section>
 
       {loading ? (
-        <div className="room-detail-loading">
-          <span className="room-detail-spinner" aria-hidden="true" />
-          กำลังโหลดข้อมูลเพิ่มเติม...
+        <div className="amd-status-bar" role="status">
+          <span className="amd-spinner" aria-hidden="true" />
+          กำลังโหลดผลตรวจห้องและประวัติการชำระเงิน...
         </div>
       ) : error ? (
-        <div className="room-detail-error" role="alert">
+        <div className="amd-status-bar is-error" role="alert">
+          <RoomDetailIcon type="alert" size={16} />
           <span>{error}</span>
           <button type="button" className="admin-action-btn is-ghost" onClick={onRetry}>ลองใหม่</button>
         </div>
       ) : detail ? (
-        <div className="moveout-detail-grid">
-          <section className={`moveout-card${inspection ? ` is-${inspectionSummary.tone}` : ''}`}>
-            <header className="moveout-card-head">
-              <span className="moveout-card-icon"><RoomDetailIcon type="clipboard" size={18} /></span>
-              <div>
-                <h4>ผลตรวจห้องตอนย้ายออก</h4>
-                <span>
-                  {inspection
-                    ? `ตรวจโดย ${inspection.inspected_by_name || '-'} · ${formatDate(inspection.created_at)}`
-                    : 'ยังไม่มีข้อมูลการตรวจห้อง'}
-                </span>
-              </div>
-              {inspection && (
-                <span className={`room-detail-chip ${inspection.status === 'reviewed' ? 'is-success' : 'is-warning'}`}>
+        alerts.length > 0 ? (
+          <ul className="amd-alerts" aria-label="สิ่งที่ต้องตรวจสอบ">
+            {alerts.map((alert) => (
+              <li key={alert.text} className={`is-${alert.tone}`}>
+                <RoomDetailIcon type={alert.icon} size={14} />
+                {alert.text}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="amd-clear">
+            <RoomDetailIcon type="check" size={14} />
+            ไม่มียอดค้าง ห้องไม่มีความเสียหาย และไม่มีงานซ่อมค้าง
+          </p>
+        )
+      ) : null}
+
+      <div className="amd-grid">
+        <div className="amd-col">
+          <MoveoutDetailCard icon="user" title="ข้อมูลผู้เช่า">
+            <dl className="amd-facts">
+              {facts.map((fact) => (
+                <div key={fact.label}>
+                  <dt>{fact.label}</dt>
+                  <dd>{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </MoveoutDetailCard>
+
+          <MoveoutDetailCard
+            icon="history"
+            title="ขั้นตอนการย้ายออก"
+            hint={moveout.preferred_move_date ? `ผู้เช่าต้องการย้ายออก ${formatDate(moveout.preferred_move_date)}` : undefined}
+          >
+            <MoveoutSteps moveout={moveout} />
+          </MoveoutDetailCard>
+        </div>
+
+        <div className="amd-col">
+          <MoveoutDetailCard
+            icon="clipboard"
+            title="ผลตรวจห้องตอนย้ายออก"
+            tone={inspectionSummary?.tone === 'danger' ? 'danger' : undefined}
+            hint={
+              inspection
+                ? `ตรวจโดย ${inspection.inspected_by_name || '-'} · ${formatDate(inspection.created_at)}`
+                : detail ? 'ยังไม่มีข้อมูลการตรวจห้อง' : undefined
+            }
+            action={
+              inspection && (
+                <span className={`amd-chip ${inspection.status === 'reviewed' ? 'is-success' : 'is-warning'}`}>
                   {MOVE_OUT_INSPECTION_STATUS[inspection.status] || inspection.status}
                 </span>
-              )}
-            </header>
-
-            {inspection ? (
+              )
+            }
+          >
+            {!detail ? (
+              <MoveoutDetailEmpty icon="clipboard" title={loading ? 'กำลังโหลดผลตรวจห้อง' : 'ยังโหลดผลตรวจไม่ได้'} text={loading ? undefined : 'กดลองใหม่ด้านบน'} />
+            ) : inspection ? (
               <>
-                <div className="moveout-card-summary">
-                  <strong className="moveout-card-verdict">{INSPECTION_TONE_LABEL[inspectionSummary.tone]}</strong>
-                  <div className="moveout-card-stats">
-                    <span className="is-success"><strong>{inspectionSummary.counts.good}</strong>ปกติ</span>
-                    <span className="is-warning"><strong>{inspectionSummary.counts.wear}</strong>สึกหรอ</span>
-                    <span className="is-danger"><strong>{inspectionSummary.counts.damaged + inspectionSummary.counts.missing}</strong>ชำรุด/หาย</span>
-                    <span><strong>{inspection.photo_count || 0}</strong>รูป</span>
+                <div className={`amd-verdict is-${inspectionSummary.tone}`}>
+                  <strong>{INSPECTION_TONE_LABEL[inspectionSummary.tone]}</strong>
+                  <div className="amd-verdict-stats">
+                    <span className="is-success"><b>{inspectionSummary.counts.good}</b>ปกติ</span>
+                    <span className="is-warning"><b>{inspectionSummary.counts.wear}</b>สึกหรอ</span>
+                    <span className="is-danger"><b>{issueCount}</b>ชำรุด/หาย</span>
+                    <span><b>{inspection.photo_count || 0}</b>รูป</span>
                   </div>
                 </div>
-                <ul className="moveout-card-list">
+                <ul className="amd-checklist">
                   {MOVE_OUT_CHECKLIST.map((item) => {
                     const result = inspection.checklist?.[item.key]
                     const info = INSPECTION_RESULT_INFO[result] || INSPECTION_RESULT_INFO.none
+                    const label = splitChecklistLabel(item.label)
                     return (
-                      <li key={item.key}>
-                        <span className={`moveout-card-dot is-${info.tone}`} aria-hidden="true" />
-                        <span className="moveout-card-list-label" title={item.label}>{item.label}</span>
-                        <span className={`room-detail-chip is-${info.tone}`}>{info.label}</span>
+                      <li key={item.key} className={`is-${info.tone}`} title={item.label}>
+                        <span className="amd-checklist-label">
+                          <strong>{label.main}</strong>
+                          {label.sub && <small>{label.sub}</small>}
+                        </span>
+                        <span className={`amd-chip is-${info.tone}`}>{info.label}</span>
                       </li>
                     )
                   })}
                 </ul>
-                <footer className="moveout-card-foot">
-                  {inspection.damage_note ? (
-                    <p title={inspection.damage_note}>
-                      <RoomDetailIcon type="note" size={13} />
-                      <span>{inspection.damage_note}</span>
-                    </p>
-                  ) : (
-                    <p className="is-empty"><RoomDetailIcon type="note" size={13} /><span>ไม่มีบันทึกความเสียหาย</span></p>
-                  )}
-                  <button type="button" className="admin-action-btn is-primary" onClick={() => onOpenInspection(inspection)}>
-                    ดูผลตรวจห้อง
-                  </button>
-                </footer>
+                <div className={`amd-damage${inspection.damage_note ? ' has-note' : ''}`}>
+                  <RoomDetailIcon type="note" size={14} />
+                  <span>{inspection.damage_note || 'ไม่มีบันทึกความเสียหาย'}</span>
+                </div>
+                <button type="button" className="admin-action-btn is-primary amd-block-btn" onClick={() => onOpenInspection(inspection)}>
+                  <RoomDetailIcon type="clipboard" size={15} />
+                  ดูผลตรวจห้องแบบเต็ม
+                </button>
               </>
             ) : (
-              <div className="moveout-card-empty">
-                <span className="room-history-state-icon"><RoomDetailIcon type="clipboard" size={22} /></span>
-                <strong>ไม่พบผลตรวจห้อง</strong>
-                <span>ไม่พบผลตรวจห้องของการย้ายออกครั้งนี้</span>
-              </div>
+              <MoveoutDetailEmpty icon="clipboard" title="ไม่พบผลตรวจห้อง" text="ไม่พบผลตรวจห้องของการย้ายออกครั้งนี้" />
             )}
-          </section>
+          </MoveoutDetailCard>
 
-          <section className="moveout-card">
-            <header className="moveout-card-head">
-              <span className="moveout-card-icon"><RoomDetailIcon type="wallet" size={18} /></span>
-              <div>
-                <h4>การชำระเงินระหว่างพัก</h4>
-                <span>{paymentList.length} รายการ · แจ้งซ่อม {detail.maintenance.total} ครั้ง</span>
-              </div>
-              {detail.maintenance.open > 0 && <span className="room-detail-chip is-warning">ซ่อมค้าง {detail.maintenance.open}</span>}
-            </header>
-
-            <div className="moveout-card-totals">
-              <div className="is-success">
-                <span>ชำระแล้ว</span>
-                <strong>฿{formatCurrency(detail.payments.paid.total)}</strong>
-              </div>
-              <div className="is-warning">
-                <span>รอชำระ</span>
-                <strong>฿{formatCurrency(detail.payments.pending.total)}</strong>
-              </div>
-              <div className="is-danger">
-                <span>ค้างชำระ</span>
-                <strong>฿{formatCurrency(detail.payments.overdue.total)}</strong>
-              </div>
-            </div>
-
-            {paymentList.length > 0 ? (
-              <ul className="moveout-card-list is-payments">
-                {paymentList.map((payment) => {
-                  const date = new Date(payment.payment_date || payment.created_at)
-                  const validDate = !Number.isNaN(date.getTime())
-                  return (
-                    <li
-                      key={payment.id}
-                      className={`is-${payment.status}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onSelectPayment(payment)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          onSelectPayment(payment)
-                        }
-                      }}
-                    >
-                      <span className="moveout-card-date">
-                        <strong>{validDate ? date.getDate() : '-'}</strong>
-                        <small>{validDate ? date.toLocaleDateString('th-TH', { month: 'short' }) : ''}</small>
-                      </span>
-                      <span className="moveout-card-list-label">
-                        <strong>{PAYMENT_TYPE_LABEL[payment.type] || payment.type}</strong>
-                        <span className={`admin-badge status-${PAYMENT_BADGE_CLASS[payment.status] || 'pending'}`}>
-                          {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
-                        </span>
-                      </span>
-                      <span className="moveout-card-amount">฿{formatCurrency(payment.amount)}</span>
-                      <svg className="moveout-card-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                    </li>
-                  )
-                })}
-              </ul>
+          <MoveoutDetailCard
+            icon="wallet"
+            title="การชำระเงินระหว่างพัก"
+            tone={totals?.overdue.total > 0 ? 'danger' : undefined}
+            hint={detail ? `${paymentList.length} รายการ` : undefined}
+          >
+            {detail ? (
+              <>
+                <div className="amd-totals">
+                  <div className="is-success">
+                    <span>ชำระแล้ว</span>
+                    <strong>฿{formatCurrency(totals.paid.total)}</strong>
+                  </div>
+                  <div className={totals.pending.total > 0 ? 'is-warning' : 'is-zero'}>
+                    <span>รอชำระ</span>
+                    <strong>฿{formatCurrency(totals.pending.total)}</strong>
+                  </div>
+                  <div className={totals.overdue.total > 0 ? 'is-danger' : 'is-zero'}>
+                    <span>ค้างชำระ</span>
+                    <strong>฿{formatCurrency(totals.overdue.total)}</strong>
+                  </div>
+                </div>
+                {unpaidTotal === 0 && paymentList.length > 0 && <p className="amd-muted">ชำระครบทุกรายการแล้ว</p>}
+                {paymentList.length > 0 ? (
+                  <ul className="amd-payments">
+                    {paymentList.map((payment) => {
+                      const date = new Date(payment.payment_date || payment.created_at)
+                      const validDate = !Number.isNaN(date.getTime())
+                      const select = () => onSelectPayment(payment)
+                      return (
+                        <li
+                          key={payment.id}
+                          className={`is-${payment.status}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`ดูรายละเอียดการชำระ ฿${formatCurrency(payment.amount)}`}
+                          onClick={select}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              select()
+                            }
+                          }}
+                        >
+                          <span className="amd-date">
+                            <strong>{validDate ? date.getDate() : '-'}</strong>
+                            <small>{validDate ? date.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' }) : ''}</small>
+                          </span>
+                          <span className="amd-payment-main">
+                            <strong>{PAYMENT_TYPE_LABEL[payment.type] || payment.type}</strong>
+                            <span className={`admin-badge status-${PAYMENT_BADGE_CLASS[payment.status] || 'pending'}`}>
+                              {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
+                            </span>
+                          </span>
+                          <span className="amd-amount">฿{formatCurrency(payment.amount)}</span>
+                          <svg className="amd-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <MoveoutDetailEmpty icon="wallet" title="ไม่มีรายการชำระเงิน" text="ไม่พบการชำระเงินระหว่างที่พักห้องนี้" />
+                )}
+              </>
             ) : (
-              <div className="moveout-card-empty">
-                <span className="room-history-state-icon"><RoomDetailIcon type="wallet" size={22} /></span>
-                <strong>ไม่มีรายการชำระเงิน</strong>
-                <span>ไม่พบการชำระเงินระหว่างที่พักห้องนี้</span>
-              </div>
+              <MoveoutDetailEmpty icon="wallet" title={loading ? 'กำลังโหลดการชำระเงิน' : 'ยังโหลดข้อมูลการชำระเงินไม่ได้'} />
             )}
-          </section>
+          </MoveoutDetailCard>
+
+          <MoveoutDetailCard
+            icon="wrench"
+            title="การแจ้งซ่อมระหว่างพัก"
+            tone={detail?.maintenance.open > 0 ? 'warning' : undefined}
+          >
+            {detail ? (
+              <dl className="amd-maintenance">
+                <div>
+                  <dt>แจ้งซ่อมทั้งหมด</dt>
+                  <dd>{detail.maintenance.total}<small>ครั้ง</small></dd>
+                </div>
+                <div className={detail.maintenance.open > 0 ? 'is-warning' : 'is-success'}>
+                  <dt>ยังค้างอยู่</dt>
+                  <dd>{detail.maintenance.open}<small>รายการ</small></dd>
+                </div>
+              </dl>
+            ) : (
+              <MoveoutDetailEmpty icon="wrench" title={loading ? 'กำลังโหลดข้อมูลแจ้งซ่อม' : 'ยังโหลดข้อมูลแจ้งซ่อมไม่ได้'} />
+            )}
+          </MoveoutDetailCard>
         </div>
-      ) : null}
+      </div>
     </div>
   )
 }
@@ -4034,6 +4171,10 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                   {contract.label}
                 </span>
               )}
+              <span className={data.room_size != null ? '' : 'is-muted'}>
+                <RoomDetailIcon type="home" size={13} />
+                {data.room_size != null ? `ขนาด ${formatRoomSize(data.room_size)}` : 'ยังไม่ระบุขนาดห้อง'}
+              </span>
               {data.created_at && (
                 <span className="is-muted">
                   <RoomDetailIcon type="calendar" size={13} />
@@ -4475,6 +4616,7 @@ function RentalPeriodCell({ start, end }) {
 const emptyRoomForm = {
   room_number: '',
   price: '',
+  room_size: '',
   electricity_unit_price: '8',
   water_unit_price: '100',
   water_price: '100',
@@ -6211,6 +6353,7 @@ function AdminBackupPage() {
     setRoomForm({
       room_number: String(room.room_number),
       price: String(room.price),
+      room_size: room.room_size != null ? String(Number(room.room_size)) : '',
       electricity_unit_price: String(room.electricity_unit_price),
       water_unit_price: String(room.water_unit_price ?? 100),
       water_price: String(room.water_price),
@@ -6331,6 +6474,11 @@ function AdminBackupPage() {
       setRoomFormError('เลขห้องต้องเป็นตัวเลข 3 หลัก')
       return
     }
+    const sizeValue = roomForm.room_size === '' ? null : Number(roomForm.room_size)
+    if (sizeValue !== null && (!Number.isFinite(sizeValue) || sizeValue <= 0 || sizeValue > 9999.99)) {
+      setRoomFormError('ขนาดห้องต้องเป็นตัวเลขมากกว่า 0 (ไม่เกิน 9,999.99 ตร.ม.)')
+      return
+    }
     const electricityValue = Number(roomForm.electricity_unit_price)
     if (!Number.isFinite(electricityValue) || electricityValue < 0 || electricityValue > 99.99) {
       setRoomFormError('ค่าไฟ/หน่วยต้องเป็นตัวเลข 2 หลัก (0-99.99)')
@@ -6351,6 +6499,7 @@ function AdminBackupPage() {
     const payload = {
       room_number: Number(roomForm.room_number),
       price: Number(roomForm.price),
+      room_size: sizeValue,
       electricity_unit_price: Number(roomForm.electricity_unit_price),
       water_unit_price: Number(roomForm.water_unit_price),
       water_price: Number(roomForm.water_price),
@@ -7687,6 +7836,7 @@ function AdminBackupPage() {
                     <th>เลขห้อง</th>
                     <th>สถานะ</th>
                     <th className="admin-room-price-column">ราคา/เดือน</th>
+                    <th className="admin-col-optional admin-room-size-column">ขนาดห้อง</th>
                     <th className="admin-col-optional admin-room-amenities-column">สิ่งอำนวยความสะดวก</th>
                     <th className="admin-col-optional admin-room-tenant-column">ผู้เช่า</th>
                     <th className="admin-col-optional admin-room-actions-column">การดำเนินการ</th>
@@ -7695,13 +7845,13 @@ function AdminBackupPage() {
                 <tbody>
                   {roomsLoading ? (
                     <tr>
-                      <td colSpan={6} className="admin-empty">
+                      <td colSpan={7} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : filteredRooms.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="admin-empty">
+                      <td colSpan={7} className="admin-empty">
                         ไม่พบข้อมูลห้องพัก
                       </td>
                     </tr>
@@ -7723,6 +7873,11 @@ function AdminBackupPage() {
                           <td className="admin-price-cell admin-room-price-column">
                             ฿{formatCurrency(room.price)}
                             <span className="admin-price-unit">/เดือน</span>
+                          </td>
+                          <td className="admin-col-optional admin-room-size-column">
+                            <span className={`admin-room-size-cell${room.room_size != null ? '' : ' is-empty'}`}>
+                              {room.room_size != null ? formatRoomSize(room.room_size) : 'ไม่ระบุ'}
+                            </span>
                           </td>
                           <td className="admin-col-optional admin-amenities-cell admin-room-amenities-column">
                             <AmenitiesList room={room} />
@@ -7755,14 +7910,15 @@ function AdminBackupPage() {
                         </tr>
                         <ExpandToggleRow
                           open={expandedRoomRows.has(room.room_number)}
-                          colSpan={6}
+                          colSpan={7}
                           onClick={() => toggleRoomRow(room.room_number)}
                         />
                         <DetailRow
                           open={expandedRoomRows.has(room.room_number)}
-                          colSpan={6}
+                          colSpan={7}
                           fields={[
                             { label: 'สถานะ', value: room.is_booked ? 'ไม่ว่าง' : 'ว่าง' },
+                            { label: 'ขนาดห้อง', value: room.room_size != null ? formatRoomSize(room.room_size) : 'ไม่ระบุ' },
                             { label: 'ราคา/เดือน', value: `฿${formatCurrency(room.price)}` },
                             {
                               label: 'ผู้เช่า',
@@ -8833,7 +8989,7 @@ function AdminBackupPage() {
       </div>
 
       {moveoutDetail && (
-        <Modal title={`รายละเอียดการย้ายออก - ห้อง ${moveoutDetail.row.room_number}`} onClose={() => setMoveoutDetail(null)} variant="moveout-detail">
+        <Modal title="รายละเอียดการย้ายออก" onClose={() => setMoveoutDetail(null)} variant="moveout-detail">
           <MoveoutDetail
             row={moveoutDetail.row}
             detail={moveoutDetail.data}
@@ -10007,7 +10163,7 @@ function AdminBackupPage() {
                   </small>
                 </div>
               </header>
-              <div className="admin-room-form-grid">
+              <div className="admin-room-form-grid is-2">
                 <label className="admin-room-field">
                   <span>เลขห้อง</span>
                   <input
@@ -10023,6 +10179,24 @@ function AdminBackupPage() {
                     placeholder="เช่น 101"
                     required
                   />
+                </label>
+                <label className="admin-room-field">
+                  <span>ขนาดห้อง <small className="admin-room-optional">ไม่บังคับ</small></span>
+                  <div className="admin-room-input">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      max="9999.99"
+                      name="room_size"
+                      className="form-control"
+                      value={roomForm.room_size}
+                      onChange={handleRoomFormChange}
+                      placeholder="เช่น 24"
+                    />
+                    <em>ตร.ม.</em>
+                  </div>
                 </label>
               </div>
             </section>

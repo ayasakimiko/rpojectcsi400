@@ -9,6 +9,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/StaffPage.css'
 import './css/ParcelManagement.css'
+import './css/WaitingDetail.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
@@ -294,136 +295,191 @@ function WaitingListTimeline({ items, now, onDetail, onEdit, onDelete, onStatusC
 
 function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onStatusChange, statusBusyId = null, actionError = '' }) {
   const [waitingPhoneCopied, setWaitingPhoneCopied] = useState(null)
-  const waitingNow = now
   const status = WAITING_UI_STATUSES[item.status] ? item.status : 'waiting'
+  const statusInfo = WAITING_UI_STATUSES[status]
   const preferences = splitWaitingPreferences(item.room_preference)
   const days = waitingDaysSince(item.created_at, now)
+  const moveIn = item.desired_move_in_date ? describeWaitingMoveIn(item.desired_move_in_date, now) : null
   const formatCurrency = (value) => Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const pricedRooms = vacantRooms.filter((room) => room.price != null)
+  const lowestPrice = pricedRooms.length > 1 ? Math.min(...pricedRooms.map((room) => Number(room.price))) : null
+  const copied = waitingPhoneCopied === item.id
+  const statusBusy = statusBusyId != null
+
   return (
-    <div className="waiting-detail">
-      <div className={`waiting-detail-hero is-${WAITING_UI_STATUSES[status].tone}`}>
-        <span className="waiting-avatar is-large" aria-hidden="true">
-          <PersonIcon size={18} />
-        </span>
-        <div className="waiting-detail-name">
-          <span className="waiting-detail-eyebrow">ข้อมูลผู้สนใจเช่าห้อง</span>
-          <strong>{item.full_name}</strong>
-        </div>
-        <span className={`waiting-status is-${WAITING_UI_STATUSES[status].tone}`}>
-          {WAITING_UI_STATUSES[status].label}
-        </span>
-      </div>
-
-      <div className="waiting-detail-contact">
-        <div className="waiting-detail-phone">
-          <span>เบอร์ติดต่อ</span>
-          <strong>{item.phone}</strong>
-        </div>
-        <div className="waiting-detail-contact-actions">
-          <a className="waiting-ui-action-btn is-primary" href={`tel:${item.phone}`}>
-            <WaitingDetailIcon type="phone" />
-            โทรติดต่อ
-          </a>
-          <button
-            type="button"
-            className="waiting-ui-action-btn is-ghost"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(item.phone)
-                setWaitingPhoneCopied(item.id)
-              } catch {
-                setWaitingPhoneCopied(null)
-              }
-            }}
-          >
-            {waitingPhoneCopied === item.id ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
-            {waitingPhoneCopied === item.id ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
-          </button>
-        </div>
-      </div>
-
-
-      {actionError && <p className="waiting-ui-form-error waiting-ui-form-error-block" role="alert">{actionError}</p>}
-      {onStatusChange && (
-        <label className="waiting-status-control is-detail">
-          <span>จัดการสถานะรายชื่อ</span>
-          <select value={status} disabled={statusBusyId != null} onChange={(event) => onStatusChange(item, event.target.value)}>
-            {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}
-          </select>
-        </label>
-      )}
-      <dl className="waiting-detail-stats">
-        <div className={days >= 30 ? 'is-long' : ''}>
-          <dt><WaitingDetailIcon type="clock" />ระยะเวลาที่รอ</dt>
-          <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
-        </div>
-        <div>
-          <dt><WaitingDetailIcon type="calendar" />วันที่แจ้ง</dt>
-          <dd>{formatWaitingDateTime(item.created_at)}</dd>
-        </div>
-        <div>
-          <dt><WaitingDetailIcon type="user" />บันทึกโดย</dt>
-          <dd className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</dd>
-        </div>
-        <div className={item.desired_move_in_date ? `is-movein-${describeWaitingMoveIn(item.desired_move_in_date, waitingNow).tone}` : ''}>
-          <dt><WaitingDetailIcon type="calendar" />ต้องการเข้าอยู่</dt>
-          <dd>
-            {item.desired_move_in_date
-              ? formatWaitingDate(item.desired_move_in_date)
-              : 'ไม่ระบุ'}
-          </dd>
-          {item.desired_move_in_date && <small>{describeWaitingMoveIn(item.desired_move_in_date, waitingNow).text}</small>}
-        </div>
-      </dl>
-
-      <section className="waiting-detail-section">
-        <h4><DoorIcon size={17} />ประเภทห้องที่สนใจ</h4>
-        <div className="waiting-tags">
-          {preferences.length > 0 ? (
-            preferences.map((preference) => <span key={preference}>{preference}</span>)
-          ) : (
-            <span className="is-muted">ไม่ระบุประเภทห้อง</span>
-          )}
-        </div>
-      </section>
-
-      <section className="waiting-detail-section is-note">
-        <h4><NoteIcon size={17} />หมายเหตุ</h4>
-        <p className={`waiting-detail-note${item.note ? '' : ' is-empty'}`}>{item.note || 'ไม่มีหมายเหตุ'}</p>
-      </section>
-
-      <section className="waiting-detail-section is-vacancies">
-        <h4>
-          <DoorIcon size={17} />
-          ห้องว่างตอนนี้ <span className="waiting-ui-count-pill">{vacantRooms.length}</span>
-        </h4>
-        {vacantRooms.length > 0 ? (
-          <div className="waiting-vacant-rooms">
-            {vacantRooms.map((room) => (
-              <div className="waiting-vacant-room" key={room.room_number}>
-                <span className="waiting-vacant-room-icon" aria-hidden="true"><DoorIcon size={19} /></span>
-                <span className="waiting-vacant-room-info">
-                  <strong>ห้อง {room.room_number}</strong>
-                  {room.price != null && <small>฿{formatCurrency(room.price)}/เดือน</small>}
-                </span>
-                <span className="waiting-vacant-room-status">ว่าง</span>
-              </div>
-            ))}
+    <div className="awd">
+      <div className="awd-scroll">
+        <header className={`awd-hero is-${statusInfo.tone}`}>
+          <div className="awd-hero-person">
+            <span className="awd-avatar" aria-hidden="true"><PersonIcon size={22} /></span>
+            <div className="awd-hero-name">
+              <small>ผู้สนใจเช่าห้อง</small>
+              <strong>{item.full_name}</strong>
+            </div>
+            <span className={`awd-status is-${statusInfo.tone}`}>
+              <span aria-hidden="true" />
+              {statusInfo.label}
+            </span>
           </div>
-        ) : (
-          <p className="waiting-detail-note is-empty">ยังไม่มีห้องว่าง</p>
+          <div className="awd-contact">
+            <div className="awd-phone">
+              <small>เบอร์ติดต่อ</small>
+              <strong>{item.phone}</strong>
+            </div>
+            <div className="awd-contact-actions">
+              <a className="awd-btn is-primary" href={`tel:${item.phone}`}>
+                <WaitingDetailIcon type="phone" />
+                โทรติดต่อ
+              </a>
+              <button
+                type="button"
+                className={`awd-btn is-ghost${copied ? ' is-copied' : ''}`}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(item.phone)
+                    setWaitingPhoneCopied(item.id)
+                  } catch {
+                    setWaitingPhoneCopied(null)
+                  }
+                }}
+                aria-live="polite"
+              >
+                {copied ? <CheckIcon size={16} /> : <WaitingDetailIcon type="copy" />}
+                {copied ? 'คัดลอกแล้ว' : 'คัดลอกเบอร์'}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {onStatusChange && (
+          <section className="awd-status-panel" aria-label="จัดการสถานะรายชื่อ">
+            <div className="awd-status-head">
+              <strong>จัดการสถานะ</strong>
+              <small>{statusBusy ? 'กำลังบันทึกสถานะ...' : 'กดเพื่อเปลี่ยนสถานะ เจ้าหน้าที่จะเห็นข้อมูลล่าสุด'}</small>
+            </div>
+            <div className="awd-status-options" role="radiogroup" aria-label="สถานะรายชื่อ">
+              {Object.entries(WAITING_UI_STATUSES).map(([key, info]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={status === key}
+                  className={`awd-status-option is-${info.tone}${status === key ? ' is-active' : ''}`}
+                  disabled={statusBusy}
+                  onClick={() => {
+                    if (status !== key) onStatusChange(item, key)
+                  }}
+                >
+                  <span aria-hidden="true" />
+                  {info.label}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
-      </section>
 
-      <p className="waiting-detail-hint"><WaitingDetailIcon type="info" />{onStatusChange ? 'ปรับสถานะเพื่อให้เจ้าหน้าที่เห็นข้อมูลล่าสุด' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}</p>
+        {actionError && (
+          <p className="awd-error" role="alert">
+            <WaitingDetailIcon type="info" />
+            {actionError}
+          </p>
+        )}
 
-      <div className="waiting-ui-form-actions waiting-detail-actions">
-        <button type="button" className="waiting-ui-action-btn is-ghost" onClick={onClose}>
+        <dl className="awd-stats">
+          <div className={days >= 30 ? 'is-long' : ''}>
+            <dt><WaitingDetailIcon type="clock" size={14} />รอมาแล้ว</dt>
+            <dd>{days === 0 ? 'แจ้งวันนี้' : `${days} วัน`}</dd>
+            <small>{days >= 30 ? 'รอนานกว่า 1 เดือน' : 'นับจากวันที่แจ้ง'}</small>
+          </div>
+          <div>
+            <dt><WaitingDetailIcon type="calendar" size={14} />วันที่แจ้ง</dt>
+            <dd>{formatWaitingDateTime(item.created_at)}</dd>
+            <small>
+              บันทึกโดย <span className={item.submitted_by_name ? 'waiting-ui-actor' : ''}>{item.submitted_by_name || '-'}</span>
+            </small>
+          </div>
+          <div className={moveIn ? `is-movein-${moveIn.tone}` : 'is-empty'}>
+            <dt><WaitingDetailIcon type="calendar" size={14} />ต้องการเข้าอยู่</dt>
+            <dd>{item.desired_move_in_date ? formatWaitingDate(item.desired_move_in_date) : 'ไม่ระบุ'}</dd>
+            <small>{moveIn ? moveIn.text : 'ยังไม่ได้ระบุวันที่'}</small>
+          </div>
+        </dl>
+
+        <div className="awd-grid">
+          <section className="awd-card">
+            <header className="awd-card-head">
+              <span className="awd-card-icon"><DoorIcon size={16} /></span>
+              <h4>ประเภทห้องที่สนใจ</h4>
+            </header>
+            {preferences.length > 0 ? (
+              <div className="awd-tags">
+                {preferences.map((preference) => <span key={preference}>{preference}</span>)}
+              </div>
+            ) : (
+              <p className="awd-empty">ไม่ได้ระบุประเภทห้อง แนะนำห้องว่างที่มีได้ทุกห้อง</p>
+            )}
+          </section>
+
+          <section className="awd-card">
+            <header className="awd-card-head">
+              <span className="awd-card-icon"><NoteIcon size={16} /></span>
+              <h4>หมายเหตุ</h4>
+            </header>
+            {item.note ? <p className="awd-note">{item.note}</p> : <p className="awd-empty">ไม่มีหมายเหตุ</p>}
+          </section>
+        </div>
+
+        <section className="awd-card is-vacancies">
+          <header className="awd-card-head">
+            <span className="awd-card-icon is-green"><DoorIcon size={16} /></span>
+            <h4>
+              ห้องว่างตอนนี้
+              <span className="awd-count">{vacantRooms.length}</span>
+            </h4>
+            {vacantRooms.length > 0 && <small>เทียบเลขห้องและราคาต่อเดือน</small>}
+          </header>
+          {vacantRooms.length > 0 ? (
+            <ul className="awd-rooms">
+              {vacantRooms.map((room) => {
+                const cheapest = lowestPrice != null && Number(room.price) === lowestPrice
+                return (
+                  <li key={room.room_number} className={cheapest ? 'is-cheapest' : ''}>
+                    <span className="awd-room-number">
+                      <small>ห้อง</small>
+                      <strong>{room.room_number}</strong>
+                    </span>
+                    <span className="awd-room-price">
+                      {room.price != null ? (
+                        <>
+                          <strong>฿{formatCurrency(room.price)}</strong>
+                          <small>/เดือน</small>
+                        </>
+                      ) : (
+                        <small>ไม่ระบุราคา</small>
+                      )}
+                    </span>
+                    {cheapest && <em>ถูกที่สุด</em>}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="awd-empty">ยังไม่มีห้องว่าง แจ้งผู้สนใจเมื่อมีห้องว่างแล้วเปลี่ยนสถานะเป็น "ติดต่อแล้ว"</p>
+          )}
+        </section>
+      </div>
+
+      <footer className="awd-actions">
+        <span className="awd-actions-hint">
+          <WaitingDetailIcon type="info" size={14} />
+          {onStatusChange ? 'แก้ชื่อ เบอร์ หรือความต้องการได้ที่ปุ่มแก้ไขข้อมูล' : 'สถานะของรายชื่อนี้จัดการโดย Admin'}
+        </span>
+        <button type="button" className="awd-btn is-ghost" onClick={onClose}>
           ปิด
         </button>
         <button
           type="button"
-          className="waiting-ui-action-btn is-primary"
+          className="awd-btn is-primary"
           onClick={() => {
             onEdit(item)
           }}
@@ -431,7 +487,7 @@ function WaitingListDetails({ item, now, vacantRooms = [], onClose, onEdit, onSt
           <WaitingDetailIcon type="edit" />
           แก้ไขข้อมูล
         </button>
-      </div>
+      </footer>
     </div>
   )
 }
@@ -1100,7 +1156,7 @@ function Modal({ title, onClose, children, variant, stickyFilters = false, bodyR
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'payment-history' ? ' staff-modal-payment-history' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'payment-history' ? ' staff-modal-payment-history' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${variant === 'waiting-detail' ? ' staff-modal-waiting-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -1390,6 +1446,12 @@ function formatCurrency(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '-'
   return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+const formatPlainNumber = formatCurrency
+
+function formatRoomSize(value) {
+  return `${formatPlainNumber(value)} ตร.ม.`
 }
 
 function splitNote(note) {
@@ -3159,16 +3221,17 @@ function MoveRoomCompare({ request, preview }) {
     { label: 'ค่าเช่า', unit: '/เดือน', money: true, from: pick(source, 'price', request.source_room_price), to: pick(target, 'price', request.target_room_price) },
     { label: 'ค่าไฟ', unit: '/หน่วย', money: true, from: source?.electricity_unit_price, to: pick(target, 'electricity_unit_price', request.target_room_electricity_unit_price) },
     { label: 'ค่าน้ำ', unit: '/เดือน', money: true, from: source?.water_price, to: pick(target, 'water_price', request.target_room_water_price) },
+    { label: 'ขนาดห้อง', unit: ' ตร.ม.', from: pick(source, 'room_size', request.source_room_size), to: pick(target, 'room_size', request.target_room_size) },
   ]
   const show = (row, value) => {
     if (value == null) return '-'
-    return row.money ? `฿${formatCurrency(value)}` : `${value}${row.unit}`
+    return row.money ? `฿${formatCurrency(value)}` : `${formatPlainNumber(value)}${row.unit}`
   }
   const change = (row) => {
     if (row.from == null || row.to == null) return { label: '-', tone: 'is-muted' }
     const diff = Number(row.to) - Number(row.from)
     if (diff === 0) return { label: 'เท่าเดิม', tone: 'is-muted' }
-    const text = row.money ? `${diff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(diff))}` : `${diff > 0 ? '+' : ''}${diff}`
+    const text = row.money ? `${diff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(diff))}` : `${diff > 0 ? '+' : '-'}${formatPlainNumber(Math.abs(diff))}${row.unit}`
     const worse = row.money ? diff > 0 : diff < 0
     return { label: text, tone: worse ? 'is-warning' : 'is-success' }
   }
@@ -7035,6 +7098,8 @@ function StaffMain() {
   const [waitingListStatus, setWaitingListStatus] = useState('all')
   const [waitingListSort, setWaitingListSort] = useState('newest')
   const [waitingListDetail, setWaitingListDetail] = useState(null)
+  const [waitingListStatusBusyId, setWaitingListStatusBusyId] = useState(null)
+  const [waitingListActionError, setWaitingListActionError] = useState('')
   const [waitingNow] = useState(() => Date.now())
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
@@ -7304,6 +7369,20 @@ function StaffMain() {
       .get('/api/staff/waiting-list', { headers: authHeaders() })
       .then(({ data }) => setWaitingList(data.waitingList))
       .catch(() => {})
+  }
+
+  const setWaitingListEntryStatus = async (entry, status) => {
+    if (waitingListStatusBusyId != null) return
+    setWaitingListStatusBusyId(entry.id)
+    setWaitingListActionError('')
+    try {
+      await axios.patch(`/api/staff/waiting-list/${entry.id}/status`, { status }, { headers: authHeaders() })
+      await loadWaitingList()
+    } catch (err) {
+      setWaitingListActionError(err.response?.data?.message || 'เปลี่ยนสถานะไม่สำเร็จ')
+    } finally {
+      setWaitingListStatusBusyId(null)
+    }
   }
 
   const loadParcels = useCallback(() => {
@@ -9398,9 +9477,18 @@ function StaffMain() {
         {waitingListDetail && (() => {
           const item = waitingList.find((entry) => entry.id === waitingListDetail.id) || waitingListDetail
           return (
-            <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => setWaitingListDetail(null)} variant="detail">
+            <Modal title="รายละเอียดผู้รอห้องว่าง" onClose={() => { setWaitingListDetail(null); setWaitingListActionError('') }} variant="waiting-detail">
               {(requestClose) => (
-                <WaitingListDetails item={item} now={waitingNow} vacantRooms={vacantRooms} onClose={requestClose} onEdit={(entry) => { setWaitingListDetail(null); openWaitingListModal(entry) }} />
+                <WaitingListDetails
+                  item={item}
+                  now={waitingNow}
+                  vacantRooms={vacantRooms}
+                  onClose={requestClose}
+                  onEdit={(entry) => { setWaitingListDetail(null); openWaitingListModal(entry) }}
+                  onStatusChange={setWaitingListEntryStatus}
+                  statusBusyId={waitingListStatusBusyId}
+                  actionError={waitingListActionError}
+                />
               )}
             </Modal>
           )
@@ -10123,7 +10211,20 @@ function StaffMain() {
                   <span>{waitingList.length ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะ' : 'กด "+ เพิ่มผู้สนใจ" เพื่อบันทึกรายชื่อแรก'}</span>
                 </div>
               ) : (
-                <WaitingListTimeline items={waitingListPageItems} now={waitingNow} onDetail={setWaitingListDetail} onEdit={openWaitingListModal} onDelete={(item) => { setWaitingListDeleteError(''); setWaitingListDelete(item) }} />
+                <>
+                  {waitingListActionError && !waitingListDetail && (
+                    <p className="staff-form-error" role="alert">{waitingListActionError}</p>
+                  )}
+                  <WaitingListTimeline
+                    items={waitingListPageItems}
+                    now={waitingNow}
+                    onDetail={setWaitingListDetail}
+                    onEdit={openWaitingListModal}
+                    onDelete={(item) => { setWaitingListDeleteError(''); setWaitingListDelete(item) }}
+                    onStatusChange={setWaitingListEntryStatus}
+                    statusBusyId={waitingListStatusBusyId}
+                  />
+                </>
               )}
             </div>
             <StaffPagination page={currentWaitingListPage} total={filteredWaitingList.length} onChange={setWaitingListPage} />
@@ -10377,6 +10478,7 @@ function StaffMain() {
                   <thead>
                     <tr>
                       <th>เลขห้อง</th>
+                      <th className="staff-col-optional">ขนาดห้อง</th>
                       <th>สถานะห้อง</th>
                       <th>ผู้เช่า</th>
                       <th className="staff-col-optional">เบอร์โทร</th>
@@ -10389,7 +10491,7 @@ function StaffMain() {
                   <tbody>
                     {filteredRooms.length === 0 ? (
                       <tr className="staff-room-empty-row">
-                        <td colSpan={8} className="staff-empty">
+                        <td colSpan={9} className="staff-empty">
                           ไม่พบข้อมูลห้องพักที่ตรงกับเงื่อนไข
                         </td>
                       </tr>
@@ -10404,6 +10506,11 @@ function StaffMain() {
                               <td className="staff-room-number-cell">
                                 <span className="staff-room-mobile-label">ห้อง</span>
                                 {room.room_number}
+                              </td>
+                              <td className="staff-col-optional">
+                                <span className={`staff-room-size${room.room_size != null ? '' : ' is-empty'}`}>
+                                  {room.room_size != null ? formatRoomSize(room.room_size) : 'ไม่ระบุ'}
+                                </span>
                               </td>
                               <td className="staff-room-status-cell">
                                 <span className={`staff-badge status-${room.is_booked ? 'booked' : room.held_for_transfer ? 'held' : 'vacant'}`}>
@@ -10517,10 +10624,14 @@ function StaffMain() {
                               </td>
                             </tr>
                             <tr className="staff-row-detail">
-                              <td colSpan={8}>
+                              <td colSpan={9}>
                                 <div className={`staff-row-detail-wrap${isExpanded ? ' is-expanded' : ''}`}>
                                   <div className="staff-row-detail-scroll">
                                     <div className="staff-row-detail-content">
+                                      <div className="staff-row-detail-item">
+                                        <span>ขนาดห้อง</span>
+                                        <strong>{room.room_size != null ? formatRoomSize(room.room_size) : 'ไม่ระบุ'}</strong>
+                                      </div>
                                       <div className="staff-row-detail-item">
                                         <span>เบอร์โทร</span>
                                         <strong>{room.tenant?.phone || '-'}</strong>
@@ -10570,7 +10681,7 @@ function StaffMain() {
                               </td>
                             </tr>
                             <tr className="staff-row-toggle-row">
-                              <td colSpan={8}>
+                              <td colSpan={9}>
                                 <button
                                   type="button"
                                   className={`staff-row-toggle${isExpanded ? ' is-expanded' : ''}`}

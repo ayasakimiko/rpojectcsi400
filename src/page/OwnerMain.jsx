@@ -5108,12 +5108,16 @@ function OwnerMain() {
                                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />
                                 </svg>
                                 {detailTenant.phone || '-'}
+                                {detailRoom.room_size != null && ` · ขนาด ${formatCurrency(detailRoom.room_size)} ตร.ม.`}
                               </span>
                             </>
                           ) : (
                             <>
                               <strong>ห้องว่าง</strong>
-                              <span className="owner-rd-hero-meta">พร้อมให้เช่า ฿{formatCurrency(detailRoom.price)}/เดือน</span>
+                              <span className="owner-rd-hero-meta">
+                                พร้อมให้เช่า ฿{formatCurrency(detailRoom.price)}/เดือน
+                                {detailRoom.room_size != null && ` · ขนาด ${formatCurrency(detailRoom.room_size)} ตร.ม.`}
+                              </span>
                             </>
                           )}
                         </div>
@@ -5654,7 +5658,10 @@ function OwnerMain() {
                               </span>
                               <span className="owner-roomlist-card-title">
                                 <strong>ห้อง {room.room_number}</strong>
-                                <em>{room.price != null ? `฿${formatCurrency(room.price)}/เดือน` : 'ไม่ระบุราคา'}</em>
+                                <em>
+                                  {room.price != null ? `฿${formatCurrency(room.price)}/เดือน` : 'ไม่ระบุราคา'}
+                                  {room.room_size != null && ` · ${formatCurrency(room.room_size)} ตร.ม.`}
+                                </em>
                               </span>
                               <span className="owner-roomlist-card-status">{ROOM_STATUS_LABELS[room.status] || 'ว่าง'}</span>
                             </span>

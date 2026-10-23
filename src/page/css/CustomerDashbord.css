@@ -884,6 +884,24 @@
   margin: 0;
 }
 
+.dashboard-room-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 4px 11px;
+  border: 1px solid #dce9fb;
+  border-radius: 999px;
+  background: #f3f8ff;
+  color: #33506f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dashboard-room-size svg {
+  color: #2563eb;
+}
+
 .dashboard-room-status {
   display: inline-block;
   font-size: 15.5px;
