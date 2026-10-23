@@ -13,14 +13,14 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 4px 12px;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
 .parcel-photo-field-heading small,
 .parcel-photo-optional {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 
@@ -75,7 +75,7 @@
   padding: 4px 6px;
   overflow: hidden;
   color: #385a80;
-  font-size: 10px;
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -89,7 +89,7 @@
   border-radius: 999px;
   background: rgba(15, 43, 82, 0.72);
   color: #fff;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -118,7 +118,7 @@
 }
 
 .parcel-photo-add small {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -129,6 +129,6 @@
 
 .parcel-photo-error {
   color: #b91c1c;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }

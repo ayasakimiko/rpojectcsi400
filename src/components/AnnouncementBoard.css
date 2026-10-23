@@ -42,7 +42,7 @@
   outline: none;
   background: transparent;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .announcement-date-range {
@@ -59,13 +59,13 @@
 
 .announcement-date-input {
   width: 100%;
-  height: 40px;
+  min-height: 40px;
   padding: 0 12px;
   border: 1.5px solid #dbe4f3;
   border-radius: 10px;
   background: #ffffff;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .announcement-date-input:focus {
@@ -81,7 +81,7 @@
   justify-content: space-between;
   gap: 8px;
   color: #4a6582;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -90,7 +90,7 @@
   border: none;
   background: none;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -113,7 +113,7 @@
 .announcement-board .announcement-board-subtitle {
   margin: 5px 0 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 400;
 }
 
@@ -128,7 +128,7 @@
 .announcement-board.owner-panel .owner-panel-header h2 {
   margin: 0;
   color: #14365c;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
 }
 
@@ -136,7 +136,7 @@
   flex: 0 0 auto;
   border-radius: 9px;
   padding: 7px 12px;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.3;
   white-space: nowrap;
 }
@@ -152,7 +152,7 @@
   padding: 0 7px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   vertical-align: middle;
 }
@@ -163,7 +163,7 @@
   border: 1px solid transparent;
   border-radius: 999px;
   padding: 2px 9px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -238,7 +238,7 @@
   align-items: center;
   gap: 8px;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -256,7 +256,7 @@
   border-radius: 999px;
   background: #eef4fc;
   color: #6b859e;
-  font-size: 10.5px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
 }
@@ -279,7 +279,7 @@
 .announcement-detail-message {
   margin: 0;
   color: #000000;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -344,13 +344,13 @@
 
 .announcement-detail-meta-text small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .announcement-detail-meta-text strong {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -372,7 +372,7 @@
   }
 
   .announcement-detail-heading h4 {
-    font-size: 15.5px;
+    font-size: 16.5px;
   }
 
   .announcement-detail-meta {
@@ -384,7 +384,7 @@
   display: grid;
   gap: 6px;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -401,7 +401,7 @@
   background: #f8fbff;
   color: #33506f;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -430,7 +430,7 @@
   display: block;
   margin-top: 2px;
   color: #b45309;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -448,7 +448,7 @@
   background: transparent;
   color: #2563eb;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   cursor: pointer;
 }
 
@@ -472,7 +472,7 @@
   border: 1px solid #e8eff8;
   border-radius: 8px;
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -496,7 +496,7 @@
 
 .announcement-field-hint {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 400;
   line-height: 1.5;
 }
@@ -602,7 +602,7 @@
 .announcement-confirm-message {
   margin: 4px 0 12px;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.55;
 }
 
@@ -617,7 +617,7 @@
   border-radius: 10px;
   padding: 10px 14px;
   background: #f8fbff;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: left;
 }
 
@@ -703,7 +703,7 @@
   display: grid;
   gap: 5px;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -719,7 +719,7 @@
   background: #f8fbff;
   color: #0f2b52;
   font: inherit;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 400;
 }
 
@@ -747,7 +747,7 @@
 .announcement-board-error {
   margin: 0 0 12px;
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .announcement-board-form .announcement-board-error {
@@ -766,7 +766,7 @@
 .announcement-board-submit {
   border-radius: 12px;
   padding: 10px 20px;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   cursor: pointer;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
@@ -938,7 +938,7 @@
 .announcement-post-byline strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -956,7 +956,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 18px;
   white-space: nowrap;
@@ -995,7 +995,7 @@
   border-radius: 999px;
   background: #f0fdf4;
   color: #15803d;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -1006,7 +1006,7 @@
 .announcement-post-title {
   margin: 0 0 6px;
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -1015,7 +1015,7 @@
 .announcement-post-message {
   margin: 0;
   color: #33506f;
-  font-size: 14px;
+  font-size: 15.5px;
   line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1036,7 +1036,7 @@
   background: none;
   color: #2563eb;
   font: inherit;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1062,7 +1062,7 @@
   align-items: center;
   gap: 5px;
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -1087,12 +1087,12 @@
   justify-content: center;
   box-sizing: border-box;
   min-width: 76px;
-  height: 36px;
+  min-height: 36px;
   padding: 0 14px;
   border: 1px solid;
   border-radius: 9px;
   box-shadow: none;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1136,7 +1136,7 @@
   background: #fbfdff;
   color: #2563eb;
   font: inherit;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -1154,7 +1154,7 @@
   padding: 0 7px;
   border-radius: 999px;
   background: #dbeafe;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 20px;
 }
 
@@ -1182,12 +1182,12 @@
 
 .announcement-feed-empty strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .announcement-feed-empty > span:last-child {
   color: #8aa0b6;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .announcement-post-more:focus-visible,
@@ -1297,7 +1297,7 @@
 
 .announcement-day-date small {
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
 }
 
@@ -1311,13 +1311,13 @@
 
 .announcement-day-text strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .announcement-day-text span {
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1329,7 +1329,7 @@
   border-radius: 999px;
   background: #f8fbff;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -1396,7 +1396,7 @@
   }
 
   .announcement-day-date strong {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .announcement-day-dot {
@@ -1553,13 +1553,13 @@
   align-items: center;
   justify-content: space-between;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
 .announcement-photo-field small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -1620,7 +1620,7 @@
   border-radius: 10px;
   background: #fbfdff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -1685,11 +1685,11 @@
 }
 
 .announcement-post-title {
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .announcement-post-message {
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .announcement-post-foot {

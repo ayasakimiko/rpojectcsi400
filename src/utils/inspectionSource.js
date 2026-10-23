@@ -1,8 +1,8 @@
 export function getInspectionPurposeLabel(inspection) {
-  if (inspection.tenant_request_type === 'move_room') return 'ตรวจก่อนเปลี่ยนห้อง'
-  if (inspection.tenant_request_type === 'moveout') return 'ตรวจก่อนย้ายออก'
-  if (inspection.tenant_request_id) return 'ตรวจสภาพห้องตามคำขอ'
-  return 'ตรวจห้องย้ายออก'
+  if (inspection.tenant_request_type === 'move_room') return 'ย้ายห้อง'
+  if (inspection.tenant_request_type === 'moveout') return 'ย้ายออก'
+  if (inspection.tenant_request_id) return 'ตามคำขอ'
+  return 'ย้ายออก'
 }
 
 export function getInspectionSourceLabel(inspection) {

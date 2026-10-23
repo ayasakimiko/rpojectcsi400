@@ -7,7 +7,7 @@
   border-radius: 999px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -47,7 +47,7 @@
   border-radius: 12px;
   background: #fffbfa;
   color: #b42318;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -60,7 +60,7 @@
 
 .contract-first-payment-note strong {
   display: block;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -95,12 +95,12 @@
 
 .contract-detail-head strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .contract-detail-head small {
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .contract-detail-icon {
@@ -133,7 +133,7 @@
 .contract-facts dt {
   margin-bottom: 3px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -142,13 +142,13 @@
   flex-direction: column;
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
 .contract-facts dd small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -174,13 +174,13 @@
 
 .contract-first-month span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .contract-first-month strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -201,7 +201,7 @@
   grid-column: 1 / -1;
   margin: 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .contract-detail-images {
@@ -222,7 +222,7 @@
 .contract-detail-images header strong {
   flex: 1;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-detail-images header span {
@@ -230,7 +230,7 @@
   border: 1px solid #c9dcfb;
   border-radius: 999px;
   background: #eaf2ff;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -252,12 +252,12 @@
 .contract-transfers header strong {
   flex: 1;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-transfers header .contract-transfers-count {
   color: #6366f1;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -271,7 +271,7 @@
 .contract-transfers-note {
   margin: 6px 0 8px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.5;
 }
 
@@ -302,12 +302,12 @@
 
 .contract-transfer-route strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .contract-transfer-route small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .contract-transfers dl {
@@ -328,13 +328,13 @@
 
 .contract-transfer-date > span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .contract-transfer-date > b {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -349,7 +349,7 @@
 .contract-transfer-deposit > span {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   white-space: nowrap;
 }
 
@@ -392,7 +392,7 @@
 
 .contract-transfer-tiles span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -405,7 +405,7 @@
 
 .contract-transfer-tiles small {
   color: #64748b;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -446,7 +446,7 @@
   padding: 7px 14px;
   background: #f5f8fd;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.01em;
 }
@@ -465,7 +465,7 @@
 
 .contract-transfer-groups dl > div {
   padding: 6px 0;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .contract-transfer-groups dt {
@@ -480,7 +480,7 @@
 
 .contract-transfers dd.is-strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -501,7 +501,7 @@
   gap: 12px;
   padding: 4px 0;
   border-bottom: 1px dashed #e3ecf8;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .contract-transfers dl > div:last-child {
@@ -551,7 +551,7 @@
   cursor: pointer;
   list-style: none;
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   user-select: none;
 }
@@ -582,7 +582,7 @@
   border: 1px solid #c9dcfb;
   border-radius: 999px;
   background: #eaf2ff;
-  font-size: 11.5px;
+  font-size: 13px;
   font-style: normal;
 }
 
@@ -635,7 +635,7 @@
   border: 0;
   background: none;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -654,7 +654,7 @@
   border-radius: 10px;
   background: #f8fbff;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -666,7 +666,7 @@
   border-radius: 999px;
   background: #eef2ff;
   color: #4338ca;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   vertical-align: middle;
 }
@@ -700,14 +700,14 @@
 
 .contract-transfers-modal-meta i {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 600;
 }
 
 .contract-transfers-modal-meta b {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -748,7 +748,7 @@
   border-radius: 10px;
   background: #f8fbff;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .contract-transfers-modal-search input:focus {
@@ -759,14 +759,14 @@
 .contract-transfers-modal-search span {
   flex: 0 0 auto;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .contract-transfers-empty {
   margin: 24px 0;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: center;
 }
 
@@ -831,7 +831,7 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   color: #2563eb;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   text-align: center;
 }
@@ -846,7 +846,7 @@
   border-radius: 12px;
   background: #f8fbff;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   text-align: center;
 }
 
@@ -856,7 +856,7 @@
 
 .contract-gallery-empty strong {
   color: #33506f;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-gallery-empty.is-compact {
@@ -875,8 +875,8 @@
 
 .csc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -895,7 +895,7 @@
 .csc-card {
   position: relative;
   display: flex;
-  height: 470px;
+  height: 540px;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
@@ -917,9 +917,9 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   overflow-y: auto;
-  padding: 16px 16px 12px;
+  padding: 18px 18px 14px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -945,8 +945,8 @@
 
 .csc-room {
   display: flex;
-  width: 54px;
-  height: 54px;
+  width: 60px;
+  height: 60px;
   flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
@@ -959,13 +959,13 @@
 
 .csc-room small {
   color: #6b859e;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .csc-room strong {
   color: #2563eb;
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 800;
 }
 
@@ -980,7 +980,7 @@
 .csc-person strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -988,7 +988,7 @@
 
 .csc-person small {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .csc-status {
@@ -999,7 +999,7 @@
   border-radius: 999px;
   background: #f0fdf4;
   color: #15803d;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1080,7 +1080,7 @@
   border-radius: 999px;
   background: #f1f3f5;
   color: #5b6472;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1098,7 +1098,7 @@
   gap: 2px 6px;
   margin-top: 2px;
   color: #6b7280;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -1270,13 +1270,13 @@
 .csc-date small,
 .csc-money small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .csc-date b {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -1318,7 +1318,7 @@
   border-radius: 999px;
   background: #fff;
   color: #2563eb;
-  font-size: 11.5px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 700;
   white-space: nowrap;
@@ -1335,7 +1335,7 @@
 
 .csc-period-meta small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -1379,7 +1379,7 @@
 .csc-money b {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -1406,7 +1406,7 @@
 
 .csc-label {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -1462,7 +1462,7 @@
   justify-content: center;
   background: rgba(15, 43, 82, 0.55);
   color: #fff;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -1480,7 +1480,7 @@
 .csc-foot > span {
   overflow: hidden;
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1495,7 +1495,7 @@
   border-radius: 9px;
   background: #fff;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -1514,12 +1514,12 @@
 
 .contract-cell-text strong {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .contract-cell-text small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .contract-cell-text b {
@@ -1533,7 +1533,7 @@
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 10.5px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   vertical-align: 1px;
@@ -1584,7 +1584,7 @@
   padding: 1px 0;
   background: rgba(15, 43, 82, 0.72);
   color: #fff;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   text-align: center;
 }
@@ -1598,7 +1598,7 @@
 .contract-cell-nophoto,
 .contract-cell-empty {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .contract-picker {
@@ -1639,12 +1639,12 @@
   align-items: center;
   gap: 8px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .contract-picker-progress > span strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-picker-progress em {
@@ -1653,7 +1653,7 @@
   border-radius: 999px;
   background: #fffbeb;
   color: #b45309;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
 }
@@ -1688,7 +1688,7 @@
   border-radius: 9px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1734,7 +1734,7 @@
   border-radius: 12px;
   background: #fbfdff;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -1771,12 +1771,12 @@
 
 .contract-picker-drop strong {
   color: #33506f;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-picker-drop span {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .contract-picker-drop:hover {
@@ -1801,7 +1801,7 @@
 }
 
 .contract-picker-overlay strong {
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-picker-actions {
@@ -1818,7 +1818,7 @@
   border-radius: 7px;
   background: #fff;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   text-align: center;
   cursor: pointer;
@@ -1832,7 +1832,7 @@
 .contract-picker-error {
   margin-top: 8px;
   color: #b42318;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1862,12 +1862,12 @@
 .contract-search input {
   width: 100%;
   min-width: 0;
-  height: 38px;
+  min-height: 38px;
   border: 0;
   outline: 0;
   background: transparent;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .contract-search:focus-within {
@@ -1877,7 +1877,7 @@
 
 .contract-toolbar-count {
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .contract-table-wrap {
@@ -1889,7 +1889,7 @@
 .contract-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .contract-table th {
@@ -1897,7 +1897,7 @@
   border-bottom: 1px solid #dce9fb;
   background: #f8fbff;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1964,7 +1964,7 @@
 
 .contract-stack small {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .contract-remaining {
@@ -1977,7 +1977,7 @@
   align-items: center;
   gap: 2px;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2009,7 +2009,7 @@
 .ccc-header p {
   margin: 1px 0 0;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .ccc-state {
@@ -2023,7 +2023,7 @@
   border-radius: 14px;
   background: #fbfdff;
   color: #8aa0b6;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: center;
 }
 
@@ -2033,7 +2033,7 @@
 
 .ccc-state strong {
   color: #33506f;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .ccc-state .is-error {
@@ -2061,7 +2061,7 @@
 
 .ccc-room span {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -2085,7 +2085,7 @@
 }
 
 .ccc-period .csc-date b {
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .ccc-period .csc-period-meta {
@@ -2181,7 +2181,7 @@
   gap: 5px;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2220,7 +2220,7 @@
   margin: 0;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   line-height: 1.4;
   white-space: nowrap;
@@ -2261,7 +2261,7 @@
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -2271,7 +2271,7 @@
   border-radius: 999px;
   background: #f3f8ff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -2295,7 +2295,7 @@
 .ccc-rows dt {
   flex: 0 0 auto;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -2303,7 +2303,7 @@
   min-width: 0;
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   text-align: right;
   overflow-wrap: anywhere;
@@ -2337,7 +2337,7 @@
 
 .ccc-rows .is-date-renew dd {
   color: #1d4ed8;
-  font-size: 14.5px;
+  font-size: 16px;
 }
 
 .ccc-bill {
@@ -2354,7 +2354,7 @@
 
 .ccc-bill h3 {
   margin-bottom: 2px;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .ccc-bill > div {
@@ -2362,7 +2362,7 @@
   align-items: baseline;
   justify-content: space-between;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .ccc-bill strong {
@@ -2379,7 +2379,7 @@
 }
 
 .ccc-bill h3 span {
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .ccc-bill > .ccc-bill-deposit {
@@ -2432,7 +2432,7 @@
   border: 0;
   background: none;
   color: #4b6a88;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -2459,7 +2459,7 @@
   align-items: baseline;
   gap: 5px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -2474,7 +2474,7 @@
 
 .ccc-bill-deposit-summary > .is-left b {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .ccc-bill-deposit-toggle {
@@ -2483,7 +2483,7 @@
   align-items: center;
   gap: 3px;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -2523,7 +2523,7 @@
   justify-content: space-between;
   gap: 10px;
   color: #4b6a88;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -2536,7 +2536,7 @@
 
 .ccc-bill-deposit-deductions small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .ccc-bill-deposit-deductions b {
@@ -2565,7 +2565,7 @@
   border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.75);
-  font-size: 10.5px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   line-height: 18px;
@@ -2573,7 +2573,7 @@
 
 .ccc-bill > .ccc-bill-deposit strong {
   color: #6d28d9;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -2656,13 +2656,13 @@
 
 .ccc-month-facts small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .ccc-month-facts b {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2689,7 +2689,7 @@
   border-radius: 9px;
   background: #fff;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -2790,14 +2790,14 @@
 
 .rent-bill-head strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .rent-bill-head small {
   overflow: hidden;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2870,13 +2870,13 @@
 
 .rent-bill-contract > header span {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .rent-bill-contract > header small {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -2901,14 +2901,14 @@
 .rent-bill-contract dt {
   min-width: 0;
   color: #5d728b;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .rent-bill-contract dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -2921,7 +2921,7 @@
 .rent-bill-contract .is-total dt,
 .rent-bill-contract .is-total dd {
   color: #b45309;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .rent-bill-contract > p {
@@ -2930,7 +2930,7 @@
   border-top: 1px solid #e8eff8;
   background: #fff;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .contract-refund-note {
@@ -2976,13 +2976,13 @@
 }
 
 .contract-refund-note strong {
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .contract-refund-note small {
   color: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   opacity: 0.85;
 }
@@ -3014,13 +3014,13 @@
 }
 
 .settled-deposit-head strong {
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .settled-deposit-head .deposit-log-link {
   flex: 0 0 auto;
   margin: 0;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .settled-deposit-meta {
@@ -3028,7 +3028,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 12px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -3074,21 +3074,21 @@
 
 .contract-refund-note.is-compact strong {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: 13.5px;
   white-space: nowrap;
 }
 
 .contract-refund-note.is-compact small {
   min-width: 0;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .csc-card:has(.contract-refund-note.is-compact) .csc-main {
-  gap: 10px;
-  padding-bottom: 10px;
+  gap: 12px;
+  padding-bottom: 12px;
 }
 
 .rent-bill-lines .is-deposit dt {
@@ -3133,14 +3133,14 @@
 
 .rent-bill-meta small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .rent-bill-meta b {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3176,13 +3176,13 @@
 
 .rent-bill-slip > header span {
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .rent-bill-slip > header small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .rent-bill-slip-image {
@@ -3215,7 +3215,7 @@
   border-radius: 999px;
   background: rgba(15, 43, 82, 0.62);
   color: #fff;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -3235,7 +3235,7 @@
   border-radius: 12px;
   background: #fbfdff;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .rent-bill-slip-empty svg {
@@ -3248,7 +3248,7 @@
   border-radius: 999px;
   background: #fffbeb;
   color: #b45309;
-  font-size: 12px;
+  font-size: 13.5px;
   font-style: normal;
 }
 
@@ -3285,14 +3285,14 @@
 
 .rent-bill-lines dt {
   color: #33506f;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .rent-bill-lines dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3318,7 +3318,7 @@
 
 .rent-bill-total span {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
@@ -3369,7 +3369,7 @@
 
 .rent-bill-foot small {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .rent-bill-foot button:hover {
@@ -3400,14 +3400,14 @@
   flex: 0 0 auto;
   width: auto;
   min-width: 0;
-  height: 30px;
+  min-height: 30px;
   margin: 0;
   padding: 0 14px;
   border: 1px solid #dbe7f5;
   border-radius: 8px;
   background: #fff;
   color: #4b6a88;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
 }
@@ -3417,7 +3417,7 @@
   align-items: center;
   gap: 6px;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -3427,14 +3427,14 @@
   border-radius: 999px;
   background: #fffbeb;
   color: #b45309;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
 }
 
 .ccc-month small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .ccc-bill .ccc-month strong {
@@ -3444,7 +3444,7 @@
 }
 
 .ccc-month span {
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .ccc-bill > .ccc-month.is-paid {
@@ -3467,7 +3467,7 @@
   border-radius: 50%;
   background: #dcfce7;
   color: #15803d;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .ccc-bill > .ccc-month.is-pending {
@@ -3509,13 +3509,13 @@
 
 .ccc-month.is-none span {
   color: #15803d;
-  font-size: 15.5px;
+  font-size: 16.5px;
   font-weight: 800;
 }
 
 .ccc-month.is-none small {
   color: #3f8f5c;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -3525,7 +3525,7 @@
 }
 
 .ccc-bill > .ccc-bill-deposit.is-paid strong {
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
@@ -3533,7 +3533,7 @@
   margin-top: -4px;
   margin-bottom: 2px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .ccc-bill-period b,
@@ -3548,7 +3548,7 @@
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
 }
@@ -3566,14 +3566,14 @@
   border-radius: 6px;
   background: #fff;
   color: #1d4ed8;
-  font-size: 11.5px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 700;
 }
 
 .ccc-bill-line small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .ccc-bill > .ccc-bill-sum {
@@ -3593,13 +3593,13 @@
 
 .ccc-bill > .is-total strong {
   color: #b45309;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .ccc-bill p {
   margin: 0;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .ccc-gallery-pane {
@@ -3657,12 +3657,12 @@
   }
 
   .ccc-period .csc-date b {
-    font-size: 12.5px;
+    font-size: 14px;
   }
 
   .ccc-period .csc-period-line em {
     padding: 1px 6px;
-    font-size: 11px;
+    font-size: 12.5px;
   }
 
   .ccc-grid {
@@ -3782,7 +3782,7 @@
 .contract-months-head small {
   display: block;
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -3795,7 +3795,7 @@
 
 .contract-months-head strong span {
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -3806,7 +3806,7 @@
   border-radius: 999px;
   background: var(--months-soft);
   color: var(--months-tone);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 800;
 }
 
@@ -3828,7 +3828,7 @@
   border-radius: 8px;
   background: #f1f5f9;
   color: #94a3b8;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -3856,7 +3856,7 @@
   flex-wrap: wrap;
   gap: 12px;
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -3924,13 +3924,13 @@
 
 .deposit-settle-card strong {
   color: #0f2b52;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .deposit-settle-card small {
   color: #92400e;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .deposit-settle-card > button {
@@ -3942,7 +3942,7 @@
   border-radius: 10px;
   background: #f59e0b;
   color: #fff;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   box-shadow: 0 6px 14px -8px rgba(217, 119, 6, 0.8);
 }
@@ -4005,7 +4005,7 @@
 
 .deposit-settle-stats i {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 600;
 }
@@ -4013,7 +4013,7 @@
 .deposit-settle-stats b {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4055,7 +4055,7 @@
   padding: 0;
   background: none;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.1px;
 }
@@ -4076,7 +4076,7 @@
   display: flex;
   align-items: baseline;
   gap: 10px;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .deposit-settle-terms dt {
@@ -4099,7 +4099,7 @@
 .deposit-settle-terms dd em {
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
 }
@@ -4133,7 +4133,7 @@
   padding: 4px 8px;
   border-radius: 8px;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .deposit-settle-terms li::before {
@@ -4171,7 +4171,7 @@
   border-radius: 10px;
   background: #fffbfa;
   color: #7a271a;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.5;
 }
 
@@ -4203,7 +4203,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -4213,14 +4213,14 @@
   border-radius: 999px;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
 }
 
 .deposit-settle-auto small {
   color: #4b6a88;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -4294,7 +4294,7 @@
   align-items: center;
   gap: 6px;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -4304,14 +4304,14 @@
   border-radius: 999px;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 10.5px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
 }
 
 .deposit-settle-option small {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .deposit-settle-radio {
@@ -4355,7 +4355,7 @@
   flex-direction: column;
   gap: 5px;
   color: #475569;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -4372,7 +4372,7 @@
   border-radius: 10px;
   background: #fff;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 500;
 }
 
@@ -4404,7 +4404,7 @@
   justify-content: space-between;
   gap: 12px;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .deposit-settle-summary dt,
@@ -4446,7 +4446,7 @@
   border-radius: 10px;
   background: #fef3f2;
   color: #b42318;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .deposit-settle-foot {
@@ -4462,7 +4462,7 @@
 .deposit-settle-foot small {
   flex: 1;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .deposit-settle-foot button {
@@ -4470,7 +4470,7 @@
   margin: 0;
   padding: 9px 16px;
   border-radius: 10px;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -4506,7 +4506,7 @@
   border: 0;
   background: none;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -4530,7 +4530,7 @@
   border-radius: 10px;
   background: #fffbeb;
   color: #b45309;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -4546,7 +4546,7 @@
   border-radius: 999px;
   background: #dc2626;
   color: #fff;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 800;
 }
@@ -4554,7 +4554,7 @@
 .deposit-log-heading {
   margin: 4px 0 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -4575,7 +4575,7 @@
   gap: 6px;
   margin: 0;
   color: #b45309;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -4596,7 +4596,7 @@
   border: 0;
   background: none;
   color: #b45309;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -4626,7 +4626,7 @@
   border-bottom: 2px solid transparent;
   background: none;
   color: #6b859e;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4645,7 +4645,7 @@
   border-radius: 999px;
   background: #eef3fa;
   color: #4b6a88;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
 }
 
@@ -4664,7 +4664,7 @@
   border-radius: 999px;
   background: #fde68a;
   color: #92400e;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .deposit-pending > ul {
@@ -4713,7 +4713,7 @@
 
 .deposit-pending-toggle > strong {
   flex: 0 0 auto;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -4776,7 +4776,7 @@
   border-radius: 8px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -4790,14 +4790,14 @@
 .deposit-pending-info b {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .deposit-pending-info small {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .deposit-pending-action {
@@ -4808,7 +4808,7 @@
   border: 1px solid transparent;
   border-radius: 9px;
   color: #fff;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4832,7 +4832,7 @@
   border-radius: 999px;
   background: #fff;
   color: #b42318;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 800;
   white-space: nowrap;
@@ -4853,7 +4853,7 @@
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .deposit-log-time b {
@@ -4870,7 +4870,7 @@
   border-radius: 999px;
   background: #f8fbff;
   color: #4b6a88;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -4884,7 +4884,7 @@
 
 .deposit-log-tags b {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -4903,7 +4903,7 @@
   margin: 0;
   padding: 24px 0;
   color: #8aa0b6;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: center;
 }
 
@@ -4953,7 +4953,7 @@
 
 .deposit-log-amount small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -4975,7 +4975,7 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .deposit-log-entry dt {
@@ -5036,7 +5036,7 @@
   padding: 2px 10px;
   border: 1px solid #dbe4f0;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-style: normal;
   font-weight: 800;
 }
@@ -5055,7 +5055,7 @@
 
 .deposit-log-entry time {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -5088,7 +5088,7 @@
   align-items: center;
   gap: 4px;
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -5113,7 +5113,7 @@
   align-items: center;
   gap: 8px;
   color: #b42318;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -5122,7 +5122,7 @@
   border: 1px solid #fca5a5;
   border-radius: 999px;
   background: #fff;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 800;
 }
@@ -5141,7 +5141,7 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .deposit-log-violation li span {
@@ -5161,7 +5161,7 @@
   border-radius: 999px;
   background: #fff;
   color: #5b6472;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -5192,7 +5192,7 @@
   border-radius: 8px;
   background: #fffbeb;
   color: #92400e;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.5;
 }
 
@@ -5239,7 +5239,7 @@
   min-width: 0;
   margin-top: -4px;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -5329,7 +5329,7 @@
   border-bottom: 2px solid transparent;
   background: none;
   color: #6b859e;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -5349,7 +5349,7 @@
   border-radius: 999px;
   background: #eef2ff;
   color: #4338ca;
-  font-size: 11.5px;
+  font-size: 12px;
   font-style: normal;
   line-height: 18px;
   text-align: center;
@@ -5381,7 +5381,7 @@
   border-radius: 10px;
   background: #f8fbff;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .ctl-date-field {
@@ -5393,7 +5393,7 @@
 
 .ctl-date-field > span {
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -5408,7 +5408,7 @@
   border-radius: 10px;
   background: #f8fbff;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .ctl-search:focus,
@@ -5422,7 +5422,7 @@
   border: 0;
   background: none;
   color: #b42318;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -5434,7 +5434,7 @@
 .ctl-result {
   margin-left: auto;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -5442,7 +5442,7 @@
 .ctl-list > li.ctl-empty {
   padding: 32px 0;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: center;
 }
 
@@ -5474,7 +5474,7 @@
 
 .ctl-summary span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -5583,7 +5583,7 @@
 }
 
 .ctl-date small {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -5597,7 +5597,7 @@
 
 .ctl-title {
   color: #0f2b52;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -5605,7 +5605,7 @@
   display: block;
   margin: 0 0 4px 4px;
   color: #7c8aa5;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -5620,7 +5620,7 @@
   flex-wrap: wrap;
   gap: 2px 12px;
   color: #475569;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -5638,7 +5638,7 @@
 
 .ctl-time {
   color: #8a94a6;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .ctl-thumbs {
@@ -5651,7 +5651,7 @@
 
 .ctl-thumbs small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -5689,7 +5689,7 @@
   justify-content: center;
   background: rgba(15, 43, 82, 0.55);
   color: #ffffff;
-  font-size: 13px;
+  font-size: 14.5px;
   font-style: normal;
   font-weight: 800;
 }
@@ -5700,7 +5700,7 @@
   align-items: center;
   gap: 2px;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }

@@ -1324,8 +1324,8 @@ function OwnerUtilityReceipts({ from, to, result, loading, error }) {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={result.trends} margin={{ top: 16, right: 12, left: 8, bottom: 0 }} barGap={8}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8eff8" />
-                      <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#6b859e' }} tickLine={false} axisLine={{ stroke: '#dce6f3' }} />
-                      <YAxis width={72} tick={{ fontSize: 11, fill: '#6b859e' }} tickLine={false} axisLine={false} tickFormatter={(value) => Intl.NumberFormat('th-TH', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
+                      <XAxis dataKey="period" tick={{ fontSize: 12, fill: '#6b859e' }} tickLine={false} axisLine={{ stroke: '#dce6f3' }} />
+                      <YAxis width={72} tick={{ fontSize: 12, fill: '#6b859e' }} tickLine={false} axisLine={false} tickFormatter={(value) => Intl.NumberFormat('th-TH', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
                       <Tooltip cursor={{ fill: '#f1f6fd' }} content={<OwnerUtilityTooltip unit={chart.unit} />} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
                       {chart.series.map((series) => <Bar key={series.key} animationDuration={180} dataKey={series.key} name={series.name} fill={series.color} maxBarSize={48} radius={[6, 6, 0, 0]} />)}

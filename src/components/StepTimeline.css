@@ -17,7 +17,7 @@
 .step-timeline-head h4 {
   margin: 0;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -94,7 +94,7 @@
 }
 
 .step-timeline-number {
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -133,7 +133,7 @@
 
 .step-timeline-body strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1.35;
 }
@@ -156,13 +156,13 @@
 
 .step-timeline-body small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
 .step-timeline-by {
   color: #2563eb;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -178,7 +178,7 @@
   padding: 1px 8px;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -188,7 +188,7 @@
   padding: 6px 10px;
   background: #f8fbff;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.5;
   white-space: pre-line;
   overflow-wrap: anywhere;

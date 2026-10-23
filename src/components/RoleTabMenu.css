@@ -39,7 +39,7 @@
     border: 0;
     background: #f8fbff;
     color: #0f2b52;
-    font-size: 13px;
+    font-size: 14.5px;
     font-weight: 700;
     text-align: left;
     cursor: pointer;
@@ -54,7 +54,7 @@
     overflow: hidden;
     margin-left: auto;
     color: #2563eb;
-    font-size: 12px;
+    font-size: 13.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

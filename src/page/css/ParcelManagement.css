@@ -57,7 +57,7 @@
 .parcel-hero-sub {
   margin: 2px 0 0;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .parcel-stats {
@@ -83,7 +83,7 @@
 
 .parcel-stat dt {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -114,7 +114,7 @@
   border-top: 1px dashed #dce9fb;
   padding-top: 12px;
   color: #b45309;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -128,7 +128,7 @@
   border-radius: 2px;
   padding-left: 9px;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -228,19 +228,19 @@
 
 .parcel-form-hint {
   color: #8aa3c4;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .parcel-form .form-label {
   margin-bottom: 6px;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .parcel-form .form-label small {
   color: #8aa3c4;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -267,7 +267,7 @@
   border-radius: 10px;
   background-color: #f8fbff;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
@@ -321,7 +321,7 @@
 .parcel-label {
   margin: 0;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -336,7 +336,7 @@
   background-color: #f8fbff;
   color: #0f2b52;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.5;
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -380,7 +380,7 @@
   border-radius: 10px;
   padding: 6px 14px;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -428,7 +428,7 @@
   padding: 10px 12px;
   background: #fef3f2;
   color: #b42318;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -468,19 +468,19 @@
   border-spacing: 0;
   color: #33506f;
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .parcel-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 44px;
+  min-height: 44px;
   padding: 0 14px;
   border-bottom: 1.5px solid #dce9fb;
   background: #f8fbff;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-align: left;
@@ -518,14 +518,14 @@
 .parcel-room-badge {
   display: grid;
   min-width: 44px;
-  height: 32px;
+  min-height: 32px;
   place-items: center;
   border-radius: 10px;
   padding: 0 8px;
   background: #eaf2ff;
   box-shadow: inset 0 0 0 1px #c9dcfb;
   color: #1d4ed8;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -543,7 +543,7 @@
   margin-top: 2px;
   overflow: hidden;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -557,7 +557,7 @@
   box-shadow: inset 0 0 0 1.5px #dce9fb;
   color: #33506f;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 13.5px;
   white-space: nowrap;
 }
 
@@ -598,7 +598,7 @@
   padding: 0 4px;
   background: rgba(15, 43, 82, 0.8);
   color: #fff;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
 }
 
@@ -608,7 +608,7 @@
   gap: 6px;
   border-radius: 999px;
   padding: 3px 10px 3px 8px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -654,7 +654,7 @@
   border-radius: 999px;
   background: #f1f3f5;
   color: #5b6472;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
   line-height: 1.6;
@@ -672,7 +672,7 @@
 .parcel-table td.parcel-empty {
   height: auto;
   color: #6b859e;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   text-align: center;
 }
@@ -758,7 +758,7 @@
 
 .parcel-detail-link {
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -788,8 +788,8 @@
 
 .parcel-ui-who .parcel-room-badge {
   min-width: 52px;
-  height: 40px;
-  font-size: 15px;
+  min-height: 40px;
+  font-size: 16px;
 }
 
 .parcel-ui-stack {
@@ -804,7 +804,7 @@
   max-width: 240px;
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -815,7 +815,7 @@
   align-items: center;
   gap: 5px;
   color: #7f94ab;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -837,7 +837,7 @@
   background: #f8fbff;
   color: #33506f;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -860,7 +860,7 @@
   border-radius: 10px;
   background: #f8fbff;
   color: #a0b2c4;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -871,7 +871,7 @@
   padding: 4px 11px;
   border: 1px solid;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -935,7 +935,7 @@
   align-items: center;
   gap: 4px;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 

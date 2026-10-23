@@ -113,7 +113,7 @@
 
 .admin-title-group p {
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
   margin: 0;
 }
 
@@ -130,7 +130,7 @@
   background: #fff5f5;
   color: #b42318;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14.5px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
@@ -177,7 +177,7 @@
   padding: 0 5px;
   background: linear-gradient(135deg, #fb7185, #e11d48);
   color: #fff;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -298,7 +298,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 14px 16px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: #0f2b52;
   background: #fff;
@@ -329,7 +329,7 @@
   padding: 0 7px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
 }
 
@@ -366,7 +366,7 @@
   gap: 10px;
   margin: 0;
   text-align: center;
-  font-size: 13px;
+  font-size: 14.5px;
   color: #6b859e;
   padding: 0 16px;
   background: #f8fbff;
@@ -460,7 +460,7 @@
 }
 
 .admin-notif-page-info {
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #6b859e;
 }
@@ -468,7 +468,7 @@
 .admin-notif-page-current {
   min-width: 44px;
   color: #0f2b52;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   text-align: center;
 }
@@ -585,7 +585,7 @@
   min-width: 0;
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -599,7 +599,7 @@
   padding: 1px 7px;
   background: linear-gradient(135deg, #fb7185, #e11d48);
   color: #fff;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 800;
   line-height: 1.6;
   vertical-align: 1px;
@@ -609,7 +609,7 @@
   flex: 0 0 auto;
   margin: 0;
   color: #94a3b8;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -624,7 +624,7 @@
   padding: 2px 10px 2px 8px;
   background: var(--notif-tint);
   color: var(--notif-text);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 1.5;
 }
@@ -649,7 +649,7 @@
 
 .admin-notif-item-preview-label {
   color: #9aabbd;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -658,7 +658,7 @@
   display: -webkit-box;
   overflow: hidden;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.55;
   -webkit-box-orient: vertical;
@@ -670,7 +670,7 @@
 
 .admin-confirm-message-status {
   display: inline-block;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   margin-bottom: 2px;
 }
@@ -698,7 +698,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 4px 0;
-  font-size: 13px;
+  font-size: 14.5px;
   color: #33506f;
 }
 
@@ -750,20 +750,20 @@
 }
 
 .admin-request-log-label {
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   color: #0f2b52;
   margin: 0;
 }
 
 .admin-request-log-date {
-  font-size: 11px;
+  font-size: 12.5px;
   color: #6b859e;
   margin: 2px 0 0;
 }
 
 .admin-request-log-duration {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #2563eb;
   margin: 2px 0 0;
@@ -771,7 +771,7 @@
 
 .admin-alert {
   border-radius: 12px;
-  font-size: 13px;
+  font-size: 14.5px;
   border: none;
 }
 
@@ -862,7 +862,7 @@
 .admin-summary-label {
   overflow: hidden;
   color: #5b7491;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -884,7 +884,7 @@
 .admin-summary-hint {
   overflow: hidden;
   color: #7f94ab;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -977,7 +977,7 @@
   background: transparent;
   color: #4b6a88;
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: 15px;
   padding: 10px 16px;
   border-radius: 10px 10px 0 0;
   transition: color 0.15s ease;
@@ -1033,7 +1033,7 @@
 }
 
 .admin-card-header h2 {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   color: #0f2b52;
   margin: 0;
@@ -1042,20 +1042,20 @@
 .waiting-list-storage-note {
   margin: 5px 0 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .waiting-list-date {
   display: block;
   margin-top: 3px;
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 400;
 }
 
 .waiting-list-status-select {
   min-width: 132px;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-modal-wide {
@@ -1068,7 +1068,7 @@
   gap: 8px;
   margin: 24px 0 10px;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
@@ -1173,14 +1173,14 @@
 .moveout-inspection-admin-hero-main strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .moveout-inspection-admin-hero-main span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .moveout-inspection-status {
@@ -1190,7 +1190,7 @@
   border: 1px solid #fde68a;
   background: #fffbeb;
   color: #b45309;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -1234,12 +1234,12 @@
 
 .moveout-inspection-admin-meta span {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .moveout-inspection-admin-meta strong {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .moveout-inspection-admin-checklist {
@@ -1259,13 +1259,13 @@
   gap: 10px;
   padding: 10px 12px;
   background: #fff;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .moveout-inspection-admin-checklist strong {
   padding: 2px 10px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1300,7 +1300,7 @@
 .moveout-inspection-damage-note {
   margin: 0;
   color: #422f05;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 500;
   line-height: 1.75;
   letter-spacing: 0.005em;
@@ -1310,14 +1310,14 @@
 
 .moveout-inspection-damage-note.is-empty {
   color: #7a90a8;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 400;
 }
 
 .moveout-inspection-empty-photos {
   margin: 0;
   color: #7a90a8;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.6;
 }
 
@@ -1337,7 +1337,7 @@
   border-radius: 12px;
   background: #fff;
   color: #33506f;
-  font-size: 11px;
+  font-size: 12.5px;
   font-family: inherit;
   text-align: left;
   cursor: zoom-in;
@@ -1401,13 +1401,13 @@
   max-width: 420px;
   border: 1.5px solid #dce9fb;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .admin-filter-select {
   border: 1.5px solid #dce9fb;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 14.5px;
   min-width: 150px;
 }
 
@@ -1429,7 +1429,7 @@
 
 .admin-toolbar-label {
   display: block;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   color: #6b859e;
   text-transform: uppercase;
@@ -1488,7 +1488,7 @@
 
 .admin-table {
   margin-bottom: 0;
-  font-size: 13.5px;
+  font-size: 15px;
   vertical-align: middle;
   border-collapse: separate;
   border-spacing: 0;
@@ -1498,7 +1498,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   color: #6b859e;
   text-transform: uppercase;
@@ -1512,7 +1512,7 @@
 
 .admin-table tbody td {
   color: #1e3a5f;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.5;
   padding: 14px 18px;
@@ -1592,7 +1592,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-price-cell {
   font-weight: 800;
-  font-size: 14.5px;
+  font-size: 16px;
   color: #2563eb;
   white-space: nowrap;
 }
@@ -1609,7 +1609,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-staff-action-date {
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 500;
   color: #8a9cba;
 }
@@ -1655,7 +1655,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-rental-date {
   font-weight: 600;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .admin-rental-arrow {
@@ -1672,7 +1672,7 @@ tr.admin-focus-flash.is-fading > td {
   vertical-align: middle;
   padding: 32px 12px;
   color: #8a9cba;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -1697,14 +1697,14 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #f5f9ff;
   color: #33506f;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .admin-price-unit {
   margin-left: 3px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   color: #8a9cba;
 }
@@ -1737,7 +1737,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #fafcff;
   color: #8a9cba;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -1756,7 +1756,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
   background: #f1f5f9;
@@ -1790,7 +1790,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-status-hint {
   margin: 4px 0 0;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 500;
   color: #a8b3c4;
   white-space: nowrap;
@@ -1892,7 +1892,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-action-btn {
   border-radius: 10px;
   padding: 7px 14px;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   border: 1.5px solid transparent;
@@ -1929,19 +1929,19 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-deposit-readonly span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .admin-deposit-readonly strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .admin-deposit-readonly small {
   color: #8a94a6;
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -2009,7 +2009,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 8px;
   background: #f8fbff;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   padding: 6px 14px;
   cursor: pointer;
@@ -2021,7 +2021,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-page-info {
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #6b859e;
 }
@@ -2135,7 +2135,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-modal-header h3 {
-  font-size: 16.5px;
+  font-size: 17px;
   font-weight: 700;
   color: #0f2b52;
   margin: 0;
@@ -2170,7 +2170,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-modal-body .form-label {
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   color: #33506f;
   margin-bottom: 5px;
@@ -2180,7 +2180,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-modal-body .form-select {
   border: 1.5px solid #dce9fb;
   border-radius: 10px;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .admin-modal-body .form-control:focus,
@@ -2230,7 +2230,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-modal-confirm .admin-action-btn {
   padding: 8px 18px;
-  font-size: 13.5px;
+  font-size: 15px;
   min-width: 104px;
 }
 
@@ -2239,7 +2239,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-form-section-title {
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   color: #6b83a8;
   text-transform: uppercase;
@@ -2264,7 +2264,7 @@ tr.admin-focus-flash.is-fading > td {
   transform: translateY(-50%);
   color: #8aa3c4;
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 15px;
   pointer-events: none;
 }
 
@@ -2287,7 +2287,7 @@ tr.admin-focus-flash.is-fading > td {
   border: 1.5px solid #dce9fb;
   background: #f8fbff;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
@@ -2354,13 +2354,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-room-form-section > header strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
 .admin-room-form-section > header small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .admin-room-form-icon {
@@ -2382,7 +2382,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -2525,7 +2525,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -2536,7 +2536,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .customer-profile-note {
   color: #b45309;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -2545,7 +2545,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   color: #4a6fa5;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -2603,7 +2603,7 @@ tr.admin-focus-flash.is-fading > td {
 .customer-profile-contract > header strong {
   flex: 1 1 auto;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -2624,7 +2624,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: var(--contract-tone);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2648,13 +2648,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .customer-profile-contract-point small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .customer-profile-contract-point strong {
   color: #0f2b52;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -2675,7 +2675,7 @@ tr.admin-focus-flash.is-fading > td {
   border: 1px dashed #dbe4f3;
   border-radius: 10px;
   color: #8aa0b6;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: center;
 }
 
@@ -2726,7 +2726,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -2738,7 +2738,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   text-overflow: ellipsis;
 }
@@ -2777,13 +2777,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .customer-profile-history > header strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
 .customer-profile-history > header small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .customer-profile-stats {
@@ -2802,14 +2802,14 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #ffffff;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   text-align: center;
 }
 
 .customer-profile-stats strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -2835,7 +2835,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   padding: 14px;
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .customer-profile-state.is-error {
@@ -2900,17 +2900,17 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-room-field > span {
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .admin-room-form .form-control {
-  height: 42px;
+  min-height: 42px;
   border: 1.5px solid #dbe4f3;
   border-radius: 10px;
   background: #ffffff;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
 }
 
@@ -2995,14 +2995,14 @@ tr.admin-focus-flash.is-fading > td {
 .admin-room-input b {
   left: 12px;
   color: #6b8fc2;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .admin-room-input em {
   right: 12px;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 600;
 }
@@ -3020,7 +3020,7 @@ tr.admin-focus-flash.is-fading > td {
   border-width: 1px;
   border-radius: 999px;
   background: #ffffff;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-room-form .admin-toggle-chip > svg {
@@ -3073,7 +3073,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #fff;
   color: #1e3a5f;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-custom-amenity {
@@ -3151,7 +3151,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-amenity-modal-form label {
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -3166,7 +3166,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-amenity-suggestions > span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-amenity-suggestions > div {
@@ -3185,7 +3185,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #f8fafc;
   color: #1e3a5f;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-amenity-suggestions button:hover,
@@ -3202,7 +3202,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-amenity-icon-picker > span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-amenity-icon-picker > div {
@@ -3233,7 +3233,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-amenity-modal-error {
   margin: 0;
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 @media (max-width: 560px) {
@@ -3333,7 +3333,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-confirm-message {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
   color: #0f2b52;
   margin-bottom: 4px;
@@ -3357,7 +3357,7 @@ tr.admin-focus-flash.is-fading > td {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #0f2b52;
   margin-bottom: 10px;
@@ -3375,7 +3375,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-detail-table {
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .admin-detail-table thead th {
@@ -3419,7 +3419,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #f8fbff;
   padding: 7px 0;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #2563eb;
   cursor: pointer;
@@ -3490,7 +3490,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-detail-item-label {
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   color: #6b859e;
   text-transform: uppercase;
@@ -3498,7 +3498,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-detail-item-value {
-  font-size: 13px;
+  font-size: 14.5px;
   color: #0f2b52;
   font-weight: 600;
 }
@@ -3653,7 +3653,7 @@ tr.admin-focus-flash.is-fading > td {
   background: transparent;
   color: #52708f;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -3699,7 +3699,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 0 7px;
   border-radius: 999px;
   background: #e8f0fb;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 20px;
   text-align: center;
 }
@@ -3725,7 +3725,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 3px 10px;
   border: 1px solid;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -3837,7 +3837,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-inspection-room strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3846,7 +3846,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-inspection-room small,
 .admin-inspection-stack small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -3884,14 +3884,14 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #f8fbff;
   color: #52708f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .admin-inspection-status {
   max-width: 150px;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -3925,7 +3925,7 @@ tr.admin-focus-flash.is-fading > td {
 @media (max-width: 560px) {
   .inspection-kind-tab {
     padding: 8px 10px;
-    font-size: 12.5px;
+    font-size: 14px;
   }
 }
 
@@ -3978,7 +3978,7 @@ tr.admin-focus-flash.is-fading > td {
   display: block;
   margin-bottom: 7px;
   color: #3974d7;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   letter-spacing: .16em;
 }
@@ -3995,7 +3995,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-rv-subtitle {
   margin: 0 0 22px;
   color: #71809a;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .admin-rv-list {
@@ -4011,7 +4011,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 10px 12px;
   background: #f1f6ff;
   color: #315b9e;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .admin-rv-card {
@@ -4035,14 +4035,14 @@ tr.admin-focus-flash.is-fading > td {
   padding: 4px 10px;
   background: #fff3d8;
   color: #906410;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
 .admin-rv-card p {
   margin: 10px 0 0;
   color: #52627b;
-  font-size: 13px;
+  font-size: 14.5px;
   overflow-wrap: anywhere;
 }
 
@@ -4090,7 +4090,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-rv-actions button {
   padding: 8px 14px;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .admin-rv-actions button.admin-rv-deny {
@@ -4165,7 +4165,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-safety-eyebrow {
   color: #b93838;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   letter-spacing: .15em;
 }
@@ -4180,7 +4180,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-safety-intro {
   margin: 0 0 20px;
   color: #71809a;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .admin-safety-message {
@@ -4190,7 +4190,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #f1f6ff;
   color: #315b9e;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .admin-safety-list {
@@ -4221,7 +4221,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 4px 10px;
   background: #e7edf5;
   color: #5b6e8b;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -4238,7 +4238,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-safety-card > p {
   margin: 10px 0;
   color: #52627b;
-  font-size: 13px;
+  font-size: 14.5px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -4247,7 +4247,7 @@ tr.admin-focus-flash.is-fading > td {
   display: block;
   margin: 7px 0 11px;
   color: #71809a;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-safety-card textarea {
@@ -4261,7 +4261,7 @@ tr.admin-focus-flash.is-fading > td {
   color: #283851;
   color-scheme: light;
   font: inherit;
-  font-size: 14px;
+  font-size: 15.5px;
   outline: none;
   resize: vertical;
 }
@@ -4279,7 +4279,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #315f9e;
   color: #fff;
   font: inherit;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4397,7 +4397,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 6px 14px;
   background: #fff;
   color: #4b6a88;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   line-height: 1.4;
   transition:
@@ -4500,7 +4500,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-review-subtitle {
   margin: 4px 0 0;
   color: #71809a;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .admin-review-count {
@@ -4510,7 +4510,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 5px 12px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -4543,7 +4543,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 0 6px;
   background: #ef4444;
   color: #fff;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   line-height: 1;
 }
@@ -4589,7 +4589,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 7px 12px;
   background: transparent;
   color: #4b6a88;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -4605,7 +4605,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 0 6px;
   background: #e0ecff;
   color: #335d91;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   line-height: 1;
   text-align: center;
@@ -4767,7 +4767,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-incident-title strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4775,14 +4775,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-title small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .admin-incident-status {
   flex: 0 0 auto;
   border-radius: 999px;
   padding: 3px 10px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -4819,7 +4819,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 2px 9px;
   background: #f8fbff;
   color: #4b6a88;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4848,7 +4848,7 @@ tr.admin-focus-flash.is-fading > td {
   display: -webkit-box;
   overflow: hidden;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -4888,7 +4888,7 @@ tr.admin-focus-flash.is-fading > td {
   place-items: center;
   background: rgba(15, 43, 82, 0.55);
   color: #fff;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -4906,7 +4906,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-incident-result {
   overflow: hidden;
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4921,7 +4921,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 6px 12px;
   background: #fff;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4966,11 +4966,11 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-empty strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .admin-incident-empty small {
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .admin-incident-detail {
@@ -5048,14 +5048,14 @@ tr.admin-focus-flash.is-fading > td {
 .admin-incident-fields dt {
   margin-bottom: 3px;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .admin-incident-fields dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.55;
   white-space: pre-line;
@@ -5073,7 +5073,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -5093,7 +5093,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -5117,13 +5117,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-visit-range-point small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .admin-visit-range-point strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -5158,7 +5158,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-fields > div.is-note dd {
   color: #713f12;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
 }
 
@@ -5177,7 +5177,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-incident-timeline h4 {
   margin: 0 0 8px;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -5259,12 +5259,12 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-timeline strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 .admin-incident-timeline small {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-incident-timeline p {
@@ -5273,7 +5273,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 6px 10px;
   background: #f8fbff;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   white-space: pre-line;
 }
 
@@ -5285,7 +5285,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-review label {
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -5296,7 +5296,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #f8fbff;
   color: #0f2b52;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15px;
   resize: vertical;
 }
 
@@ -5309,7 +5309,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-review small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .admin-incident-actions {
@@ -5324,7 +5324,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 110px;
   min-height: 42px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 @media (max-width: 576px) {
@@ -5472,7 +5472,7 @@ tr.admin-focus-flash.is-fading > td {
   display: block;
   margin-bottom: 3px;
   color: #9aabbd;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -5496,7 +5496,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5504,7 +5504,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-value small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -5522,7 +5522,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-incident-section .admin-incident-desc {
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .admin-incident-photos {
@@ -5576,7 +5576,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 1px 8px;
   background: #f1f5fb;
   color: #4b6a88;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 1.5;
 }
@@ -5738,7 +5738,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #fafcff;
   color: #a7b6c8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -5838,7 +5838,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 104px;
   min-height: 40px;
   border-radius: 11px;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -5870,7 +5870,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 0 8px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -5889,7 +5889,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 3px 10px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -5972,7 +5972,7 @@ tr.admin-focus-flash.is-fading > td {
   background: transparent;
   color: #2563eb;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -5984,7 +5984,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-more-link span {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -6017,7 +6017,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-request-section h4 {
   margin: 0 0 8px;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -6026,7 +6026,7 @@ tr.admin-focus-flash.is-fading > td {
   margin-left: 8px;
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -6058,7 +6058,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-progress-head h4 {
   margin: 0;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -6068,7 +6068,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 3px 10px;
   background: #f0fdf4;
   color: #15803d;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -6130,7 +6130,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 50%;
   background: #fff;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 800;
 }
 
@@ -6173,7 +6173,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-progress-body strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -6191,7 +6191,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-progress-body small {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-progress-gap {
@@ -6201,7 +6201,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 1px 8px;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -6217,7 +6217,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #eff6ff;
   border: 1.5px solid #bfdbfe;
   color: #1d4ed8;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -6226,13 +6226,13 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-list-storage-note {
   margin: 5px 0 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 :where(.admin-page) .inspection-footer-actions .waiting-ui-action-btn {
   min-width: 110px;
   padding: 10px 20px;
-  font-size: 13.5px;
+  font-size: 15px;
   border-radius: 12px;
 }
 
@@ -6249,7 +6249,7 @@ tr.admin-focus-flash.is-fading > td {
   justify-content: center;
   border-radius: 10px;
   padding: 6px 14px;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   border: 1.5px solid transparent;
@@ -6296,7 +6296,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-ui-form-error {
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   margin: 4px 0 0;
 }
@@ -6319,7 +6319,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 :where(.admin-page) .waiting-ui-form-label {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #0f2b52;
 }
@@ -6329,7 +6329,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   border: 1.5px solid #dce9fb;
   padding: 10px 12px;
-  font-size: 14px;
+  font-size: 15.5px;
   font-family: inherit;
   color: #0f2b52;
   background: #f8fbff;
@@ -6359,7 +6359,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-ui-form-error-block {
   margin: 0;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 :where(.admin-page) .waiting-ui-action-btn.is-danger-solid {
@@ -6384,7 +6384,7 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-ui-form-actions .waiting-ui-action-btn {
   flex: 1;
   padding: 11px 18px;
-  font-size: 14px;
+  font-size: 15.5px;
   border-radius: 12px;
   transition:
     background 0.15s ease,
@@ -6426,7 +6426,7 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-form-intro p {
   margin: 0;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.5;
 }
 
@@ -6447,13 +6447,13 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-ui-form-optional {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
 :where(.admin-page) .waiting-ui-form-counter {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 :where(.admin-page) .waiting-ui-form-input.is-invalid {
@@ -6467,7 +6467,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-ui-form-field-error {
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -6489,7 +6489,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #f8fbff;
   color: #33506f;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -6516,7 +6516,7 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .payment-slip-footer .waiting-ui-action-btn {
   min-width: 92px;
   padding: 9px 18px;
-  font-size: 13px;
+  font-size: 14.5px;
   border-radius: 12px;
 }
 
@@ -6553,7 +6553,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 1px 9px;
   border: 1px solid;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 18px;
   white-space: nowrap;
@@ -6591,7 +6591,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-tags span {
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -6606,7 +6606,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-tags-label {
   color: #7089a4;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -6667,12 +6667,12 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-empty strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 :where(.admin-page) .waiting-empty > span:last-child {
   color: #8aa0b6;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 :where(.admin-page) .waiting-detail {
@@ -6701,7 +6701,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-detail-eyebrow {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -6744,7 +6744,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-detail-phone > span {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -6794,7 +6794,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 7px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -6806,14 +6806,14 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-detail-stats dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 
 :where(.admin-page) .waiting-detail-stats small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -6838,7 +6838,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -6860,7 +6860,7 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-detail-note {
   margin: 0;
   color: #78350f;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -6930,13 +6930,13 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-vacant-room-info strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   overflow-wrap: anywhere;
 }
 
 :where(.admin-page) .waiting-vacant-room-info small {
   color: #4d7c63;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -6946,7 +6946,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eaf8ee;
   color: #15803d;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -6957,7 +6957,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 6px;
   margin: 0;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -7070,7 +7070,7 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-card-head strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7082,7 +7082,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
@@ -7115,7 +7115,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-card-days span {
   color: #8aa0b6;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -7127,7 +7127,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-card-days.is-new strong {
   color: #15803d;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 :where(.admin-page) .waiting-card-days.is-long {
@@ -7182,7 +7182,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-card-note-label {
   color: #92400e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   line-height: 1.5;
 }
@@ -7192,7 +7192,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   overflow: hidden;
   color: #78350f;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -7217,7 +7217,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 4px 12px;
   min-width: 0;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -7247,7 +7247,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #ffffff;
   color: #52708f;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -7273,14 +7273,14 @@ tr.admin-focus-flash.is-fading > td {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 32px;
+  min-height: 32px;
   padding: 0 10px 0 12px;
   border: 1px solid #2563eb;
   border-radius: 9px;
   background: #2563eb;
   color: #ffffff;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -7394,7 +7394,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-day-date small {
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
 }
 
@@ -7422,13 +7422,13 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-day-text strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 :where(.admin-page) .waiting-day-text span {
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -7440,7 +7440,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #f8fbff;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -7515,7 +7515,7 @@ tr.admin-focus-flash.is-fading > td {
   }
 
   :where(.admin-page) .waiting-day-date strong {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   :where(.admin-page) .waiting-day-dot {
@@ -7531,7 +7531,7 @@ tr.admin-focus-flash.is-fading > td {
   display: block;
   margin-bottom: 2px;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -7558,7 +7558,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -7572,7 +7572,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 50%;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -7620,7 +7620,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #f5f9ff;
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -7635,7 +7635,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #f5f9ff;
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -7644,7 +7644,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: inherit;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 18px;
 }
@@ -7722,7 +7722,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -7758,7 +7758,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 7px 12px;
   background: #fff;
   color: #52708e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -7767,7 +7767,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 1px 6px;
   border-radius: 6px;
   background: #f0f5fb;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 :where(.admin-page) .waiting-filter-segment.active {
@@ -7808,7 +7808,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #fff;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -7826,7 +7826,7 @@ tr.admin-focus-flash.is-fading > td {
 :where(.admin-page) .waiting-filter-result {
   justify-content: space-between;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 :where(.admin-page) .waiting-filter-result button {
@@ -7834,7 +7834,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 2px 4px;
   background: transparent;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -7846,7 +7846,7 @@ tr.admin-focus-flash.is-fading > td {
   justify-content: space-between;
   gap: 8px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -7857,14 +7857,14 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-card .waiting-status-control > span {
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
 :where(.admin-page) .waiting-card .waiting-status-control select {
   border-color: #bfdbfe;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -7878,7 +7878,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-status-control.is-detail > span {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -7887,7 +7887,7 @@ tr.admin-focus-flash.is-fading > td {
   min-height: 38px;
   border-color: #93c5fd;
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
   box-shadow: 0 1px 4px rgba(37, 99, 235, 0.08);
 }
@@ -7909,7 +7909,7 @@ tr.admin-focus-flash.is-fading > td {
   margin-top: auto;
   padding-top: 14px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -7936,7 +7936,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 16px;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 :where(.admin-page) .waiting-delete-icon {
@@ -7969,7 +7969,7 @@ tr.admin-focus-flash.is-fading > td {
 
 :where(.admin-page) .waiting-delete dt {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 :where(.admin-page) .waiting-delete dd {
@@ -8039,7 +8039,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  font-size: 14px;
+  font-size: 15.5px;
   border: 1px solid #dce9fb;
   border-radius: 8px;
   background: #f5f9ff;
@@ -8113,7 +8113,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 6px;
   min-height: 38px;
   padding: 8px 18px;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .room-detail-hero {
@@ -8195,7 +8195,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 4px 0;
   background: var(--room-tone);
   color: #ffffff;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -8215,7 +8215,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 2px 0;
   border-top: 1px dashed var(--room-tone-border);
   color: #6b859e;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -8229,7 +8229,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-eyebrow {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -8249,7 +8249,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-detail-price span,
 .room-detail-hero-meta {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
@@ -8262,7 +8262,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: var(--room-tone-strong);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -8309,7 +8309,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -8329,14 +8329,14 @@ tr.admin-focus-flash.is-fading > td {
 .room-detail-stats dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .room-detail-stats small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .room-detail-section {
@@ -8356,7 +8356,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -8378,7 +8378,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 6px 11px;
   border: 1px solid;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -8426,7 +8426,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-tenant-name strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   overflow-wrap: anywhere;
 }
@@ -8436,7 +8436,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
@@ -8458,7 +8458,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -8472,7 +8472,7 @@ tr.admin-focus-flash.is-fading > td {
   border: 0;
   background: none;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -8514,7 +8514,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-contract-dates small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -8525,7 +8525,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-contract-dates b {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   line-height: 1.35;
 }
@@ -8561,7 +8561,7 @@ tr.admin-focus-flash.is-fading > td {
   position: absolute;
   right: -2px;
   color: #8db6f6;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1;
   content: '›';
 }
@@ -8574,7 +8574,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -8592,7 +8592,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-contract-left {
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-style: normal;
   font-weight: 800;
   white-space: nowrap;
@@ -8618,7 +8618,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #52708f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -8633,7 +8633,7 @@ tr.admin-focus-flash.is-fading > td {
   }
 
   .room-contract-dates b {
-    font-size: 12.5px;
+    font-size: 14px;
   }
 }
 
@@ -8685,7 +8685,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -8710,7 +8710,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 4px 6px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -8718,7 +8718,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-contract-fact-status {
   margin-left: auto;
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -8759,14 +8759,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-facts dt {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .room-detail-facts dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -8789,13 +8789,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-empty strong {
   color: #065f46;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .room-detail-empty span {
   color: #4b7f6c;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .room-detail-contract-dates {
@@ -8819,13 +8819,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-contract-dates span {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .room-detail-contract-dates strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -8848,7 +8848,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-contract-dates > .is-renew small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -8867,7 +8867,7 @@ tr.admin-focus-flash.is-fading > td {
   display: block;
   margin-top: 2px;
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -8946,19 +8946,19 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .room-detail-summary strong.is-text {
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.6;
 }
 
 .room-detail-summary span {
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .room-detail-summary small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .room-detail-list {
@@ -8997,7 +8997,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-list-main > strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -9005,7 +9005,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-detail-list-head > span,
 .room-detail-list-side {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .room-detail-list-side {
@@ -9025,7 +9025,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   overflow: hidden;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
   -webkit-line-clamp: 2;
@@ -9039,7 +9039,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-detail-muted {
   margin: 0;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .room-detail-section.is-list {
@@ -9080,13 +9080,13 @@ tr.admin-focus-flash.is-fading > td {
 .room-detail-section-title h4 {
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .room-detail-section-title > span {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -9097,7 +9097,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 800;
   text-align: center;
 }
@@ -9234,7 +9234,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-date-tile small {
   color: #6b859e;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -9289,7 +9289,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-row-avatar {
   border-radius: 50%;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -9303,14 +9303,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-detail-row-title {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .room-detail-row-title.is-money {
-  font-size: 15px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -9319,7 +9319,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   overflow: hidden;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
   -webkit-line-clamp: 2;
@@ -9333,7 +9333,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 6px 8px;
   min-width: 0;
   color: #4a6582;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.5;
 }
 
@@ -9384,13 +9384,13 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   margin-top: 2px;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.5;
 }
 
 .room-detail-row-note-label {
   color: #8aa0b6;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 500;
 }
 
@@ -9426,7 +9426,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: var(--chip-soft);
   color: var(--chip-tone);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 1.5;
   white-space: nowrap;
@@ -9473,7 +9473,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 8px;
   background: #f8fbff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
@@ -9496,7 +9496,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #fbfdff;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -9529,7 +9529,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 8px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -9622,7 +9622,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-history-totals > div > div > span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -9637,7 +9637,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-history-totals small {
   grid-column: 2;
   color: var(--total-tone);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -9669,7 +9669,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 9px;
   background: transparent;
   color: #4a6582;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
@@ -9681,7 +9681,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #e3ebf6;
   color: #4a6582;
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 18px;
   text-align: center;
 }
@@ -9737,11 +9737,11 @@ tr.admin-focus-flash.is-fading > td {
 .room-history-search input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 38px;
+  min-height: 38px;
   border: none;
   background: transparent;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   outline: none;
 }
 
@@ -9772,19 +9772,19 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .room-history-sort select {
-  height: 38px;
+  min-height: 38px;
   padding: 0 30px 0 12px;
   border: 1px solid #dce9fb;
   border-radius: 11px;
   background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236093d4' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
   appearance: none;
@@ -9863,7 +9863,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .payment-detail-hero-text > span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -9884,7 +9884,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: var(--pay-strong);
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -9920,7 +9920,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -9932,7 +9932,7 @@ tr.admin-focus-flash.is-fading > td {
 .payment-detail-facts dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -9953,7 +9953,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -9993,7 +9993,7 @@ tr.admin-focus-flash.is-fading > td {
   align-self: center;
   margin: 0;
   color: #0f2b52;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -10022,7 +10022,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: var(--tag-soft);
   color: var(--tag-tone);
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -10075,7 +10075,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #fbfdff;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -10127,7 +10127,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 9px;
   background: rgba(15, 43, 82, 0.72);
   color: #ffffff;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   opacity: 0;
   transform: translateY(6px);
@@ -10166,7 +10166,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ecfdf5;
   color: #047857;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -10194,7 +10194,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .payment-detail-slip-facts dt {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -10202,7 +10202,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   text-align: right;
   overflow-wrap: anywhere;
@@ -10210,7 +10210,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .payment-detail-slip-facts dd.is-amount {
   color: var(--pay-strong);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -10245,7 +10245,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #fbfdff;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -10279,13 +10279,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .payment-detail-section.is-slip .payment-detail-slip-empty strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .payment-detail-section.is-slip .payment-detail-slip-empty > span:last-child {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
@@ -10347,13 +10347,13 @@ tr.admin-focus-flash.is-fading > td {
   min-height: 100%;
   padding: 32px 16px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   text-align: center;
 }
 
 .room-history-state strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -10403,7 +10403,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 10px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -10412,7 +10412,7 @@ tr.admin-focus-flash.is-fading > td {
   border: none;
   background: none;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -10476,7 +10476,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 14px;
   background: #fbfdff;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -10505,7 +10505,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #fef2f2;
   color: #b42318;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -10565,7 +10565,7 @@ tr.admin-focus-flash.is-fading > td {
   border-bottom: 1px solid #e3ecf8;
   background: #f3f7fd;
   color: #5b7491;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -10593,7 +10593,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-history-group-head strong {
   color: #1d4ed8;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -10603,7 +10603,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #5b7491;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -10613,7 +10613,7 @@ tr.admin-focus-flash.is-fading > td {
   border: none;
   background: none;
   color: #0f2b52;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -10702,7 +10702,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-history-cell-date span {
   color: #6b859e;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -10718,7 +10718,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-history-cell-tenant strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -10728,7 +10728,7 @@ tr.admin-focus-flash.is-fading > td {
 .room-history-cell-tenant span {
   overflow: hidden;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -10744,7 +10744,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-history-cell-amount {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -10771,7 +10771,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 5px;
   height: 32px;
   padding: 0 11px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
   border: 1px solid #bfdbfe;
@@ -10794,12 +10794,12 @@ tr.admin-focus-flash.is-fading > td {
 .room-history-slip-none {
   display: inline-flex;
   align-items: center;
-  height: 32px;
+  min-height: 32px;
   padding: 0 10px;
   border: 1px dashed #dbe4ef;
   border-radius: 10px;
   color: #9fb1c5;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -10971,7 +10971,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .tenant-card-name strong {
   color: #0f2b52;
-  font-size: 15.5px;
+  font-size: 16.5px;
   font-weight: 800;
   overflow-wrap: anywhere;
 }
@@ -10985,7 +10985,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: var(--tenant-soft);
   color: var(--tenant-tone);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -11018,13 +11018,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .tenant-card-period > div span {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .tenant-card-period > div strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -11047,7 +11047,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .tenant-card-period > .is-renew small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -11078,14 +11078,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .tenant-card-facts dt {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .tenant-card-facts dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -11113,7 +11113,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #0f2b52;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -11123,7 +11123,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .tenant-card-payments-head small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .tenant-card-payments-grid {
@@ -11159,20 +11159,20 @@ tr.admin-focus-flash.is-fading > td {
 
 .tenant-card-payments-grid span {
   color: var(--pay-tone);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
 .tenant-card-payments-grid strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .tenant-card-payments-grid small {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .tenant-card-foot {
@@ -11194,7 +11194,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 9px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -11278,7 +11278,7 @@ tr.admin-focus-flash.is-fading > td {
 .maintenance-cell-item > div > strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -11287,7 +11287,7 @@ tr.admin-focus-flash.is-fading > td {
 .maintenance-cell-item > div > span {
   overflow: hidden;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -11376,7 +11376,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .maintenance-detail-hero-text > span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -11389,7 +11389,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .maintenance-detail-hero .admin-badge {
   padding: 5px 12px;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .maintenance-detail-tel {
@@ -11410,7 +11410,7 @@ tr.admin-focus-flash.is-fading > td {
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   box-shadow: 0 6px 16px -14px rgba(180, 83, 9, 0.55);
   color: #78350f;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -11425,7 +11425,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 20px;
   text-align: center;
@@ -11511,7 +11511,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .rental-history-contracts > header strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -11522,7 +11522,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 800;
   line-height: 20px;
   text-align: center;
@@ -11535,8 +11535,8 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .rental-history-contract-search.room-history-search input {
-  height: 34px;
-  font-size: 12.5px;
+  min-height: 34px;
+  font-size: 14px;
 }
 
 .rental-history-contract-empty {
@@ -11546,7 +11546,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #ffffff;
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   text-align: center;
 }
@@ -11628,7 +11628,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .rental-history-contract-date small {
   color: #6b859e;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -11649,7 +11649,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -11658,7 +11658,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #dbeafe;
   color: #1d4ed8;
-  font-size: 10.5px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   line-height: 18px;
@@ -11666,7 +11666,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .rental-history-contract-info > span {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .rental-history-contract-info > .rental-history-contract-total {
@@ -11714,13 +11714,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .rental-history-main-title strong {
   color: #0f2b52;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .rental-history-main-title span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .rental-history-main-totals {
@@ -11769,7 +11769,7 @@ tr.admin-focus-flash.is-fading > td {
   border-top: 1px solid #e6eef9;
   background: #ffffff;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -11878,7 +11878,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 50%;
   background: #f1f5f9;
   color: #475569;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -11891,7 +11891,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-cell-person strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -11901,7 +11901,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 4px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -11918,7 +11918,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 8px;
   background: #f5f9ff;
   color: #1d4ed8;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -11931,14 +11931,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-cell-date strong {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .moveout-cell-date span {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .moveout-cell-chevron {
@@ -11952,7 +11952,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 2px;
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   transition: color 0.15s ease;
 }
@@ -12024,7 +12024,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-detail-hero-text > span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -12045,7 +12045,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ecfdf5;
   color: #047857;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -12077,7 +12077,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -12088,13 +12088,13 @@ tr.admin-focus-flash.is-fading > td {
 .moveout-detail-stay dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
 .moveout-detail-stay dd small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -12104,7 +12104,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-detail-stay > div.is-total dd {
   color: #047857;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .moveout-detail-extra {
@@ -12126,14 +12126,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-detail-extra dt {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .moveout-detail-extra dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -12182,13 +12182,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-detail-inspection-head strong {
   color: var(--insp-tone);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .moveout-detail-inspection-meta {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .moveout-detail-inspection-counts {
@@ -12209,13 +12209,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-detail-inspection-counts strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .moveout-detail-inspection-counts span {
   color: #6b859e;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   text-align: center;
 }
@@ -12238,7 +12238,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 8px;
   background: #ffffff;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -12284,7 +12284,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-detail-payments span {
   color: var(--pay-tone);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -12292,14 +12292,14 @@ tr.admin-focus-flash.is-fading > td {
   grid-row: 1 / 3;
   grid-column: 2;
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .moveout-detail-payments small {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .moveout-detail-grid .payment-detail-section > .room-detail-chip {
@@ -12401,14 +12401,14 @@ tr.admin-focus-flash.is-fading > td {
 .moveout-card-head h4 {
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .moveout-card-head > div > span {
   overflow: hidden;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -12425,7 +12425,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-card-verdict {
   color: var(--card-tone);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -12444,13 +12444,13 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 9px;
   background: #ffffff;
   color: #6b859e;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .moveout-card-stats > span strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -12504,14 +12504,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-card-totals span {
   color: var(--pay-tone);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
 .moveout-card-totals strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -12570,7 +12570,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   overflow: hidden;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -12597,13 +12597,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-card-list.is-payments .moveout-card-list-label strong {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
 .moveout-card-list.is-payments .admin-badge {
   padding: 1px 8px;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .moveout-card-date {
@@ -12632,20 +12632,20 @@ tr.admin-focus-flash.is-fading > td {
 
 .moveout-card-date strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
 .moveout-card-date small {
   color: #6b859e;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 
 .moveout-card-amount {
   flex-shrink: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -12688,7 +12688,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   margin: 0;
   color: #33506f;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .moveout-card-foot p svg {
@@ -12719,13 +12719,13 @@ tr.admin-focus-flash.is-fading > td {
   gap: 6px;
   padding: 20px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   text-align: center;
 }
 
 .moveout-card-empty strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -12800,7 +12800,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .request-detail-hero-text > span {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -12822,7 +12822,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .request-detail-hero > .admin-badge {
   padding: 5px 12px;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .request-detail-inspection {
@@ -12886,13 +12886,13 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #b45309;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 800;
 }
 
 .moveout-detail-extra > div.is-note dd {
   color: #78350f;
-  font-size: 14px;
+  font-size: 15.5px;
   line-height: 1.7;
 }
 
@@ -12989,14 +12989,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .request-cell-type strong {
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .request-cell-type span {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -13022,13 +13022,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .request-detail-inspection span {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .request-detail-inspection strong {
   color: var(--insp-tone);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -13048,14 +13048,14 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #b45309;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 800;
 }
 
 .request-detail-note p {
   margin: 0;
   color: #78350f;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -13096,7 +13096,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -13134,7 +13134,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   min-width: 0;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -13235,13 +13235,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .insp-detail-hero-rooms small {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .insp-detail-hero-top .insp-status-badge {
   padding: 5px 12px;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .insp-detail-meta {
@@ -13271,7 +13271,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -13282,7 +13282,7 @@ tr.admin-focus-flash.is-fading > td {
 .insp-detail-meta dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -13302,7 +13302,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -13329,13 +13329,13 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #fbfdff;
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .insp-detail-counts > span strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -13393,7 +13393,7 @@ tr.admin-focus-flash.is-fading > td {
   flex: 1 1 auto;
   min-width: 0;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -13418,7 +13418,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -13525,7 +13525,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #ffffff;
   color: #b42318;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -13624,7 +13624,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -13672,20 +13672,20 @@ tr.admin-focus-flash.is-fading > td {
   background: transparent;
   color: #0f2b52;
   font: inherit;
-  font-size: 13px;
+  font-size: 14.5px;
   outline: none;
 }
 
 .exp-ui-select {
   box-sizing: border-box;
-  height: 38px;
+  min-height: 38px;
   padding: 0 12px;
   border: 1px solid #dbe4f3;
   border-radius: 10px;
   background-color: #ffffff;
   color: #0f2b52;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -13719,7 +13719,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -13747,7 +13747,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-date-sep {
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -13757,7 +13757,7 @@ tr.admin-focus-flash.is-fading > td {
   justify-content: space-between;
   gap: 8px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -13767,7 +13767,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -13785,7 +13785,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   padding: 48px 16px;
   color: #8aa0b6;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
   text-align: center;
 }
@@ -13793,7 +13793,7 @@ tr.admin-focus-flash.is-fading > td {
 .exp-ui-error {
   margin: 0;
   color: #b42318;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -13853,7 +13853,7 @@ tr.admin-focus-flash.is-fading > td {
   max-width: 100%;
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -13869,7 +13869,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -13877,7 +13877,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-identity .exp-ui-category {
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .exp-ui-date {
@@ -13888,7 +13888,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #f8fbff;
   color: #4b6a88;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -13910,7 +13910,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-amount small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -13929,7 +13929,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -13983,13 +13983,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-facts.is-columns > div dt {
   flex: 0 0 auto;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .exp-ui-facts.is-columns > div dd {
   width: 100%;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -14000,7 +14000,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -14014,7 +14014,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -14027,7 +14027,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-thumbs-title {
   color: #94a8bd;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -14072,7 +14072,7 @@ tr.admin-focus-flash.is-fading > td {
   place-items: center;
   background: rgba(15, 43, 82, 0.55);
   color: #ffffff;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
 }
 
@@ -14091,7 +14091,7 @@ tr.admin-focus-flash.is-fading > td {
   flex-wrap: wrap;
   gap: 6px;
   color: #33506f;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -14101,7 +14101,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-recorder time {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -14150,7 +14150,7 @@ tr.admin-focus-flash.is-fading > td {
 .exp-ui-actions .exp-ui-link {
   display: inline-flex;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -14229,7 +14229,7 @@ tr.admin-focus-flash.is-fading > td {
   border: 0;
   background: none;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -14249,7 +14249,7 @@ tr.admin-focus-flash.is-fading > td {
   padding-top: 14px;
   border-top: 1px solid #eef3fa;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -14314,7 +14314,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 7px;
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
@@ -14354,7 +14354,7 @@ tr.admin-focus-flash.is-fading > td {
 .exp-ui-label {
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -14367,7 +14367,7 @@ tr.admin-focus-flash.is-fading > td {
   background: #f8fbff;
   color: #0f2b52;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15.5px;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -14386,7 +14386,7 @@ tr.admin-focus-flash.is-fading > td {
 .exp-ui-counter {
   margin-left: auto;
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -14407,7 +14407,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #ffffff;
   color: #4b6a88;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -14454,13 +14454,13 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #f8fbff;
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .exp-ui-filled {
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -14541,10 +14541,10 @@ tr.admin-focus-flash.is-fading > td {
 .exp-ui-detail-head > .exp-ui-method {
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  min-height: 28px;
   margin: 0;
   padding: 0 14px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -14569,13 +14569,13 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-detail-date small {
   color: #8aa0b6;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .exp-ui-detail-date strong {
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -14603,7 +14603,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-summary small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -14626,7 +14626,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-summary-vendor > span {
   color: #0f2b52;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -14637,7 +14637,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-style: normal;
   font-weight: 600;
 }
@@ -14733,7 +14733,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: rgba(15, 43, 82, 0.72);
   color: #ffffff;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -14809,7 +14809,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 10px;
   background: #f8fbff;
   color: #8aa0b6;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   text-align: center;
 }
@@ -14825,7 +14825,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 12px;
   background: #f8fbff;
   color: #8aa0b6;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -14849,14 +14849,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-note span {
   color: #b45309;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .exp-ui-note p {
   margin: 0;
   color: #713f12;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 500;
   line-height: 1.5;
   white-space: pre-line;
@@ -14885,7 +14885,7 @@ tr.admin-focus-flash.is-fading > td {
 .exp-ui-confirm-message {
   margin: 0;
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -14911,14 +14911,14 @@ tr.admin-focus-flash.is-fading > td {
 
 .exp-ui-confirm-details dt {
   color: #6b859e;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
 .exp-ui-confirm-details dd {
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -15013,7 +15013,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: linear-gradient(135deg, #dbeafe, #eff6ff);
   color: #1d4ed8;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -15040,7 +15040,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-staff-name strong {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -15048,7 +15048,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-staff-name small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -15057,7 +15057,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -15069,7 +15069,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-staff-age {
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -15080,7 +15080,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 4px 11px;
   border: 1px solid;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -15191,7 +15191,7 @@ tr.admin-focus-flash.is-fading > td {
   .admin-staff-table .admin-staff-mobile-open {
     display: inline;
     color: #2563eb;
-    font-size: 12px;
+    font-size: 13.5px;
     font-weight: 700;
   }
 
@@ -15270,7 +15270,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-staff-hero-text small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -15366,7 +15366,7 @@ tr.admin-focus-flash.is-fading > td {
   margin: 0;
   padding: 32px 12px;
   color: #8a9cba;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 600;
   text-align: center;
 }
@@ -15424,7 +15424,7 @@ tr.admin-focus-flash.is-fading > td {
   max-width: 100%;
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -15437,7 +15437,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -15462,7 +15462,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-req-photos-label {
   color: #6b859e;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -15495,7 +15495,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-req-route-room small {
   color: #8aa0b6;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -15523,7 +15523,7 @@ tr.admin-focus-flash.is-fading > td {
   padding: 3px 10px;
   border: 1px solid;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -15569,7 +15569,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -15583,7 +15583,7 @@ tr.admin-focus-flash.is-fading > td {
   min-width: 0;
   margin: 0;
   color: #0f2b52;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -15599,7 +15599,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-req-note-label {
   color: #b45309;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -15608,7 +15608,7 @@ tr.admin-focus-flash.is-fading > td {
   overflow: hidden;
   margin: 0;
   color: #713f12;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 500;
   line-height: 1.5;
   white-space: pre-line;
@@ -15708,7 +15708,7 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-req-meta-label {
   color: #0f2b52;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.35;
 }
@@ -15723,7 +15723,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: flex-start;
   gap: 2px 8px;
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -15853,7 +15853,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-visit-card .admin-incident-title strong {
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .admin-vc-model {
@@ -15864,7 +15864,7 @@ tr.admin-focus-flash.is-fading > td {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -15876,7 +15876,7 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 5px;
   padding: 4px 11px;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .admin-visit-card .admin-incident-status::before {
@@ -15912,19 +15912,19 @@ tr.admin-focus-flash.is-fading > td {
   align-items: center;
   gap: 6px;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .admin-vc-label .admin-incident-role {
   padding: 0 6px;
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .admin-vc-value {
   overflow: hidden;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -16007,7 +16007,7 @@ tr.admin-focus-flash.is-fading > td {
   gap: 6px;
   overflow: visible;
   color: #6b859e;
-  font-size: 12.5px;
+  font-size: 14px;
   white-space: normal;
 }
 

@@ -24,7 +24,7 @@
   gap: 8px;
   margin: 0;
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
@@ -36,7 +36,7 @@
   border-radius: 50%;
   background: #2563eb;
   color: #fff;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -47,7 +47,7 @@
   background: #eaf2ff;
   color: #2563eb;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -136,7 +136,7 @@
 .room-picker-placeholder {
   flex: 1;
   color: #9db2c8;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .room-picker-avatar {
@@ -148,7 +148,7 @@
   border-radius: 50%;
   background: #dbeafe;
   color: #1d4ed8;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -161,14 +161,14 @@
 
 .room-picker-main strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 15.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .room-picker-main small {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .room-picker-chevron {
@@ -224,7 +224,7 @@
   background: transparent;
   color: #0f2b52;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15px;
   outline: none;
 }
 
@@ -281,7 +281,7 @@
   padding: 4px 8px;
   background: #fff;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -293,7 +293,7 @@
 .room-picker-empty {
   padding: 18px 12px;
   color: #7c93ae;
-  font-size: 13px;
+  font-size: 14.5px;
   text-align: center;
 }
 
@@ -316,12 +316,12 @@
   flex-wrap: wrap;
   gap: 6px 12px;
   color: #33506f;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .inspection-progress-text strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .inspection-counts {
@@ -333,7 +333,7 @@
 .inspection-counts span {
   border-radius: 999px;
   padding: 1px 9px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -370,7 +370,7 @@
 .inspection-guidance {
   margin: -4px 0 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .inspection-progress-bar {
@@ -423,13 +423,13 @@
   min-width: 0;
   flex-direction: column;
   color: #0f2b52;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .inspection-row-label small {
   color: #b42318;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -448,7 +448,7 @@
   background: transparent;
   color: #4b6a88;
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -579,7 +579,7 @@
 
 .photo-dropzone-title {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -591,7 +591,7 @@
 
 .photo-dropzone-hint {
   color: #7c93ae;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .photo-grid {
@@ -621,7 +621,7 @@
   display: flex;
   flex-direction: column;
   padding: 8px 12px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -688,7 +688,7 @@
 }
 
 .photo-add-tile small {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -715,7 +715,7 @@
 .inspection-footer-note {
   margin: 0;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .inspection-footer-actions {
@@ -727,7 +727,7 @@
 .inspection-footer-actions .staff-action-btn {
   min-width: 110px;
   padding: 10px 20px;
-  font-size: 13.5px;
+  font-size: 15px;
   border-radius: 12px;
 }
 
@@ -759,7 +759,7 @@
   justify-content: center;
   border-radius: 10px;
   padding: 6px 14px;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   border: 1.5px solid transparent;
@@ -806,7 +806,7 @@
 
 .staff-form-error {
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   margin: 4px 0 0;
 }
@@ -829,7 +829,7 @@
 }
 
 .staff-form-label {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #0f2b52;
 }
@@ -839,7 +839,7 @@
   border-radius: 10px;
   border: 1.5px solid #dce9fb;
   padding: 10px 12px;
-  font-size: 14px;
+  font-size: 15.5px;
   font-family: inherit;
   color: #0f2b52;
   background: #f8fbff;
@@ -868,14 +868,14 @@
 }
 
 .staff-form-hint {
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #2563eb;
 }
 
 .staff-form-error-block {
   margin: 0;
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .staff-form-required {
@@ -884,13 +884,13 @@
 
 .staff-form-optional {
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
 .staff-form-counter {
   color: #6b859e;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .staff-form-input.is-invalid {
@@ -904,7 +904,7 @@
 
 .staff-form-field-error {
   color: #b42318;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 

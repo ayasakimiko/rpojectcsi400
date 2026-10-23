@@ -75,7 +75,7 @@
 
 .photo-viewer-heading strong {
   color: #0f2b52;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -83,7 +83,7 @@
 .photo-viewer-heading span {
   overflow: hidden;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -95,7 +95,7 @@
   border-radius: 999px;
   background: #eaf2ff;
   color: #2563eb;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -139,7 +139,7 @@
 .photo-viewer-zoom .is-level {
   min-width: 58px;
   padding: 0 8px;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -204,7 +204,7 @@
 .photo-viewer-figure figcaption {
   max-width: 100%;
   color: #33506f;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   text-align: center;
   overflow-wrap: anywhere;

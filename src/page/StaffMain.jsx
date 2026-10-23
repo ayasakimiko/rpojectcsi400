@@ -114,6 +114,8 @@ function WaitingDetailIcon({ type, size = 16 }) {
     wallet: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M16 15h2" /></>,
     photo: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></>,
     tool: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5Z" />,
+    home: <><path d="M3 11 12 4l9 7" /><path d="M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></>,
+    arrow: <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2823,7 +2825,7 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
       variant="transfer-detail"
     >
       {() => (
-        <div className="staff-transfer-body">
+        <div className={`staff-transfer-body${request.type === 'move_room' ? ' is-move-detail' : ''}`}>
           <div className="staff-transfer-top">
             <div className="staff-req-detail-head">
               <span className={`staff-badge type-${request.type}`}>
@@ -2843,6 +2845,7 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
             {isMove ? (
               <div className="staff-transfer-route">
                 <div className="staff-transfer-room is-source">
+                  <span className="staff-transfer-room-icon"><WaitingDetailIcon type="home" size={22} /></span>
                   <span className="staff-transfer-room-label">ห้องเดิม</span>
                   <strong className="staff-transfer-room-number">{request.room_number}</strong>
                   {request.source_room_price != null && (
@@ -2856,6 +2859,7 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                   <RouteArrowIcon />
                 </div>
                 <div className="staff-transfer-room is-target">
+                  <span className="staff-transfer-room-icon"><WaitingDetailIcon type="home" size={22} /></span>
                   <span className="staff-transfer-room-label">ห้องใหม่</span>
                   <strong className="staff-transfer-room-number">{request.target_room_number || '-'}</strong>
                   {request.target_room_price != null && (
@@ -2883,6 +2887,12 @@ function TenantRequestDetailModal({ request, sourceRoom, actions, onClose }) {
                     </em>
                   )}
                 </div>
+              </div>
+            )}
+            {isMove && request.note && (
+              <div className="staff-transfer-group-note">
+                <span>หมายเหตุจากผู้เช่า</span>
+                <p>{request.note}</p>
               </div>
             )}
             {request.type === 'moveout' && request.note && (
@@ -3295,22 +3305,61 @@ function MoveRoomRequestOverview({ request, preview, isOpen, contractEnd, contra
   return (
     <section className="staff-transfer-section">
       <h4 className="staff-transfer-section-title">ผู้เช่าและคำขอ</h4>
-      <div className="staff-transfer-columns">
-        <div>
-          <p className="staff-transfer-subtitle">ผู้เช่า</p>
+      <div className="staff-transfer-route-banner">
+        <div className="staff-transfer-route-banner-rooms">
+          <div className="staff-transfer-route-banner-room">
+            <span className="staff-transfer-route-banner-icon"><WaitingDetailIcon type="home" size={20} /></span>
+            <span>
+              <small>ห้องเดิม</small>
+              <b>{request.room_number}</b>
+            </span>
+          </div>
+          <span className="staff-transfer-route-banner-arrow" aria-label="ย้ายไป">
+            <WaitingDetailIcon type="arrow" size={20} />
+          </span>
+          <div className="staff-transfer-route-banner-room is-target">
+            <span className="staff-transfer-route-banner-icon"><WaitingDetailIcon type="home" size={20} /></span>
+            <span>
+              <small>ห้องใหม่</small>
+              <b>{request.target_room_number || '-'}</b>
+            </span>
+          </div>
+          <span className="staff-transfer-route-banner-status">
+            <WaitingDetailIcon type="clock" size={15} />
+            {TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}
+          </span>
+        </div>
+        <div className="staff-transfer-route-banner-tenant">
+          <span><WaitingDetailIcon type="user" size={17} />ผู้เช่า <b>{request.first_name} {request.last_name}</b></span>
+          <span><WaitingDetailIcon type="phone" size={17} />โทร <b>{request.phone || '-'}</b></span>
+        </div>
+      </div>
+      <div className="staff-transfer-groups is-readable">
+        <div className="staff-transfer-group">
+          <p className="staff-transfer-group-title">รายละเอียดคำขอ</p>
           <dl className="staff-transfer-list is-single">
             <div>
-              <dt>ชื่อ</dt>
-              <dd>
-                {request.first_name} {request.last_name}
-              </dd>
+              <dt>เหตุผล</dt>
+              <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
             </div>
             <div>
-              <dt>เบอร์โทร</dt>
-              <dd>{request.phone || '-'}</dd>
+              <dt>ต้องการย้าย</dt>
+              <dd>{formatDateOnly(request.preferred_move_date)}</dd>
             </div>
+            <div>
+              <dt>ส่งคำขอ</dt>
+              <dd>{formatDateTime(request.created_at)}</dd>
+            </div>
+            {request.accepted_by_name && (
+              <div>
+                <dt>รับเรื่องโดย</dt>
+                <dd>{request.accepted_by_name}</dd>
+              </div>
+            )}
           </dl>
-          <p className="staff-transfer-subtitle">สัญญาและการเงิน</p>
+        </div>
+        <div className="staff-transfer-group">
+          <p className="staff-transfer-group-title">สัญญาและการเงิน</p>
           <dl className="staff-transfer-list is-single">
             <div>
               <dt>สิ้นสุดสัญญา</dt>
@@ -3353,47 +3402,7 @@ function MoveRoomRequestOverview({ request, preview, isOpen, contractEnd, contra
             )}
           </dl>
         </div>
-        <div>
-          <p className="staff-transfer-subtitle">รายละเอียดคำขอ</p>
-          <dl className="staff-transfer-list is-single">
-            <div>
-              <dt>ย้ายจาก</dt>
-              <dd>ห้อง {request.room_number}</dd>
-            </div>
-            <div>
-              <dt>ย้ายไป</dt>
-              <dd className="is-accent">ห้อง {request.target_room_number || '-'}</dd>
-            </div>
-            <div>
-              <dt>เหตุผล</dt>
-              <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
-            </div>
-            <div>
-              <dt>ต้องการย้าย</dt>
-              <dd>{formatDateOnly(request.preferred_move_date)}</dd>
-            </div>
-            <div>
-              <dt>ส่งคำขอ</dt>
-              <dd>{formatDateTime(request.created_at)}</dd>
-            </div>
-            {request.accepted_by_name && (
-              <div>
-                <dt>รับเรื่องโดย</dt>
-                <dd>{request.accepted_by_name}</dd>
-              </div>
-            )}
-            <div>
-              <dt>สถานะ</dt>
-              <dd>{TENANT_REQUEST_STATUS_LABEL[request.status] || request.status}</dd>
-            </div>
-          </dl>
-        </div>
       </div>
-      {request.note && (
-        <p className="staff-transfer-note">
-          <span>หมายเหตุจากผู้เช่า:</span> {request.note}
-        </p>
-      )}
     </section>
   )
 }
@@ -3713,13 +3722,9 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                   <p className="staff-confirm-note">ตรวจสอบรายละเอียดให้ครบถ้วนก่อนกดยืนยัน</p>
                 </div>
               </div>
-              {request.note && (
-                <p className="staff-transfer-note">
-                  <span>หมายเหตุ:</span> {request.note}
-                </p>
-              )}
               <div className="staff-transfer-route">
                 <div className="staff-transfer-room is-source">
+                  <span className="staff-transfer-room-icon"><WaitingDetailIcon type="home" size={22} /></span>
                   <span className="staff-transfer-room-label">ห้องเดิม</span>
                   <strong className="staff-transfer-room-number">{request.room_number}</strong>
                   <span className="staff-transfer-room-price">
@@ -3742,6 +3747,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                   </svg>
                 </div>
                 <div className={`staff-transfer-room is-target${targetBooked ? ' is-unavailable' : ''}`}>
+                  <span className="staff-transfer-room-icon"><WaitingDetailIcon type="home" size={22} /></span>
                   <span className="staff-transfer-room-label">ห้องใหม่</span>
                   <strong className="staff-transfer-room-number">{request.target_room_number}</strong>
                   <span className="staff-transfer-room-price">
@@ -3753,6 +3759,11 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                   </span>
                 </div>
               </div>
+              {request.note && (
+                <p className="staff-transfer-note">
+                  <span>หมายเหตุ:</span> {request.note}
+                </p>
+              )}
             </div>
 
             <div className="staff-transfer-scroll">
@@ -3889,7 +3900,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
               {awaitingCharge && (
                 <section
                   ref={chargeSectionRef}
-                  className="staff-transfer-section is-warning"
+                  className="staff-transfer-section is-warning is-charge"
                   onAnimationEnd={(event) => event.currentTarget.classList.remove('is-flash')}
                 >
                   <h4 className="staff-transfer-section-title">

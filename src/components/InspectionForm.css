@@ -14,7 +14,7 @@
   border-radius: 12px;
   background: #fbfdff;
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   text-align: center;
 }
@@ -67,14 +67,14 @@
 
 .idf-request-info strong {
   color: #0f2b52;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
 }
 
 .idf-request-info span {
   overflow: hidden;
   color: #6b859e;
-  font-size: 12px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
