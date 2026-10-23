@@ -6,6 +6,8 @@ import { CONTRACT_DURATION_MONTHS, DEPOSIT_MONTHS, isValidDateTimeString, valida
 import {
   contractImageName,
   contractImageUrl,
+  cancelTransfersIntoBookedRooms,
+  expireRoomTransferCharges,
   parseContractImages,
   removeContractFiles,
   resetCustomerHistory,
@@ -103,6 +105,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     const normalizedIdcard = idcard.trim();
     const normalizedRoomNumber = Number(room_number);
 
+    await expireRoomTransferCharges(getPool());
     connection = await getPool().getConnection();
     await connection.beginTransaction();
 
@@ -190,13 +193,17 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
        WHERE id = ?`,
       [durationMonths, mysqlStartDateTime, mysqlEndDateTime, room.id],
     );
+    const cancelledTransfers = await cancelTransfersIntoBookedRooms(connection, normalizedRoomNumber);
 
     await connection.commit();
     committed = true;
 
     return res.status(201).json({
-      message: returningCustomer ? "ทำสัญญาใหม่ให้ผู้เช่าเดิมสำเร็จ ประวัติสัญญาเก่ายังเก็บไว้" : "สมัครสมาชิกสำเร็จ",
+      message: `${returningCustomer ? "ทำสัญญาใหม่ให้ผู้เช่าเดิมสำเร็จ ประวัติสัญญาเก่ายังเก็บไว้" : "สมัครสมาชิกสำเร็จ"}${
+        cancelledTransfers > 0 ? ` · ยกเลิกคำขอย้ายเข้าห้อง ${normalizedRoomNumber} ของผู้เช่าเดิม ${cancelledTransfers} รายการแล้ว` : ""
+      }`,
       returning_customer: Boolean(returningCustomer),
+      cancelled_transfers: cancelledTransfers,
       contract: {
         booking_id: bookingResult.insertId,
         contract_duration_months: durationMonths,

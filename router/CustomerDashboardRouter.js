@@ -37,7 +37,13 @@ import {
 } from "../middleware/slipVerification.js";
 import { attachParcelPhotos } from "./ParcelRouter.js";
 import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.js";
-import { loadCustomerContracts, loadRoomTransferPreview } from "./rentalContracts.js";
+import {
+  expireRoomTransferCharges,
+  loadCustomerContracts,
+  loadHeldTransferRooms,
+  loadRoomTransferPreview,
+  roomHeldForTransfer,
+} from "./rentalContracts.js";
 
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
@@ -305,6 +311,8 @@ export function computeDepositDue(paymentsForBooking, depositAmount) {
 }
 
 export const ROOM_TRANSFER_PAYMENT_TYPE = "room_transfer";
+const MOVE_ROOM_COOLDOWN_ENABLED = false;
+const MOVE_ROOM_COOLDOWN_DAYS = 15;
 export const CHARGE_PAYMENT_TYPES = ["water", "electricity", ROOM_TRANSFER_PAYMENT_TYPE];
 const NON_RENT_PAYMENT_TYPES = ["deposit", ...CHARGE_PAYMENT_TYPES];
 
@@ -361,12 +369,21 @@ export function computeRentCoverage(room, paymentsForBooking, now = new Date()) 
     creditCents -= priceCents;
     coveredThroughIndex = period.index;
   }
+  const rentalStart = room.rental_start_date ? new Date(room.rental_start_date) : start;
+  let paidBeforeBilling = 0;
+  while (
+    paidBeforeBilling < 600
+    && billingPeriodAt(start, -paidBeforeBilling) > now
+    && billingPeriodAt(start, -(paidBeforeBilling + 1)) >= rentalStart
+  ) {
+    paidBeforeBilling += 1;
+  }
   return {
     priceCents,
     currentIndex,
     coveredThroughIndex,
     paidThrough: coveredThroughIndex >= 0 ? periods[coveredThroughIndex].periodEnd : null,
-    paidPeriodsFromCurrent: Math.max(0, coveredThroughIndex - currentIndex + 1),
+    paidPeriodsFromCurrent: Math.max(0, coveredThroughIndex - currentIndex + 1) + paidBeforeBilling,
   };
 }
 
@@ -499,7 +516,7 @@ export function outstandingFromDue(currentDue) {
 }
 
 export function moveOutBalanceFromDue(currentDue) {
-  const items = (currentDue?.items ?? []).filter((item) => item.type !== "deposit");
+  const items = currentDue?.items ?? [];
   const amount = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0) / 100;
   return {
     amount,
@@ -515,8 +532,10 @@ export const MOVEOUT_OUTSTANDING_MESSAGE = (balance) =>
       .map((item) => item.label)
       .join(", ")}) กรุณาเก็บเงินให้ครบก่อนอนุมัติการย้ายออก`;
 
-export async function loadMoveOutBalance(db, customerId) {
-  return moveOutBalanceFromDue(await loadCustomerCurrentDue(db, customerId));
+export async function loadMoveOutBalance(db, customerId, { excludePaymentIds = [] } = {}) {
+  const currentDue = await loadCustomerCurrentDue(db, customerId);
+  if (!currentDue || excludePaymentIds.length === 0) return moveOutBalanceFromDue(currentDue);
+  return moveOutBalanceFromDue({ ...currentDue, items: currentDue.items.filter((item) => !excludePaymentIds.includes(item.id)) });
 }
 
 export async function loadCustomerOutstanding(db, customerId) {
@@ -548,6 +567,7 @@ export const RENEW_OUTSTANDING_MESSAGE = (amount) =>
 router.get("/me", async (req, res) => {
   try {
     const pool = getPool();
+    await expireRoomTransferCharges(pool);
 
     const [customerRows] = await pool.query(
       `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount, created_at AS registered_at,
@@ -604,11 +624,14 @@ router.get("/me", async (req, res) => {
                 sr.price AS source_room_price, tg.price AS target_room_price,
                 sr.rental_end_date AS source_rental_end_date,
                 (SELECT cu.deposit_amount FROM Customer cu WHERE cu.id = tr.customer_id) AS deposit_amount,
-                (moi.id IS NOT NULL) AS room_inspected
+                (moi.id IS NOT NULL) AS room_inspected,
+                tr.transfer_charge_due_at, tcp.amount AS transfer_charge_amount, tcp.status AS transfer_charge_status,
+                (tcp.slip_path IS NOT NULL) AS transfer_charge_has_slip
          FROM TenantRequest tr
          LEFT JOIN Room sr ON sr.room_number = tr.room_number
          LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
          LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
+         LEFT JOIN Payment tcp ON tcp.id = tr.transfer_charge_payment_id
          WHERE tr.customer_id = ? AND tr.created_at ${AFTER_HISTORY_RESET}
          ORDER BY tr.created_at DESC, tr.id DESC`,
         [customer.id, customer.id],
@@ -622,6 +645,7 @@ router.get("/me", async (req, res) => {
         [customer.id, customer.room_number, customer.id],
       ),
     ]);
+    const heldRooms = await loadHeldTransferRooms(pool, { exceptCustomerId: customer.id });
 
     const bookingIds = bookings.map((booking) => booking.booking_id);
     const [[payments], maintenanceWithPhotos, parcelsWithPhotos, depositPaymentsByCustomer, transferDeductions] = await Promise.all([
@@ -671,7 +695,7 @@ router.get("/me", async (req, res) => {
     return res.json({
       customer,
       room,
-      availableRooms,
+      availableRooms: availableRooms.filter((availableRoom) => !heldRooms.has(Number(availableRoom.room_number))),
       rentalHistory,
       maintenanceRequests: maintenanceWithPhotos,
       tenantRequests,
@@ -870,6 +894,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod];
     const qrPayload = normalizeSlipPayload(req.body?.qr_payload);
     const pool = getPool();
+    await expireRoomTransferCharges(pool);
 
     const [customerRows] = await pool.query(
       `SELECT id, room_number, deposit_amount FROM Customer WHERE id = ?`,
@@ -1182,6 +1207,7 @@ router.post("/requests", async (req, res) => {
     }
     const { type, note, targetRoomNumber, renewDurationMonths, renewPaymentType, moveReason, preferredMoveDate } = value;
 
+    await expireRoomTransferCharges(pool);
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
@@ -1222,11 +1248,41 @@ router.post("/requests", async (req, res) => {
         return res.status(400).json({ message: "ไม่สามารถเลือกห้องปัจจุบันเป็นห้องปลายทางได้" });
       }
 
+      const [stayRows] = !MOVE_ROOM_COOLDOWN_ENABLED ? [[]] : await connection.query(
+        `SELECT DATE_FORMAT(DATE_ADD(base_date, INTERVAL ? DAY), '%Y-%m-%d') AS allowed_from,
+                DATE_ADD(base_date, INTERVAL ? DAY) > CURDATE() AS too_early,
+                after_transfer
+         FROM (
+           SELECT GREATEST(DATE(r.rental_start_date), COALESCE(DATE(t.last_transfer), DATE(r.rental_start_date))) AS base_date,
+                  COALESCE(DATE(t.last_transfer) > DATE(r.rental_start_date), FALSE) AS after_transfer
+           FROM Room r
+           LEFT JOIN (SELECT MAX(transferred_at) AS last_transfer FROM RoomTransfer WHERE customer_id = ?) t ON TRUE
+           WHERE r.room_number = ?
+         ) stay`,
+        [MOVE_ROOM_COOLDOWN_DAYS, MOVE_ROOM_COOLDOWN_DAYS, customer.id, customer.room_number],
+      );
+      if (stayRows[0]?.too_early) {
+        await connection.rollback();
+        const [year, month, day] = stayRows[0].allowed_from.split("-").map(Number);
+        const reason = stayRows[0].after_transfer
+          ? `เพิ่งย้ายห้องไป ต้องรอ ${MOVE_ROOM_COOLDOWN_DAYS} วันหลังย้ายห้องจึงจะขอย้ายได้อีกครั้ง`
+          : `ต้องพักอาศัยครบ ${MOVE_ROOM_COOLDOWN_DAYS} วันนับจากวันเริ่มสัญญาจึงจะขอย้ายห้องได้`;
+        return res.status(409).json({
+          code: "MOVE_ROOM_TOO_EARLY",
+          message: `${reason} ส่งคำขอได้ตั้งแต่ ${new Date(year, month - 1, day).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" })}`,
+          allowed_from: stayRows[0].allowed_from,
+        });
+      }
+
       const [targetRooms] = await connection.query(
         `SELECT room_number, is_booked FROM Room WHERE room_number = ? FOR UPDATE`,
         [targetRoomNumber],
       );
-      if (!targetRooms[0] || targetRooms[0].is_booked) {
+      if (
+        !targetRooms[0]
+        || targetRooms[0].is_booked
+        || await roomHeldForTransfer(connection, targetRoomNumber, { exceptCustomerId: customer.id })
+      ) {
         await connection.rollback();
         return res.status(409).json({ message: "ห้องที่เลือกไม่ว่างแล้ว กรุณาเลือกห้องอื่น" });
       }
@@ -1272,6 +1328,7 @@ router.get("/requests/:id/transfer-impact", async (req, res) => {
     const requestId = Number(req.params.id);
     if (!isPositiveId(requestId)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     const pool = getPool();
+    await expireRoomTransferCharges(pool);
     const [requestRows] = await pool.query(
       `SELECT id, status FROM TenantRequest WHERE id = ? AND customer_id = ? AND type = 'move_room'`,
       [requestId, req.user.id],
@@ -1336,6 +1393,7 @@ router.get("/requests/:id/transfer-impact", async (req, res) => {
         deposit_remaining_after: preview.settlement.deposit_remaining_after,
         additional_charge: preview.settlement.additional_charge,
         charge_status: null,
+        transfer_charge: preview.transfer_charge,
         outstanding: preview.outstanding?.items ?? [],
       },
     });

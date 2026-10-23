@@ -10430,6 +10430,8 @@
 .dashboard-request-row .dashboard-request-desc.is-warning {
   gap: 2px;
   max-width: none;
+  color: #b45309;
+  font-weight: 600;
 }
 
 .dashboard-request-desc-alert {
@@ -10475,6 +10477,50 @@
   box-shadow: none;
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.dashboard-request-wait {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  align-self: flex-start;
+  min-width: 108px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 6px 14px;
+  background: #fffbeb;
+  line-height: 1.3;
+  cursor: help;
+}
+
+.dashboard-request-row:has(> .dashboard-request-wait) > .dashboard-request-info,
+.dashboard-request-row:has(> .dashboard-action-btn) > .dashboard-request-info {
+  flex: 1 1 0;
+}
+
+.dashboard-request-wait small {
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dashboard-request-wait b {
+  color: #92400e;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 480px) {
+  .dashboard-request-wait {
+    flex: 1 0 100%;
+    flex-direction: row;
+    justify-content: center;
+    gap: 6px;
+    order: 2;
+    align-items: baseline;
+  }
 }
 
 .dashboard-request-row .dashboard-progress-dropdown {
@@ -11281,6 +11327,63 @@
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1.55;
+}
+
+.dashboard-move-cost {
+  margin: 10px 12px 2px;
+  padding: 10px 12px;
+  border: 1px solid #fcd9a8;
+  border-radius: 10px;
+  background: #fff8ed;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #7c4a0e;
+}
+
+.dashboard-move-cost-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  border-bottom: 1px dashed #f5c88a;
+  font-weight: 800;
+  color: #b45309;
+}
+
+.dashboard-move-cost-head > svg {
+  flex: 0 0 auto;
+}
+
+.dashboard-move-cost-head > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dashboard-move-cost-head > strong {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.dashboard-move-cost-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.dashboard-move-cost-row > strong {
+  white-space: nowrap;
+}
+
+.dashboard-move-cost-row.is-danger > strong {
+  color: #b42318;
+}
+
+.dashboard-move-cost-row.is-ok > strong {
+  color: #15803d;
 }
 
 .dashboard-move-outcome li.is-ok {

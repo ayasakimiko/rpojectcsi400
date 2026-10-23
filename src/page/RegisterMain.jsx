@@ -450,11 +450,17 @@ function RegisterMain() {
                       {availableRooms.map((room) => (
                         <option key={room.id} value={room.room_number}>
                           ห้อง {room.room_number} · {formatContractMoney(room.price)}/เดือน
+                          {room.held_for_transfer ? ' · มีผู้เช่ารอย้ายเข้า' : ''}
                         </option>
                       ))}
                     </select>
                     {!roomsLoading && availableRooms.length === 0 && (
                       <div className="form-text text-danger">ขณะนี้ไม่มีห้องว่าง</div>
+                    )}
+                    {selectedRoom?.held_for_transfer && (
+                      <div className="form-text text-danger">
+                        ห้องนี้มีผู้เช่าเดิมรอชำระส่วนต่างเพื่อย้ายเข้า ถ้าลงทะเบียนห้องนี้ คำขอย้ายห้องของผู้เช่าคนนั้นจะถูกยกเลิกทันที
+                      </div>
                     )}
                   </div>
 

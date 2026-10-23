@@ -1136,6 +1136,102 @@
   filter: grayscale(0.6);
 }
 
+.csc-card.is-left-early {
+  border-color: #f5c2c2;
+  background: #fdf3f3;
+  opacity: 0.82;
+}
+
+.csc-card.is-left-early:hover {
+  border-color: #eba5a5;
+  box-shadow: 0 10px 24px rgba(185, 28, 28, 0.08);
+  opacity: 1;
+}
+
+.csc-card.is-left-early .csc-room {
+  border-color: #f5c2c2;
+  background: #fbe5e5;
+}
+
+.csc-card.is-left-early .csc-room strong,
+.csc-card.is-left-early .csc-person strong {
+  color: #9b3b3b;
+}
+
+.csc-card.is-left-early .csc-photo-row img {
+  filter: grayscale(0.5) sepia(0.15);
+}
+
+.csc-card.is-left-early .csc-period,
+.csc-card.is-left-early .csc-money > span,
+.csc-card.is-left-early .csc-photo,
+.csc-card.is-left-early .csc-photo-row > .contract-cell-nophoto {
+  border-color: #efd3d3;
+  background: #fffafa;
+}
+
+.csc-card.is-left-early .csc-period-meta {
+  border-top-color: #f0dada;
+}
+
+.csc-card.is-left-early .csc-period-line::before {
+  border-top-color: #e8c4c4;
+}
+
+.csc-card.is-left-early .csc-period-line::after {
+  border-color: #dba7a7;
+}
+
+.csc-card.is-left-early .csc-period-line em,
+.csc-card.is-left-early .csc-period-meta small + small:not(.is-danger):not(.is-warning) {
+  border-color: #efd3d3;
+  background: #fffafa;
+  color: #a35a5a;
+}
+
+.csc-card.is-left-early .csc-date b,
+.csc-card.is-left-early .csc-money b {
+  color: #5f4747;
+}
+
+.csc-card.is-left-early .csc-date small,
+.csc-card.is-left-early .csc-money small,
+.csc-card.is-left-early .csc-period-meta small:first-child,
+.csc-card.is-left-early .csc-label {
+  color: #a88d8d;
+}
+
+.csc-card.is-left-early .csc-money > span.is-total {
+  border-color: #e8c4c4;
+  background: #fcefef;
+}
+
+.csc-card.is-left-early .csc-money > span.is-total small,
+.csc-card.is-left-early .csc-money > span.is-total b,
+.csc-card.is-left-early .csc-label b {
+  color: #a35a5a;
+}
+
+.csc-card.is-left-early .csc-foot {
+  border-top-color: #f0d6d6;
+  background: #f9eaea;
+}
+
+.csc-card.is-left-early .csc-foot > span {
+  color: #a88d8d;
+}
+
+.csc-card.is-left-early .csc-btn {
+  border-color: #e8c4c4;
+  background: #fffafa;
+  color: #a35a5a;
+}
+
+.csc-card.is-left-early .csc-btn:hover {
+  border-color: #dba7a7;
+  background: #fcefef;
+}
+
 .contract-refund-note.is-archived {
   margin-bottom: 12px;
   border-color: #d4d8de;

@@ -1353,14 +1353,35 @@ function MoveRoomOutcome({ currentRoom, targetRoom, depositRemaining, balance })
     diff > 0 && {
       tone: 'is-warning',
       text: deducted > 0
-        ? `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} หักจากเงินมัดจำ ฿${formatCurrency(deducted)} (มัดจำเหลือ ฿${formatCurrency(deposit - deducted)})${charge > 0 ? ` และเพิ่มในยอดชำระเดือนนี้ ฿${formatCurrency(charge)}` : ''}`
-        : `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} จะเพิ่มในยอดชำระเดือนนี้ (ไม่มีเงินมัดจำให้หัก)`,
+        ? `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} หักจากเงินมัดจำ ฿${formatCurrency(deducted)} (มัดจำเหลือ ฿${formatCurrency(deposit - deducted)})${charge > 0 ? ` ส่วนที่เหลือ ฿${formatCurrency(charge)} ต้องชำระภายใน 3 วันก่อนทำสัญญาย้ายห้อง` : ''}`
+        : `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} ต้องชำระภายใน 3 วันก่อนทำสัญญาย้ายห้อง (ไม่มีเงินมัดจำให้หัก)`,
     },
     { tone: 'is-info', text: `คำขอและแจ้งซ่อมที่ยังค้างของห้อง ${currentNumber} จะถูกยกเลิก ส่งใหม่ได้จากห้องใหม่` },
   ].filter(Boolean)
   return (
     <div className="dashboard-move-impact">
       <div className="dashboard-move-impact-title">จะเกิดอะไรขึ้นถ้าเจ้าหน้าที่อนุมัติ</div>
+      {diff > 0 && (
+        <div className="dashboard-move-cost">
+          <div className="dashboard-move-cost-head">
+            <FieldIcon name="info" size={16} />
+            <span>ส่วนต่างที่ต้องจ่ายเพิ่มทั้งหมด (รวมเงินมัดจำที่ถูกหัก)</span>
+            <strong>฿{formatCurrency(diff)}</strong>
+          </div>
+          <div className="dashboard-move-cost-row">
+            <span>หักจากเงินมัดจำ</span>
+            <strong>{deducted > 0 ? `฿${formatCurrency(deducted)}` : 'ไม่หัก'}</strong>
+          </div>
+          <div className="dashboard-move-cost-row">
+            <span>เงินมัดจำคงเหลือหลังหัก</span>
+            <strong>฿{formatCurrency(deposit - deducted)}</strong>
+          </div>
+          <div className={`dashboard-move-cost-row${charge > 0 ? ' is-danger' : ' is-ok'}`}>
+            <span>ต้องชำระเพิ่มภายใน 3 วัน</span>
+            <strong>{charge > 0 ? `฿${formatCurrency(charge)}` : 'ไม่มี'}</strong>
+          </div>
+        </div>
+      )}
       <ol className="dashboard-move-outcome">
         {steps.map((step) => (
           <li key={step.text} className={step.tone}>
@@ -1428,7 +1449,7 @@ function MoveRoomContractImpact({ request }) {
     },
     { label: 'เงินมัดจำคงเหลือ', value: `฿${formatCurrency(impact.deposit_remaining_after)}`, tone: 'is-brand' },
     total > 0 && {
-      label: impact.final ? 'เพิ่มในยอดชำระ' : 'ต้องชำระเพิ่มเดือนนี้',
+      label: impact.final ? 'ชำระส่วนต่างเพิ่ม' : 'ต้องชำระก่อนย้ายห้อง',
       value: charge > 0
         ? `฿${formatCurrency(charge)}${impact.final ? (impact.charge_status === 'paid' ? ' (ชำระแล้ว)' : ' (รอชำระ)') : ''}`
         : 'ไม่มี',
@@ -1452,7 +1473,14 @@ function MoveRoomContractImpact({ request }) {
         {diff > 0 && total > 0 && (
           <li>
             ห้องใหม่แพงกว่า ฿{formatCurrency(diff)}/เดือน ระบบหักส่วนต่างจากเงินมัดจำก่อน
-            {charge > 0 ? ` ส่วนที่มัดจำไม่พอ ฿${formatCurrency(charge)} จะเพิ่มในยอดชำระเดือนนี้` : ''}
+            {charge > 0 ? ` ส่วนที่มัดจำไม่พอ ฿${formatCurrency(charge)} ต้องชำระก่อน จึงจะย้ายห้องและทำสัญญาได้` : ''}
+          </li>
+        )}
+        {!impact.final && charge > 0 && (
+          <li className="is-danger">
+            {impact.transfer_charge?.due_at
+              ? `ชำระส่วนต่าง ฿${formatCurrency(charge)} ภายใน ${formatDateTime(impact.transfer_charge.due_at)} ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`
+              : `เมื่อเจ้าหน้าที่ส่งยอดมา ต้องชำระส่วนต่างภายใน 3 วัน ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`}
           </li>
         )}
         {diff <= 0 && <li className="is-ok">{diff === 0 ? 'ค่าเช่าเท่าเดิม' : 'ห้องใหม่ถูกกว่า'} ไม่หักเงินมัดจำและไม่มียอดเพิ่ม</li>}
@@ -2429,6 +2457,21 @@ function msUntil(value) {
   return new Date(value).getTime() - Date.now()
 }
 
+const MOVE_ROOM_COOLDOWN_ENABLED = false
+const MOVE_ROOM_COOLDOWN_DAYS = 15
+
+function moveRoomCooldown(startValue, lastTransferValue) {
+  const start = startValue ? new Date(startValue) : null
+  const lastTransfer = lastTransferValue ? new Date(lastTransferValue) : null
+  const afterTransfer = Boolean(lastTransfer && (!start || lastTransfer > start))
+  const base = afterTransfer ? lastTransfer : start
+  if (!base) return null
+  return {
+    allowedAt: new Date(base.getFullYear(), base.getMonth(), base.getDate() + MOVE_ROOM_COOLDOWN_DAYS),
+    afterTransfer,
+  }
+}
+
 const CONTRACT_WARNING_WINDOW_MS = 10 * MS_PER_DAY
 const CONTRACT_FINAL_WARNING_WINDOW_MS = 3 * MS_PER_DAY
 
@@ -3344,6 +3387,7 @@ function getRequestDetail(kind, request) {
     )
     if (kind === 'moveout' && request.preferred_move_date) fields.push(['วันที่ต้องการย้ายออก', formatDateOnly(request.preferred_move_date)])
     if (request.status === 'rejected' && request.reject_reason) fields.push(['เหตุผลที่ไม่อนุมัติ', request.reject_reason])
+    if (request.status === 'cancelled' && request.reject_reason) fields.push(['เหตุผลที่ยกเลิก', request.reject_reason])
   }
 
   return { title, heading, icon, iconClass, meta, statusLabel, badge, heroStatus, fields, photos }
@@ -5257,6 +5301,18 @@ function CustomerDashbord() {
   )
   const moveRoomRequest = latestRequestByType('move_room')
   const moveRoomActive = Boolean(moveRoomRequest && ['pending', 'in_progress'].includes(moveRoomRequest.status))
+  const moveRoomChargeDue = moveRoomActive && moveRoomRequest.transfer_charge_due_at && moveRoomRequest.transfer_charge_status === 'pending'
+    ? moveRoomRequest
+    : null
+  const lastMoveRoomAt = (data?.tenantRequests ?? [])
+    .filter((request) => request.type === 'move_room' && request.status === 'approved' && request.completed_at)
+    .reduce((latest, request) => (!latest || new Date(request.completed_at) > new Date(latest) ? request.completed_at : latest), null)
+  const moveRoomWait = MOVE_ROOM_COOLDOWN_ENABLED && room?.is_booked ? moveRoomCooldown(room.rental_start_date, lastMoveRoomAt) : null
+  const moveRoomAllowedAt = moveRoomWait?.allowedAt ?? null
+  const moveRoomTooEarly = Boolean(moveRoomAllowedAt && msUntil(moveRoomAllowedAt) > 0)
+  const moveRoomWaitMessage = moveRoomWait?.afterTransfer
+    ? `เพิ่งย้ายห้องไป ต้องรอ ${MOVE_ROOM_COOLDOWN_DAYS} วันหลังย้ายห้องจึงจะขอย้ายได้อีกครั้ง`
+    : `ต้องพักอาศัยครบ ${MOVE_ROOM_COOLDOWN_DAYS} วันนับจากวันเริ่มสัญญาจึงจะขอย้ายห้องได้`
 
   const canResubmitRenew =
     !renewRequest
@@ -5295,6 +5351,7 @@ function CustomerDashbord() {
         previewLabel: 'หมายเหตุของคุณ',
         detail:
           (request.type === 'moveout' && MOVEOUT_STATUS_POPUP_CONTENT[request.status]?.message)
+          || (request.type === 'move_room' && request.status === 'cancelled' && request.reject_reason)
           || (request.type === 'move_room' && MOVE_ROOM_STATUS_POPUP_CONTENT[request.status]?.message)
           || (request.type === 'move_room' && request.target_room_number
             ? `ห้องปลายทางที่ขอ: ${request.target_room_number}`
@@ -6547,10 +6604,11 @@ function CustomerDashbord() {
                       <p className="dashboard-confirm-message">{content.message}</p>
                     </div>
                   </div>
-                  {statusPopup.status === 'rejected' && statusPopup.request?.reject_reason && (
+                  {['rejected', 'cancelled'].includes(statusPopup.status) && statusPopup.request?.reject_reason && (
                     <div className="dashboard-reject-reason">
                       <span className="dashboard-reject-reason-label">
-                        ข้อความจากเจ้าหน้าที่{statusPopup.request.completed_by_name ? ` (${statusPopup.request.completed_by_name})` : ''}
+                        {statusPopup.status === 'cancelled' ? 'เหตุผลที่ยกเลิก' : 'ข้อความจากเจ้าหน้าที่'}
+                        {statusPopup.request.completed_by_name ? ` (${statusPopup.request.completed_by_name})` : ''}
                       </span>
                       <p>{statusPopup.request.reject_reason}</p>
                     </div>
@@ -7904,17 +7962,29 @@ function CustomerDashbord() {
                       <div data-customer-focus="tenant-move_room" className={`dashboard-request-row${moveRoomRequest ? ' has-detail-link' : ''}`}>
                         <div className="dashboard-request-info">
                           <p className="dashboard-request-title">ย้ายห้อง</p>
-                          <p className={`dashboard-request-desc${!moveRoomActive && room?.is_booked && moveOutOutstanding > 0 ? ' is-warning' : ''}`}>
-                            {moveRoomActive
+                          <p className={`dashboard-request-desc${moveRoomChargeDue || (!moveRoomActive && room?.is_booked && (moveRoomTooEarly || moveOutOutstanding > 0)) ? ' is-warning' : ''}`}>
+                            {moveRoomChargeDue
+                              ? moveRoomChargeDue.transfer_charge_has_slip
+                                ? `ส่งสลิปส่วนต่าง ฿${formatCurrency(moveRoomChargeDue.transfer_charge_amount)} แล้ว รอเจ้าหน้าที่ตรวจ`
+                                : `ชำระส่วนต่าง ฿${formatCurrency(moveRoomChargeDue.transfer_charge_amount)} ภายใน ${formatDateTime(moveRoomChargeDue.transfer_charge_due_at)} ไม่งั้นคำขอถูกยกเลิก`
+                              : moveRoomActive
                               ? `กำลังขอย้ายไปห้อง ${moveRoomRequest.target_room_number}`
-                              : room?.is_booked && moveOutOutstanding > 0
-                                ? <OutstandingNotice amount={moveOutOutstanding} items={moveOutUnpaidItems} action="ขอย้ายห้อง" />
-                                : availableRooms.length > 0
-                                  ? 'ส่งคำขอย้ายไปยังห้องพักที่ว่าง'
-                                  : 'ขณะนี้ไม่มีห้องว่างให้เลือก'}
+                              : moveRoomTooEarly
+                                ? `${moveRoomWaitMessage} ส่งคำขอได้ตั้งแต่ ${formatDate(moveRoomAllowedAt)}`
+                                : room?.is_booked && moveOutOutstanding > 0
+                                  ? <OutstandingNotice amount={moveOutOutstanding} items={moveOutUnpaidItems} action="ขอย้ายห้อง" />
+                                  : availableRooms.length > 0
+                                    ? MOVE_ROOM_COOLDOWN_ENABLED
+                                      ? `ส่งคำขอย้ายไปยังห้องพักที่ว่าง (ต้องพักอาศัยครบ ${MOVE_ROOM_COOLDOWN_DAYS} วันขึ้นไป)`
+                                      : 'ส่งคำขอย้ายไปยังห้องพักที่ว่าง'
+                                    : 'ขณะนี้ไม่มีห้องว่างให้เลือก'}
                           </p>
                         </div>
-                        {moveRoomActive ? (
+                        {moveRoomChargeDue && !moveRoomChargeDue.transfer_charge_has_slip ? (
+                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
+                            ชำระส่วนต่าง
+                          </button>
+                        ) : moveRoomActive ? (
                           <button
                             type="button"
                             className={`dashboard-badge status-${tenantRequestBadgeClass(moveRoomRequest.status)} dashboard-badge-btn`}
@@ -7922,6 +7992,11 @@ function CustomerDashbord() {
                           >
                             {TENANT_REQUEST_STATUS_LABEL[moveRoomRequest.status]}
                           </button>
+                        ) : moveRoomTooEarly ? (
+                          <span className="dashboard-request-wait" title={`ขอย้ายห้องได้ตั้งแต่ ${formatDate(moveRoomAllowedAt)}`}>
+                            <small>ขอย้ายได้อีก</small>
+                            <b>{Math.ceil(msUntil(moveRoomAllowedAt) / 86400000)} วัน</b>
+                          </span>
                         ) : room?.is_booked && moveOutOutstanding > 0 ? (
                           <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
                             ชำระยอดค้าง
@@ -7975,6 +8050,15 @@ function CustomerDashbord() {
                             )}
                             {activeRequestType === 'move_room' && (
                               <>
+                                {MOVE_ROOM_COOLDOWN_ENABLED && (
+                                  <p className="dashboard-move-hint">
+                                    <FieldIcon name="info" size={16} />
+                                    <span>
+                                      เงื่อนไข: ต้องพักอาศัยครบ {MOVE_ROOM_COOLDOWN_DAYS} วันนับจากวันเริ่มสัญญา และหลังย้ายห้องแล้วต้องรออีก {MOVE_ROOM_COOLDOWN_DAYS} วันจึงจะขอย้ายได้อีกครั้ง
+                                      {moveRoomAllowedAt && ` (ขอย้ายได้ตั้งแต่ ${formatDate(moveRoomAllowedAt)})`}
+                                    </span>
+                                  </p>
+                                )}
                                 <FieldLabel htmlFor="target-room-number" required>
                                   ห้องที่ต้องการย้ายไป
                                 </FieldLabel>

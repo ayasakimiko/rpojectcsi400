@@ -3,12 +3,11 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole, requireStaffRole } from "../middleware/authMiddleware.js";
 import { isPositiveId, validateRoomFields } from "../middleware/validation.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
+import { expireRoomTransferCharges, loadHeldTransferRooms } from "./rentalContracts.js";
 
-// ตั้งค่า Router และการตรวจสอบบัญชีสำหรับจัดการห้องพัก
 const router = Router();
 const requireActiveAccount = createRequireActiveAccount(getPool);
 
-// ผู้ดูแลเพิ่มห้องพัก พร้อมราคา สิ่งอำนวยความสะดวก และอัตราค่าน้ำค่าไฟ
 router.post("/create", authenticate, requireAdminRole, requireActiveAccount, async (req, res) => {
   try {
     const {
@@ -74,7 +73,6 @@ router.post("/create", authenticate, requireAdminRole, requireActiveAccount, asy
   }
 });
 
-// แสดงรายการห้องและข้อมูลผู้เช่าปัจจุบันสำหรับเจ้าหน้าที่
 router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req, res) => {
   try {
     const pool = getPool();
@@ -102,15 +100,16 @@ router.get("/", authenticate, requireStaffRole, requireActiveAccount, async (req
   }
 });
 
-// แสดงห้องว่างและรายละเอียดห้องพักสำหรับการเลือกห้อง
 router.get("/available", async (req, res) => {
   try {
     const pool = getPool();
-    const [rooms] = await pool.query(
-      `SELECT id, room_number, price, rental_duration_months FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`,
-    );
+    await expireRoomTransferCharges(pool);
+    const [[rooms], heldRooms] = await Promise.all([
+      pool.query(`SELECT id, room_number, price, rental_duration_months FROM Room WHERE is_booked = FALSE ORDER BY room_number ASC`),
+      loadHeldTransferRooms(pool),
+    ]);
 
-    return res.json({ rooms });
+    return res.json({ rooms: rooms.map((room) => ({ ...room, held_for_transfer: heldRooms.has(Number(room.room_number)) })) });
   } catch (error) {
     console.error("Fetch available rooms error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });

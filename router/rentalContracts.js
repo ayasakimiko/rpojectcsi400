@@ -499,12 +499,17 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   const forUpdate = lock ? " FOR UPDATE" : "";
   const [requestRows] = await db.query(
     `SELECT id, customer_id, room_number, target_room_number, type, status, note, move_reason,
-            DATE_FORMAT(preferred_move_date, '%Y-%m-%d') AS preferred_move_date, created_at
+            DATE_FORMAT(preferred_move_date, '%Y-%m-%d') AS preferred_move_date, created_at,
+            transfer_charge_payment_id, transfer_charge_due_at, transfer_charge_periods
      FROM TenantRequest WHERE id = ?${forUpdate}`,
     [requestId],
   );
   const request = requestRows[0];
   if (!request || request.type !== "move_room") return null;
+  const [chargeRows] = request.transfer_charge_payment_id
+    ? await db.query(`SELECT id, amount, status, slip_path FROM Payment WHERE id = ?${forUpdate}`, [request.transfer_charge_payment_id])
+    : [[]];
+  const chargePayment = chargeRows[0] ?? null;
 
   const blockers = [];
   const [existingTransfers] = await db.query(`SELECT id FROM RoomTransfer WHERE tenant_request_id = ?${forUpdate}`, [request.id]);
@@ -537,6 +542,9 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   const targetRoom = rooms.find((room) => room.room_number === request.target_room_number) ?? null;
   if (!targetRoom) blockers.push("ไม่พบห้องปลายทาง");
   else if (targetRoom.is_booked) blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าแล้ว ไม่สามารถย้ายเข้าได้`);
+  else if (await roomHeldForTransfer(db, targetRoom.room_number, { exceptRequestId: request.id })) {
+    blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าคนอื่นจองไว้ระหว่างรอชำระส่วนต่าง`);
+  }
   if (!sourceRoom || !sourceRoom.is_booked) blockers.push("ห้องต้นทางเปลี่ยนแปลงแล้ว กรุณาตรวจสอบสถานะห้อง");
   else if (!sourceRoom.contract_active) blockers.push("สัญญาเช่าหมดอายุแล้ว ไม่สามารถย้ายห้องได้");
 
@@ -552,7 +560,9 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
     : [[]];
   const coverage = sourceRoom ? computeRentCoverage(sourceRoom, payments, now) : null;
 
-  const balance = stale ? { amount: 0, items: [] } : await loadMoveOutBalance(db, customer.id);
+  const balance = stale
+    ? { amount: 0, items: [] }
+    : await loadMoveOutBalance(db, customer.id, { excludePaymentIds: chargePayment ? [chargePayment.id] : [] });
   if (balance.items.length > 0) {
     blockers.push(
       balance.items.every((item) => item.status === "pending")
@@ -573,9 +583,25 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   const settlement = computeRoomTransferSettlement({
     sourcePriceCents: toCents(sourceRoom?.price),
     targetPriceCents: toCents(targetRoom?.price),
-    chargeablePeriods: coverage?.paidPeriodsFromCurrent ?? 0,
+    chargeablePeriods: request.transfer_charge_periods ?? coverage?.paidPeriodsFromCurrent ?? 0,
     depositRemainingCents,
   });
+
+  const transferCharge = {
+    required: settlement.additionalChargeCents > 0,
+    payment: chargePayment,
+    status: !chargePayment
+      ? "not_sent"
+      : chargePayment.status === "paid"
+        ? "paid"
+        : chargePayment.slip_path ? "verifying" : "unpaid",
+    dueAt: request.transfer_charge_due_at,
+  };
+  if (chargePayment && toCents(chargePayment.amount) !== settlement.additionalChargeCents) {
+    blockers.push(
+      `ยอดส่วนต่างเปลี่ยนจาก ${formatBaht(toCents(chargePayment.amount))} เป็น ${formatBaht(settlement.additionalChargeCents)} กรุณาปฏิเสธคำขอแล้วให้ผู้เช่าส่งคำขอใหม่`,
+    );
+  }
 
   return {
     request,
@@ -587,10 +613,129 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
     balance,
     deposit: { amountCents: depositAmountCents, paidCents: depositPaidCents, deductedBeforeCents, remainingCents: depositRemainingCents },
     settlement,
+    transferCharge,
     newPriceFrom: coverage?.paidThrough ?? sourceRoom?.billing_start_date ?? sourceRoom?.rental_start_date ?? null,
     blockers,
     stale,
   };
+}
+
+export const ROOM_TRANSFER_CHARGE_DAYS = 3;
+
+export async function loadHeldTransferRooms(db, { exceptCustomerId = 0 } = {}) {
+  const [rows] = await db.query(
+    `SELECT DISTINCT target_room_number FROM TenantRequest
+     WHERE type = 'move_room' AND status IN ('pending', 'in_progress')
+       AND transfer_charge_payment_id IS NOT NULL AND target_room_number IS NOT NULL AND customer_id <> ?`,
+    [exceptCustomerId],
+  );
+  return new Set(rows.map((row) => Number(row.target_room_number)));
+}
+
+export async function roomHeldForTransfer(db, roomNumber, { exceptRequestId = 0, exceptCustomerId = 0 } = {}) {
+  const [rows] = await db.query(
+    `SELECT id FROM TenantRequest
+     WHERE type = 'move_room' AND status IN ('pending', 'in_progress') AND transfer_charge_payment_id IS NOT NULL
+       AND target_room_number = ? AND id <> ? AND customer_id <> ?
+     LIMIT 1`,
+    [roomNumber, exceptRequestId, exceptCustomerId],
+  );
+  return rows.length > 0;
+}
+
+export const roomTransferNeedsPayment = (plan) => plan.transferCharge.required && plan.transferCharge.status !== "paid";
+
+export async function requestRoomTransferCharge(connection, plan, staffName) {
+  const { request, sourceRoom, targetRoom, booking, settlement } = plan;
+  const [chargeResult] = await connection.query(
+    `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', ?, ?)`,
+    [
+      booking.id,
+      settlement.additionalChargeCents / 100,
+      ROOM_TRANSFER_PAYMENT_TYPE,
+      `ส่วนต่างค่าเช่าย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number}${
+        settlement.depositDeductedCents > 0 ? ` (หักจากเงินมัดจำแล้ว ${formatBaht(settlement.depositDeductedCents)})` : ""
+      } ชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน`.slice(0, 255),
+    ],
+  );
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'in_progress',
+         accepted_at = COALESCE(accepted_at, NOW()),
+         accepted_by_name = COALESCE(accepted_by_name, ?),
+         transfer_charge_payment_id = ?,
+         transfer_charge_due_at = DATE_ADD(NOW(), INTERVAL ? DAY),
+         transfer_charge_periods = ?
+     WHERE id = ?`,
+    [staffName || null, chargeResult.insertId, ROOM_TRANSFER_CHARGE_DAYS, settlement.chargeablePeriods, request.id],
+  );
+  return chargeResult.insertId;
+}
+
+export async function cancelTransfersIntoBookedRooms(db, roomNumber = null) {
+  const [rows] = await db.query(
+    `SELECT tr.id, tr.target_room_number, tr.transfer_charge_payment_id
+     FROM TenantRequest tr
+     JOIN Room r ON r.room_number = tr.target_room_number
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND r.is_booked = TRUE
+       AND (? IS NULL OR tr.target_room_number = ?)`,
+    [roomNumber, roomNumber],
+  );
+  for (const row of rows) {
+    await db.query(
+      `UPDATE TenantRequest
+       SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (ห้องปลายทางมีผู้เช่าแล้ว)', reject_reason = ?
+       WHERE id = ? AND status IN ('pending', 'in_progress')`,
+      [`ห้อง ${row.target_room_number} มีผู้เช่าเข้าพักแล้ว ระบบยกเลิกคำขอย้ายห้องและการทำสัญญาใหม่ กรุณาเลือกห้องอื่น`, row.id],
+    );
+    if (row.transfer_charge_payment_id) {
+      await db.query(
+        `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: ห้องปลายทางมีผู้เช่าแล้ว)'), 255)
+         WHERE id = ? AND status = 'pending' AND slip_path IS NULL`,
+        [row.transfer_charge_payment_id],
+      );
+    }
+  }
+  return rows.length;
+}
+
+export async function expireRoomTransferCharges(db) {
+  await cancelTransfersIntoBookedRooms(db);
+  const [rows] = await db.query(
+    `SELECT tr.id, tr.transfer_charge_payment_id
+     FROM TenantRequest tr
+     LEFT JOIN Payment p ON p.id = tr.transfer_charge_payment_id
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+       AND tr.transfer_charge_due_at IS NOT NULL AND tr.transfer_charge_due_at <= NOW()
+       AND (p.id IS NULL OR (p.status = 'pending' AND p.slip_path IS NULL))`,
+  );
+  for (const row of rows) {
+    const [paymentResult] = await db.query(
+      `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: ไม่ชำระภายในกำหนด)'), 255)
+       WHERE id = ? AND status = 'pending' AND slip_path IS NULL`,
+      [row.transfer_charge_payment_id],
+    );
+    if (row.transfer_charge_payment_id && paymentResult.affectedRows === 0) continue;
+    await db.query(
+      `UPDATE TenantRequest
+       SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (ไม่ชำระส่วนต่าง)', reject_reason = ?
+       WHERE id = ? AND status IN ('pending', 'in_progress')`,
+      [`ไม่ได้ชำระส่วนต่างค่าเช่าภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน ระบบยกเลิกการย้ายห้องและการทำสัญญาใหม่แล้ว`, row.id],
+    );
+  }
+  const [orphanRows] = await db.query(
+    `SELECT p.id FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id
+     WHERE tr.type = 'move_room' AND tr.status IN ('rejected', 'cancelled') AND p.status = 'pending' AND p.slip_path IS NULL`,
+  );
+  if (orphanRows.length > 0) {
+    await db.query(
+      `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: คำขอย้ายห้องถูกยกเลิก)'), 255)
+       WHERE id IN (?) AND status = 'pending' AND slip_path IS NULL`,
+      [orphanRows.map((row) => row.id)],
+    );
+  }
+  return rows.length;
 }
 
 export async function loadRoomTransferPreview(db, requestId) {
@@ -621,13 +766,25 @@ export async function loadRoomTransferPreview(db, requestId) {
       deposit_remaining_after: settlement.depositRemainingAfterCents / 100,
     },
     new_price_from: plan.newPriceFrom,
+    transfer_charge: {
+      required: plan.transferCharge.required,
+      status: plan.transferCharge.status,
+      payment_id: plan.transferCharge.payment?.id ?? null,
+      amount: plan.transferCharge.payment ? Number(plan.transferCharge.payment.amount) : settlement.additionalChargeCents / 100,
+      due_at: plan.transferCharge.dueAt,
+      days: ROOM_TRANSFER_CHARGE_DAYS,
+    },
     blockers: plan.stale ? ["ผู้เช่าเปลี่ยนห้องไปแล้ว คำขอนี้จะถูกนำออกจากรายการ"] : plan.blockers,
-    can_approve: !plan.stale && plan.blockers.length === 0,
+    can_request_charge: !plan.stale && plan.blockers.length === 0 && plan.transferCharge.status === "not_sent" && plan.transferCharge.required,
+    can_approve: !plan.stale && plan.blockers.length === 0 && !roomTransferNeedsPayment(plan),
   };
 }
 
 export async function applyRoomTransfer(connection, plan, staffName, contractImages = []) {
   const { request, customer, sourceRoom, targetRoom, booking, settlement, deposit } = plan;
+  if (roomTransferNeedsPayment(plan)) {
+    throw Object.assign(new Error("ผู้เช่ายังไม่ได้ชำระส่วนต่างค่าเช่า"), { code: "TRANSFER_CHARGE_UNPAID" });
+  }
   if (contractImages.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
     throw Object.assign(new Error(`กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป`), {
       code: "CONTRACT_IMAGES_REQUIRED",
@@ -670,21 +827,7 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
   );
   const toBookingId = bookingResult.insertId;
 
-  let chargePaymentId = null;
-  if (settlement.additionalChargeCents > 0) {
-    const [chargeResult] = await connection.query(
-      `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', ?, ?)`,
-      [
-        toBookingId,
-        settlement.additionalChargeCents / 100,
-        ROOM_TRANSFER_PAYMENT_TYPE,
-        `ส่วนต่างค่าเช่าย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number}${
-          settlement.depositDeductedCents > 0 ? ` (หักจากเงินมัดจำแล้ว ${formatBaht(settlement.depositDeductedCents)})` : ""
-        }`.slice(0, 255),
-      ],
-    );
-    chargePaymentId = chargeResult.insertId;
-  }
+  const chargePaymentId = settlement.additionalChargeCents > 0 ? plan.transferCharge.payment.id : null;
 
   const [transferResult] = await connection.query(
     `INSERT INTO RoomTransfer (tenant_request_id, customer_id, from_booking_id, to_booking_id, from_room_number, to_room_number,
@@ -727,6 +870,6 @@ export function roomTransferApprovalMessage(plan) {
   const { settlement, sourceRoom, targetRoom } = plan;
   const parts = [`อนุมัติย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number} สำเร็จ`];
   if (settlement.depositDeductedCents > 0) parts.push(`หักส่วนต่างจากเงินมัดจำ ${formatBaht(settlement.depositDeductedCents)}`);
-  if (settlement.additionalChargeCents > 0) parts.push(`เพิ่มยอดชำระเดือนนี้ ${formatBaht(settlement.additionalChargeCents)}`);
+  if (settlement.additionalChargeCents > 0) parts.push(`ผู้เช่าชำระส่วนต่างแล้ว ${formatBaht(settlement.additionalChargeCents)}`);
   return parts.join(" · ");
 }

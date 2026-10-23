@@ -2041,6 +2041,19 @@ function TenantRequestCard({ request, steps = [], children }) {
         </span>
       </div>
       <Body request={request} />
+      {request.type === 'move_room' && request.transfer_charge_due_at && (
+        <div className={`staff-req-charge is-${request.transfer_charge_status === 'paid' ? 'paid' : request.transfer_charge_has_slip ? 'verifying' : 'unpaid'}`}>
+          <strong>
+            {request.transfer_charge_status === 'paid'
+              ? 'ชำระส่วนต่างแล้ว พร้อมทำสัญญา'
+              : request.transfer_charge_has_slip
+                ? 'ส่งสลิปส่วนต่างแล้ว รอตรวจสลิป'
+                : 'รอผู้เช่าชำระส่วนต่าง'}
+            {' '}฿{formatCurrency(request.transfer_charge_amount)}
+          </strong>
+          {request.transfer_charge_status !== 'paid' && <span>ครบกำหนด {formatDateTime(request.transfer_charge_due_at)}</span>}
+        </div>
+      )}
       {request.note && (
         <div className="staff-req-note">
           <span className="staff-req-note-label">{TENANT_REQUEST_NOTE_LABEL[request.type] || 'หมายเหตุ'}</span>
@@ -3020,6 +3033,13 @@ function useRoomTransferPreview(requestId, enabled = true) {
   return enabled ? state : { preview: null, loading: false, error: '' }
 }
 
+const TRANSFER_CHARGE_STATUS_TEXT = {
+  not_sent: 'มัดจำไม่พอหัก ต้องส่งยอดให้ผู้เช่าชำระก่อนทำสัญญา',
+  unpaid: 'ส่งยอดแล้ว รอผู้เช่าชำระ',
+  verifying: 'ผู้เช่าส่งสลิปแล้ว รอตรวจสลิป',
+  paid: 'ชำระแล้ว พร้อมทำสัญญา',
+}
+
 function MoveRoomReadiness({ request, preview, loading, error }) {
   if (loading) {
     return (
@@ -3073,6 +3093,17 @@ function MoveRoomReadiness({ request, preview, loading, error }) {
       ok: !contractExpired,
       detail: contractExpired ? 'สัญญาหมดอายุแล้ว ย้ายห้องไม่ได้' : 'สัญญายังมีผล',
     },
+    ...(preview.transfer_charge?.required
+      ? [{
+          key: 'charge',
+          label: `ผู้เช่าชำระส่วนต่าง ฿${formatCurrency(preview.transfer_charge.amount)}`,
+          ok: preview.transfer_charge.status === 'paid',
+          detail: TRANSFER_CHARGE_STATUS_TEXT[preview.transfer_charge.status],
+          hint: preview.transfer_charge.due_at && preview.transfer_charge.status !== 'paid'
+            ? `ต้องชำระภายใน ${formatDateTime(preview.transfer_charge.due_at)} ไม่เช่นนั้นระบบจะยกเลิกคำขอย้ายห้อง`
+            : null,
+        }]
+      : []),
   ]
   const knownMessages = ['ตรวจห้อง', 'ยอดค้าง', 'สลิป', 'มีผู้เช่าแล้ว', 'หมดอายุ', 'ห้องปลายทาง']
   const otherBlockers = preview.blockers.filter((message) => !knownMessages.some((word) => message.includes(word)))
@@ -3532,7 +3563,7 @@ function TransferSettlementSection({ preview, loading, loadError }) {
       ? `เริ่มคิดค่าเช่าราคาใหม่ตั้งแต่รอบ ${formatDate(preview.new_price_from)} เป็นต้นไป`
       : 'เริ่มคิดค่าเช่าราคาใหม่ตั้งแต่รอบถัดไป',
     diff > 0 && periods > 0 && deducted > 0 && `หักส่วนต่าง ฿${formatCurrency(deducted)} จากเงินมัดจำ เหลือมัดจำ ฿${formatCurrency(settlement.deposit_remaining_after)}`,
-    diff > 0 && charge > 0 && `เพิ่มรายการ "ส่วนต่างค่าเช่า (ย้ายห้อง)" ฿${formatCurrency(charge)} ในยอดชำระเดือนนี้ของผู้เช่า (เก็บครั้งเดียว)`,
+    diff > 0 && charge > 0 && `มัดจำไม่พอ ผู้เช่าต้องชำระส่วนต่าง ฿${formatCurrency(charge)} ภายใน ${preview.transfer_charge?.days ?? 3} วันก่อนทำสัญญาย้ายห้อง ถ้าไม่ชำระระบบจะยกเลิกคำขอ`,
     diff > 0 && periods === 0 && 'ผู้เช่ายังไม่ได้ชำระค่าเช่ารอบใด จึงไม่มีส่วนต่างย้อนหลัง รอบแรกจะเรียกเก็บในราคาห้องใหม่',
     diff <= 0 && (diff === 0 ? 'ค่าเช่าเท่าเดิม ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ' : 'ห้องใหม่ถูกกว่า ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ'),
   ].filter(Boolean)
@@ -3587,7 +3618,7 @@ function TransferSettlementSection({ preview, loading, loadError }) {
               <dd>฿{formatCurrency(settlement.deposit_remaining_after)}</dd>
             </div>
             <div>
-              <dt>เก็บเพิ่มเดือนนี้</dt>
+              <dt>เก็บเพิ่มก่อนย้าย</dt>
               <dd className={charge > 0 ? 'is-danger' : 'is-success'}>{charge > 0 ? `฿${formatCurrency(charge)}` : 'ไม่มี'}</dd>
             </div>
           </dl>
@@ -3602,7 +3633,7 @@ function TransferSettlementSection({ preview, loading, loadError }) {
   )
 }
 
-function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose }) {
+function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCharge, onClose }) {
   const [openedAt] = useState(() => Date.now())
   const { preview, loading: previewLoading, error: previewError } = useRoomTransferPreview(request.id)
 
@@ -3617,6 +3648,8 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
   const [contractFilesError, setContractFilesError] = useState('')
   const contractFilesReady = contractFiles.length >= ROOM_TRANSFER_MIN_CONTRACT_IMAGES
   const canApprove = Boolean(preview?.can_approve) && !previewLoading && !previewError && contractFilesReady
+  const transferCharge = preview?.transfer_charge
+  const awaitingCharge = Boolean(transferCharge?.required && transferCharge.status !== 'paid')
   const handleContractFilesChange = (files) => {
     const invalid = files.map(validateImageFile).find(Boolean)
     if (invalid) {
@@ -3638,6 +3671,16 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
     const body = new FormData()
     contractFiles.forEach((file) => body.append('contract_images', file))
     onConfirm(body)
+  }
+  const chargeSectionRef = useRef(null)
+  const contractSectionRef = useRef(null)
+  const scrollToSection = (ref) => {
+    const node = ref.current
+    if (!node) return
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    node.classList.remove('is-flash')
+    void node.offsetWidth
+    node.classList.add('is-flash')
   }
   const amenities = TARGET_ROOM_AMENITIES.filter((item) => request[`target_room_${item.key}`])
   const bedCount = Number(request.target_room_bed)
@@ -3739,9 +3782,9 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
 
               <section className="staff-transfer-section">
                 <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
-                <div className="staff-transfer-columns">
-                  <div>
-                    <p className="staff-transfer-subtitle">ผู้เช่า</p>
+                <div className="staff-transfer-groups">
+                  <div className="staff-transfer-group">
+                    <p className="staff-transfer-group-title">ผู้เช่า</p>
                     <dl className="staff-transfer-list is-single">
                       <div>
                         <dt>ชื่อ</dt>
@@ -3754,36 +3797,9 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
                         <dd>{request.phone || '-'}</dd>
                       </div>
                     </dl>
-                    <p className="staff-transfer-subtitle">การเงิน</p>
-                    <dl className="staff-transfer-list is-single">
-                      <div>
-                        <dt>เงินมัดจำตามสัญญา</dt>
-                        <dd>
-                          {preview
-                            ? `฿${formatCurrency(preview.deposit.amount)}`
-                            : request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}
-                        </dd>
-                      </div>
-                      {preview && (
-                        <div>
-                          <dt>ชำระมัดจำแล้ว</dt>
-                          <dd>฿{formatCurrency(preview.deposit.paid)}</dd>
-                        </div>
-                      )}
-                      <div>
-                        <dt>ยอดค้างห้องเดิม</dt>
-                        <dd className={hasDue ? 'is-danger' : 'is-success'}>
-                          {!preview ? '-' : hasDue ? `฿${formatCurrency(outstanding.amount)}` : 'ไม่มี'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>ชำระค่าเช่าถึง</dt>
-                        <dd>{preview?.coverage?.paid_through ? formatDate(preview.coverage.paid_through) : '-'}</dd>
-                      </div>
-                    </dl>
                   </div>
-                  <div>
-                    <p className="staff-transfer-subtitle">สัญญาเช่าปัจจุบัน</p>
+                  <div className="staff-transfer-group">
+                    <p className="staff-transfer-group-title">สัญญาเช่าปัจจุบัน</p>
                     <dl className="staff-transfer-list is-single">
                       {preview?.contract && (
                         <>
@@ -3812,7 +3828,38 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
                         </dd>
                       </div>
                     </dl>
-                    <p className="staff-transfer-subtitle">คำขอย้ายห้อง</p>
+                  </div>
+                  <div className="staff-transfer-group">
+                    <p className="staff-transfer-group-title">การเงิน</p>
+                    <dl className="staff-transfer-list is-single">
+                      <div>
+                        <dt>เงินมัดจำตามสัญญา</dt>
+                        <dd>
+                          {preview
+                            ? `฿${formatCurrency(preview.deposit.amount)}`
+                            : request.deposit_amount != null ? `฿${formatCurrency(request.deposit_amount)}` : '-'}
+                        </dd>
+                      </div>
+                      {preview && (
+                        <div>
+                          <dt>ชำระมัดจำแล้ว</dt>
+                          <dd>฿{formatCurrency(preview.deposit.paid)}</dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt>ยอดค้างห้องเดิม</dt>
+                        <dd className={hasDue ? 'is-danger' : 'is-success'}>
+                          {!preview ? '-' : hasDue ? `฿${formatCurrency(outstanding.amount)}` : 'ไม่มี'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>ชำระค่าเช่าถึง</dt>
+                        <dd>{preview?.coverage?.paid_through ? formatDate(preview.coverage.paid_through) : '-'}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div className="staff-transfer-group">
+                    <p className="staff-transfer-group-title">คำขอย้ายห้อง</p>
                     <dl className="staff-transfer-list is-single">
                       <div>
                         <dt>เหตุผล</dt>
@@ -3839,7 +3886,29 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
 
               <TransferSettlementSection preview={preview} loading={previewLoading} loadError={previewError} />
 
-              <section className={`staff-transfer-section${contractFilesReady ? '' : ' is-warning'}`}>
+              {awaitingCharge && (
+                <section
+                  ref={chargeSectionRef}
+                  className="staff-transfer-section is-warning"
+                  onAnimationEnd={(event) => event.currentTarget.classList.remove('is-flash')}
+                >
+                  <h4 className="staff-transfer-section-title">
+                    ต้องเก็บส่วนต่างก่อนทำสัญญา
+                    <span className="staff-transfer-chip is-warning">{TRANSFER_CHARGE_STATUS_TEXT[transferCharge.status]}</span>
+                  </h4>
+                  <p className="staff-transfer-muted">
+                    เงินมัดจำไม่พอหักส่วนต่าง ผู้เช่าต้องชำระ ฿{formatCurrency(transferCharge.amount)} ภายใน {transferCharge.days} วัน
+                    {transferCharge.due_at ? ` (ถึง ${formatDateTime(transferCharge.due_at)})` : ' นับจากกดส่งยอด'}
+                    {' '}ระหว่างนี้ยังไม่ย้ายห้องและยังไม่ทำสัญญาใหม่ ถ้าเลยกำหนดระบบจะยกเลิกคำขอย้ายห้องอัตโนมัติ
+                  </p>
+                </section>
+              )}
+
+              <section
+                ref={contractSectionRef}
+                className={`staff-transfer-section${contractFilesReady ? '' : ' is-warning'}`}
+                onAnimationEnd={(event) => event.currentTarget.classList.remove('is-flash')}
+              >
                 <h4 className="staff-transfer-section-title">
                   รูปสัญญาใหม่ (บังคับ)
                   <span className={`staff-transfer-chip ${contractFilesReady ? 'is-success' : 'is-warning'}`}>
@@ -3865,14 +3934,22 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
             </div>
 
             <div className="staff-transfer-footer">
-              {!contractFilesReady && (
-                <p className="staff-transfer-footer-warning" role="status">
+              {awaitingCharge && transferCharge.status !== 'not_sent' && (
+                <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection(chargeSectionRef)}>
+                  <strong>{TRANSFER_CHARGE_STATUS_TEXT[transferCharge.status]}</strong>
+                  <span>ทำสัญญาย้ายห้องได้หลังผู้เช่าชำระส่วนต่างและตรวจสลิปผ่านแล้ว</span>
+                  <em className="staff-transfer-footer-warning-link">ดูรายละเอียด ↓</em>
+                </button>
+              )}
+              {!awaitingCharge && !contractFilesReady && (
+                <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection(contractSectionRef)}>
                   <strong>ต้องแนบรูปสัญญาใหม่ก่อนอนุมัติ</strong>
                   <span>
                     แนบแล้ว {contractFiles.length} จาก {ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป
                     {' '}· ขาดอีก {ROOM_TRANSFER_MIN_CONTRACT_IMAGES - contractFiles.length} รูป
                   </span>
-                </p>
+                  <em className="staff-transfer-footer-warning-link">ไปแนบรูป ↓</em>
+                </button>
               )}
               {blockers.map((message) => (
                 <p key={message} className="staff-form-error">
@@ -3889,14 +3966,20 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onClose 
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
                 </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processing || !canApprove}
-                  onClick={handleConfirm}
-                >
-                  {processing ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติย้ายห้อง'}
-                </button>
+                {preview?.can_request_charge ? (
+                  <button type="button" className="staff-action-btn is-primary" disabled={processing} onClick={onSendCharge}>
+                    {processing ? 'กำลังดำเนินการ...' : `ส่งยอดเก็บเงิน ฿${formatCurrency(transferCharge.amount)}`}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="staff-action-btn is-primary"
+                    disabled={processing || !canApprove}
+                    onClick={handleConfirm}
+                  >
+                    {processing ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติย้ายห้อง'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -7932,6 +8015,23 @@ function StaffMain() {
     else loadRequests()
   }
 
+  const handleSendTransferCharge = async () => {
+    if (!renewApproveConfirm) return
+    const key = `tenant-${renewApproveConfirm.id}`
+    setProcessingRequestKey(key)
+    setRequestsError('')
+    try {
+      const { data } = await axios.post(`/api/staff/requests/${renewApproveConfirm.id}/transfer-charge`, {}, { headers: authHeaders() })
+      setActionSuccess(data.message || 'ส่งยอดส่วนต่างให้ผู้เช่าแล้ว')
+      setRenewApproveConfirm(null)
+      await loadRequests()
+    } catch (err) {
+      setRequestsError(err.response?.data?.message || 'ส่งยอดส่วนต่างไม่สำเร็จ')
+    } finally {
+      setProcessingRequestKey('')
+    }
+  }
+
   const renewOutstandingAmount = renewApproveConfirm?.type === 'renew' ? Number(renewApproveConfirm.outstanding?.amount) || 0 : 0
   const renewOutstandingRoom = renewOutstandingAmount > 0
     ? rooms.find((room) => String(room.room_number) === String(renewApproveConfirm.room_number))
@@ -10291,8 +10391,8 @@ function StaffMain() {
                                 {room.room_number}
                               </td>
                               <td className="staff-room-status-cell">
-                                <span className={`staff-badge status-${room.is_booked ? 'booked' : 'vacant'}`}>
-                                  {room.is_booked ? 'ไม่ว่าง' : 'ว่าง'}
+                                <span className={`staff-badge status-${room.is_booked ? 'booked' : room.held_for_transfer ? 'held' : 'vacant'}`}>
+                                  {room.is_booked ? 'ไม่ว่าง' : room.held_for_transfer ? 'ว่าง · มีผู้เช่ารอย้ายเข้า' : 'ว่าง'}
                                 </span>
                               </td>
                               <td className="staff-room-tenant-cell">
@@ -13042,6 +13142,7 @@ function StaffMain() {
           error={requestsError}
           processing={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
           onConfirm={handleConfirmRenewApproval}
+          onSendCharge={handleSendTransferCharge}
           onClose={() => setRenewApproveConfirm(null)}
         />
       )}

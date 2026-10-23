@@ -41,16 +41,22 @@ import { createResidentVisitReview, listResidentVisitRequests } from "./resident
 import {
   applyRoomTransfer,
   buildRoomTransferPlan,
+  cancelTransfersIntoBookedRooms,
   closeCustomerTenancy,
   contractImageName,
   contractImageUrl,
+  expireRoomTransferCharges,
   loadCompletedContracts,
   loadContractByBooking,
+  loadHeldTransferRooms,
   loadRoomTransferPreview,
   parseOptionalContractImages,
   removeContractFiles,
+  requestRoomTransferCharge,
+  ROOM_TRANSFER_CHARGE_DAYS,
   ROOM_TRANSFER_MIN_CONTRACT_IMAGES,
   roomTransferApprovalMessage,
+  roomTransferNeedsPayment,
 } from "./rentalContracts.js";
 
 const router = Router();
@@ -673,13 +679,23 @@ router.post("/move-out-inspections", async (req, res) => {
           [staffName, tenantRequestId],
         );
       }
+      let sentChargeCents = 0;
+      if (linkedRequestType === "move_room") {
+        const plan = await buildRoomTransferPlan(connection, tenantRequestId, { lock: true });
+        if (plan?.customer && !plan.stale && plan.blockers.length === 0 && plan.transferCharge.required && plan.transferCharge.status === "not_sent") {
+          await requestRoomTransferCharge(connection, plan, staffName);
+          sentChargeCents = plan.settlement.additionalChargeCents;
+        }
+      }
       await connection.commit();
       return res.status(201).json({
         message: tenantRequestId === null
           ? "ส่งผลตรวจห้องให้ Admin แล้ว"
           : linkedRequestType === "moveout"
             ? "บันทึกผลตรวจแล้ว สามารถอนุมัติการย้ายออกได้"
-            : "บันทึกผลตรวจแล้ว สามารถอนุมัติย้ายห้องได้ทันที",
+            : sentChargeCents > 0
+              ? `บันทึกผลตรวจแล้ว ส่งยอดส่วนต่าง ฿${(sentChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน`
+              : "บันทึกผลตรวจแล้ว สามารถอนุมัติย้ายห้องได้ทันที",
         inspectionId: result.insertId,
       });
     } catch (error) {
@@ -701,6 +717,7 @@ router.post("/move-out-inspections", async (req, res) => {
 router.get("/rooms", async (req, res) => {
   try {
     const pool = getPool();
+    await expireRoomTransferCharges(pool);
 
     const [rooms] = await pool.query(
       `SELECT
@@ -750,7 +767,10 @@ router.get("/rooms", async (req, res) => {
       }
     }
 
-    const depositPaymentsByCustomer = await loadDepositPayments(pool, rooms.map((room) => room.customer_id).filter(Boolean));
+    const [depositPaymentsByCustomer, heldRooms] = await Promise.all([
+      loadDepositPayments(pool, rooms.map((room) => room.customer_id).filter(Boolean)),
+      loadHeldTransferRooms(pool),
+    ]);
     const result = rooms.map((room) => {
       const booking = latestBookingByRoomId.get(room.id);
       const payments = booking ? paymentsByBookingId.get(booking.id) || [] : [];
@@ -761,6 +781,7 @@ router.get("/rooms", async (req, res) => {
       return {
         room_number: room.room_number,
         is_booked: room.is_booked,
+        held_for_transfer: !room.is_booked && heldRooms.has(Number(room.room_number)),
         price: room.price,
         electricity_unit_price: room.electricity_unit_price,
         water_unit_price: room.water_unit_price,
@@ -1049,10 +1070,13 @@ router.post("/rooms/:room_number/utility-bill", async (req, res) => {
 router.get("/requests", async (req, res) => {
   try {
     const pool = getPool();
+    await expireRoomTransferCharges(pool);
 
     const [[tenantRequests], [maintenanceRequests]] = await Promise.all([pool.query(
       `SELECT tr.id, tr.customer_id, tr.type, tr.note, tr.renew_duration_months, tr.renew_payment_type, tr.status, tr.created_at,
-              tr.accepted_at, tr.accepted_by_name,
+              tr.accepted_at, tr.accepted_by_name, tr.transfer_charge_due_at,
+              tcp.amount AS transfer_charge_amount, tcp.status AS transfer_charge_status,
+              (tcp.slip_path IS NOT NULL) AS transfer_charge_has_slip,
               tr.move_reason, DATE_FORMAT(tr.preferred_move_date, '%Y-%m-%d') AS preferred_move_date,
               tr.room_number, tr.target_room_number, c.first_name, c.last_name, c.phone, c.deposit_amount,
               moi.id AS inspection_id, moi.status AS inspection_status, moi.reviewed_at AS inspection_reviewed_at,
@@ -1068,6 +1092,7 @@ router.get("/requests", async (req, res) => {
        LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
        LEFT JOIN Room sr ON sr.room_number = tr.room_number
        LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
+       LEFT JOIN Payment tcp ON tcp.id = tr.transfer_charge_payment_id
        WHERE tr.status IN ('pending', 'in_progress') AND tr.room_number = c.room_number
        ORDER BY tr.created_at ASC`,
     ), pool.query(
@@ -1256,12 +1281,58 @@ router.get("/requests/:id/transfer-preview", async (req, res) => {
   try {
     const requestId = Number(req.params.id);
     if (!isPositiveId(requestId)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+    await expireRoomTransferCharges(getPool());
     const preview = await loadRoomTransferPreview(getPool(), requestId);
     if (!preview) return res.status(404).json({ message: "ไม่พบคำขอย้ายห้องนี้" });
     return res.json({ preview });
   } catch (error) {
     console.error("Room transfer preview error:", error);
     return res.status(500).json({ message: "ไม่สามารถคำนวณรายละเอียดการย้ายห้องได้" });
+  }
+});
+
+router.post("/requests/:id/transfer-charge", async (req, res) => {
+  const pool = getPool();
+  const requestId = Number(req.params.id);
+  if (!isPositiveId(requestId)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+  const connection = await pool.getConnection();
+  try {
+    await expireRoomTransferCharges(pool);
+    const staffName = await getActingStaffName(pool, req.user);
+    await connection.beginTransaction();
+    const plan = await buildRoomTransferPlan(connection, requestId, { lock: true });
+    if (!plan?.customer) {
+      await connection.rollback();
+      return res.status(404).json({ message: "ไม่พบคำขอย้ายห้องนี้" });
+    }
+    if (plan.stale) {
+      await cancelStaleTenantRequests(connection, plan.request.customer_id, plan.customer.room_number);
+      await connection.commit();
+      return res.status(410).json({ message: "คำขอถูกนำออกจากรายการแล้ว เนื่องจากผู้เช่าเปลี่ยนห้อง" });
+    }
+    if (plan.blockers.length > 0) {
+      await connection.rollback();
+      return res.status(409).json({ message: plan.blockers[0], blockers: plan.blockers });
+    }
+    if (!plan.transferCharge.required) {
+      await connection.rollback();
+      return res.status(409).json({ message: "เงินมัดจำพอหักส่วนต่างแล้ว ไม่ต้องเก็บเงินเพิ่ม" });
+    }
+    if (plan.transferCharge.status !== "not_sent") {
+      await connection.rollback();
+      return res.status(409).json({ message: "ส่งยอดส่วนต่างให้ผู้เช่าไปแล้ว" });
+    }
+    await requestRoomTransferCharge(connection, plan, staffName);
+    await connection.commit();
+    return res.status(201).json({
+      message: `ส่งยอดส่วนต่าง ฿${(plan.settlement.additionalChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าแล้ว ต้องชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน ไม่เช่นนั้นคำขอย้ายห้องจะถูกยกเลิก`,
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Room transfer charge error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection.release();
   }
 });
 
@@ -1277,6 +1348,7 @@ router.post("/requests/:id/approve", parseOptionalContractImages, async (req, re
     }
 
     const staffName = await getActingStaffName(pool, req.user);
+    await expireRoomTransferCharges(pool);
 
     await connection.beginTransaction();
 
@@ -1344,6 +1416,17 @@ router.post("/requests/:id/approve", parseOptionalContractImages, async (req, re
       if (transferPlan.blockers.length > 0) {
         await connection.rollback();
         return res.status(409).json({ message: transferPlan.blockers[0], blockers: transferPlan.blockers });
+      }
+      if (roomTransferNeedsPayment(transferPlan)) {
+        await connection.rollback();
+        return res.status(409).json({
+          code: "TRANSFER_CHARGE_UNPAID",
+          message: transferPlan.transferCharge.status === "not_sent"
+            ? "เงินมัดจำไม่พอหักส่วนต่าง กรุณาส่งยอดเก็บเงินให้ผู้เช่าชำระก่อนทำสัญญาย้ายห้อง"
+            : transferPlan.transferCharge.status === "verifying"
+              ? "ผู้เช่าส่งสลิปส่วนต่างแล้ว กรุณาตรวจสลิปให้เรียบร้อยก่อนทำสัญญาย้ายห้อง"
+              : "ผู้เช่ายังไม่ได้ชำระส่วนต่างค่าเช่า ยังทำสัญญาย้ายห้องไม่ได้",
+        });
       }
       if (uploadedFiles.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
         await connection.rollback();
@@ -1431,6 +1514,9 @@ router.post("/requests/:id/approve", parseOptionalContractImages, async (req, re
         tenantRequest.customer_id,
         tenantRequest.type === "move_room" ? tenantRequest.target_room_number : null,
       );
+    }
+    if (tenantRequest.type === "move_room") {
+      await cancelTransfersIntoBookedRooms(connection, tenantRequest.target_room_number);
     }
 
     if (tenantRequest.type === "moveout") {

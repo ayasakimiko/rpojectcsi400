@@ -672,7 +672,9 @@ function StaffContractCard({ contract, onOpen }) {
   const tenantName = `${contract.first_name || ''} ${contract.last_name || ''}`.trim() || '-'
   const extra = images.length - STAFF_CARD_PHOTOS
   return (
-    <li className={`csc-card is-${cardStatus}${contract.is_archived ? ' is-archived' : ''}`}>
+    <li
+      className={`csc-card is-${cardStatus}${contract.is_archived ? ' is-archived' : ''}${contract.status === 'ended_early' ? ' is-left-early' : ''}`}
+    >
       <button type="button" className="csc-main" onClick={onOpen} aria-label={`ดูสัญญาห้อง ${contract.room_number}`}>
         <span className="csc-head">
           <ContractRoomBadge contract={contract} />
