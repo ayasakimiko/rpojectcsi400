@@ -2068,23 +2068,6 @@ function formatDays(days) {
   return months >= 12 && months % 12 === 0 ? `${months / 12} ปี` : `${months} เดือน`
 }
 
-function RoomDetailSection({ icon, title, hint, count, action, children }) {
-  return (
-    <section className="room-detail-section is-list">
-      <header className="room-detail-section-head">
-        <span className="room-detail-section-icon"><RoomDetailIcon type={icon} size={16} /></span>
-        <div className="room-detail-section-title">
-          <h4>{title}</h4>
-          {hint && <span>{hint}</span>}
-        </div>
-        {count > 0 && <span className="room-detail-section-count">{count}</span>}
-        {action}
-      </header>
-      {children}
-    </section>
-  )
-}
-
 function RoomDetailDateTile({ value }) {
   if (!value) return <span className="room-detail-date-tile is-empty">-</span>
   const date = new Date(value)
@@ -2094,15 +2077,6 @@ function RoomDetailDateTile({ value }) {
       <small>{date.toLocaleDateString('th-TH', { month: 'short' })}</small>
       <small>{date.getFullYear() + 543}</small>
     </span>
-  )
-}
-
-function RoomDetailEmptyRow({ icon, text }) {
-  return (
-    <div className="room-detail-empty-row">
-      <RoomDetailIcon type={icon} size={18} />
-      <span>{text}</span>
-    </div>
   )
 }
 
@@ -3928,6 +3902,64 @@ function PaymentDetail({ payment, roomNumber, onSlip }) {
   )
 }
 
+function RoomDetailChevron() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  )
+}
+
+function RoomDetailCard({ icon, title, hint, count, action, tone, className = '', children }) {
+  return (
+    <section className={`ard-card${tone ? ` is-${tone}` : ''}${className ? ` ${className}` : ''}`}>
+      <header className="ard-card-head">
+        <span className="ard-card-icon"><RoomDetailIcon type={icon} size={16} /></span>
+        <div className="ard-card-title">
+          <h4>
+            {title}
+            {count > 0 && <span className="ard-card-count">{count}</span>}
+          </h4>
+          {hint && <small>{hint}</small>}
+        </div>
+        {action}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function RoomDetailLink({ onClick, children }) {
+  return (
+    <button type="button" className="ard-link" onClick={onClick}>
+      {children}
+      <RoomDetailChevron />
+    </button>
+  )
+}
+
+function RoomDetailEmpty({ icon, title, text }) {
+  return (
+    <div className="ard-empty">
+      <span className="ard-empty-icon"><RoomDetailIcon type={icon} size={18} /></span>
+      <div>
+        <strong>{title}</strong>
+        {text && <span>{text}</span>}
+      </div>
+    </div>
+  )
+}
+
+function rowKeyHandler(action) {
+  return (event) => {
+    if (event.target !== event.currentTarget) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      action()
+    }
+  }
+}
+
 function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHistory, onSelectPayment, onOpenTenants, onOpenMaintenance }) {
   const [now] = useState(() => Date.now())
   const [contractOpen, setContractOpen] = useState(false)
@@ -3954,303 +3986,253 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
   const payments = detail?.payments || []
   const paidTotal = payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const pendingPayments = payments.filter((payment) => payment.status !== 'paid').length
+  const hasPeriod = Boolean(data.rental_start_date || data.rental_end_date)
+  const customAmenities = parseRoomAmenities(data.custom_amenities)
+  const availableAmenities = ROOM_AMENITIES.filter((amenity) => Boolean(data[amenity.key]))
+  const missingAmenities = ROOM_AMENITIES.filter((amenity) => !data[amenity.key])
+  const depositAmount = Number(roomContract?.deposit_amount) > 0
+    ? Number(roomContract.deposit_transfer_deducted) > 0 ? roomContract.deposit_remaining : roomContract.deposit_amount
+    : null
+  const contractRent = roomContract?.monthly_price ?? null
+  const rentDiffers = contractRent != null && Number(contractRent) !== Number(data.price)
+  const summaryValue = (value) => (detail ? value : loading ? '…' : '-')
+  const lastInspection = detail?.lastInspection
 
   return (
-    <div className="room-detail">
-      <div className="room-detail-scroll">
-        <div className={`room-detail-hero is-${heroTone}`}>
-          <div className="room-detail-number">
-            <span className="room-detail-number-label">ห้อง</span>
+    <div className="ard">
+      <div className="ard-scroll">
+        <header className={`ard-hero is-${heroTone}`}>
+          <div className="ard-hero-room">
+            <small>ห้อง</small>
             <strong>{data.room_number}</strong>
-            <span className="room-detail-number-floor">ชั้น {String(data.room_number).charAt(0)}</span>
+            <span>ชั้น {String(data.room_number).charAt(0)}</span>
           </div>
-          <div className="room-detail-hero-info">
-            <span className="room-detail-eyebrow">รายละเอียดห้องพัก</span>
-            <div className="room-detail-price">
+          <div className="ard-hero-main">
+            <span className="ard-status">
+              <span aria-hidden="true" />
+              {ROOM_HERO_STATUS_LABEL[heroTone]}
+            </span>
+            <div className="ard-hero-price">
               <strong>฿{formatCurrency(data.price)}</strong>
               <span>/ เดือน</span>
             </div>
-            {data.created_at && <span className="room-detail-hero-meta">เพิ่มเข้าระบบ {formatDate(data.created_at)}</span>}
-          </div>
-          <span className="room-detail-status">
-            <span aria-hidden="true" />
-            {ROOM_HERO_STATUS_LABEL[heroTone]}
-          </span>
-        </div>
-
-        <dl className="room-detail-stats">
-          <div>
-            <dt><RoomDetailIcon type="wallet" />ค่าเช่า</dt>
-            <dd>฿{formatCurrency(data.price)}</dd>
-            <small>ต่อเดือน</small>
-          </div>
-          <div className="is-electric">
-            <dt><RoomDetailIcon type="bolt" />ค่าไฟ</dt>
-            <dd>฿{formatCurrency(data.electricity_unit_price)}</dd>
-            <small>ต่อหน่วย</small>
-          </div>
-          <div className="is-water">
-            <dt><RoomDetailIcon type="drop" />ค่าน้ำ</dt>
-            <dd>฿{formatCurrency(data.water_price)}</dd>
-            <small>เหมาจ่ายต่อเดือน</small>
-          </div>
-          <div className="is-water">
-            <dt><RoomDetailIcon type="drop" />ค่าน้ำตามหน่วย</dt>
-            <dd>฿{formatCurrency(data.water_unit_price)}</dd>
-            <small>ต่อหน่วย</small>
-          </div>
-        </dl>
-
-        <section className="room-detail-section">
-          <h4><RoomDetailIcon type="sparkle" size={17} />สิ่งอำนวยความสะดวก</h4>
-          <div className="room-detail-amenities">
-            {ROOM_AMENITIES.map((amenity) => {
-              const available = Boolean(data[amenity.key])
-              return (
-                <span key={amenity.key} className={available ? 'is-on' : 'is-off'}>
-                  <RoomDetailIcon type={available ? 'check' : 'x'} size={13} />
-                  {amenity.label}
+            <div className="ard-hero-meta">
+              {tenant ? (
+                <span>
+                  <RoomDetailIcon type="user" size={13} />
+                  {tenant.first_name} {tenant.last_name}
                 </span>
-              )
-            })}
-            {parseRoomAmenities(data.custom_amenities).map((amenity) => (
-              <span key={amenity.name} className="is-on"><CustomAmenityIcon name={amenity.icon} size={14} />{amenity.name}</span>
-            ))}
-          </div>
-        </section>
-
-        <section className="room-detail-section">
-          <h4><RoomDetailIcon type="user" size={17} />ผู้เช่าปัจจุบัน</h4>
-          {tenant ? (
-            <>
-              <div className="room-detail-tenant">
-                <span className="room-detail-avatar" aria-hidden="true"><PersonIcon size={20} /></span>
-                <div className="room-detail-tenant-name">
-                  <strong>{tenant.first_name} {tenant.last_name}</strong>
-                  {tenant.phone && (
-                    <a href={`tel:${tenant.phone}`}>
-                      <RoomDetailIcon type="phone" size={13} />
-                      {tenant.phone}
-                    </a>
-                  )}
-                </div>
-              </div>
-              {detail?.tenant && (
-                <dl className="room-detail-facts">
-                  <div><dt>อายุ</dt><dd>{tenant.age ? `${tenant.age} ปี` : '-'}</dd></div>
-                  <div>
-                    <dt>เงินมัดจำ</dt>
-                    <dd>
-                      {Number(tenant.deposit_amount) > 0 ? `฿${formatCurrency(tenant.deposit_amount)}` : 'ไม่มีมัดจำ'}
-                      {roomContract && DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
-                        <small className={`room-detail-deposit-status is-${roomContract.deposit_status}`}>
-                          {formatDepositMonths(roomContract)} · {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
-                        </small>
-                      )}
-                    </dd>
-                  </div>
-                  <div><dt>ลงทะเบียนเมื่อ</dt><dd>{formatDate(tenant.created_at)}</dd></div>
-                </dl>
+              ) : (
+                <span>
+                  <RoomDetailIcon type="door" size={13} />
+                  ไม่มีผู้เช่า
+                </span>
               )}
-            </>
-          ) : (
-            <div className="room-detail-empty">
-              <RoomDetailIcon type="door" size={22} />
-              <div>
-                <strong>ยังไม่มีผู้เช่า</strong>
-                <span>ห้องนี้ว่างและพร้อมให้เช่า</span>
-              </div>
+              {contract && (
+                <span className={`is-${contract.tone}`}>
+                  <RoomDetailIcon type="clock" size={13} />
+                  {contract.label}
+                </span>
+              )}
+              {data.created_at && (
+                <span className="is-muted">
+                  <RoomDetailIcon type="calendar" size={13} />
+                  เพิ่มเข้าระบบ {formatDate(data.created_at)}
+                </span>
+              )}
             </div>
-          )}
-        </section>
-
-        <section className="room-detail-section room-contract">
-          <header className="room-contract-head">
-            <h4>
-              <RoomDetailIcon type="calendar" size={17} />
-              สัญญาเช่า
-            </h4>
-            {roomContract && <ContractStatusBadge status={roomContract.status} />}
-            {roomContract && (
-              <button type="button" className="room-contract-full" onClick={() => setContractOpen(true)}>
-                ดูสัญญาแบบเต็ม ›
-              </button>
-            )}
-          </header>
-          {data.rental_start_date || data.rental_end_date ? (
-            <>
-              {roomContract && <ContractFirstPaymentNote contract={roomContract} />}
-              {roomContract && <DepositRefundNote contract={roomContract} />}
-              <div className="room-contract-period">
-                <div className="room-contract-dates">
-                  <span>
-                    <small>เริ่มสัญญา</small>
-                    <b className="is-start">{formatDate(data.rental_start_date)}</b>
-                  </span>
-                  <span className="room-contract-track">
-                    {data.rental_duration_months && (
-                      <span className="room-contract-duration">{data.rental_duration_months} เดือน</span>
-                    )}
-                  </span>
-                  <span>
-                    <small>{roomExtended ? 'ต่อสัญญาถึง' : 'สิ้นสุด'}</small>
-                    <b className="is-end">{formatDate(data.rental_end_date)}</b>
-                    {roomExtended && <small className="is-old">เดิม {formatDate(roomContract.rental_end_date)}</small>}
-                  </span>
-                </div>
-                {contract && (
-                  <div className="room-contract-period-meta">
-                    <span className="room-contract-elapsed">
-                      <RoomDetailIcon type="clock" size={14} />
-                      {contract.tone === 'danger' ? 'ครบระยะสัญญาแล้ว' : `ผ่านไปแล้ว ${contract.elapsedDays} วัน`}
-                    </span>
-                    <em className={`room-contract-left is-${contract.tone}`}>{contract.label}</em>
-                  </div>
-                )}
-              </div>
-              <dl className={`room-contract-facts${roomContract ? '' : ' is-summary'}`}>
-                <div className="is-rent">
-                  <dt>
-                    <RoomDetailIcon type="door" size={14} />
-                    ค่าเช่า/เดือน
-                  </dt>
-                  <dd>฿{formatCurrency(roomContract?.monthly_price ?? data.price)}</dd>
-                  {roomContract?.billing_periods > 0 && <small>{roomContract.billing_periods} รอบบิล</small>}
-                </div>
-                {roomContract && (
-                  <>
-                    <div className="is-deposit">
-                      <dt>
-                        <RoomDetailIcon type="wallet" size={14} />
-                        เงินมัดจำ
-                        {Number(roomContract.deposit_amount) > 0 && DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
-                          <span className={`room-contract-fact-status is-${roomContract.deposit_status}`}>
-                            {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
-                          </span>
-                        )}
-                      </dt>
-                      <dd>
-                        {Number(roomContract.deposit_amount) > 0
-                          ? `฿${formatCurrency(
-                              Number(roomContract.deposit_transfer_deducted) > 0
-                                ? roomContract.deposit_remaining
-                                : roomContract.deposit_amount,
-                            )}`
-                          : 'ไม่มี'}
-                      </dd>
-                      {Number(roomContract.deposit_amount) > 0 && <small>{formatDepositMonths(roomContract)}</small>}
-                    </div>
-                    <div className="is-paid">
-                      <dt>
-                        <RoomDetailIcon type="check" size={14} />
-                        ชำระแล้ว
-                      </dt>
-                      <dd>฿{formatCurrency(roomContract.rent_paid)}</dd>
-                      <small>ค่าเช่าที่รับแล้วทั้งหมด</small>
-                    </div>
-                    <div className="is-total">
-                      <dt>
-                        <RoomDetailIcon type="receipt" size={14} />
-                        ยอดตามสัญญา
-                      </dt>
-                      <dd>฿{formatCurrency(roomContract.contract_total)}</dd>
-                      <small>รวมทุกเดือน {roomContract.billing_periods || 0} เดือน</small>
-                    </div>
-                  </>
-                )}
-              </dl>
-            </>
-          ) : (
-            <p className="room-detail-muted">ยังไม่มีข้อมูลสัญญาเช่า</p>
-          )}
-          {contractOpen && roomContract && (
-            <ContractFullModal contract={roomContract} onClose={() => setContractOpen(false)} />
-          )}
-        </section>
+          </div>
+          <dl className="ard-hero-stats">
+            <div className={`is-maintenance${detail ? (openMaintenance > 0 ? ' is-warning' : ' is-success') : ''}`}>
+              <dt><RoomDetailIcon type="wrench" size={14} />แจ้งซ่อมค้าง</dt>
+              <dd>{summaryValue(openMaintenance)}</dd>
+              <small>{detail ? `ทั้งหมด ${totalMaintenance} รายการ` : 'รอข้อมูล'}</small>
+            </div>
+            <div className={`is-parcel${detail ? (detail.parcels?.pending > 0 ? ' is-info' : ' is-calm') : ''}`}>
+              <dt><RoomDetailIcon type="box" size={14} />พัสดุรอรับ</dt>
+              <dd>{summaryValue(detail?.parcels?.pending ?? 0)}</dd>
+              <small>{detail ? `ทั้งหมด ${detail.parcels?.total ?? 0} ชิ้น` : 'รอข้อมูล'}</small>
+            </div>
+            <div
+              className={`is-inspection${
+                !detail
+                  ? ''
+                  : !lastInspection
+                    ? ' is-calm'
+                    : lastInspection.status === 'reviewed'
+                      ? ' is-success'
+                      : lastInspection.status === 'follow_up'
+                        ? ' is-danger'
+                        : ' is-warning'
+              }`}
+            >
+              <dt><RoomDetailIcon type="clipboard" size={14} />ตรวจห้องล่าสุด</dt>
+              <dd className="is-text">
+                {detail
+                  ? lastInspection ? MOVE_OUT_INSPECTION_STATUS[lastInspection.status] || lastInspection.status : 'ไม่มี'
+                  : summaryValue('')}
+              </dd>
+              <small>{detail ? (lastInspection ? formatDate(lastInspection.created_at) : 'ยังไม่เคยตรวจ') : 'รอข้อมูล'}</small>
+            </div>
+          </dl>
+        </header>
 
         {loading ? (
-          <div className="room-detail-loading">
-            <span className="room-detail-spinner" aria-hidden="true" />
-            กำลังโหลดข้อมูลเพิ่มเติม...
+          <div className="ard-status-bar" role="status">
+            <span className="ard-spinner" aria-hidden="true" />
+            กำลังโหลดข้อมูลผู้เช่า การชำระเงิน และประวัติห้อง...
           </div>
         ) : error ? (
-          <div className="room-detail-error" role="alert">
+          <div className="ard-status-bar is-error" role="alert">
+            <RoomDetailIcon type="alert" size={16} />
             <span>{error}</span>
             <button type="button" className="admin-action-btn is-ghost" onClick={onRetry}>ลองใหม่</button>
           </div>
-        ) : detail ? (
-          <>
-            <div className="room-detail-summary">
-              <div className={openMaintenance > 0 ? 'is-warning' : ''}>
-                <span className="room-detail-summary-icon"><RoomDetailIcon type="wrench" size={18} /></span>
-                <div>
-                  <strong>{openMaintenance}</strong>
-                  <span>แจ้งซ่อมค้าง</span>
-                  <small>ทั้งหมด {totalMaintenance} รายการ</small>
-                </div>
-              </div>
-              <div className={detail.parcels.pending > 0 ? 'is-info' : ''}>
-                <span className="room-detail-summary-icon"><RoomDetailIcon type="box" size={18} /></span>
-                <div>
-                  <strong>{detail.parcels.pending}</strong>
-                  <span>พัสดุรอรับ</span>
-                  <small>ทั้งหมด {detail.parcels.total} ชิ้น</small>
-                </div>
-              </div>
-              <div>
-                <span className="room-detail-summary-icon"><RoomDetailIcon type="clipboard" size={18} /></span>
-                <div>
-                  <strong className="is-text">{detail.lastInspection ? MOVE_OUT_INSPECTION_STATUS[detail.lastInspection.status] || detail.lastInspection.status : 'ไม่มี'}</strong>
-                  <span>ตรวจห้องล่าสุด</span>
-                  <small>{detail.lastInspection ? formatDate(detail.lastInspection.created_at) : 'ยังไม่เคยตรวจ'}</small>
-                </div>
-              </div>
-            </div>
+        ) : null}
 
-            {tenant && (
-              <RoomDetailSection
+        <div className="ard-grid">
+          <div className="ard-col">
+            <RoomDetailCard
+              icon="user"
+              title="ผู้เช่าปัจจุบัน"
+              action={(detail?.history || []).length > 0 && <RoomDetailLink onClick={() => onOpenTenants()}>ผู้เช่าทั้งหมด</RoomDetailLink>}
+            >
+              {tenant ? (
+                <div className="ard-tenant">
+                  <div className="ard-tenant-id">
+                    <span className="ard-avatar" aria-hidden="true"><PersonIcon size={20} /></span>
+                    <div>
+                      <strong>{tenant.first_name} {tenant.last_name}</strong>
+                      {tenant.phone ? (
+                        <a href={`tel:${tenant.phone}`}>
+                          <RoomDetailIcon type="phone" size={13} />
+                          {tenant.phone}
+                        </a>
+                      ) : (
+                        <span className="is-muted">ไม่มีเบอร์โทร</span>
+                      )}
+                    </div>
+                  </div>
+                  {detail?.tenant && (
+                    <dl className="ard-facts is-2">
+                      <div><dt>อายุ</dt><dd>{tenant.age ? `${tenant.age} ปี` : '-'}</dd></div>
+                      <div><dt>ลงทะเบียนเมื่อ</dt><dd>{formatDate(tenant.created_at)}</dd></div>
+                    </dl>
+                  )}
+                </div>
+              ) : (
+                <RoomDetailEmpty icon="door" title="ห้องว่าง พร้อมให้เช่า" text="ยังไม่มีผู้เช่าในห้องนี้" />
+              )}
+            </RoomDetailCard>
+
+            <RoomDetailCard
+              icon="calendar"
+              title="สัญญาและเงินมัดจำ"
+              className="ard-contract"
+              action={
+                roomContract && (
+                  <div className="ard-contract-actions">
+                    <ContractStatusBadge status={roomContract.status} />
+                    <RoomDetailLink onClick={() => setContractOpen(true)}>ดูสัญญาเต็ม</RoomDetailLink>
+                  </div>
+                )
+              }
+            >
+              {hasPeriod ? (
+                <>
+                  {roomContract && <ContractFirstPaymentNote contract={roomContract} />}
+                  {roomContract && <DepositRefundNote contract={roomContract} />}
+                  <div className="ard-period">
+                    <div className="ard-period-dates">
+                      <span>
+                        <small>เริ่มสัญญา</small>
+                        <b>{formatDate(data.rental_start_date)}</b>
+                      </span>
+                      <span className="ard-period-track" aria-hidden="true">
+                        {data.rental_duration_months && <em>{data.rental_duration_months} เดือน</em>}
+                      </span>
+                      <span className="is-end">
+                        <small>{roomExtended ? 'ต่อสัญญาถึง' : 'สิ้นสุดสัญญา'}</small>
+                        <b>{formatDate(data.rental_end_date)}</b>
+                        {roomExtended && <small className="is-old">เดิม {formatDate(roomContract.rental_end_date)}</small>}
+                      </span>
+                    </div>
+                    {contract && (
+                      <div className="ard-period-meta">
+                        <span>{contract.tone === 'danger' ? 'ครบระยะสัญญาแล้ว' : `ผ่านไปแล้ว ${contract.elapsedDays} วัน`}</span>
+                        <em className={`is-${contract.tone}`}>{contract.label}</em>
+                      </div>
+                    )}
+                  </div>
+                  {roomContract ? (
+                    <dl className="ard-facts is-4">
+                      <div>
+                        <dt>ค่าเช่าตามสัญญา</dt>
+                        <dd>฿{formatCurrency(contractRent)}</dd>
+                        <small>{rentDiffers ? `ราคาห้องตอนนี้ ฿${formatCurrency(data.price)}` : roomContract.billing_periods > 0 ? `${roomContract.billing_periods} รอบบิล` : 'ต่อเดือน'}</small>
+                      </div>
+                      <div className="is-deposit">
+                        <dt>เงินมัดจำ</dt>
+                        <dd>{depositAmount != null ? `฿${formatCurrency(depositAmount)}` : 'ไม่มี'}</dd>
+                        {depositAmount != null && (
+                          <small>
+                            {formatDepositMonths(roomContract)}
+                            {DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
+                              <b className={`ard-deposit-status is-${roomContract.deposit_status}`}>{DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}</b>
+                            )}
+                          </small>
+                        )}
+                      </div>
+                      <div className="is-paid">
+                        <dt>รับค่าเช่าแล้ว</dt>
+                        <dd>฿{formatCurrency(roomContract.rent_paid)}</dd>
+                        <small>รวมทุกงวดที่ชำระ</small>
+                      </div>
+                      <div>
+                        <dt>ยอดตามสัญญา</dt>
+                        <dd>฿{formatCurrency(roomContract.contract_total)}</dd>
+                        <small>รวม {roomContract.billing_periods || 0} เดือน</small>
+                      </div>
+                    </dl>
+                  ) : (
+                    !loading && !detail && <p className="ard-muted">ข้อมูลเงินมัดจำจะแสดงเมื่อโหลดรายละเอียดเสร็จ</p>
+                  )}
+                </>
+              ) : (
+                <RoomDetailEmpty icon="calendar" title="ยังไม่มีสัญญาเช่า" text={data.is_booked ? 'ไม่พบวันเริ่มและวันสิ้นสุดสัญญา' : 'จะแสดงเมื่อมีการลงทะเบียนผู้เช่า'} />
+              )}
+              {contractOpen && roomContract && <ContractFullModal contract={roomContract} onClose={() => setContractOpen(false)} />}
+            </RoomDetailCard>
+
+            {detail && tenant && (
+              <RoomDetailCard
                 icon="wallet"
                 title="การชำระเงินล่าสุด"
-                count={detail.payments.length}
-                hint={
-                  detail.payments.length > 0
-                    ? `ชำระแล้ว ฿${formatCurrency(paidTotal)}${pendingPayments > 0 ? ` · รอชำระ ${pendingPayments} รายการ` : ''}`
-                    : 'ของผู้เช่าปัจจุบัน'
-                }
-                action={
-                  <button type="button" className="room-detail-section-link" onClick={onOpenHistory}>
-                    ดูทั้งหมด
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </button>
-                }
+                count={payments.length}
+                hint={payments.length > 0 ? `ชำระแล้ว ฿${formatCurrency(paidTotal)}${pendingPayments > 0 ? ` · ค้าง/รอ ${pendingPayments} รายการ` : ''}` : 'ของผู้เช่าปัจจุบัน'}
+                action={<RoomDetailLink onClick={onOpenHistory}>ดูทั้งหมด</RoomDetailLink>}
               >
-                {detail.payments.length > 0 ? (
-                  <ul className="room-detail-rows">
-                    {detail.payments.map((payment) => {
+                {payments.length > 0 ? (
+                  <ul className="ard-rows">
+                    {payments.map((payment) => {
                       const tone = payment.status === 'paid' ? 'is-success' : payment.status === 'overdue' ? 'is-danger' : 'is-warning'
                       const noteParts = parsePaymentNote(payment.note)
+                      const select = () => onSelectPayment(payment)
                       return (
                         <li
                           key={payment.id}
-                          className={`${tone} is-clickable`}
+                          className={tone}
                           role="button"
                           tabIndex={0}
                           aria-label={`ดูรายละเอียดการชำระ ฿${formatCurrency(payment.amount)}`}
-                          onClick={() => onSelectPayment(payment)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              onSelectPayment(payment)
-                            }
-                          }}
+                          onClick={select}
+                          onKeyDown={rowKeyHandler(select)}
                         >
                           <RoomDetailDateTile value={payment.payment_date} />
-                          <div className="room-detail-row-main">
-                            <strong className="room-detail-row-title is-money">฿{formatCurrency(payment.amount)}</strong>
-                            <div className="room-detail-row-meta">
-                              <span className="room-detail-chip is-type">
+                          <div className="ard-row-main">
+                            <strong className="is-money">฿{formatCurrency(payment.amount)}</strong>
+                            <div className="ard-row-meta">
+                              <span className="ard-chip">
                                 <RoomDetailIcon type="wallet" size={11} />
                                 {PAYMENT_TYPE_LABEL[payment.type] || payment.type}
                               </span>
@@ -4258,198 +4240,211 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                                 .filter((tag) => tag.tone !== 'info')
                                 .slice(0, 1)
                                 .map((tag) => (
-                                  <span key={tag.text} className={`room-detail-chip is-${tag.tone}`}>
+                                  <span key={tag.text} className={`ard-chip is-${tag.tone}`}>
                                     <RoomDetailIcon type={tag.icon} size={11} />
                                     {tag.value}
                                   </span>
                                 ))}
                             </div>
-                            {noteParts.main && (
-                              <div className="room-detail-row-note" title={payment.note}>
-                                <small className="room-detail-row-note-label">หมายเหตุ</small>
-                                <span className="room-detail-row-note-content">
-                                  <RoomDetailIcon type="note" size={12} />
-                                  <span>{noteParts.main}</span>
-                                </span>
-                              </div>
-                            )}
+                            {noteParts.main && <p className="ard-row-note" title={payment.note}>{noteParts.main}</p>}
                           </div>
                           <span className={`admin-badge status-${PAYMENT_BADGE_CLASS[payment.status] || 'pending'}`}>
                             {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
                           </span>
-                          <span className="room-detail-row-chevron" aria-hidden="true">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M9 18l6-6-6-6" />
-                            </svg>
-                          </span>
+                          <span className="ard-row-chevron" aria-hidden="true"><RoomDetailChevron /></span>
                         </li>
                       )
                     })}
                   </ul>
                 ) : (
-                  <RoomDetailEmptyRow icon="wallet" text="ยังไม่มีประวัติการชำระเงิน" />
+                  <RoomDetailEmpty icon="wallet" title="ยังไม่มีประวัติการชำระเงิน" text="รายการจะแสดงเมื่อผู้เช่าชำระหรือมีบิล" />
                 )}
-              </RoomDetailSection>
+              </RoomDetailCard>
+            )}
+          </div>
+
+          <div className="ard-col">
+            <RoomDetailCard icon="bolt" title="ค่าเช่าและสาธารณูปโภค" hint="อัตราที่ใช้ออกบิลของห้องนี้">
+              <dl className="ard-rates">
+                <div>
+                  <dt><span className="ard-rate-icon is-rent"><RoomDetailIcon type="home" size={14} /></span>ค่าเช่าห้อง</dt>
+                  <dd>฿{formatCurrency(data.price)}<small>/เดือน</small></dd>
+                </div>
+                <div>
+                  <dt><span className="ard-rate-icon is-electric"><RoomDetailIcon type="bolt" size={14} /></span>ค่าไฟ</dt>
+                  <dd>฿{formatCurrency(data.electricity_unit_price)}<small>/หน่วย</small></dd>
+                </div>
+                <div>
+                  <dt><span className="ard-rate-icon is-water"><RoomDetailIcon type="drop" size={14} /></span>ค่าน้ำเหมาจ่าย</dt>
+                  <dd>฿{formatCurrency(data.water_price)}<small>/เดือน</small></dd>
+                </div>
+                <div>
+                  <dt><span className="ard-rate-icon is-water"><RoomDetailIcon type="drop" size={14} /></span>ค่าน้ำตามหน่วย</dt>
+                  <dd>฿{formatCurrency(data.water_unit_price)}<small>/หน่วย</small></dd>
+                </div>
+              </dl>
+            </RoomDetailCard>
+
+            <RoomDetailCard
+              icon="sparkle"
+              title="สิ่งอำนวยความสะดวก"
+              count={availableAmenities.length + customAmenities.length}
+            >
+              {availableAmenities.length + customAmenities.length > 0 ? (
+                <div className="ard-amenities">
+                  {availableAmenities.map((amenity) => (
+                    <span key={amenity.key} className="is-on">
+                      <RoomDetailIcon type="check" size={13} />
+                      {amenity.label}
+                    </span>
+                  ))}
+                  {customAmenities.map((amenity) => (
+                    <span key={amenity.name} className="is-on is-custom">
+                      <CustomAmenityIcon name={amenity.icon} size={14} />
+                      {amenity.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <RoomDetailEmpty icon="sparkle" title="ยังไม่ได้ระบุสิ่งอำนวยความสะดวก" text="เพิ่มได้จากปุ่มแก้ไขข้อมูลห้อง" />
+              )}
+              {missingAmenities.length > 0 && (
+                <p className="ard-amenities-missing">
+                  ไม่มี: {missingAmenities.map((amenity) => amenity.label).join(' · ')}
+                </p>
+              )}
+            </RoomDetailCard>
+
+            {detail && (
+              <RoomDetailCard
+                icon="wrench"
+                title="แจ้งซ่อมล่าสุด"
+                count={detail.maintenance.length}
+                tone={openMaintenance > 0 ? 'warning' : undefined}
+                hint={totalMaintenance > 0 ? `ค้างอยู่ ${openMaintenance} จากทั้งหมด ${totalMaintenance} รายการ` : undefined}
+                action={totalMaintenance > 0 && <RoomDetailLink onClick={() => onOpenMaintenance()}>ดูทั้งหมด</RoomDetailLink>}
+              >
+                {detail.maintenance.length > 0 ? (
+                  <ul className="ard-rows">
+                    {detail.maintenance.map((request) => {
+                      const category = MAINTENANCE_CATEGORY_LABEL[request.category] ? request.category : 'other'
+                      const open = () => onOpenMaintenance(request.id)
+                      return (
+                        <li
+                          key={request.id}
+                          className={`is-maintenance-${request.status}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`ดูรายละเอียดแจ้งซ่อม ${MAINTENANCE_CATEGORY_LABEL[category]}`}
+                          onClick={open}
+                          onKeyDown={rowKeyHandler(open)}
+                        >
+                          <span className={`ard-row-icon category-${category}`} aria-hidden="true">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              {MAINTENANCE_CATEGORY_ICON[category]}
+                            </svg>
+                          </span>
+                          <div className="ard-row-main">
+                            <strong>{MAINTENANCE_CATEGORY_LABEL[category]}</strong>
+                            {request.description && <p className="ard-row-note">{request.description}</p>}
+                            <div className="ard-row-meta">
+                              <span className="ard-meta">
+                                <RoomDetailIcon type="calendar" size={12} />
+                                แจ้ง {formatDate(request.created_at)}
+                              </span>
+                              {request.completed_at && (
+                                <span className="ard-meta is-success">
+                                  <RoomDetailIcon type="check" size={12} />
+                                  เสร็จ {formatDate(request.completed_at)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`admin-badge status-${request.status}`}>
+                            {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
+                          </span>
+                          <span className="ard-row-chevron" aria-hidden="true"><RoomDetailChevron /></span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <RoomDetailEmpty icon="wrench" title="ไม่มีประวัติการแจ้งซ่อม" text="ห้องนี้ยังไม่เคยแจ้งซ่อม" />
+                )}
+              </RoomDetailCard>
             )}
 
-            <RoomDetailSection
-              icon="wrench"
-              title="แจ้งซ่อมล่าสุด"
-              count={detail.maintenance.length}
-              hint={totalMaintenance > 0 ? `ค้างอยู่ ${openMaintenance} จากทั้งหมด ${totalMaintenance} รายการ` : 'ห้องนี้ยังไม่เคยแจ้งซ่อม'}
-              action={
-                totalMaintenance > 0 && (
-                  <button type="button" className="room-detail-section-link" onClick={() => onOpenMaintenance()}>
-                    ดูทั้งหมด
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </button>
-                )
-              }
-            >
-              {detail.maintenance.length > 0 ? (
-                <ul className="room-detail-rows">
-                  {detail.maintenance.map((request) => {
-                    const category = MAINTENANCE_CATEGORY_LABEL[request.category] ? request.category : 'other'
-                    return (
-                      <li
-                        key={request.id}
-                        className={`is-maintenance-${request.status} is-clickable`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`ดูรายละเอียดแจ้งซ่อม ${MAINTENANCE_CATEGORY_LABEL[category]}`}
-                        onClick={() => onOpenMaintenance(request.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            onOpenMaintenance(request.id)
-                          }
-                        }}
-                      >
-                        <span className={`room-detail-row-icon category-${category}`} aria-hidden="true">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            {MAINTENANCE_CATEGORY_ICON[category]}
-                          </svg>
-                        </span>
-                        <div className="room-detail-row-main">
-                          <strong className="room-detail-row-title">{MAINTENANCE_CATEGORY_LABEL[category]}</strong>
-                          {request.description && <p className="room-detail-row-desc">{request.description}</p>}
-                          <div className="room-detail-row-meta">
-                            <span className="room-detail-meta-item">
-                              <RoomDetailIcon type="calendar" size={12} />
-                              <em>แจ้ง</em>
-                              {formatDate(request.created_at)}
-                            </span>
-                            {request.completed_at && (
-                              <span className="room-detail-meta-item is-success">
-                                <RoomDetailIcon type="check" size={12} />
-                                <em>เสร็จ</em>
-                                {formatDate(request.completed_at)}
+            {detail && (
+              <RoomDetailCard
+                icon="history"
+                title="ประวัติผู้เช่าก่อนหน้า"
+                count={pastTenants.length}
+                hint={pastTenants.length > 0 ? 'เรียงจากล่าสุดไปเก่าสุด' : undefined}
+                action={(detail.history || []).length > 0 && <RoomDetailLink onClick={() => onOpenTenants()}>ดูทั้งหมด</RoomDetailLink>}
+              >
+                {pastTenants.length > 0 ? (
+                  <ul className="ard-rows">
+                    {pastTenants.map((booking) => {
+                      const stay = formatStayLength(booking.rental_start_date, booking.rental_end_date)
+                      const open = () => onOpenTenants(booking.booking_id)
+                      return (
+                        <li
+                          key={booking.booking_id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`ดูรายละเอียดผู้เช่า ${booking.first_name} ${booking.last_name}`}
+                          onClick={open}
+                          onKeyDown={rowKeyHandler(open)}
+                        >
+                          <span className="ard-row-icon is-person" aria-hidden="true"><PersonIcon size={17} /></span>
+                          <div className="ard-row-main">
+                            <strong>{booking.first_name} {booking.last_name}</strong>
+                            <div className="ard-row-meta">
+                              <span className="ard-meta">
+                                <RoomDetailIcon type="calendar" size={12} />
+                                {booking.rental_start_date && booking.rental_end_date
+                                  ? `${formatDate(booking.rental_start_date)} – ${formatDate(booking.rental_end_date)}`
+                                  : `ทำสัญญา ${formatDate(booking.created_at)}`}
                               </span>
-                            )}
-                          </div>
-                        </div>
-                        <span className={`admin-badge status-${request.status}`}>
-                          {MAINTENANCE_STATUS_LABEL[request.status] || request.status}
-                        </span>
-                        <span className="room-detail-row-chevron" aria-hidden="true">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M9 18l6-6-6-6" />
-                          </svg>
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <RoomDetailEmptyRow icon="wrench" text="ไม่มีประวัติการแจ้งซ่อม" />
-              )}
-            </RoomDetailSection>
-
-            <RoomDetailSection
-              icon="history"
-              title="ผู้เช่าก่อนหน้า"
-              count={pastTenants.length}
-              hint={pastTenants.length > 0 ? 'เรียงจากล่าสุดไปเก่าสุด' : 'ยังไม่มีผู้เช่าเก่าในห้องนี้'}
-              action={
-                (detail.history || []).length > 0 && (
-                  <button type="button" className="room-detail-section-link" onClick={() => onOpenTenants()}>
-                    ดูทั้งหมด
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </button>
-                )
-              }
-            >
-              {pastTenants.length > 0 ? (
-                <ul className="room-detail-rows">
-                  {pastTenants.map((booking) => {
-                    const stay = formatStayLength(booking.rental_start_date, booking.rental_end_date)
-                    return (
-                      <li
-                        key={booking.booking_id}
-                        className="is-clickable"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`ดูรายละเอียดผู้เช่า ${booking.first_name} ${booking.last_name}`}
-                        onClick={() => onOpenTenants(booking.booking_id)}
-                        onKeyDown={(event) => {
-                          if (event.target !== event.currentTarget) return
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            onOpenTenants(booking.booking_id)
-                          }
-                        }}
-                      >
-                        <span className="room-detail-row-avatar" aria-hidden="true"><PersonIcon size={18} /></span>
-                        <div className="room-detail-row-main">
-                          <strong className="room-detail-row-title">{booking.first_name} {booking.last_name}</strong>
-                          <div className="room-detail-row-meta">
-                            <span className="room-detail-meta-item">
-                              <RoomDetailIcon type="calendar" size={12} />
-                              {booking.rental_start_date && booking.rental_end_date ? (
-                                `${formatDate(booking.rental_start_date)} – ${formatDate(booking.rental_end_date)}`
-                              ) : (
-                                <>
-                                  <em>ทำสัญญา</em>
-                                  {formatDate(booking.created_at)}
-                                </>
+                              {stay && (
+                                <span className="ard-chip">
+                                  <RoomDetailIcon type="clock" size={11} />
+                                  อยู่ {stay}
+                                </span>
                               )}
-                            </span>
-                            {stay && (
-                              <span className="room-detail-chip is-stay">
-                                <RoomDetailIcon type="clock" size={11} />
-                                อยู่ {stay}
-                              </span>
+                            </div>
+                            {booking.phone && (
+                              <div className="ard-row-meta">
+                                <a className="ard-meta is-link" href={`tel:${booking.phone}`} onClick={(event) => event.stopPropagation()}>
+                                  <RoomDetailIcon type="phone" size={12} />
+                                  {booking.phone}
+                                </a>
+                              </div>
                             )}
                           </div>
-                        </div>
-                        {booking.phone && (
-                          <a className="room-detail-row-phone" href={`tel:${booking.phone}`} onClick={(event) => event.stopPropagation()}>
-                            <RoomDetailIcon type="phone" size={13} />
-                            {booking.phone}
-                          </a>
-                        )}
-                        <span className="room-detail-row-chevron" aria-hidden="true">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M9 18l6-6-6-6" />
-                          </svg>
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <RoomDetailEmptyRow icon="history" text="ไม่มีประวัติผู้เช่าก่อนหน้า" />
-              )}
-            </RoomDetailSection>
-          </>
-        ) : null}
+                          <span className="ard-row-chevron" aria-hidden="true"><RoomDetailChevron /></span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <RoomDetailEmpty icon="history" title="ไม่มีประวัติผู้เช่าก่อนหน้า" text="ห้องนี้ยังไม่เคยมีผู้เช่าคนอื่น" />
+                )}
+              </RoomDetailCard>
+            )}
+          </div>
+        </div>
       </div>
 
-      <footer className="room-detail-actions">
+      <footer className="ard-actions">
+        {data.is_booked ? (
+          <span className="ard-actions-note">
+            <RoomDetailIcon type="alert" size={14} />
+            ห้องที่มีผู้เช่าอยู่แก้ไขข้อมูลไม่ได้
+          </span>
+        ) : (
+          <span className="ard-actions-note is-muted">ห้องว่าง แก้ไขราคา สิ่งอำนวยความสะดวก หรือเลขห้องได้</span>
+        )}
         <button type="button" className="admin-action-btn is-ghost" onClick={onOpenHistory}>
           <RoomDetailIcon type="wallet" size={15} />
           ประวัติการจ่ายเงิน
@@ -9891,7 +9886,7 @@ function AdminBackupPage() {
 
       {roomDetail && (
         <Modal
-          title={`รายละเอียดห้อง ${roomDetail.room.room_number}`}
+          title="รายละเอียดห้องพัก"
           onClose={() => {
             setPaymentDetail(null)
             setRoomDetail(null)
