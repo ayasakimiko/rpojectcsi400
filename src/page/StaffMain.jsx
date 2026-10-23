@@ -33,7 +33,7 @@ import {
   ContractTransferHistory,
   StaffCompletedContracts,
 } from '../components/RentalContract.jsx'
-import { addContractMonths, CONTRACT_MAX_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
+import { addContractMonths, completedContractSummaryTiles, CONTRACT_MAX_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
 import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 
@@ -1741,7 +1741,7 @@ const TENANT_TYPE_SEGMENTS = [
   { key: 'move_room', label: 'ย้ายห้อง' },
 ]
 
-function StaffFilterPanel({
+export function StaffFilterPanel({
   segments,
   segmentsClassName = '',
   active,
@@ -1756,9 +1756,10 @@ function StaffFilterPanel({
   onClear,
   sticky = false,
   dateRange,
+  segmentsBelow = true,
 }) {
   return (
-    <div className={`staff-req-filters${sticky ? ' is-sticky' : ''}`}>
+    <div className={`staff-req-filters${sticky ? ' is-sticky' : ''}${segmentsBelow ? ' is-segments-below' : ''}`}>
       {segments && (
         <div className={`staff-req-segments${segmentsClassName ? ` ${segmentsClassName}` : ''}`} role="tablist" aria-label={segmentLabel}>
           {segments.map((segment) => (
@@ -2106,7 +2107,7 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
   return (
     <Modal title="ยืนยันรับเรื่องแจ้งย้ายออก" onClose={onClose} variant="transfer">
       {(requestClose) => (
-        <div className="staff-transfer-body">
+        <div className="staff-transfer-body is-moveout-ack">
           <div className="staff-transfer-top">
             <div className="staff-transfer-hero">
               <div className="staff-confirm-icon is-info">
@@ -2152,6 +2153,11 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
 
           <div className="staff-transfer-scroll">
             <section className="staff-transfer-section">
+              <h4 className="staff-transfer-section-title">เหตุผล/รายละเอียดการย้ายออก</h4>
+              <p className="staff-transfer-note">{request.note || '-'}</p>
+            </section>
+
+            <section className="staff-transfer-section">
               <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
               <div className="staff-transfer-columns">
                 <div>
@@ -2193,11 +2199,6 @@ function MoveoutAcknowledgeModal({ request, room, error, processing, onConfirm, 
                   </dl>
                 </div>
               </div>
-            </section>
-
-            <section className="staff-transfer-section">
-              <h4 className="staff-transfer-section-title">เหตุผล/รายละเอียดการย้ายออก</h4>
-              <p className="staff-transfer-note">{request.note || '-'}</p>
             </section>
 
             <section className="staff-transfer-section">
@@ -3158,7 +3159,6 @@ function MoveRoomCompare({ request, preview }) {
     { label: 'ค่าเช่า', unit: '/เดือน', money: true, from: pick(source, 'price', request.source_room_price), to: pick(target, 'price', request.target_room_price) },
     { label: 'ค่าไฟ', unit: '/หน่วย', money: true, from: source?.electricity_unit_price, to: pick(target, 'electricity_unit_price', request.target_room_electricity_unit_price) },
     { label: 'ค่าน้ำ', unit: '/เดือน', money: true, from: source?.water_price, to: pick(target, 'water_price', request.target_room_water_price) },
-    { label: 'เตียง', unit: ' เตียง', from: source?.bed, to: pick(target, 'bed', request.target_room_bed) },
   ]
   const show = (row, value) => {
     if (value == null) return '-'
@@ -3692,7 +3692,6 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
     node.classList.add('is-flash')
   }
   const amenities = TARGET_ROOM_AMENITIES.filter((item) => request[`target_room_${item.key}`])
-  const bedCount = Number(request.target_room_bed)
 
   return (
     <>
@@ -3783,7 +3782,6 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                 {request.target_room_water_price != null && (
                   <span className="staff-transfer-tag">น้ำ ฿{formatCurrency(request.target_room_water_price)}</span>
                 )}
-                {bedCount > 0 && <span className="staff-transfer-tag">เตียง {bedCount}</span>}
                 {amenities.map((item) => (
                   <span key={item.key} className="staff-transfer-tag">
                     {item.label}
@@ -4223,8 +4221,8 @@ function StaffPagination({ page, total, onChange, pageSize = STAFF_LIST_PAGE_SIZ
   )
 }
 
-export function StaffCompletedContractsTab() {
-  return <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} FilterPanel={StaffFilterPanel} />
+export function StaffCompletedContractsTab({ onSummaryChange }) {
+  return <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} FilterPanel={StaffFilterPanel} onSummaryChange={onSummaryChange} />
 }
 
 function flashHighlight(element, className) {
@@ -7185,6 +7183,7 @@ function StaffMain() {
   })
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
+  const [contractSummary, setContractSummary] = useState(null)
   const [pendingVisitCount, setPendingVisitCount] = useState(0)
   const [parkedVehicleCount, setParkedVehicleCount] = useState(0)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
@@ -9036,6 +9035,10 @@ function StaffMain() {
         },
       ],
     },
+    'completed-contracts': {
+      title: 'สัญญาที่เสร็จสมบูรณ์',
+      tiles: completedContractSummaryTiles(contractSummary),
+    },
     'waiting-list': {
       title: 'รายชื่อรอห้องว่าง',
       tiles: [
@@ -9840,7 +9843,7 @@ function StaffMain() {
           />
         )}
 
-        {staffTab === 'completed-contracts' && <StaffCompletedContractsTab />}
+        {staffTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={setContractSummary} />}
 
         {staffTab === 'resident-visits' && (
           <StaffResidentVisitsTab
@@ -10049,6 +10052,7 @@ function StaffMain() {
               </button>
             </div>
             <StaffFilterPanel
+              segmentsBelow
               segmentsClassName="staff-waiting-segments"
               segments={[
                 { key: 'all', label: 'ทั้งหมด', count: waitingList.length },
@@ -13029,7 +13033,7 @@ function StaffMain() {
       {moveoutConfirmRequest && (
         <Modal title="ยืนยันการย้ายออก" onClose={() => setMoveoutConfirmRequest(null)} variant="confirm">
           {(requestClose) => (
-            <div className="staff-confirm-body">
+            <div className="staff-confirm-body is-moveout-confirm">
               <div className="staff-confirm-icon is-warning">
                 <svg
                   viewBox="0 0 24 24"
@@ -13104,7 +13108,7 @@ function StaffMain() {
                       <ul>
                         <li>ห้อง {request.room_number} กลับเป็นห้องว่าง พร้อมให้เช่าต่อ</li>
                         <li>สัญญาของผู้เช่าเปลี่ยนเป็น "สัญญาเก่า"</li>
-                        <li>ผู้เช่ายังเข้าระบบดูประวัติได้ แต่ทำรายการใหม่ไม่ได้</li>
+                        <li>บัญชีผู้เช่าถูกระงับ เข้าสู่ระบบไม่ได้จนกว่าจะลงทะเบียนเช่าใหม่</li>
                         <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ค้างอยู่จะถูกยกเลิก</li>
                       </ul>
                       {depositPaid > 0 && (

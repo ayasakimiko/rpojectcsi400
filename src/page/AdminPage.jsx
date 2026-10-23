@@ -12,7 +12,7 @@ import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { ArchivedContractBadge, ContractCell, ContractDetail, ContractFirstPaymentNote, ContractFullModal, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
-import { DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
+import { completedContractSummaryTiles, DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -31,7 +31,7 @@ import InspectionForm from '../components/InspectionForm.jsx'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { StaffCompletedContractsTab } from './StaffMain.jsx'
+import { StaffCompletedContractsTab, StaffFilterPanel } from './StaffMain.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -135,13 +135,6 @@ function WaitingListPanel({ items, now, vacantCount, onAdd, onDetail, onEdit, on
         <button type="button" className="waiting-ui-action-btn is-primary" onClick={onAdd}>+ เพิ่มผู้สนใจ</button>
       </header>
       <div className="waiting-filter-panel">
-        <div className="waiting-filter-segments" role="group" aria-label="สถานะรายชื่อ">
-          {[{ key: 'all', label: 'ทั้งหมด', tone: 'all' }, ...Object.entries(WAITING_UI_STATUSES).map(([key, info]) => ({ key, ...info }))].map(info => (
-            <button key={info.key} type="button" className={`waiting-filter-segment is-${info.tone}${status === info.key ? ' active' : ''}`} aria-pressed={status === info.key} onClick={() => { setStatus(info.key); setPage(1) }}>
-              {info.label}<span>{info.key === 'all' ? items.length : counts[info.key] || 0}</span>
-            </button>
-          ))}
-        </div>
         <div className="waiting-filter-row">
           <label className="waiting-filter-search">
             <span className="waiting-sr-only">ค้นหารายชื่อ</span>
@@ -150,6 +143,13 @@ function WaitingListPanel({ items, now, vacantCount, onAdd, onDetail, onEdit, on
           <select className="waiting-ui-form-input waiting-filter-sort" aria-label="เรียงลำดับ" value={sort} onChange={event => { setSort(event.target.value); setPage(1) }}>
             <option value="newest">แจ้งล่าสุดก่อน</option><option value="oldest">รอนานสุดก่อน</option>
           </select>
+        </div>
+        <div className="waiting-filter-segments" role="group" aria-label="สถานะรายชื่อ">
+          {[{ key: 'all', label: 'ทั้งหมด', tone: 'all' }, ...Object.entries(WAITING_UI_STATUSES).map(([key, info]) => ({ key, ...info }))].map(info => (
+            <button key={info.key} type="button" className={`waiting-filter-segment is-${info.tone}${status === info.key ? ' active' : ''}`} aria-pressed={status === info.key} onClick={() => { setStatus(info.key); setPage(1) }}>
+              {info.label}<span>{info.key === 'all' ? items.length : counts[info.key] || 0}</span>
+            </button>
+          ))}
         </div>
         <div className="waiting-filter-dates">
           <span><WaitingDetailIcon type="calendar" />วันที่แจ้ง</span>
@@ -1186,6 +1186,34 @@ const TAB_GROUPS = [
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
   { key: 'finance', label: 'รายจ่าย', tabs: ['expenses'] },
 ]
+const isCustomerMovedOut = (customer) =>
+  (Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date
+
+const CUSTOMER_SEGMENTS = [
+  { key: 'all', label: 'ทั้งหมด', match: () => true },
+  { key: 'staying', label: 'พักอยู่', match: (customer) => !isCustomerMovedOut(customer) },
+  { key: 'moved-out', label: 'ย้ายออกแล้ว', match: isCustomerMovedOut },
+  { key: 'active', label: 'ใช้งานปกติ', match: (customer) => !customer.is_suspended },
+  { key: 'suspended', label: 'ระงับการใช้งาน', match: (customer) => Boolean(customer.is_suspended) },
+  { key: 'deposit', label: 'รอจัดการมัดจำ', match: (customer) => Boolean(customer.contract?.can_settle_deposit) },
+]
+
+const customerRegisteredTime = (customer) => new Date(customer.registered_at || 0).getTime() || 0
+
+const CUSTOMER_SORTERS = {
+  room: (a, b) => (a.room_number ?? Infinity) - (b.room_number ?? Infinity) || Boolean(a.is_suspended) - Boolean(b.is_suspended),
+  newest: (a, b) => customerRegisteredTime(b) - customerRegisteredTime(a),
+  oldest: (a, b) => customerRegisteredTime(a) - customerRegisteredTime(b),
+  name: (a, b) => `${a.first_name || ''} ${a.last_name || ''}`.localeCompare(`${b.first_name || ''} ${b.last_name || ''}`, 'th'),
+}
+
+const CUSTOMER_SORT_OPTIONS = [
+  { value: 'room', label: 'เรียงตามเลขห้อง' },
+  { value: 'newest', label: 'ลงทะเบียนล่าสุดก่อน' },
+  { value: 'oldest', label: 'ลงทะเบียนเก่าสุดก่อน' },
+  { value: 'name', label: 'เรียงตามชื่อ' },
+]
+
 const TAB_LABEL = Object.fromEntries(TABS.map((tab) => [tab.key, tab.label]))
 const TAB_GROUP_OF = Object.fromEntries(TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab, group.key])))
 
@@ -1775,7 +1803,7 @@ function AdminRequestCard({ request, onOpen }) {
   )
 }
 
-function CustomerProfile({ customer, contract, rentalHistory, loading, error, idcardRevealed, onToggleIdCard, onRetry, onOpenHistory, onEdit, onToggleSuspend }) {
+function CustomerProfile({ customer, contract, rentalHistory, loading, error, idcardRevealed, onToggleIdCard, onRetry, onOpenHistory, onEdit, onToggleSuspend, onDepositSettled }) {
   const [now] = useState(() => Date.now())
   const payments = (rentalHistory || []).flatMap((booking) => booking.payments || [])
   const paidTotal = payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
@@ -1921,7 +1949,7 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
           {loading && !contract ? (
             <p className="customer-profile-state">กำลังโหลดข้อมูล...</p>
           ) : (
-            <ContractDetail contract={contract} />
+            <ContractDetail contract={contract} onDepositSettled={onDepositSettled} />
           )}
         </section>
       </div>
@@ -1968,15 +1996,6 @@ const ROOM_AMENITIES = [
   { key: 'refrigerator', label: 'ตู้เย็น' },
 ]
 
-const ROOM_AMENITY_ICONS = [
-  { key: 'sparkle', label: 'ทั่วไป' },
-  { key: 'desk', label: 'โต๊ะ' },
-  { key: 'wardrobe', label: 'ตู้' },
-  { key: 'shower', label: 'น้ำอุ่น' },
-  { key: 'tv', label: 'ทีวี' },
-  { key: 'balcony', label: 'ระเบียง' },
-  { key: 'sofa', label: 'โซฟา' },
-]
 
 const ROOM_AMENITY_SUGGESTIONS = [
   { name: 'โต๊ะทำงาน', icon: 'desk' },
@@ -3980,11 +3999,6 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
             <dd>฿{formatCurrency(data.water_unit_price)}</dd>
             <small>ต่อหน่วย</small>
           </div>
-          <div>
-            <dt><RoomDetailIcon type="bed" />เตียง</dt>
-            <dd>{data.bed ?? 0}</dd>
-            <small>เตียง</small>
-          </div>
         </dl>
 
         <section className="room-detail-section">
@@ -4466,7 +4480,6 @@ function RentalPeriodCell({ start, end }) {
 const emptyRoomForm = {
   room_number: '',
   price: '',
-  bed: '1',
   electricity_unit_price: '8',
   water_unit_price: '100',
   water_price: '100',
@@ -5459,6 +5472,7 @@ function AdminBackupPage() {
   const [activeTab, setActiveTab] = useState('rooms')
   const [lastTabByGroup, setLastTabByGroup] = useState({})
   const [pendingVehicleCount, setPendingVehicleCount] = useState(0)
+  const [contractSummary, setContractSummary] = useState(null)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [tabFocus, setTabFocus] = useState(null)
   const requestRowFocus = useFocusScroll()
@@ -6202,7 +6216,6 @@ function AdminBackupPage() {
     setRoomForm({
       room_number: String(room.room_number),
       price: String(room.price),
-      bed: String(room.bed ?? 1),
       electricity_unit_price: String(room.electricity_unit_price),
       water_unit_price: String(room.water_unit_price ?? 100),
       water_price: String(room.water_price),
@@ -6294,10 +6307,6 @@ function AdminBackupPage() {
       setRoomForm((prev) => ({ ...prev, room_number: value.replace(/\D/g, '').slice(0, 3) }))
       return
     }
-    if (name === 'bed') {
-      setRoomForm((prev) => ({ ...prev, bed: value.replace(/\D/g, '').slice(0, 2) }))
-      return
-    }
     if (name === 'electricity_unit_price' || name === 'water_unit_price' || name === 'water_price') {
       const maxValue = name === 'electricity_unit_price' ? 99.99 : 999.99
       if (value !== '' && Number(value) > maxValue) return
@@ -6323,13 +6332,8 @@ function AdminBackupPage() {
 
   const submitRoomForm = async (event, requestClose) => {
     event.preventDefault()
-    if (roomModal.mode === 'create' && !/^[1-9][0-9]{2}$/.test(roomForm.room_number)) {
+    if (!/^[1-9][0-9]{2}$/.test(roomForm.room_number)) {
       setRoomFormError('เลขห้องต้องเป็นตัวเลข 3 หลัก')
-      return
-    }
-    const bedValue = Number(roomForm.bed)
-    if (!Number.isInteger(bedValue) || bedValue < 0 || bedValue > 99) {
-      setRoomFormError('จำนวนเตียงต้องเป็นตัวเลข 2 หลัก (0-99)')
       return
     }
     const electricityValue = Number(roomForm.electricity_unit_price)
@@ -6352,7 +6356,6 @@ function AdminBackupPage() {
     const payload = {
       room_number: Number(roomForm.room_number),
       price: Number(roomForm.price),
-      bed: Number(roomForm.bed),
       electricity_unit_price: Number(roomForm.electricity_unit_price),
       water_unit_price: Number(roomForm.water_unit_price),
       water_price: Number(roomForm.water_price),
@@ -6369,8 +6372,12 @@ function AdminBackupPage() {
         setSuccessMessage(data.message || 'สร้างห้องพักสำเร็จ')
       } else {
         const { room_number, ...editable } = payload
-        void room_number
-        const { data } = await axios.put(`/api/admin/rooms/${roomModal.room.room_number}`, editable, { headers: authHeaders() })
+        const renamed = room_number !== Number(roomModal.room.room_number)
+        const { data } = await axios.put(
+          `/api/admin/rooms/${roomModal.room.room_number}`,
+          renamed ? { ...editable, room_number } : editable,
+          { headers: authHeaders() },
+        )
         setSuccessMessage(data.message || 'แก้ไขข้อมูลห้องพักสำเร็จ')
       }
       requestClose()
@@ -6576,6 +6583,7 @@ function AdminBackupPage() {
   const [customersError, setCustomersError] = useState('')
   const [customerSearch, setCustomerSearch] = useState('')
   const [customerStatusFilter, setCustomerStatusFilter] = useState('all')
+  const [customerSort, setCustomerSort] = useState('room')
   const [customersPage, setCustomersPage] = useState(1)
   const [customerModal, setCustomerModal] = useState(null)
   const [customerForm, setCustomerForm] = useState(emptyCustomerForm)
@@ -6597,10 +6605,10 @@ function AdminBackupPage() {
     })
   }
 
-  const loadCustomers = (search = customerSearch) => {
+  const loadCustomers = () => {
     setCustomersLoading(true)
     return axios
-      .get('/api/admin/customers', { headers: authHeaders(), params: { search: search || undefined } })
+      .get('/api/admin/customers', { headers: authHeaders() })
       .then(({ data }) => {
         setCustomers(data.customers)
         setCustomersError('')
@@ -6611,16 +6619,6 @@ function AdminBackupPage() {
       })
       .finally(() => setCustomersLoading(false))
   }
-
-  const isCustomerSearchMount = useRef(true)
-  useEffect(() => {
-    if (isCustomerSearchMount.current) {
-      isCustomerSearchMount.current = false
-      return
-    }
-    const timeout = setTimeout(() => loadCustomers(customerSearch), 400)
-    return () => clearTimeout(timeout)
-  }, [customerSearch])
 
   const openEditCustomer = (customer) => {
     setCustomerForm({
@@ -6709,11 +6707,33 @@ function AdminBackupPage() {
     setCustomerDetail({ customer: customerProfile.detail.customer, rentalHistory: customerProfile.detail.rentalHistory })
   }
 
+  const customerSegmentCounts = useMemo(
+    () =>
+      customers.reduce(
+        (counts, customer) => {
+          CUSTOMER_SEGMENTS.forEach((segment) => {
+            if (segment.match(customer)) counts[segment.key] += 1
+          })
+          return counts
+        },
+        Object.fromEntries(CUSTOMER_SEGMENTS.map((segment) => [segment.key, 0])),
+      ),
+    [customers],
+  )
+
   const filteredCustomers = useMemo(() => {
-    if (customerStatusFilter === 'all') return customers
-    const wantSuspended = customerStatusFilter === 'suspended'
-    return customers.filter((customer) => Boolean(customer.is_suspended) === wantSuspended)
-  }, [customers, customerStatusFilter])
+    const keyword = customerSearch.trim().toLowerCase()
+    const segment = CUSTOMER_SEGMENTS.find((item) => item.key === customerStatusFilter) || CUSTOMER_SEGMENTS[0]
+    return customers
+      .filter((customer) => {
+        if (!segment.match(customer)) return false
+        if (!keyword) return true
+        return [customer.room_number, `${customer.first_name || ''} ${customer.last_name || ''}`, customer.phone, customer.idcard]
+          .filter((value) => value != null)
+          .some((value) => String(value).toLowerCase().includes(keyword))
+      })
+      .sort(CUSTOMER_SORTERS[customerSort] || CUSTOMER_SORTERS.room)
+  }, [customers, customerStatusFilter, customerSearch, customerSort])
 
   const customersTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / ROWS_PER_PAGE))
   const currentCustomersPage = Math.min(customersPage, customersTotalPages)
@@ -6734,15 +6754,12 @@ function AdminBackupPage() {
   const [requestStatusFilter, setRequestStatusFilter] = useState('all')
   const [requestSearch, setRequestSearch] = useState('')
 
-  const loadRequestLogs = (page = 1, status = requestStatusFilter, search = requestSearch) => {
+  const loadRequestLogs = () => {
     setRequestLogsLoading(true)
     return axios
-      .get('/api/admin/logs/requests', {
-        headers: authHeaders(),
-        params: { page, status: status !== 'all' ? status : undefined, search: search || undefined },
-      })
+      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { all: 1 } })
       .then(({ data }) => {
-        setRequestLogs({ items: data.requests, total: data.total, page: data.page, pageSize: data.pageSize })
+        setRequestLogs((current) => ({ items: data.requests, total: data.total, page: current.page, pageSize: data.pageSize }))
         setRequestLogsError('')
       })
       .catch((err) => {
@@ -6758,15 +6775,12 @@ function AdminBackupPage() {
   const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState('all')
   const [maintenanceSearch, setMaintenanceSearch] = useState('')
 
-  const loadMaintenanceLogs = (page = 1, status = maintenanceStatusFilter, search = maintenanceSearch) => {
+  const loadMaintenanceLogs = () => {
     setMaintenanceLogsLoading(true)
     return axios
-      .get('/api/admin/logs/maintenance', {
-        headers: authHeaders(),
-        params: { page, status: status !== 'all' ? status : undefined, search: search || undefined },
-      })
+      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { all: 1 } })
       .then(({ data }) => {
-        setMaintenanceLogs({ items: data.requests, total: data.total, page: data.page, pageSize: data.pageSize })
+        setMaintenanceLogs((current) => ({ items: data.requests, total: data.total, page: current.page, pageSize: data.pageSize }))
         setMaintenanceLogsError('')
       })
       .catch((err) => {
@@ -6809,15 +6823,15 @@ function AdminBackupPage() {
     })
   }
 
-  const loadMoveoutLogs = (page = 1, search = moveoutSearch) => {
+  const loadMoveoutLogs = () => {
     setMoveoutLogsLoading(true)
     return axios
       .get('/api/admin/logs/moveouts', {
         headers: authHeaders(),
-        params: { page, search: search || undefined },
+        params: { all: 1 },
       })
       .then(({ data }) => {
-        setMoveoutLogs({ items: data.moveouts, total: data.total, page: data.page, pageSize: data.pageSize })
+        setMoveoutLogs({ items: data.moveouts, total: data.total, page: 1, pageSize: data.pageSize })
         setMoveoutLogsError('')
       })
       .catch((err) => {
@@ -6868,7 +6882,7 @@ function AdminBackupPage() {
     }
     loadRooms()
     loadStaff()
-    loadCustomers('')
+    loadCustomers()
     loadWaitingList()
     loadMoveOutInspections()
     loadParcels()
@@ -6888,44 +6902,11 @@ function AdminBackupPage() {
   }, [loadParcels])
 
   useEffect(() => {
-    if (activeTab === 'requests') loadRequestLogs(1, requestStatusFilter, requestSearch)
-    if (activeTab === 'maintenance') loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch)
-    if (activeTab === 'moveouts') loadMoveoutLogs(1, moveoutSearch)
+    if (activeTab === 'requests') loadRequestLogs()
+    if (activeTab === 'maintenance') loadMaintenanceLogs()
+    if (activeTab === 'moveouts') loadMoveoutLogs()
     if (activeTab === 'expenses') loadExpenses(1)
   }, [activeTab])
-
-  const isRequestSearchMount = useRef(true)
-  useEffect(() => {
-    if (isRequestSearchMount.current) {
-      isRequestSearchMount.current = false
-      return
-    }
-    if (activeTab !== 'requests') return
-    const timeout = setTimeout(() => loadRequestLogs(1, requestStatusFilter, requestSearch), 400)
-    return () => clearTimeout(timeout)
-  }, [requestSearch])
-
-  const isMaintenanceSearchMount = useRef(true)
-  useEffect(() => {
-    if (isMaintenanceSearchMount.current) {
-      isMaintenanceSearchMount.current = false
-      return
-    }
-    if (activeTab !== 'maintenance') return
-    const timeout = setTimeout(() => loadMaintenanceLogs(1, maintenanceStatusFilter, maintenanceSearch), 400)
-    return () => clearTimeout(timeout)
-  }, [maintenanceSearch])
-
-  const isMoveoutSearchMount = useRef(true)
-  useEffect(() => {
-    if (isMoveoutSearchMount.current) {
-      isMoveoutSearchMount.current = false
-      return
-    }
-    if (activeTab !== 'moveouts') return
-    const timeout = setTimeout(() => loadMoveoutLogs(1, moveoutSearch), 400)
-    return () => clearTimeout(timeout)
-  }, [moveoutSearch])
 
   const handleLogout = () => {
     sessionStorage.removeItem('token')
@@ -6999,6 +6980,7 @@ function AdminBackupPage() {
         onClick: () => goToTab('announcements'),
       },
     ],
+    contracts: completedContractSummaryTiles(contractSummary),
     staff: [
       { key: 'all', icon: 'queue', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
       { key: 'active', icon: 'vacant', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
@@ -7108,9 +7090,52 @@ function AdminBackupPage() {
     notifCurrentPage * NOTIF_PAGE_SIZE,
   )
 
-  const requestLogsTotalPages = Math.max(1, Math.ceil(requestLogs.total / requestLogs.pageSize))
-  const maintenanceLogsTotalPages = Math.max(1, Math.ceil(maintenanceLogs.total / maintenanceLogs.pageSize))
-  const moveoutLogsTotalPages = Math.max(1, Math.ceil(moveoutLogs.total / moveoutLogs.pageSize))
+  const matchesLogKeyword = (keyword, values) =>
+    !keyword || values.filter((value) => value != null).some((value) => String(value).toLowerCase().includes(keyword))
+  const requestKeyword = requestSearch.trim().toLowerCase()
+  const filteredRequestLogs = requestLogs.items.filter(
+    (request) =>
+      (requestStatusFilter === 'all' || request.status === requestStatusFilter) &&
+      matchesLogKeyword(requestKeyword, [
+        request.room_number,
+        request.target_room_number,
+        `${request.first_name || ''} ${request.last_name || ''}`,
+        request.accepted_by_name,
+        request.completed_by_name,
+      ]),
+  )
+  const requestLogsTotalPages = Math.max(1, Math.ceil(filteredRequestLogs.length / requestLogs.pageSize))
+  const currentRequestLogsPage = Math.min(requestLogs.page, requestLogsTotalPages)
+  const pagedRequestLogs = filteredRequestLogs.slice((currentRequestLogsPage - 1) * requestLogs.pageSize, currentRequestLogsPage * requestLogs.pageSize)
+
+  const maintenanceKeyword = maintenanceSearch.trim().toLowerCase()
+  const filteredMaintenanceLogs = maintenanceLogs.items.filter(
+    (request) =>
+      (maintenanceStatusFilter === 'all' || request.status === maintenanceStatusFilter) &&
+      matchesLogKeyword(maintenanceKeyword, [
+        request.room_number,
+        `${request.first_name || ''} ${request.last_name || ''}`,
+        request.accepted_by_name,
+        request.completed_by_name,
+      ]),
+  )
+  const maintenanceLogsTotalPages = Math.max(1, Math.ceil(filteredMaintenanceLogs.length / maintenanceLogs.pageSize))
+  const currentMaintenanceLogsPage = Math.min(maintenanceLogs.page, maintenanceLogsTotalPages)
+  const pagedMaintenanceLogs = filteredMaintenanceLogs.slice(
+    (currentMaintenanceLogsPage - 1) * maintenanceLogs.pageSize,
+    currentMaintenanceLogsPage * maintenanceLogs.pageSize,
+  )
+  const moveoutKeyword = moveoutSearch.trim().toLowerCase()
+  const filteredMoveouts = moveoutKeyword
+    ? moveoutLogs.items.filter((moveout) =>
+        [moveout.room_number, `${moveout.first_name || ''} ${moveout.last_name || ''}`, moveout.idcard, moveout.phone]
+          .filter((value) => value != null)
+          .some((value) => String(value).toLowerCase().includes(moveoutKeyword)),
+      )
+    : moveoutLogs.items
+  const moveoutLogsTotalPages = Math.max(1, Math.ceil(filteredMoveouts.length / moveoutLogs.pageSize))
+  const currentMoveoutPage = Math.min(moveoutLogs.page, moveoutLogsTotalPages)
+  const pagedMoveouts = filteredMoveouts.slice((currentMoveoutPage - 1) * moveoutLogs.pageSize, currentMoveoutPage * moveoutLogs.pageSize)
 
 
 
@@ -7152,14 +7177,16 @@ function AdminBackupPage() {
       setRequestSearch('')
       setActiveTab('requests')
       notifTargetRef.current = { tab: 'requests', id: notif.request.id }
-      loadRequestLogs(1, 'all', '').finally(() => setNotifTargetReady((count) => count + 1))
+      setRequestLogs((current) => ({ ...current, page: 1 }))
+      loadRequestLogs().finally(() => setNotifTargetReady((count) => count + 1))
       return
     }
     setMaintenanceStatusFilter('all')
     setMaintenanceSearch('')
     setActiveTab('maintenance')
     notifTargetRef.current = { tab: 'maintenance', id: notif.request.id }
-    loadMaintenanceLogs(1, 'all', '').finally(() => setNotifTargetReady((count) => count + 1))
+    setMaintenanceLogs((current) => ({ ...current, page: 1 }))
+    loadMaintenanceLogs().finally(() => setNotifTargetReady((count) => count + 1))
   }
 
   useEffect(() => {
@@ -7436,7 +7463,7 @@ function AdminBackupPage() {
 
         {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/admin/dorm-info" />}
 
-        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab />}
+        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={setContractSummary} />}
 
         {activeTab === 'vehicle-requests' && (
           <AdminVehicleRequestsTab
@@ -7921,42 +7948,50 @@ function AdminBackupPage() {
               <h2>รายการลูกค้า</h2>
             </div>
 
-            <div className="admin-toolbar">
-              <div className="admin-search-group">
-                <label className="admin-toolbar-label" htmlFor="customer-search">
-                  ค้นหา
-                </label>
-                <input
-                  id="customer-search"
-                  type="text"
-                  className="form-control admin-search-input"
-                  placeholder="ค้นหาชื่อ, เบอร์โทร, เลขห้อง, บัตร ปชช..."
-                  value={customerSearch}
-                  onChange={(event) => {
-                    setCustomerSearch(event.target.value)
-                    setCustomersPage(1)
-                  }}
-                />
-              </div>
-              <div className="admin-filter-group">
-                <label className="admin-toolbar-label" htmlFor="customer-status-filter">
-                  สถานะ
-                </label>
-                <select
-                  id="customer-status-filter"
-                  className="form-select admin-filter-select"
-                  value={customerStatusFilter}
-                  onChange={(event) => {
-                    setCustomerStatusFilter(event.target.value)
-                    setCustomersPage(1)
-                  }}
-                >
-                  <option value="all">ทุกสถานะ</option>
-                  <option value="active">ใช้งานปกติ</option>
-                  <option value="suspended">ระงับการใช้งาน</option>
-                </select>
-              </div>
-            </div>
+            <StaffFilterPanel
+              segments={CUSTOMER_SEGMENTS.map((segment) => ({
+                key: segment.key,
+                label: segment.label,
+                count: customerSegmentCounts[segment.key],
+              }))}
+              segmentLabel="กรองรายการลูกค้า"
+              segmentsBelow
+              active={customerStatusFilter}
+              onSegment={(key) => {
+                setCustomerStatusFilter(key)
+                setCustomersPage(1)
+              }}
+              search={customerSearch}
+              onSearch={(value) => {
+                setCustomerSearch(value)
+                setCustomersPage(1)
+              }}
+              searchPlaceholder="ค้นหาชื่อ, เบอร์โทร, เลขห้อง, บัตร ปชช..."
+              resultText={`พบ ${filteredCustomers.length} จาก ${customers.length} คน`}
+              canClear={Boolean(customerSearch.trim()) || customerStatusFilter !== 'all' || customerSort !== 'room'}
+              onClear={() => {
+                setCustomerSearch('')
+                setCustomerStatusFilter('all')
+                setCustomerSort('room')
+                setCustomersPage(1)
+              }}
+            >
+              <select
+                className="staff-filter-select"
+                value={customerSort}
+                onChange={(event) => {
+                  setCustomerSort(event.target.value)
+                  setCustomersPage(1)
+                }}
+                aria-label="เรียงลำดับ"
+              >
+                {CUSTOMER_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </StaffFilterPanel>
 
             {customersError && <div className="alert alert-danger">{customersError}</div>}
 
@@ -7969,6 +8004,7 @@ function AdminBackupPage() {
                     <th className="admin-customer-room-column">ห้อง</th>
                     <th className="admin-col-optional">ระยะเวลาสัญญา</th>
                     <th className="admin-col-optional admin-customer-contract-column">สัญญาเช่า / มัดจำ</th>
+                    <th className="admin-col-optional admin-customer-stay-column">การเข้าพัก</th>
                     <th className="admin-customer-status-column">สถานะ</th>
                     <th className="admin-col-optional">การดำเนินการ</th>
                     <th className="admin-customer-profile-column" aria-hidden="true" />
@@ -7977,13 +8013,13 @@ function AdminBackupPage() {
                 <tbody>
                   {customersLoading ? (
                     <tr>
-                      <td colSpan={8} className="admin-empty">
+                      <td colSpan={9} className="admin-empty">
                         กำลังโหลดข้อมูล...
                       </td>
                     </tr>
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="admin-empty">
+                      <td colSpan={9} className="admin-empty">
                         ไม่พบข้อมูลลูกค้า
                       </td>
                     </tr>
@@ -8045,12 +8081,22 @@ function AdminBackupPage() {
                           <td className="admin-col-optional admin-customer-contract-column">
                             <ContractCell contract={customer.contract} />
                           </td>
+                          <td className="admin-col-optional admin-customer-stay-column">
+                            {(Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date ? (
+                              <span className="admin-stay-label is-moved-out">ย้ายออกแล้ว</span>
+                            ) : (
+                              <span className="admin-stay-label is-staying">พักอยู่</span>
+                            )}
+                          </td>
                           <td className="admin-customer-status-column">
                             <span className={`admin-badge status-${customer.is_suspended ? 'suspended' : 'active'}`}>
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                             </span>
-                            {(Boolean(customer.is_suspended) || customer.room_number == null) && !customer.rental_start_date && !customer.rental_end_date && (
-                              <p className="admin-status-hint">ย้ายออกจากหอพักแล้ว</p>
+                            {customer.contract?.can_settle_deposit && (
+                              <p className={`admin-status-hint is-deposit${customer.contract.deposit_refund === 'forfeit' ? ' is-forfeit' : ' is-refund'}`}>
+                                {customer.contract.deposit_refund === 'forfeit' ? 'รอบันทึกริบมัดจำ' : 'รอคืนมัดจำ'}{' '}
+                                ฿{formatCurrency(customer.contract.deposit_remaining ?? customer.contract.deposit_paid)}
+                              </p>
                             )}
                           </td>
                           <td className="admin-col-optional">
@@ -8078,12 +8124,12 @@ function AdminBackupPage() {
                         </tr>
                         <ExpandToggleRow
                           open={expandedCustomerRows.has(customer.id)}
-                          colSpan={8}
+                          colSpan={9}
                           onClick={() => toggleCustomerRow(customer.id)}
                         />
                         <DetailRow
                           open={expandedCustomerRows.has(customer.id)}
-                          colSpan={8}
+                          colSpan={9}
                           fields={[
                             { label: 'ห้อง', value: customer.room_number || '-' },
                             {
@@ -8165,7 +8211,10 @@ function AdminBackupPage() {
                   className="form-control admin-search-input"
                   placeholder="ค้นหาเลขห้อง, ชื่อ, ผู้อนุมัติ..."
                   value={requestSearch}
-                  onChange={(event) => setRequestSearch(event.target.value)}
+                  onChange={(event) => {
+                    setRequestSearch(event.target.value)
+                    setRequestLogs((current) => ({ ...current, page: 1 }))
+                  }}
                 />
               </div>
               <div className="admin-filter-group">
@@ -8178,7 +8227,7 @@ function AdminBackupPage() {
                   value={requestStatusFilter}
                   onChange={(event) => {
                     setRequestStatusFilter(event.target.value)
-                    loadRequestLogs(1, event.target.value, requestSearch)
+                    setRequestLogs((current) => ({ ...current, page: 1 }))
                   }}
                 >
                   <option value="all">ทุกสถานะ</option>
@@ -8195,16 +8244,20 @@ function AdminBackupPage() {
 
             {requestLogsLoading ? (
               <p className="admin-req-empty">กำลังโหลดข้อมูล...</p>
-            ) : requestLogs.items.length === 0 ? (
+            ) : pagedRequestLogs.length === 0 ? (
               <p className="admin-req-empty">ไม่พบประวัติคำขอ</p>
             ) : (
               <div className="admin-req-grid">
-                {requestLogs.items.map((request) => (
+                {pagedRequestLogs.map((request) => (
                   <AdminRequestCard key={request.id} request={request} onOpen={setRequestDetail} />
                 ))}
               </div>
             )}
-            <Pagination page={requestLogs.page} totalPages={requestLogsTotalPages} onChange={(page) => loadRequestLogs(page, requestStatusFilter, requestSearch)} />
+            <Pagination
+              page={currentRequestLogsPage}
+              totalPages={requestLogsTotalPages}
+              onChange={(page) => setRequestLogs((current) => ({ ...current, page }))}
+            />
           </div>
         )}
 
@@ -8225,7 +8278,10 @@ function AdminBackupPage() {
                   className="form-control admin-search-input"
                   placeholder="ค้นหาเลขห้อง, ชื่อ, ผู้ดำเนินการ..."
                   value={maintenanceSearch}
-                  onChange={(event) => setMaintenanceSearch(event.target.value)}
+                  onChange={(event) => {
+                    setMaintenanceSearch(event.target.value)
+                    setMaintenanceLogs((current) => ({ ...current, page: 1 }))
+                  }}
                 />
               </div>
               <div className="admin-filter-group">
@@ -8238,7 +8294,7 @@ function AdminBackupPage() {
                   value={maintenanceStatusFilter}
                   onChange={(event) => {
                     setMaintenanceStatusFilter(event.target.value)
-                    loadMaintenanceLogs(1, event.target.value, maintenanceSearch)
+                    setMaintenanceLogs((current) => ({ ...current, page: 1 }))
                   }}
                 >
                   <option value="all">ทุกสถานะ</option>
@@ -8254,19 +8310,19 @@ function AdminBackupPage() {
 
             {maintenanceLogsLoading ? (
               <p className="admin-req-empty">กำลังโหลดข้อมูล...</p>
-            ) : maintenanceLogs.items.length === 0 ? (
+            ) : pagedMaintenanceLogs.length === 0 ? (
               <p className="admin-req-empty">ไม่พบประวัติแจ้งซ่อม</p>
             ) : (
               <div className="admin-req-grid">
-                {maintenanceLogs.items.map((request) => (
+                {pagedMaintenanceLogs.map((request) => (
                   <AdminMaintenanceCard key={request.id} request={request} onOpen={setMaintenanceDetail} onPhotos={openMaintenancePhotos} />
                 ))}
               </div>
             )}
             <Pagination
-              page={maintenanceLogs.page}
+              page={currentMaintenanceLogsPage}
               totalPages={maintenanceLogsTotalPages}
-              onChange={(page) => loadMaintenanceLogs(page, maintenanceStatusFilter, maintenanceSearch)}
+              onChange={(page) => setMaintenanceLogs((current) => ({ ...current, page }))}
             />
           </div>
         )}
@@ -8288,7 +8344,10 @@ function AdminBackupPage() {
                   className="form-control admin-search-input"
                   placeholder="ค้นหาชื่อ, เลขห้อง, บัตร ปชช..."
                   value={moveoutSearch}
-                  onChange={(event) => setMoveoutSearch(event.target.value)}
+                  onChange={(event) => {
+                    setMoveoutSearch(event.target.value)
+                    setMoveoutLogs((current) => ({ ...current, page: 1 }))
+                  }}
                 />
               </div>
             </div>
@@ -8297,11 +8356,11 @@ function AdminBackupPage() {
 
             {moveoutLogsLoading ? (
               <p className="admin-req-empty">กำลังโหลดข้อมูล...</p>
-            ) : moveoutLogs.items.length === 0 ? (
+            ) : pagedMoveouts.length === 0 ? (
               <p className="admin-req-empty">ไม่พบรายชื่อผู้ย้ายออก</p>
             ) : (
               <div className="admin-req-grid">
-                {moveoutLogs.items.map((moveout) => (
+                {pagedMoveouts.map((moveout) => (
                   <AdminMoveoutCard
                     key={moveout.id}
                     moveout={moveout}
@@ -8313,9 +8372,9 @@ function AdminBackupPage() {
               </div>
             )}
             <Pagination
-              page={moveoutLogs.page}
+              page={currentMoveoutPage}
               totalPages={moveoutLogsTotalPages}
-              onChange={(page) => loadMoveoutLogs(page, moveoutSearch)}
+              onChange={(page) => setMoveoutLogs((current) => ({ ...current, page }))}
             />
           </div>
         )}
@@ -9944,10 +10003,16 @@ function AdminBackupPage() {
                 <span className="admin-room-form-icon"><RoomDetailIcon type="home" size={16} /></span>
                 <div>
                   <strong>ข้อมูลห้องพัก</strong>
-                  <small>{roomModal.mode === 'edit' ? 'เลขห้องแก้ไขไม่ได้หลังสร้างแล้ว' : 'เลขห้อง 3 หลัก เช่น 101'}</small>
+                  <small>
+                    {roomModal.mode === 'edit' && roomModal.room?.is_booked
+                      ? 'ห้องนี้มีผู้เช่าอยู่ เปลี่ยนเลขห้องไม่ได้'
+                      : roomModal.mode === 'edit'
+                        ? 'ห้องว่าง เปลี่ยนเลขห้องได้ (3 หลัก)'
+                        : 'เลขห้อง 3 หลัก เช่น 101'}
+                  </small>
                 </div>
               </header>
-              <div className="admin-room-form-grid is-2">
+              <div className="admin-room-form-grid">
                 <label className="admin-room-field">
                   <span>เลขห้อง</span>
                   <input
@@ -9958,18 +10023,11 @@ function AdminBackupPage() {
                     className="form-control"
                     value={roomForm.room_number}
                     onChange={handleRoomFormChange}
-                    disabled={roomModal.mode === 'edit'}
+                    disabled={roomModal.mode === 'edit' && Boolean(roomModal.room?.is_booked)}
                     maxLength={3}
                     placeholder="เช่น 101"
                     required
                   />
-                </label>
-                <label className="admin-room-field">
-                  <span>จำนวนเตียง</span>
-                  <div className="admin-room-input">
-                    <input type="number" min="0" max="99" name="bed" className="form-control" value={roomForm.bed} onChange={handleRoomFormChange} />
-                    <em>เตียง</em>
-                  </div>
                 </label>
               </div>
             </section>
@@ -10103,35 +10161,105 @@ function AdminBackupPage() {
 
       {roomModal && addingAmenity && (
         <Modal title="เพิ่มสิ่งอำนวยความสะดวก" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError('') }}>
-          {(requestClose) => (
-            <form className="admin-amenity-modal-form" onSubmit={(event) => { event.preventDefault(); addRoomAmenity(requestClose) }}>
-              <div className="admin-amenity-modal-content">
-                <label htmlFor="admin-new-amenity">ชื่อสิ่งอำนวยความสะดวก</label>
-                <input id="admin-new-amenity" type="text" className="form-control" maxLength={60} value={amenityDraft} onChange={(event) => { setAmenityDraft(event.target.value); setAmenityModalError('') }} placeholder="เช่น โต๊ะทำงาน" autoFocus />
-                <div className="admin-amenity-suggestions">
-                  <span>รายการแนะนำ · กดเพื่อเลือก</span>
-                  <div>
-                    {ROOM_AMENITY_SUGGESTIONS.filter((suggestion) => !roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === suggestion.name.toLocaleLowerCase())).map((suggestion) => (
-                      <button type="button" key={suggestion.name} className={amenityDraft === suggestion.name ? 'is-selected' : ''} onClick={() => { setAmenityDraft(suggestion.name); setAmenityIcon(suggestion.icon); setAmenityModalError('') }} aria-pressed={amenityDraft === suggestion.name}><CustomAmenityIcon name={suggestion.icon} size={15} />{suggestion.name}</button>
-                    ))}
+          {(requestClose) => {
+            const usedCount = roomForm.custom_amenities.length
+            const remaining = Math.max(0, 12 - usedCount)
+            const draftName = amenityDraft.trim()
+            const availableSuggestions = ROOM_AMENITY_SUGGESTIONS.filter(
+              (suggestion) => !roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === suggestion.name.toLocaleLowerCase()),
+            )
+            return (
+              <form className="admin-amenity-modal-form" onSubmit={(event) => { event.preventDefault(); addRoomAmenity(requestClose) }}>
+                <div className="admin-amenity-modal-content">
+                  <div className={`admin-amenity-preview${draftName ? '' : ' is-empty'}`} aria-live="polite">
+                    <span className="admin-amenity-preview-icon"><CustomAmenityIcon name={amenityIcon} size={26} /></span>
+                    <div className="admin-amenity-preview-text">
+                      <small>ตัวอย่างที่จะแสดงในห้อง</small>
+                      <strong>{draftName || 'ชื่อสิ่งอำนวยความสะดวก'}</strong>
+                    </div>
+                    <span className={`admin-amenity-quota${remaining <= 2 ? ' is-low' : ''}`}>
+                      <b>{usedCount}</b>/12
+                      <small>รายการ</small>
+                    </span>
                   </div>
+
+                  <section className="admin-amenity-section">
+                    <header>
+                      <span className="admin-amenity-step">1</span>
+                      <label htmlFor="admin-new-amenity">ชื่อสิ่งอำนวยความสะดวก <span className="text-danger">*</span></label>
+                      <small className={`admin-amenity-counter${amenityDraft.length >= 55 ? ' is-near' : ''}`}>{amenityDraft.length}/60</small>
+                    </header>
+                    <div className={`admin-amenity-name-input${amenityModalError ? ' is-invalid' : ''}`}>
+                      <i><CustomAmenityIcon name={amenityIcon} size={18} /></i>
+                      <input
+                        id="admin-new-amenity"
+                        type="text"
+                        maxLength={60}
+                        value={amenityDraft}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          const match = ROOM_AMENITY_SUGGESTIONS.find((suggestion) => suggestion.name === value.trim())
+                          setAmenityDraft(value)
+                          setAmenityIcon(match ? match.icon : 'sparkle')
+                          setAmenityModalError('')
+                        }}
+                        placeholder="เช่น โต๊ะทำงาน, ไมโครเวฟ"
+                        autoFocus
+                        autoComplete="off"
+                      />
+                      {amenityDraft && (
+                        <button type="button" onClick={() => { setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError('') }} aria-label="ล้างชื่อ">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                    {amenityModalError && (
+                      <p className="admin-amenity-modal-error" role="alert">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+                        {amenityModalError}
+                      </p>
+                    )}
+                  </section>
+
+                  <section className="admin-amenity-section">
+                    <header>
+                      <span className="admin-amenity-step">2</span>
+                      <span className="admin-amenity-section-title">รายการแนะนำ</span>
+                      <small>กดเพื่อใช้ชื่อและไอคอนนี้</small>
+                    </header>
+                    {availableSuggestions.length > 0 ? (
+                      <div className="admin-amenity-suggest-grid">
+                        {availableSuggestions.map((suggestion) => {
+                          const selected = draftName === suggestion.name
+                          return (
+                            <button
+                              type="button"
+                              key={suggestion.name}
+                              className={selected ? 'is-selected' : ''}
+                              onClick={() => { setAmenityDraft(suggestion.name); setAmenityIcon(suggestion.icon); setAmenityModalError('') }}
+                              aria-pressed={selected}
+                            >
+                              <span><CustomAmenityIcon name={suggestion.icon} size={17} /></span>
+                              {suggestion.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="admin-amenity-empty">เพิ่มรายการแนะนำครบทุกอย่างแล้ว พิมพ์ชื่อเองได้ที่ช่องด้านบน</p>
+                    )}
+                  </section>
                 </div>
-                <div className="admin-amenity-icon-picker">
-                  <span>เลือกไอคอน</span>
-                  <div>
-                    {ROOM_AMENITY_ICONS.map((option) => (
-                      <button type="button" key={option.key} className={amenityIcon === option.key ? 'is-selected' : ''} onClick={() => setAmenityIcon(option.key)} aria-label={option.label} aria-pressed={amenityIcon === option.key} title={option.label}><CustomAmenityIcon name={option.key} size={20} /></button>
-                    ))}
-                  </div>
+                <div className="admin-amenity-modal-actions">
+                  <span className="admin-amenity-remaining">
+                    {remaining > 0 ? `เพิ่มได้อีก ${remaining} รายการ` : 'ครบ 12 รายการแล้ว'}
+                  </span>
+                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
+                  <button type="submit" className="admin-action-btn is-primary" disabled={remaining === 0}>เพิ่มรายการ</button>
                 </div>
-                {amenityModalError && <p className="admin-amenity-modal-error" role="alert">{amenityModalError}</p>}
-              </div>
-              <div className="admin-amenity-modal-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
-                <button type="submit" className="admin-action-btn is-primary">บันทึก</button>
-              </div>
-            </form>
-          )}
+              </form>
+            )
+          }}
         </Modal>
       )}
 
@@ -10517,6 +10645,11 @@ function AdminBackupPage() {
               onOpenHistory={openCustomerProfileHistory}
               onEdit={() => openEditCustomer(profileCustomer)}
               onToggleSuspend={() => setCustomerSuspendConfirm(profileCustomer)}
+              onDepositSettled={(updated) => {
+                const merge = (current) => (current?.booking_id === updated.booking_id ? { ...current, ...updated } : current)
+                setCustomerProfile((prev) => (prev?.detail ? { ...prev, detail: { ...prev.detail, contract: merge(prev.detail.contract) } } : prev))
+                setCustomers((list) => list.map((item) => (item.id === customerProfile.id ? { ...item, contract: merge(item.contract) } : item)))
+              }}
             />
           </Modal>
         )

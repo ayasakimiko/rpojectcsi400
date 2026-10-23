@@ -70,3 +70,13 @@ export function formatDepositMonths(contract) {
   if (!(Number(contract?.deposit_amount) > 0)) return 'ไม่มีมัดจำ'
   return Number.isInteger(months) && months > 0 ? `${months} เดือน` : formatContractMoney(contract.deposit_amount)
 }
+
+export function completedContractSummaryTiles(summary) {
+  const value = (key) => (summary ? summary[key] : '-')
+  return [
+    { key: 'total', icon: 'total', tone: 'blue', label: 'สัญญาทั้งหมด', value: value('total'), hint: summary?.archived ? `สัญญาเก่า ${summary.archived} ฉบับ` : null },
+    { key: 'active', icon: 'vacant', tone: 'green', label: 'สัญญามีผล', value: value('active') },
+    { key: 'awaiting', icon: 'slip', tone: 'amber', label: 'รอชำระงวดแรก', value: value('awaitingPayment') },
+    { key: 'deposit', icon: 'due', tone: 'red', label: 'รอคืน/ริบมัดจำ', value: value('pendingDeposit'), alert: summary?.pendingDeposit > 0 },
+  ]
+}

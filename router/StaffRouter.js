@@ -219,7 +219,7 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
         contract.status,
         contract.moved_out_at || contract.next_contract_at || null,
         contract.effective_end_date || contract.rental_end_date || null,
-        contract.is_suspended ? "suspended" : contract.moved_out_at ? "moveout" : contract.next_contract_at ? "new_contract" : null,
+        contract.moved_out_at ? "moveout" : contract.is_suspended ? "suspended" : contract.next_contract_at ? "new_contract" : null,
         staffName || req.user.role,
       ],
     );
@@ -1480,7 +1480,10 @@ router.post("/requests/:id/approve", parseOptionalContractImages, async (req, re
       await connection.query(`UPDATE TenantRequest SET move_in_date = ? WHERE id = ?`, [moveInDate, requestId]);
 
       await closeCustomerTenancy(connection, tenantRequest.customer_id);
-      await connection.query(`UPDATE Customer SET room_number = NULL WHERE id = ?`, [tenantRequest.customer_id]);
+      await connection.query(
+        `UPDATE Customer SET room_number = NULL, is_suspended = TRUE, suspended_at = COALESCE(suspended_at, NOW()) WHERE id = ?`,
+        [tenantRequest.customer_id],
+      );
 
       await connection.query(
         `UPDATE Room

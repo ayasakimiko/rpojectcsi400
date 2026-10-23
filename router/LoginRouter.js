@@ -40,7 +40,7 @@ router.post("/login", async (req, res) => {
            FROM ${table} WHERE idcard = ?`,
           [normalizedUsername],
         );
-        if (!rows[0] || rows[0].is_suspended) continue;
+        if (!rows[0] || rows[0].is_suspended || (table === "Customer" && rows[0].room_number == null)) continue;
         candidates.push({ ...rows[0], role: table });
       }
     } else {

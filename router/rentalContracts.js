@@ -433,7 +433,7 @@ export async function loadCustomerContracts(pool, customerIds, { currentOnly = f
               ) AS contract_rank
        ${CONTRACT_JOINS}
        WHERE b.customer_id IN (?)
-         ${currentOnly ? "AND (c.is_suspended = TRUE OR b.created_at > COALESCE(c.history_reset_at, '1000-01-01'))" : ""}
+         ${currentOnly ? "AND (c.is_suspended = TRUE OR b.created_at >= COALESCE(c.history_reset_at, '1000-01-01'))" : ""}
      ) ranked
      WHERE contract_rank = 1`,
     [ids],
@@ -442,6 +442,18 @@ export async function loadCustomerContracts(pool, customerIds, { currentOnly = f
   const contracts = await attachContractImages(pool, rows, new Date());
   return new Map(contracts.map((contract) => [contract.customer_id, contract]));
 }
+
+export async function loadUnsettledDeposit(db, customerId) {
+  const contract = (await loadCustomerContracts(db, [customerId])).get(customerId);
+  return contract?.can_settle_deposit
+    ? { booking_id: contract.booking_id, room_number: contract.room_number, amount: Number(contract.deposit_remaining ?? contract.deposit_paid) || 0, action: contract.deposit_refund, contract }
+    : null;
+}
+
+export const UNSETTLED_DEPOSIT_MESSAGE = (deposit) =>
+  `ผู้เช่าคนนี้ยังมีเงินมัดจำ ฿${deposit.amount.toLocaleString("th-TH")} จากสัญญาห้อง ${deposit.room_number} ที่ยังไม่ได้บันทึก${
+    deposit.action === "forfeit" ? "การริบ" : "การคืน"
+  } กรุณาจัดการเงินมัดจำในเมนูสัญญาที่เสร็จสมบูรณ์ก่อนทำสัญญาใหม่`;
 
 export async function loadContractByBooking(pool, bookingId) {
   const [rows] = await pool.query(

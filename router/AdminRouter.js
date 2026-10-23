@@ -23,7 +23,7 @@ import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
-import { loadCustomerContracts, resetCustomerHistory } from "./rentalContracts.js";
+import { loadCustomerContracts, resetCustomerHistory, roomHeldForTransfer } from "./rentalContracts.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
 
 const router = Router();
@@ -835,6 +835,11 @@ router.put("/rooms/:room_number", async (req, res) => {
     }
 
     const pool = getPool();
+    if (hasField(body, "room_number") && Number(body.room_number) !== roomNumberValue) {
+      if (await roomHeldForTransfer(pool, roomNumberValue)) {
+        return res.status(409).json({ message: "ห้องนี้มีผู้เช่ารอย้ายเข้าอยู่ ยังเปลี่ยนเลขห้องไม่ได้" });
+      }
+    }
     const [result] = await pool.query(`UPDATE Room SET ${columns.join(", ")} WHERE room_number = ? AND is_booked = FALSE`, [
       ...values,
       roomNumberValue,
@@ -1320,7 +1325,7 @@ router.get("/logs/requests", async (req, res) => {
        ${whereClause}
        ORDER BY tr.created_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, LOG_PAGE_SIZE, offset],
+      [...params, req.query.all === "1" ? 5000 : LOG_PAGE_SIZE, req.query.all === "1" ? 0 : offset],
     );
 
     return res.json({ requests, total, page, pageSize: LOG_PAGE_SIZE });
@@ -1367,7 +1372,7 @@ router.get("/logs/maintenance", async (req, res) => {
        ${whereClause}
        ORDER BY mr.created_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, LOG_PAGE_SIZE, offset],
+      [...params, req.query.all === "1" ? 5000 : LOG_PAGE_SIZE, req.query.all === "1" ? 0 : offset],
     );
 
     return res.json({ requests: await attachMaintenancePhotos(pool, requests), total, page, pageSize: LOG_PAGE_SIZE });
@@ -1401,6 +1406,7 @@ router.get("/logs/moveouts", async (req, res) => {
     );
     const total = countRows[0].total;
 
+    const loadAll = req.query.all === "1";
     const [moveouts] = await pool.query(
       `SELECT tr.id, tr.note, tr.created_at, tr.completed_at, tr.completed_by_name, tr.move_in_date,
               tr.room_number, c.idcard, c.first_name, c.last_name, c.phone
@@ -1409,7 +1415,7 @@ router.get("/logs/moveouts", async (req, res) => {
        ${whereClause}
        ORDER BY tr.completed_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, LOG_PAGE_SIZE, offset],
+      [...params, loadAll ? 5000 : LOG_PAGE_SIZE, loadAll ? 0 : offset],
     );
 
     return res.json({ moveouts, total, page, pageSize: LOG_PAGE_SIZE });

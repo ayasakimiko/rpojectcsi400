@@ -394,13 +394,14 @@ function computeRentDue(room, paymentsForBooking) {
   const now = new Date();
   const priceCents = Math.round(Number(room.price) * 100);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
-  if (now < start || now > end) return null;
+  if (now > end) return null;
+  const billingNow = now < start ? start : now;
 
   const rentPayments = paymentsForBooking.filter(isRentPayment);
   const periods = [];
   for (let offset = 0; ; offset += 1) {
     const periodStart = billingPeriodAt(start, offset);
-    if (periodStart > now || periodStart >= end) break;
+    if (periodStart > billingNow || periodStart >= end) break;
     periods.push({ periodStart, periodEnd: billingPeriodAt(start, offset + 1), index: offset });
   }
   if (periods.length === 0) return null;
@@ -508,9 +509,9 @@ export function computeCurrentDue(room, paymentsForBooking, depositAmount, depos
 }
 
 export function outstandingFromDue(currentDue) {
-  const items = (currentDue?.items ?? []).filter(
-    (item) => item.status !== "pending" && !(item.type === "rent" && item.status === "due"),
-  );
+  const unpaid = (currentDue?.items ?? []).filter((item) => item.status !== "pending");
+  const blocking = unpaid.some((item) => !(item.type === "rent" && item.status === "due"));
+  const items = blocking ? unpaid : [];
   const amount = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0) / 100;
   return { amount, items: items.map(({ type, label, amount: itemAmount, status }) => ({ type, label, amount: itemAmount, status })) };
 }
@@ -1508,6 +1509,14 @@ router.post("/resident-visit-requests", async (req, res) => {
     const pool = getPool();
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     if (!customers[0]?.room_number) return res.status(400).json({ message: "ไม่พบห้องพักที่ผูกกับบัญชีนี้" });
+    const outstanding = await loadCustomerOutstanding(pool, req.user.id);
+    if (outstanding.amount > 0) {
+      return res.status(409).json({
+        code: "VISIT_OUTSTANDING",
+        message: `มียอดค้างชำระ ฿${outstanding.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} กรุณาชำระให้ครบก่อนลงทะเบียนรถหรือผู้มาติดต่อ`,
+        outstanding,
+      });
+    }
     const [[{ openCount }]] = await pool.query(
       "SELECT COUNT(*) AS openCount FROM ResidentVisitRequest WHERE customer_id = ? AND status = 'pending'",
       [req.user.id],

@@ -941,12 +941,6 @@ function MoveRoomPreview({ currentRoom, targetRoom }) {
           <FieldIcon name="water" size={13} />
           น้ำ ฿{formatCurrency(targetRoom.water_unit_price)}/หน่วย · เหมา ฿{formatCurrency(targetRoom.water_price)}/เดือน
         </span>
-        {Number(targetRoom.bed) > 0 && (
-          <span>
-            <AmenityIcon name="bed" />
-            เตียง {targetRoom.bed}
-          </span>
-        )}
         {amenities.map((amenity) => (
           <span key={amenity.key} className={`is-${amenity.color}`}>
             <AmenityIcon name={amenity.key} />
@@ -1011,6 +1005,17 @@ const MOVE_ROOM_STATUS_POPUP_CONTENT = {
   },
   cancelled: { title: 'คำขอย้ายห้องถูกยกเลิก', message: 'คำขอเดิมถูกยกเลิกเนื่องจากสถานะห้องหรือบัญชีผู้เช่าเปลี่ยนแปลง', icon: 'danger' },
 }
+
+const MOVE_ROOM_TAKEN_CANCELLER = 'ระบบ (ห้องปลายทางมีผู้เช่าแล้ว)'
+
+const isMoveRoomTakenCancellation = (request) =>
+  request?.type === 'move_room' && request.status === 'cancelled' && request.completed_by_name === MOVE_ROOM_TAKEN_CANCELLER
+
+const getMoveRoomTakenPopupContent = (request) => ({
+  title: 'ห้องที่จะย้ายไปมีผู้เช่าแล้ว',
+  message: `ห้อง ${request.target_room_number} มีผู้เช่ารายใหม่ลงทะเบียนเข้าพักแล้ว คำขอย้ายห้องและยอดส่วนต่างที่รอชำระถูกยกเลิกอัตโนมัติ หากยังต้องการย้าย กรุณาส่งคำขอใหม่โดยเลือกห้องอื่น`,
+  icon: 'danger',
+})
 
 const RENEW_RESUBMIT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000
 
@@ -1298,18 +1303,17 @@ function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, depo
         <li>ไม่มีค่าเช่าของเดือนถัดไปหลังวันที่ย้ายออกได้รับอนุมัติ</li>
         <li>เจ้าหน้าที่จะนัดตรวจสภาพห้องก่อนอนุมัติ ค่าเสียหายที่พบอาจหักจากเงินมัดจำ</li>
         <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ยังไม่ได้รับจะถูกยกเลิกเมื่ออนุมัติ รับพัสดุให้เรียบร้อยก่อนย้าย</li>
-        <li>หลังย้ายออก ยังเข้าสู่ระบบเพื่อดูประวัติการเช่า ใบเสร็จ และสัญญาเก่าได้ แต่ทำรายการใหม่ไม่ได้</li>
+        <li>เมื่ออนุมัติย้ายออก บัญชีนี้จะถูกระงับและเข้าสู่ระบบไม่ได้อีก บันทึกใบเสร็จหรือสัญญาที่ต้องใช้ไว้ก่อน</li>
       </ul>
     </div>
   )
 }
 
-function OutstandingNotice({ amount, items, action }) {
+function OutstandingNotice({ amount, action }) {
   return (
     <>
       <span className="dashboard-request-desc-alert">
         <strong>ค้างชำระ ฿{formatCurrency(amount)}</strong>
-        <span>{items.map((item) => item.label).join(', ')}</span>
       </span>
       <span className="dashboard-request-desc-next">ชำระให้ครบก่อน จึงจะ{action}ได้</span>
     </>
@@ -1703,6 +1707,9 @@ const STATUS_HERO_LABEL = {
 }
 
 function getStatusPopupContent(popup) {
+  if (popup.kind === 'move_room' && isMoveRoomTakenCancellation({ ...popup.request, type: 'move_room' })) {
+    return getMoveRoomTakenPopupContent(popup.request)
+  }
   const content = STATUS_POPUP_CONTENT_BY_KIND[popup.kind]?.[popup.status]
   if (content || !popup.previousOf) return content
   return {
@@ -2646,7 +2653,7 @@ function formatVisitRange(start, end) {
   return `${new Date(start).toLocaleString('th-TH', options)} – ${end ? new Date(end).toLocaleString('th-TH', options) : 'ไม่จำกัดเวลา'}`
 }
 
-function ResidentVisitRequestRow() {
+function ResidentVisitRequestRow({ outstanding = 0 }) {
   const [view, setView] = useState(null)
   const [items, setItems] = useState([])
   const [busy, setBusy] = useState(false)
@@ -2788,7 +2795,9 @@ function ResidentVisitRequestRow() {
       <div className="dashboard-request-info">
         <p className="dashboard-request-title">ลงทะเบียนรถและผู้มาติดต่อ</p>
         <p className="dashboard-request-desc">
-          {pendingCount > 0 ? (
+          {outstanding > 0 ? (
+            <OutstandingNotice amount={outstanding} action="ลงทะเบียนรถและผู้มาติดต่อ" />
+          ) : pendingCount > 0 ? (
             <>
               <span className="dashboard-request-desc-status">
                 รออนุมัติ <strong>{pendingCount} รายการ</strong>
@@ -2805,8 +2814,12 @@ function ResidentVisitRequestRow() {
         type="button"
         className="dashboard-action-btn is-primary"
         onClick={openModal}
-        disabled={pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT}
-        title={pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT ? `ส่งได้สูงสุด ${CUSTOMER_OPEN_REPORT_LIMIT} รายการที่รออนุมัติ` : undefined}
+        disabled={outstanding > 0 || pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT}
+        title={
+          outstanding > 0
+            ? 'ชำระยอดค้างให้ครบก่อนลงทะเบียน'
+            : pendingCount >= CUSTOMER_OPEN_REPORT_LIMIT ? `ส่งได้สูงสุด ${CUSTOMER_OPEN_REPORT_LIMIT} รายการที่รออนุมัติ` : undefined
+        }
       >
         ลงทะเบียน
       </button>
@@ -4662,6 +4675,17 @@ function CustomerDashbord() {
     return true
   }
 
+  const noticeMoveRoomTaken = (dashboardData) => {
+    const request = dashboardData?.tenantRequests?.find((item) => item.type === 'move_room')
+    if (!isMoveRoomTakenCancellation(request)) return false
+    const seenKey = `move_room_taken_notice_seen_${request.id}`
+    if (localStorage.getItem(seenKey)) return false
+    localStorage.setItem(seenKey, '1')
+    setMoveRoomReminder(null)
+    setStatusPopup({ kind: 'move_room', status: request.status, request })
+    return true
+  }
+
   const maybeShowStatusPopups = (dashboardData) => {
     const tryShowStatusPopup = (kind, status, id, request, open = () => setStatusPopup({ kind, status, request })) => {
       if (!STATUS_POPUP_CONTENT_BY_KIND[kind]?.[status]) return false
@@ -4713,7 +4737,7 @@ function CustomerDashbord() {
       .then(({ data }) => {
         setData(data)
         setError('')
-        remindMoveRoomContact(data, true)
+        if (!noticeMoveRoomTaken(data)) remindMoveRoomContact(data, true)
       })
       .catch((err) => {
         if (err.response?.status === 401) {
@@ -4786,7 +4810,7 @@ function CustomerDashbord() {
           setData(data)
           const justLoggedIn = sessionStorage.getItem('justLoggedIn') === '1'
           sessionStorage.removeItem('justLoggedIn')
-          if (!remindMoveRoomContact(data, false) && justLoggedIn) maybeShowStatusPopups(data)
+          if (!noticeMoveRoomTaken(data) && !remindMoveRoomContact(data, false) && justLoggedIn) maybeShowStatusPopups(data)
         }
       })
       .catch((err) => {
@@ -6833,7 +6857,7 @@ function CustomerDashbord() {
                       requestClose()
                     }}
                   >
-                    ดูรายละเอียดคำขอ
+                    ดูรายละเอียด
                   </button>
                   <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
                     รับทราบ
@@ -7592,10 +7616,6 @@ function CustomerDashbord() {
                         {parseRoomAmenities(room.custom_amenities).map((amenity) => (
                           <span key={amenity.name} className="dashboard-amenity is-teal"><CustomAmenityIcon name={amenity.icon} size={16} />{amenity.name}</span>
                         ))}
-                        <span className="dashboard-amenity is-indigo">
-                          <AmenityIcon name="bed" />
-                          เตียง {room.bed ?? 0} เตียง
-                        </span>
                       </div>
 
                       <h3 className="dashboard-section-title">ค่าน้ำ - ค่าไฟ</h3>
@@ -7879,7 +7899,7 @@ function CustomerDashbord() {
                             <p className="dashboard-request-title">ต่อสัญญา</p>
                             <p className={`dashboard-request-desc${canResubmitRenew && renewOutstanding > 0 ? ' is-warning' : ''}`}>
                               {(canResubmitRenew && renewOutstanding > 0
-                                && <OutstandingNotice amount={renewOutstanding} items={data.outstanding.items} action="ต่อสัญญา" />)
+                                && <OutstandingNotice amount={renewOutstanding} action="ต่อสัญญา" />)
                                 || (!canResubmitRenew && renewRequest?.status !== 'pending' && RENEW_STATUS_POPUP_CONTENT[renewRequest?.status]?.message)
                                 || (renewRequest?.status === 'pending'
                                   ? `ขอต่อ ${RENEW_DURATION_LABEL[renewRequest.renew_duration_months] || `${renewRequest.renew_duration_months} เดือน`} · จ่ายรายเดือน`
@@ -7923,7 +7943,7 @@ function CustomerDashbord() {
                           <p className={`dashboard-request-desc${!moveoutActive && moveOutOutstanding > 0 ? ' is-warning' : ''}`}>
                             {(moveoutActive && MOVEOUT_STATUS_POPUP_CONTENT[moveoutRequest?.status]?.message)
                               || (room?.is_booked && moveOutOutstanding > 0
-                                && <OutstandingNotice amount={moveOutOutstanding} items={moveOutUnpaidItems} action="แจ้งย้ายออก" />)
+                                && <OutstandingNotice amount={moveOutOutstanding} action="แจ้งย้ายออก" />)
                               || 'แจ้งความประสงค์ย้ายออกก่อนสิ้นสุดสัญญา'}
                           </p>
                         </div>
@@ -7972,7 +7992,7 @@ function CustomerDashbord() {
                               : moveRoomTooEarly
                                 ? `${moveRoomWaitMessage} ส่งคำขอได้ตั้งแต่ ${formatDate(moveRoomAllowedAt)}`
                                 : room?.is_booked && moveOutOutstanding > 0
-                                  ? <OutstandingNotice amount={moveOutOutstanding} items={moveOutUnpaidItems} action="ขอย้ายห้อง" />
+                                  ? <OutstandingNotice amount={moveOutOutstanding} action="ขอย้ายห้อง" />
                                   : availableRooms.length > 0
                                     ? MOVE_ROOM_COOLDOWN_ENABLED
                                       ? `ส่งคำขอย้ายไปยังห้องพักที่ว่าง (ต้องพักอาศัยครบ ${MOVE_ROOM_COOLDOWN_DAYS} วันขึ้นไป)`
@@ -8021,7 +8041,7 @@ function CustomerDashbord() {
                           </button>
                         )}
                       </div>
-                      {room?.is_booked && <ResidentVisitRequestRow />}
+                      {room?.is_booked && <ResidentVisitRequestRow outstanding={renewOutstanding} />}
                       <SafetyIncidentReportRow />
                     </div>
 

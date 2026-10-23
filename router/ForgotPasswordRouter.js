@@ -25,7 +25,7 @@ function maskPhone(phone) {
 async function findCustomer(idcard) {
   const [rows] = await getPool().query(
     `SELECT id, idcard, phone, first_name, last_name, room_number FROM Customer
-     WHERE idcard = ? AND is_suspended = FALSE LIMIT 1`,
+     WHERE idcard = ? AND is_suspended = FALSE AND room_number IS NOT NULL LIMIT 1`,
     [idcard],
   );
   return rows[0] || null;
@@ -120,7 +120,7 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(401).json({ message: "ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง กรุณาทำรายการใหม่" });
     }
     const [result] = await getPool().query(
-      `UPDATE Customer SET password = ? WHERE id = ? AND is_suspended = FALSE`,
+      `UPDATE Customer SET password = ? WHERE id = ? AND is_suspended = FALSE AND room_number IS NOT NULL`,
       [await bcrypt.hash(newPassword, 10), payload.id],
     );
     if (result.affectedRows === 0) {

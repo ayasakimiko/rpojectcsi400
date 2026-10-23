@@ -8,9 +8,12 @@ import {
   contractImageUrl,
   cancelTransfersIntoBookedRooms,
   expireRoomTransferCharges,
+  loadCustomerContracts,
+  loadUnsettledDeposit,
   parseContractImages,
   removeContractFiles,
   resetCustomerHistory,
+  UNSETTLED_DEPOSIT_MESSAGE,
 } from "./rentalContracts.js";
 
 const router = Router();
@@ -27,18 +30,44 @@ export function addContractMonths(value, months) {
   return `${target.getUTCFullYear()}-${pad(target.getUTCMonth() + 1)}-${pad(Math.min(Number(day), lastDay))}${time}`;
 }
 
+router.get("/register/suggest", authenticate, requireStaffRole, createRequireActiveAccount(getPool), async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT id, idcard, first_name, last_name, phone FROM Customer
+       WHERE is_suspended = FALSE AND room_number IS NULL
+       ORDER BY idcard ASC LIMIT 2000`,
+    );
+    const contracts = rows.length ? await loadCustomerContracts(pool, rows.map((row) => row.id)) : new Map();
+    const customers = rows
+      .filter((row) => !contracts.get(row.id)?.can_settle_deposit)
+      .map(({ idcard: rowIdcard, first_name: firstName, last_name: lastName, phone }) => ({
+        idcard: rowIdcard,
+        first_name: firstName ?? "",
+        last_name: lastName ?? "",
+        phone: phone ?? "",
+      }));
+    return res.json({ customers });
+  } catch (error) {
+    console.error("Register suggest error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.get("/register/lookup/:idcard", authenticate, requireStaffRole, createRequireActiveAccount(getPool), async (req, res) => {
   const idcard = String(req.params.idcard ?? "").trim();
   if (!/^\d{13}$/.test(idcard)) {
     return res.status(400).json({ message: "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก" });
   }
   try {
-    const [rows] = await getPool().query(
-      `SELECT first_name, last_name, phone, age, room_number FROM Customer WHERE idcard = ? AND is_suspended = FALSE LIMIT 1`,
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT id, first_name, last_name, phone, age, room_number FROM Customer WHERE idcard = ? LIMIT 1`,
       [idcard],
     );
     const customer = rows[0];
     if (!customer) return res.json({ found: false });
+    const unsettledDeposit = customer.room_number == null ? await loadUnsettledDeposit(pool, customer.id) : null;
     return res.json({
       found: true,
       customer: {
@@ -48,6 +77,8 @@ router.get("/register/lookup/:idcard", authenticate, requireStaffRole, createReq
         age: customer.age ?? "",
         room_number: customer.room_number,
       },
+      unsettled_deposit_contract: unsettledDeposit?.contract ?? null,
+      unsettled_deposit_message: unsettledDeposit ? UNSETTLED_DEPOSIT_MESSAGE(unsettledDeposit) : null,
     });
   } catch (error) {
     console.error("Register lookup error:", error);
@@ -118,6 +149,12 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       await connection.rollback();
       await removeContractFiles(files);
       return res.status(409).json({ message: `เลขบัตรประชาชนนี้มีสัญญาเช่าห้อง ${returningCustomer.room_number} อยู่แล้ว` });
+    }
+    const unsettledDeposit = returningCustomer ? await loadUnsettledDeposit(connection, returningCustomer.id) : null;
+    if (unsettledDeposit) {
+      await connection.rollback();
+      await removeContractFiles(files);
+      return res.status(409).json({ code: "DEPOSIT_UNSETTLED", message: UNSETTLED_DEPOSIT_MESSAGE(unsettledDeposit) });
     }
 
     const [roomRows] = await connection.query(

@@ -6,7 +6,7 @@ import './css/Login.css'
 import './css/RegisterPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
-import { ContractImagePicker } from '../components/RentalContract.jsx'
+import { ContractImagePicker, DepositSettlementForm } from '../components/RentalContract.jsx'
 import {
   addContractMonths,
   CONTRACT_DURATION_OPTIONS,
@@ -112,6 +112,13 @@ function RegisterMain() {
   const [contractImages, setContractImages] = useState([])
   const [contractImageError, setContractImageError] = useState('')
   const [idcardLookup, setIdcardLookup] = useState(null)
+  const [idcardCandidates, setIdcardCandidates] = useState([])
+  const [idcardSuggestOpen, setIdcardSuggestOpen] = useState(false)
+  const idcardSuggestions =
+    registerForm.idcard.length >= 1 && registerForm.idcard.length < 13
+      ? idcardCandidates.filter((customer) => customer.idcard.startsWith(registerForm.idcard)).slice(0, 8)
+      : []
+  const showIdcardSuggestions = idcardSuggestOpen && idcardSuggestions.length > 0
   const selectedRoom = availableRooms.find((room) => String(room.room_number) === String(registerForm.room_number))
   const selectedRoomPrice = selectedRoom ? Number(selectedRoom.price) : null
   const contractEndDate =
@@ -168,7 +175,29 @@ function RegisterMain() {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 13)
     setRegisterForm((prev) => ({ ...prev, idcard: digitsOnly }))
     setIdcardLookup(null)
+    setIdcardSuggestOpen(true)
   }
+
+  const pickIdcardSuggestion = (customer) => {
+    setRegisterForm((prev) => ({ ...prev, idcard: customer.idcard }))
+    setIdcardLookup(null)
+    setIdcardSuggestOpen(false)
+  }
+
+  useEffect(() => {
+    let isActive = true
+    axios
+      .get('/api/auth/register/suggest', {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      })
+      .then(({ data }) => {
+        if (isActive) setIdcardCandidates(data.customers || [])
+      })
+      .catch(() => {})
+    return () => {
+      isActive = false
+    }
+  }, [])
 
   useEffect(() => {
     const idcard = registerForm.idcard
@@ -192,7 +221,12 @@ function RegisterMain() {
           phone: phone || prev.phone,
           age: age !== '' && age != null ? String(age) : prev.age,
         }))
-        setIdcardLookup({ found: true, room_number })
+        setIdcardLookup({
+          found: true,
+          room_number,
+          depositMessage: data.unsettled_deposit_message || null,
+          depositContract: data.unsettled_deposit_contract || null,
+        })
       })
       .catch(() => {})
     return () => {
@@ -250,6 +284,11 @@ function RegisterMain() {
       !confirmPassword
     ) {
       setError(contract_duration_months ? 'กรุณากรอกข้อมูลให้ครบทุกช่อง' : 'กรุณาเลือกระยะเวลาสัญญาเช่า')
+      return
+    }
+
+    if (idcardLookup?.depositMessage) {
+      setError(idcardLookup.depositMessage)
       return
     }
 
@@ -316,10 +355,6 @@ function RegisterMain() {
           <div className="col-12 col-lg-10 col-xl-9">
             <div className="auth-card register-card">
               <div className="register-head">
-                <button type="button" className="register-back" onClick={() => navigate(-1)} disabled={loading}>
-                  <RegisterIcon type="back" size={16} />
-                  <span>กลับ</span>
-                </button>
                 <div className="register-head-main">
                   <span className="register-head-icon">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -373,24 +408,65 @@ function RegisterMain() {
                     <label className="form-label" htmlFor="register-idcard">
                       เลขบัตรประชาชน <Required />
                     </label>
-                    <input
-                      id="register-idcard"
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={13}
-                      name="idcard"
-                      className="form-control"
-                      placeholder="เลขบัตรประชาชน 13 หลัก"
-                      value={registerForm.idcard}
-                      onChange={handleIdcardChange}
-                      autoComplete="username"
-                    />
-                    {idcardLookup?.found ? (
-                      <div className={`form-text ${idcardLookup.room_number != null ? 'text-danger' : 'text-success'}`}>
-                        {idcardLookup.room_number != null
-                          ? `ผู้เช่าเดิม · มีสัญญาเช่าห้อง ${idcardLookup.room_number} อยู่แล้ว`
-                          : 'ผู้เช่าเดิม · ดึงชื่อ นามสกุล เบอร์โทร และอายุให้แล้ว'}
-                      </div>
+                    <div className="register-suggest">
+                      <input
+                        id="register-idcard"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={13}
+                        name="idcard"
+                        className="form-control"
+                        placeholder="เลขบัตรประชาชน 13 หลัก"
+                        value={registerForm.idcard}
+                        onChange={handleIdcardChange}
+                        onFocus={() => setIdcardSuggestOpen(true)}
+                        onBlur={() => setIdcardSuggestOpen(false)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') setIdcardSuggestOpen(false)
+                        }}
+                        autoComplete="off"
+                        role="combobox"
+                        aria-expanded={showIdcardSuggestions}
+                        aria-controls="register-idcard-suggest"
+                      />
+                      {showIdcardSuggestions && (
+                        <ul id="register-idcard-suggest" className="register-suggest-list" role="listbox">
+                          {idcardSuggestions.map((customer) => (
+                            <li key={customer.idcard} role="option" aria-selected="false">
+                              <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => pickIdcardSuggestion(customer)}
+                              >
+                                <strong>
+                                  <mark>{customer.idcard.slice(0, registerForm.idcard.length)}</mark>
+                                  {customer.idcard.slice(registerForm.idcard.length)}
+                                </strong>
+                                <small>
+                                  {[customer.first_name, customer.last_name].filter(Boolean).join(' ') || '-'}
+                                  {customer.phone ? ` · ${customer.phone}` : ''}
+                                </small>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {idcardLookup?.depositMessage ? (
+                      <p className="register-field-hint is-danger" role="alert">
+                        <RegisterIcon type="alert" size={14} />
+                        <span><b>ผู้เช่าเดิม</b> · ต้องจัดการเงินมัดจำของสัญญาเก่าก่อนลงทะเบียน</span>
+                      </p>
+                    ) : idcardLookup?.found ? (
+                      <p className={`register-field-hint ${idcardLookup.room_number != null ? 'is-danger' : 'is-success'}`}>
+                        <RegisterIcon type={idcardLookup.room_number != null ? 'alert' : 'check'} size={14} />
+                        <span>
+                          <b>ผู้เช่าเดิม</b> ·{' '}
+                          {idcardLookup.room_number != null
+                            ? `มีสัญญาเช่าห้อง ${idcardLookup.room_number} อยู่แล้ว`
+                            : 'ดึงชื่อ นามสกุล เบอร์โทร และอายุให้แล้ว'}
+                        </span>
+                      </p>
                     ) : (
                       <div className="form-text">ใช้เป็นชื่อผู้ใช้สำหรับเข้าสู่ระบบ</div>
                     )}
@@ -429,6 +505,25 @@ function RegisterMain() {
                       onChange={handleAgeChange}
                     />
                   </div>
+                  {idcardLookup?.depositContract && (
+                    <div className="col-12 register-deposit-settle">
+                      <DepositSettlementForm
+                        contract={idcardLookup.depositContract}
+                        onSaved={() => {
+                          setIdcardLookup((prev) => ({ ...prev, depositMessage: null, depositContract: null, depositSettled: true }))
+                          setError('')
+                        }}
+                      />
+                    </div>
+                  )}
+                  {idcardLookup?.depositSettled && (
+                    <div className="col-12">
+                      <p className="register-field-hint is-success">
+                        <RegisterIcon type="check" size={14} />
+                        <span>บันทึกการจัดการเงินมัดจำของสัญญาเก่าแล้ว ลงทะเบียนสัญญาใหม่ต่อได้เลย</span>
+                      </p>
+                    </div>
+                  )}
                 </RegisterSection>
 
                 <RegisterSection step={2} icon="home" title="ห้องพักและสัญญาเช่า" hint="ราคาห้องดึงจากข้อมูลห้องจริง วันสิ้นสุดคำนวณให้อัตโนมัติ">
@@ -458,8 +553,12 @@ function RegisterMain() {
                       <div className="form-text text-danger">ขณะนี้ไม่มีห้องว่าง</div>
                     )}
                     {selectedRoom?.held_for_transfer && (
-                      <div className="form-text text-danger">
-                        ห้องนี้มีผู้เช่าเดิมรอชำระส่วนต่างเพื่อย้ายเข้า ถ้าลงทะเบียนห้องนี้ คำขอย้ายห้องของผู้เช่าคนนั้นจะถูกยกเลิกทันที
+                      <div className="register-room-notice" role="note">
+                        <span className="register-room-notice-icon"><RegisterIcon type="alert" size={16} /></span>
+                        <div>
+                          <strong>มีผู้เช่ารอย้ายเข้าห้องนี้</strong>
+                          <span>ผู้เช่าเดิมกำลังรอชำระส่วนต่าง หากลงทะเบียนห้องนี้ คำขอย้ายห้องของผู้เช่าคนนั้นจะถูกยกเลิกทันที</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -474,8 +573,7 @@ function RegisterMain() {
                       name="deposit_months"
                       className="form-control"
                       value={`${DEPOSIT_MONTHS} เดือน${selectedRoomPrice !== null ? ` · ${formatContractMoney(selectedRoomPrice * DEPOSIT_MONTHS)}` : ''}`}
-                      readOnly
-                      required
+                      disabled
                     />
                     <div className="form-text">
                       {selectedRoom
@@ -626,7 +724,7 @@ function RegisterMain() {
                     <button type="button" className="auth-secondary-btn register-cancel" disabled={loading} onClick={() => navigate(-1)}>
                       ยกเลิก
                     </button>
-                    <button type="submit" className="auth-submit-btn register-submit" disabled={loading}>
+                    <button type="submit" className="auth-submit-btn register-submit" disabled={loading || Boolean(idcardLookup?.depositMessage)}>
                       {loading ? 'กำลังลงทะเบียน...' : 'ลงทะเบียนลูกค้า'}
                     </button>
                   </div>

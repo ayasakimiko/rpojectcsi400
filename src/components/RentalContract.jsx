@@ -238,7 +238,7 @@ export function ContractFirstMonth({ contract }) {
   )
 }
 
-export function ContractDetail({ contract, showPerson = false }) {
+export function ContractDetail({ contract, showPerson = false, onDepositSettled }) {
   const [now] = useState(() => Date.now())
   if (!contract) {
     return (
@@ -260,7 +260,11 @@ export function ContractDetail({ contract, showPerson = false }) {
         <ContractStatusBadge status={contract.status} />
       </div>
       {!contract.is_archived && <ContractFirstPaymentNote contract={contract} />}
-      <DepositRefundNote contract={contract} />
+      {onDepositSettled && contract.can_settle_deposit ? (
+        <DepositSettlementForm contract={contract} onSaved={onDepositSettled} />
+      ) : (
+        <DepositRefundNote contract={contract} />
+      )}
       {!contract.is_archived && (
         <ContractMonthTrack
           start={contract.rental_start_date}
@@ -298,7 +302,11 @@ export function ContractCell({ contract }) {
     ? Math.max(1, Math.round((end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()))
     : null
   const hasDeposit = Number(contract.deposit_amount) > 0
-  const depositState = contract.deposit_refund === 'forfeit'
+  const depositState = contract.deposit_settlement
+    ? contract.deposit_settlement === 'refunded'
+      ? { label: 'คืนแล้ว', tone: 'paid' }
+      : { label: 'ริบแล้ว', tone: 'muted' }
+    : contract.deposit_refund === 'forfeit'
     ? { label: 'ริบ', tone: 'due' }
     : contract.deposit_refund === 'refund'
       ? { label: 'ต้องคืน', tone: 'pending' }
@@ -785,7 +793,7 @@ const COMPLETED_CONTRACT_SORTERS = {
   room: (a, b) => String(a.room_number || '').localeCompare(String(b.room_number || ''), 'th', { numeric: true }),
 }
 
-export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSize = 12 }) {
+export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSize = 12, onSummaryChange }) {
   const [contracts, setContracts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -866,6 +874,16 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
   )
   const archivedCount = contracts.filter((contract) => contract.is_archived).length
   const pendingDepositCount = contracts.filter((contract) => contract.can_settle_deposit).length
+  useEffect(() => {
+    if (!onSummaryChange || loading) return
+    onSummaryChange({
+      total: contracts.length,
+      active: (statusCounts.active || 0) + (statusCounts.transferred || 0),
+      awaitingPayment: (statusCounts.awaiting_payment || 0) + (statusCounts.payment_review || 0),
+      pendingDeposit: pendingDepositCount,
+      archived: archivedCount,
+    })
+  }, [onSummaryChange, loading, contracts.length, statusCounts, pendingDepositCount, archivedCount])
   const filtersActive = Boolean(keyword || dates.from || dates.to || status !== 'all' || scope !== 'all' || sort !== 'newest')
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -908,6 +926,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
         ]}
         active={status}
         onSegment={resetPage(setStatus)}
+        segmentsBelow
         search={search}
         onSearch={resetPage(setSearch)}
         searchPlaceholder="ค้นหาชื่อผู้เช่า เบอร์โทร หรือเลขห้อง"
@@ -1077,21 +1096,32 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [invalidField, setInvalidField] = useState(null)
+  const deductionRef = useRef(null)
+  const noteRef = useRef(null)
   const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
   const deductionValue = Number(deduction) || 0
   const refundAmount = Math.max(0, paid - deductionValue)
   const noteRequired = action === 'forfeit' || deductionValue > 0
 
+  const failField = (field, ref, message) => {
+    setError(message)
+    setInvalidField(field)
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    ref.current?.focus({ preventScroll: true })
+  }
+
   const submit = async (event) => {
     event.preventDefault()
     if (action === 'refund' && (deductionValue < 0 || deductionValue > paid)) {
-      setError('จำนวนเงินที่หักต้องอยู่ระหว่าง 0 ถึงเงินมัดจำที่ชำระไว้')
+      failField('deduction', deductionRef, 'จำนวนเงินที่หักต้องอยู่ระหว่าง 0 ถึงเงินมัดจำที่ชำระไว้')
       return
     }
     if (noteRequired && !note.trim()) {
-      setError(action === 'forfeit' ? 'กรุณาระบุเหตุผลที่ริบเงินมัดจำ' : 'กรุณาระบุรายการค่าเสียหายที่หัก')
+      failField('note', noteRef, action === 'forfeit' ? 'กรุณาระบุเหตุผลที่ริบเงินมัดจำ' : 'กรุณาระบุรายการค่าเสียหายที่หัก')
       return
     }
+    setInvalidField(null)
     setSaving(true)
     setError('')
     try {
@@ -1160,9 +1190,10 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
             </span>
           </div>
           {action === 'refund' && (
-            <label className="deposit-settle-field">
+            <label className={`deposit-settle-field${invalidField === 'deduction' ? ' is-invalid' : ''}`}>
               <span>หักค่าเสียหาย (บาท)</span>
               <input
+                ref={deductionRef}
                 type="number"
                 min="0"
                 max={paid}
@@ -1173,16 +1204,18 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
                 onChange={(event) => {
                   setDeduction(event.target.value)
                   setError('')
+                  setInvalidField(null)
                 }}
               />
             </label>
           )}
-          <label className={`deposit-settle-field${action === 'forfeit' ? ' is-forfeit-note' : ''}`}>
+          <label className={`deposit-settle-field${action === 'forfeit' ? ' is-forfeit-note' : ''}${invalidField === 'note' ? ' is-invalid' : ''}`}>
             <span>
               {action === 'forfeit' ? 'เหตุผลที่ริบ' : 'รายการค่าเสียหาย / หมายเหตุ'}
               {noteRequired && <em> *</em>}
             </span>
             <textarea
+              ref={noteRef}
               rows={3}
               maxLength={500}
               value={note}
@@ -1190,6 +1223,7 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
               onChange={(event) => {
                 setNote(event.target.value)
                 setError('')
+                setInvalidField(null)
               }}
             />
           </label>
@@ -1209,8 +1243,8 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
               <dd>{formatContractMoney(action === 'refund' ? refundAmount : paid)}</dd>
             </div>
           </dl>
-          {error && <p className="deposit-settle-error">{error}</p>}
         </div>
+        {error && <p className="deposit-settle-error" role="alert">{error}</p>}
         <footer className="deposit-settle-foot">
           <small>บันทึกแล้วแก้ไขไม่ได้ ระบบจะเก็บไว้ในบันทึกการจัดการเงินมัดจำ</small>
           <button type="button" className="deposit-settle-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
@@ -1223,7 +1257,7 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
   )
 }
 
-function DepositSettlementForm({ contract, onSaved }) {
+export function DepositSettlementForm({ contract, onSaved }) {
   const [open, setOpen] = useState(false)
   const suggested = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
   const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0

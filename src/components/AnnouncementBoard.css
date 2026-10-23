@@ -1913,3 +1913,88 @@
   margin: 0;
   -webkit-appearance: none;
 }
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) {
+  --announcement-dialog-pad: 20px;
+  overscroll-behavior: contain;
+  padding-top: 0;
+  padding-bottom: 0;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-width: thin;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail)::-webkit-scrollbar-track {
+  margin: 14px 0;
+  background: transparent;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail)::-webkit-scrollbar-thumb {
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #c9dcfb;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail)::-webkit-scrollbar-thumb:hover {
+  background: #93b8f0;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) > .announcement-dialog-header {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  margin: 0 calc(var(--announcement-dialog-pad) * -1);
+  padding: var(--announcement-dialog-pad) var(--announcement-dialog-pad) 12px;
+  background: #fff;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) .announcement-form-actions {
+  position: sticky;
+  z-index: 3;
+  bottom: 0;
+  margin: 0 calc(var(--announcement-dialog-pad) * -1);
+  padding: 12px var(--announcement-dialog-pad) var(--announcement-dialog-pad);
+  background: #fff;
+  box-shadow: 0 -8px 16px -12px rgba(15, 43, 82, 0.18);
+}
+
+@media (max-width: 560px) {
+  .announcement-dialog:not(.announcement-confirm):not(.announcement-detail) {
+    --announcement-dialog-pad: 16px;
+  }
+}
+
+.announcement-overlay:has(> .announcement-dialog:not(.announcement-confirm):not(.announcement-detail)) {
+  padding: 12px;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) {
+  max-height: min(860px, calc(100vh - 24px));
+  max-height: min(860px, calc(100dvh - 24px));
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) .announcement-board-form {
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) .announcement-board-form textarea {
+  min-height: 80px;
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) .announcement-photo-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.announcement-dialog:not(.announcement-confirm):not(.announcement-detail) .announcement-popup-field {
+  padding: 10px 12px;
+}
+
+@media (max-width: 560px) {
+  .announcement-dialog:not(.announcement-confirm):not(.announcement-detail) .announcement-photo-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

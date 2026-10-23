@@ -1556,6 +1556,10 @@
   color: #b42318;
 }
 
+.contract-cell-deposit.is-muted {
+  color: #64748b;
+}
+
 .contract-cell-thumb {
   position: relative;
   display: inline-flex;
@@ -3952,6 +3956,57 @@
   background: #d97706;
 }
 
+.deposit-settle-card > button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  box-shadow: none;
+}
+
+.deposit-settle-card.is-forfeit {
+  border-color: #fecdca;
+  background: #fffbfa;
+}
+
+.deposit-settle-card.is-forfeit .deposit-settle-card-icon {
+  border-color: #fecdca;
+  color: #b42318;
+}
+
+.deposit-settle-card.is-forfeit strong {
+  color: #b42318;
+}
+
+.deposit-settle-card.is-forfeit small {
+  color: #b42318;
+}
+
+.deposit-settle-card strong,
+.deposit-settle-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deposit-settle-card small {
+  font-size: 13px;
+}
+
+.deposit-settle-card > button {
+  white-space: nowrap;
+}
+
+.deposit-settle-card.is-forfeit > button {
+  border-color: #fda29b;
+  background: #fff;
+  color: #b42318;
+}
+
+.deposit-settle-card.is-forfeit > button:hover {
+  border-color: #f97066;
+  background: #fef3f2;
+}
+
 .rent-bill.deposit-settle-modal {
   width: 560px;
   height: 620px;
@@ -3982,8 +4037,36 @@
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  padding: 16px 20px 18px;
+  overscroll-behavior: contain;
+  padding: 16px 14px 18px 20px;
+  scroll-padding-block: 16px;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.deposit-settle-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.deposit-settle-body::-webkit-scrollbar-track {
+  margin: 8px 0;
+  background: transparent;
+}
+
+.deposit-settle-body::-webkit-scrollbar-thumb {
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #c9dcfb;
+}
+
+.deposit-settle-body::-webkit-scrollbar-thumb:hover {
+  background: #93b8f0;
+}
+
+.rent-bill.deposit-settle-modal {
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
 }
 
 .deposit-settle-stats {
@@ -4456,8 +4539,17 @@
   color: #b42318;
 }
 
+.deposit-settle-field.is-invalid input,
+.deposit-settle-field.is-invalid textarea,
+.deposit-settle-field.is-invalid input:focus,
+.deposit-settle-field.is-invalid textarea:focus {
+  border-color: #f97066;
+  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.15);
+}
+
 .deposit-settle-error {
-  margin: 0;
+  flex: 0 0 auto;
+  margin: 0 20px 10px;
   padding: 8px 12px;
   border: 1px solid #fecdca;
   border-radius: 10px;

@@ -22,20 +22,11 @@ export function getActingAdminName(pool, user) {
 
 export const requireActiveStaff = createRequireActiveAccount(getPool);
 
-const FORMER_TENANT_WRITE_PATHS = [/^\/profile$/, /^\/dorm-info\/acknowledge$/, /^\/announcements\/\d+\/acknowledge$/];
-
 export async function requireActiveCustomer(req, res, next) {
   try {
     const [rows] = await getPool().query("SELECT is_suspended, room_number FROM Customer WHERE id = ?", [req.user.id]);
-    if (!rows[0] || rows[0].is_suspended) {
+    if (!rows[0] || rows[0].is_suspended || rows[0].room_number == null) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
-    }
-    if (
-      rows[0].room_number == null
-      && !["GET", "HEAD"].includes(req.method)
-      && !FORMER_TENANT_WRITE_PATHS.some((pattern) => pattern.test(req.path))
-    ) {
-      return res.status(403).json({ code: "CUSTOMER_MOVED_OUT", message: "คุณย้ายออกจากหอพักแล้ว บัญชีนี้ใช้ดูประวัติได้อย่างเดียว" });
     }
     return next();
   } catch (error) {

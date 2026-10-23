@@ -177,6 +177,137 @@
   font-weight: 700;
 }
 
+.register-room-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #fde3b5;
+  border-radius: 11px;
+  background: #fffaf0;
+}
+
+.register-room-notice-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fcd9a0;
+  border-radius: 8px;
+  background: #fff;
+  color: #b45309;
+}
+
+.register-room-notice > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.45;
+}
+
+.register-room-notice strong {
+  color: #92400e;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.register-room-notice > div > span {
+  color: #8a5a1c;
+  font-size: 13.5px;
+}
+
+.register-suggest {
+  position: relative;
+}
+
+.register-suggest-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 248px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid #dce9fb;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 43, 82, 0.12);
+  list-style: none;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-width: thin;
+}
+
+.register-suggest-list button {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.register-suggest-list button:hover,
+.register-suggest-list button:focus-visible {
+  outline: none;
+  background: #f3f8ff;
+}
+
+.register-suggest-list strong {
+  color: #0f2b52;
+  font-size: 14.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.register-suggest-list mark {
+  padding: 0;
+  background: transparent;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.register-suggest-list small {
+  color: #6b859e;
+  font-size: 13px;
+}
+
+.register-field-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.register-field-hint svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.register-field-hint b {
+  font-weight: 700;
+}
+
+.register-field-hint.is-danger {
+  color: #b42318;
+}
+
+.register-field-hint.is-success {
+  color: #067647;
+}
+
 .register-optional {
   margin-left: 4px;
   padding: 1px 7px;
