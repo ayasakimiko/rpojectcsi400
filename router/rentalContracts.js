@@ -179,6 +179,50 @@ function contractRentTotalCents(periodStarts, basePriceCents, transfers) {
   return total + transfers.reduce((sum, transfer) => sum + toCents(transfer.price_difference_total), 0);
 }
 
+function contractRentBreakdown(periodStarts, basePriceCents, baseRoom, transfers, endDate) {
+  const periods = periodStarts.map((start) => ({ start, priceCents: basePriceCents, room: baseRoom }));
+  const leftovers = [];
+  for (const transfer of transfers) {
+    const from = transfer.new_price_from ? new Date(transfer.new_price_from) : null;
+    for (const period of periods) {
+      if (!from || period.start >= from) {
+        period.priceCents = toCents(transfer.to_price);
+        period.room = transfer.to_room_number;
+      }
+    }
+    const diffCents = toCents(transfer.price_difference_total);
+    const chargeable = Number(transfer.chargeable_periods) || 0;
+    const covered = from && chargeable > 0 ? periods.filter((period) => period.start < from).slice(-chargeable) : [];
+    if (diffCents > 0 && covered.length > 0) {
+      const each = Math.floor(diffCents / covered.length);
+      covered.forEach((period, index) => {
+        period.priceCents += each + (index === 0 ? diffCents - each * covered.length : 0);
+        period.room = transfer.to_room_number;
+      });
+    } else if (diffCents > 0) {
+      leftovers.push({ kind: "difference", from_room_number: transfer.from_room_number, room_number: transfer.to_room_number, price_cents: diffCents });
+    }
+  }
+  const lines = [];
+  periods.forEach((period, index) => {
+    const last = lines.at(-1);
+    if (last && last.room_number === period.room && last.price_cents === period.priceCents) {
+      last.periods += 1;
+      last.to_month = index + 1;
+    } else {
+      lines.push({ kind: "rent", room_number: period.room, price_cents: period.priceCents, periods: 1, from_month: index + 1, to_month: index + 1 });
+    }
+  });
+  return [...lines, ...leftovers].map(({ price_cents, ...line }) => ({
+    ...line,
+    ...(line.kind === "rent"
+      ? { from_date: periodStarts[line.from_month - 1], to_date: periodStarts[line.to_month] ?? endDate ?? null }
+      : {}),
+    price: price_cents / 100,
+    amount: (line.kind === "rent" ? price_cents * line.periods : price_cents) / 100,
+  }));
+}
+
 function transferSummary(transfer) {
   return {
     id: transfer.id,
@@ -262,6 +306,7 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
     first_payment_status: firstPayment,
     billing_periods: totalPeriods,
     contract_total: contractTotalCents / 100,
+    rent_breakdown: contractRentBreakdown(periodStarts, priceCents, contract.room_number, transfers, endDate),
     rent_paid: paidCents / 100,
     contract_remaining: Math.max(0, contractTotalCents - paidCents) / 100,
     status,
@@ -286,6 +331,8 @@ const CONTRACT_COLUMNS = `
     WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
   (SELECT MAX(pb.id) FROM Booking pb
     WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+  (SELECT MIN(nb4.created_at) FROM Booking nb4
+    WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
   COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
     WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
       AND NOT EXISTS (SELECT 1 FROM Booking nb3

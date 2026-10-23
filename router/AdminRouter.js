@@ -1224,9 +1224,10 @@ router.patch("/customers/:id/suspend", async (req, res) => {
     if (is_suspended && !wasSuspended) await resetCustomerHistory(connection, customerId);
     await connection.query(
       is_suspended || wasSuspended
-        ? `UPDATE Customer SET is_suspended = ?, room_number = NULL WHERE id = ?`
-        : `UPDATE Customer SET is_suspended = ? WHERE id = ?`,
-      [is_suspended, customerId],
+        ? `UPDATE Customer SET is_suspended = ?, suspended_at = IF(?, COALESCE(suspended_at, NOW()), NULL),
+                              room_number = NULL WHERE id = ?`
+        : `UPDATE Customer SET is_suspended = ?, suspended_at = IF(?, NOW(), NULL) WHERE id = ?`,
+      [is_suspended, Boolean(is_suspended), customerId],
     );
     await cancelStaleTenantRequests(connection, customerId, is_suspended || wasSuspended ? null : roomNumber);
     if (is_suspended || wasSuspended) {

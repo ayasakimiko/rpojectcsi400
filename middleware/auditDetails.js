@@ -4,8 +4,6 @@ import jwt from "jsonwebtoken";
 import { PUBLIC_UPLOAD_DIR } from "./publicUploads.js";
 import { getPool } from "../Database/connection.js";
 
-// สรุปข้อมูลคำขอใน service เดียวกัน เพื่อให้การบันทึกประวัติทำงานได้แม้ gateway หยุดทำงาน
-
 const auditContext = new AsyncLocalStorage();
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const HIDDEN_KEY = /pass(word)?|otp|token|secret|idcard|qr_?payload|data_?url|photos?$/i;
@@ -17,7 +15,6 @@ export function recordAuditImages(urls) {
   auditContext.getStore()?.images.push(...urls.filter((url) => typeof url === "string"));
 }
 
-// ให้ route เพิ่มข้อมูลที่ server คำนวณเอง เช่น ยอดเงินที่เก็บ เมื่อคำขอไม่ได้ส่งข้อมูลนั้นมา
 export function recordAuditFields(fields) {
   const store = auditContext.getStore();
   if (!store) return;

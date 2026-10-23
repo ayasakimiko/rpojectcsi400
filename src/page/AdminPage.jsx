@@ -2031,11 +2031,11 @@ function describeContract(start, end, now) {
   const startMs = new Date(start).getTime()
   const endMs = new Date(end).getTime()
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null
-  const percent = Math.min(100, Math.max(0, ((now - startMs) / (endMs - startMs)) * 100))
+  const elapsedDays = Math.max(0, Math.floor((now - startMs) / (1000 * 60 * 60 * 24)))
   const daysLeft = Math.ceil((endMs - now) / (1000 * 60 * 60 * 24))
   const tone = daysLeft < 0 ? 'danger' : daysLeft <= 30 ? 'warning' : 'success'
   const label = daysLeft < 0 ? `หมดสัญญาแล้ว ${Math.abs(daysLeft)} วัน` : daysLeft === 0 ? 'ครบสัญญาวันนี้' : `เหลืออีก ${daysLeft} วัน`
-  return { percent, tone, label }
+  return { elapsedDays, tone, label }
 }
 
 function formatStayLength(start, end) {
@@ -2751,15 +2751,6 @@ function MaintenanceDetail({ request, onPhotos }) {
         <span className={`admin-badge status-${request.status}`}>{MAINTENANCE_STATUS_LABEL[request.status] || request.status}</span>
       </div>
 
-      <dl className="payment-detail-facts">
-        {facts.map((fact) => (
-          <div key={fact.label}>
-            <dt><RoomDetailIcon type={fact.icon} size={14} />{fact.label}</dt>
-            <dd>{fact.href ? <a className="maintenance-detail-tel" href={`tel:${fact.href}`}>{fact.value}</a> : fact.value || '-'}</dd>
-          </div>
-        ))}
-      </dl>
-
       <section className="payment-detail-section">
         <h4><RoomDetailIcon type="note" size={16} />รายละเอียดปัญหา</h4>
         {request.description ? (
@@ -2771,6 +2762,15 @@ function MaintenanceDetail({ request, onPhotos }) {
           </div>
         )}
       </section>
+
+      <dl className="payment-detail-facts">
+        {facts.map((fact) => (
+          <div key={fact.label}>
+            <dt><RoomDetailIcon type={fact.icon} size={14} />{fact.label}</dt>
+            <dd>{fact.href ? <a className="maintenance-detail-tel" href={`tel:${fact.href}`}>{fact.value}</a> : fact.value || '-'}</dd>
+          </div>
+        ))}
+      </dl>
 
       <section className="payment-detail-section">
         <h4><RoomDetailIcon type="history" size={16} />สถานะการแจ้งซ่อม</h4>
@@ -2953,6 +2953,15 @@ function MoveoutDetail({ row, detail, loading, error, onRetry, onOpenInspection,
         </dl>
       </div>
 
+      {moveout.note && (
+        <dl className="moveout-detail-extra">
+          <div className="is-note">
+            <dt><RoomDetailIcon type="note" size={14} />หมายเหตุจากผู้เช่า</dt>
+            <dd>{moveout.note}</dd>
+          </div>
+        </dl>
+      )}
+
       <section className="payment-detail-section">
         <h4><RoomDetailIcon type="user" size={16} />ข้อมูลผู้เช่า</h4>
         <dl className="payment-detail-facts is-three">
@@ -2968,17 +2977,9 @@ function MoveoutDetail({ row, detail, loading, error, onRetry, onOpenInspection,
       <section className="payment-detail-section">
         <h4><RoomDetailIcon type="history" size={16} />ขั้นตอนการย้ายออก</h4>
         <MoveoutSteps moveout={moveout} />
-        {(moveout.preferred_move_date || moveout.note) && (
+        {moveout.preferred_move_date && (
           <dl className="moveout-detail-extra">
-            {moveout.preferred_move_date && (
-              <div><dt>วันที่ผู้เช่าต้องการย้ายออก</dt><dd>{formatDate(moveout.preferred_move_date)}</dd></div>
-            )}
-            {moveout.note && (
-              <div className="is-note">
-                <dt><RoomDetailIcon type="note" size={14} />หมายเหตุจากผู้เช่า</dt>
-                <dd>{moveout.note}</dd>
-              </div>
-            )}
+            <div><dt>วันที่ผู้เช่าต้องการย้ายออก</dt><dd>{formatDate(moveout.preferred_move_date)}</dd></div>
           </dl>
         )}
       </section>
@@ -4072,57 +4073,74 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
                     <small>เริ่มสัญญา</small>
                     <b className="is-start">{formatDate(data.rental_start_date)}</b>
                   </span>
-                  <span className="room-contract-arrow" aria-hidden="true">→</span>
+                  <span className="room-contract-track">
+                    {data.rental_duration_months && (
+                      <span className="room-contract-duration">{data.rental_duration_months} เดือน</span>
+                    )}
+                  </span>
                   <span>
-                    <small>{roomExtended ? 'ต่อสัญญาถึง' : 'สิ้นสุดสัญญา'}</small>
+                    <small>{roomExtended ? 'ต่อสัญญาถึง' : 'สิ้นสุด'}</small>
                     <b className="is-end">{formatDate(data.rental_end_date)}</b>
                     {roomExtended && <small className="is-old">เดิม {formatDate(roomContract.rental_end_date)}</small>}
                   </span>
-                  {contract && <em className={`room-contract-left is-${contract.tone}`}>{contract.label}</em>}
                 </div>
                 {contract && (
-                  <div className={`room-contract-progress is-${contract.tone}`} aria-hidden="true">
-                    <i style={{ width: `${contract.percent}%` }} />
+                  <div className="room-contract-period-meta">
+                    <span className="room-contract-elapsed">
+                      <RoomDetailIcon type="clock" size={14} />
+                      {contract.tone === 'danger' ? 'ครบระยะสัญญาแล้ว' : `ผ่านไปแล้ว ${contract.elapsedDays} วัน`}
+                    </span>
+                    <em className={`room-contract-left is-${contract.tone}`}>{contract.label}</em>
                   </div>
                 )}
               </div>
-              <dl className="room-contract-facts">
-                <div>
-                  <dt>ค่าเช่า/เดือน</dt>
+              <dl className={`room-contract-facts${roomContract ? '' : ' is-summary'}`}>
+                <div className="is-rent">
+                  <dt>
+                    <RoomDetailIcon type="door" size={14} />
+                    ค่าเช่า/เดือน
+                  </dt>
                   <dd>฿{formatCurrency(roomContract?.monthly_price ?? data.price)}</dd>
-                </div>
-                <div>
-                  <dt>ระยะสัญญา</dt>
-                  <dd>
-                    {data.rental_duration_months ? `${data.rental_duration_months} เดือน` : '-'}
-                    {roomExtended && <small>รวมที่ต่อแล้ว</small>}
-                  </dd>
+                  {roomContract?.billing_periods > 0 && <small>{roomContract.billing_periods} รอบบิล</small>}
                 </div>
                 {roomContract && (
                   <>
-                    <div>
-                      <dt>เงินมัดจำ</dt>
+                    <div className="is-deposit">
+                      <dt>
+                        <RoomDetailIcon type="wallet" size={14} />
+                        เงินมัดจำ
+                        {Number(roomContract.deposit_amount) > 0 && DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
+                          <span className={`room-contract-fact-status is-${roomContract.deposit_status}`}>
+                            {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
+                          </span>
+                        )}
+                      </dt>
                       <dd>
                         {Number(roomContract.deposit_amount) > 0
-                          ? `฿${formatCurrency(roomContract.deposit_remaining ?? roomContract.deposit_amount)}`
+                          ? `฿${formatCurrency(
+                              Number(roomContract.deposit_transfer_deducted) > 0
+                                ? roomContract.deposit_remaining
+                                : roomContract.deposit_amount,
+                            )}`
                           : 'ไม่มี'}
-                        {DEPOSIT_STATUS_LABEL[roomContract.deposit_status] && (
-                          <small className={`room-detail-deposit-status is-${roomContract.deposit_status}`}>
-                            {DEPOSIT_STATUS_LABEL[roomContract.deposit_status]}
-                          </small>
-                        )}
                       </dd>
+                      {Number(roomContract.deposit_amount) > 0 && <small>{formatDepositMonths(roomContract)}</small>}
                     </div>
-                    <div>
-                      <dt>ค่าเช่าที่เหลือ</dt>
-                      <dd className="is-remaining">
-                        ฿{formatCurrency(roomContract.contract_remaining)}
-                        {Number(roomContract.monthly_price) > 0 && (
-                          <small>
-                            ประมาณ {Math.ceil(Math.round((roomContract.contract_remaining / roomContract.monthly_price) * 100) / 100)} เดือน
-                          </small>
-                        )}
-                      </dd>
+                    <div className="is-paid">
+                      <dt>
+                        <RoomDetailIcon type="check" size={14} />
+                        ชำระแล้ว
+                      </dt>
+                      <dd>฿{formatCurrency(roomContract.rent_paid)}</dd>
+                      <small>ค่าเช่าที่รับแล้วทั้งหมด</small>
+                    </div>
+                    <div className="is-total">
+                      <dt>
+                        <RoomDetailIcon type="receipt" size={14} />
+                        ยอดตามสัญญา
+                      </dt>
+                      <dd>฿{formatCurrency(roomContract.contract_total)}</dd>
+                      <small>รวมทุกเดือน {roomContract.billing_periods || 0} เดือน</small>
                     </div>
                   </>
                 )}
@@ -9275,6 +9293,14 @@ function AdminBackupPage() {
                   <span className={`admin-badge status-${request.status}`}>{REQUEST_STATUS_LABEL[request.status] || request.status}</span>
                 </div>
 
+                <div className={`request-detail-note${request.note ? '' : ' is-empty'}`}>
+                  <span className="request-detail-note-label">
+                    <RoomDetailIcon type="note" size={14} />
+                    {request.type === 'moveout' ? 'เหตุผล / รายละเอียดการย้ายออก' : 'หมายเหตุจากผู้เช่า'}
+                  </span>
+                  <p>{request.note || 'ผู้เช่าไม่ได้ระบุรายละเอียด'}</p>
+                </div>
+
                 <section className="payment-detail-section">
                   <h4><RoomDetailIcon type="user" size={16} />ข้อมูลผู้เช่า</h4>
                   <dl className="payment-detail-facts">
@@ -9307,14 +9333,6 @@ function AdminBackupPage() {
                       </div>
                     </div>
                   )}
-
-                  <div className={`request-detail-note${request.note ? '' : ' is-empty'}`}>
-                    <span className="request-detail-note-label">
-                      <RoomDetailIcon type="note" size={14} />
-                      {request.type === 'moveout' ? 'เหตุผล / รายละเอียดการย้ายออก' : 'หมายเหตุจากผู้เช่า'}
-                    </span>
-                    <p>{request.note || 'ผู้เช่าไม่ได้ระบุรายละเอียด'}</p>
-                  </div>
                 </section>
 
                 <section className="payment-detail-section">

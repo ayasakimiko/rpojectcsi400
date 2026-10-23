@@ -9,7 +9,7 @@ export const TABLES_BY_SERVICE = {
   customer: ["TenantRequest", "ResidentVisitRequest", "SafetyIncident"],
   maintenance: ["MaintenanceRequest", "MaintenancePhoto"],
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],
-  staff: ["MoveOutInspection"],
+  staff: ["MoveOutInspection", "DepositSettlementLog"],
   admin: ["Announcement", "AnnouncementAcknowledgement", "WaitingList"],
   owner: ["Expense", "RoomOccupancySnapshot", "AuditLog", "DormConfig"],
   parcel: ["Parcel", "ParcelPhoto"],

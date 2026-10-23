@@ -255,3 +255,13 @@ EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
 UPDATE `Customer` SET `history_reset_at` = NOW() WHERE `is_suspended` = TRUE AND `history_reset_at` IS NULL;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Customer' AND COLUMN_NAME = 'suspended_at'),
+    'SELECT 1',
+    'ALTER TABLE `Customer` ADD COLUMN `suspended_at` DATETIME NULL AFTER is_suspended'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;

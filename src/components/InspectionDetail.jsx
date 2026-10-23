@@ -135,6 +135,13 @@ export default function InspectionDetail({
         </div>
 
         <section className="idt-section">
+          <h4><Icon type="note" size={16} />รายละเอียดที่พบ / หมายเหตุ</h4>
+          <div className={`idt-note${inspection.damage_note ? '' : ' is-empty'}`}>
+            <p>{inspection.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
+          </div>
+        </section>
+
+        <section className="idt-section">
           <div className="idt-section-head">
             <h4><Icon type="clipboard" size={16} />Checklist</h4>
             <span className={`idt-result is-${summary.tone}`}>
@@ -161,13 +168,6 @@ export default function InspectionDetail({
               )
             })}
           </ul>
-        </section>
-
-        <section className="idt-section">
-          <h4><Icon type="note" size={16} />รายละเอียดที่พบ / หมายเหตุ</h4>
-          <div className={`idt-note${inspection.damage_note ? '' : ' is-empty'}`}>
-            <p>{inspection.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
-          </div>
         </section>
 
         <section className="idt-section">

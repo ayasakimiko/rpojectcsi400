@@ -126,6 +126,37 @@ router.get("/contracts/completed", async (_req, res) => {
   }
 });
 
+async function sendDepositSettlementLogs(res, bookingId = null) {
+  try {
+    const [rows] = await getPool().query(
+      `SELECT id, booking_id, room_number, tenant_name, action, deposit_amount, deduction, refunded_amount,
+              forfeited_amount, note, contract_status, left_at, contract_end_date, left_reason, settled_by_name, created_at
+         FROM DepositSettlementLog ${bookingId ? "WHERE booking_id = ?" : ""} ORDER BY id DESC LIMIT 500`,
+      bookingId ? [bookingId] : [],
+    );
+    return res.json({
+      logs: rows.map((row) => ({
+        ...row,
+        deposit_amount: Number(row.deposit_amount),
+        deduction: Number(row.deduction),
+        refunded_amount: Number(row.refunded_amount),
+        forfeited_amount: Number(row.forfeited_amount),
+      })),
+    });
+  } catch (error) {
+    console.error("Fetch deposit settlement logs error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดบันทึกการจัดการเงินมัดจำได้" });
+  }
+}
+
+router.get("/contracts/deposit-settlement-logs", (req, res) => sendDepositSettlementLogs(res));
+
+router.get("/contracts/:bookingId/deposit-settlement-logs", (req, res) => {
+  const bookingId = Number(req.params.bookingId);
+  if (!isPositiveId(bookingId)) return res.status(400).json({ message: "รหัสสัญญาไม่ถูกต้อง" });
+  return sendDepositSettlementLogs(res, bookingId);
+});
+
 router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
   try {
     const bookingId = Number(req.params.bookingId);
@@ -139,6 +170,14 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
 
     const { error, value } = parseDepositSettlementInput(req.body ?? {}, contract.deposit_remaining);
     if (error) return res.status(400).json({ message: error });
+    const requiredAction = contract.deposit_refund === "forfeit" ? "forfeit" : "refund";
+    if (value.action !== requiredAction) {
+      return res.status(409).json({
+        message: requiredAction === "forfeit"
+          ? "ผู้เช่าย้ายออกก่อนครบสัญญา ต้องริบเงินมัดจำตามเงื่อนไข"
+          : "ผู้เช่าพักครบสัญญา ต้องคืนเงินมัดจำตามเงื่อนไข",
+      });
+    }
 
     const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
@@ -155,7 +194,30 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
       ],
     );
     if (!result.affectedRows) return res.status(409).json({ message: "บันทึกการคืน/ริบเงินมัดจำของสัญญานี้ไปแล้ว" });
-    const [updated] = await withThisMonthRent(pool, [await loadContractByBooking(pool, bookingId)]);
+    await pool.query(
+      `INSERT INTO DepositSettlementLog (booking_id, customer_id, room_number, tenant_name, action, deposit_amount,
+                                        deduction, refunded_amount, forfeited_amount, note, contract_status,
+                                        left_at, contract_end_date, left_reason, settled_by_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        bookingId,
+        contract.customer_id,
+        contract.room_number ?? null,
+        `${contract.first_name || ""} ${contract.last_name || ""}`.trim() || null,
+        value.action === "refund" ? "refunded" : "forfeited",
+        contract.deposit_remaining,
+        value.deductionCents / 100,
+        value.refundCents / 100,
+        value.action === "refund" ? 0 : contract.deposit_remaining,
+        value.note,
+        contract.status,
+        contract.moved_out_at || contract.next_contract_at || null,
+        contract.effective_end_date || contract.rental_end_date || null,
+        contract.is_suspended ? "suspended" : contract.moved_out_at ? "moveout" : contract.next_contract_at ? "new_contract" : null,
+        staffName || req.user.role,
+      ],
+    );
+    const [updated] =await withThisMonthRent(pool, [await loadContractByBooking(pool, bookingId)]);
     return res.json({
       message: value.action === "refund"
         ? `บันทึกคืนเงินมัดจำ ฿${(value.refundCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} แล้ว`

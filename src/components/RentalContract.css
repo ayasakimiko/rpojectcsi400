@@ -1028,6 +1028,42 @@
   color: #b42318;
 }
 
+.csc-status.is-deposit-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: #fcd34d;
+  background: #fef3c7;
+  color: #b45309;
+  animation: deposit-alert-pulse 1.8s ease-in-out infinite;
+}
+
+.csc-status.is-deposit-alert::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  content: "";
+}
+
+@keyframes deposit-alert-pulse {
+  50% {
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .csc-status.is-deposit-alert {
+    animation: none;
+  }
+}
+
+.contract-refund-note.is-pending-task {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+
 .csc-badges {
   display: flex;
   flex: 0 0 auto;
@@ -1978,6 +2014,21 @@
   gap: 14px;
 }
 
+.staff-modal-body:has(> .ccc-modal > .contract-refund-note, > .ccc-modal > .deposit-settle-card) {
+  overflow-y: auto;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-width: thin;
+}
+
+.ccc-modal:has(> .contract-refund-note, > .deposit-settle-card) {
+  height: auto;
+}
+
+.ccc-modal:has(> .contract-refund-note, > .deposit-settle-card) .ccc-grid {
+  height: 640px;
+  flex: 0 0 auto;
+}
+
 .ccc-modal .ccc-header h2 {
   margin: 0;
   color: #0f2b52;
@@ -2053,6 +2104,30 @@
 
 .ccc-person-header > .contract-status {
   align-self: flex-start;
+}
+
+.ccc-person-header > .csc-badges {
+  max-width: 55%;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ccc-person-header > .csc-badges > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .ccc-modal .ccc-grid {
@@ -2223,11 +2298,170 @@
   font-weight: 700;
 }
 
-.ccc-bill-deposit > span {
+.ccc-bill > .ccc-bill-deposit {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.ccc-bill-deposit-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ccc-bill-deposit-main > span {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+
+.ccc-bill-deposit-more {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.ccc-bill-deposit-more > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4b6a88;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ccc-bill-deposit-more > button:focus {
+  outline: none;
+}
+
+.ccc-bill-deposit-more > button:focus-visible {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #bfdbfe;
+}
+
+.ccc-bill-deposit-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+
+.ccc-bill-deposit-summary > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: #6b859e;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ccc-bill-deposit-summary b {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ccc-bill-deposit-summary > .is-deduct b {
+  color: #b45309;
+}
+
+.ccc-bill-deposit-summary > .is-left b {
+  color: #0f2b52;
+  font-size: 13.5px;
+}
+
+.ccc-bill-deposit-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ccc-bill-deposit-more > button:hover .ccc-bill-deposit-toggle {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ccc-bill-deposit-toggle svg {
+  transform: rotate(90deg);
+  transition: transform 0.08s ease-out;
+}
+
+.ccc-bill-deposit-more.is-open .ccc-bill-deposit-toggle svg {
+  transform: rotate(-90deg);
+}
+
+.ccc-bill-deposit-more.is-open .deposit-collapse {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+}
+
+.ccc-bill-deposit-deductions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 0 0;
+  list-style: none;
+}
+
+.ccc-bill-deposit-deductions li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: #4b6a88;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ccc-bill-deposit-deductions li > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.ccc-bill-deposit-deductions small {
+  color: #8aa0b6;
+  font-size: 11px;
+}
+
+.ccc-bill-deposit-deductions b {
+  color: #0f2b52;
+  font-variant-numeric: tabular-nums;
+}
+
+.ccc-bill-deposit-deductions li.is-deduct,
+.ccc-bill-deposit-deductions li.is-deduct b {
+  color: #b45309;
+}
+
+.ccc-bill-deposit-deductions li.is-left {
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  color: inherit;
+  font-weight: 800;
+}
+
+.ccc-bill-deposit-deductions li.is-left b {
+  color: inherit;
 }
 
 .ccc-bill-deposit em {
@@ -2655,6 +2889,71 @@
   font-size: 12px;
   font-weight: 600;
   opacity: 0.85;
+}
+
+.contract-refund-note.is-detailed {
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.contract-refund-note.is-detailed > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.settled-deposit-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settled-deposit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settled-deposit-head strong {
+  font-size: 13px;
+}
+
+.settled-deposit-head .deposit-log-link {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.settled-deposit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.settled-deposit-meta > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.settled-deposit-meta svg {
+  flex: 0 0 auto;
+}
+
+.settled-deposit-meta > .is-staff {
+  color: #1d4ed8;
+}
+
+.settled-deposit-meta > .is-date {
+  color: #64748b;
 }
 
 .contract-refund-note.is-compact {
@@ -3106,8 +3405,86 @@
 }
 
 .ccc-bill > .ccc-month.is-none {
-  border-color: #e3ecf8;
+  padding: 14px 16px;
+  border: 1.5px solid #86efac;
+  background: linear-gradient(110deg, #dcfce7, #f0fdf4 70%);
+  box-shadow: 0 6px 16px -10px rgba(22, 163, 74, 0.55);
+}
+
+.ccc-month.is-none span {
+  color: #15803d;
+  font-size: 15.5px;
+  font-weight: 800;
+}
+
+.ccc-month.is-none small {
+  color: #3f8f5c;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-paid {
+  border-color: #d1fae5;
   background: #fff;
+}
+
+.ccc-bill > .ccc-bill-deposit.is-paid strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ccc-bill > .ccc-bill-period {
+  margin-top: -4px;
+  margin-bottom: 2px;
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.ccc-bill-period b,
+.ccc-bill-line b {
+  color: #0f2b52;
+  font-weight: 700;
+}
+
+.ccc-bill-period em {
+  padding: 1px 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.ccc-bill-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.ccc-bill-line i {
+  padding: 1px 8px;
+  border: 1px solid #c7d7ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.ccc-bill-line small {
+  color: #8aa0b6;
+  font-size: 11.5px;
+}
+
+.ccc-bill > .ccc-bill-sum {
+  padding-top: 6px;
+  border-top: 1px dashed #dce9fb;
+  color: #0f2b52;
+  font-weight: 700;
 }
 
 .ccc-bill > .is-total {
@@ -3417,38 +3794,278 @@
   background: #eff6ff;
 }
 
-.deposit-settle {
+.deposit-settle-card {
   display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid #fde68a;
   border-radius: 14px;
-  background: #fffdf5;
+  background: linear-gradient(105deg, #fffbeb, #fffdf7 70%);
 }
 
-.deposit-settle-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+.deposit-settle-card-icon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fff;
   color: #b45309;
 }
 
-.deposit-settle-head > div {
+.deposit-settle-card > div {
   display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
 }
 
-.deposit-settle-head strong {
+.deposit-settle-card strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 14.5px;
+  font-weight: 800;
 }
 
-.deposit-settle-head small {
+.deposit-settle-card small {
   color: #92400e;
   font-size: 12.5px;
+}
+
+.deposit-settle-card > button {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 9px 16px;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  box-shadow: 0 6px 14px -8px rgba(217, 119, 6, 0.8);
+}
+
+.deposit-settle-card > button:hover {
+  border-color: #d97706;
+  background: #d97706;
+}
+
+.rent-bill.deposit-settle-modal {
+  width: 560px;
+  height: 620px;
+}
+
+.rent-bill.deposit-log-modal {
+  width: 880px;
+  height: 720px;
+}
+
+.deposit-settle-icon {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.deposit-settle {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.deposit-settle-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 16px 20px 18px;
+  scrollbar-width: thin;
+}
+
+.deposit-settle-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deposit-settle-stats > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.deposit-settle-stats i {
+  color: #8aa0b6;
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.deposit-settle-stats b {
+  overflow: hidden;
+  color: #0f2b52;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deposit-settle-stats > .is-forfeit {
+  border-color: #fecdca;
+  background: #fffbfa;
+}
+
+.deposit-settle-stats > .is-forfeit b {
+  color: #b42318;
+}
+
+.deposit-settle-stats > .is-refund {
+  border-color: #bbf7d0;
+  background: #f6fef9;
+}
+
+.deposit-settle-stats > .is-refund b {
+  color: #15803d;
+}
+
+.deposit-settle-terms {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.deposit-settle-terms h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+}
+
+.deposit-settle-terms h4 svg {
+  flex: 0 0 auto;
+  color: #2563eb;
+}
+
+.deposit-settle-terms dl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.deposit-settle-terms dl > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.deposit-settle-terms dt {
+  flex: 0 0 88px;
+  color: #8aa0b6;
+  font-weight: 600;
+}
+
+.deposit-settle-terms dd {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #0f2b52;
+  font-weight: 700;
+}
+
+.deposit-settle-terms dd em {
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.deposit-settle-terms dd em.is-early {
+  border: 1px solid #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.deposit-settle-terms dd em.is-complete {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.deposit-settle-terms ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed #dce9fb;
+  list-style: none;
+}
+
+.deposit-settle-terms li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: #8aa0b6;
+  font-size: 12.5px;
+}
+
+.deposit-settle-terms li::before {
+  flex: 0 0 auto;
+  content: "•";
+}
+
+.deposit-settle-terms li b {
+  font-weight: 700;
+}
+
+.deposit-settle-terms li.is-active {
+  font-weight: 600;
+}
+
+.deposit-settle-terms li.is-active::before {
+  content: "✓";
+}
+
+.deposit-settle-terms li.is-refund {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.deposit-settle-terms li.is-active.is-forfeit {
+  border: 1px solid #fecdca;
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .deposit-settle-damage {
@@ -3468,26 +4085,173 @@
   gap: 8px;
 }
 
-.deposit-settle-option {
-  padding: 9px 12px;
-  border: 1px solid #dbe4f0;
+.deposit-settle-auto {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #dbe4f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.deposit-settle-auto > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.deposit-settle-auto strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.deposit-settle-auto em {
+  padding: 0 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.deposit-settle-auto small {
+  color: #4b6a88;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.deposit-settle-auto-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   border-radius: 10px;
   background: #fff;
+}
+
+.deposit-settle-auto.is-refund {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.deposit-settle-auto.is-refund strong,
+.deposit-settle-auto.is-refund .deposit-settle-auto-icon {
+  color: #15803d;
+}
+
+.deposit-settle-auto.is-refund .deposit-settle-auto-icon {
+  border: 1px solid #bbf7d0;
+}
+
+.deposit-settle-auto.is-forfeit {
+  border-color: #fda29b;
+  background: #fef3f2;
+}
+
+.deposit-settle-auto.is-forfeit strong,
+.deposit-settle-auto.is-forfeit .deposit-settle-auto-icon {
+  color: #b42318;
+}
+
+.deposit-settle-auto.is-forfeit .deposit-settle-auto-icon {
+  border: 1px solid #fecdca;
+}
+
+.deposit-settle-option {
+  display: flex;
+  width: auto;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1.5px solid #dbe4f0;
+  border-radius: 12px;
+  background: #fff;
   color: #475569;
-  font-size: 13.5px;
+  text-align: left;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.deposit-settle-option:hover {
+  border-color: #b6c8de;
+}
+
+.deposit-settle-option > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deposit-settle-option strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.deposit-settle-option strong em {
+  padding: 0 7px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 10.5px;
+  font-style: normal;
   font-weight: 700;
+}
+
+.deposit-settle-option small {
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.deposit-settle-radio {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  border: 2px solid #c3d2e4;
+  border-radius: 50%;
+  background: #fff;
 }
 
 .deposit-settle-option.is-refund.is-active {
   border-color: #86efac;
   background: #f0fdf4;
+}
+
+.deposit-settle-option.is-refund.is-active strong {
   color: #15803d;
+}
+
+.deposit-settle-option.is-refund.is-active .deposit-settle-radio {
+  border: 5px solid #16a34a;
 }
 
 .deposit-settle-option.is-forfeit.is-active {
   border-color: #fda29b;
   background: #fef3f2;
+}
+
+.deposit-settle-option.is-forfeit.is-active strong {
   color: #b42318;
+}
+
+.deposit-settle-option.is-forfeit.is-active .deposit-settle-radio {
+  border: 5px solid #dc2626;
 }
 
 .deposit-settle-field {
@@ -3516,31 +4280,859 @@
   font-weight: 500;
 }
 
+.deposit-settle-field input:focus,
+.deposit-settle-field textarea:focus {
+  border-color: #93c5fd;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.deposit-settle-field textarea {
+  resize: vertical;
+}
+
 .deposit-settle-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.deposit-settle-summary > div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
-  color: #475569;
+  gap: 12px;
+  color: #6b859e;
   font-size: 13px;
 }
 
-.deposit-settle-summary strong {
+.deposit-settle-summary dt,
+.deposit-settle-summary dd {
+  margin: 0;
+}
+
+.deposit-settle-summary dd {
   color: #0f2b52;
-  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.deposit-settle-summary > .is-total {
+  padding-top: 8px;
+  border-top: 1px dashed #dce9fb;
+  color: #0f2b52;
+  font-weight: 800;
+}
+
+.deposit-settle-summary > .is-total dd {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.deposit-settle-summary.is-refund > .is-total dd {
+  color: #15803d;
+}
+
+.deposit-settle-summary.is-forfeit > .is-total dd {
+  color: #b42318;
 }
 
 .deposit-settle-error {
   margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fef3f2;
   color: #b42318;
   font-size: 13px;
 }
 
-.deposit-settle > .staff-action-btn {
-  align-self: flex-end;
+.deposit-settle-foot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #edf2f9;
+  background: #fbfcfe;
+}
+
+.deposit-settle-foot small {
+  flex: 1;
+  color: #8aa0b6;
+  font-size: 11.5px;
+}
+
+.deposit-settle-foot button {
+  width: auto;
+  margin: 0;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.deposit-settle-cancel {
+  border: 1px solid #dbe7f5;
+  background: #fff;
+  color: #4b6a88;
+}
+
+.deposit-settle-submit {
+  border: 1px solid transparent;
+  color: #fff;
+}
+
+.deposit-settle-submit.is-refund {
+  background: #16a34a;
+}
+
+.deposit-settle-submit.is-forfeit {
+  background: #dc2626;
+}
+
+.deposit-settle-foot button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.deposit-log-link {
+  align-self: flex-start;
+  width: auto;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.deposit-log-link:hover {
+  color: #1d4ed8;
+}
+
+.deposit-log-open {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  width: auto;
+  margin: 0 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.deposit-log-open:hover {
+  border-color: #fcd34d;
+  background: #fef3c7;
+}
+
+.deposit-log-open em {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.deposit-log-heading {
+  margin: 4px 0 0;
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.deposit-pending {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  background: #fffbeb;
+}
+
+.deposit-pending > h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #b45309;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.deposit-pending.is-full {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.deposit-pending.is-full > h4 {
+  display: none;
+}
+
+.deposit-pending-more {
+  width: auto;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b45309;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.deposit-pending-more:hover {
+  color: #92400e;
+}
+
+.deposit-log-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid #edf2f9;
+}
+
+.deposit-log-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0 0 -1px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #6b859e;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deposit-log-tabs button:hover {
+  color: #0f2b52;
+}
+
+.deposit-log-tabs button.is-active {
+  border-bottom-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.deposit-log-tabs button span {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef3fa;
+  color: #4b6a88;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.deposit-log-tabs button.is-active span {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.deposit-log-tabs button.is-alert span {
+  background: #dc2626;
+  color: #fff;
+}
+
+.deposit-pending > h4 span {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #fde68a;
+  color: #92400e;
+  font-size: 11px;
+}
+
+.deposit-pending > ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deposit-pending > ul > li {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.deposit-pending > ul > li.is-open {
+  border-color: #fcd34d;
+  box-shadow: 0 6px 16px -12px rgba(180, 83, 9, 0.6);
+}
+
+.deposit-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.deposit-pending-toggle {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.deposit-pending-toggle > strong {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.deposit-pending > ul > li.is-forfeit .deposit-pending-toggle > strong {
+  color: #b42318;
+}
+
+.deposit-pending > ul > li.is-refund .deposit-pending-toggle > strong {
+  color: #15803d;
+}
+
+.deposit-pending-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: #8aa0b6;
+  transform: rotate(90deg);
+  transition: transform 0.08s ease-out;
+}
+
+.deposit-pending > ul > li.is-open .deposit-pending-chevron {
+  color: #b45309;
+  transform: rotate(-90deg);
+}
+
+.deposit-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows 0.08s ease-out, opacity 0.06s ease-out, visibility 0.08s;
+}
+
+.deposit-collapse > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.deposit-pending > ul > li.is-open .deposit-collapse,
+.deposit-log-violation.is-open .deposit-collapse {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deposit-collapse {
+    transition: none;
+  }
+}
+
+.deposit-pending-detail > .deposit-settle-terms {
+  margin: 0 10px 10px;
+}
+
+.deposit-pending-room {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.deposit-pending-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.deposit-pending-info b {
+  overflow: hidden;
+  color: #0f2b52;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deposit-pending-info small {
+  color: #6b859e;
+  font-size: 12px;
+}
+
+.deposit-pending-action {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deposit-pending > ul > li.is-forfeit .deposit-pending-action {
+  background: #dc2626;
+}
+
+.deposit-pending > ul > li.is-refund .deposit-pending-action {
+  background: #16a34a;
+}
+
+.deposit-pending-action:hover {
+  filter: brightness(0.92);
+}
+
+.deposit-settle-terms li em {
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid #fca5a5;
+  border-radius: 999px;
+  background: #fff;
+  color: #b42318;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 575px) {
+  .deposit-pending-row {
+    flex-wrap: wrap;
+  }
+
+  .deposit-pending-action {
+    width: 100%;
+  }
+}
+
+.deposit-log-entry .deposit-log-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b859e;
+  font-size: 12.5px;
+}
+
+.deposit-log-time b {
+  color: #0f2b52;
+  font-weight: 700;
+}
+
+.deposit-log-time > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid #e3ecf8;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #4b6a88;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.deposit-log-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.deposit-log-tags b {
+  color: #0f2b52;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.deposit-log-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  scrollbar-width: thin;
+}
+
+.deposit-log-empty {
+  margin: 0;
+  padding: 24px 0;
+  color: #8aa0b6;
+  font-size: 13px;
+  text-align: center;
+}
+
+.deposit-log-entry {
+  --log-tone: #64748b;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.deposit-log-entry.is-refund {
+  --log-tone: #16a34a;
+}
+
+.deposit-log-entry.is-forfeit {
+  --log-tone: #dc2626;
+}
+
+.deposit-log-entry > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #e3ecf8;
+}
+
+.deposit-log-entry > header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.deposit-log-amount {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.deposit-log-amount small {
+  color: #8aa0b6;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.deposit-log-amount strong {
+  color: var(--log-tone);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.deposit-log-entry dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin: 0;
+}
+
+.deposit-log-entry dl > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.deposit-log-entry dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #8aa0b6;
+  font-weight: 600;
+}
+
+.deposit-log-entry dt svg {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.deposit-log-entry dd {
+  margin: 0;
+  color: #0f2b52;
+  font-weight: 700;
+}
+
+.deposit-log-entry dl > .is-money dt svg,
+.deposit-log-entry dl > .is-money dd {
+  color: #6d28d9;
+}
+
+.deposit-log-entry dl > .is-deduct dt svg,
+.deposit-log-entry dl > .is-deduct dd {
+  color: #b45309;
+}
+
+.deposit-log-entry dl > .is-staff dt svg,
+.deposit-log-entry dl > .is-staff dd {
+  color: #1d4ed8;
+}
+
+.deposit-log-entry dl > .is-status-unpaid dt svg,
+.deposit-log-entry dl > .is-status-unpaid dd {
+  color: #b42318;
+}
+
+.deposit-log-entry dl > .is-status-warning dt svg,
+.deposit-log-entry dl > .is-status-warning dd {
+  color: #b45309;
+}
+
+.deposit-log-entry dl > .is-status-active dt svg,
+.deposit-log-entry dl > .is-status-active dd {
+  color: #15803d;
+}
+
+.deposit-log-entry dl > .is-status-muted dt svg,
+.deposit-log-entry dl > .is-status-muted dd {
+  color: #475569;
+}
+
+.deposit-log-entry > header em {
+  padding: 2px 10px;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.deposit-log-entry.is-refund > header em {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.deposit-log-entry.is-forfeit > header em {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.deposit-log-entry time {
+  color: #6b859e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deposit-log-violation {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fef3f2;
+}
+
+.deposit-log-violation > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.deposit-log-violation-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.deposit-log-violation-toggle svg {
+  transform: rotate(90deg);
+  transition: transform 0.08s ease-out;
+}
+
+.deposit-log-violation.is-open .deposit-log-violation-toggle svg {
+  transform: rotate(-90deg);
+}
+
+.deposit-log-violation > .deposit-collapse > ul > li:first-child {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #fecdca;
+}
+
+.deposit-log-violation > button > strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #b42318;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.deposit-log-violation > strong em {
+  padding: 0 8px;
+  border: 1px solid #fca5a5;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.deposit-log-violation ul {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deposit-log-violation li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 12.5px;
+}
+
+.deposit-log-violation li span {
+  flex: 0 0 92px;
+  color: #b45d55;
+  font-weight: 600;
+}
+
+.deposit-log-violation li b {
+  color: #7a271a;
+  font-weight: 700;
+}
+
+.deposit-log-violation li small {
+  padding: 0 8px;
+  border: 1px solid #d4d8de;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b6472;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.deposit-log-violation li small.is-moveout {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.deposit-log-violation li small.is-suspended {
+  border-color: #d4d8de;
+  background: #f1f3f5;
+  color: #5b6472;
+}
+
+.deposit-log-violation li small.is-new_contract {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.deposit-log-note {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.deposit-log-note b {
+  flex: 0 0 auto;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.deposit-log-note span {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 575px) {
+  .deposit-settle-stats,
+  .deposit-settle-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .deposit-settle-card {
+    flex-wrap: wrap;
+  }
+
+  .deposit-settle-card > button {
+    width: 100%;
+  }
+
+  .deposit-settle-foot {
+    flex-wrap: wrap;
+  }
+
+  .deposit-settle-foot small {
+    flex-basis: 100%;
+  }
 }
 
 .csc-transfer-route {

@@ -8060,7 +8060,8 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-modal.admin-modal-room-detail {
-  max-width: 680px;
+  max-width: 900px;
+  max-height: 92vh;
 }
 
 .admin-modal-room-detail .admin-modal-body {
@@ -8484,24 +8485,31 @@ tr.admin-focus-flash.is-fading > td {
 .room-contract-period {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 11px;
+  min-width: 0;
+  padding: 13px 15px;
   border: 1px solid #e6eef9;
   border-radius: 12px;
   background: #fbfdff;
 }
 
 .room-contract-dates {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 6px 14px;
+  display: grid;
+  grid-template-columns: max-content minmax(48px, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
 }
 
-.room-contract-dates > span:not(.room-contract-arrow) {
+.room-contract-dates > span:not(.room-contract-track) {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
+  min-width: 0;
+}
+
+.room-contract-dates > span:last-child {
+  align-items: flex-end;
+  text-align: right;
 }
 
 .room-contract-dates small {
@@ -8517,28 +8525,72 @@ tr.admin-focus-flash.is-fading > td {
 
 .room-contract-dates b {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
+  line-height: 1.35;
 }
 
 .room-contract-dates b.is-start {
-  color: #15803d;
+  color: #0f2b52;
 }
 
 .room-contract-dates b.is-end {
-  color: #c2410c;
+  color: #0f2b52;
 }
 
-.room-contract-arrow {
-  padding-bottom: 2px;
-  color: #94a3b8;
+.room-contract-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 28px;
+  align-self: end;
+  margin-bottom: 2px;
+}
+
+.room-contract-track::before {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed #b7d2fb;
+  content: '';
+}
+
+.room-contract-track::after {
+  position: absolute;
+  right: -2px;
+  color: #8db6f6;
   font-size: 16px;
-  font-weight: 700;
+  line-height: 1;
+  content: '›';
+}
+
+.room-contract-duration {
+  position: relative;
+  z-index: 1;
+  padding: 3px 9px;
+  border: 1px solid #cfe0fb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.room-contract-period-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e6eef9;
 }
 
 .room-contract-left {
-  margin-left: auto;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-style: normal;
@@ -8561,85 +8613,130 @@ tr.admin-focus-flash.is-fading > td {
   color: #b42318;
 }
 
-.room-contract-progress {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e8eff8;
+.room-contract-elapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #52708f;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.room-contract-progress i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: #22c55e;
-}
+@media (max-width: 420px) {
+  .room-contract-period {
+    padding: 12px;
+  }
 
-.room-contract-progress.is-warning i {
-  background: #f59e0b;
-}
+  .room-contract-dates {
+    grid-template-columns: minmax(0, max-content) minmax(48px, 1fr) minmax(0, max-content);
+    gap: 6px;
+  }
 
-.room-contract-progress.is-danger i {
-  background: #ef4444;
+  .room-contract-dates b {
+    font-size: 12.5px;
+  }
 }
 
 .room-contract-facts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
-  border: 1px solid #e6eef9;
-  border-radius: 12px;
-  overflow: hidden;
+}
+
+.room-contract-facts.is-summary {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .room-contract-facts > div {
+  --fact-tone: #2563eb;
+  --fact-border: #dbe7f7;
+  --fact-bg: #f8fbff;
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid var(--fact-border);
+  border-radius: 11px;
+  background: var(--fact-bg);
 }
 
-.room-contract-facts > div + div {
-  border-left: 1px solid #eef3fa;
+.room-contract-facts > .is-deposit {
+  --fact-tone: #6d28d9;
+  --fact-border: #e4dcfb;
+  --fact-bg: #faf8ff;
+}
+
+.room-contract-facts > .is-paid {
+  --fact-tone: #047857;
+  --fact-border: #cceee0;
+  --fact-bg: #f5fcf8;
+}
+
+.room-contract-facts > .is-total {
+  --fact-tone: #0f2b52;
+  --fact-border: #e4ecf7;
+  --fact-bg: #ffffff;
 }
 
 .room-contract-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   color: #6b859e;
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.room-contract-facts dt svg {
+  flex: 0 0 auto;
+  color: var(--fact-tone);
 }
 
 .room-contract-facts dd {
-  display: flex;
-  flex-direction: column;
   margin: 0;
-  color: #0f2b52;
-  font-size: 14px;
+  color: var(--fact-tone);
+  font-size: 17px;
   font-weight: 800;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-.room-contract-facts dd small {
+.room-contract-facts > div > small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
   color: #6b859e;
   font-size: 11.5px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
-.room-contract-facts dd.is-remaining {
+.room-contract-fact-status {
+  margin-left: auto;
+  color: #6b859e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.room-contract-fact-status.is-paid {
+  color: #15803d;
+}
+
+.room-contract-fact-status.is-pending {
   color: #b45309;
 }
 
+.room-contract-fact-status.is-due {
+  color: #b42318;
+}
+
 @media (max-width: 640px) {
-  .room-contract-facts {
+  .room-contract-facts:not(.is-summary) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .room-contract-facts > div:nth-child(3) {
-    border-left: 0;
-  }
-
-  .room-contract-facts > div:nth-child(n + 3) {
-    border-top: 1px solid #eef3fa;
   }
 }
 

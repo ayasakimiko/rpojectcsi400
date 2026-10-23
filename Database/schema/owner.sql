@@ -42,6 +42,22 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+UPDATE Customer c
+  JOIN (SELECT CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, '/', -2), '/', 1) AS UNSIGNED) AS customer_id,
+               MAX(created_at) AS suspended_at
+          FROM AuditLog
+         WHERE method = 'PATCH' AND endpoint LIKE '/api/admin/customers/%/suspend'
+           AND details LIKE '%["is_suspended",true]%'
+         GROUP BY customer_id) s ON s.customer_id = c.id
+   SET c.suspended_at = s.suspended_at
+ WHERE c.is_suspended = TRUE AND c.suspended_at IS NULL;
+
+UPDATE Booking b
+  JOIN Customer c ON c.id = b.customer_id
+   SET b.ended_at = c.suspended_at
+ WHERE c.is_suspended = TRUE AND c.suspended_at IS NOT NULL
+   AND b.ended_at IS NULL AND b.contract_completed_at IS NOT NULL;
+
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expense' AND INDEX_NAME = 'idx_expense_date'),
