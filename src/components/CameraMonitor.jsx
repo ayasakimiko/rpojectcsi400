@@ -115,10 +115,10 @@ function ParkingScene() {
   )
 }
 
-const CameraScene = memo(function CameraScene({ scene }) {
+const CameraScene = memo(function CameraScene({ scene, seed = 0 }) {
   if (scene === 'lobby') return <LobbyScene />
   if (scene === 'parking') return <ParkingScene />
-  if (scene === 'corridor') return <CorridorScene />
+  if (scene === 'corridor') return <CorridorScene seed={seed} />
   return <EntranceScene />
 })
 
@@ -147,7 +147,39 @@ function CamIcon({ name, size = 16 }) {
   )
 }
 
-function CameraFeed({ camera, index, mode, time, large = false, scrub = null, paused = false, seeking = false }) {
+const WEATHER_LABEL = { clear: 'ท้องฟ้าแจ่มใส', cloudy: 'มีเมฆมาก', rain: 'ฝนตก', fog: 'หมอกลง' }
+const WEATHER_KEYS = Object.keys(WEATHER_LABEL)
+
+function hashText(text) {
+  let hash = 0
+  for (const char of text) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  hash ^= hash >>> 16
+  hash = Math.imul(hash, 0x45d9f3b) >>> 0
+  hash ^= hash >>> 16
+  return hash >>> 0
+}
+
+function nightLevel(minutes) {
+  const hour = minutes / 60
+  if (hour < 5 || hour >= 19.5) return 1
+  if (hour < 7) return 1 - (hour - 5) / 2
+  if (hour >= 17.5) return (hour - 17.5) / 2
+  return 0
+}
+
+function sceneVariant(date, minutes) {
+  const hash = hashText(date)
+  const night = nightLevel(minutes)
+  return {
+    seed: (hash >>> 3) % 32,
+    weather: WEATHER_KEYS[hash % WEATHER_KEYS.length],
+    shift: (hash % 97) * 1.7,
+    night,
+    period: night >= 0.85 ? 'กลางคืน' : night > 0.15 ? (minutes < 720 ? 'รุ่งเช้า' : 'พลบค่ำ') : 'กลางวัน',
+  }
+}
+
+function CameraFeed({ camera, index, mode, time, large = false, scrub = null, paused = false, seeking = false, variant = null }) {
   if (!camera?.online) {
     return (
       <div className={`camera-feed${large ? ' camera-feed-large' : ''} is-offline`}>
@@ -162,12 +194,17 @@ function CameraFeed({ camera, index, mode, time, large = false, scrub = null, pa
 
   return (
     <div
-      className={`camera-feed camera-feed-${index + 1} is-scene-${camera.scene}${large ? ' camera-feed-large' : ''}${scrub !== null ? ' is-scrub' : ''}${paused ? ' is-paused' : ''}${seeking ? ' is-seeking' : ''}`}
-      style={scrub !== null ? { '--scrub': `${-scrub}s` } : undefined}
+      className={`camera-feed camera-feed-${index + 1} is-scene-${camera.scene}${large ? ' camera-feed-large' : ''}${scrub !== null ? ' is-scrub' : ''}${paused ? ' is-paused' : ''}${seeking ? ' is-seeking' : ''}${variant ? ` weather-${variant.weather}` : ''}`}
+      style={{
+        ...(scrub !== null ? { '--scrub': `${-(scrub + (variant?.shift || 0))}s` } : {}),
+        ...(variant ? { '--night': variant.night } : {}),
+      }}
     >
       <div className="camera-feed-scene" aria-hidden="true">
-        <CameraScene scene={camera.scene} />
+        <CameraScene scene={camera.scene} seed={variant?.seed} />
       </div>
+      <span className="camera-feed-weather" aria-hidden="true" />
+      <span className="camera-feed-night" aria-hidden="true" />
       <span className="camera-feed-noise" aria-hidden="true" />
       <span className="camera-feed-sweep" aria-hidden="true" />
       <span className="camera-feed-top">
@@ -389,6 +426,8 @@ function CameraMonitor() {
   const motionCount = CAMERAS.filter((camera) => camera.online && camera.motion).length
   const viewerIndex = CAMERAS.findIndex((camera) => camera.id === viewerId)
   const feedTime = mode === 'playback' ? `${playbackDateLabel} ${formatClock(safePlaybackMinutes)}` : timeLabel
+  const liveVariant = sceneVariant(today, currentDayMinutes)
+  const viewerVariant = mode === 'playback' ? sceneVariant(playbackDate, safePlaybackMinutes) : liveVariant
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 1000)
@@ -538,7 +577,7 @@ function CameraMonitor() {
           {visibleCameras.map((camera) => (
             <article className={`camera-card${camera.online ? '' : ' is-offline'}${selectedId === camera.id ? ' is-selected' : ''}`} key={camera.id}>
               <button type="button" className="camera-preview-button" onClick={() => openCamera(camera)} disabled={!camera.online} aria-label={`เปิดภาพกล้อง ${camera.name}`}>
-                <CameraFeed camera={camera} index={CAMERAS.indexOf(camera)} mode="live" time={timeLabel} />
+                <CameraFeed camera={camera} index={CAMERAS.indexOf(camera)} mode="live" time={timeLabel} variant={liveVariant} />
                 {camera.online && <span className="camera-preview-hint"><CamIcon name="expand" size={13} />ขยายภาพ</span>}
               </button>
               <div className="camera-card-details">
@@ -591,6 +630,7 @@ function CameraMonitor() {
                   time={feedTime}
                   large
                   scrub={mode === 'playback' ? safePlaybackMinutes : null}
+                  variant={viewerVariant}
                   paused={mode === 'playback' && !playing}
                   seeking={mode === 'playback' && seeking}
                 />
@@ -630,6 +670,8 @@ function CameraMonitor() {
                     <div><dt>ตำแหน่ง</dt><dd>{viewerCamera.location}</dd></div>
                     <div><dt>สถานะ</dt><dd><span className="camera-pill is-online"><i />ออนไลน์</span></dd></div>
                     <div><dt>การบันทึก</dt><dd>{viewerCamera.recording ? <span className="camera-pill is-rec"><i />กำลังบันทึก</span> : <span className="camera-pill is-offline"><i />ไม่บันทึก</span>}</dd></div>
+                    <div><dt>สภาพอากาศ</dt><dd><span className={`camera-pill is-weather-${viewerVariant.weather}`}><i />{WEATHER_LABEL[viewerVariant.weather]}</span></dd></div>
+                    <div><dt>ช่วงเวลา</dt><dd><span className={`camera-pill ${viewerVariant.night >= 0.5 ? 'is-night' : 'is-day'}`}><i />{viewerVariant.period}</span></dd></div>
                     <div><dt>การเคลื่อนไหว</dt><dd>{viewerCamera.motion ? <span className="camera-pill is-motion"><i />ตรวจพบ</span> : <span className="camera-pill is-offline"><i />ไม่พบ</span>}</dd></div>
                   </dl>
                 </section>

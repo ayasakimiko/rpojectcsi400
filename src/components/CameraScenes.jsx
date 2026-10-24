@@ -292,8 +292,19 @@ function doorPoints(xa, xb, mirror = false) {
     .join(' ')
 }
 
-export function CorridorScene() {
+const SHIRT_COLORS = ['#334155', '#7c2d12', '#065f46', '#1e3a8a', '#831843', '#78350f', '#3f6212', '#0f766e']
+const CORRIDOR_WALKERS = ['approach', 'away', 'enter-left', 'exit-right', 'enter-right']
+
+function corridorCast(seed) {
+  const picks = CORRIDOR_WALKERS.filter((_, index) => ((seed >> index) & 1) === 1)
+  const cast = picks.length >= 2 ? picks : ['approach', CORRIDOR_WALKERS[2 + (seed % 3)]]
+  return cast.map((path, index) => ({ path, body: SHIRT_COLORS[(seed + index * 3) % SHIRT_COLORS.length] }))
+}
+
+export function CorridorScene({ seed = 0 }) {
   const doors = [[18, 46], [76, 94], [110, 120]]
+  const cast = corridorCast(seed)
+  const paths = new Set(cast.map((walker) => walker.path))
   return (
     <svg className="scene-svg" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice">
       <defs>
@@ -349,6 +360,9 @@ export function CorridorScene() {
           <polygon points={doorPoints(xa, xb, true)} fill="url(#cr-door)" stroke="#3d2a1b" strokeWidth="0.8" />
         </g>
       ))}
+      {paths.has('enter-left') && <polygon className="corridor-svg-open is-enter-left" points={doorPoints(76, 94)} fill="#2a2119" />}
+      {paths.has('exit-right') && <polygon className="corridor-svg-open is-exit-right" points={doorPoints(76, 94, true)} fill="#2a2119" />}
+      {paths.has('enter-right') && <polygon className="corridor-svg-open is-enter-right" points={doorPoints(18, 46, true)} fill="#2a2119" />}
       <g fill="#e5e7eb">
         <rect x="50" y="62" width="7" height="3.2" rx="0.6" />
         <rect x="263" y="62" width="7" height="3.2" rx="0.6" />
@@ -375,9 +389,11 @@ export function CorridorScene() {
         <rect x="151" y="46" width="18" height="1.8" rx="0.6" fill="#fffaf0" />
         <ellipse cx="160" cy="112" rx="18" ry="3" fill="url(#cr-shine)" />
       </g>
-      <g className="corridor-svg-walker">
-        <SvgPerson body="#334155" />
-      </g>
+      {cast.map((walker) => (
+        <g key={walker.path} className={`corridor-svg-walker is-${walker.path}`}>
+          <SvgPerson body={walker.body} />
+        </g>
+      ))}
     </svg>
   )
 }
