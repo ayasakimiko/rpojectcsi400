@@ -885,6 +885,8 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       awaitingPayment: (statusCounts.awaiting_payment || 0) + (statusCounts.payment_review || 0),
       pendingDeposit: pendingDepositCount,
       archived: archivedCount,
+      transferred: statusCounts.transferred || 0,
+      endedEarly: statusCounts.ended_early || 0,
     })
   }, [onSummaryChange, loading, contracts.length, statusCounts, pendingDepositCount, archivedCount])
   const filtersActive = Boolean(keyword || dates.from || dates.to || status !== 'all' || scope !== 'all' || sort !== 'newest')
