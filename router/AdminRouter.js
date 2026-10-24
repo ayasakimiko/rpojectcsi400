@@ -910,7 +910,7 @@ router.put("/rooms/:room_number", async (req, res) => {
 
     const pool = getPool();
     if (hasField(body, "room_number") && Number(body.room_number) !== roomNumberValue) {
-      if (await roomHeldForTransfer(pool, roomNumberValue)) {
+      if (await roomHeldForTransfer(pool, roomNumberValue, { anyRequest: true })) {
         return res.status(409).json({ message: "ห้องนี้มีผู้เช่ารอย้ายเข้าอยู่ ยังเปลี่ยนเลขห้องไม่ได้" });
       }
     }

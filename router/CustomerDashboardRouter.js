@@ -40,6 +40,7 @@ import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.
 import {
   expireRoomTransferCharges,
   loadCustomerContracts,
+  claimRoomsForPaidTransfers,
   loadHeldTransferRooms,
   loadRoomTransferPreview,
   roomHeldForTransfer,
@@ -1064,6 +1065,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
          WHERE id IN (?) AND status = 'pending'`,
         [slipPath, methodLabel, verifyLabel, utilityPaymentIds],
       );
+      await claimRoomsForPaidTransfers(connection);
     }
 
     if (currentDue.rentAmount > 0 && currentDue.lumpSumMonths) {

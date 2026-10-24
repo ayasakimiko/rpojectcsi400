@@ -564,7 +564,7 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   if (!targetRoom) blockers.push("ไม่พบห้องปลายทาง");
   else if (targetRoom.is_booked) blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าแล้ว ไม่สามารถย้ายเข้าได้`);
   else if (await roomHeldForTransfer(db, targetRoom.room_number, { exceptRequestId: request.id })) {
-    blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าคนอื่นจองไว้ระหว่างรอชำระส่วนต่าง`);
+    blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าคนอื่นชำระเงินย้ายเข้าก่อนแล้ว`);
   }
   if (!sourceRoom || !sourceRoom.is_booked) blockers.push("ห้องต้นทางเปลี่ยนแปลงแล้ว กรุณาตรวจสอบสถานะห้อง");
   else if (!sourceRoom.contract_active) blockers.push("สัญญาเช่าหมดอายุแล้ว ไม่สามารถย้ายห้องได้");
@@ -682,23 +682,67 @@ export const ROOM_TRANSFER_CHARGE_DAYS = 3;
 
 export async function loadHeldTransferRooms(db, { exceptCustomerId = 0 } = {}) {
   const [rows] = await db.query(
-    `SELECT DISTINCT target_room_number FROM TenantRequest
-     WHERE type = 'move_room' AND status IN ('pending', 'in_progress')
-       AND transfer_charge_payment_id IS NOT NULL AND target_room_number IS NOT NULL AND customer_id <> ?`,
+    `SELECT DISTINCT tr.target_room_number FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+       AND tr.target_room_number IS NOT NULL AND tr.customer_id <> ?`,
     [exceptCustomerId],
   );
   return new Set(rows.map((row) => Number(row.target_room_number)));
 }
 
-export async function roomHeldForTransfer(db, roomNumber, { exceptRequestId = 0, exceptCustomerId = 0 } = {}) {
+export async function roomHeldForTransfer(db, roomNumber, { exceptRequestId = 0, exceptCustomerId = 0, anyRequest = false } = {}) {
   const [rows] = await db.query(
-    `SELECT id FROM TenantRequest
-     WHERE type = 'move_room' AND status IN ('pending', 'in_progress') AND transfer_charge_payment_id IS NOT NULL
-       AND target_room_number = ? AND id <> ? AND customer_id <> ?
+    `SELECT tr.id FROM TenantRequest tr
+     LEFT JOIN Payment p ON p.id = tr.transfer_charge_payment_id
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+       AND (? OR p.status = 'paid')
+       AND tr.target_room_number = ? AND tr.id <> ? AND tr.customer_id <> ?
      LIMIT 1`,
-    [roomNumber, exceptRequestId, exceptCustomerId],
+    [anyRequest, roomNumber, exceptRequestId, exceptCustomerId],
   );
   return rows.length > 0;
+}
+
+export async function claimRoomsForPaidTransfers(db) {
+  const [winners] = await db.query(
+    `SELECT tr.id, tr.target_room_number FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND tr.target_room_number IS NOT NULL
+       AND EXISTS (SELECT 1 FROM TenantRequest other
+         WHERE other.type = 'move_room' AND other.status IN ('pending', 'in_progress')
+           AND other.target_room_number = tr.target_room_number AND other.id <> tr.id)
+     ORDER BY p.id ASC`,
+  );
+  const claimed = new Set();
+  let cancelled = 0;
+  for (const winner of winners) {
+    if (claimed.has(winner.target_room_number)) continue;
+    claimed.add(winner.target_room_number);
+    const [losers] = await db.query(
+      `SELECT id, transfer_charge_payment_id FROM TenantRequest
+       WHERE type = 'move_room' AND status IN ('pending', 'in_progress') AND target_room_number = ? AND id <> ?`,
+      [winner.target_room_number, winner.id],
+    );
+    for (const loser of losers) {
+      await db.query(
+        `UPDATE TenantRequest
+         SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (มีผู้เช่าคนอื่นชำระก่อน)', reject_reason = ?
+         WHERE id = ? AND status IN ('pending', 'in_progress')`,
+        [`มีผู้เช่าคนอื่นชำระเงินย้ายเข้าห้อง ${winner.target_room_number} ก่อนแล้ว ระบบยกเลิกคำขอย้ายห้องนี้ กรุณาเลือกห้องอื่น`, loser.id],
+      );
+      if (loser.transfer_charge_payment_id) {
+        await db.query(
+          `UPDATE Payment SET status = 'cancelled',
+                  note = LEFT(CONCAT(COALESCE(note, ''), IF(slip_path IS NULL, ' (ยกเลิก: มีผู้เช่าคนอื่นชำระก่อน)', ' (ยกเลิก: มีผู้เช่าคนอื่นชำระก่อน ต้องคืนเงินตามสลิป)')), 255)
+           WHERE id = ? AND status = 'pending'`,
+          [loser.transfer_charge_payment_id],
+        );
+      }
+      cancelled += 1;
+    }
+  }
+  return cancelled;
 }
 
 export const roomTransferNeedsPayment = (plan) => plan.transferCharge.required && plan.transferCharge.status !== "paid";
@@ -794,6 +838,7 @@ export async function cancelTransfersIntoBookedRooms(db, roomNumber = null) {
 
 export async function expireRoomTransferCharges(db) {
   await cancelTransfersIntoBookedRooms(db);
+  await claimRoomsForPaidTransfers(db);
   const [rows] = await db.query(
     `SELECT tr.id, tr.transfer_charge_payment_id
      FROM TenantRequest tr

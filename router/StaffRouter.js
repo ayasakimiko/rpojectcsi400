@@ -43,6 +43,7 @@ import {
   applyRoomTransfer,
   buildRoomTransferPlan,
   cancelTransfersIntoBookedRooms,
+  claimRoomsForPaidTransfers,
   closeCustomerTenancy,
   contractImageName,
   contractImageUrl,
@@ -376,6 +377,7 @@ router.patch("/payment-verifications/:id", async (req, res) => {
        WHERE booking_id = ? AND slip_path = ? AND status = 'pending'`,
       [payment.booking_id, payment.slip_path],
     );
+    await claimRoomsForPaidTransfers(connection);
     if (currentDue?.lumpSumMonths) {
       await connection.query(
         `UPDATE Room SET prepaid_until = DATE_ADD(?, INTERVAL ? MONTH), pending_lump_sum_months = NULL
@@ -979,6 +981,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
         `UPDATE Payment SET status = 'paid', payment_date = CURDATE() WHERE id IN (?)`,
         [utilityPaymentIds],
       );
+      await claimRoomsForPaidTransfers(connection);
     }
 
     await connection.commit();

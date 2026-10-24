@@ -8,6 +8,8 @@ configureDatabaseService("staff");
 const {
   applyRoomTransfer,
   buildRoomTransferPlan,
+  claimRoomsForPaidTransfers,
+  roomHeldForTransfer,
   loadCustomerContracts,
   syncRoomTransferCharge,
   validateInspectionDamage,
@@ -199,6 +201,34 @@ test("more expensive room with damage: deposit top-up before the move, rent diff
     await connection.query(`UPDATE Payment SET status = 'paid' WHERE id = ?`, [row.rent_charge_payment_id]);
     const paidContract = (await loadCustomerContracts(connection, [tenant.customerId])).get(tenant.customerId);
     assert.equal(cents(paidContract.rent_paid), unpaidRent + rentCharge);
+  }));
+
+test("two tenants can ask for the same room and whoever pays the deposit top-up first gets it", () =>
+  withRollback(async (connection) => {
+    const first = await setupTenant(connection, { oldPrice: 3500, newPrice: 4500, damage: 0 });
+    const second = await setupTenant(connection, { oldPrice: 3500, newPrice: 4500, damage: 0 });
+    await connection.query(`UPDATE TenantRequest SET target_room_number = ? WHERE id = ?`, [first.targetNumber, second.requestId]);
+
+    assert.ok(await syncRoomTransferCharge(connection, first.requestId, "ทดสอบ") > 0);
+    assert.ok(await syncRoomTransferCharge(connection, second.requestId, "ทดสอบ") > 0);
+    assert.equal(await roomHeldForTransfer(connection, first.targetNumber, { exceptRequestId: second.requestId }), false);
+
+    const [[firstRequest]] = await connection.query(`SELECT transfer_charge_payment_id FROM TenantRequest WHERE id = ?`, [first.requestId]);
+    const [[secondRequest]] = await connection.query(`SELECT transfer_charge_payment_id FROM TenantRequest WHERE id = ?`, [second.requestId]);
+    await connection.query(`UPDATE Payment SET status = 'paid', slip_path = 'test.jpg' WHERE id = ?`, [firstRequest.transfer_charge_payment_id]);
+    assert.equal(await claimRoomsForPaidTransfers(connection), 1);
+
+    const [[loser]] = await connection.query(`SELECT status, reject_reason FROM TenantRequest WHERE id = ?`, [second.requestId]);
+    assert.equal(loser.status, "cancelled");
+    assert.match(loser.reject_reason, /ชำระเงินย้ายเข้าห้อง .* ก่อนแล้ว/);
+    const [[loserCharge]] = await connection.query(`SELECT status FROM Payment WHERE id = ?`, [secondRequest.transfer_charge_payment_id]);
+    assert.equal(loserCharge.status, "cancelled");
+
+    const [[winner]] = await connection.query(`SELECT status FROM TenantRequest WHERE id = ?`, [first.requestId]);
+    assert.equal(winner.status, "in_progress");
+    assert.equal(await roomHeldForTransfer(connection, first.targetNumber, { exceptCustomerId: second.customerId }), true);
+    const plan = await buildRoomTransferPlan(connection, first.requestId, { lock: true });
+    assert.deepEqual(plan.blockers, []);
   }));
 
 test("unpaid current rent blocks the transfer and never creates credit", () =>
