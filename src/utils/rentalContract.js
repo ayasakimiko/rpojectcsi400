@@ -78,5 +78,7 @@ export function completedContractSummaryTiles(summary) {
     { key: 'active', icon: 'vacant', tone: 'green', label: 'สัญญามีผล', value: value('active') },
     { key: 'awaiting', icon: 'slip', tone: 'amber', label: 'รอชำระงวดแรก', value: value('awaitingPayment') },
     { key: 'deposit', icon: 'due', tone: 'red', label: 'รอคืน/ริบมัดจำ', value: value('pendingDeposit'), alert: summary?.pendingDeposit > 0 },
+    { key: 'transferred', icon: 'booked', tone: 'violet', label: 'ย้ายห้องแล้ว', value: value('transferred') },
+    { key: 'ended-early', icon: 'request', tone: 'orange', label: 'ออกก่อนสัญญา', value: value('endedEarly') },
   ]
 }

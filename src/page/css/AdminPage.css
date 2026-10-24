@@ -783,6 +783,22 @@
   gap: 14px;
 }
 
+@media (min-width: 1100px) {
+  .admin-summary-grid.is-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .admin-summary-grid.is-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1099px) {
+  .admin-summary-grid.is-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .admin-summary-card {
   --tone-ink: #2563eb;
   --tone-value: #1d4ed8;
