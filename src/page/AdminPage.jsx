@@ -35,7 +35,8 @@ import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { StaffCompletedContractsTab, StaffFilterPanel } from './StaffMain.jsx'
+import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel } from './StaffMain.jsx'
+import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1227,7 +1228,8 @@ const TABS = [
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
   { key: 'waiting-list', label: 'รายชื่อรอห้องว่าง' },
-  { key: 'move-out-inspections', label: 'ตรวจห้องย้ายออก' },
+  { key: 'move-in-inspections', label: 'ตรวจก่อนเข้าอยู่' },
+  { key: 'move-out-inspections', label: 'ผลตรวจห้อง' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'expenses', label: 'รายจ่าย' },
   { key: 'announcements', label: 'ประกาศ' },
@@ -1238,7 +1240,8 @@ const TABS = [
 const TAB_GROUPS = [
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'room-types', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
-  { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
+  { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
+  { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
@@ -2085,6 +2088,19 @@ function availableAssetSuggestions(form) {
     ].map((name) => name.toLocaleLowerCase()),
   )
   return ROOM_AMENITY_SUGGESTIONS.filter((suggestion) => !used.has(suggestion.name.toLocaleLowerCase()))
+}
+
+function roomEquipmentItems(form) {
+  const amenities = [
+    ...BUILTIN_EQUIPMENT.filter((item) => form[item.field]).map((item) => ({ name: item.name, icon: 'sparkle' })),
+    ...form.custom_amenities,
+  ]
+  return [
+    ...amenities.map((item) => ({ ...item, asset: form.assetRows.find((row) => row.name.trim() === item.name) })),
+    ...form.assetRows
+      .filter((row) => !amenities.some((item) => item.name === row.name.trim()))
+      .map((row) => ({ name: row.name.trim(), icon: 'sparkle', asset: row })),
+  ]
 }
 
 function RoomDetailIcon({ type, size = 16 }) {
@@ -5812,6 +5828,7 @@ function AdminBackupPage() {
   const [roomsPage, setRoomsPage] = useState(1)
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
+  const equipmentItems = roomEquipmentItems(roomForm)
   const [amenityDraft, setAmenityDraft] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('sparkle')
   const [amenityPrice, setAmenityPrice] = useState('')
@@ -8854,6 +8871,8 @@ function AdminBackupPage() {
           />
         )}
 
+        {activeTab === 'move-in-inspections' && <MoveInInspectionPanel Modal={StaffModal} FilterPanel={StaffFilterPanel} />}
+
         {activeTab === 'move-out-inspections' && (
           <div className="admin-card">
             <div className="admin-card-header">
@@ -10410,11 +10429,8 @@ function AdminBackupPage() {
                 <span className="admin-room-form-icon"><RoomDetailIcon type="sparkle" size={16} /></span>
                 <div>
                   <strong>อุปกรณ์และทรัพย์สินในห้อง</strong>
-                  <small>กดเพื่อเลือกหรือยกเลิก · กด “+ เพิ่มทรัพย์สิน” เพื่อใส่ชื่อและราคา (ใช้คำนวณค่าเสียหายตอนย้ายออก)</small>
+                  <small>จัดการรายการและราคาสำหรับคำนวณค่าเสียหายตอนย้ายออก</small>
                 </div>
-                <span className="admin-room-form-count">
-                  เลือกแล้ว {['air_conditioner', 'refrigerator'].filter((field) => roomForm[field]).length + roomForm.custom_amenities.length}
-                </span>
               </header>
               {roomTypes.length > 0 && (
                 <label className="admin-room-field room-assets-type">
@@ -10431,45 +10447,38 @@ function AdminBackupPage() {
                   </select>
                 </label>
               )}
-              <div className="admin-toggle-grid">
-                {BUILTIN_EQUIPMENT.filter((item) => roomForm[item.field]).map((item) => {
-                  const asset = roomForm.assetRows.find((row) => row.name.trim() === item.name)
-                  return (
-                    <span className="admin-custom-amenity" key={item.field}>
-                      <CustomAmenityIcon name="sparkle" size={15} />{item.name}
-                      {asset && <small className="admin-custom-amenity-price">฿{assetPriceValue(asset.price).toLocaleString('th-TH')}</small>}
-                      <button type="button" onClick={() => removeRoomAsset(item.name)} aria-label={`ลบ ${item.name}`}>×</button>
-                    </span>
-                  )
-                })}
-                {roomForm.custom_amenities.map((amenity) => {
-                  const asset = roomForm.assetRows.find((row) => row.name.trim() === amenity.name)
-                  return (
-                    <span className="admin-custom-amenity" key={amenity.name}>
-                      <CustomAmenityIcon name={amenity.icon} size={15} />{amenity.name}
-                      {asset && <small className="admin-custom-amenity-price">฿{assetPriceValue(asset.price).toLocaleString('th-TH')}</small>}
-                      <button type="button" onClick={() => removeRoomAsset(amenity.name)} aria-label={`ลบ ${amenity.name}`}>×</button>
-                    </span>
-                  )
-                })}
-                {roomForm.assetRows
-                  .filter((row) => !roomForm.custom_amenities.some((amenity) => amenity.name === row.name.trim())
-                    && !BUILTIN_EQUIPMENT.some((item) => roomForm[item.field] && item.name === row.name.trim()))
-                  .map((row) => (
-                    <span className="admin-custom-amenity" key={row.rowId}>
-                      <CustomAmenityIcon name="sparkle" size={15} />{row.name}
-                      <small className="admin-custom-amenity-price">฿{assetPriceValue(row.price).toLocaleString('th-TH')}</small>
-                      <button type="button" onClick={() => removeRoomAsset(row.name.trim())} aria-label={`ลบ ${row.name}`}>×</button>
-                    </span>
-                  ))}
-                <button type="button" className="admin-custom-amenity-add" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
+              <div className="admin-equipment-list-heading">
+                <strong>รายการในห้อง <span>{equipmentItems.length} รายการ</span></strong>
+                <button type="button" className="admin-action-btn is-primary" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
               </div>
-              {roomForm.assetRows.length > 0 && (
-                <p className="admin-room-assets-total">
-                  ทรัพย์สินที่มีราคา {roomForm.assetRows.length} รายการ · มูลค่ารวม{' '}
-                  <strong>฿{roomForm.assetRows.reduce((sum, row) => sum + assetPriceValue(row.price), 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
-                </p>
+              {equipmentItems.length > 0 ? (
+                <ul className="admin-equipment-list">
+                  {equipmentItems.map((item) => (
+                    <li className="admin-equipment-item" key={item.asset?.rowId ?? item.name}>
+                      <span className="admin-equipment-icon" aria-hidden="true"><CustomAmenityIcon name={item.icon} size={20} /></span>
+                      <div className="admin-equipment-info">
+                        <strong>{item.name}</strong>
+                        <span className={item.asset ? 'admin-equipment-price' : 'admin-equipment-unpriced'}>
+                          {item.asset ? '฿' + assetPriceValue(item.asset.price).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'ยังไม่ระบุราคา'}
+                        </span>
+                      </div>
+                      <button type="button" className="admin-equipment-remove" onClick={() => removeRoomAsset(item.name)} aria-label={'ลบ ' + item.name} title={'ลบ ' + item.name}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="admin-equipment-empty">
+                  <RoomDetailIcon type="box" size={28} />
+                  <strong>ยังไม่มีอุปกรณ์หรือทรัพย์สิน</strong>
+                  <span>กด “เพิ่มทรัพย์สิน” เพื่อเริ่มเพิ่มรายการในห้องนี้</span>
+                </div>
               )}
+              <div className="admin-equipment-summary">
+                <div><strong>มูลค่าทรัพย์สินรวม</strong><small>ระบุราคาแล้ว {roomForm.assetRows.length} รายการ</small></div>
+                <strong>฿{roomForm.assetRows.reduce((sum, row) => sum + assetPriceValue(row.price), 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
             </section>
 
             <div className="admin-room-form-actions">

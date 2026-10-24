@@ -721,8 +721,8 @@ const CHECKLIST_RESULT_OPTIONS = [
 ]
 const INSPECTION_MAX_PHOTOS = 15
 const INSPECTION_PAGES = [
-  { key: 'results', label: 'ผลตรวจห้อง' },
   { key: 'move-in', label: 'ตรวจก่อนเข้าอยู่' },
+  { key: 'results', label: 'ผลตรวจห้อง' },
 ]
 const STAFF_INSPECTION_STATUS_LABEL = {
   pending: 'รอ Admin ตรวจ',
@@ -1142,7 +1142,7 @@ function buildAnnouncementNotif(item) {
 
 const openModalStack = []
 
-function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef }) {
+export function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -3595,7 +3595,7 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
           <div className="mic-view-toggle" role="group" aria-label="มุมมองผลตรวจ">
             {[
               { key: 'latest', label: 'ผลตรวจล่าสุด' },
-              { key: 'compare', label: 'เทียบกับตอนเข้าอยู่' },
+              { key: 'compare', label: 'ผลตรวจก่อนเข้าอยู่' },
             ].map((item) => (
               <button
                 key={item.key}
@@ -7186,7 +7186,7 @@ function StaffMain() {
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
   const [inspectionAssetsOpen, setInspectionAssetsOpen] = useState(true)
-  const [inspectionPage, setInspectionPage] = useState('results')
+  const [inspectionPage, setInspectionPage] = useState('move-in')
   const liveMoveInBaseline = useMoveInBaseline(inspectionModal && !inspectionEditing ? inspectionForm.room_number : null)
   const inspectionBaseline = inspectionEditing
     ? { loading: false, baseline: inspectionEditing.move_in_baseline ?? null, error: '' }
@@ -9869,7 +9869,7 @@ function StaffMain() {
                 <InspectionTopicFilter
                   topics={[
                     { key: 'all', label: 'ทั้งหมด' },
-                    ...(inspectionForm.room_number ? [{ key: 'baseline', label: 'เทียบกับผลตรวจก่อนเข้าอยู่' }] : []),
+                    ...(inspectionForm.room_number ? [{ key: 'baseline', label: 'ผลตรวจก่อนเข้าอยู่' }] : []),
                     { key: 'checklist', label: 'ตรวจสภาพห้อง' },
                     { key: 'photos', label: 'รายละเอียดและรูปภาพ' },
                     ...(inspectionMoveRoomId ? [{ key: 'finance', label: 'ค่าเสียหายและเงินมัดจำ' }] : []),

@@ -2454,6 +2454,77 @@
   flex-shrink: 0;
 }
 
+.ccc-modal .ccc-hero {
+  height: auto;
+  min-height: 72px;
+  gap: 8px;
+}
+
+.ccc-modal .ccc-room {
+  width: 76px;
+  border-radius: 10px;
+}
+
+.ccc-modal .ccc-room strong {
+  font-size: 22px;
+}
+
+.ccc-modal .ccc-period.csc-period {
+  border-radius: 10px;
+}
+
+.ccc-modal .ccc-period .csc-period-row {
+  padding: 5px 12px;
+}
+
+.ccc-modal .ccc-period .csc-date b {
+  font-size: 14px;
+}
+
+.ccc-modal .ccc-period .csc-period-meta {
+  padding: 3px 12px;
+}
+
+.ccc-modal .ccc-summary {
+  gap: 8px;
+}
+
+.ccc-modal .ccc-summary-card {
+  height: auto;
+  min-height: 72px;
+  gap: 9px;
+  padding: 8px 12px;
+  border-radius: 11px;
+}
+
+.ccc-modal .ccc-summary-card::after {
+  width: 60px;
+  height: 60px;
+}
+
+.ccc-modal .ccc-summary-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.ccc-modal .ccc-summary-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.ccc-modal .ccc-summary-text small {
+  font-size: 12px;
+}
+
+.ccc-modal .ccc-summary-text strong {
+  font-size: 18px;
+}
+
+.ccc-modal .ccc-summary-card.is-primary .ccc-summary-text strong {
+  font-size: 20px;
+}
+
 .staff-modal-body:has(> .ccc-modal > .contract-refund-note, > .ccc-modal > .deposit-settle-card) {
   overflow-y: auto;
   scrollbar-color: #c9dcfb transparent;

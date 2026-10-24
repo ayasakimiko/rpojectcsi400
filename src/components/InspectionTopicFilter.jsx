@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import './InspectionForm.css'
 
 export default function InspectionTopicFilter({ topics, value, onChange }) {
   const barRef = useRef(null)
@@ -7,9 +8,9 @@ export default function InspectionTopicFilter({ topics, value, onChange }) {
     onChange(key)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const form = barRef.current?.closest('form')
-        if (!form) return
-        const target = key === 'all' ? form : form.querySelector(`[data-topic="${key}"]:not([hidden])`)
+        const root = barRef.current?.closest('[data-topic-root], form')
+        if (!root) return
+        const target = key === 'all' ? root : root.querySelector(`[data-topic="${key}"]:not([hidden])`)
         target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         barRef.current?.querySelector(`[data-key="${key}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
       })

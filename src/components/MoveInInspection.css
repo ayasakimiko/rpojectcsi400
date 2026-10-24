@@ -1021,35 +1021,128 @@
 .move-out-assets {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e8eff8;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.move-out-assets-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf2f9;
   background: #f8fbff;
+}
+
+.move-out-assets-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.move-out-assets-title strong {
+  color: #0f2b52;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.move-out-assets-title span {
+  color: #6b859e;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.move-out-assets-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.move-out-assets-stats span {
+  padding: 3px 10px;
+  border: 1px solid #e3ecf8;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b7290;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.move-out-assets-stats .is-good {
+  border-color: #dcfce7;
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.move-out-assets-stats .is-issue,
+.move-out-assets-stats .is-charge {
+  border-color: #fee4e2;
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .move-out-assets-note {
   margin: 0;
-  color: #5b7290;
-  font-size: 12px;
+  padding: 8px 14px 0;
+  color: #6b859e;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.move-out-assets-list {
+  display: flex;
+  max-height: 440px;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 10px 14px 12px;
+  scrollbar-width: thin;
+}
+
+.move-out-assets-empty {
+  margin: 0;
+  padding: 18px 12px;
+  border: 1px dashed #dce9fb;
+  border-radius: 12px;
+  color: #8aa0b6;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
 }
 
 .move-out-asset {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border: 1px solid #e6f0fd;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e8eff8;
+  border-radius: 12px;
   background: #fff;
+  transition: border-color 0.15s ease;
+}
+
+.move-out-asset:hover {
+  border-color: #dce9fb;
+}
+
+.move-out-asset.is-wear {
+  border-color: #fef0c7;
+  background: #fffdf7;
 }
 
 .move-out-asset.is-damaged,
 .move-out-asset.is-missing {
-  background: #fff8f8;
+  border-color: #fee4e2;
+  background: #fffafa;
 }
 
 .move-out-asset.is-invalid {
   border-color: #fca5a5;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.12);
 }
 
 .move-out-asset-head {
@@ -1057,19 +1150,23 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
 .move-out-asset-name {
   display: flex;
+  min-width: 0;
   flex-direction: column;
+  gap: 1px;
   color: #0f2b52;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 700;
 }
 
 .move-out-asset-name b {
   color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .move-out-asset-name small {
@@ -1084,8 +1181,39 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #0f2b52;
+  padding: 10px 14px;
+  border-top: 1px solid #edf2f9;
+  background: #fbfdff;
+  color: #5b7290;
   font-size: 13px;
+  font-weight: 600;
+}
+
+.move-out-assets-footer strong {
+  color: #0f2b52;
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.move-out-assets-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 14px;
+  border: 1px dashed #93c5fd;
+  border-radius: 9px;
+  background: #fff;
+  color: #2563eb;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.move-out-assets-add:hover {
+  border-style: solid;
+  background: #eff6ff;
 }
 
 .inspection-damage-total {

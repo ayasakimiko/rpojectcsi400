@@ -82,11 +82,25 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
     else update(index, { result, cost: COSTED_RESULTS.includes(result) ? defaultAssetCost({ ...asset, result }) : undefined })
   }
 
+  const assetTotal = (assets || []).reduce((sum, asset) => sum + (Number(String(asset.price ?? '').replace(/,/g, '')) || 0), 0)
+  const issueCount = (assets || []).filter((asset) => ['damaged', 'missing'].includes(asset.result)).length
+  const chargeTotal = chargeableAssetCost(assets || [])
+
   if (!roomNumber) return <p className="move-out-assets-note">เลือกห้องก่อน ระบบจะดึงทรัพย์สินของห้องพร้อมราคา</p>
   if (assets === null) return <p className="move-out-assets-note">{current.error || 'กำลังโหลดทรัพย์สินของห้อง...'}</p>
 
   return (
     <div className="move-out-assets">
+      <div className="move-out-assets-head">
+        <div className="move-out-assets-title">
+          <strong>อุปกรณ์และทรัพย์สิน</strong>
+          <span>{assets.length} รายการ · มูลค่ารวม {formatBaht(assetTotal)}</span>
+        </div>
+        <div className="move-out-assets-stats">
+          <span className={issueCount > 0 ? 'is-issue' : 'is-good'}>{issueCount > 0 ? `ชำรุด/สูญหาย ${issueCount}` : 'ปกติทั้งหมด'}</span>
+          {!recordOnly && <span className={chargeTotal > 0 ? 'is-charge' : ''}>ค่าเสียหาย {formatBaht(chargeTotal)}</span>}
+        </div>
+      </div>
       <p className="move-out-assets-note">
         {recordOnly ? (
           'ราคาเริ่มจากที่ Admin กำหนด แก้ราคาได้ในช่อง ฿ · ราคานี้ใช้เป็นราคาอ้างอิงตอนตรวจย้ายออก · ผลตรวจเริ่มต้นเป็น “ปกติ”'
@@ -98,7 +112,8 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
           </>
         )}
       </p>
-      {assets.length === 0 && <p className="move-out-assets-note">ห้องนี้ยังไม่มีรายการทรัพย์สิน กด “+ เพิ่มรายการ” เพื่อกรอกเอง</p>}
+      <div className="move-out-assets-list">
+      {assets.length === 0 && <p className="move-out-assets-empty">ห้องนี้ยังไม่มีรายการทรัพย์สิน กด “+ เพิ่มรายการ” เพื่อกรอกเอง</p>}
       {assets.map((asset, index) => {
         const invalid = invalidIndexes.includes(index)
         const costed = !recordOnly && COSTED_RESULTS.includes(asset.result)
@@ -174,23 +189,18 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
           </div>
         )
       })}
+      </div>
       <div className="move-out-assets-footer">
         <button
           type="button"
-          className="inspection-link-btn"
+          className="move-out-assets-add"
           onClick={() => onChange([...assets, { name: '', price: '', move_in_result: null, result: 'good', manual: true }])}
         >
           + เพิ่มรายการ
         </button>
-        {recordOnly ? (
-          <span>
-            {assets.length} รายการ · มูลค่ารวม <strong>{formatBaht(assets.reduce((sum, asset) => sum + (Number(String(asset.price ?? '').replace(/,/g, '')) || 0), 0))}</strong>
-          </span>
-        ) : (
-          <span>
-            ค่าเสียหายทรัพย์สิน <strong>{formatBaht(chargeableAssetCost(assets))}</strong>
-          </span>
-        )}
+        <span>
+          {recordOnly ? 'มูลค่ารวม' : 'ค่าเสียหายทรัพย์สิน'} <strong>{formatBaht(recordOnly ? assetTotal : chargeTotal)}</strong>
+        </span>
       </div>
     </div>
   )

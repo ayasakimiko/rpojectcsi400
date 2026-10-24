@@ -101,7 +101,7 @@ function ConditionGrid({ title, items }) {
   )
 }
 
-export default function MoveInBaselineCard({ baseline, loading = false, error = '', title = 'เทียบกับผลตรวจก่อนเข้าอยู่' }) {
+export default function MoveInBaselineCard({ baseline, loading = false, error = '', title = 'ผลตรวจก่อนเข้าอยู่' }) {
   const [open, setOpen] = useState(true)
   const [photoIndex, setPhotoIndex] = useState(null)
   const [filter, setFilter] = useState('all')
