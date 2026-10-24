@@ -395,6 +395,10 @@ function computeRentDue(room, paymentsForBooking) {
   const priceCents = Math.round(Number(room.price) * 100);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !Number.isSafeInteger(priceCents) || priceCents <= 0) return null;
   if (now > end) return null;
+  if (room.billing_start_date && now < start) {
+    return { amount: 0, firstPeriod: false, monthlyPrice: priceCents / 100, lumpSumMonths: null, overdueMonths: 0,
+      periodStart: billingPeriodAt(start, -1), periodEnd: start, dueDate: null, status: "paid" };
+  }
   const billingNow = now < start ? start : now;
 
   const rentPayments = paymentsForBooking.filter(isRentPayment);

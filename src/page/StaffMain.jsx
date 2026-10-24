@@ -3410,6 +3410,25 @@ function MoveRoomContractCard({ request, preview, loading, contractEnd, contract
   )
 }
 
+function SectionFilter({ sections, value, onChange }) {
+  return (
+    <div className="trd-filter" role="tablist" aria-label="กรองหัวข้อ">
+      {sections.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          role="tab"
+          aria-selected={value === item.key}
+          className={value === item.key ? 'is-active' : ''}
+          onClick={() => onChange(item.key)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function MoveRoomDetailBody({ request, isOpen, rentDiff, transferPreview, contractEnd, contractMsLeft, progressSteps, finished, actions }) {
   const { preview, loading, error } = transferPreview
   const tenantName = `${request.first_name || ''} ${request.last_name || ''}`.trim()
@@ -3429,20 +3448,7 @@ function MoveRoomDetailBody({ request, isOpen, rentDiff, transferPreview, contra
       <div className="trd-scroll">
         <MoveRoomDetailHero request={request} rentDiff={rentDiff} preview={preview} isOpen={isOpen} />
 
-        <div className="trd-filter" role="tablist" aria-label="กรองหัวข้อ">
-          {sections.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="tab"
-              aria-selected={section === item.key}
-              className={section === item.key ? 'is-active' : ''}
-              onClick={() => setSection(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <SectionFilter sections={sections} value={section} onChange={setSection} />
 
         <div className={`trd-note${request.note ? '' : ' is-empty'}`}>
           <small>หมายเหตุจากผู้เช่า</small>
@@ -3607,17 +3613,17 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
               )
             })}
           </ul>
-          {inspection.damage_note && (
-            <div className={`staff-insp-note${issueItems.length > 0 ? ' is-issue' : ''}`}>
-              <strong>{issueItems.length > 0 ? 'รายละเอียดความเสียหาย' : 'หมายเหตุจากการตรวจ'}</strong>
-              <p>{inspection.damage_note}</p>
-            </div>
-          )}
           {inspection.tenant_request_type === 'move_room' && (
             <p className="idt-damage-cost">
               ค่าเสียหายที่หักจากเงินมัดจำ{' '}
               <b>{Number(inspection.damage_cost) > 0 ? `฿${formatCurrency(inspection.damage_cost)}` : 'ไม่มี'}</b>
             </p>
+          )}
+          {inspection.damage_note && (
+            <div className={`staff-insp-note${issueItems.length > 0 ? ' is-issue' : ''}`}>
+              <strong>{issueItems.length > 0 ? 'รายละเอียดความเสียหาย' : 'หมายเหตุจากการตรวจ'}</strong>
+              <p>{inspection.damage_note}</p>
+            </div>
           )}
           {photos.length > 0 ? (
             <div className="staff-insp-gallery">
@@ -3750,13 +3756,25 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
   }
   const chargeSectionRef = useRef(null)
   const contractSectionRef = useRef(null)
-  const scrollToSection = (ref) => {
-    const node = ref.current
-    if (!node) return
-    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    node.classList.remove('is-flash')
-    void node.offsetWidth
-    node.classList.add('is-flash')
+  const [section, setSection] = useState('all')
+  const sections = [
+    { key: 'all', label: 'ทั้งหมด' },
+    { key: 'tenant', label: 'ผู้เช่าและสัญญา' },
+    { key: 'inspection', label: 'ผลตรวจห้อง' },
+    { key: 'money', label: 'เงินมัดจำและยอดชำระ' },
+    { key: 'contract', label: 'รูปสัญญาใหม่' },
+  ]
+  const show = (key) => section === 'all' || section === key
+  const scrollToSection = (key, ref) => {
+    if (!show(key)) setSection(key)
+    requestAnimationFrame(() => {
+      const node = ref.current
+      if (!node) return
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      node.classList.remove('is-flash')
+      void node.offsetWidth
+      node.classList.add('is-flash')
+    })
   }
   const amenities = TARGET_ROOM_AMENITIES.filter((item) => request[`target_room_${item.key}`])
 
@@ -3825,14 +3843,15 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                   </span>
                 </div>
               </div>
+            </div>
+
+            <div className="staff-transfer-scroll">
+              <SectionFilter sections={sections} value={section} onChange={setSection} />
               {request.note && (
                 <p className="staff-transfer-note">
                   <span>หมายเหตุ:</span> {request.note}
                 </p>
               )}
-            </div>
-
-            <div className="staff-transfer-scroll">
               <div className="staff-transfer-summary">
                 {rentDiff !== null && (
                   <span
@@ -3856,7 +3875,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                 ))}
               </div>
 
-              <section className="staff-transfer-section">
+              <section className="staff-transfer-section" hidden={!show('tenant')}>
                 <h4 className="staff-transfer-section-title">ผู้เช่าและสัญญา</h4>
                 <div className="staff-transfer-groups">
                   <div className="staff-transfer-group">
@@ -3954,15 +3973,17 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                 </div>
               </section>
 
-              <InspectionSummary
-                inspectionId={request.inspection_id}
-                roomNumber={request.room_number}
-                tenantName={`${request.first_name || ''} ${request.last_name || ''}`.trim()}
-              />
+              {show('inspection') && (
+                <InspectionSummary
+                  inspectionId={request.inspection_id}
+                  roomNumber={request.room_number}
+                  tenantName={`${request.first_name || ''} ${request.last_name || ''}`.trim()}
+                />
+              )}
 
-              <TransferSettlementSection preview={preview} loading={previewLoading} loadError={previewError} />
+              {show('money') && <TransferSettlementSection preview={preview} loading={previewLoading} loadError={previewError} />}
 
-              {awaitingCharge && (
+              {show('money') && awaitingCharge && (
                 <section
                   ref={chargeSectionRef}
                   className="staff-transfer-section is-warning is-charge"
@@ -3982,6 +4003,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
 
               <section
                 ref={contractSectionRef}
+                hidden={!show('contract')}
                 className={`staff-transfer-section${contractFilesReady ? '' : ' is-warning'}`}
                 onAnimationEnd={(event) => event.currentTarget.classList.remove('is-flash')}
               >
@@ -4011,14 +4033,14 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
 
             <div className="staff-transfer-footer">
               {awaitingCharge && transferCharge.status !== 'not_sent' && (
-                <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection(chargeSectionRef)}>
+                <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection('money', chargeSectionRef)}>
                   <strong>{TRANSFER_CHARGE_STATUS_TEXT[transferCharge.status]}</strong>
                   <span>ทำสัญญาย้ายห้องได้หลังผู้เช่าชำระยอดย้ายห้องและตรวจสลิปผ่านแล้ว</span>
                   <em className="staff-transfer-footer-warning-link">ดูรายละเอียด ↓</em>
                 </button>
               )}
               {!awaitingCharge && !contractFilesReady && (
-                <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection(contractSectionRef)}>
+                <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection('contract', contractSectionRef)}>
                   <strong>ต้องแนบรูปสัญญาใหม่ก่อนอนุมัติ</strong>
                   <span>
                     แนบแล้ว {contractFiles.length} จาก {ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป
