@@ -1,5 +1,7 @@
 const ICON_PATHS = {
-  sparkle: <><path d="m12 2 1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7L12 2Z" /><path d="m19 17 .6 2.4L22 20l-2.4.6L19 23l-.6-2.4L16 20l2.4-.6L19 17Z" /></>,
+  sparkle: <><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" /><path d="m3 8 9 5 9-5M12 13v8" /></>,
+  aircon: <><rect x="2" y="4" width="20" height="9" rx="2" /><path d="M6 9h12M7 17c0 1.5-1 2-1 3m6-3v3m5-3c0 1.5 1 2 1 3" /></>,
+  fridge: <><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M5 9h14M8 5v2m0 5v3" /></>,
   desk: <><path d="M3 10h18v3H3zM5 13v8m14-8v8M8 10V4h8v6" /></>,
   wardrobe: <><rect x="4" y="2" width="16" height="20" rx="1" /><path d="M12 2v20M9 11v3m6-3v3" /></>,
   shower: <><path d="M5 20V7a4 4 0 0 1 8 0v1m-2 0h7v3h-7zM12 14v1m3-1v2m3-2v1" /></>,

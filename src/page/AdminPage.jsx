@@ -2060,15 +2060,13 @@ const ROOM_AMENITIES = [
 ]
 
 
-// Air conditioner and fridge are stored as the room's on/off columns (used by
-// tenant pages and room search) but are added and removed like any other asset.
 const BUILTIN_EQUIPMENT = [
-  { field: 'air_conditioner', name: 'เครื่องปรับอากาศ' },
-  { field: 'refrigerator', name: 'ตู้เย็น' },
+  { field: 'air_conditioner', name: 'เครื่องปรับอากาศ', icon: 'aircon' },
+  { field: 'refrigerator', name: 'ตู้เย็น', icon: 'fridge' },
 ]
 
 const ROOM_AMENITY_SUGGESTIONS = [
-  ...BUILTIN_EQUIPMENT.map((item) => ({ name: item.name, icon: 'sparkle' })),
+  ...BUILTIN_EQUIPMENT.map((item) => ({ name: item.name, icon: item.icon })),
   { name: 'โต๊ะทำงาน', icon: 'desk' },
   { name: 'ตู้เสื้อผ้า', icon: 'wardrobe' },
   { name: 'เครื่องทำน้ำอุ่น', icon: 'shower' },
@@ -2090,7 +2088,7 @@ function availableAssetSuggestions(form) {
 
 function roomEquipmentItems(form) {
   const amenities = [
-    ...BUILTIN_EQUIPMENT.filter((item) => form[item.field]).map((item) => ({ name: item.name, icon: 'sparkle' })),
+    ...BUILTIN_EQUIPMENT.filter((item) => form[item.field]).map((item) => ({ name: item.name, icon: item.icon })),
     ...form.custom_amenities,
   ]
   return [
@@ -6388,8 +6386,6 @@ function AdminBackupPage() {
     setRoomModal({ mode: 'create' })
   }
 
-  // mode 'amenities' shows only the equipment and assets section; it is allowed
-  // for occupied rooms because it saves through the assets endpoint.
   const openEditRoom = (room, mode = 'edit') => {
     if (room.is_booked && mode === 'edit') return
     setAmenityDraft('')
@@ -6502,8 +6498,6 @@ function AdminBackupPage() {
     setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  // Custom amenities double as priced room assets: each one added here is shown
-  // to tenants and also used to calculate damage at move-out.
   const addRoomAmenity = (requestClose) => {
     const name = amenityDraft.trim()
     if (!name) {
@@ -6527,7 +6521,6 @@ function AdminBackupPage() {
       ...(builtin
         ? { [builtin.field]: true }
         : {
-            // Only 12 amenities are shown to tenants; extra assets are still priced.
             custom_amenities: prev.custom_amenities.length < 12 ? [...prev.custom_amenities, { name, icon: amenityIcon }] : prev.custom_amenities,
           }),
       assetRows: [...prev.assetRows, ...toAssetRows([{ name, price: amenityPrice.replace(/,/g, '').trim() }])],
@@ -6545,7 +6538,6 @@ function AdminBackupPage() {
     }))
   }
 
-  // Opens the add-asset modal with the first unused suggestion already picked.
   const openAddRoomAsset = () => {
     const [first] = availableAssetSuggestions(roomForm)
     setAmenityDraft(first?.name || '')
@@ -10301,7 +10293,6 @@ function AdminBackupPage() {
           <form className="admin-room-form" onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
             {roomFormError && <div className="alert alert-danger py-2 px-3">{roomFormError}</div>}
 
-            {/* The "ทรัพย์สิน" button opens only the equipment section, which stays editable while the room is occupied. */}
             {roomModal.mode !== 'amenities' && (
             <>
             <section className="admin-room-form-section">
