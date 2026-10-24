@@ -16,6 +16,7 @@ import ProcessSteps from '../components/ProcessSteps.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
+import WifiManager from '../components/WifiManager.jsx'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
@@ -1734,6 +1735,7 @@ const OWNER_TABS = [
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
+  { key: 'wifi', label: 'Wi-Fi' },
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
   { key: 'audit', label: 'ประวัติ Audit' },
@@ -3638,6 +3640,8 @@ function OwnerMain() {
         {activeTab === 'parking' && (
           <StaffResidentVisitsTab canManageSettings onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
         )}
+
+        {activeTab === 'wifi' && <WifiManager />}
 
         {activeTab === 'safety' && (
           <StaffSafetyTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} onSummaryChange={summaryReporters.safety} />

@@ -46,6 +46,7 @@ import { damageInputError, damageInputValue } from '../utils/damageCost.js'
 import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
+import WifiManager from '../components/WifiManager.jsx'
 import {
   ParkingChoiceGroup,
   ParkingFinePayment,
@@ -1295,6 +1296,7 @@ const STAFF_TABS = [
   { key: 'payment-review', label: 'ประวัติสลิป' },
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'parcels', label: 'พัสดุ' },
+  { key: 'wifi', label: 'Wi-Fi' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
@@ -10587,6 +10589,8 @@ function StaffMain() {
             onChange={loadAnnouncements}
           />
         )}
+
+        {staffTab === 'wifi' && <WifiManager />}
 
         {staffTab === 'parcels' && (
           <div className="parcel-management-card">

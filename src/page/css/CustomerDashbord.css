@@ -11688,3 +11688,55 @@
 .dashboard-renew-summary.is-warning strong {
   color: #b45309;
 }
+
+.dashboard-status-sections {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  margin: 8px 0 14px;
+  padding: 4px;
+  border: 1px solid #dce9fb;
+  border-radius: 12px;
+  background: #f1f6fd;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dashboard-status-sections::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-status-section-tab {
+  flex: 1 0 auto;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #5b7590;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.dashboard-status-section-tab:hover {
+  color: #1d4ed8;
+}
+
+.dashboard-status-section-tab.is-active {
+  background: #ffffff;
+  color: #1d4ed8;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 43, 82, 0.12);
+}
+
+.dashboard-status-section-tab:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}

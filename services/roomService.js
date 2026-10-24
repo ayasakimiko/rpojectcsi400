@@ -4,6 +4,7 @@ import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import roomRouter from "../router/RoomRouter.js";
+import wifiRouter from "../router/WifiRouter.js";
 
 configureDatabaseService("room");
 
@@ -18,6 +19,8 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "room" });
 });
 
+// Mounted first so "/wifi" is not read as a room number by roomRouter.
+app.use("/api/rooms/wifi", wifiRouter);
 app.use("/api/rooms", roomRouter);
 
 const server = app.listen(PORT, () => {

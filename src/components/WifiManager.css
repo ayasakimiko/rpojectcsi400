@@ -1,0 +1,1393 @@
+.wifi-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid #e6f0fd;
+  border-radius: 20px;
+  background: #fff;
+  padding: 20px;
+  color: #0f2b52;
+}
+
+.wifi-manager-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.wifi-manager-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wifi-manager-title h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.wifi-manager-title p {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: #6b859e;
+}
+
+.wifi-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  color: #fff;
+}
+
+.wifi-input {
+  min-width: 0;
+  border: 1.5px solid #d6e4f5;
+  border-radius: 10px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #0f2b52;
+  background: #fff;
+}
+
+.wifi-input:focus {
+  outline: none;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+.wifi-search {
+  width: 220px;
+}
+
+.wifi-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.wifi-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid #d6e4f5;
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #48627d;
+  cursor: pointer;
+}
+
+.wifi-filter-chip span {
+  min-width: 20px;
+  border-radius: 999px;
+  padding: 0 6px;
+  background: #eef4fc;
+  font-size: 12px;
+  text-align: center;
+}
+
+.wifi-filter-chip.is-active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.wifi-filter-chip.is-active span {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.wifi-refresh {
+  margin-left: auto;
+}
+
+.wifi-notice {
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wifi-notice.is-success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.wifi-notice.is-error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.wifi-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.wifi-room-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1.5px solid #dbe7f6;
+  border-radius: 16px;
+  padding: 16px;
+  background: #fbfdff;
+}
+
+.wifi-room-card.is-disabled {
+  background: #f8fafc;
+  border-style: dashed;
+}
+
+.wifi-room-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wifi-room-head h4 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.wifi-room-head small {
+  color: #6b859e;
+  font-size: 13px;
+}
+
+.wifi-status-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wifi-manager-title .wifi-status-badge {
+  margin-left: auto;
+}
+
+.wifi-status-badge.is-active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.wifi-status-badge.is-full {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.wifi-status-badge.is-off {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.wifi-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wifi-usage-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.wifi-usage-text small {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.wifi-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wifi-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px dashed #c7d7ec;
+  border-radius: 9px;
+  background: #fff;
+  color: #b6c7dc;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.wifi-slot.is-used {
+  border: 1.5px solid #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.wifi-slot.is-used.is-offline {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.wifi-slots.is-full .wifi-slot.is-used:not(.is-offline) {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.wifi-slot-plus {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wifi-device-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wifi-device-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wifi-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wifi-device-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: #fff;
+  border: 1px solid #e6f0fd;
+}
+
+.wifi-device-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.wifi-device-name small {
+  color: #8199b2;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wifi-online-toggle {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: #e2e8f0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.wifi-online-toggle.is-online {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.wifi-online-toggle.is-static {
+  cursor: default;
+}
+
+.wifi-remove-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.wifi-remove-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.wifi-empty-text {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 14px;
+  color: #8199b2;
+  text-align: center;
+}
+
+.wifi-hint {
+  color: #6b859e;
+  font-size: 12.5px;
+}
+
+.wifi-error {
+  margin: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.wifi-room-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #e6f0fd;
+}
+
+.wifi-room-actions .wifi-btn {
+  flex: 1 1 auto;
+}
+
+.wifi-btn {
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 6px 12px;
+  background: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1d4ed8;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wifi-btn:hover:not(:disabled),
+.wifi-btn.is-active {
+  border-color: #60a5fa;
+  background: #dbeafe;
+}
+
+.wifi-btn.is-primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.wifi-btn.is-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.wifi-btn.is-warning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.wifi-btn.is-danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.wifi-btn.is-danger-ghost {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.wifi-btn.is-danger-ghost:hover:not(:disabled),
+.wifi-btn.is-danger-ghost.is-active {
+  border-color: #f87171;
+  background: #fee2e2;
+}
+
+.wifi-btn:disabled,
+.wifi-link-btn:disabled,
+.wifi-online-toggle:disabled,
+.wifi-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wifi-link-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.wifi-customer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: auto;
+  color: #0f2b52;
+}
+
+.wifi-customer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.wifi-cred-card.is-hero .wifi-cred-row {
+  padding: 16px 18px;
+}
+
+.wifi-cred-card.is-hero .wifi-cred-value {
+  font-size: 22px;
+}
+
+.wifi-customer-off {
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px 16px;
+  color: #64748b;
+  text-align: center;
+}
+
+.wifi-customer-off small {
+  font-size: 13px;
+}
+
+.wifi-customer-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1.5px solid #e6f0fd;
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: #fff;
+}
+
+.wifi-customer-usage.is-full {
+  border-color: #fde68a;
+  background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
+}
+
+.wifi-customer-usage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #6b859e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wifi-customer-count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.wifi-customer-count strong {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #1d4ed8;
+}
+
+.wifi-customer-usage.is-full .wifi-customer-count strong {
+  color: #b45309;
+}
+
+.wifi-customer-usage.is-off {
+  background: #f8fafc;
+}
+
+.wifi-customer-usage.is-off .wifi-customer-count strong {
+  color: #94a3b8;
+}
+
+.wifi-customer-count span {
+  color: #48627d;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wifi-customer-remaining {
+  margin-bottom: 6px;
+  color: #48627d;
+  font-size: 13.5px;
+}
+
+.wifi-online-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wifi-online-count i,
+.wifi-presence::before {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+.wifi-customer-devices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wifi-customer-devices li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e6f0fd;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fbfdff;
+}
+
+.wifi-customer-devices .wifi-device-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+
+.wifi-customer-devices li:not(.is-online) .wifi-device-icon {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.wifi-presence {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  color: #15803d;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wifi-presence::before {
+  content: "";
+}
+
+.wifi-customer-devices li:not(.is-online) .wifi-presence {
+  color: #64748b;
+}
+
+.wifi-customer-devices li:not(.is-online) .wifi-presence::before {
+  background: #cbd5e1;
+  box-shadow: none;
+}
+
+.wifi-empty-box {
+  margin: 0;
+  border: 1.5px dashed #d6e4f5;
+  border-radius: 12px;
+  padding: 18px;
+  color: #8199b2;
+  font-size: 14px;
+  text-align: center;
+}
+
+.wifi-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f1f7ff;
+  color: #48627d;
+  font-size: 13px;
+}
+
+.wifi-note svg {
+  flex-shrink: 0;
+  color: #2563eb;
+}
+
+@media (max-width: 860px) {
+  .wifi-customer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .wifi-manager {
+    padding: 14px;
+  }
+
+  .wifi-search {
+    width: 100%;
+  }
+
+  .wifi-room-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+.wifi-device-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.wifi-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 43, 82, 0.45);
+  backdrop-filter: blur(2px);
+  animation: wifi-fade-in 0.15s ease;
+}
+
+.wifi-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  color: #0f2b52;
+  box-shadow: 0 24px 60px rgba(15, 43, 82, 0.25);
+  animation: wifi-pop-in 0.18s ease;
+}
+
+.wifi-modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid #e6f0fd;
+}
+
+.wifi-modal-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.wifi-modal-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wifi-modal-head p {
+  margin: 2px 0 0;
+  color: #6b859e;
+  font-size: 13.5px;
+}
+
+.wifi-modal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  color: #fff;
+}
+
+.wifi-modal.is-danger .wifi-modal-icon {
+  background: linear-gradient(135deg, #f87171, #dc2626);
+}
+
+.wifi-modal-close {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: #8199b2;
+  cursor: pointer;
+}
+
+.wifi-modal-close:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f2b52;
+}
+
+.wifi-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.wifi-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e6f0fd;
+  background: #f8fbff;
+}
+
+.wifi-modal-actions .wifi-btn {
+  min-width: 110px;
+  padding: 9px 16px;
+  font-size: 14.5px;
+}
+
+.wifi-modal-quota {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f1f7ff;
+}
+
+.wifi-modal-quota .wifi-usage-text small {
+  color: #2563eb;
+}
+
+.wifi-modal-message {
+  margin: 0;
+  font-size: 14.5px;
+  color: #48627d;
+}
+
+.wifi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.wifi-field > label,
+.wifi-field > legend {
+  margin: 0 0 2px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.wifi-field .wifi-input {
+  padding: 10px 12px;
+  font-size: 15px;
+}
+
+.wifi-required {
+  color: #dc2626;
+}
+
+.wifi-field-counter {
+  align-self: flex-end;
+  color: #8199b2;
+  font-size: 12px;
+}
+
+.wifi-type-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wifi-type-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1.5px solid #e2ebf6;
+  border-radius: 14px;
+  padding: 14px 6px 12px;
+  background: #fff;
+  color: #48627d;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wifi-type-tile input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wifi-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  color: #5b7898;
+  transition: color 0.15s ease;
+}
+
+.wifi-type-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wifi-type-tile:hover {
+  border-color: #bfdbfe;
+  background: #fafcff;
+}
+
+.wifi-type-tile.is-selected {
+  border-color: #2563eb;
+  background: #f5f9ff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+}
+
+.wifi-type-tile.is-selected .wifi-type-icon {
+  color: #2563eb;
+}
+
+.wifi-type-tile:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.35);
+}
+
+.wifi-device-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wifi-device-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff7f7;
+}
+
+@keyframes wifi-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes wifi-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+@media (max-width: 600px) {
+  .wifi-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .wifi-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .wifi-type-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .wifi-modal-actions .wifi-btn {
+    flex: 1;
+  }
+}
+
+.wifi-device-name {
+  overflow-wrap: normal;
+}
+
+.wifi-device-label {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wifi-device-name small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wifi-field-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f2b52;
+}
+
+.wifi-field-error {
+  color: #dc2626;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wifi-stepper {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.wifi-stepper-btn {
+  width: 56px;
+  flex-shrink: 0;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  font: inherit;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  color: #1d4ed8;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wifi-stepper-btn:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #dbeafe;
+}
+
+.wifi-stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wifi-stepper-value {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #d6e4f5;
+  border-radius: 14px;
+  padding: 8px 12px 6px;
+  background: #fff;
+}
+
+.wifi-stepper-value:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+.wifi-stepper-value:has(input[aria-invalid="true"]) {
+  border-color: #fca5a5;
+}
+
+.wifi-stepper-value input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #0f2b52;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.wifi-stepper-value input::-webkit-outer-spin-button,
+.wifi-stepper-value input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.wifi-stepper-value span {
+  color: #6b859e;
+  font-size: 13px;
+}
+
+.wifi-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wifi-preset-chip {
+  min-width: 44px;
+  border: 1.5px solid #d6e4f5;
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: #48627d;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.wifi-preset-chip:hover:not(:disabled) {
+  border-color: #93c5fd;
+}
+
+.wifi-preset-chip.is-selected {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.wifi-preset-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wifi-diff {
+  margin-left: 6px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wifi-diff.is-up {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.wifi-diff.is-down {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.wifi-cred-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.wifi-cred-card.is-off {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.wifi-cred-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.wifi-cred-row + .wifi-cred-row {
+  border-top: 1px dashed #c7d7ec;
+}
+
+.wifi-cred-row > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wifi-cred-label {
+  color: #6b859e;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wifi-cred-value {
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f2b52;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wifi-cred-value.is-secret {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.06em;
+}
+
+.wifi-cred-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.wifi-icon-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  border: 1.5px solid #d6e4f5;
+  border-radius: 9px;
+  padding: 5px 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d4ed8;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.wifi-icon-btn:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.wifi-icon-btn.is-done {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.wifi-setting-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e6f0fd;
+  border-radius: 14px;
+}
+
+.wifi-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.wifi-setting-row + .wifi-setting-row {
+  border-top: 1px solid #e6f0fd;
+}
+
+.wifi-setting-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wifi-setting-row strong {
+  font-size: 14.5px;
+}
+
+.wifi-setting-row small {
+  color: #6b859e;
+  font-size: 12.5px;
+}
+
+.wifi-switch {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: #cbd5e1;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.wifi-switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 43, 82, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.wifi-switch.is-on {
+  background: #22c55e;
+}
+
+.wifi-switch.is-on span {
+  transform: translateX(20px);
+}
+
+.wifi-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.4);
+}
+
+.wifi-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wifi-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fef2f2;
+  animation: wifi-fade-in 0.15s ease;
+}
+
+.wifi-confirm p {
+  margin: 0;
+  color: #991b1b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wifi-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .wifi-cred-row {
+    flex-wrap: wrap;
+  }
+}
+
+.wifi-device-cancel {
+  flex-shrink: 0;
+  border: 1.5px solid #fecaca;
+  border-radius: 8px;
+  padding: 3px 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wifi-device-cancel:hover:not(:disabled) {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.wifi-device-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wifi-customer-devices + .wifi-notice {
+  margin-top: 4px;
+}
+
+.wifi-device-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.wifi-test-connect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px dashed #93c5fd;
+  border-radius: 10px;
+  padding: 5px 10px;
+  background: #f5f9ff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d4ed8;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wifi-test-connect:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.wifi-test-connect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wifi-test-badge {
+  border-radius: 999px;
+  padding: 0 7px;
+  background: #fef3c7;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+}
