@@ -4,7 +4,7 @@ import path from "node:path";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
-import { PUBLIC_UPLOAD_DIR, deletePublicImages } from "../middleware/publicUploads.js";
+import { PUBLIC_UPLOAD_DIR, customerUploadFolder, deletePublicImages, moveUploadedFiles, uploadedFileUrl } from "../middleware/publicUploads.js";
 import { isPositiveId } from "../middleware/validation.js";
 
 const MAX_PARCEL_PHOTOS = 6;
@@ -74,8 +74,6 @@ function readText(value, maxLength) {
   if (text?.length > maxLength) throw new HttpError(400, "ข้อมูลพัสดุยาวเกินกำหนด");
   return text;
 }
-
-const photoUrl = (file) => `/uploads/parcels/${file.filename}`;
 
 async function removePhotos(urls) {
   try {
@@ -150,6 +148,7 @@ export function createParcelRouter(getActorName) {
       if (checks.includes(false)) throw new HttpError(400, "ไฟล์ที่อัปโหลดไม่ใช่รูปภาพ JPG, PNG หรือ WebP ที่ถูกต้อง");
 
       const actorName = await getActorName(pool, req.user);
+      await moveUploadedFiles(files, customerUploadFolder("parcels", tenant.id));
 
       connection = await pool.getConnection();
       await connection.beginTransaction();
@@ -160,14 +159,14 @@ export function createParcelRouter(getActorName) {
       );
       if (files.length > 0) {
         await connection.query(`INSERT INTO ParcelPhoto (parcel_id, name, url) VALUES ?`, [
-          files.map((file) => [result.insertId, path.basename(file.originalname).slice(0, 255) || "รูปพัสดุ", photoUrl(file)]),
+          files.map((file) => [result.insertId, path.basename(file.originalname).slice(0, 255) || "รูปพัสดุ", uploadedFileUrl(file)]),
         ]);
       }
       await connection.commit();
       return res.status(201).json({ message: "บันทึกพัสดุเข้าห้องสำเร็จ", parcelId: result.insertId });
     } catch (error) {
       if (connection) await connection.rollback();
-      await removePhotos((req.files ?? []).map(photoUrl));
+      await removePhotos((req.files ?? []).map(uploadedFileUrl));
       if (error instanceof HttpError) return res.status(error.status).json({ message: error.message });
       console.error("Create parcel error:", error);
       return res.status(500).json({ message: SERVER_ERROR });

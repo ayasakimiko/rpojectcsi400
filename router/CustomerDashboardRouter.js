@@ -9,10 +9,12 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, requireCustomerRole } from "../middleware/authMiddleware.js";
 import { requireActiveCustomer } from "../middleware/accounts.js";
 import {
+  customerUploadFolder,
   deletePublicImages,
   parseStoredPhotos,
   PUBLIC_UPLOAD_DIR,
   savePublicImages,
+  uploadedFileUrl,
   withIncidentPhotos,
 } from "../middleware/publicUploads.js";
 import { listAnnouncements } from "./AnnouncementRouter.js";
@@ -103,12 +105,12 @@ export function classifySafetySeverity(incidentType, description) {
 }
 const PAYMENT_SLIP_FOLDER = "payment-slips";
 const PAYMENT_SLIP_EXTENSIONS = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
-const PAYMENT_SLIP_DIR = path.join(PUBLIC_UPLOAD_DIR, PAYMENT_SLIP_FOLDER);
-fs.mkdirSync(PAYMENT_SLIP_DIR, { recursive: true });
-
 const slipUpload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, callback) => callback(null, PAYMENT_SLIP_DIR),
+    destination: (req, _file, callback) => {
+      const folderPath = path.join(PUBLIC_UPLOAD_DIR, customerUploadFolder(PAYMENT_SLIP_FOLDER, req.user?.id));
+      fs.mkdir(folderPath, { recursive: true }, (error) => callback(error, folderPath));
+    },
     filename: (_req, file, callback) => callback(null, `${randomUUID()}${PAYMENT_SLIP_EXTENSIONS[file.mimetype]}`),
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -177,7 +179,7 @@ export async function createSafetyIncident(req, res) {
     const requestedRoom = Number(roomNumber);
     const safeRoom = isCustomer ? user.room_number : Number.isInteger(requestedRoom) && requestedRoom > 0 ? requestedRoom : null;
     const severity = classifySafetySeverity(String(incidentType).trim(), description);
-    savedPhotos = await savePublicImages("incidents", parsedPhotos.value);
+    savedPhotos = await savePublicImages(isCustomer ? customerUploadFolder("incidents", req.user.id) : "incidents", parsedPhotos.value);
     await pool.query(
       `INSERT INTO SafetyIncident (reporter_role, reporter_id, reporter_name, room_number, incident_type, severity, description, photos)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -899,7 +901,7 @@ async function recordSlipRejection(pool, attempt, file, reason) {
     [
       attempt.bookingId,
       attempt.customerId,
-      `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(file.filename)}`,
+      uploadedFileUrl(file),
       attempt.qrPayload || null,
       details.transRef,
       details.amount,
@@ -972,7 +974,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
         attempt = { bookingId: booking.id, customerId: customer.id, qrPayload, slip: null, used };
         throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
       }
-      const manualSlipPath = `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
+      const manualSlipPath = uploadedFileUrl(req.file);
       const manualLabel = testMode ? `${methodLabel} · ${TEST_PAYMENT_MARK}` : methodLabel;
       connection = await pool.getConnection();
       await connection.beginTransaction();
@@ -1039,7 +1041,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     const verifyLabel = testMode ? TEST_PAYMENT_MARK : "ตรวจสลิปอัตโนมัติ";
 
     attempt = null;
-    const slipPath = `/uploads/${PAYMENT_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
+    const slipPath = uploadedFileUrl(req.file);
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
@@ -1163,7 +1165,7 @@ router.post("/maintenance", async (req, res) => {
       return res.status(400).json({ message: "กรุณาแนบรูปปัญหาอย่างน้อย 1 รูป" });
     }
 
-    const savedPhotos = await savePublicImages("maintenance", photos.value);
+    const savedPhotos = await savePublicImages(customerUploadFolder("maintenance", req.user.id), photos.value);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -1594,7 +1596,7 @@ router.post("/resident-visit-requests", async (req, res) => {
     if (requestType === "vehicle" && (await isPlateRegisteredByOther(pool, req.user.id, vehiclePlate))) {
       return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
     }
-    savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
+    savedPhotos = await savePublicImages(customerUploadFolder("vehicles", req.user.id), parsedPhotos.value);
     const insert = async (db) => {
       if (parking) {
         await assertParkingAllowed(db, { ...parking.value, customerId: req.user.id, guestPhone: "" });

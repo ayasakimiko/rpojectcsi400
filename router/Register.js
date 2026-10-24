@@ -6,6 +6,7 @@ import { CONTRACT_DURATION_MONTHS, DEPOSIT_MONTHS, isValidDateTimeString, valida
 import {
   contractImageName,
   contractImageUrl,
+  moveContractFiles,
   cancelTransfersIntoBookedRooms,
   expireRoomTransferCharges,
   loadCustomerContracts,
@@ -219,6 +220,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       [customerId, room.id, mysqlStartDateTime, mysqlEndDateTime, durationMonths, normalizedDepositAmount],
     );
 
+    await moveContractFiles(files, customerId);
     await connection.query(
       `INSERT INTO ContractImage (booking_id, customer_id, name, url) VALUES ?`,
       [files.map((file, index) => [bookingResult.insertId, customerId, contractImageName(file, index), contractImageUrl(file)])],

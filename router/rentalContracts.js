@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
-import { PUBLIC_UPLOAD_DIR, deletePublicImages } from "../middleware/publicUploads.js";
+import { PUBLIC_UPLOAD_DIR, customerUploadFolder, deletePublicImages, moveUploadedFiles, uploadedFileUrl } from "../middleware/publicUploads.js";
 import { IMAGE_TYPES, isRealImage } from "./ParcelRouter.js";
 import { CONTRACT_MIN_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from "../middleware/validation.js";
 import {
@@ -50,7 +50,9 @@ const UPLOAD_ERRORS = {
   LIMIT_UNEXPECTED_FILE: `แนบรูปสัญญาได้ไม่เกิน ${CONTRACT_MAX_IMAGES} รูป`,
 };
 
-export const contractImageUrl = (file) => `/uploads/${CONTRACT_IMAGE_FOLDER}/${file.filename}`;
+export const contractImageUrl = uploadedFileUrl;
+
+export const moveContractFiles = (files, customerId) => moveUploadedFiles(files, customerUploadFolder(CONTRACT_IMAGE_FOLDER, customerId));
 
 export async function removeContractFiles(files) {
   try {
@@ -1246,6 +1248,8 @@ export function createAttachTransferContractHandler(getPool) {
     let kept = false;
     try {
       if (!Number.isSafeInteger(transferId) || transferId <= 0) return res.status(400).json({ message: "รหัสรายการย้ายห้องไม่ถูกต้อง" });
+      const [[transfer]] = await connection.query("SELECT customer_id FROM RoomTransfer WHERE id = ?", [transferId]);
+      if (transfer) await moveContractFiles(files, transfer.customer_id);
       await connection.beginTransaction();
       await attachTransferContractImages(
         connection,

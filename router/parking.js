@@ -4,7 +4,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { isPositiveId } from "../middleware/validation.js";
-import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
+import { PUBLIC_UPLOAD_DIR, customerUploadFolder, moveUploadedFiles } from "../middleware/publicUploads.js";
 import {
   DEMO_PAYMENT_CHANNELS,
   TEST_PAYMENT_MARK,
@@ -471,7 +471,7 @@ export function createFinePaymentHandler({ getActingName, scopeCustomerId = () =
       );
       const config = configRows[0] || {};
       const testMode = Boolean(config.payment_test_mode);
-      const slipPath = `/uploads/${FINE_SLIP_FOLDER}/${path.basename(req.file.filename)}`;
+      const [slipPath] = await moveUploadedFiles([req.file], customerUploadFolder(FINE_SLIP_FOLDER, request.customer_id));
       const actorName = await getActingName(pool, req.user);
       const methodLabel = FINE_METHOD_LABELS[method];
       let nextStatus = "paid";

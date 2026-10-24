@@ -37,6 +37,35 @@ export async function deletePublicImages(urls) {
   }
 }
 
+export const GUEST_UPLOAD_FOLDER = "guest";
+export const OWNER_FOLDER_PATTERN = /^(?:customer-[1-9]\d{0,9}|guest)$/;
+
+export function customerUploadFolder(folder, customerId) {
+  const id = Number(customerId);
+  return `${folder}/${Number.isSafeInteger(id) && id > 0 ? `customer-${id}` : GUEST_UPLOAD_FOLDER}`;
+}
+
+export function uploadedFileUrl(file) {
+  if (!file?.path) return null;
+  const relative = path.relative(PUBLIC_UPLOAD_DIR, path.resolve(file.path));
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  return `${URL_PREFIX}/${relative.split(path.sep).join("/")}`;
+}
+
+export async function moveUploadedFiles(files, folder) {
+  const folderPath = path.join(PUBLIC_UPLOAD_DIR, folder);
+  await fs.mkdir(folderPath, { recursive: true });
+  for (const file of files ?? []) {
+    if (!file?.path) continue;
+    const target = path.join(folderPath, path.basename(file.path));
+    if (path.resolve(file.path) === target) continue;
+    await fs.rename(file.path, target);
+    file.path = target;
+    file.destination = folderPath;
+  }
+  return (files ?? []).map(uploadedFileUrl);
+}
+
 export async function savePublicImages(folder, photos) {
   const folderPath = path.join(PUBLIC_UPLOAD_DIR, folder);
   await fs.mkdir(folderPath, { recursive: true });

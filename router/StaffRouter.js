@@ -17,7 +17,7 @@ import {
   parseUtilityBillInput,
   parseWaitingListInput,
 } from "../middleware/validation.js";
-import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
+import { customerUploadFolder, deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
 import { recordAuditFields } from "../middleware/auditDetails.js";
 import { roomEquipmentAssets } from "./roomAssets.js";
 import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";
@@ -71,6 +71,7 @@ import {
   closeCustomerTenancy,
   contractImageName,
   contractImageUrl,
+  moveContractFiles,
   expireRoomTransferCharges,
   loadCompletedContracts,
   loadContractByBooking,
@@ -633,7 +634,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.photos, moi.tenant_request_id, tr.type AS tenant_request_type, tr.status AS tenant_request_status
+      `SELECT moi.photos, moi.tenant_request_id, tr.customer_id, tr.type AS tenant_request_type, tr.status AS tenant_request_status
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
        WHERE moi.id = ? AND moi.hidden_at IS NULL`,
@@ -657,7 +658,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     }
 
     const staffName = await getActingStaffName(pool, req.user);
-    const savedPhotos = await savePublicImages("move-out-inspections", value.newPhotos);
+    const savedPhotos = await savePublicImages(customerUploadFolder("move-out-inspections", rows[0].customer_id), value.newPhotos);
     let sentChargeCents = 0;
     const connection = await pool.getConnection();
     try {
@@ -759,7 +760,7 @@ router.post("/move-out-inspections", async (req, res) => {
       }
     }
     const staffName = await getActingStaffName(pool, req.user);
-    const photos = await savePublicImages("move-out-inspections", value.photos);
+    const photos = await savePublicImages(customerUploadFolder("move-out-inspections", tenant.id), value.photos);
     const connection = await pool.getConnection();
     let linkedRequestType = null;
     try {
@@ -976,7 +977,7 @@ router.post("/move-in-inspections", async (req, res) => {
     }
 
     const staffName = await getActingStaffName(pool, req.user);
-    const photos = await savePublicImages("move-in-inspections", value.photos);
+    const photos = await savePublicImages(customerUploadFolder("move-in-inspections", tenant.customer_id), value.photos);
     try {
       const [result] = await pool.query(
         `INSERT INTO MoveInInspection
@@ -1035,7 +1036,7 @@ router.patch("/move-in-inspections/:id", async (req, res) => {
       return res.status(409).json({ message: "มีบันทึกผลตรวจของวันที่นี้แล้ว กรุณาเลือกวันอื่น" });
     }
 
-    const savedPhotos = await savePublicImages("move-in-inspections", value.newPhotos);
+    const savedPhotos = await savePublicImages(customerUploadFolder("move-in-inspections", rows[0].customer_id), value.newPhotos);
     try {
       await pool.query(
         `UPDATE MoveInInspection
@@ -1828,6 +1829,7 @@ router.post("/requests/:id/approve", parseOptionalContractImages, async (req, re
           message: `กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูปก่อนอนุมัติย้ายห้อง`,
         });
       }
+      await moveContractFiles(uploadedFiles, transferPlan.customer.id);
       await applyRoomTransfer(
         connection,
         transferPlan,
@@ -2121,7 +2123,7 @@ router.post("/resident-visit-requests", async (req, res) => {
       return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนกับห้องพักอยู่แล้ว" });
     }
     const staffName = await getActingStaffName(pool, req.user);
-    savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
+    savedPhotos = await savePublicImages(customerUploadFolder("vehicles", customerId), parsedPhotos.value);
     const result = await withParkingLock(pool, async (connection) => {
       await assertParkingAllowed(connection, { ...parking.value, customerId, guestPhone: isVisitor ? guestPhone : "" });
       const [inserted] = await connection.query(
@@ -2216,7 +2218,7 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
     }
 
     const staffName = await getActingStaffName(pool, req.user);
-    savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
+    savedPhotos = await savePublicImages(customerUploadFolder("vehicles", current.customer_id), parsedPhotos.value);
     const nextPhotos = [...keptPhotos, ...savedPhotos];
     const result = await withParkingLock(pool, async (connection) => {
       await assertParkingAllowed(connection, {

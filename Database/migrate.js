@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename } from "node:fs/promises";
+import path from "node:path";
 import mysql from "mysql2/promise";
 import { DB_CONFIG, SCHEMA_SERVICES, TABLE_OWNER, TABLES_BY_SERVICE, serviceDatabaseName } from "./connection.js";
-import { savePublicImages } from "../middleware/publicUploads.js";
+import { PUBLIC_UPLOAD_DIR, customerUploadFolder, parseStoredPhotos, savePublicImages } from "../middleware/publicUploads.js";
 
 const PHOTO_BATCH_SIZE = 20;
 const databaseFor = (service) => serviceDatabaseName(DB_CONFIG.database, service);
@@ -170,6 +171,73 @@ async function moveMaintenancePhotosToFiles(connection) {
   return moved;
 }
 
+const CUSTOMER_UPLOAD_SOURCES = [
+  { table: "Payment", column: "slip_path", sql: (t) => `SELECT p.slip_path AS value, b.customer_id FROM ${t("Payment")} p JOIN ${t("Booking")} b ON b.id = p.booking_id WHERE p.slip_path LIKE '/uploads/%'` },
+  { table: "PaymentSlip", column: "slip_path", sql: (t) => `SELECT slip_path AS value, customer_id FROM ${t("PaymentSlip")}` },
+  { table: "PaymentSlipRejection", column: "slip_path", sql: (t) => `SELECT slip_path AS value, customer_id FROM ${t("PaymentSlipRejection")}` },
+  { table: "ResidentVisitRequest", column: "fine_slip_path", sql: (t) => `SELECT fine_slip_path AS value, customer_id FROM ${t("ResidentVisitRequest")} WHERE fine_slip_path IS NOT NULL` },
+  { table: "ResidentVisitRequest", column: "vehicle_photos", json: true, sql: (t) => `SELECT vehicle_photos AS value, customer_id FROM ${t("ResidentVisitRequest")} WHERE vehicle_photos LIKE '%/uploads/%'` },
+  { table: "ParcelPhoto", column: "url", sql: (t) => `SELECT ph.url AS value, p.customer_id FROM ${t("ParcelPhoto")} ph JOIN ${t("Parcel")} p ON p.id = ph.parcel_id` },
+  { table: "ContractImage", column: "url", sql: (t) => `SELECT url AS value, customer_id FROM ${t("ContractImage")}` },
+  { table: "MaintenancePhoto", column: "url", sql: (t) => `SELECT mp.url AS value, mr.customer_id FROM ${t("MaintenancePhoto")} mp JOIN ${t("MaintenanceRequest")} mr ON mr.id = mp.maintenance_request_id WHERE mp.url IS NOT NULL` },
+  { table: "SafetyIncident", column: "photos", json: true, sql: (t) => `SELECT photos AS value, reporter_id AS customer_id FROM ${t("SafetyIncident")} WHERE reporter_role = 'Customer' AND photos LIKE '%/uploads/%'` },
+  { table: "MoveOutInspection", column: "photos", json: true, sql: (t) => `SELECT moi.photos AS value, tr.customer_id FROM ${t("MoveOutInspection")} moi LEFT JOIN ${t("TenantRequest")} tr ON tr.id = moi.tenant_request_id WHERE moi.photos LIKE '%/uploads/%'` },
+  { table: "MoveInInspection", column: "photos", json: true, sql: (t) => `SELECT photos AS value, customer_id FROM ${t("MoveInInspection")} WHERE photos LIKE '%/uploads/%'` },
+];
+const ROOT_UPLOAD_URL = /^\/uploads\/([a-z-]+)\/([A-Za-z0-9][A-Za-z0-9._-]*)$/;
+
+async function moveCustomerUploadsToFolders(connection) {
+  const qualified = (table) => `\`${databaseFor(TABLE_OWNER[table])}\`.\`${table}\``;
+  const targets = new Map();
+  for (const source of CUSTOMER_UPLOAD_SOURCES) {
+    const [rows] = await connection.query(source.sql(qualified));
+    for (const row of rows) {
+      const urls = source.json ? parseStoredPhotos(row.value).map((photo) => photo.url) : [row.value];
+      for (const url of urls) {
+        const match = ROOT_UPLOAD_URL.exec(url ?? "");
+        if (match && !targets.has(url)) targets.set(url, `/uploads/${customerUploadFolder(match[1], row.customer_id)}/${match[2]}`);
+      }
+    }
+  }
+
+  const moved = [];
+  for (const [from, to] of targets) {
+    const fromPath = path.join(PUBLIC_UPLOAD_DIR, from.slice("/uploads/".length));
+    const toPath = path.join(PUBLIC_UPLOAD_DIR, to.slice("/uploads/".length));
+    try {
+      await mkdir(path.dirname(toPath), { recursive: true });
+      await rename(fromPath, toPath);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      try {
+        await access(toPath);
+      } catch {
+        continue;
+      }
+    }
+    moved.push([from, to]);
+  }
+
+  for (const [from, to] of moved) {
+    for (const source of CUSTOMER_UPLOAD_SOURCES) {
+      const target = qualified(source.table);
+      if (source.json) {
+        await connection.query(
+          `UPDATE ${target} SET ${source.column} = REPLACE(${source.column}, ?, ?) WHERE ${source.column} LIKE ?`,
+          [`"${from}"`, `"${to}"`, `%"${from}"%`],
+        );
+      } else {
+        await connection.query(`UPDATE ${target} SET ${source.column} = ? WHERE ${source.column} = ?`, [to, from]);
+      }
+    }
+    await connection.query(
+      `UPDATE ${qualified("AuditLog")} SET details = REPLACE(details, ?, ?) WHERE details LIKE ?`,
+      [`"${from}"`, `"${to}"`, `%"${from}"%`],
+    );
+  }
+  return moved.length;
+}
+
 async function migrate() {
   const { database, ...serverConfig } = DB_CONFIG;
   const connection = await mysql.createConnection({ ...serverConfig, multipleStatements: true });
@@ -186,7 +254,8 @@ async function migrate() {
     if (copied) await applySchema(connection, true);
     await connection.changeUser({ database: databaseFor("maintenance") });
     const moved = await moveMaintenancePhotosToFiles(connection);
-    console.log(`Service databases for "${database}" are ready.${copied ? " Legacy data copied." : ""}${moved ? ` Moved ${moved} maintenance photos to files.` : ""}`);
+    const relocated = await moveCustomerUploadsToFolders(connection);
+    console.log(`Service databases for "${database}" are ready.${copied ? " Legacy data copied." : ""}${moved ? ` Moved ${moved} maintenance photos to files.` : ""}${relocated ? ` Moved ${relocated} uploads into customer folders.` : ""}`);
   } finally {
     try {
       if (locked) await connection.query("SELECT RELEASE_LOCK(?)", [lockName]);

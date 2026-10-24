@@ -29,7 +29,7 @@ import {
   validatePersonUpdateInput,
   validateRoomFields,
 } from "../middleware/validation.js";
-import { deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
+import { customerUploadFolder, deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
@@ -290,7 +290,8 @@ router.post("/move-out-inspections", async (req, res) => {
     const damageError = await validateInspectionDamage(pool, tenantRequestId, value.damageCostCents);
     if (damageError) return res.status(409).json({ message: damageError });
     const adminName = await getActingAdminName(pool, req.user);
-    photos = await savePublicImages("move-out-inspections", value.photos);
+    const [[requestOwner]] = await pool.query("SELECT customer_id FROM TenantRequest WHERE id = ?", [tenantRequestId]);
+    photos = await savePublicImages(customerUploadFolder("move-out-inspections", requestOwner?.customer_id), value.photos);
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
@@ -371,7 +372,7 @@ router.put("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.photos, moi.tenant_request_id, tr.type AS tenant_request_type, tr.status AS tenant_request_status
+      `SELECT moi.photos, moi.tenant_request_id, tr.customer_id, tr.type AS tenant_request_type, tr.status AS tenant_request_status
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
        WHERE moi.id = ? AND moi.hidden_at IS NULL`,
@@ -394,7 +395,7 @@ router.put("/move-out-inspections/:id", async (req, res) => {
     }
 
     const adminName = await getActingAdminName(pool, req.user);
-    const savedPhotos = await savePublicImages("move-out-inspections", value.newPhotos);
+    const savedPhotos = await savePublicImages(customerUploadFolder("move-out-inspections", rows[0].customer_id), value.newPhotos);
     let sentChargeCents = 0;
     const connection = await pool.getConnection();
     try {

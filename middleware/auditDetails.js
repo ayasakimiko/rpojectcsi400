@@ -1,7 +1,6 @@
-import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import jwt from "jsonwebtoken";
-import { PUBLIC_UPLOAD_DIR } from "./publicUploads.js";
+import { uploadedFileUrl } from "./publicUploads.js";
 import { getPool } from "../Database/connection.js";
 
 const auditContext = new AsyncLocalStorage();
@@ -68,14 +67,6 @@ export function buildAuditDetails(body, extraImages = [], { extraFields = [], re
   return { fields, images };
 }
 
-function uploadedFileUrl(file) {
-  if (!file?.path) return null;
-  const relative = path.relative(PUBLIC_UPLOAD_DIR, path.resolve(file.path));
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
-  return `/uploads/${relative.split(path.sep).join("/")}`;
-}
-
-// ใช้หลัง express.json() เพื่อให้รูปที่บันทึกในคำขอเดียวกันถูกเก็บไว้ในบริบทของคำขอนั้น
 export function auditDetailsMiddleware(req, res, next) {
   if (!MUTATING_METHODS.has(req.method)) return next();
   const store = { images: [], fields: [], resultMessage: null };

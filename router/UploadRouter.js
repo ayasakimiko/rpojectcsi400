@@ -2,7 +2,7 @@ import { Router } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { authenticate, STAFF_ROLES } from "../middleware/authMiddleware.js";
-import { PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
+import { OWNER_FOLDER_PATTERN, PUBLIC_UPLOAD_DIR } from "../middleware/publicUploads.js";
 
 const ROLE_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
 const FOLDERS = new Set(["announcements", "contracts", "expenses", "incidents", "maintenance", "move-in-inspections", "move-out-inspections", "parcels", "payment-slips", "vehicles"]);
@@ -20,9 +20,9 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
   });
   router.use(authenticate);
 
-  router.get("/:folder/:fileName", async (req, res) => {
-    const { folder, fileName } = req.params;
-    if (!FOLDERS.has(folder) || fileName.length > 255 || !IMAGE_FILE.test(fileName)) {
+  async function serveUpload(req, res) {
+    const { folder, owner = null, fileName } = req.params;
+    if (!FOLDERS.has(folder) || (owner !== null && !OWNER_FOLDER_PATTERN.test(owner)) || fileName.length > 255 || !IMAGE_FILE.test(fileName)) {
       return res.status(404).json({ message: NOT_FOUND });
     }
     const { role, id } = req.user;
@@ -44,7 +44,7 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
         return res.status(403).json({ message: "ไม่ได้รับอนุญาต" });
       }
 
-      const storedUrl = `/uploads/${folder}/${fileName}`;
+      const storedUrl = `/uploads/${folder}/${owner ? `${owner}/` : ""}${fileName}`;
       if (folder === "payment-slips") {
         const isCustomer = role === "Customer";
         const [payments] = await pool.query(
@@ -101,7 +101,7 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
       }
 
       const root = await fs.realpath(uploadsDir);
-      const folderPath = path.join(root, folder);
+      const folderPath = owner ? path.join(root, folder, owner) : path.join(root, folder);
       const filePath = path.join(folderPath, fileName);
       const realFile = await fs.realpath(filePath);
       const stat = await fs.lstat(filePath);
@@ -125,7 +125,10 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
       console.error("Read upload error:", error);
       return res.status(500).json({ message: "โหลดรูปภาพไม่สำเร็จ" });
     }
-  });
+  }
+
+  router.get("/:folder/:fileName", serveUpload);
+  router.get("/:folder/:owner/:fileName", serveUpload);
 
   return router;
 }
