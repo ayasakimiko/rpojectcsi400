@@ -24,6 +24,9 @@ import {
   InspectionRoomCell,
 } from '../components/InspectionCells.jsx'
 import InspectionDetail from '../components/InspectionDetail.jsx'
+import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
+import MoveOutAssetCheck from '../components/MoveOutAssetCheck.jsx'
+import { assetPriceValue, chargeableAssetCost, COSTED_RESULTS, isValidAssetPrice, itemCostTotal } from '../utils/inspectionChecklist.js'
 import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
 import MoveRoomDamageFinance from '../components/MoveRoomDamageFinance.jsx'
 import { damageInputError, damageInputValue } from '../utils/damageCost.js'
@@ -7135,6 +7138,8 @@ function StaffMain() {
     checklist: {},
     damage_note: '',
     damage_cost: '',
+    assets: null,
+    item_costs: {},
     photos: [],
     existingPhotos: [],
   })
@@ -7147,6 +7152,7 @@ function StaffMain() {
   const [inspectionError, setInspectionError] = useState('')
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
+  const [inspectionAssetsOpen, setInspectionAssetsOpen] = useState(false)
   const inspectionMoveRoomId = inspectionTenantRequest?.type === 'move_room'
     ? inspectionTenantRequest.id
     : inspectionEditing?.tenant_request_type === 'move_room' ? inspectionEditing.tenant_request_id : null
@@ -7588,6 +7594,8 @@ function StaffMain() {
       checklist: {},
       damage_note: '',
       damage_cost: '',
+      assets: null,
+      item_costs: {},
       photos: [],
       existingPhotos: [],
     })
@@ -7604,6 +7612,8 @@ function StaffMain() {
       checklist: {},
       damage_note: '',
       damage_cost: '',
+      assets: null,
+      item_costs: {},
       photos: [],
       existingPhotos: [],
     })
@@ -7639,6 +7649,10 @@ function StaffMain() {
         checklist: detail.checklist,
         damage_note: detail.damage_note || '',
         damage_cost: Number(detail.damage_cost) > 0 ? String(Number(detail.damage_cost)) : '',
+        assets: detail.assets
+          ? detail.assets.map((asset) => ({ ...asset, cost: asset.cost === undefined ? undefined : String(asset.cost) }))
+          : null,
+        item_costs: Object.fromEntries(Object.entries(detail.item_costs || {}).map(([key, cost]) => [key, String(cost)])),
         photos: [],
         existingPhotos: detail.photos || [],
       })
@@ -7662,12 +7676,28 @@ function StaffMain() {
     }
   }
 
+  // Keeps the damage amount in step with the per-item and asset costs.
+  const withDamageTotal = (form) => {
+    const total = itemCostTotal(form.checklist, form.item_costs) + chargeableAssetCost(form.assets || [])
+    return { ...form, damage_cost: total > 0 ? String(total) : '' }
+  }
+
   const setChecklistResult = (key, value) => {
     setInspectionForm((form) => {
       const { [key]: current, ...rest } = form.checklist
-      return { ...form, checklist: current === value ? rest : { ...rest, [key]: value } }
+      return withDamageTotal({ ...form, checklist: current === value ? rest : { ...rest, [key]: value } })
     })
     setInspectionFieldErrors((errors) => ({ ...errors, checklist: (errors.checklist || []).filter((k) => k !== key) }))
+  }
+
+  const setInspectionItemCost = (key, cost) => {
+    setInspectionForm((form) => withDamageTotal({ ...form, item_costs: { ...form.item_costs, [key]: cost } }))
+    setInspectionFieldErrors((errors) => ({ ...errors, item_costs: (errors.item_costs || []).filter((k) => k !== key) }))
+  }
+
+  const setInspectionAssets = (assets) => {
+    setInspectionForm((form) => withDamageTotal({ ...form, assets }))
+    setInspectionFieldErrors((errors) => ({ ...errors, assets: undefined }))
   }
 
   const resetChecklist = () => {
@@ -7684,7 +7714,23 @@ function StaffMain() {
     if (!inspectionEditing && !room) fieldErrors.room = 'กรุณาเลือกห้องที่มีผู้เช่า'
     const missing = MOVE_OUT_CHECKLIST.filter((item) => !inspectionForm.checklist[item.key]).map((item) => item.key)
     if (missing.length > 0) fieldErrors.checklist = missing
-    const hasIssue = Object.values(inspectionForm.checklist).some((result) => ['damaged', 'missing'].includes(result))
+    const costError = (cost) => cost !== undefined && cost !== '' && !isValidAssetPrice(cost)
+    const missingAssets = (inspectionForm.assets || [])
+      .map((asset, index) => (!String(asset.name).trim() || !isValidAssetPrice(asset.price) || costError(asset.cost) ? index : null))
+      .filter((index) => index !== null)
+    if (missingAssets.length > 0) {
+      fieldErrors.assets = missingAssets
+      setInspectionAssetsOpen(true)
+    }
+    const invalidCosts = MOVE_OUT_CHECKLIST
+      .filter((item) => COSTED_RESULTS.includes(inspectionForm.checklist[item.key]) && costError(inspectionForm.item_costs[item.key]))
+      .map((item) => item.key)
+    if (invalidCosts.length > 0) fieldErrors.item_costs = invalidCosts
+    if (inspectionDamageTotal > 0 && !inspectionForm.damage_note.trim()) {
+      fieldErrors.damage_note = 'กรุณาระบุรายการความเสียหายที่คิดค่าเสียหาย'
+    }
+    const hasIssue = [...Object.values(inspectionForm.checklist), ...(inspectionForm.assets || []).map((asset) => asset.result)]
+      .some((result) => ['damaged', 'missing'].includes(result))
     if (hasIssue && !inspectionForm.damage_note.trim()) {
       fieldErrors.damage_note = 'กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย'
     }
@@ -7702,6 +7748,10 @@ function StaffMain() {
       setInspectionError(
         missing.length > 0
           ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
+          : missingAssets.length > 0
+            ? `อุปกรณ์และทรัพย์สินยังไม่ถูกต้อง ${missingAssets.length} รายการ (ชื่อ ราคา หรือค่าเสียหาย)`
+          : invalidCosts.length > 0
+            ? 'ค่าเสียหายต้องเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง'
           : hasIssue && inspectionForm.photos.length + inspectionForm.existingPhotos.length === 0
             ? 'กรุณาแนบภาพประกอบรายการชำรุดหรือสูญหาย'
             : fieldErrors.damage_cost || 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
@@ -7717,6 +7767,24 @@ function StaffMain() {
         checklist: inspectionForm.checklist,
         damage_note: inspectionForm.damage_note.trim(),
         photos,
+        item_costs: Object.fromEntries(
+          Object.entries(inspectionForm.item_costs)
+            .filter(([key]) => COSTED_RESULTS.includes(inspectionForm.checklist[key]))
+            .map(([key, cost]) => [key, assetPriceValue(cost)]),
+        ),
+        ...(inspectionForm.assets
+          ? {
+              assets: inspectionForm.assets.map(({ name, price, move_in_result, result, cost }) => ({
+                name: String(name).trim(),
+                price: assetPriceValue(price),
+                move_in_result,
+                result: result || 'good',
+                ...(COSTED_RESULTS.includes(result) ? { cost: assetPriceValue(cost) } : {}),
+              })),
+            }
+          : {}),
+        // Move-out damage is summed on the server from the item and asset costs;
+        // move-room keeps its editable amount, which follows the same total.
         ...(inspectionMoveRoomId ? { damage_cost: damageInputValue(inspectionForm.damage_cost) } : {}),
       }
       const { data } = inspectionEditing
@@ -8598,7 +8666,11 @@ function StaffMain() {
     missing: inspectionResults.filter((result) => result === 'missing').length,
     not_applicable: inspectionResults.filter((result) => result === 'not_applicable').length,
   }
-  
+  const inspectionHasIssue = inspectionCounts.damaged + inspectionCounts.missing > 0
+    || (inspectionForm.assets || []).some((asset) => ['damaged', 'missing'].includes(asset.result))
+  const inspectionDamageTotal = itemCostTotal(inspectionForm.checklist, inspectionForm.item_costs)
+    + chargeableAssetCost(inspectionForm.assets || [])
+
   const vacantRooms = rooms
     .filter((room) => !room.is_booked)
     .sort((a, b) => a.room_number - b.room_number)
@@ -9731,7 +9803,7 @@ function StaffMain() {
                         value={inspectionForm.room_number}
                         invalid={Boolean(inspectionFieldErrors.room)}
                         onChange={(roomNumber) => {
-                          setInspectionForm((form) => ({ ...form, room_number: roomNumber }))
+                          setInspectionForm((form) => ({ ...form, room_number: roomNumber, assets: null }))
                           setInspectionFieldErrors((errors) => ({ ...errors, room: undefined }))
                         }}
                       />
@@ -9782,14 +9854,27 @@ function StaffMain() {
                     {MOVE_OUT_CHECKLIST.map((item) => {
                       const result = inspectionForm.checklist[item.key] || ''
                       const isMissing = (inspectionFieldErrors.checklist || []).includes(item.key)
+                      const isFurniture = item.key === 'furniture'
+                      const costInvalid = (inspectionFieldErrors.item_costs || []).includes(item.key)
+                      const assetCount = inspectionForm.assets?.length || 0
                       return (
                         <div
                           key={item.key}
-                          className={`inspection-row${result ? ` is-${result}` : ''}${isMissing ? ' is-missing' : ''}`}
+                          className={`inspection-row has-extra${result ? ` is-${result}` : ''}${isMissing ? ' is-missing' : ''}`}
                         >
                           <span className="inspection-row-label">
                             {item.label}
                             {isMissing && <small>ยังไม่ได้เลือก</small>}
+                            {isFurniture && (
+                              <button
+                                type="button"
+                                className="inspection-assets-toggle"
+                                aria-expanded={inspectionAssetsOpen}
+                                onClick={() => setInspectionAssetsOpen((open) => !open)}
+                              >
+                                {inspectionAssetsOpen ? '▴' : '▾'} อุปกรณ์และทรัพย์สินในห้อง{inspectionForm.assets ? ` (${assetCount})` : ''}
+                              </button>
+                            )}
                           </span>
                           <div className="inspection-choices" role="radiogroup" aria-label={item.label}>
                             {CHECKLIST_RESULT_OPTIONS.map((option) => (
@@ -9806,9 +9891,43 @@ function StaffMain() {
                               </button>
                             ))}
                           </div>
+                          {!isFurniture && COSTED_RESULTS.includes(result) && (
+                            <label className={`inspection-cost${costInvalid ? ' is-invalid' : ''}`}>
+                              <span>ค่าเสียหาย</span>
+                              <input
+                                className="staff-form-input"
+                                inputMode="decimal"
+                                value={inspectionForm.item_costs[item.key] ?? ''}
+                                placeholder="0"
+                                aria-label={`ค่าเสียหาย ${item.label}`}
+                                onChange={(event) => setInspectionItemCost(item.key, event.target.value)}
+                              />
+                              <em>บาท</em>
+                              {costInvalid && <small>ตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง</small>}
+                            </label>
+                          )}
+                          {/* Kept mounted while collapsed so the room's assets still load and get saved. */}
+                          {isFurniture && (
+                            <div className="inspection-assets-panel" hidden={!inspectionAssetsOpen && !COSTED_RESULTS.includes(result)}>
+                              <MoveOutAssetCheck
+                                roomNumber={inspectionForm.room_number}
+                                assets={inspectionForm.assets}
+                                onChange={setInspectionAssets}
+                                invalidIndexes={inspectionFieldErrors.assets || []}
+                              />
+                            </div>
+                          )}
                         </div>
                       )
                     })}
+                  </div>
+                  <div className={`inspection-damage-total${inspectionDamageTotal > 0 ? ' is-charged' : ''}`}>
+                    <span>ค่าเสียหายเบื้องต้น (หักจากเงินมัดจำ)</span>
+                    <strong>
+                      {inspectionDamageTotal > 0
+                        ? `฿${inspectionDamageTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : 'ไม่มีค่าเสียหาย'}
+                    </strong>
                   </div>
                 </section>
 
@@ -9820,7 +9939,7 @@ function StaffMain() {
                     <div className="staff-form-label-row">
                       <label className="staff-form-label" htmlFor="inspection-damage-note">
                         รายละเอียดและตำแหน่งที่พบ{' '}
-                        {inspectionCounts.damaged + inspectionCounts.missing > 0 ? (
+                        {inspectionHasIssue ? (
                           <span className="staff-form-required">*</span>
                         ) : (
                           <span className="staff-form-optional">(ไม่บังคับ)</span>
@@ -9847,7 +9966,7 @@ function StaffMain() {
                   <div className="staff-form-field">
                     <span className="staff-form-label">
                       รูปภาพประกอบ{' '}
-                      {inspectionCounts.damaged + inspectionCounts.missing > 0 ? (
+                      {inspectionHasIssue ? (
                         <span className="staff-form-required">(จำเป็นเมื่อชำรุด/สูญหาย · สูงสุด {INSPECTION_MAX_PHOTOS} รูป)</span>
                       ) : (
                         <span className="staff-form-optional">(ไม่บังคับ · สูงสุด {INSPECTION_MAX_PHOTOS} รูป)</span>
@@ -10289,6 +10408,8 @@ function StaffMain() {
             <StaffPagination page={currentWaitingListPage} total={filteredWaitingList.length} onChange={setWaitingListPage} />
           </div>
         )}
+
+        {staffTab === 'move-out-inspections' && <MoveInInspectionPanel Modal={Modal} />}
 
         {staffTab === 'move-out-inspections' && (
           <div className="staff-card staff-tab-card">

@@ -4,28 +4,10 @@ import InspectionPhotoPicker from './InspectionPhotoPicker.jsx'
 import MoveRoomDamageFinance from './MoveRoomDamageFinance.jsx'
 import { damageInputError, damageInputValue } from '../utils/damageCost.js'
 import compressImageFile from '../utils/compressImageFile.js'
+import { CHECKLIST_ITEMS, RESULT_OPTIONS } from '../utils/inspectionChecklist.js'
 import './InspectionCells.css'
 import './InspectionStaffForm.css'
 import './InspectionForm.css'
-
-const CHECKLIST_ITEMS = [
-  { key: 'walls', label: 'ผนังและสี (รอยแตก คราบ สีลอก)' },
-  { key: 'floor', label: 'พื้น (รอยแตก คราบ ความเสียหาย)' },
-  { key: 'ceiling', label: 'เพดานและไฟ (คราบรั่วซึม หลอดไฟ)' },
-  { key: 'doors', label: 'ประตูและกุญแจ (บาน ลูกบิด กลอน กุญแจ)' },
-  { key: 'windows', label: 'หน้าต่าง (กระจก วงกบ ตัวล็อก)' },
-  { key: 'electrical', label: 'ระบบไฟฟ้า (ปลั๊ก สวิตช์ ไฟส่องสว่าง)' },
-  { key: 'bathroom', label: 'ห้องน้ำและสุขภัณฑ์ (ก๊อก ฝักบัว โถ ท่อระบาย)' },
-  { key: 'furniture', label: 'เฟอร์นิเจอร์และอุปกรณ์ของห้อง' },
-]
-
-const RESULT_OPTIONS = [
-  { key: 'good', label: 'ปกติ', title: 'สภาพดี ใช้งานได้' },
-  { key: 'wear', label: 'สึกหรอ', title: 'สึกหรอตามการใช้งานปกติ แต่ยังใช้งานได้' },
-  { key: 'damaged', label: 'ชำรุด', title: 'เสียหายหรือใช้งานไม่ได้' },
-  { key: 'missing', label: 'สูญหาย', title: 'อุปกรณ์หรือทรัพย์สินที่ควรมีสูญหาย' },
-  { key: 'not_applicable', label: 'ไม่มี', title: 'ไม่มีหรือติดตั้งรายการนี้ในห้อง' },
-]
 
 const MAX_PHOTOS = 15
 

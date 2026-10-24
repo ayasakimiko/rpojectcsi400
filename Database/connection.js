@@ -4,12 +4,12 @@ import "dotenv/config";
 export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "payment", "staff", "admin", "owner", "parcel"];
 
 export const TABLES_BY_SERVICE = {
-  room: ["Room"],
+  room: ["Room", "RoomType"],
   auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage", "RoomTransfer"],
   customer: ["TenantRequest", "ResidentVisitRequest", "SafetyIncident"],
   maintenance: ["MaintenanceRequest", "MaintenancePhoto"],
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],
-  staff: ["MoveOutInspection", "DepositSettlementLog"],
+  staff: ["MoveOutInspection", "DepositSettlementLog", "MoveInInspection"],
   admin: ["Announcement", "AnnouncementAcknowledgement", "WaitingList"],
   owner: ["Expense", "RoomOccupancySnapshot", "AuditLog", "DormConfig"],
   parcel: ["Parcel", "ParcelPhoto"],

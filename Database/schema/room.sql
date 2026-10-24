@@ -70,3 +70,33 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- Room types group rooms that share the same furnishings. `assets` is a JSON
+-- list of { name, price } used as the default price list for move-in checks.
+CREATE TABLE IF NOT EXISTS RoomType (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(500) NULL,
+    assets TEXT NOT NULL,
+    updated_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'room_type_id'),
+    'SELECT 1',
+    'ALTER TABLE `Room` ADD COLUMN `room_type_id` INT NULL AFTER `room_size`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+-- A room's own asset list ({ name, price }); NULL means use its room type's list.
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Room' AND COLUMN_NAME = 'assets'),
+    'SELECT 1',
+    'ALTER TABLE `Room` ADD COLUMN `assets` TEXT NULL AFTER `room_type_id`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;

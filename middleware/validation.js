@@ -568,15 +568,46 @@ function parseMoveOutChecklistAndNote(body) {
   const noteError = validateText(body.damage_note, "รายละเอียดความเสียหาย", { maxLength: 1000, required: false });
   if (noteError) return { error: noteError };
   const damageNote = typeof body.damage_note === "string" ? body.damage_note.trim() : "";
-  if (Object.values(checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result)) && !damageNote) {
+  // Assets and item costs are optional so admin edits that never send them keep the stored values.
+  const assets = body.assets === undefined ? { value: null } : parseAssetList(body.assets, { withResult: true, withMoveInResult: true });
+  if (assets.error) return assets;
+  const itemCosts = parseItemCosts(body.item_costs, checklist);
+  if (itemCosts.error) return itemCosts;
+  const hasIssue = [...Object.values(checklist), ...(assets.value || []).map((asset) => asset.result)]
+    .some((result) => MOVE_OUT_ISSUE_RESULTS.has(result));
+  if (hasIssue && !damageNote) {
     return { error: "กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย" };
   }
-  const damageCost = parseDamageCost(body.damage_cost);
+  // Without an explicit amount the damage is the sum of the item and asset costs.
+  const computedCents = itemCosts.value || assets.value
+    ? Object.values(itemCosts.value || {}).reduce((sum, cost) => sum + Math.round(cost * 100), 0)
+      + (assets.value || []).reduce((sum, asset) => sum + Math.round((asset.cost || 0) * 100), 0)
+    : null;
+  const damageCost = body.damage_cost === undefined && computedCents !== null ? { value: computedCents } : parseDamageCost(body.damage_cost);
   if (damageCost.error) return damageCost;
+  if (damageCost.value > 99999999) return { error: "ค่าเสียหายสูงเกินไป" };
   if (damageCost.value > 0 && !damageNote) {
     return { error: "กรุณาระบุรายการความเสียหายที่คิดค่าเสียหาย" };
   }
-  return { value: { checklist, damageNote: damageNote || null, damageCostCents: damageCost.value } };
+  return {
+    value: { checklist, assets: assets.value, itemCosts: itemCosts.value, damageNote: damageNote || null, damageCostCents: damageCost.value },
+    hasIssue,
+  };
+}
+
+const COSTED_RESULTS = new Set(["wear", "damaged", "missing"]);
+
+function parseItemCosts(itemCosts, checklist) {
+  if (itemCosts === undefined || itemCosts === null) return { value: null };
+  if (typeof itemCosts !== "object" || Array.isArray(itemCosts)) return { error: "ค่าเสียหายรายหัวข้อไม่ถูกต้อง" };
+  const value = {};
+  for (const key of MOVE_OUT_CHECKLIST_KEYS) {
+    if (!COSTED_RESULTS.has(checklist[key]) || itemCosts[key] === undefined) continue;
+    const cost = parseDamageCost(itemCosts[key]);
+    if (cost.error) return cost;
+    if (cost.value > 0) value[key] = cost.value / 100;
+  }
+  return { value };
 }
 
 export function parseDamageCost(value) {
@@ -600,7 +631,7 @@ export function parseMoveOutInspectionInput(body = {}) {
   if (core.error) return core;
   const photos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
   if (photos.error) return photos;
-  if (Object.values(core.value.checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result)) && photos.value.length === 0) {
+  if (core.hasIssue && photos.value.length === 0) {
     return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
   }
   return { value: { roomNumber, ...core.value, photos: photos.value } };
@@ -620,10 +651,134 @@ export function parseMoveOutInspectionUpdate(body = {}, existingPhotos = []) {
   if (keptPhotos.length + newPhotos.value.length > MOVE_OUT_MAX_PHOTOS) {
     return { error: `แนบรูปได้ไม่เกิน ${MOVE_OUT_MAX_PHOTOS} รูป` };
   }
-  if (
-    Object.values(core.value.checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result))
-    && keptPhotos.length + newPhotos.value.length === 0
-  ) {
+  if (core.hasIssue && keptPhotos.length + newPhotos.value.length === 0) {
+    return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
+  }
+  return { value: { ...core.value, keptPhotos, newPhotos: newPhotos.value } };
+}
+
+const ROOM_TYPE_MAX_ASSETS = 50;
+
+function parseAssetPrice(value) {
+  const price = parseDamageCost(value);
+  if (price.error) return { error: price.error.replace("ค่าเสียหาย", "ราคาทรัพย์สิน") };
+  return { value: price.value / 100 };
+}
+
+function parseAssetList(assets, { withResult = false, withMoveInResult = false } = {}) {
+  if (assets === undefined || assets === null) return { value: [] };
+  if (!Array.isArray(assets) || assets.length > ROOM_TYPE_MAX_ASSETS) {
+    return { error: `ระบุรายการทรัพย์สินได้ไม่เกิน ${ROOM_TYPE_MAX_ASSETS} รายการ` };
+  }
+  const value = [];
+  const names = new Set();
+  for (const asset of assets) {
+    const nameError = validateText(asset?.name, "ชื่อทรัพย์สิน", { maxLength: 100 });
+    if (nameError) return { error: nameError };
+    const name = asset.name.trim();
+    if (names.has(name)) return { error: `รายการทรัพย์สิน "${name}" ซ้ำกัน` };
+    names.add(name);
+    const price = parseAssetPrice(asset.price);
+    if (price.error) return price;
+    const item = { name, price: price.value };
+    if (withResult) {
+      if (!MOVE_OUT_RESULTS.has(asset.result)) return { error: `กรุณาเลือกผลตรวจของ "${name}"` };
+      item.result = asset.result;
+    }
+    if (withMoveInResult) {
+      const moveInResult = asset.move_in_result ?? null;
+      if (moveInResult !== null && !MOVE_OUT_RESULTS.has(moveInResult)) return { error: `ผลตรวจก่อนเข้าอยู่ของ "${name}" ไม่ถูกต้อง` };
+      item.move_in_result = moveInResult;
+      // Move-out damage charged for this asset; only meaningful for wear/damaged/missing.
+      if (COSTED_RESULTS.has(item.result) && asset.cost !== undefined && asset.cost !== null && asset.cost !== "") {
+        const cost = parseDamageCost(asset.cost);
+        if (cost.error) return { error: `ค่าเสียหายของ "${name}": ${cost.error}` };
+        if (cost.value > 0) item.cost = cost.value / 100;
+      }
+    }
+    value.push(item);
+  }
+  return { value };
+}
+
+export function parseRoomTypeInput(body = {}) {
+  const error =
+    validateText(body.name, "ชื่อประเภทห้อง", { maxLength: 100 }) ||
+    validateText(body.description, "รายละเอียดประเภทห้อง", { maxLength: 500, required: false });
+  if (error) return { error };
+  const assets = parseAssetList(body.assets);
+  if (assets.error) return assets;
+  const roomNumbers = body.room_numbers ?? [];
+  if (!Array.isArray(roomNumbers) || roomNumbers.some((room) => !Number.isInteger(Number(room)) || Number(room) < 100 || Number(room) > 999)) {
+    return { error: "รายการห้องไม่ถูกต้อง" };
+  }
+  return {
+    value: {
+      name: body.name.trim(),
+      description: typeof body.description === "string" ? body.description.trim() || null : null,
+      assets: assets.value,
+      roomNumbers: [...new Set(roomNumbers.map(Number))],
+    },
+  };
+}
+
+export function parseRoomAssetsInput(body = {}) {
+  const roomTypeId = body.room_type_id === null || body.room_type_id === undefined || body.room_type_id === "" ? null : Number(body.room_type_id);
+  if (roomTypeId !== null && !isPositiveId(roomTypeId)) return { error: "ประเภทห้องไม่ถูกต้อง" };
+  const assets = parseAssetList(body.assets);
+  if (assets.error) return assets;
+  return { value: { roomTypeId, assets: assets.value } };
+}
+
+function parseMoveInChecklistAndAssets(body) {
+  if (!isValidDateString(body.inspection_date)) return { error: "กรุณาเลือกวันที่ตรวจ" };
+  const checklist = {};
+  for (const key of MOVE_OUT_CHECKLIST_KEYS) {
+    const result = body.checklist?.[key];
+    if (!MOVE_OUT_RESULTS.has(result)) return { error: "กรุณาตรวจและเลือกผลให้ครบทุกหัวข้อ" };
+    checklist[key] = result;
+  }
+  const assets = parseAssetList(body.assets, { withResult: true });
+  if (assets.error) return assets;
+  const noteError = validateText(body.note, "รายละเอียด", { maxLength: 1000, required: false });
+  if (noteError) return { error: noteError };
+  const note = typeof body.note === "string" ? body.note.trim() : "";
+  const hasIssue = [...Object.values(checklist), ...assets.value.map((asset) => asset.result)]
+    .some((result) => MOVE_OUT_ISSUE_RESULTS.has(result));
+  if (hasIssue && !note) return { error: "กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย" };
+  return { value: { inspectionDate: body.inspection_date, checklist, assets: assets.value, note: note || null }, hasIssue };
+}
+
+export function parseMoveInInspectionInput(body = {}) {
+  const roomNumber = Number(body.room_number);
+  if (!Number.isInteger(roomNumber) || roomNumber < 100 || roomNumber > 999) {
+    return { error: "เลขห้องไม่ถูกต้อง" };
+  }
+  const core = parseMoveInChecklistAndAssets(body);
+  if (core.error) return core;
+  const photos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
+  if (photos.error) return photos;
+  if (core.hasIssue && photos.value.length === 0) {
+    return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
+  }
+  return { value: { roomNumber, ...core.value, photos: photos.value } };
+}
+
+export function parseMoveInInspectionUpdate(body = {}, existingPhotos = []) {
+  const core = parseMoveInChecklistAndAssets(body);
+  if (core.error) return core;
+  let keptPhotos = existingPhotos;
+  if (body.keep_photos !== undefined) {
+    if (!Array.isArray(body.keep_photos)) return { error: "รายการรูปที่เก็บไว้ไม่ถูกต้อง" };
+    const keepUrls = new Set(body.keep_photos);
+    keptPhotos = existingPhotos.filter((photo) => keepUrls.has(photo.url));
+  }
+  const newPhotos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
+  if (newPhotos.error) return newPhotos;
+  if (keptPhotos.length + newPhotos.value.length > MOVE_OUT_MAX_PHOTOS) {
+    return { error: `แนบรูปได้ไม่เกิน ${MOVE_OUT_MAX_PHOTOS} รูป` };
+  }
+  if (core.hasIssue && keptPhotos.length + newPhotos.value.length === 0) {
     return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
   }
   return { value: { ...core.value, keptPhotos, newPhotos: newPhotos.value } };

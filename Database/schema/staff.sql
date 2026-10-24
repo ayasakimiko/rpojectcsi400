@@ -147,3 +147,49 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- Move-in inspections record the room condition and the agreed asset prices
+-- before a new tenant moves in. Room type and prices are snapshotted so later
+-- price changes do not alter what the tenant signed off on.
+CREATE TABLE IF NOT EXISTS MoveInInspection (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    room_number INT UNSIGNED NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    tenant_name VARCHAR(255) NOT NULL,
+    tenant_phone VARCHAR(20),
+    room_type_id INT NULL,
+    room_type_name VARCHAR(100) NULL,
+    inspection_date DATE NOT NULL,
+    checklist TEXT NOT NULL,
+    assets TEXT NOT NULL,
+    note VARCHAR(1000),
+    photos LONGTEXT NOT NULL,
+    inspected_by_name VARCHAR(255),
+    updated_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_move_in_inspection_customer_room (customer_id, room_number)
+);
+
+-- Asset results at move-out, compared against the move-in inspection:
+-- JSON list of { name, price, move_in_result, result }.
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'assets'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `assets` TEXT NULL AFTER checklist'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+-- Damage amount per checklist item ({ walls: 500, ... }) for items marked wear/damaged/missing.
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'item_costs'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `item_costs` TEXT NULL AFTER assets'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;

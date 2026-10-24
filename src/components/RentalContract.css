@@ -6166,3 +6166,10 @@
   font-size: 12px;
   font-weight: 600;
 }
+
+.deposit-settle-hint {
+  display: block;
+  margin-top: 4px;
+  color: #5b7290;
+  font-size: 12px;
+}

@@ -694,3 +694,10 @@
   color: #b45309;
   font-variant-numeric: tabular-nums;
 }
+
+.idt-asset-before {
+  display: block;
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 500;
+}

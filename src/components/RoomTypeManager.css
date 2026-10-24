@@ -1,0 +1,208 @@
+.room-type-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-type-muted {
+  margin: 4px 0 0;
+  color: #8aa0b6;
+  font-size: 14px;
+}
+
+.room-type-warning {
+  color: #b45309;
+}
+
+.room-type-empty {
+  padding: 28px 16px;
+  border: 1px dashed #dce9fb;
+  border-radius: 12px;
+  color: #8aa0b6;
+  text-align: center;
+}
+
+.room-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.room-type-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #e6f0fd;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.room-type-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.room-type-card h3 {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.room-type-card header p {
+  margin: 2px 0 0;
+  color: #8aa0b6;
+  font-size: 13px;
+}
+
+.room-type-total {
+  color: #1d4ed8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.room-type-asset-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-type-asset-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dashed #eef3fb;
+  color: #33507a;
+  font-size: 14px;
+}
+
+.room-type-card-rooms {
+  margin: 0;
+  color: #5b7290;
+  font-size: 13px;
+}
+
+.room-type-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.room-type-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-type-asset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-type-asset > .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.room-type-asset-price {
+  flex: 0 0 150px;
+}
+
+.room-type-asset-price input {
+  text-align: right;
+}
+
+.room-type-asset-remove {
+  flex: 0 0 32px;
+  height: 32px;
+  border: 1px solid #e6f0fd;
+  border-radius: 8px;
+  background: #fff;
+  color: #8aa0b6;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.room-type-asset-remove:hover {
+  border-color: #fca5a5;
+  color: #b42318;
+}
+
+.room-type-assets-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #0f2b52;
+  font-size: 14px;
+}
+
+.room-type-rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.room-type-room {
+  display: flex;
+  min-width: 64px;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f2b52;
+  font-weight: 600;
+}
+
+.room-type-room small {
+  color: #8aa0b6;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.room-type-room.is-active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+@media (max-width: 560px) {
+  .room-type-asset {
+    flex-wrap: wrap;
+  }
+
+  .room-type-asset > .form-control {
+    flex-basis: 100%;
+  }
+
+  .room-type-asset-price {
+    flex: 1 1 auto;
+  }
+}
+
+.room-assets-type {
+  max-width: 360px;
+  margin-bottom: 12px;
+}
+
+.admin-custom-amenity-price {
+  margin-left: 4px;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.admin-room-assets-total {
+  margin: 10px 0 0;
+  color: #5b7290;
+  font-size: 13px;
+}
