@@ -139,6 +139,12 @@ export default function InspectionDetail({
           <div className={`idt-note${inspection.damage_note ? '' : ' is-empty'}`}>
             <p>{inspection.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
           </div>
+          {inspection.tenant_request_type === 'move_room' && (
+            <p className="idt-damage-cost">
+              ค่าเสียหายที่หักจากเงินมัดจำ{' '}
+              <b>{Number(inspection.damage_cost) > 0 ? `฿${Number(inspection.damage_cost).toLocaleString('th-TH', { maximumFractionDigits: 2 })}` : 'ไม่มี'}</b>
+            </p>
+          )}
         </section>
 
         <section className="idt-section">

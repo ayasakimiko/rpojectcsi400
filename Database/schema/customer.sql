@@ -92,6 +92,16 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'TenantRequest' AND COLUMN_NAME = 'transfer_calc_date'),
+    'SELECT 1',
+    'ALTER TABLE `TenantRequest` ADD COLUMN `transfer_calc_date` DATE NULL AFTER transfer_charge_periods'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 CREATE TABLE IF NOT EXISTS ResidentVisitRequest (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
     customer_id INT UNSIGNED NULL,

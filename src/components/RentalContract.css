@@ -5870,3 +5870,17 @@
     height: 44px;
   }
 }
+
+.contract-transfer-finance {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.contract-transfer-finance > small {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}

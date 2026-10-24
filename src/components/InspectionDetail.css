@@ -675,3 +675,22 @@
     padding: 14px 16px;
   }
 }
+
+.idt-damage-cost {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 9px 14px;
+  border: 1px solid #e6edf7;
+  border-radius: 12px;
+  background: #fff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.idt-damage-cost b {
+  color: #b45309;
+  font-variant-numeric: tabular-nums;
+}

@@ -9,6 +9,7 @@ import {
   isPositiveId,
   MOVE_OUT_INSPECTION_STATUSES,
   normalizePersonUpdate,
+  parseDamageCost,
   parseMoveOutInspectionInput,
   parseMoveOutInspectionUpdate,
   parsePage,
@@ -23,7 +24,15 @@ import announcementRouter from "./AnnouncementRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
-import { loadCustomerContracts, resetCustomerHistory, roomHeldForTransfer } from "./rentalContracts.js";
+import {
+  expireRoomTransferCharges,
+  loadCustomerContracts,
+  loadRoomTransferPreview,
+  resetCustomerHistory,
+  roomHeldForTransfer,
+  syncRoomTransferCharge,
+  validateInspectionDamage,
+} from "./rentalContracts.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
 
 const router = Router();
@@ -187,7 +196,7 @@ router.get("/move-out-inspections", async (_req, res) => {
     const pool = getPool();
     const [inspections] = await pool.query(
       `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
-              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, JSON_LENGTH(moi.photos) AS photo_count,
+              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.damage_cost, JSON_LENGTH(moi.photos) AS photo_count,
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
@@ -223,6 +232,23 @@ router.get("/move-out-inspections/move-room-candidates", async (_req, res) => {
   }
 });
 
+router.get("/move-out-inspections/move-room-candidates/:id/transfer-preview", async (req, res) => {
+  try {
+    const requestId = Number(req.params.id);
+    if (!isPositiveId(requestId)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
+    const damage = req.query.damage === undefined ? { value: null } : parseDamageCost(req.query.damage);
+    if (damage.error) return res.status(400).json({ message: damage.error });
+    const pool = getPool();
+    await expireRoomTransferCharges(pool);
+    const preview = await loadRoomTransferPreview(pool, requestId, { damageCents: damage.value });
+    if (!preview) return res.status(404).json({ message: "ไม่พบคำขอย้ายห้องนี้" });
+    return res.json({ preview });
+  } catch (error) {
+    console.error("Admin room transfer preview error:", error);
+    return res.status(500).json({ message: "ไม่สามารถคำนวณรายละเอียดการย้ายห้องได้" });
+  }
+});
+
 router.post("/move-out-inspections", async (req, res) => {
   let photos = [];
   let connection;
@@ -237,6 +263,8 @@ router.post("/move-out-inspections", async (req, res) => {
     }
 
     const pool = getPool();
+    const damageError = await validateInspectionDamage(pool, tenantRequestId, value.damageCostCents);
+    if (damageError) return res.status(409).json({ message: damageError });
     const adminName = await getActingAdminName(pool, req.user);
     photos = await savePublicImages("move-out-inspections", value.photos);
     connection = await pool.getConnection();
@@ -270,8 +298,8 @@ router.post("/move-out-inspections", async (req, res) => {
     }
 
     const [result] = await connection.query(
-      `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, photos, inspected_by_name, status, reviewed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reviewed', NOW())`,
+      `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, damage_cost, photos, inspected_by_name, status, reviewed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reviewed', NOW())`,
       [
         value.roomNumber,
         tenantRequestId,
@@ -279,6 +307,7 @@ router.post("/move-out-inspections", async (req, res) => {
         tenantRequest.phone || null,
         JSON.stringify(value.checklist),
         value.damageNote,
+        value.damageCostCents / 100,
         JSON.stringify(photos),
         adminName,
       ],
@@ -291,8 +320,14 @@ router.post("/move-out-inspections", async (req, res) => {
        WHERE id = ?`,
       [adminName, tenantRequestId],
     );
+    const sentChargeCents = await syncRoomTransferCharge(connection, tenantRequestId, adminName);
     await connection.commit();
-    return res.status(201).json({ message: "บันทึกผลตรวจห้องสำเร็จ", inspectionId: result.insertId });
+    return res.status(201).json({
+      message: sentChargeCents > 0
+        ? `บันทึกผลตรวจห้องสำเร็จ ส่งยอดชำระย้ายห้อง ฿${(sentChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าแล้ว`
+        : "บันทึกผลตรวจห้องสำเร็จ",
+      inspectionId: result.insertId,
+    });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => {});
     await deletePublicImages(photos.map((photo) => photo.url));
@@ -311,29 +346,61 @@ router.put("/move-out-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`SELECT photos FROM MoveOutInspection WHERE id = ? AND hidden_at IS NULL`, [inspectionId]);
+    const [rows] = await pool.query(
+      `SELECT moi.photos, moi.tenant_request_id, tr.type AS tenant_request_type, tr.status AS tenant_request_status
+       FROM MoveOutInspection moi
+       LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
+       WHERE moi.id = ? AND moi.hidden_at IS NULL`,
+      [inspectionId],
+    );
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
     const existingPhotos = JSON.parse(rows[0].photos);
+    const openMoveRoomId = rows[0].tenant_request_type === "move_room" && ["pending", "in_progress"].includes(rows[0].tenant_request_status)
+      ? rows[0].tenant_request_id
+      : null;
     const { error, value } = parseMoveOutInspectionUpdate(req.body ?? {}, existingPhotos);
     if (error) {
       return res.status(400).json({ message: error });
     }
+    if (openMoveRoomId) {
+      const damageError = await validateInspectionDamage(pool, openMoveRoomId, value.damageCostCents);
+      if (damageError) return res.status(409).json({ message: damageError });
+    }
 
+    const adminName = await getActingAdminName(pool, req.user);
     const savedPhotos = await savePublicImages("move-out-inspections", value.newPhotos);
+    let sentChargeCents = 0;
+    const connection = await pool.getConnection();
     try {
-      await pool.query(
-        `UPDATE MoveOutInspection SET checklist = ?, damage_note = ?, photos = ?, updated_at = NOW() WHERE id = ?`,
-        [JSON.stringify(value.checklist), value.damageNote, JSON.stringify([...value.keptPhotos, ...savedPhotos]), inspectionId],
+      await connection.beginTransaction();
+      await connection.query(
+        `UPDATE MoveOutInspection SET checklist = ?, damage_note = ?, damage_cost = ?, photos = ?, updated_at = NOW() WHERE id = ?`,
+        [
+          JSON.stringify(value.checklist),
+          value.damageNote,
+          value.damageCostCents / 100,
+          JSON.stringify([...value.keptPhotos, ...savedPhotos]),
+          inspectionId,
+        ],
       );
+      if (openMoveRoomId) sentChargeCents = await syncRoomTransferCharge(connection, openMoveRoomId, adminName);
+      await connection.commit();
     } catch (updateError) {
+      await connection.rollback();
       await deletePublicImages(savedPhotos.map((photo) => photo.url));
       throw updateError;
+    } finally {
+      connection.release();
     }
     const keptUrls = new Set(value.keptPhotos.map((photo) => photo.url));
     await deletePublicImages(existingPhotos.filter((photo) => !keptUrls.has(photo.url)).map((photo) => photo.url));
-    return res.json({ message: "แก้ไขผลตรวจห้องสำเร็จ" });
+    return res.json({
+      message: sentChargeCents > 0
+        ? `แก้ไขผลตรวจห้องสำเร็จ ส่งยอดชำระย้ายห้อง ฿${(sentChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าแล้ว`
+        : "แก้ไขผลตรวจห้องสำเร็จ",
+    });
   } catch (error) {
     console.error("Admin update move-out inspection error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -350,7 +417,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
     const pool = getPool();
     const [rows] = await pool.query(
       `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
-              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.photos,
+              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.damage_cost, moi.photos,
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
@@ -1225,7 +1292,7 @@ router.patch("/customers/:id/suspend", async (req, res) => {
         const [roomUpdate] = await connection.query(
           `UPDATE Room SET is_booked = FALSE, rental_start_date = NULL, rental_end_date = NULL,
                            rental_duration_months = NULL, prepaid_until = NULL, billing_start_date = NULL,
-                           pending_lump_sum_months = NULL
+                           pending_lump_sum_months = NULL, rent_credit = NULL
            WHERE room_number = ?`,
           [roomNumber],
         );

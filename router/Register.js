@@ -226,7 +226,8 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
          rental_end_date = ?,
          prepaid_until = NULL,
          billing_start_date = NULL,
-         pending_lump_sum_months = NULL
+         pending_lump_sum_months = NULL,
+         rent_credit = NULL
        WHERE id = ?`,
       [durationMonths, mysqlStartDateTime, mysqlEndDateTime, room.id],
     );

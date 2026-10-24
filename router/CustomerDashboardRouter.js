@@ -44,6 +44,12 @@ import {
   loadRoomTransferPreview,
   roomHeldForTransfer,
 } from "./rentalContracts.js";
+import {
+  billingPeriodAt,
+  depositBalanceAfterTransfers,
+  transferDepositDeductedCents,
+  transferFinanceView,
+} from "./roomTransferFinance.js";
 
 const router = Router();
 const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
@@ -272,17 +278,17 @@ export async function loadDepositPayments(db, customerIds) {
   return byCustomer;
 }
 
-export async function loadTransferDepositDeductions(db, customerIds) {
+export async function loadTransferDepositLedger(db, customerIds) {
   const ids = validCustomerIds(customerIds);
   const byCustomer = new Map();
   if (ids.length === 0) return byCustomer;
   const [rows] = await db.query(
-    `SELECT rt.customer_id, SUM(rt.deposit_deducted) AS deducted FROM RoomTransfer rt
+    `SELECT rt.customer_id, rt.deposit_deducted, rt.damage_deduction, rt.deposit_after FROM RoomTransfer rt
      WHERE rt.customer_id IN (?) AND ${DEPOSIT_CYCLE_START("rt.from_booking_id", "rt.customer_id")}
-     GROUP BY rt.customer_id`,
+     ORDER BY rt.id ASC`,
     [ids],
   );
-  for (const row of rows) byCustomer.set(row.customer_id, Math.round(Number(row.deducted) * 100) || 0);
+  for (const row of rows) byCustomer.set(row.customer_id, [...(byCustomer.get(row.customer_id) ?? []), row]);
   return byCustomer;
 }
 
@@ -318,18 +324,12 @@ const NON_RENT_PAYMENT_TYPES = ["deposit", ...CHARGE_PAYMENT_TYPES];
 
 export const isRentPayment = (payment) => !NON_RENT_PAYMENT_TYPES.includes(payment.type);
 
-function billingPeriodAt(start, offset) {
-  const date = new Date(start.getFullYear(), start.getMonth() + offset, 1, start.getHours(), start.getMinutes(), start.getSeconds());
-  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  date.setDate(Math.min(start.getDate(), lastDay));
-  return date;
-}
-
 function rentCreditCents(room, rentPayments, periods, priceCents) {
+  const carriedCents = Math.max(0, Math.round(Number(room.rent_credit) * 100) || 0);
   const paidRentCents = Math.max(0, rentPayments.reduce((total, payment) => {
     const amount = Math.round(Number(payment.amount) * 100);
     return payment.status === "paid" && Number.isSafeInteger(amount) ? total + amount : total;
-  }, 0));
+  }, carriedCents));
   const prepaidUntil = room.prepaid_until ? new Date(room.prepaid_until) : null;
   const prepaidCents = prepaidUntil && !Number.isNaN(prepaidUntil.getTime())
     ? periods.filter((period) => period.periodEnd <= prepaidUntil).length * priceCents : 0;
@@ -441,7 +441,7 @@ function computeRentDue(room, paymentsForBooking) {
   };
 }
 
-const CHARGE_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า", [ROOM_TRANSFER_PAYMENT_TYPE]: "ส่วนต่างค่าเช่า (ย้ายห้อง)" };
+const CHARGE_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า", [ROOM_TRANSFER_PAYMENT_TYPE]: "ยอดชำระย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม)" };
 
 export function computeCurrentDue(room, paymentsForBooking, depositAmount, depositPayments = paymentsForBooking) {
   const rentDue = computeRentDue(room, paymentsForBooking);
@@ -549,7 +549,7 @@ async function loadCustomerCurrentDue(db, customerId) {
   if (!customer?.room_number) return null;
   const [[roomRows], [bookingRows]] = await Promise.all([
     db.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months, rent_credit FROM Room WHERE room_number = ?`,
       [customer.room_number],
     ),
     db.query(`SELECT id FROM Booking WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, [customer.id]),
@@ -595,7 +595,7 @@ router.get("/me", async (req, res) => {
       [parcels],
     ] = await Promise.all([
       pool.query(
-        `SELECT room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months
+        `SELECT room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities, electricity_unit_price, water_unit_price, water_price, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months, rent_credit
          FROM Room WHERE room_number = ?`,
         [customer.room_number],
       ),
@@ -649,7 +649,7 @@ router.get("/me", async (req, res) => {
     const heldRooms = await loadHeldTransferRooms(pool, { exceptCustomerId: customer.id });
 
     const bookingIds = bookings.map((booking) => booking.booking_id);
-    const [[payments], maintenanceWithPhotos, parcelsWithPhotos, depositPaymentsByCustomer, transferDeductions] = await Promise.all([
+    const [[payments], maintenanceWithPhotos, parcelsWithPhotos, depositPaymentsByCustomer, transferLedger] = await Promise.all([
       bookingIds.length > 0
         ? pool.query(
             `SELECT id, booking_id, amount, payment_date, status, type, electricity_units, water_units, note, slip_path, created_at
@@ -662,8 +662,9 @@ router.get("/me", async (req, res) => {
       attachMaintenancePhotos(pool, maintenanceRequests),
       attachParcelPhotos(pool, parcels),
       loadDepositPayments(pool, [customer.id]),
-      loadTransferDepositDeductions(pool, [customer.id]),
+      loadTransferDepositLedger(pool, [customer.id]),
     ]);
+    const customerTransfers = transferLedger.get(customer.id) ?? [];
 
     const paymentsByBooking = new Map();
     for (const payment of payments) {
@@ -704,8 +705,8 @@ router.get("/me", async (req, res) => {
       currentDue,
       outstanding: outstandingFromDue(currentDue),
       moveOutBalance: moveOutBalanceFromDue(currentDue),
-      depositPaid: Math.max(0, paidDepositCents(depositPaymentsByCustomer.get(customer.id)) - (transferDeductions.get(customer.id) ?? 0)) / 100,
-      depositTransferDeducted: (transferDeductions.get(customer.id) ?? 0) / 100,
+      depositPaid: depositBalanceAfterTransfers(paidDepositCents(depositPaymentsByCustomer.get(customer.id)), customerTransfers) / 100,
+      depositTransferDeducted: transferDepositDeductedCents(customerTransfers) / 100,
       parcels: parcelsWithPhotos,
     });
   } catch (error) {
@@ -721,7 +722,7 @@ export async function withThisMonthRent(pool, contracts) {
   const [[customers], [rooms], [bookings]] = await Promise.all([
     pool.query(`SELECT id, room_number, deposit_amount FROM Customer WHERE id IN (?)`, [customerIds]),
     pool.query(
-      `SELECT room_number, is_booked, price, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months
+      `SELECT room_number, is_booked, price, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months, rent_credit
        FROM Room WHERE room_number IN (?)`,
       [[...new Set(active.map((contract) => contract.current_room_number))]],
     ),
@@ -905,7 +906,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     if (!customer) throw new SlipVerificationError(404, "ไม่พบข้อมูลผู้ใช้");
 
     const [roomRows] = await pool.query(
-      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months FROM Room WHERE room_number = ?`,
+      `SELECT price, is_booked, rental_start_date, rental_end_date, prepaid_until, billing_start_date, pending_lump_sum_months, rent_credit FROM Room WHERE room_number = ?`,
       [customer.room_number],
     );
     const room = roomRows[0];
@@ -1339,11 +1340,10 @@ router.get("/requests/:id/transfer-impact", async (req, res) => {
 
     if (request.status === "approved") {
       const [transfers] = await pool.query(
-        `SELECT rt.from_room_number, rt.to_room_number, rt.from_price, rt.to_price, rt.chargeable_periods,
-                rt.price_difference_total, rt.deposit_before, rt.deposit_deducted, rt.amount_charged, rt.new_price_from,
-                rt.transferred_at, cp.status AS charge_status, tb.rental_end_date
+        `SELECT rt.*, cp.status AS charge_status, rp.status AS rent_charge_status, tb.rental_end_date
          FROM RoomTransfer rt
          LEFT JOIN Payment cp ON cp.id = rt.charge_payment_id
+         LEFT JOIN Payment rp ON rp.id = rt.rent_charge_payment_id
          LEFT JOIN Booking tb ON tb.id = rt.to_booking_id
          WHERE rt.tenant_request_id = ?`,
         [requestId],
@@ -1365,9 +1365,10 @@ router.get("/requests/:id/transfer-impact", async (req, res) => {
           total_difference: Number(transfer.price_difference_total),
           deposit_remaining: depositBefore,
           deposit_deducted: deducted,
-          deposit_remaining_after: Math.max(0, depositBefore - deducted),
+          deposit_remaining_after: transfer.deposit_after == null ? Math.max(0, depositBefore - deducted) : Number(transfer.deposit_after),
           additional_charge: Number(transfer.amount_charged),
           charge_status: transfer.charge_status ?? null,
+          finance: transferFinanceView(transfer),
           outstanding: [],
           transferred_at: transfer.transferred_at,
         },
@@ -1388,12 +1389,13 @@ router.get("/requests/:id/transfer-impact", async (req, res) => {
         contract_end_date: preview.contract?.effective_end_date ?? preview.contract?.rental_end_date ?? null,
         new_price_from: preview.new_price_from,
         chargeable_periods: preview.settlement.chargeable_periods,
-        total_difference: preview.settlement.total_difference,
+        total_difference: preview.settlement.rent_difference,
         deposit_remaining: preview.deposit.remaining,
-        deposit_deducted: preview.settlement.deposit_deducted,
-        deposit_remaining_after: preview.settlement.deposit_remaining_after,
+        deposit_deducted: preview.settlement.damage_deduction,
+        deposit_remaining_after: preview.settlement.deposit_after,
         additional_charge: preview.settlement.additional_charge,
         charge_status: null,
+        finance: preview.settlement,
         transfer_charge: preview.transfer_charge,
         outstanding: preview.outstanding?.items ?? [],
       },

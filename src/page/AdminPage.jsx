@@ -1313,6 +1313,8 @@ const MAINTENANCE_CATEGORY_ICON = {
   ),
 }
 
+const adminTransferPreviewUrl = (requestId) => `/api/admin/move-out-inspections/move-room-candidates/${requestId}/transfer-preview`
+
 function formatCurrency(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '-'
@@ -4128,7 +4130,7 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
   const availableAmenities = ROOM_AMENITIES.filter((amenity) => Boolean(data[amenity.key]))
   const missingAmenities = ROOM_AMENITIES.filter((amenity) => !data[amenity.key])
   const depositAmount = Number(roomContract?.deposit_amount) > 0
-    ? Number(roomContract.deposit_transfer_deducted) > 0 ? roomContract.deposit_remaining : roomContract.deposit_amount
+    ? roomContract.deposit_transfer_adjusted || Number(roomContract.deposit_transfer_deducted) > 0 ? roomContract.deposit_remaining : roomContract.deposit_amount
     : null
   const contractRent = roomContract?.monthly_price ?? null
   const rentDiffers = contractRent != null && Number(contractRent) !== Number(data.price)
@@ -9082,6 +9084,7 @@ function AdminBackupPage() {
               candidatesLoading={inspectionEditor.candidatesLoading}
               submitting={inspectionEditor.submitting}
               error={inspectionEditor.error}
+              previewUrlFor={adminTransferPreviewUrl}
               onCancel={() => setInspectionConfirm({ kind: 'cancel', close: requestClose })}
               onSubmit={(payload) => setInspectionConfirm({ kind: 'save', payload, close: requestClose })}
             />

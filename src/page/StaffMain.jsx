@@ -24,6 +24,9 @@ import {
   InspectionRoomCell,
 } from '../components/InspectionCells.jsx'
 import InspectionDetail from '../components/InspectionDetail.jsx'
+import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
+import MoveRoomDamageFinance from '../components/MoveRoomDamageFinance.jsx'
+import { damageInputError, damageInputValue } from '../utils/damageCost.js'
 import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
@@ -1432,7 +1435,7 @@ const PAYMENT_TYPE_LABEL = {
   deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
-  room_transfer: 'ส่วนต่างค่าเช่า (ย้ายห้อง)',
+  room_transfer: 'ยอดชำระย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม)',
 }
 
 function dueBadgeClass(status) {
@@ -2110,10 +2113,10 @@ function TenantRequestCard({ request, steps = [], children }) {
         <div className={`staff-req-charge is-${request.transfer_charge_status === 'paid' ? 'paid' : request.transfer_charge_has_slip ? 'verifying' : 'unpaid'}`}>
           <strong>
             {request.transfer_charge_status === 'paid'
-              ? 'ชำระส่วนต่างแล้ว พร้อมทำสัญญา'
+              ? 'ชำระยอดย้ายห้องแล้ว พร้อมทำสัญญา'
               : request.transfer_charge_has_slip
-                ? 'ส่งสลิปส่วนต่างแล้ว รอตรวจสลิป'
-                : 'รอผู้เช่าชำระส่วนต่าง'}
+                ? 'ส่งสลิปยอดย้ายห้องแล้ว รอตรวจสลิป'
+                : 'รอผู้เช่าชำระยอดย้ายห้อง'}
             {' '}฿{formatCurrency(request.transfer_charge_amount)}
           </strong>
           {request.transfer_charge_status !== 'paid' && <span>ครบกำหนด {formatDateTime(request.transfer_charge_due_at)}</span>}
@@ -3037,7 +3040,7 @@ function useRoomTransferPreview(requestId, enabled = true) {
 }
 
 const TRANSFER_CHARGE_STATUS_TEXT = {
-  not_sent: 'มัดจำไม่พอหัก ต้องส่งยอดให้ผู้เช่าชำระก่อนทำสัญญา',
+  not_sent: 'มีค่าเช่าหรือมัดจำที่ต้องเก็บเพิ่ม ต้องส่งยอดให้ผู้เช่าชำระก่อนทำสัญญา',
   unpaid: 'ส่งยอดแล้ว รอผู้เช่าชำระ',
   verifying: 'ผู้เช่าส่งสลิปแล้ว รอตรวจสลิป',
   paid: 'ชำระแล้ว พร้อมทำสัญญา',
@@ -3083,7 +3086,7 @@ function buildMoveRoomChecks(request, preview) {
     ...(preview.transfer_charge?.required
       ? [{
           key: 'charge',
-          label: `ผู้เช่าชำระส่วนต่าง ฿${formatCurrency(preview.transfer_charge.amount)}`,
+          label: `ผู้เช่าชำระมัดจำเพิ่ม ฿${formatCurrency(preview.transfer_charge.amount)}`,
           ok: preview.transfer_charge.status === 'paid',
           detail: TRANSFER_CHARGE_STATUS_TEXT[preview.transfer_charge.status],
           hint: preview.transfer_charge.due_at && preview.transfer_charge.status !== 'paid'
@@ -3195,16 +3198,11 @@ function MoveRoomDecision({ request, preview, loading, error }) {
   if (loading) return <TrdState tone="loading">กำลังตรวจสอบความพร้อมและคำนวณยอด... ตัวเลขด้านล่างจะแสดงเมื่อคำนวณเสร็จ</TrdState>
   if (error || !preview) return <TrdState tone="danger">{error || 'ไม่สามารถตรวจสอบเงื่อนไขการย้ายห้องได้'}</TrdState>
   const { checks, otherBlockers, remaining } = buildMoveRoomChecks(request, preview)
-  const alerts = [
-    preview.target_room?.is_booked && { tone: 'danger', icon: 'home', text: `ห้อง ${preview.target_room.room_number} มีผู้เช่าแล้ว` },
-    !request.inspection_id && { tone: 'warning', icon: 'tool', text: `ยังไม่ได้ตรวจห้อง ${request.room_number}` },
-    (preview.outstanding?.items ?? []).length > 0 && { tone: 'danger', icon: 'wallet', text: 'ห้องเดิมมียอดค้างชำระ' },
-    preview.transfer_charge?.required && preview.transfer_charge.status !== 'paid' && {
-      tone: 'danger',
-      icon: 'wallet',
-      text: `ผู้เช่าต้องชำระส่วนต่าง ฿${formatCurrency(preview.transfer_charge.amount)}`,
-    },
-  ].filter(Boolean)
+  const todos = [
+    ...checks.filter((check) => !check.ok),
+    ...otherBlockers.map((message) => ({ key: message, label: message })),
+  ]
+  const passed = checks.filter((check) => check.ok)
   return (
     <section className={`trd-decision ${preview.can_approve ? 'is-ready' : 'is-blocked'}`} aria-live="polite">
       <div className="trd-decision-head">
@@ -3214,34 +3212,39 @@ function MoveRoomDecision({ request, preview, loading, error }) {
           <small>{preview.can_approve ? 'ผ่านเงื่อนไขครบทุกข้อ กดอนุมัติได้ที่ปุ่มด้านล่าง' : 'ดูรายการที่ต้องจัดการในเช็กลิสต์ด้านล่าง'}</small>
         </div>
       </div>
-      {alerts.length > 0 && (
-        <ul className="trd-alerts">
-          {alerts.map((alert) => (
-            <li key={alert.text} className={`is-${alert.tone}`}>
-              <WaitingDetailIcon type={alert.icon} size={14} />
-              {alert.text}
-            </li>
-          ))}
-        </ul>
+      {todos.length > 0 && (
+        <div className="trd-check-group is-todo">
+          <p className="trd-check-group-title">ต้องจัดการ <em>{todos.length}</em></p>
+          <ol className="trd-checks">
+            {todos.map((check, index) => (
+              <li key={check.key} className="is-todo">
+                <span className="trd-check-icon" aria-hidden="true">{index + 1}</span>
+                <span>
+                  <strong>{check.label}</strong>
+                  {check.detail && <small>{check.detail}</small>}
+                  {check.hint && <small className="is-hint">{check.hint}</small>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
-      <ul className="trd-checks">
-        {checks.map((check) => (
-          <li key={check.key} className={check.ok ? 'is-ok' : 'is-todo'}>
-            <span className="trd-check-icon" aria-hidden="true">{check.ok ? '✓' : '!'}</span>
-            <span>
-              <strong>{check.label}</strong>
-              <small>{check.detail}</small>
-              {check.hint && <small className="is-hint">{check.hint}</small>}
-            </span>
-          </li>
-        ))}
-        {otherBlockers.map((message) => (
-          <li key={message} className="is-todo">
-            <span className="trd-check-icon" aria-hidden="true">!</span>
-            <span><strong>{message}</strong></span>
-          </li>
-        ))}
-      </ul>
+      {passed.length > 0 && (
+        <div className="trd-check-group is-ok">
+          <p className="trd-check-group-title">ผ่านแล้ว <em>{passed.length}</em></p>
+          <ul className="trd-checks is-compact">
+            {passed.map((check) => (
+              <li key={check.key} className="is-ok">
+                <span className="trd-check-icon" aria-hidden="true">✓</span>
+                <span>
+                  <strong>{check.label}</strong>
+                  <small>{check.detail}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }
@@ -3315,7 +3318,7 @@ function MoveRoomSettlement({ preview, loading, error }) {
   if (loading) {
     return (
       <TrdCard icon="wallet" title="เงินมัดจำและยอดที่ต้องชำระ" badge={<TrdSourceTag estimate />}>
-        <TrdState tone="loading">กำลังคำนวณส่วนต่างค่าเช่าและเงินมัดจำ...</TrdState>
+        <TrdState tone="loading">กำลังคำนวณเงินมัดจำและค่าเช่าตามวันที่เหลือ...</TrdState>
       </TrdCard>
     )
   }
@@ -3326,68 +3329,22 @@ function MoveRoomSettlement({ preview, loading, error }) {
       </TrdCard>
     )
   }
-  const { settlement, deposit, coverage } = preview
-  const diff = Number(settlement.price_difference) || 0
-  const periods = Number(settlement.chargeable_periods) || 0
-  const deducted = Number(settlement.deposit_deducted) || 0
-  const charge = Number(settlement.additional_charge) || 0
+  const charge = Number(preview.settlement.additional_charge) || 0
   const chargeSent = Boolean(preview.transfer_charge?.required && preview.transfer_charge.status !== 'not_sent')
   return (
     <TrdCard
       icon="wallet"
       title="เงินมัดจำและยอดที่ต้องชำระ"
-      tone={charge > 0 ? 'danger' : undefined}
+      hint={charge > 0 && preview.transfer_charge?.status ? TRANSFER_CHARGE_STATUS_TEXT[preview.transfer_charge.status] : undefined}
+      tone={charge > 0 && preview.transfer_charge?.status !== 'paid' ? 'danger' : undefined}
       badge={<TrdSourceTag estimate={!chargeSent} />}
     >
-      <div className={`trd-due ${charge > 0 ? 'is-danger' : 'is-success'}`}>
-        <small>ผู้เช่าต้องชำระเพิ่มก่อนย้าย</small>
-        <strong>{charge > 0 ? `฿${formatCurrency(charge)}` : 'ไม่ต้องชำระเพิ่ม'}</strong>
-        {charge > 0 && preview.transfer_charge?.status && (
-          <span>{TRANSFER_CHARGE_STATUS_TEXT[preview.transfer_charge.status]}</span>
-        )}
-      </div>
-      <div className="trd-flow">
-        <div>
-          <small>ส่วนต่าง/เดือน</small>
-          <b className={diff > 0 ? 'is-warning' : diff < 0 ? 'is-success' : ''}>{diff === 0 ? 'ไม่มี' : `${diff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(diff))}`}</b>
-          {diff > 0 && <em>{periods} รอบที่ชำระแล้ว{coverage?.paid_through ? ` (ถึง ${formatDate(coverage.paid_through)})` : ''}</em>}
-        </div>
-        <div>
-          <small>ส่วนต่างรวม</small>
-          <b className={Number(settlement.total_difference) > 0 ? 'is-warning' : ''}>฿{formatCurrency(settlement.total_difference)}</b>
-        </div>
-        <div>
-          <small>หักจากมัดจำ</small>
-          <b className={deducted > 0 ? 'is-warning' : ''}>{deducted > 0 ? `− ฿${formatCurrency(deducted)}` : 'ไม่หัก'}</b>
-        </div>
-      </div>
-      <dl className="trd-deposit">
-        <div>
-          <dt>มัดจำคงเหลือตอนนี้</dt>
-          <dd>
-            ฿{formatCurrency(deposit.remaining)}
-            {Number(deposit.deducted_before) > 0 && <small>เคยหักย้ายห้องแล้ว ฿{formatCurrency(deposit.deducted_before)}</small>}
-          </dd>
-        </div>
-        <div>
-          <dt>มัดจำหลังย้าย</dt>
-          <dd>฿{formatCurrency(settlement.deposit_remaining_after)}</dd>
-        </div>
-        {deposit.amount > 0 && (
-          <div>
-            <dt>ชำระมัดจำแล้ว</dt>
-            <dd className={deposit.paid >= deposit.amount ? 'is-success' : 'is-warning'}>
-              ฿{formatCurrency(deposit.paid)}{deposit.paid < deposit.amount ? ` จาก ฿${formatCurrency(deposit.amount)}` : ''}
-            </dd>
-          </div>
-        )}
-      </dl>
-      {diff > 0 && periods === 0 && (
-        <p className="trd-muted">ผู้เช่ายังไม่ได้ชำระค่าเช่ารอบใด จึงไม่มีส่วนต่างย้อนหลัง รอบแรกจะเรียกเก็บในราคาห้องใหม่</p>
-      )}
-      {diff <= 0 && (
-        <p className="trd-muted">{diff === 0 ? 'ค่าเช่าเท่าเดิม ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ' : 'ห้องใหม่ถูกกว่า ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ'}</p>
-      )}
+      <RoomTransferFinance
+        finance={preview.settlement}
+        fromPrice={preview.source_room?.price}
+        toPrice={preview.target_room?.price}
+        chargeStatus={preview.transfer_charge?.status === 'paid' ? 'paid' : null}
+      />
     </TrdCard>
   )
 }
@@ -3399,6 +3356,7 @@ function MoveRoomContractCard({ request, preview, loading, contractEnd, contract
   const changes = [
     `สัญญาเปลี่ยนเป็นห้อง ${request.target_room_number}${targetPrice != null ? ` ค่าเช่า ฿${formatCurrency(targetPrice)}/เดือน` : ''}`,
     'วันสิ้นสุดสัญญาเท่าเดิม',
+    'เงินมัดจำเดิมโอนไปเป็นมัดจำห้องใหม่ ส่วนเกินเก็บเป็นเครดิตมัดจำที่คืนได้',
     preview?.new_price_from ? `เริ่มคิดราคาใหม่ตั้งแต่รอบ ${formatDate(preview.new_price_from)}` : 'เริ่มคิดราคาใหม่ตั้งแต่รอบถัดไป',
     'รูปสัญญาที่เซ็นไว้ไม่ถูกแก้ไข ระบบบันทึกการย้ายแนบท้ายสัญญาให้',
   ]
@@ -3455,65 +3413,89 @@ function MoveRoomContractCard({ request, preview, loading, contractEnd, contract
 function MoveRoomDetailBody({ request, isOpen, rentDiff, transferPreview, contractEnd, contractMsLeft, progressSteps, finished, actions }) {
   const { preview, loading, error } = transferPreview
   const tenantName = `${request.first_name || ''} ${request.last_name || ''}`.trim()
+  const [section, setSection] = useState('all')
+  const hasInspection = Boolean(request.inspection_id || isOpen)
+  const sections = [
+    { key: 'all', label: 'ทั้งหมด' },
+    { key: 'overview', label: 'ภาพรวมคำขอ' },
+    isOpen && { key: 'money', label: 'เงินมัดจำและยอดชำระ' },
+    { key: 'rooms', label: 'เปรียบเทียบห้อง' },
+    isOpen && { key: 'contract', label: 'สัญญา' },
+    hasInspection && { key: 'inspection', label: 'ผลตรวจห้อง' },
+  ].filter(Boolean)
+  const show = (key) => section === 'all' || section === key
   return (
     <div className="trd">
       <div className="trd-scroll">
         <MoveRoomDetailHero request={request} rentDiff={rentDiff} preview={preview} isOpen={isOpen} />
+
+        <div className="trd-filter" role="tablist" aria-label="กรองหัวข้อ">
+          {sections.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={section === item.key}
+              className={section === item.key ? 'is-active' : ''}
+              onClick={() => setSection(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
 
         <div className={`trd-note${request.note ? '' : ' is-empty'}`}>
           <small>หมายเหตุจากผู้เช่า</small>
           <p>{request.note || 'ผู้เช่าไม่ได้ระบุหมายเหตุ'}</p>
         </div>
 
-        {isOpen && <MoveRoomDecision request={request} preview={preview} loading={loading} error={error} />}
-
-        <TrdCard icon="clock" title="ขั้นตอนการดำเนินการ">
-          <ProcessSteps
-            actorClassName="staff-actor"
-            startDate={request.created_at}
-            endDate={finished ? request.completed_at : null}
-            steps={progressSteps}
-          />
-        </TrdCard>
-
-        <dl className="trd-request-strip" aria-label="รายละเอียดคำขอ">
-          <div>
-            <dt><WaitingDetailIcon type="info" size={14} />เหตุผล</dt>
-            <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
-          </div>
-          <div>
-            <dt><WaitingDetailIcon type="calendar" size={14} />ต้องการย้าย</dt>
-            <dd>{formatDateOnly(request.preferred_move_date)}</dd>
-          </div>
-          <div>
-            <dt><WaitingDetailIcon type="clock" size={14} />ส่งคำขอ</dt>
-            <dd>{formatDateTime(request.created_at)}</dd>
-          </div>
-          <div>
-            <dt><WaitingDetailIcon type="user" size={14} />รับเรื่องโดย</dt>
-            <dd>{request.accepted_by_name || 'ยังไม่มีผู้รับเรื่อง'}</dd>
-          </div>
-        </dl>
-
-        <div className="trd-grid">
-          <div className="trd-col">
-            {isOpen && <MoveRoomSettlement preview={preview} loading={loading} error={error} />}
-            <MoveRoomCompare request={request} preview={preview} />
-          </div>
-          <div className="trd-col">
-            {isOpen && (
-              <MoveRoomContractCard
-                request={request}
-                preview={preview}
-                loading={loading}
-                contractEnd={contractEnd}
-                contractMsLeft={contractMsLeft}
+        {show('overview') && (
+          <>
+            <TrdCard icon="clock" title="ขั้นตอนการดำเนินการ">
+              <ProcessSteps
+                actorClassName="staff-actor"
+                startDate={request.created_at}
+                endDate={finished ? request.completed_at : null}
+                steps={progressSteps}
               />
-            )}
-          </div>
-        </div>
+            </TrdCard>
 
-        {(request.inspection_id || isOpen) && (
+            {isOpen && <MoveRoomDecision request={request} preview={preview} loading={loading} error={error} />}
+
+            <dl className="trd-request-strip" aria-label="รายละเอียดคำขอ">
+              <div>
+                <dt><WaitingDetailIcon type="info" size={14} />เหตุผล</dt>
+                <dd>{MOVE_ROOM_REASON_LABEL[request.move_reason] || '-'}</dd>
+              </div>
+              <div>
+                <dt><WaitingDetailIcon type="calendar" size={14} />ต้องการย้าย</dt>
+                <dd>{formatDateOnly(request.preferred_move_date)}</dd>
+              </div>
+              <div>
+                <dt><WaitingDetailIcon type="clock" size={14} />ส่งคำขอ</dt>
+                <dd>{formatDateTime(request.created_at)}</dd>
+              </div>
+              <div>
+                <dt><WaitingDetailIcon type="user" size={14} />รับเรื่องโดย</dt>
+                <dd>{request.accepted_by_name || 'ยังไม่มีผู้รับเรื่อง'}</dd>
+              </div>
+            </dl>
+          </>
+        )}
+
+        {isOpen && show('money') && <MoveRoomSettlement preview={preview} loading={loading} error={error} />}
+        {show('rooms') && <MoveRoomCompare request={request} preview={preview} />}
+        {isOpen && show('contract') && (
+          <MoveRoomContractCard
+            request={request}
+            preview={preview}
+            loading={loading}
+            contractEnd={contractEnd}
+            contractMsLeft={contractMsLeft}
+          />
+        )}
+
+        {hasInspection && show('inspection') && (
           <div className={`trd-inspection${!request.inspection_id && isOpen ? ' is-missing' : ''}`}>
             <InspectionSummary inspectionId={request.inspection_id} roomNumber={request.room_number} tenantName={tenantName} />
           </div>
@@ -3631,6 +3613,12 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
               <p>{inspection.damage_note}</p>
             </div>
           )}
+          {inspection.tenant_request_type === 'move_room' && (
+            <p className="idt-damage-cost">
+              ค่าเสียหายที่หักจากเงินมัดจำ{' '}
+              <b>{Number(inspection.damage_cost) > 0 ? `฿${formatCurrency(inspection.damage_cost)}` : 'ไม่มี'}</b>
+            </p>
+          )}
           {photos.length > 0 ? (
             <div className="staff-insp-gallery">
               <div className="staff-insp-gallery-head">
@@ -3677,93 +3665,41 @@ function TransferSettlementSection({ preview, loading, loadError }) {
   if (loading) {
     return (
       <section className="staff-transfer-section">
-        <h4 className="staff-transfer-section-title">ผลต่อสัญญาและยอดชำระ</h4>
-        <p className="staff-transfer-muted">กำลังคำนวณส่วนต่างค่าเช่าและเงินมัดจำ...</p>
+        <h4 className="staff-transfer-section-title">ผลต่อเงินมัดจำและยอดชำระ</h4>
+        <p className="staff-transfer-muted">กำลังคำนวณเงินมัดจำและค่าเช่าตามวันที่เหลือ...</p>
       </section>
     )
   }
   if (loadError || !preview) {
     return (
       <section className="staff-transfer-section is-danger">
-        <h4 className="staff-transfer-section-title">ผลต่อสัญญาและยอดชำระ</h4>
+        <h4 className="staff-transfer-section-title">ผลต่อเงินมัดจำและยอดชำระ</h4>
         <p className="staff-form-error">{loadError || 'ไม่สามารถคำนวณรายละเอียดการย้ายห้องได้'}</p>
       </section>
     )
   }
-  const { settlement, deposit, coverage } = preview
-  const sourcePrice = Number(preview.source_room?.price) || 0
   const targetPrice = Number(preview.target_room?.price) || 0
-  const diff = Number(settlement.price_difference) || 0
-  const periods = Number(settlement.chargeable_periods) || 0
-  const deducted = Number(settlement.deposit_deducted) || 0
-  const charge = Number(settlement.additional_charge) || 0
   const outcomes = [
     `สัญญาเดิมจะเปลี่ยนเป็นห้อง ${preview.target_room?.room_number} ค่าเช่า ฿${formatCurrency(targetPrice)}/เดือน วันสิ้นสุดสัญญาเท่าเดิม`,
     preview.new_price_from
       ? `เริ่มคิดค่าเช่าราคาใหม่ตั้งแต่รอบ ${formatDate(preview.new_price_from)} เป็นต้นไป`
       : 'เริ่มคิดค่าเช่าราคาใหม่ตั้งแต่รอบถัดไป',
-    diff > 0 && periods > 0 && deducted > 0 && `หักส่วนต่าง ฿${formatCurrency(deducted)} จากเงินมัดจำ เหลือมัดจำ ฿${formatCurrency(settlement.deposit_remaining_after)}`,
-    diff > 0 && charge > 0 && `มัดจำไม่พอ ผู้เช่าต้องชำระส่วนต่าง ฿${formatCurrency(charge)} ภายใน ${preview.transfer_charge?.days ?? 3} วันก่อนทำสัญญาย้ายห้อง ถ้าไม่ชำระระบบจะยกเลิกคำขอ`,
-    diff > 0 && periods === 0 && 'ผู้เช่ายังไม่ได้ชำระค่าเช่ารอบใด จึงไม่มีส่วนต่างย้อนหลัง รอบแรกจะเรียกเก็บในราคาห้องใหม่',
-    diff <= 0 && (diff === 0 ? 'ค่าเช่าเท่าเดิม ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ' : 'ห้องใหม่ถูกกว่า ไม่หักเงินมัดจำและไม่มีส่วนต่างที่ต้องชำระ'),
+    'เงินมัดจำเดิมโอนไปเป็นเงินมัดจำห้องใหม่ ไม่นำไปหักค่าเช่า',
+    Number(preview.settlement.additional_charge) > 0 &&
+      `ผู้เช่าต้องชำระมัดจำเพิ่ม ฿${formatCurrency(preview.settlement.additional_charge)} ภายใน ${preview.transfer_charge?.days ?? 3} วันก่อนทำสัญญาย้ายห้อง ถ้าไม่ชำระระบบจะยกเลิกคำขอ`,
+    Number(preview.settlement.rent_charge) > 0 &&
+      `หลังย้ายสำเร็จ ระบบส่งบิลส่วนต่างค่าเช่าเดือนที่ย้ายเข้า ฿${formatCurrency(preview.settlement.rent_charge)} ให้ผู้เช่า จากนั้นเก็บค่าเช่ารายเดือนตามปกติ`,
   ].filter(Boolean)
 
   return (
     <section className="staff-transfer-section">
-      <h4 className="staff-transfer-section-title">ผลต่อสัญญาและยอดชำระ</h4>
-      <div className="staff-transfer-columns">
-        <div>
-          <p className="staff-transfer-subtitle">ส่วนต่างค่าเช่า</p>
-          <dl className="staff-transfer-list is-single">
-            <div>
-              <dt>ห้องเดิม → ห้องใหม่</dt>
-              <dd>฿{formatCurrency(sourcePrice)} → ฿{formatCurrency(targetPrice)}</dd>
-            </div>
-            <div>
-              <dt>ส่วนต่างต่อเดือน</dt>
-              <dd className={diff > 0 ? 'is-warning' : diff < 0 ? 'is-success' : ''}>
-                {diff === 0 ? 'ไม่มี' : `${diff > 0 ? '+' : '-'}฿${formatCurrency(Math.abs(diff))}`}
-              </dd>
-            </div>
-            {diff > 0 && (
-              <div>
-                <dt>รอบที่ชำระไว้แล้ว</dt>
-                <dd>{periods} รอบ{coverage?.paid_through ? ` (ถึง ${formatDate(coverage.paid_through)})` : ''}</dd>
-              </div>
-            )}
-            <div>
-              <dt>ส่วนต่างที่ต้องชำระ</dt>
-              <dd className={Number(settlement.total_difference) > 0 ? 'is-warning' : ''}>
-                ฿{formatCurrency(settlement.total_difference)}
-              </dd>
-            </div>
-          </dl>
-        </div>
-        <div>
-          <p className="staff-transfer-subtitle">เงินมัดจำและยอดชำระ</p>
-          <dl className="staff-transfer-list is-single">
-            <div>
-              <dt>มัดจำคงเหลือ</dt>
-              <dd>
-                ฿{formatCurrency(deposit.remaining)}
-                {Number(deposit.deducted_before) > 0 && <small> (เคยหักแล้ว ฿{formatCurrency(deposit.deducted_before)})</small>}
-              </dd>
-            </div>
-            <div>
-              <dt>หักจากมัดจำ</dt>
-              <dd className={deducted > 0 ? 'is-warning' : ''}>{deducted > 0 ? `− ฿${formatCurrency(deducted)}` : 'ไม่หัก'}</dd>
-            </div>
-            <div>
-              <dt>มัดจำหลังย้าย</dt>
-              <dd>฿{formatCurrency(settlement.deposit_remaining_after)}</dd>
-            </div>
-            <div>
-              <dt>เก็บเพิ่มก่อนย้าย</dt>
-              <dd className={charge > 0 ? 'is-danger' : 'is-success'}>{charge > 0 ? `฿${formatCurrency(charge)}` : 'ไม่มี'}</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
+      <h4 className="staff-transfer-section-title">ผลต่อเงินมัดจำและยอดชำระ</h4>
+      <RoomTransferFinance
+        finance={preview.settlement}
+        fromPrice={preview.source_room?.price}
+        toPrice={preview.target_room?.price}
+        chargeStatus={preview.transfer_charge?.status === 'paid' ? 'paid' : null}
+      />
       <ul className="staff-transfer-outcomes">
         {outcomes.map((text) => (
           <li key={text}>{text}</li>
@@ -4033,11 +3969,11 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                   onAnimationEnd={(event) => event.currentTarget.classList.remove('is-flash')}
                 >
                   <h4 className="staff-transfer-section-title">
-                    ต้องเก็บส่วนต่างก่อนทำสัญญา
+                    ต้องเก็บเงินเพิ่มก่อนทำสัญญา
                     <span className="staff-transfer-chip is-warning">{TRANSFER_CHARGE_STATUS_TEXT[transferCharge.status]}</span>
                   </h4>
                   <p className="staff-transfer-muted">
-                    เงินมัดจำไม่พอหักส่วนต่าง ผู้เช่าต้องชำระ ฿{formatCurrency(transferCharge.amount)} ภายใน {transferCharge.days} วัน
+                    ผู้เช่าต้องชำระมัดจำเพิ่ม ฿{formatCurrency(transferCharge.amount)} ภายใน {transferCharge.days} วัน
                     {transferCharge.due_at ? ` (ถึง ${formatDateTime(transferCharge.due_at)})` : ' นับจากกดส่งยอด'}
                     {' '}ระหว่างนี้ยังไม่ย้ายห้องและยังไม่ทำสัญญาใหม่ ถ้าเลยกำหนดระบบจะยกเลิกคำขอย้ายห้องอัตโนมัติ
                   </p>
@@ -4077,7 +4013,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
               {awaitingCharge && transferCharge.status !== 'not_sent' && (
                 <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection(chargeSectionRef)}>
                   <strong>{TRANSFER_CHARGE_STATUS_TEXT[transferCharge.status]}</strong>
-                  <span>ทำสัญญาย้ายห้องได้หลังผู้เช่าชำระส่วนต่างและตรวจสลิปผ่านแล้ว</span>
+                  <span>ทำสัญญาย้ายห้องได้หลังผู้เช่าชำระยอดย้ายห้องและตรวจสลิปผ่านแล้ว</span>
                   <em className="staff-transfer-footer-warning-link">ดูรายละเอียด ↓</em>
                 </button>
               )}
@@ -4253,7 +4189,7 @@ function SummaryIcon({ type }) {
   )
 }
 
-const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟ', room_transfer: 'ส่วนต่างย้ายห้อง' }
+const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟ', room_transfer: 'ยอดย้ายห้อง' }
 const PAYMENT_ITEM_ORDER = ['deposit', 'rent', 'room_transfer', 'water', 'electricity']
 
 function slipPaymentItems(payment) {
@@ -7176,6 +7112,7 @@ function StaffMain() {
     room_number: '',
     checklist: {},
     damage_note: '',
+    damage_cost: '',
     photos: [],
     existingPhotos: [],
   })
@@ -7188,6 +7125,9 @@ function StaffMain() {
   const [inspectionError, setInspectionError] = useState('')
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
+  const inspectionMoveRoomId = inspectionTenantRequest?.type === 'move_room'
+    ? inspectionTenantRequest.id
+    : inspectionEditing?.tenant_request_type === 'move_room' ? inspectionEditing.tenant_request_id : null
   const [invoicePrintError, setInvoicePrintError] = useState('')
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [invoiceGenerating, setInvoiceGenerating] = useState(false)
@@ -7625,6 +7565,7 @@ function StaffMain() {
       room_number: occupiedRoom ? String(occupiedRoom.room_number) : '',
       checklist: {},
       damage_note: '',
+      damage_cost: '',
       photos: [],
       existingPhotos: [],
     })
@@ -7640,6 +7581,7 @@ function StaffMain() {
       room_number: String(request.room_number),
       checklist: {},
       damage_note: '',
+      damage_cost: '',
       photos: [],
       existingPhotos: [],
     })
@@ -7674,6 +7616,7 @@ function StaffMain() {
         room_number: String(detail.room_number),
         checklist: detail.checklist,
         damage_note: detail.damage_note || '',
+        damage_cost: Number(detail.damage_cost) > 0 ? String(Number(detail.damage_cost)) : '',
         photos: [],
         existingPhotos: detail.photos || [],
       })
@@ -7726,6 +7669,12 @@ function StaffMain() {
     if (hasIssue && inspectionForm.photos.length + inspectionForm.existingPhotos.length === 0) {
       fieldErrors.photos = 'กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย'
     }
+    if (inspectionMoveRoomId && damageInputError(inspectionForm.damage_cost)) {
+      fieldErrors.damage_cost = damageInputError(inspectionForm.damage_cost)
+    }
+    if (inspectionMoveRoomId && Number(damageInputValue(inspectionForm.damage_cost)) > 0 && !inspectionForm.damage_note.trim()) {
+      fieldErrors.damage_note = 'กรุณาระบุรายการความเสียหายที่คิดค่าเสียหาย'
+    }
     setInspectionFieldErrors(fieldErrors)
     if (Object.keys(fieldErrors).length > 0) {
       setInspectionError(
@@ -7733,7 +7682,7 @@ function StaffMain() {
           ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
           : hasIssue && inspectionForm.photos.length + inspectionForm.existingPhotos.length === 0
             ? 'กรุณาแนบภาพประกอบรายการชำรุดหรือสูญหาย'
-            : 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
+            : fieldErrors.damage_cost || 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
       )
       return
     }
@@ -7746,6 +7695,7 @@ function StaffMain() {
         checklist: inspectionForm.checklist,
         damage_note: inspectionForm.damage_note.trim(),
         photos,
+        ...(inspectionMoveRoomId ? { damage_cost: damageInputValue(inspectionForm.damage_cost) } : {}),
       }
       const { data } = inspectionEditing
         ? await axios.patch(
@@ -8179,11 +8129,11 @@ function StaffMain() {
     setRequestsError('')
     try {
       const { data } = await axios.post(`/api/staff/requests/${renewApproveConfirm.id}/transfer-charge`, {}, { headers: authHeaders() })
-      setActionSuccess(data.message || 'ส่งยอดส่วนต่างให้ผู้เช่าแล้ว')
+      setActionSuccess(data.message || 'ส่งยอดชำระย้ายห้องให้ผู้เช่าแล้ว')
       setRenewApproveConfirm(null)
       await loadRequests()
     } catch (err) {
-      setRequestsError(err.response?.data?.message || 'ส่งยอดส่วนต่างไม่สำเร็จ')
+      setRequestsError(err.response?.data?.message || 'ส่งยอดชำระย้ายห้องไม่สำเร็จ')
     } finally {
       setProcessingRequestKey('')
     }
@@ -9905,6 +9855,25 @@ function StaffMain() {
                   </div>
                 </section>
 
+                {inspectionMoveRoomId && (
+                  <section className="inspection-section">
+                    <h4 className="inspection-section-title">
+                      <span className="inspection-step">4</span> ค่าเสียหายและเงินมัดจำ
+                    </h4>
+                    <MoveRoomDamageFinance
+                      key={inspectionMoveRoomId}
+                      previewUrl={`/api/staff/requests/${inspectionMoveRoomId}/transfer-preview`}
+                      value={inspectionForm.damage_cost}
+                      onChange={(next) => {
+                        setInspectionForm((form) => ({ ...form, damage_cost: next }))
+                        setInspectionFieldErrors((errors) => ({ ...errors, damage_cost: undefined }))
+                      }}
+                      error={inspectionFieldErrors.damage_cost}
+                      inputId="inspection-damage-cost"
+                    />
+                  </section>
+                )}
+
                 <div className="inspection-footer">
                   {inspectionError && (
                     <p className="staff-form-error inspection-footer-error" role="alert">
@@ -9915,7 +9884,7 @@ function StaffMain() {
                     {inspectionTenantRequest || inspectionEditing?.tenant_request_id
                       ? inspectionTenantRequest?.type === 'moveout' || inspectionEditing?.tenant_request_type === 'moveout'
                         ? 'บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติการย้ายออกได้'
-                        : 'บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติย้ายห้องได้ทันที'
+                        : 'บันทึกผลตรวจแล้ว ถ้ามีค่าเช่าหรือมัดจำที่ต้องเก็บเพิ่ม ระบบจะส่งยอดให้ผู้เช่าชำระก่อนอนุมัติย้ายห้อง'
                       : 'ผลตรวจและรูปจะถูกบันทึกในระบบและส่งให้ Admin ตรวจสอบ'}
                   </p>
                   <div className="inspection-footer-actions">

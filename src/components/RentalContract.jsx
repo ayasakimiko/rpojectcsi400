@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { UploadImage } from './UploadMedia.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
+import RoomTransferFinance from './RoomTransferFinance.jsx'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import './RentalContract.css'
 import {
@@ -1818,7 +1819,7 @@ function ContractTransferTimeline({ contract, viewer }) {
       .toLowerCase()
       .includes(keyword)
   })
-  const lastDeposit = Math.max(0, Number(transfers.at(-1).deposit_before) - Number(transfers.at(-1).deposit_deducted))
+  const lastDeposit = transfers.at(-1).deposit_after ?? Math.max(0, Number(transfers.at(-1).deposit_before) - Number(transfers.at(-1).deposit_deducted))
   return (
     <div className="ctl">
       <div className="ctl-summary">
@@ -1889,7 +1890,7 @@ function ContractTransferTimeline({ contract, viewer }) {
         {items.map(({ transfer, order }) => {
           const fromPrice = Number(transfer.from_price) || 0
           const toPrice = Number(transfer.to_price) || 0
-          const deducted = Number(transfer.deposit_deducted) || 0
+          const deducted = transfer.finance ? Number(transfer.finance.damage_deduction) || 0 : Number(transfer.deposit_deducted) || 0
           const charged = Number(transfer.amount_charged) || 0
           const date = transfer.transferred_at ? new Date(transfer.transferred_at) : null
           return (
@@ -1909,7 +1910,9 @@ function ContractTransferTimeline({ contract, viewer }) {
                       ค่าเช่า {formatContractMoney(fromPrice)} → {formatContractMoney(toPrice)}
                     </span>
                     <span className={deducted > 0 ? 'is-up' : 'is-down'}>
-                      {deducted > 0 ? `หักมัดจำ ${formatContractMoney(deducted)}` : 'ไม่หักมัดจำ'}
+                      {transfer.finance
+                        ? `มัดจำหลังย้าย ${formatContractMoney(transfer.deposit_after)}${deducted > 0 ? ` (หักค่าเสียหาย ${formatContractMoney(deducted)})` : ''}`
+                        : deducted > 0 ? `หักมัดจำ ${formatContractMoney(deducted)}` : 'ไม่หักมัดจำ'}
                     </span>
                     {charged > 0 && (
                       <span className={transfer.charge_status === 'paid' ? 'is-down' : 'is-danger'}>
@@ -2266,21 +2269,46 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
   )
 }
 
+function depositAdjustmentLines(contract) {
+  return contractTransfers(contract).flatMap((transfer) => {
+    const route = `${transfer.from_room_number} → ${transfer.to_room_number}`
+    const date = formatContractDate(transfer.transferred_at)
+    const finance = transfer.finance
+    if (!finance) {
+      return Number(transfer.deposit_deducted) > 0
+        ? [{ key: `${transfer.id}-legacy`, label: `หักส่วนต่างย้ายห้อง ${route}`, date, amount: -Number(transfer.deposit_deducted) }]
+        : []
+    }
+    return [
+      { key: 'damage', label: `หักค่าเสียหายห้อง ${transfer.from_room_number}`, amount: -Number(finance.damage_deduction) },
+      { key: 'topup', label: `ชำระมัดจำเพิ่ม (ย้าย ${route})`, amount: Number(finance.deposit_topup) },
+      { key: 'rent', label: `เครดิตค่าเช่าที่เหลือเข้ามัดจำ (${route})`, amount: Number(finance.rent_credit_to_deposit) },
+      { key: 'excess', label: 'คืนส่วนเกินเพดานมัดจำ', amount: -Number(finance.deposit_excess_refund) },
+    ]
+      .filter((line) => line.amount)
+      .map((line) => ({ ...line, key: `${transfer.id}-${line.key}`, date }))
+  })
+}
+
 function DepositDeductions({ contract }) {
   const [open, setOpen] = useState(false)
+  const lines = depositAdjustmentLines(contract)
+  const deducted = Number(contract.deposit_transfer_deducted) || 0
   return (
     <div className={`ccc-bill-deposit-more${open ? ' is-open' : ''}`}>
       <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <span className="ccc-bill-deposit-summary">
-          <span className="is-deduct">
-            หักไป <b>−{formatContractMoney(contract.deposit_transfer_deducted)}</b>
-          </span>
+          {deducted > 0 && (
+            <span className="is-deduct">
+              หักไป <b>−{formatContractMoney(deducted)}</b>
+            </span>
+          )}
           <span className="is-left">
             คงเหลือ <b>{formatContractMoney(contract.deposit_remaining)}</b>
           </span>
         </span>
         <span className="ccc-bill-deposit-toggle">
-          {open ? 'ซ่อน' : 'ดูรายการหัก'}
+          {open ? 'ซ่อน' : 'ดูรายการปรับมัดจำ'}
           <ContractIcon type="chevron" size={13} />
         </span>
       </button>
@@ -2290,17 +2318,15 @@ function DepositDeductions({ contract }) {
             <span>เงินมัดจำที่ชำระ</span>
             <b>{formatContractMoney(contract.deposit_paid ?? contract.deposit_amount)}</b>
           </li>
-          {contractTransfers(contract)
-            .filter((transfer) => Number(transfer.deposit_deducted) > 0)
-            .map((transfer) => (
-              <li key={transfer.id} className="is-deduct">
-                <span>
-                  หักส่วนต่างย้ายห้อง {transfer.from_room_number} → {transfer.to_room_number}
-                  <small>{formatContractDate(transfer.transferred_at)}</small>
-                </span>
-                <b>−{formatContractMoney(transfer.deposit_deducted)}</b>
-              </li>
-            ))}
+          {lines.map((line) => (
+            <li key={line.key} className={line.amount < 0 ? 'is-deduct' : undefined}>
+              <span>
+                {line.label}
+                <small>{line.date}</small>
+              </span>
+              <b>{line.amount < 0 ? '−' : '+'}{formatContractMoney(Math.abs(line.amount))}</b>
+            </li>
+          ))}
           <li className="is-left">
             <span>คงเหลือ</span>
             <b>{formatContractMoney(contract.deposit_remaining)}</b>
@@ -2397,8 +2423,10 @@ function ContractTransferEntry({ transfer, order, viewer, detailed = false, depo
   const periods = Number(transfer.chargeable_periods) || 0
   const totalDiff = Number(transfer.price_difference_total) || 0
   const depositBefore = Number(transfer.deposit_before) || 0
-  const deducted = Number(transfer.deposit_deducted) || 0
-  const depositAfter = Math.max(0, depositBefore - deducted)
+  const finance = transfer.finance
+  const deducted = finance ? Number(finance.damage_deduction) || 0 : Number(transfer.deposit_deducted) || 0
+  const depositAfter = transfer.deposit_after == null ? Math.max(0, depositBefore - deducted) : Number(transfer.deposit_after) || 0
+  const credited = finance ? (Number(finance.total_credit) || 0) - (Number(finance.deposit_excess_refund) || 0) : 0
   const charged = Number(transfer.amount_charged) || 0
   const contractDeposit = Number(depositAmount) || 0
   const yours = viewer === 'customer' ? 'ของคุณ' : ''
@@ -2413,7 +2441,9 @@ function ContractTransferEntry({ transfer, order, viewer, detailed = false, depo
     {
       label: `มัดจำ${yours}หลังย้าย`,
       value: formatContractMoney(depositAfter),
-      note: deducted > 0 ? `หักไป ${formatContractMoney(deducted)}` : 'ไม่ถูกหัก',
+      note: finance
+        ? [deducted > 0 && `หักค่าเสียหาย ${formatContractMoney(deducted)}`, credited > 0 && `เครดิต +${formatContractMoney(credited)}`].filter(Boolean).join(' · ') || 'โอนมัดจำครบ'
+        : deducted > 0 ? `หักไป ${formatContractMoney(deducted)}` : 'ไม่ถูกหัก',
       tone: deducted > 0 ? 'is-warning' : 'is-success',
     },
     {
@@ -2491,6 +2521,12 @@ function ContractTransferEntry({ transfer, order, viewer, detailed = false, depo
               </div>
             ))}
           </div>
+          {finance ? (
+            <div className="contract-transfer-finance">
+              <RoomTransferFinance finance={finance} fromPrice={fromPrice} toPrice={toPrice} final chargeStatus={transfer.charge_status} />
+              {viewer !== 'customer' && transfer.approved_by_name && <small>อนุมัติโดย {transfer.approved_by_name}</small>}
+            </div>
+          ) : (
           <div className="contract-transfer-groups">
             {groups.map((group) => (
               <section key={group.title}>
@@ -2506,6 +2542,7 @@ function ContractTransferEntry({ transfer, order, viewer, detailed = false, depo
               </section>
             ))}
           </div>
+          )}
         </>
       ) : (
         <dl>
@@ -2521,19 +2558,34 @@ function ContractTransferEntry({ transfer, order, viewer, detailed = false, depo
               <dd>รอบ {formatContractDate(transfer.new_price_from)}</dd>
             </div>
           )}
-          <div>
-            <dt>ส่วนต่างที่ต้องชำระ</dt>
-            <dd className={totalDiff > 0 ? 'is-warning' : ''}>
-              {diff > 0 ? formatContractMoney(totalDiff) : diff === 0 ? 'ราคาเท่าเดิม' : 'ห้องใหม่ถูกกว่า ไม่มีส่วนต่าง'}
-            </dd>
-          </div>
+          {finance ? (
+            <div>
+              <dt>{finance.rent_charge_after_move ? 'ส่วนต่างค่าเช่าเดือนที่ย้ายเข้า' : `ค่าเช่า ${finance.remaining_days} วันที่เหลือ`}</dt>
+              <dd className={Number(finance.rent_charge) > 0 ? 'is-warning' : Number(finance.rent_credit_to_deposit) > 0 ? 'is-success' : ''}>
+                {Number(finance.rent_charge) > 0
+                  ? `จ่ายเพิ่ม ${formatContractMoney(finance.rent_charge)}${finance.rent_charge_after_move ? (finance.rent_charge_status === 'paid' ? ' (ชำระแล้ว)' : ' (รอชำระ)') : ''}`
+                  : Number(finance.rent_credit_to_deposit) > 0
+                    ? `เครดิตเข้ามัดจำ +${formatContractMoney(finance.rent_credit_to_deposit)}`
+                    : 'ไม่มีส่วนต่าง'}
+              </dd>
+            </div>
+          ) : (
+            <div>
+              <dt>ส่วนต่างที่ต้องชำระ</dt>
+              <dd className={totalDiff > 0 ? 'is-warning' : ''}>
+                {diff > 0 ? formatContractMoney(totalDiff) : diff === 0 ? 'ราคาเท่าเดิม' : 'ห้องใหม่ถูกกว่า ไม่มีส่วนต่าง'}
+              </dd>
+            </div>
+          )}
           <div>
             <dt>เงินมัดจำ{yours}</dt>
             <dd className="contract-transfer-deposit">
               <span className={deducted > 0 ? 'is-warning' : 'is-success'}>
-                {deducted > 0 ? `หักส่วนต่าง ${formatContractMoney(deducted)}` : 'ไม่หักส่วนต่าง'}
+                {finance
+                  ? deducted > 0 ? `หักค่าเสียหาย ${formatContractMoney(deducted)}` : credited > 0 ? `เครดิต +${formatContractMoney(credited)}` : 'โอนไปห้องใหม่'
+                  : deducted > 0 ? `หักส่วนต่าง ${formatContractMoney(deducted)}` : 'ไม่หักส่วนต่าง'}
               </span>
-              <span className="is-strong">เหลือ {formatContractMoney(depositAfter)}</span>
+              <span className="is-strong">{finance ? 'หลังย้าย' : 'เหลือ'} {formatContractMoney(depositAfter)}</span>
             </dd>
           </div>
           {charged > 0 && (
@@ -2760,9 +2812,11 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
       label: 'เงินมัดจำ',
       value: formatDepositSummary(contract),
     },
-    ...(Number(contract.deposit_transfer_deducted) > 0
+    ...(contract.deposit_transfer_adjusted || Number(contract.deposit_transfer_deducted) > 0
       ? [
-          { label: 'หักส่วนต่างย้ายห้อง', value: `− ${formatContractMoney(contract.deposit_transfer_deducted)}`, tone: 'is-warning' },
+          ...(Number(contract.deposit_transfer_deducted) > 0
+            ? [{ label: 'หักจากมัดจำตอนย้ายห้อง', value: `− ${formatContractMoney(contract.deposit_transfer_deducted)}`, tone: 'is-warning' }]
+            : []),
           { label: 'มัดจำคงเหลือ', value: formatContractMoney(contract.deposit_remaining), tone: 'is-accent' },
         ]
       : []),
@@ -2866,7 +2920,7 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
                     )}
                   </strong>
                 </div>
-                {Number(contract.deposit_transfer_deducted) > 0 && <DepositDeductions contract={contract} />}
+                {(contract.deposit_transfer_adjusted || Number(contract.deposit_transfer_deducted) > 0) && <DepositDeductions contract={contract} />}
               </div>
             )}
             <ThisMonthRent thisMonth={contract.this_month ?? null} contract={contract} viewer={viewer} />

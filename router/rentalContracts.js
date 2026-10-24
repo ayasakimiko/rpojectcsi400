@@ -9,10 +9,21 @@ import {
   computeRentCoverage,
   loadDepositPayments,
   loadMoveOutBalance,
-  loadTransferDepositDeductions,
+  loadTransferDepositLedger,
   paidDepositCents,
   ROOM_TRANSFER_PAYMENT_TYPE,
 } from "./CustomerDashboardRouter.js";
+import {
+  computeProratedRent,
+  computeRoomTransferSettlement,
+  depositBalanceAfterTransfers,
+  settlementView,
+  signedCents,
+  toCents,
+  transferDepositDeductedCents,
+  transferFinanceView,
+  transferRentPaidCents,
+} from "./roomTransferFinance.js";
 
 export const CONTRACT_IMAGE_FOLDER = "contracts";
 export { CONTRACT_MIN_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES };
@@ -164,8 +175,6 @@ function billingPeriodStarts(startValue, endValue) {
   return starts;
 }
 
-const toCents = (value) => Math.max(0, Math.round(Number(value) * 100) || 0);
-
 function contractRentTotalCents(periodStarts, basePriceCents, transfers) {
   let total = 0;
   for (const periodStart of periodStarts) {
@@ -176,7 +185,7 @@ function contractRentTotalCents(periodStarts, basePriceCents, transfers) {
     }
     total += priceCents;
   }
-  return total + transfers.reduce((sum, transfer) => sum + toCents(transfer.price_difference_total), 0);
+  return Math.max(0, total + transfers.reduce((sum, transfer) => sum + signedCents(transfer.price_difference_total), 0));
 }
 
 function contractRentBreakdown(periodStarts, basePriceCents, baseRoom, transfers, endDate) {
@@ -190,16 +199,16 @@ function contractRentBreakdown(periodStarts, basePriceCents, baseRoom, transfers
         period.room = transfer.to_room_number;
       }
     }
-    const diffCents = toCents(transfer.price_difference_total);
+    const diffCents = signedCents(transfer.price_difference_total);
     const chargeable = Number(transfer.chargeable_periods) || 0;
     const covered = from && chargeable > 0 ? periods.filter((period) => period.start < from).slice(-chargeable) : [];
-    if (diffCents > 0 && covered.length > 0) {
+    if (diffCents !== 0 && covered.length > 0) {
       const each = Math.floor(diffCents / covered.length);
       covered.forEach((period, index) => {
         period.priceCents += each + (index === 0 ? diffCents - each * covered.length : 0);
         period.room = transfer.to_room_number;
       });
-    } else if (diffCents > 0) {
+    } else if (diffCents !== 0) {
       leftovers.push({ kind: "difference", from_room_number: transfer.from_room_number, room_number: transfer.to_room_number, price_cents: diffCents });
     }
   }
@@ -234,8 +243,13 @@ function transferSummary(transfer) {
     price_difference_total: Number(transfer.price_difference_total),
     deposit_before: Number(transfer.deposit_before),
     deposit_deducted: Number(transfer.deposit_deducted),
+    damage_deduction: Number(transfer.damage_deduction) || 0,
+    deposit_after: transfer.deposit_after == null
+      ? Math.max(0, Number(transfer.deposit_before) - Number(transfer.deposit_deducted))
+      : Number(transfer.deposit_after),
     amount_charged: Number(transfer.amount_charged),
     charge_status: Number(transfer.amount_charged) > 0 ? transfer.charge_status ?? "pending" : null,
+    finance: transferFinanceView(transfer),
     new_price_from: transfer.new_price_from,
     approved_by_name: transfer.approved_by_name,
     transferred_at: transfer.transferred_at,
@@ -262,20 +276,17 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
   const periodStarts = billingPeriodStarts(row.rental_start_date, endDate);
   const totalPeriods = periodStarts.length;
   const contractTotalCents = contractRentTotalCents(periodStarts, priceCents, transfers);
-  const transferDeductedCents = transfers.reduce((sum, transfer) => sum + toCents(transfer.deposit_deducted), 0);
-  const transferPaidCents = transferDeductedCents + transfers.reduce(
-    (sum, transfer) => sum + (transfer.charge_status === "paid" ? toCents(transfer.amount_charged) : 0),
-    0,
-  );
-  const paidCents = Math.max(0, rentPaidCents || 0) + transferPaidCents;
+  const transferDeductedCents = transferDepositDeductedCents(transfers);
+  const transferPaidCents = transfers.reduce((sum, transfer) => sum + transferRentPaidCents(transfer), 0);
+  const paidCents = Math.max(0, Math.max(0, rentPaidCents || 0) + transferPaidCents);
   const depositState = depositStatus(depositCents, deposit);
-  const firstRentPaid = priceCents === 0 || paidCents >= priceCents;
+  const firstRentPaid = priceCents === 0 || Math.max(0, rentPaidCents || 0) >= priceCents || paidCents >= priceCents;
   const firstPayment = firstRentPaid && ["none", "paid"].includes(depositState)
     ? "paid"
     : rentPending || depositState === "pending" ? "pending" : "due";
   const status = contractStatus(row, now, firstPayment);
   const depositPaidCents = Math.min(depositCents, deposit.paidCents);
-  const depositRemainingCents = Math.max(0, depositPaidCents - transferDeductedCents);
+  const depositRemainingCents = depositBalanceAfterTransfers(depositPaidCents, transfers);
   const { room_number_current, ...contract } = row;
   delete contract.latest_end_date;
   delete contract.prev_contract_id;
@@ -297,6 +308,7 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
     first_month_total: (priceCents + depositCents) / 100,
     deposit_paid: depositPaidCents / 100,
     deposit_transfer_deducted: transferDeductedCents / 100,
+    deposit_transfer_adjusted: depositRemainingCents !== depositPaidCents || transferDeductedCents > 0,
     deposit_remaining: depositRemainingCents / 100,
     deposit_refund: depositRefund(status, depositRemainingCents, contract.deposit_settlement),
     deposit_deduction: contract.deposit_deduction == null ? null : Number(contract.deposit_deduction),
@@ -371,8 +383,9 @@ async function attachContractImages(pool, contracts, now) {
       [customerIds],
     ),
     pool.query(
-      `SELECT rt.*, cp.status AS charge_status FROM RoomTransfer rt
+      `SELECT rt.*, cp.status AS charge_status, rp.status AS rent_charge_status FROM RoomTransfer rt
        LEFT JOIN Payment cp ON cp.id = rt.charge_payment_id
+       LEFT JOIN Payment rp ON rp.id = rt.rent_charge_payment_id
        WHERE rt.customer_id IN (?) ORDER BY rt.id ASC`,
       [customerIds],
     ),
@@ -478,24 +491,15 @@ export async function loadCompletedContracts(pool) {
 
 const ROOM_COLUMNS = `id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
   electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until,
-  billing_start_date, pending_lump_sum_months, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active`;
+  billing_start_date, pending_lump_sum_months, rent_credit, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active`;
 
 const formatBaht = (cents) => `฿${(cents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
 
-export function computeRoomTransferSettlement({ sourcePriceCents, targetPriceCents, chargeablePeriods, depositRemainingCents }) {
-  const priceDifferenceCents = targetPriceCents - sourcePriceCents;
-  const periods = priceDifferenceCents > 0 ? Math.max(0, chargeablePeriods) : 0;
-  const totalDifferenceCents = Math.max(0, priceDifferenceCents) * periods;
-  const availableDepositCents = Math.max(0, depositRemainingCents);
-  const depositDeductedCents = Math.min(totalDifferenceCents, availableDepositCents);
-  return {
-    priceDifferenceCents,
-    chargeablePeriods: periods,
-    totalDifferenceCents,
-    depositDeductedCents,
-    additionalChargeCents: totalDifferenceCents - depositDeductedCents,
-    depositRemainingAfterCents: availableDepositCents - depositDeductedCents,
-  };
+const startOfDay = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+function parseDateOnly(value) {
+  const [year, month, day] = String(value).split("-").map(Number);
+  return year && month && day ? new Date(year, month - 1, day) : null;
 }
 
 function roomSummary(room) {
@@ -507,12 +511,13 @@ function roomSummary(room) {
   return summary;
 }
 
-export async function buildRoomTransferPlan(db, requestId, { lock = false, now = new Date() } = {}) {
+export async function buildRoomTransferPlan(db, requestId, { lock = false, now = new Date(), damageCents = null } = {}) {
   const forUpdate = lock ? " FOR UPDATE" : "";
   const [requestRows] = await db.query(
     `SELECT id, customer_id, room_number, target_room_number, type, status, note, move_reason,
             DATE_FORMAT(preferred_move_date, '%Y-%m-%d') AS preferred_move_date, created_at,
-            transfer_charge_payment_id, transfer_charge_due_at, transfer_charge_periods
+            transfer_charge_payment_id, transfer_charge_due_at, transfer_charge_periods,
+            DATE_FORMAT(transfer_calc_date, '%Y-%m-%d') AS transfer_calc_date
      FROM TenantRequest WHERE id = ?${forUpdate}`,
     [requestId],
   );
@@ -543,8 +548,12 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   }
   const stale = customer.room_number !== request.room_number;
 
-  const [inspectionRows] = await db.query(`SELECT id FROM MoveOutInspection WHERE tenant_request_id = ?${forUpdate}`, [request.id]);
-  if (!inspectionRows[0]) blockers.push("กรุณาตรวจห้องก่อนอนุมัติย้ายห้อง");
+  const [inspectionRows] = await db.query(
+    `SELECT id, damage_cost FROM MoveOutInspection WHERE tenant_request_id = ?${forUpdate}`,
+    [request.id],
+  );
+  const inspection = inspectionRows[0] ?? null;
+  if (!inspection) blockers.push("กรุณาตรวจห้องก่อนอนุมัติย้ายห้อง");
 
   const [rooms] = await db.query(
     `SELECT ${ROOM_COLUMNS} FROM Room WHERE room_number IN (?, ?) ORDER BY room_number${forUpdate}`,
@@ -583,21 +592,43 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
     );
   }
 
-  const [depositPayments, deductions] = await Promise.all([
+  const [depositPayments, ledger] = await Promise.all([
     loadDepositPayments(db, [customer.id]),
-    loadTransferDepositDeductions(db, [customer.id]),
+    loadTransferDepositLedger(db, [customer.id]),
   ]);
+  const priorTransfers = ledger.get(customer.id) ?? [];
   const depositAmountCents = Math.max(0, toCents(customer.deposit_amount));
   const depositPaidCents = Math.min(depositAmountCents, paidDepositCents(depositPayments.get(customer.id)));
-  const deductedBeforeCents = deductions.get(customer.id) ?? 0;
-  const depositRemainingCents = Math.max(0, depositPaidCents - deductedBeforeCents);
+  const deductedBeforeCents = transferDepositDeductedCents(priorTransfers);
+  const depositRemainingCents = depositBalanceAfterTransfers(depositPaidCents, priorTransfers);
 
-  const settlement = computeRoomTransferSettlement({
-    sourcePriceCents: toCents(sourceRoom?.price),
-    targetPriceCents: toCents(targetRoom?.price),
-    chargeablePeriods: request.transfer_charge_periods ?? coverage?.paidPeriodsFromCurrent ?? 0,
-    depositRemainingCents,
+  const inspectionDamageCents = toCents(inspection?.damage_cost);
+  const appliedDamageCents = damageCents ?? inspectionDamageCents;
+  if (appliedDamageCents > depositRemainingCents) {
+    blockers.push(
+      `ค่าเสียหาย ${formatBaht(appliedDamageCents)} เกินเงินมัดจำคงเหลือ ${formatBaht(depositRemainingCents)} กรุณาแก้ไขผลตรวจห้อง`,
+    );
+  }
+
+  const sourcePriceCents = toCents(sourceRoom?.price);
+  const targetPriceCents = toCents(targetRoom?.price);
+  const paidThrough = coverage?.paidThrough ?? sourceRoom?.billing_start_date ?? sourceRoom?.rental_start_date ?? null;
+  const moveDate = (request.transfer_calc_date && parseDateOnly(request.transfer_calc_date)) || startOfDay(now);
+  const proration = computeProratedRent({
+    anchor: sourceRoom?.billing_start_date ?? sourceRoom?.rental_start_date,
+    paidThrough,
+    moveDate,
+    sourcePriceCents,
+    targetPriceCents,
   });
+  const settlement = computeRoomTransferSettlement({
+    sourcePriceCents,
+    targetPriceCents,
+    depositBalanceCents: depositRemainingCents,
+    damageCents: appliedDamageCents,
+    proration,
+  });
+  const newPriceFrom = proration.nextPeriodStart ?? paidThrough;
 
   const transferCharge = {
     required: settlement.additionalChargeCents > 0,
@@ -611,7 +642,7 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   };
   if (chargePayment && toCents(chargePayment.amount) !== settlement.additionalChargeCents) {
     blockers.push(
-      `ยอดส่วนต่างเปลี่ยนจาก ${formatBaht(toCents(chargePayment.amount))} เป็น ${formatBaht(settlement.additionalChargeCents)} กรุณาปฏิเสธคำขอแล้วให้ผู้เช่าส่งคำขอใหม่`,
+      `ยอดชำระย้ายห้องเปลี่ยนจาก ${formatBaht(toCents(chargePayment.amount))} เป็น ${formatBaht(settlement.additionalChargeCents)} กรุณาปฏิเสธคำขอแล้วให้ผู้เช่าส่งคำขอใหม่`,
     );
   }
 
@@ -623,13 +654,28 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
     booking,
     coverage,
     balance,
+    inspection,
+    damage: { inspectionCents: inspectionDamageCents, appliedCents: appliedDamageCents },
     deposit: { amountCents: depositAmountCents, paidCents: depositPaidCents, deductedBeforeCents, remainingCents: depositRemainingCents },
     settlement,
     transferCharge,
-    newPriceFrom: coverage?.paidThrough ?? sourceRoom?.billing_start_date ?? sourceRoom?.rental_start_date ?? null,
+    newPriceFrom,
     blockers,
     stale,
   };
+}
+
+export async function validateInspectionDamage(db, requestId, damageCents) {
+  const plan = await buildRoomTransferPlan(db, requestId, { damageCents });
+  if (!plan?.customer || plan.stale) return null;
+  if (damageCents > plan.deposit.remainingCents) {
+    return `ค่าเสียหายต้องไม่เกินเงินมัดจำคงเหลือ ${formatBaht(plan.deposit.remainingCents)}`;
+  }
+  const payment = plan.transferCharge.payment;
+  if (payment && (payment.status === "paid" || payment.slip_path) && damageCents !== plan.damage.inspectionCents) {
+    return "ผู้เช่าชำระหรือส่งสลิปยอดย้ายห้องแล้ว จึงแก้ไขค่าเสียหายไม่ได้ กรุณาปฏิเสธคำขอแล้วให้ผู้เช่าส่งคำขอใหม่";
+  }
+  return null;
 }
 
 export const ROOM_TRANSFER_CHARGE_DAYS = 3;
@@ -659,15 +705,14 @@ export const roomTransferNeedsPayment = (plan) => plan.transferCharge.required &
 
 export async function requestRoomTransferCharge(connection, plan, staffName) {
   const { request, sourceRoom, targetRoom, booking, settlement } = plan;
+  const parts = [`มัดจำเพิ่ม ${formatBaht(settlement.topupCents)}`];
   const [chargeResult] = await connection.query(
     `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', ?, ?)`,
     [
       booking.id,
       settlement.additionalChargeCents / 100,
       ROOM_TRANSFER_PAYMENT_TYPE,
-      `ส่วนต่างค่าเช่าย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number}${
-        settlement.depositDeductedCents > 0 ? ` (หักจากเงินมัดจำแล้ว ${formatBaht(settlement.depositDeductedCents)})` : ""
-      } ชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน`.slice(0, 255),
+      `ย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number}: ${parts.join(" + ")} ชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน`.slice(0, 255),
     ],
   );
   await connection.query(
@@ -677,11 +722,47 @@ export async function requestRoomTransferCharge(connection, plan, staffName) {
          accepted_by_name = COALESCE(accepted_by_name, ?),
          transfer_charge_payment_id = ?,
          transfer_charge_due_at = DATE_ADD(NOW(), INTERVAL ? DAY),
-         transfer_charge_periods = ?
+         transfer_charge_periods = ?,
+         transfer_calc_date = ?
      WHERE id = ?`,
-    [staffName || null, chargeResult.insertId, ROOM_TRANSFER_CHARGE_DAYS, settlement.chargeablePeriods, request.id],
+    [
+      staffName || null,
+      chargeResult.insertId,
+      ROOM_TRANSFER_CHARGE_DAYS,
+      settlement.chargeablePeriods,
+      settlement.moveDate,
+      request.id,
+    ],
   );
   return chargeResult.insertId;
+}
+
+export async function syncRoomTransferCharge(connection, requestId, staffName) {
+  let plan = await buildRoomTransferPlan(connection, requestId, { lock: true });
+  if (!plan?.customer || plan.stale) return 0;
+  const payment = plan.transferCharge.payment;
+  if (
+    payment && payment.status === "pending" && !payment.slip_path
+    && toCents(payment.amount) !== plan.settlement.additionalChargeCents
+  ) {
+    await connection.query(
+      `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: แก้ไขผลตรวจห้อง คำนวณยอดใหม่)'), 255)
+       WHERE id = ? AND status = 'pending' AND slip_path IS NULL`,
+      [payment.id],
+    );
+    await connection.query(
+      `UPDATE TenantRequest
+       SET transfer_charge_payment_id = NULL, transfer_charge_due_at = NULL, transfer_charge_periods = NULL, transfer_calc_date = NULL
+       WHERE id = ?`,
+      [requestId],
+    );
+    plan = await buildRoomTransferPlan(connection, requestId, { lock: true });
+  }
+  if (plan.blockers.length === 0 && plan.transferCharge.required && plan.transferCharge.status === "not_sent") {
+    await requestRoomTransferCharge(connection, plan, staffName);
+    return plan.settlement.additionalChargeCents;
+  }
+  return 0;
 }
 
 export async function cancelTransfersIntoBookedRooms(db, roomNumber = null) {
@@ -732,7 +813,7 @@ export async function expireRoomTransferCharges(db) {
       `UPDATE TenantRequest
        SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (ไม่ชำระส่วนต่าง)', reject_reason = ?
        WHERE id = ? AND status IN ('pending', 'in_progress')`,
-      [`ไม่ได้ชำระส่วนต่างค่าเช่าภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน ระบบยกเลิกการย้ายห้องและการทำสัญญาใหม่แล้ว`, row.id],
+      [`ไม่ได้ชำระยอดย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม) ภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน ระบบยกเลิกการย้ายห้องและการทำสัญญาใหม่แล้ว`, row.id],
     );
   }
   const [orphanRows] = await db.query(
@@ -750,8 +831,8 @@ export async function expireRoomTransferCharges(db) {
   return rows.length;
 }
 
-export async function loadRoomTransferPreview(db, requestId) {
-  const plan = await buildRoomTransferPlan(db, requestId);
+export async function loadRoomTransferPreview(db, requestId, { damageCents = null } = {}) {
+  const plan = await buildRoomTransferPlan(db, requestId, { damageCents });
   if (!plan) return null;
   const contracts = plan.customer ? await loadCustomerContracts(db, [plan.customer.id], { currentOnly: true }) : new Map();
   const { request, customer, sourceRoom, targetRoom, coverage, balance, deposit, settlement } = plan;
@@ -769,20 +850,19 @@ export async function loadRoomTransferPreview(db, requestId) {
       deducted_before: deposit.deductedBeforeCents / 100,
       remaining: deposit.remainingCents / 100,
     },
-    settlement: {
-      price_difference: settlement.priceDifferenceCents / 100,
-      chargeable_periods: settlement.chargeablePeriods,
-      total_difference: settlement.totalDifferenceCents / 100,
-      deposit_deducted: settlement.depositDeductedCents / 100,
-      additional_charge: settlement.additionalChargeCents / 100,
-      deposit_remaining_after: settlement.depositRemainingAfterCents / 100,
+    damage: {
+      inspection_id: plan.inspection?.id ?? null,
+      recorded: plan.damage.inspectionCents / 100,
+      applied: plan.damage.appliedCents / 100,
     },
+    settlement: settlementView(settlement),
     new_price_from: plan.newPriceFrom,
     transfer_charge: {
       required: plan.transferCharge.required,
       status: plan.transferCharge.status,
       payment_id: plan.transferCharge.payment?.id ?? null,
       amount: plan.transferCharge.payment ? Number(plan.transferCharge.payment.amount) : settlement.additionalChargeCents / 100,
+      deposit_topup: settlement.topupCents / 100,
       due_at: plan.transferCharge.dueAt,
       days: ROOM_TRANSFER_CHARGE_DAYS,
     },
@@ -793,9 +873,9 @@ export async function loadRoomTransferPreview(db, requestId) {
 }
 
 export async function applyRoomTransfer(connection, plan, staffName, contractImages = []) {
-  const { request, customer, sourceRoom, targetRoom, booking, settlement, deposit } = plan;
+  const { request, customer, sourceRoom, targetRoom, booking, settlement } = plan;
   if (roomTransferNeedsPayment(plan)) {
-    throw Object.assign(new Error("ผู้เช่ายังไม่ได้ชำระส่วนต่างค่าเช่า"), { code: "TRANSFER_CHARGE_UNPAID" });
+    throw Object.assign(new Error("ผู้เช่ายังไม่ได้ชำระยอดย้ายห้อง"), { code: "TRANSFER_CHARGE_UNPAID" });
   }
   if (contractImages.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
     throw Object.assign(new Error(`กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป`), {
@@ -814,14 +894,14 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
   await connection.query(
     `UPDATE Room
      SET is_booked = FALSE, rental_duration_months = NULL, rental_start_date = NULL, rental_end_date = NULL,
-         prepaid_until = NULL, billing_start_date = NULL, pending_lump_sum_months = NULL
+         prepaid_until = NULL, billing_start_date = NULL, pending_lump_sum_months = NULL, rent_credit = NULL
      WHERE id = ?`,
     [sourceRoom.id],
   );
   await connection.query(
     `UPDATE Room
      SET is_booked = TRUE, rental_duration_months = ?, rental_start_date = ?, rental_end_date = ?,
-         prepaid_until = NULL, billing_start_date = ?, pending_lump_sum_months = ?
+         prepaid_until = NULL, billing_start_date = ?, pending_lump_sum_months = ?, rent_credit = ?
      WHERE id = ?`,
     [
       sourceRoom.rental_duration_months,
@@ -829,6 +909,7 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
       sourceRoom.rental_end_date,
       plan.newPriceFrom,
       sourceRoom.pending_lump_sum_months,
+      settlement.rentCarryCents > 0 ? settlement.rentCarryCents / 100 : null,
       targetRoom.id,
     ],
   );
@@ -840,12 +921,31 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
   const toBookingId = bookingResult.insertId;
 
   const chargePaymentId = settlement.additionalChargeCents > 0 ? plan.transferCharge.payment.id : null;
+  let rentChargePaymentId = null;
+  if (settlement.rentChargeCents > 0) {
+    const [rentChargeResult] = await connection.query(
+      `INSERT INTO Payment (booking_id, amount, payment_date, status, type, note) VALUES (?, ?, CURDATE(), 'pending', ?, ?)`,
+      [
+        toBookingId,
+        settlement.rentChargeCents / 100,
+        ROOM_TRANSFER_PAYMENT_TYPE,
+        `ส่วนต่างค่าเช่าเดือนที่ย้ายเข้า ห้อง ${sourceRoom.room_number} → ${targetRoom.room_number}`,
+      ],
+    );
+    rentChargePaymentId = rentChargeResult.insertId;
+  }
+  const hasMoveMonth = settlement.chargeablePeriods > 0;
 
+  const money = (cents) => cents / 100;
   const [transferResult] = await connection.query(
     `INSERT INTO RoomTransfer (tenant_request_id, customer_id, from_booking_id, to_booking_id, from_room_number, to_room_number,
                                from_price, to_price, chargeable_periods, price_difference_total, deposit_before, deposit_deducted,
-                               amount_charged, charge_payment_id, new_price_from, approved_by_name, contract_booking_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               amount_charged, charge_payment_id, new_price_from, approved_by_name, contract_booking_id,
+                               inspection_id, move_date, paid_through, remaining_days, period_days, old_unused_rent,
+                               new_prorated_rent, rent_charge, rent_credit_to_deposit, damage_deduction, transferable_deposit,
+                               required_deposit, deposit_applied, deposit_topup, deposit_surplus_credit, deposit_limit,
+                               deposit_excess_refund, deposit_after, rent_carry_credit, rent_charge_payment_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       request.id,
       customer.id,
@@ -855,15 +955,34 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
       targetRoom.room_number,
       sourceRoom.price,
       targetRoom.price,
-      settlement.chargeablePeriods,
-      settlement.totalDifferenceCents / 100,
-      deposit.remainingCents / 100,
-      settlement.depositDeductedCents / 100,
-      settlement.additionalChargeCents / 100,
+      hasMoveMonth ? 1 : 0,
+      money(settlement.moveMonthDifferenceCents),
+      money(settlement.depositBeforeCents),
+      money(settlement.additionalChargeCents),
       chargePaymentId,
       plan.newPriceFrom,
       staffName || null,
       contractBookingId,
+      plan.inspection?.id ?? null,
+      settlement.moveDate,
+      settlement.paidThrough,
+      settlement.remainingDays,
+      settlement.periodDays,
+      money(settlement.oldUnusedCents),
+      money(settlement.newProratedCents),
+      money(settlement.rentChargeCents),
+      money(settlement.rentCreditCents),
+      money(settlement.damageDeductionCents),
+      money(settlement.transferableCents),
+      money(settlement.requiredCents),
+      money(settlement.appliedCents),
+      money(settlement.topupCents),
+      money(settlement.surplusCents),
+      money(settlement.limitCents),
+      money(settlement.excessRefundCents),
+      money(settlement.depositAfterCents),
+      money(settlement.rentCarryCents),
+      rentChargePaymentId,
     ],
   );
   const transferId = transferResult.insertId;
@@ -875,13 +994,20 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
     `INSERT INTO ContractImage (booking_id, customer_id, name, url, room_transfer_id) VALUES ?`,
     [contractImages.map((image) => [contractBookingId, customer.id, image.name, image.url, transferId])],
   );
-  return { toBookingId, chargePaymentId, transferId, contractBookingId };
+  return { toBookingId, chargePaymentId, rentChargePaymentId, transferId, contractBookingId };
 }
 
 export function roomTransferApprovalMessage(plan) {
   const { settlement, sourceRoom, targetRoom } = plan;
   const parts = [`อนุมัติย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number} สำเร็จ`];
-  if (settlement.depositDeductedCents > 0) parts.push(`หักส่วนต่างจากเงินมัดจำ ${formatBaht(settlement.depositDeductedCents)}`);
-  if (settlement.additionalChargeCents > 0) parts.push(`ผู้เช่าชำระส่วนต่างแล้ว ${formatBaht(settlement.additionalChargeCents)}`);
+  if (settlement.damageDeductionCents > 0) parts.push(`หักค่าเสียหายจากเงินมัดจำ ${formatBaht(settlement.damageDeductionCents)}`);
+  if (settlement.additionalChargeCents > 0) parts.push(`ผู้เช่าชำระมัดจำเพิ่มแล้ว ${formatBaht(settlement.additionalChargeCents)}`);
+  if (settlement.rentChargeCents > 0) parts.push(`ส่งบิลส่วนต่างค่าเช่าเดือนที่ย้ายเข้า ${formatBaht(settlement.rentChargeCents)} ให้ผู้เช่าแล้ว`);
+  if (settlement.rentCarryCents > 0) parts.push(`ค่าเช่าห้องเดิมที่จ่ายล่วงหน้า ${formatBaht(settlement.rentCarryCents)} นำไปหักบิลค่าเช่ารอบถัดไป`);
+  if (settlement.surplusCents + settlement.rentCreditCents > 0) {
+    parts.push(`เพิ่มเป็นเงินมัดจำที่คืนได้ ${formatBaht(settlement.surplusCents + settlement.rentCreditCents - settlement.excessRefundCents)}`);
+  }
+  if (settlement.excessRefundCents > 0) parts.push(`ต้องคืนเงินส่วนเกินเพดานมัดจำให้ผู้เช่า ${formatBaht(settlement.excessRefundCents)}`);
+  parts.push(`เงินมัดจำห้องใหม่ ${formatBaht(settlement.depositAfterCents)}`);
   return parts.join(" · ");
 }

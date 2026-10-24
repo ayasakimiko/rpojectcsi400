@@ -571,7 +571,24 @@ function parseMoveOutChecklistAndNote(body) {
   if (Object.values(checklist).some((result) => MOVE_OUT_ISSUE_RESULTS.has(result)) && !damageNote) {
     return { error: "กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย" };
   }
-  return { value: { checklist, damageNote: damageNote || null } };
+  const damageCost = parseDamageCost(body.damage_cost);
+  if (damageCost.error) return damageCost;
+  if (damageCost.value > 0 && !damageNote) {
+    return { error: "กรุณาระบุรายการความเสียหายที่คิดค่าเสียหาย" };
+  }
+  return { value: { checklist, damageNote: damageNote || null, damageCostCents: damageCost.value } };
+}
+
+export function parseDamageCost(value) {
+  if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) return { value: 0 };
+  const amount = Number(typeof value === "string" ? value.replace(/,/g, "").trim() : value);
+  const cents = Math.round(amount * 100);
+  if (!Number.isFinite(amount) || !Number.isSafeInteger(cents) || cents < 0) {
+    return { error: "ค่าเสียหายต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" };
+  }
+  if (Math.abs(amount * 100 - cents) > 1e-6) return { error: "ค่าเสียหายระบุทศนิยมได้ไม่เกิน 2 ตำแหน่ง" };
+  if (cents > 99999999) return { error: "ค่าเสียหายสูงเกินไป" };
+  return { value: cents };
 }
 
 export function parseMoveOutInspectionInput(body = {}) {

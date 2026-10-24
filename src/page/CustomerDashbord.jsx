@@ -13,6 +13,7 @@ import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { CustomerContractPanel } from '../components/RentalContract.jsx'
+import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
@@ -21,7 +22,7 @@ import readSlipQrPayload from '../utils/slipQr.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { addContractMonths } from '../utils/rentalContract.js'
+import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -404,7 +405,7 @@ const PAYMENT_TYPE_LABEL = {
   deposit: 'เงินมัดจำ',
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
-  room_transfer: 'ส่วนต่างค่าเช่า (ย้ายห้อง)',
+  room_transfer: 'ยอดชำระย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม)',
 }
 
 const AMENITIES = [
@@ -1025,7 +1026,7 @@ const isMoveRoomTakenCancellation = (request) =>
 
 const getMoveRoomTakenPopupContent = (request) => ({
   title: 'ห้องที่จะย้ายไปมีผู้เช่าแล้ว',
-  message: `ห้อง ${request.target_room_number} มีผู้เช่ารายใหม่ลงทะเบียนเข้าพักแล้ว คำขอย้ายห้องและยอดส่วนต่างที่รอชำระถูกยกเลิกอัตโนมัติ หากยังต้องการย้าย กรุณาส่งคำขอใหม่โดยเลือกห้องอื่น`,
+  message: `ห้อง ${request.target_room_number} มีผู้เช่ารายใหม่ลงทะเบียนเข้าพักแล้ว คำขอย้ายห้องและยอดชำระย้ายห้องที่รอชำระถูกยกเลิกอัตโนมัติ หากยังต้องการย้าย กรุณาส่งคำขอใหม่โดยเลือกห้องอื่น`,
   icon: 'danger',
 })
 
@@ -1266,7 +1267,7 @@ function MoveOutImpactPreview({ room, moveDate, depositAmount, depositPaid, depo
       value: deposit <= 0
         ? 'ไม่มี'
         : deductedDeposit > 0
-          ? `฿${formatCurrency(paidDeposit)} (หักส่วนต่างย้ายห้อง ฿${formatCurrency(deductedDeposit)})`
+          ? `฿${formatCurrency(paidDeposit)} (หักค่าเสียหายตอนย้ายห้อง ฿${formatCurrency(deductedDeposit)})`
           : `฿${formatCurrency(paidDeposit)}${paidDeposit < deposit ? ` จาก ฿${formatCurrency(deposit)}` : ''}`,
       tone: deposit <= 0 ? 'muted' : paidDeposit >= deposit ? 'ok' : paidDeposit > 0 ? 'warning' : 'danger',
     },
@@ -1348,10 +1349,11 @@ function MoveRoomOutcome({ currentRoom, targetRoom, depositRemaining, balance })
   const toPrice = Number(targetRoom.price) || 0
   const diff = toPrice - fromPrice
   const deposit = Math.max(0, Number(depositRemaining) || 0)
-  const deducted = diff > 0 ? Math.min(diff, deposit) : 0
-  const charge = diff > 0 ? diff - deducted : 0
+  const requiredDeposit = toPrice * DEPOSIT_MONTHS
+  const depositTopup = Math.max(0, requiredDeposit - deposit)
+  const depositSurplus = Math.max(0, deposit - requiredDeposit)
   const steps = [
-    { tone: 'is-info', text: `เจ้าหน้าที่จะนัดตรวจสภาพห้อง ${currentNumber} ก่อนอนุมัติ` },
+    { tone: 'is-info', text: `เจ้าหน้าที่จะนัดตรวจสภาพห้อง ${currentNumber} ก่อนอนุมัติ ถ้ามีค่าเสียหายจะหักจากเงินมัดจำก่อนโอนไปห้องใหม่` },
     balanceItems.length > 0 && {
       tone: 'is-danger',
       text: `ต้องชำระยอดค้างให้ครบก่อนจึงจะอนุมัติได้: ${balanceItems.map((item) => `${item.label} ฿${formatCurrency(item.amount)}`).join(', ')}`,
@@ -1362,42 +1364,36 @@ function MoveRoomOutcome({ currentRoom, targetRoom, depositRemaining, balance })
       text: `ใช้สัญญาฉบับเดิมต่อ${currentRoom.rental_end_date ? ` วันสิ้นสุดสัญญายังเป็น ${formatDate(currentRoom.rental_end_date)}` : ''} ระบบบันทึกการย้ายแนบท้ายสัญญา`,
     },
     diff === 0
-      ? { tone: 'is-ok', text: 'ค่าเช่าเท่าเดิม ไม่หักเงินมัดจำและไม่มียอดเพิ่ม' }
-      : diff < 0
-        ? { tone: 'is-ok', text: `ค่าเช่าลดลงเหลือ ฿${formatCurrency(toPrice)}/เดือน ตั้งแต่รอบบิลถัดไป ไม่หักเงินมัดจำ (รอบที่จ่ายไปแล้วไม่คืนส่วนต่าง)` }
-        : { tone: 'is-warning', text: `ค่าเช่าเพิ่มเป็น ฿${formatCurrency(toPrice)}/เดือน ตั้งแต่รอบบิลถัดไป` },
-    diff > 0 && {
-      tone: 'is-warning',
-      text: deducted > 0
-        ? `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} หักจากเงินมัดจำ ฿${formatCurrency(deducted)} (มัดจำเหลือ ฿${formatCurrency(deposit - deducted)})${charge > 0 ? ` ส่วนที่เหลือ ฿${formatCurrency(charge)} ต้องชำระภายใน 3 วันก่อนทำสัญญาย้ายห้อง` : ''}`
-        : `ส่วนต่างรอบนี้ ฿${formatCurrency(diff)} ต้องชำระภายใน 3 วันก่อนทำสัญญาย้ายห้อง (ไม่มีเงินมัดจำให้หัก)`,
-    },
+      ? { tone: 'is-ok', text: 'ค่าเช่าเท่าเดิม ไม่มีส่วนต่างค่าเช่า' }
+      : diff > 0
+        ? { tone: 'is-warning', text: `ห้องใหม่แพงกว่า ฿${formatCurrency(diff)}/เดือน จ่ายเพิ่มเฉพาะวันที่เหลือในรอบที่จ่ายแล้ว (ค่าเช่าเดิมที่ยังไม่ได้ใช้นำมาลดค่าเช่าห้องใหม่) รอบถัดไปคิด ฿${formatCurrency(toPrice)}/เดือน` }
+        : { tone: 'is-ok', text: `ห้องใหม่ถูกกว่า ฿${formatCurrency(Math.abs(diff))}/เดือน ค่าเช่าที่จ่ายเกินสำหรับวันที่เหลือจะเก็บเป็นเงินมัดจำที่คืนได้ รอบถัดไปคิด ฿${formatCurrency(toPrice)}/เดือน` },
     { tone: 'is-info', text: `คำขอและแจ้งซ่อมที่ยังค้างของห้อง ${currentNumber} จะถูกยกเลิก ส่งใหม่ได้จากห้องใหม่` },
   ].filter(Boolean)
   return (
     <div className="dashboard-move-impact">
       <div className="dashboard-move-impact-title">จะเกิดอะไรขึ้นถ้าเจ้าหน้าที่อนุมัติ</div>
-      {diff > 0 && (
-        <div className="dashboard-move-cost">
-          <div className="dashboard-move-cost-head">
-            <FieldIcon name="info" size={16} />
-            <span>ส่วนต่างที่ต้องจ่ายเพิ่มทั้งหมด (รวมเงินมัดจำที่ถูกหัก)</span>
-            <strong>฿{formatCurrency(diff)}</strong>
-          </div>
-          <div className="dashboard-move-cost-row">
-            <span>หักจากเงินมัดจำ</span>
-            <strong>{deducted > 0 ? `฿${formatCurrency(deducted)}` : 'ไม่หัก'}</strong>
-          </div>
-          <div className="dashboard-move-cost-row">
-            <span>เงินมัดจำคงเหลือหลังหัก</span>
-            <strong>฿{formatCurrency(deposit - deducted)}</strong>
-          </div>
-          <div className={`dashboard-move-cost-row${charge > 0 ? ' is-danger' : ' is-ok'}`}>
-            <span>ต้องชำระเพิ่มภายใน 3 วัน</span>
-            <strong>{charge > 0 ? `฿${formatCurrency(charge)}` : 'ไม่มี'}</strong>
-          </div>
+      <div className="dashboard-move-cost">
+        <div className="dashboard-move-cost-head">
+          <FieldIcon name="info" size={16} />
+          <span>เงินมัดจำย้ายไปเป็นมัดจำห้องใหม่ (ไม่นำไปหักค่าเช่า)</span>
+          <strong>฿{formatCurrency(deposit)}</strong>
         </div>
-      )}
+        <div className="dashboard-move-cost-row">
+          <span>มัดจำที่ห้องใหม่ต้องมี ({DEPOSIT_MONTHS} เดือน)</span>
+          <strong>฿{formatCurrency(requiredDeposit)}</strong>
+        </div>
+        <div className={`dashboard-move-cost-row${depositTopup > 0 ? ' is-danger' : ' is-ok'}`}>
+          <span>ต้องชำระมัดจำเพิ่ม</span>
+          <strong>{depositTopup > 0 ? `฿${formatCurrency(depositTopup)}` : 'ไม่ต้อง'}</strong>
+        </div>
+        {depositSurplus > 0 && (
+          <div className="dashboard-move-cost-row is-ok">
+            <span>มัดจำส่วนเกิน เก็บเป็นเงินมัดจำที่คืนได้</span>
+            <strong>+฿{formatCurrency(depositSurplus)}</strong>
+          </div>
+        )}
+      </div>
       <ol className="dashboard-move-outcome">
         {steps.map((step) => (
           <li key={step.text} className={step.tone}>
@@ -1444,6 +1440,7 @@ function MoveRoomContractImpact({ request }) {
   const deducted = Number(impact.deposit_deducted) || 0
   const charge = Number(impact.additional_charge) || 0
   const total = Number(impact.total_difference) || 0
+  const finance = impact.finance
   const rows = [
     { label: 'ห้องในสัญญา', value: `ห้อง ${impact.from_room_number} → ห้อง ${impact.to_room_number}`, tone: 'is-accent' },
     {
@@ -1451,28 +1448,28 @@ function MoveRoomContractImpact({ request }) {
       value: `฿${formatCurrency(impact.from_price)} → ฿${formatCurrency(impact.to_price)}`,
       tone: diff > 0 ? 'is-warning' : diff < 0 ? 'is-ok' : null,
     },
+    impact.final && impact.transferred_at && { label: 'ย้ายห้องสำเร็จเมื่อ', value: formatDate(impact.transferred_at) },
     impact.new_price_from && { label: 'ราคาใหม่เริ่มรอบ', value: formatDate(impact.new_price_from) },
     impact.contract_end_date && { label: 'วันสิ้นสุดสัญญา', value: `${formatDate(impact.contract_end_date)} (เท่าเดิม)` },
-    {
+    !finance && {
       label: 'ส่วนต่างที่ต้องชำระ',
       value: total > 0 ? `฿${formatCurrency(total)} (ครั้งเดียว)` : 'ไม่มี',
       tone: total > 0 ? 'is-warning' : 'is-ok',
     },
-    total > 0 && {
+    !finance && total > 0 && {
       label: 'หักจากเงินมัดจำ',
       value: deducted > 0 ? `฿${formatCurrency(deducted)}` : 'ไม่หัก',
       tone: deducted > 0 ? 'is-warning' : null,
     },
-    { label: 'เงินมัดจำคงเหลือ', value: `฿${formatCurrency(impact.deposit_remaining_after)}`, tone: 'is-brand' },
-    total > 0 && {
-      label: impact.final ? 'ชำระส่วนต่างเพิ่ม' : 'ต้องชำระก่อนย้ายห้อง',
-      value: charge > 0
-        ? `฿${formatCurrency(charge)}${impact.final ? (impact.charge_status === 'paid' ? ' (ชำระแล้ว)' : ' (รอชำระ)') : ''}`
-        : 'ไม่มี',
+    !finance && { label: 'เงินมัดจำคงเหลือ', value: `฿${formatCurrency(impact.deposit_remaining_after)}`, tone: 'is-brand' },
+    !finance && total > 0 && {
+      label: 'ชำระส่วนต่างเพิ่ม',
+      value: charge > 0 ? `฿${formatCurrency(charge)}${impact.charge_status === 'paid' ? ' (ชำระแล้ว)' : ' (รอชำระ)'}` : 'ไม่มี',
       tone: charge > 0 ? (impact.charge_status === 'paid' ? 'is-ok' : 'is-danger') : 'is-ok',
     },
   ].filter(Boolean)
   const outstanding = impact.outstanding ?? []
+  const chargePaid = impact.final ? impact.charge_status === 'paid' : impact.transfer_charge?.status === 'paid'
 
   return (
     <div className="dashboard-move-impact">
@@ -1485,21 +1482,30 @@ function MoveRoomContractImpact({ request }) {
           <strong>{row.value}</strong>
         </div>
       ))}
+      {finance && (
+        <RoomTransferFinance
+          finance={finance}
+          fromPrice={impact.from_price}
+          toPrice={impact.to_price}
+          final={impact.final}
+          chargeStatus={chargePaid ? 'paid' : null}
+        />
+      )}
       <ul className="dashboard-renew-preview-notes dashboard-moveout-impact-notes">
-        {diff > 0 && total > 0 && (
-          <li>
-            ห้องใหม่แพงกว่า ฿{formatCurrency(diff)}/เดือน ระบบหักส่วนต่างจากเงินมัดจำก่อน
-            {charge > 0 ? ` ส่วนที่มัดจำไม่พอ ฿${formatCurrency(charge)} ต้องชำระก่อน จึงจะย้ายห้องและทำสัญญาได้` : ''}
-          </li>
+        {finance && <li>เงินมัดจำห้องเดิมใช้เป็นเงินมัดจำห้องใหม่เท่านั้น ไม่นำไปหักค่าเช่า</li>}
+        {finance && Number(finance.total_credit) > 0 && (
+          <li className="is-ok">ส่วนที่เหลือเก็บเป็นเงินมัดจำที่คืนได้ของห้องใหม่ ไม่ใช่ยอดค้างชำระ</li>
         )}
         {!impact.final && charge > 0 && (
           <li className="is-danger">
             {impact.transfer_charge?.due_at
-              ? `ชำระส่วนต่าง ฿${formatCurrency(charge)} ภายใน ${formatDateTime(impact.transfer_charge.due_at)} ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`
-              : `เมื่อเจ้าหน้าที่ส่งยอดมา ต้องชำระส่วนต่างภายใน 3 วัน ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`}
+              ? `ชำระ ฿${formatCurrency(charge)} ภายใน ${formatDateTime(impact.transfer_charge.due_at)} ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`
+              : `เมื่อเจ้าหน้าที่ตรวจห้องและส่งยอดมา ต้องชำระภายใน 3 วัน ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`}
           </li>
         )}
-        {diff <= 0 && <li className="is-ok">{diff === 0 ? 'ค่าเช่าเท่าเดิม' : 'ห้องใหม่ถูกกว่า'} ไม่หักเงินมัดจำและไม่มียอดเพิ่ม</li>}
+        {finance && Number(finance.rent_charge) > 0 && (
+          <li>ส่วนต่างค่าเช่าเดือนที่ย้ายเข้า ฿{formatCurrency(finance.rent_charge)} เรียกเก็บหลังย้ายห้องสำเร็จ จากนั้นจ่ายค่าเช่ารายเดือนตามปกติ</li>
+        )}
         <li>สัญญาฉบับเดิมยังใช้ต่อ ระบบบันทึกการย้ายห้องแนบท้ายสัญญา ดูได้ที่เมนูสัญญาเช่าของฉัน</li>
         {outstanding.length > 0 && (
           <li className="is-danger">
@@ -1509,7 +1515,7 @@ function MoveRoomContractImpact({ request }) {
         {!impact.final && impact.target_available === false && (
           <li className="is-danger">ห้อง {impact.to_room_number} ไม่ว่างแล้ว กรุณาติดต่อเจ้าหน้าที่</li>
         )}
-        {!impact.final && <li>ตัวเลขคำนวณจากข้อมูลปัจจุบัน ยอดจริงยืนยันตอนเจ้าหน้าที่อนุมัติ</li>}
+        {!impact.final && <li>ตัวเลขคำนวณจากข้อมูลปัจจุบัน ค่าเช่าคิดตามวันที่เหลือ ณ วันที่ย้ายจริง ยอดจริงยืนยันตอนเจ้าหน้าที่อนุมัติ</li>}
       </ul>
     </div>
   )
@@ -8013,8 +8019,8 @@ function CustomerDashbord() {
                           <p className={`dashboard-request-desc${moveRoomChargeDue || (!moveRoomActive && room?.is_booked && (moveRoomTooEarly || moveOutOutstanding > 0)) ? ' is-warning' : ''}`}>
                             {moveRoomChargeDue
                               ? moveRoomChargeDue.transfer_charge_has_slip
-                                ? `ส่งสลิปส่วนต่าง ฿${formatCurrency(moveRoomChargeDue.transfer_charge_amount)} แล้ว รอเจ้าหน้าที่ตรวจ`
-                                : `ชำระส่วนต่าง ฿${formatCurrency(moveRoomChargeDue.transfer_charge_amount)} ภายใน ${formatDateTime(moveRoomChargeDue.transfer_charge_due_at)} ไม่งั้นคำขอถูกยกเลิก`
+                                ? `ส่งสลิปยอดย้ายห้อง ฿${formatCurrency(moveRoomChargeDue.transfer_charge_amount)} แล้ว รอเจ้าหน้าที่ตรวจ`
+                                : `ชำระยอดย้ายห้อง ฿${formatCurrency(moveRoomChargeDue.transfer_charge_amount)} ภายใน ${formatDateTime(moveRoomChargeDue.transfer_charge_due_at)} ไม่งั้นคำขอถูกยกเลิก`
                               : moveRoomActive
                               ? `กำลังขอย้ายไปห้อง ${moveRoomRequest.target_room_number}`
                               : moveRoomTooEarly
@@ -8030,7 +8036,7 @@ function CustomerDashbord() {
                         </div>
                         {moveRoomChargeDue && !moveRoomChargeDue.transfer_charge_has_slip ? (
                           <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                            ชำระส่วนต่าง
+                            ชำระยอดย้ายห้อง
                           </button>
                         ) : moveRoomActive ? (
                           <button

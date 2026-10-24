@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { PersonIcon } from './ParcelIcons.jsx'
 import InspectionPhotoPicker from './InspectionPhotoPicker.jsx'
+import MoveRoomDamageFinance from './MoveRoomDamageFinance.jsx'
+import { damageInputError, damageInputValue } from '../utils/damageCost.js'
 import compressImageFile from '../utils/compressImageFile.js'
 import './InspectionCells.css'
 import './InspectionStaffForm.css'
@@ -33,10 +35,11 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function InspectionForm({ mode, candidates = [], candidatesLoading = false, initial = null, submitting = false, error = '', onSubmit, onCancel }) {
+export default function InspectionForm({ mode, candidates = [], candidatesLoading = false, initial = null, submitting = false, error = '', previewUrlFor = null, onSubmit, onCancel }) {
   const [requestId, setRequestId] = useState(() => (mode === 'create' && candidates.length === 1 ? String(candidates[0].id) : ''))
   const [checklist, setChecklist] = useState(() => ({ ...(initial?.checklist || {}) }))
   const [damageNote, setDamageNote] = useState(initial?.damage_note || '')
+  const [damageCost, setDamageCost] = useState(() => (Number(initial?.damage_cost) > 0 ? String(Number(initial.damage_cost)) : ''))
   const [existingPhotos, setExistingPhotos] = useState(initial?.photos || [])
   const [photos, setPhotos] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
@@ -47,6 +50,8 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
   const counts = RESULT_OPTIONS.reduce((total, option) => ({ ...total, [option.key]: results.filter((value) => value === option.key).length }), {})
   const hasIssue = counts.damaged + counts.missing > 0
   const photoCount = existingPhotos.length + photos.length
+  const moveRoomRequestId = mode === 'create' ? selectedRequest?.id : initial?.tenant_request_type === 'move_room' ? initial?.tenant_request_id : null
+  const previewUrl = moveRoomRequestId && previewUrlFor ? previewUrlFor(moveRoomRequestId) : null
 
   const setResult = (key, value) => {
     setChecklist((current) => {
@@ -64,6 +69,8 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
     if (missing.length > 0) errors.checklist = missing
     if (hasIssue && !damageNote.trim()) errors.damage_note = 'กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย'
     if (hasIssue && photoCount === 0) errors.photos = 'กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย'
+    if (previewUrl && damageInputError(damageCost)) errors.damage_cost = damageInputError(damageCost)
+    if (previewUrl && Number(damageInputValue(damageCost)) > 0 && !damageNote.trim()) errors.damage_note = 'กรุณาระบุรายการความเสียหายที่คิดค่าเสียหาย'
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) {
       setLocalError(
@@ -73,7 +80,7 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
             ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
             : errors.photos
               ? 'กรุณาแนบภาพประกอบรายการชำรุดหรือสูญหาย'
-              : 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
+              : errors.damage_cost || 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์สีแดง',
       )
       return
     }
@@ -81,6 +88,7 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
     try {
       const compressed = await Promise.all(photos.map((file) => compressImageFile(file)))
       const payload = { checklist, damage_note: damageNote.trim(), photos: compressed }
+      if (previewUrl) payload.damage_cost = damageInputValue(damageCost)
       if (mode === 'create') {
         payload.room_number = selectedRequest.room_number
         payload.tenant_request_id = selectedRequest.id
@@ -289,13 +297,32 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
         </div>
       </section>
 
+      {previewUrl && (
+        <section className="inspection-section">
+          <h4 className="inspection-section-title">
+            <span className="inspection-step">4</span> ค่าเสียหายและเงินมัดจำ
+          </h4>
+          <MoveRoomDamageFinance
+            key={previewUrl}
+            previewUrl={previewUrl}
+            value={damageCost}
+            onChange={(next) => {
+              setDamageCost(next)
+              setFieldErrors((current) => ({ ...current, damage_cost: undefined }))
+            }}
+            error={fieldErrors.damage_cost}
+            inputId="admin-inspection-damage-cost"
+          />
+        </section>
+      )}
+
       <div className="inspection-footer">
         {shownError && (
           <p className="staff-form-error inspection-footer-error" role="alert">
             {shownError}
           </p>
         )}
-        <p className="inspection-footer-note">บันทึกผลตรวจและรูปแล้ว Staff สามารถอนุมัติย้ายห้องได้ทันที</p>
+        <p className="inspection-footer-note">บันทึกผลตรวจแล้ว ถ้ามีค่าเช่าหรือมัดจำที่ต้องเก็บเพิ่ม ระบบจะส่งยอดให้ผู้เช่าชำระก่อนอนุมัติย้ายห้อง</p>
         <div className="inspection-footer-actions">
           <button type="button" className="staff-action-btn is-ghost" onClick={onCancel} disabled={submitting}>
             ยกเลิก

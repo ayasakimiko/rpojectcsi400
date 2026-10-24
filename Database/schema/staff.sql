@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS MoveOutInspection (
     tenant_phone VARCHAR(20),
     checklist TEXT NOT NULL,
     damage_note VARCHAR(1000),
+    damage_cost DECIMAL(10,2) NULL,
     photos LONGTEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     inspected_by_name VARCHAR(255),
@@ -33,6 +34,16 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'updated_at'),
     'SELECT 1',
     'ALTER TABLE `MoveOutInspection` ADD COLUMN `updated_at` DATETIME NULL AFTER reviewed_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'MoveOutInspection' AND COLUMN_NAME = 'damage_cost'),
+    'SELECT 1',
+    'ALTER TABLE `MoveOutInspection` ADD COLUMN `damage_cost` DECIMAL(10,2) NULL AFTER damage_note'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;

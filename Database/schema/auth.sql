@@ -180,6 +180,24 @@ CREATE TABLE IF NOT EXISTS RoomTransfer (
     transferred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     contract_booking_id INT NULL,
+    inspection_id INT NULL,
+    move_date DATE NULL,
+    paid_through DATETIME NULL,
+    remaining_days INT UNSIGNED NULL,
+    period_days INT UNSIGNED NULL,
+    old_unused_rent DECIMAL(10,2) NULL,
+    new_prorated_rent DECIMAL(10,2) NULL,
+    rent_charge DECIMAL(10,2) NULL,
+    rent_credit_to_deposit DECIMAL(10,2) NULL,
+    damage_deduction DECIMAL(10,2) NULL,
+    transferable_deposit DECIMAL(10,2) NULL,
+    required_deposit DECIMAL(10,2) NULL,
+    deposit_applied DECIMAL(10,2) NULL,
+    deposit_topup DECIMAL(10,2) NULL,
+    deposit_surplus_credit DECIMAL(10,2) NULL,
+    deposit_limit DECIMAL(10,2) NULL,
+    deposit_excess_refund DECIMAL(10,2) NULL,
+    deposit_after DECIMAL(10,2) NULL,
 
     UNIQUE KEY uq_room_transfer_request (tenant_request_id),
     CONSTRAINT fk_room_transfer_customer FOREIGN KEY (customer_id) REFERENCES Customer(id),
@@ -193,6 +211,46 @@ SET @schema_upgrade_sql = IF(
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'RoomTransfer' AND COLUMN_NAME = 'contract_booking_id'),
     'SELECT 1',
     'ALTER TABLE `RoomTransfer` ADD COLUMN `contract_booking_id` INT NULL AFTER transferred_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'RoomTransfer' AND COLUMN_NAME = 'deposit_after'),
+    'SELECT 1',
+    'ALTER TABLE `RoomTransfer`
+       ADD COLUMN `inspection_id` INT NULL AFTER contract_booking_id,
+       ADD COLUMN `move_date` DATE NULL AFTER inspection_id,
+       ADD COLUMN `paid_through` DATETIME NULL AFTER move_date,
+       ADD COLUMN `remaining_days` INT UNSIGNED NULL AFTER paid_through,
+       ADD COLUMN `period_days` INT UNSIGNED NULL AFTER remaining_days,
+       ADD COLUMN `old_unused_rent` DECIMAL(10,2) NULL AFTER period_days,
+       ADD COLUMN `new_prorated_rent` DECIMAL(10,2) NULL AFTER old_unused_rent,
+       ADD COLUMN `rent_charge` DECIMAL(10,2) NULL AFTER new_prorated_rent,
+       ADD COLUMN `rent_credit_to_deposit` DECIMAL(10,2) NULL AFTER rent_charge,
+       ADD COLUMN `damage_deduction` DECIMAL(10,2) NULL AFTER rent_credit_to_deposit,
+       ADD COLUMN `transferable_deposit` DECIMAL(10,2) NULL AFTER damage_deduction,
+       ADD COLUMN `required_deposit` DECIMAL(10,2) NULL AFTER transferable_deposit,
+       ADD COLUMN `deposit_applied` DECIMAL(10,2) NULL AFTER required_deposit,
+       ADD COLUMN `deposit_topup` DECIMAL(10,2) NULL AFTER deposit_applied,
+       ADD COLUMN `deposit_surplus_credit` DECIMAL(10,2) NULL AFTER deposit_topup,
+       ADD COLUMN `deposit_limit` DECIMAL(10,2) NULL AFTER deposit_surplus_credit,
+       ADD COLUMN `deposit_excess_refund` DECIMAL(10,2) NULL AFTER deposit_limit,
+       ADD COLUMN `deposit_after` DECIMAL(10,2) NULL AFTER deposit_excess_refund'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'RoomTransfer' AND COLUMN_NAME = 'rent_charge_payment_id'),
+    'SELECT 1',
+    'ALTER TABLE `RoomTransfer`
+       ADD COLUMN `rent_carry_credit` DECIMAL(10,2) NULL AFTER deposit_after,
+       ADD COLUMN `rent_charge_payment_id` INT UNSIGNED NULL AFTER rent_carry_credit'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
