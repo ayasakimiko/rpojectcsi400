@@ -400,6 +400,16 @@ function SlipDropZone({ id, file, onChange, onError }) {
   )
 }
 
+function attachHorizontalWheel(node) {
+  if (!node || node.dataset.wheelBound) return
+  node.dataset.wheelBound = 'true'
+  node.addEventListener('wheel', (event) => {
+    if (node.scrollWidth <= node.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+    event.preventDefault()
+    node.scrollLeft += event.deltaY
+  }, { passive: false })
+}
+
 const PAYMENT_TYPE_LABEL = {
   rent: 'ค่าเช่าห้อง',
   deposit: 'เงินมัดจำ',
@@ -7522,7 +7532,7 @@ function CustomerDashbord() {
               <h2>ประวัติการเช่าและการชำระค่าเช่า</h2>
             </div>
             {filteredRentalHistory.length > 0 && (
-              <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ">
+              <div className="dashboard-history-tabs" role="tablist" aria-label="เลือกห้องที่ต้องการดูประวัติ" ref={attachHorizontalWheel}>
                 {filteredRentalHistory.map((entry, index) => {
                   const { movedOut } = getBookingTransfer(index)
                   const isCurrent = index === 0 && Boolean(room?.is_booked)

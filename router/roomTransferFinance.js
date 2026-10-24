@@ -195,16 +195,25 @@ export function transferFinanceView(transfer) {
   if (transfer.deposit_after == null) return null;
   const rentCredit = Number(transfer.rent_credit_to_deposit) || 0;
   const surplus = Number(transfer.deposit_surplus_credit) || 0;
+  const fromPrice = Number(transfer.from_price) || 0;
+  const toPrice = Number(transfer.to_price) || 0;
+  const oldUnused = Number(transfer.old_unused_rent) || 0;
+  const newProrated = Number(transfer.new_prorated_rent) || 0;
+  const periods = toPrice > 0 && newProrated > 0 ? Math.max(1, Math.ceil(newProrated / toPrice - 1e-9)) : Number(transfer.chargeable_periods) || 0;
+  const later = Math.max(0, periods - 1);
   return {
-    price_difference: Number(transfer.to_price) - Number(transfer.from_price),
+    price_difference: toPrice - fromPrice,
     move_date: transfer.move_date ?? transfer.transferred_at ?? null,
     paid_through: transfer.paid_through ?? null,
     remaining_days: Number(transfer.remaining_days) || 0,
     period_days: Number(transfer.period_days) || 0,
-    chargeable_periods: Number(transfer.chargeable_periods) || 0,
-    old_unused_rent: Number(transfer.old_unused_rent) || 0,
-    new_prorated_rent: Number(transfer.new_prorated_rent) || 0,
-    rent_difference: Number(transfer.price_difference_total) || 0,
+    chargeable_periods: periods,
+    old_unused_rent: oldUnused,
+    new_prorated_rent: newProrated,
+    rent_difference: transfer.new_prorated_rent != null ? newProrated - oldUnused : Number(transfer.price_difference_total) || 0,
+    move_period_old_rent: Math.max(0, oldUnused - fromPrice * later),
+    move_period_new_rent: Math.max(0, newProrated - toPrice * later),
+    next_period_start: transfer.rent_charge_payment_id != null ? transfer.new_price_from ?? null : null,
     rent_charge: Number(transfer.rent_charge) || 0,
     rent_charge_after_move: transfer.rent_charge_payment_id != null,
     rent_charge_status: transfer.rent_charge_status ?? null,

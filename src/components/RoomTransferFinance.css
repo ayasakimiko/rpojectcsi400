@@ -571,6 +571,94 @@
   font-weight: 600;
 }
 
+.rtf:not(.is-compact) {
+  gap: 14px;
+}
+
+.rtf:not(.is-compact) .rtf-tile {
+  padding: 12px 14px;
+}
+
+.rtf:not(.is-compact) .rtf-tile small {
+  font-size: 13.5px;
+}
+
+.rtf:not(.is-compact) .rtf-tile strong {
+  font-size: 21px;
+}
+
+.rtf:not(.is-compact) .rtf-tile.is-highlight strong {
+  font-size: 24px;
+}
+
+.rtf:not(.is-compact) .rtf-tile span,
+.rtf:not(.is-compact) .rtf-breakdown li {
+  font-size: 13px;
+}
+
+.rtf:not(.is-compact) .rtf-block {
+  padding: 12px 14px 6px;
+}
+
+.rtf:not(.is-compact) .rtf-block h5,
+.rtf:not(.is-compact) .rtf-catchup h5,
+.rtf:not(.is-compact) .rtf-total h5 {
+  font-size: 16.5px;
+}
+
+.rtf:not(.is-compact) .rtf-row {
+  padding: 8px 0;
+}
+
+.rtf:not(.is-compact) .rtf-row dt {
+  font-size: 14.5px;
+}
+
+.rtf:not(.is-compact) .rtf-row dt small {
+  font-size: 12.5px;
+}
+
+.rtf:not(.is-compact) .rtf-row dd {
+  font-size: 15px;
+}
+
+.rtf:not(.is-compact) .rtf-row.is-highlight dt {
+  font-size: 15px;
+}
+
+.rtf:not(.is-compact) .rtf-row.is-highlight dd {
+  font-size: 20px;
+}
+
+.rtf:not(.is-compact) .rtf-catchup-reason {
+  font-size: 14.5px;
+}
+
+.rtf:not(.is-compact) .rtf-catchup-sub {
+  font-size: 15px;
+}
+
+.rtf:not(.is-compact) .rtf-catchup-foot,
+.rtf:not(.is-compact) .rtf-note {
+  font-size: 13.5px;
+}
+
+.rtf:not(.is-compact) .rtf-schedule li {
+  padding: 10px 12px;
+}
+
+.rtf:not(.is-compact) .rtf-schedule b {
+  font-size: 15px;
+}
+
+.rtf:not(.is-compact) .rtf-schedule small {
+  font-size: 13px;
+}
+
+.rtf:not(.is-compact) .rtf-schedule strong {
+  font-size: 16.5px;
+}
+
 @media (max-width: 640px) {
   .rtf-tiles,
   .rtf-grid {

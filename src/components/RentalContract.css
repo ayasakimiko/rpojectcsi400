@@ -681,21 +681,26 @@
 .contract-transfers-modal-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 6px;
 }
 
 .contract-transfers-modal-meta > span {
   display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid #e3ecf8;
+  border-radius: 999px;
+  background: #f8fbff;
+  white-space: nowrap;
 }
 
-.contract-transfers-modal-meta > span + span::before {
-  content: '·';
-  margin-right: 6px;
-  color: #c0c8d4;
-  font-weight: 800;
+.contract-transfers-modal-meta > span.is-count {
+  border-color: #d9d6fb;
+  background: #f4f3ff;
 }
 
 .contract-transfers-modal-meta i {
@@ -716,8 +721,8 @@
 }
 
 .rent-bill.contract-full-modal {
-  width: 1180px;
-  height: 900px;
+  width: 1280px;
+  height: 960px;
   max-height: calc(100vh - 32px);
   max-height: calc(100dvh - 32px);
 }
@@ -2279,6 +2284,15 @@
   min-height: 0;
   flex-direction: column;
   gap: 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-width: thin;
+}
+
+.ccc-modal > * {
+  flex-shrink: 0;
 }
 
 .staff-modal-body:has(> .ccc-modal > .contract-refund-note, > .ccc-modal > .deposit-settle-card) {

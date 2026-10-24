@@ -38,10 +38,12 @@ function toFieldValue(value) {
     if (!text || text.startsWith("data:") || text.startsWith("/uploads/")) return null;
     return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text;
   }
+  
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (Array.isArray(value) && value.length > 0 && value.every((item) => ["string", "number"].includes(typeof item))) {
     return toFieldValue(value.join(", "));
   }
+
   return null;
 }
 

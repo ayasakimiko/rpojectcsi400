@@ -1502,9 +1502,12 @@
   display: flex;
   gap: 4px;
   margin: -4px 0 14px;
+  padding-bottom: 2px;
   border-bottom: 1px solid #e3e9f3;
   overflow-x: auto;
-  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  scrollbar-color: #c9dcfb transparent;
+  scrollbar-width: thin;
 }
 
 .dashboard-history-tab {
