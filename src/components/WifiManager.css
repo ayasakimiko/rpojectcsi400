@@ -7,6 +7,33 @@
   background: #fff;
   padding: 20px;
   color: #0f2b52;
+  height: 760px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.wifi-manager > * {
+  flex-shrink: 0;
+}
+
+.wifi-manager > .wifi-room-grid,
+.wifi-manager > .wifi-empty-text {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.wifi-manager > .wifi-room-grid {
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #c7d8ee transparent;
+}
+
+.wifi-manager > .wifi-empty-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .wifi-manager-head {
@@ -66,7 +93,10 @@
 }
 
 .wifi-search {
-  width: 220px;
+  flex: 0 1 380px;
+  width: 380px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .wifi-filters {
@@ -283,6 +313,32 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.wifi-room-card .wifi-device-list,
+.wifi-room-card .wifi-empty-text {
+  height: 168px;
+  box-sizing: border-box;
+}
+
+.wifi-room-card .wifi-device-list {
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #c7d8ee transparent;
+}
+
+.wifi-room-card .wifi-device-list li {
+  flex-shrink: 0;
+}
+
+.wifi-room-card .wifi-empty-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed #d6e4f5;
+  border-radius: 12px;
+  background: #fff;
 }
 
 .wifi-device-list li {
@@ -665,6 +721,7 @@
 @media (max-width: 600px) {
   .wifi-manager {
     padding: 14px;
+    height: 640px;
   }
 
   .wifi-search {
