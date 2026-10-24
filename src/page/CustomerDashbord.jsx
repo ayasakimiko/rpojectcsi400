@@ -1489,8 +1489,10 @@ function MoveRoomContractImpact({ request }) {
           toPrice={impact.to_price}
           final={impact.final}
           chargeStatus={chargePaid ? 'paid' : null}
+          showNote={false}
         />
       )}
+      <p className="dashboard-move-impact-notes-title">สิ่งที่ควรรู้</p>
       <ul className="dashboard-renew-preview-notes dashboard-moveout-impact-notes">
         {finance && <li>เงินมัดจำห้องเดิมใช้เป็นเงินมัดจำห้องใหม่เท่านั้น ไม่นำไปหักค่าเช่า</li>}
         {finance && Number(finance.total_credit) > 0 && (

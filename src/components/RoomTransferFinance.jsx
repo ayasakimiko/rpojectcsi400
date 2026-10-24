@@ -16,7 +16,7 @@ function FinanceRow({ label, value, note, tone }) {
   )
 }
 
-export default function RoomTransferFinance({ finance, fromPrice, toPrice, final = false, chargeStatus = null, compact = false }) {
+export default function RoomTransferFinance({ finance, fromPrice, toPrice, final = false, chargeStatus = null, compact = false, showNote = true }) {
   if (!finance) return null
   const oldPrice = amount(fromPrice)
   const newPrice = amount(toPrice)
@@ -327,7 +327,7 @@ export default function RoomTransferFinance({ finance, fromPrice, toPrice, final
           )}
         </dl>
       </section>
-      {!compact && (
+      {!compact && showNote && (
         <p className="rtf-note">
           ก่อนย้ายเก็บเฉพาะเงินมัดจำเพิ่ม · ส่วนต่างค่าเช่าเดือนที่ย้ายเข้าเก็บหลังย้ายสำเร็จ · เดือนถัดไปจ่ายค่าเช่ารายเดือนตามราคาห้องใหม่ตามปกติ
         </p>

@@ -757,9 +757,18 @@ export async function withThisMonthRent(pool, contracts) {
     const bookingPayments = payments.filter((payment) => payment.booking_id === bookingId);
     const rentDue = computeRentDue(room, bookingPayments);
     const depositDue = computeDepositDue(depositPaymentsByCustomer.get(customer.id) ?? [], customer.deposit_amount);
-    const lastRentPayment = bookingPayments
-      .filter((payment) => isRentPayment(payment) && ["paid", "pending"].includes(payment.status))
-      .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date) || new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)[0];
+    const inMoveMonth = rentDue?.status === "paid" && room.billing_start_date && new Date(room.billing_start_date) > new Date();
+    const moveInCharge = inMoveMonth
+      ? bookingPayments
+        .filter((payment) => payment.type === ROOM_TRANSFER_PAYMENT_TYPE && ["paid", "pending"].includes(payment.status))
+        .sort((a, b) => b.id - a.id)[0]
+      : null;
+    const moveInStatus = !moveInCharge ? null : moveInCharge.status === "paid" ? "paid" : moveInCharge.slip_path ? "pending" : "due";
+    const lastRentPayment = moveInCharge
+      ? (moveInStatus === "due" ? null : moveInCharge)
+      : bookingPayments
+        .filter((payment) => isRentPayment(payment) && ["paid", "pending"].includes(payment.status))
+        .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date) || new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)[0];
     return {
       ...contract,
       this_month: rentDue
@@ -772,8 +781,8 @@ export async function withThisMonthRent(pool, contracts) {
                   slip_path: lastRentPayment.slip_path || null,
                 }
               : null,
-            status: rentDue.status,
-            amount: rentDue.amount,
+            status: moveInStatus ?? rentDue.status,
+            amount: moveInStatus && moveInStatus !== "paid" ? Number(moveInCharge.amount) : rentDue.amount,
             overdue_months: rentDue.overdueMonths,
             deposit_due: depositDue.amount,
             deposit_status: depositDue.status,

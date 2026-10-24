@@ -2076,6 +2076,148 @@
   gap: 12px;
 }
 
+.ccc-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ccc-summary-card {
+  --tone: #2563eb;
+  --tone-soft: #eaf2ff;
+  --tone-line: #bfd4f8;
+  position: relative;
+  display: flex;
+  height: 92px;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  padding: 14px 16px;
+  border: 1px solid var(--tone-line);
+  border-radius: 16px;
+  background: linear-gradient(115deg, #fff 45%, var(--tone-soft) 100%);
+  box-shadow: 0 6px 18px -14px rgba(15, 23, 42, 0.35);
+}
+
+.ccc-summary-card::after {
+  position: absolute;
+  top: -26px;
+  right: -22px;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: var(--tone-soft);
+  content: '';
+  opacity: 0.9;
+}
+
+.ccc-summary-card.is-green {
+  --tone: #0f766e;
+  --tone-soft: #e3f6f1;
+  --tone-line: #a7dccf;
+}
+
+.ccc-summary-card.is-violet {
+  --tone: #6d28d9;
+  --tone-soft: #f1ebff;
+  --tone-line: #d4c4fb;
+}
+
+.ccc-summary-card.is-teal {
+  --tone: #0369a1;
+  --tone-soft: #e3f2fb;
+  --tone-line: #a9d3ec;
+}
+
+.ccc-summary-card.is-amber {
+  --tone: #b45309;
+  --tone-soft: #fff4e0;
+  --tone-line: #f6d39a;
+}
+
+.ccc-summary-card.is-primary {
+  border-width: 1.5px;
+}
+
+.ccc-summary-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--tone-line);
+  border-radius: 12px;
+  background: var(--tone-soft);
+  color: var(--tone);
+}
+
+.ccc-summary-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ccc-summary-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ccc-summary-text small {
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.ccc-summary-text strong {
+  overflow: hidden;
+  color: var(--tone);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccc-summary-card.is-primary .ccc-summary-text strong {
+  font-size: 24px;
+}
+
+.ccc-summary-text strong em {
+  margin-left: 3px;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.ccc-summary-text > span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .ccc-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ccc-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .ccc-room {
   display: flex;
   width: 104px;
@@ -2909,57 +3051,178 @@
   font-weight: 600;
 }
 
-.rent-bill-contract dl {
-  margin: 0;
-  padding: 4px 14px;
+.rent-bill-facts {
+  display: flex;
+  flex-direction: column;
+  margin: 12px 14px 0;
+  overflow: hidden;
+  border: 1px solid #e3ecf8;
+  border-radius: 11px;
+  background: #fff;
 }
 
-.rent-bill-contract dl > div {
+.rent-bill-facts > div {
   display: flex;
+  min-width: 0;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 0;
-  border-bottom: 1px dashed #e8eff8;
+  padding: 9px 12px;
 }
 
-.rent-bill-contract dl > div:last-child {
-  border-bottom: 0;
+.rent-bill-facts > div + div {
+  border-top: 1px dashed #e3ecf8;
 }
 
-.rent-bill-contract dt {
+.rent-bill-facts small {
+  flex: 0 0 auto;
+}
+
+.rent-bill-facts b {
+  text-align: right;
+}
+
+.rent-bill-deposit > div {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.rent-bill-facts small {
   color: #5d728b;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
-.rent-bill-contract dd {
-  margin: 0;
+.rent-bill-deposit small {
+  color: #8aa0b6;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.rent-bill-facts b,
+.rent-bill-deposit b {
   color: #0f2b52;
   font-size: 14.5px;
   font-weight: 800;
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.rent-bill-contract .is-paid dd {
+.rent-bill-facts b.is-accent {
+  color: #1d4ed8;
+  font-size: 17px;
+}
+
+.rent-bill-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 14px 0;
+  padding: 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.rent-bill-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rent-bill-progress-head span {
+  color: #33506f;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.rent-bill-progress-head b {
+  color: #0f2b52;
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rent-bill-progress > small {
+  margin-top: -4px;
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rent-bill-progress-bar {
+  display: block;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #fdecd3;
+}
+
+.rent-bill-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.rent-bill-progress-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rent-bill-progress-foot b {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rent-bill-progress-foot .is-paid {
   color: #15803d;
 }
 
-.rent-bill-contract .is-total dt,
-.rent-bill-contract .is-total dd {
+.rent-bill-progress-foot .is-left {
   color: #b45309;
-  font-size: 15px;
 }
 
-.rent-bill-contract > p {
+.rent-bill-deposit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 12px;
+}
+
+.rent-bill-deposit p {
   margin: 0;
-  padding: 8px 14px;
+  color: #8aa0b6;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.rent-bill-first {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
   border-top: 1px solid #e8eff8;
   background: #fff;
-  color: #8aa0b6;
-  font-size: 13px;
+  color: #5d728b;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.rent-bill-first b {
+  color: #0f2b52;
+  font-weight: 800;
 }
 
 .contract-refund-note {
@@ -3143,35 +3406,40 @@
 }
 
 .rent-bill-meta {
-  display: grid;
+  display: flex;
   flex: 0 0 auto;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 8px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e8eff8;
+  border-radius: 11px;
+  background: #fbfdff;
 }
 
 .rent-bill-meta > div {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-  padding: 8px 11px;
-  border: 1px solid #e8eff8;
-  border-radius: 10px;
-  background: #fbfdff;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+}
+
+.rent-bill-meta > div + div {
+  border-top: 1px dashed #e3ecf8;
 }
 
 .rent-bill-meta small {
-  color: #8aa0b6;
-  font-size: 13px;
+  flex: 0 0 auto;
+  color: #5d728b;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .rent-bill-meta b {
-  overflow: hidden;
   color: #0f2b52;
-  font-size: 15.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 15px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .rent-bill-meta b.is-due {

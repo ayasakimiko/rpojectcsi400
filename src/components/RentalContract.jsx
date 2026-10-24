@@ -2111,8 +2111,16 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
     ? `เงินมัดจำ ${depositMonths} เดือน (${formatContractMoney(price)} × ${depositMonths})`
     : 'เงินมัดจำ'
   const firstBill = ['awaiting_payment', 'payment_review'].includes(contract.status)
+  const contractTotal = Number(contract.contract_total) || 0
+  const rentProgress = contractTotal > 0 ? Math.min(100, Math.max(0, (Number(contract.rent_paid) / contractTotal) * 100)) : 0
+  const paidAmount = Number(thisMonth.last_payment?.amount) || 0
+  const prepaidCredit = paid && paidAmount > 0 && paidAmount < price ? price - paidAmount : 0
   const lines = paid
-    ? [{ label: 'ค่าเช่ารอบนี้', value: formatContractMoney(price) }, { label: 'ชำระแล้ว', value: `− ${formatContractMoney(price)}`, tone: 'is-paid' }]
+    ? [
+        { label: 'ค่าเช่ารอบนี้', value: formatContractMoney(price) },
+        ...(prepaidCredit > 0 ? [{ label: 'หักค่าเช่าที่จ่ายล่วงหน้าไว้', value: `− ${formatContractMoney(prepaidCredit)}`, tone: 'is-paid' }] : []),
+        { label: 'ชำระแล้ว', value: `− ${formatContractMoney(prepaidCredit > 0 ? paidAmount : price)}`, tone: 'is-paid' },
+      ]
     : [
         ...(rentPaid
           ? [{ label: 'ค่าเช่ารอบนี้', value: 'ชำระแล้ว', tone: 'is-paid' }]
@@ -2124,7 +2132,7 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
               tone: 'is-deposit',
             }]
           : []),
-        ...(adjustment < 0 ? [{ label: 'หักยอดที่ชำระไปแล้ว', value: `− ${formatContractMoney(-adjustment)}`, tone: 'is-paid' }] : []),
+        ...(adjustment < 0 ? [{ label: 'หักค่าเช่าที่จ่ายไว้แล้ว', value: `− ${formatContractMoney(-adjustment)}`, tone: 'is-paid' }] : []),
         ...(adjustment > 0 ? [{ label: 'ค่าเช่าล่วงหน้า (ทบยอด)', value: formatContractMoney(adjustment) }] : []),
       ]
 
@@ -2182,44 +2190,46 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
           </div>
           <section className="rent-bill-contract" aria-label="ราคาตามสัญญา">
             <header>
-              <span>ราคาตามสัญญา</span>
+              <span>สัญญาของคุณ</span>
               <small>{formatContractLength(contract)} · {contract.billing_periods || 0} รอบบิล</small>
             </header>
-            <dl>
+            <div className="rent-bill-facts">
               <div>
-                <dt>ช่วงสัญญา</dt>
-                <dd>{billDate(contract.rental_start_date)} – {billDate(contract.current_end_date || contract.rental_end_date)}</dd>
-              </div>
-              <div>
-                <dt>ค่าห้อง/เดือน</dt>
-                <dd>{formatContractMoney(contract.monthly_price)}</dd>
+                <small>ช่วงสัญญา</small>
+                <b>{billDate(contract.rental_start_date)} ถึง {billDate(contract.current_end_date || contract.rental_end_date)}</b>
               </div>
               <div>
-                <dt>เงินมัดจำ</dt>
-                <dd>{formatDepositSummary(contract)}</dd>
+                <small>ค่าห้องต่อเดือน</small>
+                <b className="is-accent">{formatContractMoney(contract.monthly_price)}</b>
               </div>
+            </div>
+            <div className="rent-bill-progress">
+              <div className="rent-bill-progress-head">
+                <span>ค่าเช่าทั้งสัญญา</span>
+                <b>{formatContractMoney(contract.contract_total)}</b>
+              </div>
+              {contract.room_transfers?.length > 0 && <small>รวมส่วนต่างจากการย้ายห้องแล้ว</small>}
+              <span className="rent-bill-progress-bar" aria-hidden="true">
+                <i style={{ width: `${rentProgress}%` }} />
+              </span>
+              <div className="rent-bill-progress-foot">
+                <span className="is-paid">จ่ายแล้ว <b>{formatContractMoney(contract.rent_paid)}</b></span>
+                <span className="is-left">เหลือ <b>{formatContractMoney(contract.contract_remaining)}</b>{remainingRentMonthsLabel(contract)}</span>
+              </div>
+            </div>
+            <div className="rent-bill-deposit">
               <div>
-                <dt>งวดแรก (ค่าห้อง + มัดจำ)</dt>
-                <dd>{formatContractMoney(contract.first_month_total)}</dd>
+                <small>เงินมัดจำ</small>
+                <b>{formatDepositSummary(contract)}</b>
               </div>
-              <div>
-                <dt>
-                  {contract.room_transfers?.length > 0
-                    ? `ยอดค่าเช่าตามสัญญา (${contract.billing_periods || 0} รอบ รวมส่วนต่างย้ายห้อง)`
-                    : `ยอดค่าเช่าตามสัญญา (${formatContractMoney(contract.monthly_price)} × ${contract.billing_periods || 0})`}
-                </dt>
-                <dd>{formatContractMoney(contract.contract_total)}</dd>
+              <p>แยกจากค่าเช่า ไม่นำมาหักค่าเช่า · คืนเมื่ออยู่ครบสัญญา ออกก่อนสัญญาไม่คืน</p>
+            </div>
+            {firstBill && (
+              <div className="rent-bill-first">
+                <span>งวดแรก (ค่าห้อง + มัดจำ)</span>
+                <b>{formatContractMoney(contract.first_month_total)}</b>
               </div>
-              <div className="is-paid">
-                <dt>ค่าเช่าที่ชำระแล้ว</dt>
-                <dd>− {formatContractMoney(contract.rent_paid)}</dd>
-              </div>
-              <div className="is-total">
-                <dt>ค่าเช่าที่เหลือ{remainingRentMonthsLabel(contract)}</dt>
-                <dd>{formatContractMoney(contract.contract_remaining)}</dd>
-              </div>
-            </dl>
-            <p>เงินมัดจำไม่ถูกหักจากค่าเช่า · คืนเมื่อพักครบสัญญา ไม่คืนหากออกก่อนสัญญา</p>
+            )}
           </section>
           </div>
 
@@ -2788,6 +2798,83 @@ export function ContractTransferHistory({ contract, viewer = 'staff' }) {
   )
 }
 
+const SUMMARY_CARD_ICONS = {
+  wallet: <><rect x="3" y="6" width="18" height="13" rx="2.5" /><path d="M3 10h18M16 14.5h2" /></>,
+  home: <><path d="M4 11l8-6 8 6" /><path d="M6 10v9h12v-9" /><path d="M10 19v-5h4v5" /></>,
+  receipt: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>,
+  calendar: <><rect x="4" y="5" width="16" height="15" rx="2.5" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
+}
+
+function ContractSummaryCards({ contract, daysLeft }) {
+  const depositPaid = Number(contract.deposit_paid) || 0
+  const depositLeft = contract.deposit_remaining != null ? Number(contract.deposit_remaining) : depositPaid
+  const deducted = Number(contract.deposit_transfer_deducted) || 0
+  const hasDeposit = Number(contract.deposit_amount) > 0
+  const originalPrice = Number(contract.original_monthly_price) || 0
+  const priceChanged = originalPrice > 0 && originalPrice !== Number(contract.monthly_price)
+  const endDate = contract.effective_end_date || contract.current_end_date || contract.rental_end_date
+  const cards = [
+    {
+      key: 'deposit',
+      icon: 'wallet',
+      tone: 'blue',
+      label: 'เงินมัดจำคงเหลือ',
+      value: hasDeposit ? formatContractMoney(depositLeft) : 'ไม่มีมัดจำ',
+      hint: !hasDeposit
+        ? null
+        : deducted > 0
+          ? `จ่ายไว้ ${formatContractMoney(depositPaid)} · หักไป ${formatContractMoney(deducted)}`
+          : `${formatDepositMonths(contract)} · ${DEPOSIT_STATUS_LABEL[contract.deposit_status] || 'คืนได้เมื่ออยู่ครบสัญญา'}`,
+    },
+    {
+      key: 'rent',
+      icon: 'home',
+      tone: 'green',
+      label: 'ค่าห้องตามสัญญา',
+      value: formatContractMoney(contract.monthly_price),
+      unit: '/เดือน',
+      hint: priceChanged ? `ห้อง ${contract.room_number} · เดิม ${formatContractMoney(originalPrice)}/เดือน` : `ห้อง ${contract.room_number || '-'}`,
+    },
+    {
+      key: 'total',
+      icon: 'receipt',
+      tone: 'violet',
+      label: 'ยอดค่าเช่าตลอดสัญญา',
+      value: formatContractMoney(contract.contract_total),
+      hint: `ชำระแล้ว ${formatContractMoney(contract.rent_paid)}`,
+    },
+    {
+      key: 'days',
+      icon: 'calendar',
+      tone: daysLeft !== null && daysLeft <= 30 ? 'amber' : 'teal',
+      label: 'สัญญาเหลืออีก',
+      value: formatDaysLeft(daysLeft),
+      hint: endDate ? `สิ้นสุด ${formatContractDate(endDate)}` : null,
+    },
+  ]
+  return (
+    <div className="ccc-summary">
+      {cards.map((card) => (
+        <div key={card.key} className={`ccc-summary-card is-${card.tone}${card.key === 'deposit' ? ' is-primary' : ''}`}>
+          <span className="ccc-summary-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              {SUMMARY_CARD_ICONS[card.icon]}
+            </svg>
+          </span>
+          <span className="ccc-summary-text">
+            <small>{card.label}</small>
+            <strong>
+              {card.value}
+              {card.unit && <em>{card.unit}</em>}
+            </strong>
+            {card.hint && <span>{card.hint}</span>}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function CustomerContractBody({ contract, viewer = 'customer' }) {
   const [now] = useState(() => Date.now())
   const { daysLeft, totalDays, usedDays } = contractTimeline(contract, now)
@@ -2843,6 +2930,8 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
           />
         </div>
       </div>
+
+      <ContractSummaryCards contract={contract} daysLeft={daysLeft} />
 
       <div className="ccc-grid">
         <div className="ccc-pane">
