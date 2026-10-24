@@ -13,6 +13,8 @@ import {
   parseMoveOutInspectionInput,
   parseMoveOutInspectionUpdate,
   parsePage,
+  parseRoomAssetsInput,
+  parseRoomTypeInput,
   parseSearch,
   parseWaitingListInput,
   validatePersonInput,
@@ -34,6 +36,7 @@ import {
   validateInspectionDamage,
 } from "./rentalContracts.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
+import { effectiveRoomAssets } from "./roomAssets.js";
 
 const router = Router();
 
@@ -418,7 +421,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
     const pool = getPool();
     const [rows] = await pool.query(
       `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
-              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.damage_note, moi.damage_cost, moi.photos,
+              moi.tenant_name, moi.tenant_phone, moi.checklist, moi.assets, moi.item_costs, moi.damage_note, moi.damage_cost, moi.photos,
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
@@ -430,7 +433,13 @@ router.get("/move-out-inspections/:id", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
     return res.json({
-      inspection: { ...inspection, checklist: JSON.parse(inspection.checklist), photos: JSON.parse(inspection.photos) },
+      inspection: {
+        ...inspection,
+        checklist: JSON.parse(inspection.checklist),
+        assets: inspection.assets ? JSON.parse(inspection.assets) : null,
+        item_costs: inspection.item_costs ? JSON.parse(inspection.item_costs) : null,
+        photos: JSON.parse(inspection.photos),
+      },
     });
   } catch (error) {
     console.error("Fetch move-out inspection error:", error);
@@ -497,6 +506,117 @@ router.delete("/move-out-inspections/:id", async (req, res) => {
   }
 });
 
+router.get("/room-types", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [types] = await pool.query("SELECT id, name, description, assets, updated_at, created_at FROM RoomType ORDER BY name ASC");
+    const [rooms] = await pool.query("SELECT room_number, room_type_id FROM Room WHERE room_type_id IS NOT NULL ORDER BY room_number ASC");
+    return res.json({
+      roomTypes: types.map((type) => ({
+        ...type,
+        assets: JSON.parse(type.assets),
+        room_numbers: rooms.filter((room) => room.room_type_id === type.id).map((room) => room.room_number),
+      })),
+    });
+  } catch (error) {
+    console.error("Fetch room types error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+// A room belongs to at most one type, so saving a type's room list also moves
+// those rooms away from any type they had before.
+async function saveRoomType(pool, roomTypeId, value) {
+  if (value.roomNumbers.length > 0) {
+    const [found] = await pool.query("SELECT room_number FROM Room WHERE room_number IN (?)", [value.roomNumbers]);
+    if (found.length !== value.roomNumbers.length) return { status: 400, message: "มีห้องที่เลือกไม่อยู่ในระบบ" };
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    let id = roomTypeId;
+    if (id) {
+      const [result] = await connection.query(
+        "UPDATE RoomType SET name = ?, description = ?, assets = ?, updated_at = NOW() WHERE id = ?",
+        [value.name, value.description, JSON.stringify(value.assets), id],
+      );
+      if (result.affectedRows === 0) {
+        await connection.rollback();
+        return { status: 404, message: "ไม่พบประเภทห้อง" };
+      }
+    } else {
+      const [result] = await connection.query(
+        "INSERT INTO RoomType (name, description, assets) VALUES (?, ?, ?)",
+        [value.name, value.description, JSON.stringify(value.assets)],
+      );
+      id = result.insertId;
+    }
+    await connection.query("UPDATE Room SET room_type_id = NULL WHERE room_type_id = ?", [id]);
+    if (value.roomNumbers.length > 0) {
+      await connection.query("UPDATE Room SET room_type_id = ? WHERE room_number IN (?)", [id, value.roomNumbers]);
+    }
+    await connection.commit();
+    return { id };
+  } catch (error) {
+    await connection.rollback();
+    if (error.code === "ER_DUP_ENTRY") return { status: 409, message: "มีชื่อประเภทห้องนี้แล้ว" };
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+router.post("/room-types", async (req, res) => {
+  try {
+    const { error, value } = parseRoomTypeInput(req.body ?? {});
+    if (error) return res.status(400).json({ message: error });
+    const result = await saveRoomType(getPool(), null, value);
+    if (result.status) return res.status(result.status).json({ message: result.message });
+    return res.status(201).json({ message: "เพิ่มประเภทห้องสำเร็จ", roomTypeId: result.id });
+  } catch (error) {
+    console.error("Create room type error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.put("/room-types/:id", async (req, res) => {
+  try {
+    const roomTypeId = Number(req.params.id);
+    if (!isPositiveId(roomTypeId)) return res.status(400).json({ message: "รหัสประเภทห้องไม่ถูกต้อง" });
+    const { error, value } = parseRoomTypeInput(req.body ?? {});
+    if (error) return res.status(400).json({ message: error });
+    const result = await saveRoomType(getPool(), roomTypeId, value);
+    if (result.status) return res.status(result.status).json({ message: result.message });
+    return res.json({ message: "แก้ไขประเภทห้องสำเร็จ" });
+  } catch (error) {
+    console.error("Update room type error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.delete("/room-types/:id", async (req, res) => {
+  const roomTypeId = Number(req.params.id);
+  if (!isPositiveId(roomTypeId)) return res.status(400).json({ message: "รหัสประเภทห้องไม่ถูกต้อง" });
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("UPDATE Room SET room_type_id = NULL WHERE room_type_id = ?", [roomTypeId]);
+    const [result] = await connection.query("DELETE FROM RoomType WHERE id = ?", [roomTypeId]);
+    if (result.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: "ไม่พบประเภทห้อง" });
+    }
+    await connection.commit();
+    return res.json({ message: "ลบประเภทห้องสำเร็จ" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Delete room type error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection.release();
+  }
+});
+
 router.get("/rooms", async (req, res) => {
   try {
     const pool = getPool();
@@ -506,8 +626,10 @@ router.get("/rooms", async (req, res) => {
          r.air_conditioner, r.wifi, r.refrigerator, r.bed, r.bathroom, r.cctv, r.custom_amenities,
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
+         r.room_type_id, rt.name AS room_type_name, r.assets AS room_assets, rt.assets AS type_assets,
          c.id AS customer_id, c.first_name, c.last_name, c.phone
        FROM Room r
+       LEFT JOIN RoomType rt ON rt.id = r.room_type_id
        LEFT JOIN Customer c ON c.id = (
          SELECT c2.id FROM Customer c2
          WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
@@ -516,9 +638,52 @@ router.get("/rooms", async (req, res) => {
        )
        ORDER BY r.room_number ASC`,
     );
-    return res.json({ rooms });
+    return res.json({
+      rooms: rooms.map(({ room_assets, type_assets, ...room }) => ({ ...room, assets: effectiveRoomAssets(room_assets, type_assets) })),
+    });
   } catch (error) {
     console.error("Admin fetch rooms error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+// Assets can be changed while a tenant lives in the room, unlike the other room fields.
+router.put("/rooms/:room_number/assets", async (req, res) => {
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+    const body = req.body ?? {};
+    const { error, value } = parseRoomAssetsInput(body);
+    if (error) return res.status(400).json({ message: error });
+    // The in-room equipment toggles and chips are edited together with the assets.
+    const amenityBody = Object.fromEntries(
+      ["air_conditioner", "refrigerator", "custom_amenities"].filter((field) => hasField(body, field)).map((field) => [field, body[field]]),
+    );
+    const amenityError = validateRoomFields(amenityBody);
+    if (amenityError) return res.status(400).json({ message: amenityError });
+    const pool = getPool();
+    if (value.roomTypeId !== null) {
+      const [types] = await pool.query("SELECT id FROM RoomType WHERE id = ?", [value.roomTypeId]);
+      if (!types[0]) return res.status(400).json({ message: "ไม่พบประเภทห้องที่เลือก" });
+    }
+    const { columns, values } = buildUpdate(["air_conditioner", "refrigerator", "custom_amenities"], {
+      ...amenityBody,
+      ...(hasField(amenityBody, "air_conditioner") ? { air_conditioner: Boolean(amenityBody.air_conditioner) } : {}),
+      ...(hasField(amenityBody, "refrigerator") ? { refrigerator: Boolean(amenityBody.refrigerator) } : {}),
+      ...(hasField(amenityBody, "custom_amenities")
+        ? { custom_amenities: JSON.stringify(amenityBody.custom_amenities.map(normalizeRoomAmenity)) }
+        : {}),
+    });
+    const [result] = await pool.query(
+      `UPDATE Room SET ${[...columns, "room_type_id = ?", "assets = ?"].join(", ")} WHERE room_number = ?`,
+      [...values, value.roomTypeId, JSON.stringify(value.assets), roomNumberValue],
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    return res.json({ message: "บันทึกอุปกรณ์และทรัพย์สินในห้องสำเร็จ" });
+  } catch (error) {
+    console.error("Admin update room assets error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

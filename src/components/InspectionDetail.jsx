@@ -2,6 +2,7 @@ import { UploadImage } from './UploadMedia.jsx'
 import { PersonIcon } from './ParcelIcons.jsx'
 import { InspectionPurposeBadge } from './InspectionCells.jsx'
 import { getInspectionSourceLabel } from '../utils/inspectionSource.js'
+import { assetCost, chargeableAssetCost } from '../utils/inspectionChecklist.js'
 import './InspectionCells.css'
 import './InspectionDetail.css'
 
@@ -53,6 +54,10 @@ function summarize(checklist) {
   }
   const tone = counts.damaged + counts.missing > 0 ? 'danger' : counts.wear > 0 ? 'warning' : 'success'
   return { counts, tone }
+}
+
+function formatBaht(value) {
+  return `฿${Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatDateTime(value) {
@@ -139,13 +144,43 @@ export default function InspectionDetail({
           <div className={`idt-note${inspection.damage_note ? '' : ' is-empty'}`}>
             <p>{inspection.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
           </div>
-          {inspection.tenant_request_type === 'move_room' && (
+          {(isMoveRoom || Number(inspection.damage_cost) > 0) && (
             <p className="idt-damage-cost">
-              ค่าเสียหายที่หักจากเงินมัดจำ{' '}
-              <b>{Number(inspection.damage_cost) > 0 ? `฿${Number(inspection.damage_cost).toLocaleString('th-TH', { maximumFractionDigits: 2 })}` : 'ไม่มี'}</b>
+              {isMoveRoom ? 'ค่าเสียหายที่หักจากเงินมัดจำ' : 'ค่าเสียหายจากทรัพย์สิน (ใช้หักเงินมัดจำ)'}{' '}
+              <b>{Number(inspection.damage_cost) > 0 ? formatBaht(inspection.damage_cost) : 'ไม่มี'}</b>
             </p>
           )}
         </section>
+
+        {inspection.assets?.length > 0 && (
+          <section className="idt-section">
+            <div className="idt-section-head">
+              <h4><Icon type="clipboard" size={16} />อุปกรณ์และทรัพย์สินในห้อง</h4>
+              <span className={`idt-result is-${chargeableAssetCost(inspection.assets) > 0 ? 'danger' : 'success'}`}>
+                คิดค่าเสียหาย {formatBaht(chargeableAssetCost(inspection.assets))}
+              </span>
+            </div>
+            <ul className="idt-checklist">
+              {inspection.assets.map((asset) => {
+                const info = RESULT_INFO[asset.result] || RESULT_NONE
+                const before = RESULT_INFO[asset.move_in_result]?.label || 'ไม่ได้บันทึก'
+                return (
+                  <li key={asset.name} className={`is-${info.tone}`}>
+                    <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
+                    <span className="idt-checklist-label">
+                      {asset.name} · {formatBaht(asset.price)}
+                      <small className="idt-asset-before">
+                        ตอนเข้าอยู่: {before}
+                        {assetCost(asset) > 0 && ` · ค่าเสียหาย ${formatBaht(assetCost(asset))}`}
+                      </small>
+                    </span>
+                    <span className={`idt-chip is-${info.tone}`}>{info.label}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
 
         <section className="idt-section">
           <div className="idt-section-head">
@@ -165,10 +200,14 @@ export default function InspectionDetail({
           <ul className="idt-checklist">
             {CHECKLIST_ITEMS.map((item) => {
               const info = RESULT_INFO[inspection.checklist?.[item.key]] || RESULT_NONE
+              const itemCost = Number(inspection.item_costs?.[item.key]) || 0
               return (
                 <li key={item.key} className={`is-${info.tone}`}>
                   <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
-                  <span className="idt-checklist-label">{item.label}</span>
+                  <span className="idt-checklist-label">
+                    {item.label}
+                    {itemCost > 0 && <small className="idt-asset-before">ค่าเสียหาย {formatBaht(itemCost)}</small>}
+                  </span>
                   <span className={`idt-chip is-${info.tone}`}>{info.label}</span>
                 </li>
               )

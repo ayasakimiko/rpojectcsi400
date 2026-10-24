@@ -2429,10 +2429,6 @@
 .staff-modal.staff-modal-wide:has(.ccc-modal) {
   width: min(1240px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
-  height: min(860px, calc(100vh - 32px));
-}
-
-.admin-contracts .staff-modal.staff-modal-wide:has(.ccc-modal) {
   height: min(1120px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
 }
@@ -6432,4 +6428,11 @@
   color: #94a3b8;
   font-size: 12px;
   font-weight: 600;
+}
+
+.deposit-settle-hint {
+  display: block;
+  margin-top: 4px;
+  color: #5b7290;
+  font-size: 12px;
 }

@@ -339,6 +339,11 @@ const CONTRACT_COLUMNS = `
     WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
       AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
     ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+  (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+    JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+    WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+      AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+    ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
   (SELECT MIN(nb.id) FROM Booking nb
     WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
   (SELECT MAX(pb.id) FROM Booking pb

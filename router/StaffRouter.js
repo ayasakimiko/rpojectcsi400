@@ -7,6 +7,8 @@ import {
   lookup,
   parseDamageCost,
   parseDepositSettlementInput,
+  parseMoveInInspectionInput,
+  parseMoveInInspectionUpdate,
   parseMoveOutInspectionInput,
   parseMoveOutInspectionUpdate,
   parsePage,
@@ -17,6 +19,7 @@ import {
 } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
 import { recordAuditFields } from "../middleware/auditDetails.js";
+import { roomEquipmentAssets } from "./roomAssets.js";
 import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
@@ -524,6 +527,34 @@ router.get("/move-out-inspections", async (_req, res) => {
   }
 });
 
+// The current tenant's move-in inspection, used as the baseline when checking
+// the same room at move-out.
+router.get("/move-out-inspections/move-in-baseline/:room_number", async (req, res) => {
+  try {
+    const roomNumber = Number(req.params.room_number);
+    if (!isPositiveId(roomNumber)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+    const pool = getPool();
+    const [tenantRows] = await pool.query(`${MOVE_IN_TENANT_SQL} AND r.room_number = ?`, [roomNumber]);
+    const tenant = tenantRows[0];
+    if (!tenant) return res.json({ baseline: null, room_assets: [] });
+    const [rows] = await pool.query(
+      `SELECT ${MOVE_IN_INSPECTION_COLUMNS} FROM MoveInInspection
+       WHERE customer_id = ? AND room_number = ?
+       ORDER BY id DESC LIMIT 1`,
+      [tenant.customer_id, roomNumber],
+    );
+    return res.json({
+      baseline: rows[0] ? parseMoveInInspectionRow(rows[0]) : null,
+      room_assets: roomEquipmentAssets(tenant),
+    });
+  } catch (error) {
+    console.error("Fetch move-in baseline error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.get("/move-out-inspections/:id", async (req, res) => {
   try {
     const inspectionId = Number(req.params.id);
@@ -534,7 +565,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
     const pool = getPool();
     const [rows] = await pool.query(
       `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number, moi.tenant_name, moi.tenant_phone,
-              moi.checklist, moi.damage_note, moi.damage_cost, moi.photos, moi.status, moi.inspected_by_name,
+              moi.checklist, moi.assets, moi.item_costs, moi.damage_note, moi.damage_cost, moi.photos, moi.status, moi.inspected_by_name,
               moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
        LEFT JOIN TenantRequest tr ON tr.id = moi.tenant_request_id
@@ -546,7 +577,13 @@ router.get("/move-out-inspections/:id", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
     return res.json({
-      inspection: { ...inspection, checklist: JSON.parse(inspection.checklist), photos: JSON.parse(inspection.photos) },
+      inspection: {
+        ...inspection,
+        checklist: JSON.parse(inspection.checklist),
+        assets: inspection.assets ? JSON.parse(inspection.assets) : null,
+        item_costs: inspection.item_costs ? JSON.parse(inspection.item_costs) : null,
+        photos: JSON.parse(inspection.photos),
+      },
     });
   } catch (error) {
     console.error("Fetch move-out inspection error:", error);
@@ -594,10 +631,13 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
       await connection.beginTransaction();
       await connection.query(
         `UPDATE MoveOutInspection
-         SET checklist = ?, damage_note = ?, damage_cost = ?, photos = ?, updated_at = NOW()
+         SET checklist = ?, assets = COALESCE(?, assets), item_costs = COALESCE(?, item_costs),
+             damage_note = ?, damage_cost = ?, photos = ?, updated_at = NOW()
          WHERE id = ?`,
         [
           JSON.stringify(value.checklist),
+          value.assets ? JSON.stringify(value.assets) : null,
+          value.itemCosts ? JSON.stringify(value.itemCosts) : null,
           value.damageNote,
           value.damageCostCents / 100,
           JSON.stringify([...value.keptPhotos, ...savedPhotos]),
@@ -713,14 +753,16 @@ router.post("/move-out-inspections", async (req, res) => {
       }
 
       const [result] = await connection.query(
-        `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, damage_note, damage_cost, photos, inspected_by_name, status, reviewed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE NOW() END)`,
+        `INSERT INTO MoveOutInspection (room_number, tenant_request_id, tenant_name, tenant_phone, checklist, assets, item_costs, damage_note, damage_cost, photos, inspected_by_name, status, reviewed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE NOW() END)`,
         [
           value.roomNumber,
           tenantRequestId,
           `${tenant.first_name} ${tenant.last_name}`,
           tenant.phone || null,
           JSON.stringify(value.checklist),
+          value.assets ? JSON.stringify(value.assets) : null,
+          value.itemCosts ? JSON.stringify(value.itemCosts) : null,
           value.damageNote,
           value.damageCostCents / 100,
           JSON.stringify(photos),
@@ -765,6 +807,187 @@ router.post("/move-out-inspections", async (req, res) => {
       return res.status(409).json({ message: "มีผลตรวจสำหรับคำขอนี้แล้ว กรุณาแก้ไขผลตรวจเดิม" });
     }
     console.error("Create move-out inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+// The current tenant of each booked room, joined with the room type whose asset
+// list pre-fills the move-in checklist.
+const MOVE_IN_TENANT_SQL = `
+  SELECT r.room_number, r.rental_start_date, r.room_type_id, rt.name AS room_type_name,
+         r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities,
+         c.id AS customer_id, c.first_name, c.last_name, c.phone
+  FROM Room r
+  JOIN Customer c ON c.id = (
+    SELECT c2.id FROM Customer c2
+    WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+    ORDER BY c2.id DESC
+    LIMIT 1
+  )
+  LEFT JOIN RoomType rt ON rt.id = r.room_type_id
+  WHERE r.is_booked = TRUE`;
+
+const MOVE_IN_INSPECTION_COLUMNS = `
+  id, room_number, customer_id, tenant_name, tenant_phone, room_type_id, room_type_name,
+  DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date, checklist, assets, note,
+  inspected_by_name, updated_at, created_at`;
+
+function parseMoveInInspectionRow(row) {
+  return { ...row, checklist: JSON.parse(row.checklist), assets: JSON.parse(row.assets) };
+}
+
+router.get("/move-in-inspections/candidates", async (_req, res) => {
+  try {
+    const pool = getPool();
+    const [rooms] = await pool.query(`${MOVE_IN_TENANT_SQL} ORDER BY r.room_number ASC`);
+    const [inspected] = await pool.query("SELECT id, customer_id, room_number FROM MoveInInspection");
+    const inspectionByTenant = new Map(inspected.map((row) => [`${row.customer_id}:${row.room_number}`, row.id]));
+    return res.json({
+      candidates: rooms.map(({ room_assets, type_assets, air_conditioner, refrigerator, custom_amenities, ...room }) => ({
+        ...room,
+        room_assets: roomEquipmentAssets({ room_assets, type_assets, air_conditioner, refrigerator, custom_amenities }),
+        inspection_id: inspectionByTenant.get(`${room.customer_id}:${room.room_number}`) || null,
+      })),
+    });
+  } catch (error) {
+    console.error("Fetch move-in inspection candidates error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-in-inspections", async (_req, res) => {
+  try {
+    const [rows] = await getPool().query(
+      `SELECT ${MOVE_IN_INSPECTION_COLUMNS}, JSON_LENGTH(photos) AS photo_count
+       FROM MoveInInspection
+       ORDER BY inspection_date DESC, id DESC`,
+    );
+    return res.json({ inspections: rows.map(parseMoveInInspectionRow) });
+  } catch (error) {
+    console.error("Fetch move-in inspections error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.get("/move-in-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+    const [rows] = await getPool().query(
+      `SELECT ${MOVE_IN_INSPECTION_COLUMNS}, photos FROM MoveInInspection WHERE id = ?`,
+      [inspectionId],
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    const inspection = parseMoveInInspectionRow(rows[0]);
+    return res.json({ inspection: { ...inspection, photos: JSON.parse(rows[0].photos) } });
+  } catch (error) {
+    console.error("Fetch move-in inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.post("/move-in-inspections", async (req, res) => {
+  try {
+    const { error, value } = parseMoveInInspectionInput(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const pool = getPool();
+    const [tenantRows] = await pool.query(`${MOVE_IN_TENANT_SQL} AND r.room_number = ?`, [value.roomNumber]);
+    const tenant = tenantRows[0];
+    if (!tenant) {
+      return res.status(400).json({ message: "กรุณาเลือกห้องที่มีผู้เช่า" });
+    }
+    const [existing] = await pool.query(
+      "SELECT id FROM MoveInInspection WHERE customer_id = ? AND room_number = ?",
+      [tenant.customer_id, value.roomNumber],
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ message: "ผู้เช่านี้มีผลตรวจก่อนเข้าอยู่แล้ว กรุณาแก้ไขผลตรวจเดิม" });
+    }
+
+    const staffName = await getActingStaffName(pool, req.user);
+    const photos = await savePublicImages("move-in-inspections", value.photos);
+    try {
+      const [result] = await pool.query(
+        `INSERT INTO MoveInInspection
+           (room_number, customer_id, tenant_name, tenant_phone, room_type_id, room_type_name,
+            inspection_date, checklist, assets, note, photos, inspected_by_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          value.roomNumber,
+          tenant.customer_id,
+          `${tenant.first_name} ${tenant.last_name}`,
+          tenant.phone || null,
+          tenant.room_type_id,
+          tenant.room_type_name,
+          value.inspectionDate,
+          JSON.stringify(value.checklist),
+          JSON.stringify(value.assets),
+          value.note,
+          JSON.stringify(photos),
+          staffName,
+        ],
+      );
+      return res.status(201).json({ message: "บันทึกผลตรวจก่อนเข้าอยู่สำเร็จ", inspectionId: result.insertId });
+    } catch (error) {
+      await deletePublicImages(photos.map((photo) => photo.url));
+      throw error;
+    }
+  } catch (error) {
+    console.error("Create move-in inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.patch("/move-in-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query("SELECT photos FROM MoveInInspection WHERE id = ?", [inspectionId]);
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
+    }
+    const existingPhotos = JSON.parse(rows[0].photos);
+    const { error, value } = parseMoveInInspectionUpdate(req.body ?? {}, existingPhotos);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+
+    const savedPhotos = await savePublicImages("move-in-inspections", value.newPhotos);
+    try {
+      await pool.query(
+        `UPDATE MoveInInspection
+         SET inspection_date = ?, checklist = ?, assets = ?, note = ?, photos = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          value.inspectionDate,
+          JSON.stringify(value.checklist),
+          JSON.stringify(value.assets),
+          value.note,
+          JSON.stringify([...value.keptPhotos, ...savedPhotos]),
+          inspectionId,
+        ],
+      );
+    } catch (error) {
+      await deletePublicImages(savedPhotos.map((photo) => photo.url));
+      throw error;
+    }
+
+    const keptUrls = new Set(value.keptPhotos.map((photo) => photo.url));
+    await deletePublicImages(existingPhotos.filter((photo) => !keptUrls.has(photo.url)).map((photo) => photo.url));
+    return res.json({ message: "แก้ไขผลตรวจก่อนเข้าอยู่สำเร็จ" });
+  } catch (error) {
+    console.error("Update move-in inspection error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });

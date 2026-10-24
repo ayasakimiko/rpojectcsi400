@@ -1096,14 +1096,16 @@ function DepositContractTerms({ contract, title = 'เงื่อนไขส�
 
 function DepositSettlementModal({ contract, onClose, onSaved }) {
   const action = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
-  const [deduction, setDeduction] = useState('')
-  const [note, setNote] = useState('')
+  const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
+  // Pre-fill the deduction with the asset damage from the move-out inspection.
+  const inspectionDamage = action === 'refund' ? Math.min(Number(contract.moveout_damage_cost) || 0, paid) : 0
+  const [deduction, setDeduction] = useState(inspectionDamage > 0 ? String(inspectionDamage) : '')
+  const [note, setNote] = useState(inspectionDamage > 0 ? (contract.moveout_damage_note || '').slice(0, 500) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [invalidField, setInvalidField] = useState(null)
   const deductionRef = useRef(null)
   const noteRef = useRef(null)
-  const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
   const deductionValue = Number(deduction) || 0
   const refundAmount = Math.max(0, paid - deductionValue)
   const noteRequired = action === 'forfeit' || deductionValue > 0
@@ -1211,6 +1213,11 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
                   setInvalidField(null)
                 }}
               />
+              {inspectionDamage > 0 && (
+                <small className="deposit-settle-hint">
+                  ดึงจากผลตรวจย้ายออก {formatContractMoney(inspectionDamage)} (คำนวณจากราคาทรัพย์สินที่ชำรุด/สูญหาย) แก้ไขได้
+                </small>
+              )}
             </label>
           )}
           <label className={`deposit-settle-field${action === 'forfeit' ? ' is-forfeit-note' : ''}${invalidField === 'note' ? ' is-invalid' : ''}`}>

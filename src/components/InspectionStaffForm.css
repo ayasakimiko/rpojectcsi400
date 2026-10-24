@@ -4,6 +4,78 @@
   gap: 18px;
 }
 
+.staff-modal-inspection .staff-modal-header h3 {
+  font-size: 21px;
+}
+
+.staff-modal-inspection .inspection-form {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.staff-modal-inspection .inspection-section-title {
+  font-size: 18px;
+}
+
+.staff-modal-inspection :is(.inspection-row-label, .staff-form-label, .staff-form-input, .room-picker-main strong) {
+  font-size: 17px;
+}
+
+.staff-modal-inspection :is(.inspection-choice, .inspection-topic-options button, .inspection-link-btn, .inspection-progress-text, .inspection-footer-actions .staff-action-btn) {
+  font-size: 16px;
+}
+
+.staff-modal-inspection .inspection-choice {
+  min-height: 42px;
+  padding: 8px 14px;
+}
+
+.staff-modal-inspection .inspection-topic-options button {
+  min-height: 40px;
+}
+
+.staff-modal-inspection :is(.inspection-guidance, .inspection-footer-note, .inspection-topic-filter > span, .inspection-counts span, .room-picker-main small, .staff-form-optional, .staff-form-field-error, .mrdf-note) {
+  font-size: 14.5px;
+}
+
+.staff-modal-inspection .rtf.is-compact :is(.rtf-row dt, .rtf-row dd, .rtf-catchup-reason, .rtf-tile small, .rtf-schedule b) {
+  font-size: 16px;
+}
+
+.staff-modal-inspection .rtf.is-compact :is(.rtf-row dt small, .rtf-tile span, .rtf-schedule small, .rtf-note) {
+  font-size: 14px;
+}
+
+.staff-modal-inspection .rtf.is-compact :is(h5, .rtf-schedule strong) {
+  font-size: 18px;
+}
+
+.staff-modal-inspection .rtf.is-compact :is(.rtf-tile strong, .rtf-row.is-highlight dd) {
+  font-size: 22px;
+}
+
+@media (max-width: 767px) {
+  .staff-modal.staff-modal-inspection {
+    padding: 18px;
+  }
+
+  .staff-modal-inspection .inspection-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-modal-inspection .inspection-choices {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .staff-modal-inspection .inspection-choice {
+    flex: 1 1 auto;
+    padding: 8px;
+  }
+}
+
 .inspection-section {
   display: flex;
   flex-direction: column;
@@ -15,6 +87,10 @@
 }
 
 .inspection-topic-filter {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -22,6 +98,7 @@
   border: 1px solid #e3ecf8;
   border-radius: 10px;
   background: #f8fbff;
+  box-shadow: 0 4px 10px rgba(15, 43, 82, 0.08);
 }
 
 .inspection-topic-filter > span {

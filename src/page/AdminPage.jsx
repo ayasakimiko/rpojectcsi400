@@ -29,6 +29,9 @@ import {
 import { getInspectionPurposeLabel, getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionForm from '../components/InspectionForm.jsx'
+import RoomTypeManager from '../components/RoomTypeManager.jsx'
+import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../utils/roomAssets.js'
+import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
@@ -1216,6 +1219,7 @@ const ROWS_PER_PAGE = 15
 const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
+  { key: 'room-types', label: 'ประเภทห้องและทรัพย์สิน' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
@@ -1232,7 +1236,7 @@ const TABS = [
 ]
 
 const TAB_GROUPS = [
-  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'room-types', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
@@ -2055,7 +2059,15 @@ const ROOM_AMENITIES = [
 ]
 
 
+// Air conditioner and fridge are stored as the room's on/off columns (used by
+// tenant pages and room search) but are added and removed like any other asset.
+const BUILTIN_EQUIPMENT = [
+  { field: 'air_conditioner', name: 'เครื่องปรับอากาศ' },
+  { field: 'refrigerator', name: 'ตู้เย็น' },
+]
+
 const ROOM_AMENITY_SUGGESTIONS = [
+  ...BUILTIN_EQUIPMENT.map((item) => ({ name: item.name, icon: 'sparkle' })),
   { name: 'โต๊ะทำงาน', icon: 'desk' },
   { name: 'ตู้เสื้อผ้า', icon: 'wardrobe' },
   { name: 'เครื่องทำน้ำอุ่น', icon: 'shower' },
@@ -2063,6 +2075,17 @@ const ROOM_AMENITY_SUGGESTIONS = [
   { name: 'ระเบียง', icon: 'balcony' },
   { name: 'โซฟา', icon: 'sofa' },
 ]
+
+function availableAssetSuggestions(form) {
+  const used = new Set(
+    [
+      ...form.custom_amenities.map((item) => item.name),
+      ...form.assetRows.map((row) => row.name.trim()),
+      ...BUILTIN_EQUIPMENT.filter((item) => form[item.field]).map((item) => item.name),
+    ].map((name) => name.toLocaleLowerCase()),
+  )
+  return ROOM_AMENITY_SUGGESTIONS.filter((suggestion) => !used.has(suggestion.name.toLocaleLowerCase()))
+}
 
 function RoomDetailIcon({ type, size = 16 }) {
   const paths = {
@@ -4628,6 +4651,8 @@ const emptyRoomForm = {
   refrigerator: false,
   bathroom: false,
   cctv: false,
+  room_type_id: null,
+  assetRows: [],
 }
 
 const emptyStaffForm = { idcard: '', password: '', confirm_password: '', phone: '', first_name: '', last_name: '', age: '' }
@@ -5789,6 +5814,8 @@ function AdminBackupPage() {
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
   const [amenityDraft, setAmenityDraft] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('sparkle')
+  const [amenityPrice, setAmenityPrice] = useState('')
+  const roomTypes = useRoomTypes()
   const [addingAmenity, setAddingAmenity] = useState(false)
   const [amenityModalError, setAmenityModalError] = useState('')
   const [roomSubmitting, setRoomSubmitting] = useState(false)
@@ -6346,8 +6373,10 @@ function AdminBackupPage() {
     setRoomModal({ mode: 'create' })
   }
 
-  const openEditRoom = (room) => {
-    if (room.is_booked) return
+  // mode 'amenities' shows only the equipment and assets section; it is allowed
+  // for occupied rooms because it saves through the assets endpoint.
+  const openEditRoom = (room, mode = 'edit') => {
+    if (room.is_booked && mode === 'edit') return
     setAmenityDraft('')
     setAmenityIcon('sparkle')
     setAddingAmenity(false)
@@ -6365,9 +6394,11 @@ function AdminBackupPage() {
       refrigerator: Boolean(room.refrigerator),
       bathroom: Boolean(room.bathroom),
       cctv: Boolean(room.cctv),
+      room_type_id: room.room_type_id ?? null,
+      assetRows: toAssetRows(room.assets),
     })
     setRoomFormError('')
-    setRoomModal({ mode: 'edit', room })
+    setRoomModal({ mode, room })
   }
 
   const openRoomDetail = (room) => {
@@ -6456,22 +6487,94 @@ function AdminBackupPage() {
     setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
+  // Custom amenities double as priced room assets: each one added here is shown
+  // to tenants and also used to calculate damage at move-out.
   const addRoomAmenity = (requestClose) => {
     const name = amenityDraft.trim()
     if (!name) {
-      setAmenityModalError('กรุณากรอกชื่อสิ่งอำนวยความสะดวก')
+      setAmenityModalError('กรุณากรอกชื่อทรัพย์สิน')
       return
     }
-    if (name.length > 60 || roomForm.custom_amenities.length >= 12 || roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
-      setAmenityModalError('รายการซ้ำ ยาวเกิน 60 ตัวอักษร หรือครบ 12 รายการแล้ว')
+    const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
+    const duplicate = (builtin && roomForm[builtin.field])
+      || roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())
+      || roomForm.assetRows.some((row) => row.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
+    if (name.length > 60 || duplicate) {
+      setAmenityModalError('รายการซ้ำหรือยาวเกิน 60 ตัวอักษร')
       return
     }
-    setRoomForm((prev) => ({ ...prev, custom_amenities: [...prev.custom_amenities, { name, icon: amenityIcon }] }))
+    if (!isValidAssetPrice(amenityPrice)) {
+      setAmenityModalError('กรุณาระบุราคาเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง')
+      return
+    }
+    setRoomForm((prev) => ({
+      ...prev,
+      ...(builtin
+        ? { [builtin.field]: true }
+        : {
+            // Only 12 amenities are shown to tenants; extra assets are still priced.
+            custom_amenities: prev.custom_amenities.length < 12 ? [...prev.custom_amenities, { name, icon: amenityIcon }] : prev.custom_amenities,
+          }),
+      assetRows: [...prev.assetRows, ...toAssetRows([{ name, price: amenityPrice.replace(/,/g, '').trim() }])],
+    }))
     requestClose()
+  }
+
+  const removeRoomAsset = (name) => {
+    const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
+    setRoomForm((prev) => ({
+      ...prev,
+      ...(builtin ? { [builtin.field]: false } : {}),
+      custom_amenities: prev.custom_amenities.filter((item) => item.name !== name),
+      assetRows: prev.assetRows.filter((row) => row.name.trim() !== name),
+    }))
+  }
+
+  // Opens the add-asset modal with the first unused suggestion already picked.
+  const openAddRoomAsset = () => {
+    const [first] = availableAssetSuggestions(roomForm)
+    setAmenityDraft(first?.name || '')
+    setAmenityIcon(first?.icon || 'sparkle')
+    setAmenityPrice('')
+    setAmenityModalError('')
+    setAddingAmenity(true)
+  }
+
+  const applyRoomType = (roomTypeId) => {
+    const type = roomTypes.find((item) => item.id === roomTypeId)
+    setRoomForm((prev) => {
+      const known = new Set(prev.assetRows.map((row) => row.name.trim()))
+      const added = (type?.assets || []).filter((asset) => !known.has(asset.name))
+      return { ...prev, room_type_id: roomTypeId, assetRows: [...prev.assetRows, ...toAssetRows(added)] }
+    })
   }
 
   const submitRoomForm = async (event, requestClose) => {
     event.preventDefault()
+    if (roomModal.mode === 'amenities') {
+      const error = assetRowsError(roomForm.assetRows)
+      if (error) {
+        setRoomFormError(error)
+        return
+      }
+      setRoomSubmitting(true)
+      setRoomFormError('')
+      try {
+        const { data } = await saveRoomAssets(roomModal.room.room_number, roomForm.room_type_id, roomForm.assetRows, {
+          air_conditioner: roomForm.air_conditioner,
+          refrigerator: roomForm.refrigerator,
+          custom_amenities: roomForm.custom_amenities,
+        })
+        setSuccessMessage(data.message)
+        requestClose()
+        await loadRooms()
+      } catch (err) {
+        setRoomFormError(err.response?.data?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      } finally {
+        setRoomSubmitting(false)
+      }
+      return
+    }
     if (!/^[1-9][0-9]{2}$/.test(roomForm.room_number)) {
       setRoomFormError('เลขห้องต้องเป็นตัวเลข 3 หลัก')
       return
@@ -6494,6 +6597,11 @@ function AdminBackupPage() {
     }
     if (!Number.isFinite(waterValue) || waterValue < 0 || waterValue > 999.99) {
       setRoomFormError('ค่าน้ำ/เดือนต้องเป็นตัวเลข 3 หลัก (0-999.99)')
+      return
+    }
+    const assetsError = assetRowsError(roomForm.assetRows)
+    if (assetsError) {
+      setRoomFormError(assetsError)
       return
     }
     setRoomSubmitting(true)
@@ -6525,6 +6633,11 @@ function AdminBackupPage() {
           { headers: authHeaders() },
         )
         setSuccessMessage(data.message || 'แก้ไขข้อมูลห้องพักสำเร็จ')
+      }
+      try {
+        await saveRoomAssets(payload.room_number, roomForm.room_type_id, roomForm.assetRows)
+      } catch (assetError) {
+        setPageError(`บันทึกห้องแล้ว แต่บันทึกทรัพย์สินไม่สำเร็จ (${assetError.response?.data?.message || 'ลองใหม่ที่ปุ่ม “ทรัพย์สิน”'})`)
       }
       requestClose()
       await loadRooms()
@@ -7799,6 +7912,8 @@ function AdminBackupPage() {
           </div>
         )}
 
+        {activeTab === 'room-types' && <RoomTypeManager Modal={Modal} rooms={rooms} onRoomsChanged={loadRooms} />}
+
         {activeTab === 'rooms' && (
           <div className="admin-card">
             <div className="admin-card-header">
@@ -7908,6 +8023,9 @@ function AdminBackupPage() {
                               <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                 แก้ไข
                               </button>
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room, 'amenities')} title="อุปกรณ์และทรัพย์สินในห้อง (แก้ได้แม้มีผู้เช่า)">
+                                ทรัพย์สิน
+                              </button>
                               <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถลบได้' : undefined}>
                                 ลบ
                               </button>
@@ -7942,6 +8060,9 @@ function AdminBackupPage() {
                                   </button>
                                   <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                     แก้ไข
+                                  </button>
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room, 'amenities')} title="อุปกรณ์และทรัพย์สินในห้อง (แก้ได้แม้มีผู้เช่า)">
+                                    ทรัพย์สิน
                                   </button>
                                   <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถลบได้' : undefined}>
                                     ลบ
@@ -10151,11 +10272,23 @@ function AdminBackupPage() {
 
 
       {roomModal && (
-        <Modal title={roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : `แก้ไขห้อง ${roomModal.room.room_number}`} onClose={() => setRoomModal(null)}>
+        <Modal
+          title={
+            roomModal.mode === 'create'
+              ? 'เพิ่มห้องพัก'
+              : roomModal.mode === 'amenities'
+                ? `อุปกรณ์และทรัพย์สินในห้อง ${roomModal.room.room_number}`
+                : `แก้ไขห้อง ${roomModal.room.room_number}`
+          }
+          onClose={() => setRoomModal(null)}
+        >
           {(requestClose) => (
           <form className="admin-room-form" onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
             {roomFormError && <div className="alert alert-danger py-2 px-3">{roomFormError}</div>}
 
+            {/* The "ทรัพย์สิน" button opens only the equipment section, which stays editable while the room is occupied. */}
+            {roomModal.mode !== 'amenities' && (
+            <>
             <section className="admin-room-form-section">
               <header>
                 <span className="admin-room-form-icon"><RoomDetailIcon type="home" size={16} /></span>
@@ -10269,57 +10402,74 @@ function AdminBackupPage() {
                 </label>
               </div>
             </section>
+            </>
+            )}
 
             <section className="admin-room-form-section">
               <header>
                 <span className="admin-room-form-icon"><RoomDetailIcon type="sparkle" size={16} /></span>
                 <div>
-                  <strong>สิ่งอำนวยความสะดวก</strong>
-                  <small>กดเพื่อเลือกหรือยกเลิก</small>
+                  <strong>อุปกรณ์และทรัพย์สินในห้อง</strong>
+                  <small>กดเพื่อเลือกหรือยกเลิก · กด “+ เพิ่มทรัพย์สิน” เพื่อใส่ชื่อและราคา (ใช้คำนวณค่าเสียหายตอนย้ายออก)</small>
                 </div>
                 <span className="admin-room-form-count">
                   เลือกแล้ว {['air_conditioner', 'refrigerator'].filter((field) => roomForm[field]).length + roomForm.custom_amenities.length}
                 </span>
               </header>
-              <div className="admin-toggle-grid">
-                {[
-                  [
-                    'air_conditioner',
-                    'เครื่องปรับอากาศ',
-                    <path key="ac" d="M12 3v18M5.6 6.5 18.4 17.5M18.4 6.5 5.6 17.5" />,
-                  ],
-                  [
-                    'refrigerator',
-                    'ตู้เย็น',
-                    <g key="fridge">
-                      <rect x="5" y="2.5" width="14" height="19" rx="2" />
-                      <line x1="5" y1="10.5" x2="19" y2="10.5" />
-                      <line x1="8.5" y1="5.5" x2="8.5" y2="8" />
-                      <line x1="8.5" y1="13.5" x2="8.5" y2="16" />
-                    </g>,
-                  ],
-                ].map(([field, label, icon]) => (
-                  <label className="admin-toggle-chip" key={field}>
-                    <input type="checkbox" name={field} checked={roomForm[field]} onChange={handleRoomFormChange} />
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {icon}
-                    </svg>
-                    <span className="admin-room-chip-label">{label}</span>
-                    <span className="admin-room-chip-check" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M5 12.5 10 17l9-10" />
-                      </svg>
-                    </span>
-                  </label>
-                ))}
-                {roomForm.custom_amenities.map((amenity) => (
-                  <span className="admin-custom-amenity" key={amenity.name}>
-                    <CustomAmenityIcon name={amenity.icon} size={15} />{amenity.name}
-                    <button type="button" onClick={() => setRoomForm((prev) => ({ ...prev, custom_amenities: prev.custom_amenities.filter((item) => item.name !== amenity.name) }))} aria-label={`ลบ ${amenity.name}`}>×</button>
+              {roomTypes.length > 0 && (
+                <label className="admin-room-field room-assets-type">
+                  <span>
+                    ดึงทรัพย์สินจากประเภทห้อง <small className="admin-room-optional">ไม่บังคับ</small>
                   </span>
-                ))}
-                <button type="button" className="admin-custom-amenity-add" onClick={() => { setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError(''); setAddingAmenity(true) }} disabled={roomForm.custom_amenities.length >= 12}>+ เพิ่มเอง</button>
+                  <select className="form-select" value={roomForm.room_type_id ?? ''} onChange={(event) => applyRoomType(event.target.value ? Number(event.target.value) : null)}>
+                    <option value="">ไม่ระบุประเภท</option>
+                    {roomTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name} ({type.assets.length} รายการ)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <div className="admin-toggle-grid">
+                {BUILTIN_EQUIPMENT.filter((item) => roomForm[item.field]).map((item) => {
+                  const asset = roomForm.assetRows.find((row) => row.name.trim() === item.name)
+                  return (
+                    <span className="admin-custom-amenity" key={item.field}>
+                      <CustomAmenityIcon name="sparkle" size={15} />{item.name}
+                      {asset && <small className="admin-custom-amenity-price">฿{assetPriceValue(asset.price).toLocaleString('th-TH')}</small>}
+                      <button type="button" onClick={() => removeRoomAsset(item.name)} aria-label={`ลบ ${item.name}`}>×</button>
+                    </span>
+                  )
+                })}
+                {roomForm.custom_amenities.map((amenity) => {
+                  const asset = roomForm.assetRows.find((row) => row.name.trim() === amenity.name)
+                  return (
+                    <span className="admin-custom-amenity" key={amenity.name}>
+                      <CustomAmenityIcon name={amenity.icon} size={15} />{amenity.name}
+                      {asset && <small className="admin-custom-amenity-price">฿{assetPriceValue(asset.price).toLocaleString('th-TH')}</small>}
+                      <button type="button" onClick={() => removeRoomAsset(amenity.name)} aria-label={`ลบ ${amenity.name}`}>×</button>
+                    </span>
+                  )
+                })}
+                {roomForm.assetRows
+                  .filter((row) => !roomForm.custom_amenities.some((amenity) => amenity.name === row.name.trim())
+                    && !BUILTIN_EQUIPMENT.some((item) => roomForm[item.field] && item.name === row.name.trim()))
+                  .map((row) => (
+                    <span className="admin-custom-amenity" key={row.rowId}>
+                      <CustomAmenityIcon name="sparkle" size={15} />{row.name}
+                      <small className="admin-custom-amenity-price">฿{assetPriceValue(row.price).toLocaleString('th-TH')}</small>
+                      <button type="button" onClick={() => removeRoomAsset(row.name.trim())} aria-label={`ลบ ${row.name}`}>×</button>
+                    </span>
+                  ))}
+                <button type="button" className="admin-custom-amenity-add" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
               </div>
+              {roomForm.assetRows.length > 0 && (
+                <p className="admin-room-assets-total">
+                  ทรัพย์สินที่มีราคา {roomForm.assetRows.length} รายการ · มูลค่ารวม{' '}
+                  <strong>฿{roomForm.assetRows.reduce((sum, row) => sum + assetPriceValue(row.price), 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
+                </p>
+              )}
             </section>
 
             <div className="admin-room-form-actions">
@@ -10327,7 +10477,9 @@ function AdminBackupPage() {
                 ยกเลิก
               </button>
               <button type="submit" className="admin-action-btn is-primary" disabled={roomSubmitting}>
-                {roomSubmitting ? 'กำลังบันทึก...' : roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : 'บันทึกการแก้ไข'}
+                {roomSubmitting
+                  ? 'กำลังบันทึก...'
+                  : roomModal.mode === 'create' ? 'เพิ่มห้องพัก' : roomModal.mode === 'amenities' ? 'บันทึกอุปกรณ์และทรัพย์สิน' : 'บันทึกการแก้ไข'}
               </button>
             </div>
           </form>
@@ -10336,14 +10488,12 @@ function AdminBackupPage() {
       )}
 
       {roomModal && addingAmenity && (
-        <Modal title="เพิ่มสิ่งอำนวยความสะดวก" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError('') }}>
+        <Modal title="เพิ่มทรัพย์สินในห้อง" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityPrice(''); setAmenityModalError('') }}>
           {(requestClose) => {
             const usedCount = roomForm.custom_amenities.length
             const remaining = Math.max(0, 12 - usedCount)
             const draftName = amenityDraft.trim()
-            const availableSuggestions = ROOM_AMENITY_SUGGESTIONS.filter(
-              (suggestion) => !roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === suggestion.name.toLocaleLowerCase()),
-            )
+            const availableSuggestions = availableAssetSuggestions(roomForm)
             return (
               <form className="admin-amenity-modal-form" onSubmit={(event) => { event.preventDefault(); addRoomAmenity(requestClose) }}>
                 <div className="admin-amenity-modal-content">
@@ -10351,7 +10501,8 @@ function AdminBackupPage() {
                     <span className="admin-amenity-preview-icon"><CustomAmenityIcon name={amenityIcon} size={26} /></span>
                     <div className="admin-amenity-preview-text">
                       <small>ตัวอย่างที่จะแสดงในห้อง</small>
-                      <strong>{draftName || 'ชื่อสิ่งอำนวยความสะดวก'}</strong>
+                      <strong>{draftName || 'ชื่อทรัพย์สิน'}</strong>
+                      {isValidAssetPrice(amenityPrice) && <small>ราคา ฿{assetPriceValue(amenityPrice).toLocaleString('th-TH')}</small>}
                     </div>
                     <span className={`admin-amenity-quota${remaining <= 2 ? ' is-low' : ''}`}>
                       <b>{usedCount}</b>/12
@@ -10362,7 +10513,7 @@ function AdminBackupPage() {
                   <section className="admin-amenity-section">
                     <header>
                       <span className="admin-amenity-step">1</span>
-                      <label htmlFor="admin-new-amenity">ชื่อสิ่งอำนวยความสะดวก <span className="text-danger">*</span></label>
+                      <label htmlFor="admin-new-amenity">ชื่อทรัพย์สิน <span className="text-danger">*</span></label>
                       <small className={`admin-amenity-counter${amenityDraft.length >= 55 ? ' is-near' : ''}`}>{amenityDraft.length}/60</small>
                     </header>
                     <div className={`admin-amenity-name-input${amenityModalError ? ' is-invalid' : ''}`}>
@@ -10400,6 +10551,29 @@ function AdminBackupPage() {
                   <section className="admin-amenity-section">
                     <header>
                       <span className="admin-amenity-step">2</span>
+                      <label htmlFor="admin-new-amenity-price">ราคาทรัพย์สิน (บาท) <span className="text-danger">*</span></label>
+                      <small>ใช้คิดค่าเสียหายเมื่อชำรุดหรือสูญหาย</small>
+                    </header>
+                    <div className="admin-amenity-name-input">
+                      <i>฿</i>
+                      <input
+                        id="admin-new-amenity-price"
+                        type="text"
+                        inputMode="decimal"
+                        value={amenityPrice}
+                        onChange={(event) => {
+                          setAmenityPrice(event.target.value)
+                          setAmenityModalError('')
+                        }}
+                        placeholder="เช่น 3500"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </section>
+
+                  <section className="admin-amenity-section">
+                    <header>
+                      <span className="admin-amenity-step">3</span>
                       <span className="admin-amenity-section-title">รายการแนะนำ</span>
                       <small>กดเพื่อใช้ชื่อและไอคอนนี้</small>
                     </header>
@@ -10428,10 +10602,10 @@ function AdminBackupPage() {
                 </div>
                 <div className="admin-amenity-modal-actions">
                   <span className="admin-amenity-remaining">
-                    {remaining > 0 ? `เพิ่มได้อีก ${remaining} รายการ` : 'ครบ 12 รายการแล้ว'}
+                    {remaining > 0 ? `แสดงในหน้าห้องได้อีก ${remaining} รายการ` : 'ครบ 12 รายการที่แสดงแล้ว (ยังบันทึกเป็นทรัพย์สินได้)'}
                   </span>
                   <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
-                  <button type="submit" className="admin-action-btn is-primary" disabled={remaining === 0}>เพิ่มรายการ</button>
+                  <button type="submit" className="admin-action-btn is-primary">เพิ่มทรัพย์สิน</button>
                 </div>
               </form>
             )
