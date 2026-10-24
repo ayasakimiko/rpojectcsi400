@@ -5138,6 +5138,7 @@ table tbody td.owner-empty-row:last-child {
 .owner-rd-balance {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  flex-shrink: 0;
   gap: 0;
   margin-top: 12px;
   overflow: hidden;
@@ -7109,7 +7110,7 @@ table tbody td.owner-empty-row:last-child {
 }
 
 .owner-oc-table col.is-period {
-  width: 150px;
+  width: 170px;
 }
 
 .owner-oc-table col.is-arrow {
@@ -7124,8 +7125,29 @@ table tbody td.owner-empty-row:last-child {
 }
 
 .owner-oc-panel .owner-oc-table th {
-  height: 44px;
+  height: 52px;
+  font-size: 14.5px;
   line-height: 1.2;
+}
+
+.owner-oc-panel .owner-oc-table td {
+  height: 64px;
+  font-size: 15.5px;
+}
+
+.owner-oc-panel .owner-oc-table .owner-oc-period {
+  gap: 9px;
+  font-size: 16px;
+}
+
+.owner-oc-panel .owner-oc-table .owner-oc-rate {
+  min-width: 70px;
+  padding: 4px 12px;
+  font-size: 15.5px;
+}
+
+.owner-oc-panel .owner-oc-table .owner-oc-row-more {
+  font-size: 14px;
 }
 
 .owner-oc-panel .owner-oc-table th:first-child,
@@ -7144,10 +7166,10 @@ table tbody td.owner-empty-row:last-child {
   --cell-tone: #2563eb;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 8px;
+  gap: 7px;
+  padding: 7px 13px 7px 11px;
   border: 1px solid color-mix(in srgb, var(--cell-tone) 30%, #ffffff);
-  border-radius: 9px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--cell-tone) 7%, #ffffff);
   color: var(--cell-tone);
   font-variant-numeric: tabular-nums;
@@ -7166,13 +7188,13 @@ table tbody td.owner-empty-row:last-child {
 
 .owner-oc-cell strong {
   color: #0f2b52;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .owner-oc-cell small {
   color: #8aa0b6;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -9001,7 +9023,7 @@ textarea.owner-xe-input { resize: vertical; line-height: 1.5; }
 .owner-pl-status.is-other { border-color: #e3ecf8; background: #f8fafc; color: #64748b; }
 .owner-pl-note-cell { display: block; overflow: hidden; color: #4b6a88; text-overflow: ellipsis; white-space: nowrap; }
 .owner-pl-note-cell.is-empty { color: #9aabbd; font-style: italic; }
-.owner-pl-thumb { display: inline-block; width: 40px; height: 48px; overflow: hidden; border: 1px solid #dce6f3; border-radius: 8px; background: #f8fbff; vertical-align: middle; }
+.owner-pl-thumb { display: inline-block; width: 60px; height: 74px; overflow: hidden; border: 1px solid #dce6f3; border-radius: 10px; background: #f8fbff; vertical-align: middle; }
 .owner-pl-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .owner-pl-noslip { color: #9aabbd; font-size: 13px; }
 .owner-pl-overlay { z-index: 40; }

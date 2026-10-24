@@ -185,11 +185,11 @@ export function ParkingStatusPill({ status }) {
   return <span className={`parking-pill is-${FINE_STATUS_TONE[status] || 'muted'}`}>ค่าปรับ{FINE_STATUS_LABEL[status]}</span>
 }
 
-export function ParkingSessionPanel({ item, finePerHour }) {
+export function ParkingSessionPanel({ item, finePerHour, alwaysShow = false }) {
   const now = useNow()
   const session = getVisitorSession(item, finePerHour, now)
   const space = item.parking_space_code
-  if (!session && !space) return null
+  if (!session && !space && !alwaysShow) return null
   return (
     <section className="parking-session" aria-label="ข้อมูลที่จอด">
       <dl className="parking-session-grid">

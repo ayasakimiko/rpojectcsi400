@@ -6155,6 +6155,16 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                   ]
                 : []),
             ]
+            const withTime = (name, at) => (name || at ? [name, at && formatStaffDateTime(at)].filter(Boolean).join(' · ') : null)
+            const reviewLabel = detail.status === 'rejected' ? 'ไม่อนุมัติโดย' : 'อนุมัติโดย'
+            const requestInfo = [
+              ['เลขคำขอ', `#${detail.id}`],
+              ['ส่งคำขอเมื่อ', formatStaffDateTime(detail.created_at)],
+              [reviewLabel, withTime(reviewer, reviewedAt) || (detail.status === 'pending' ? 'รออนุมัติ' : null)],
+              ['แก้ไขล่าสุด', withTime(detail.updated_by_name, detail.updated_at) || 'ไม่เคยแก้ไข'],
+              ...(detail.status === 'cancelled' ? [['ยกเลิกโดย', withTime(detail.cancelled_by_name, detail.cancelled_at), true]] : []),
+              ...(detail.is_special ? [['คำขอพิเศษ', detail.special_reason || 'ไม่ระบุเหตุผล', true]] : []),
+            ]
             return (
               <div className="staff-rv-detail">
                 <div className={`staff-rv-detail-hero is-${info.tone}`}>
@@ -6215,7 +6225,18 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                     <p>{detail.note}</p>
                   </section>
                 )}
-                {detail.request_type === 'vehicle' && <ParkingSessionPanel item={detail} finePerHour={finePerHour} />}
+                {detail.request_type === 'vehicle' && <ParkingSessionPanel item={detail} finePerHour={finePerHour} alwaysShow />}
+                <section className="staff-rv-request-info" aria-label="ข้อมูลคำขอ">
+                  <h4 className="staff-rv-timeline-title">ข้อมูลคำขอ</h4>
+                  <dl className="staff-rv-fields">
+                    {requestInfo.map(([label, value, wide]) => (
+                      <div key={label} className={wide ? 'is-wide' : undefined}>
+                        <dt>{label}</dt>
+                        <dd>{value || '-'}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
                 {['unpaid', 'pending_review', 'paid'].includes(detail.fine_status) && (
                   <>
                     <ParkingFinePayment

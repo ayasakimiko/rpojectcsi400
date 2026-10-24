@@ -1744,7 +1744,13 @@ const OWNER_TABS = [
 
 const AUDIT_RESOURCES = [
   ['move-out-inspections', 'ผลตรวจห้องย้ายออก'],
+  ['move-in-inspections', 'ผลตรวจห้องก่อนเข้าพัก'],
   ['resident-visit-requests', 'คำขอเข้าเยี่ยม/รถ'],
+  ['payment-settings', 'ช่องทางรับโอน'],
+  ['room-transfers', 'การย้ายห้อง'],
+  ['room-types', 'ประเภทห้อง'],
+  ['contracts', 'สัญญาเช่า'],
+  ['parking', 'ตั้งค่าที่จอดรถ'],
   ['payment-verifications', 'รายการชำระเงิน'],
   ['safety-incidents', 'รายงานเหตุ'],
   ['utility-bill', 'บิลค่าน้ำ-ค่าไฟ'],
@@ -1792,6 +1798,21 @@ const AUDIT_FIELD_LABELS = {
   paidItems: 'รายการที่ชำระ', totalAmount: 'ยอดรวม', result: 'ผลการดำเนินการ',
   electricity_amount: 'ค่าไฟ (บาท)', water_amount: 'ค่าน้ำ (บาท)',
   recipient_name: 'ชื่อผู้รับ', carrier: 'บริษัทขนส่ง', tracking_number: 'เลขพัสดุ', floor: 'ชั้น', room_type: 'ประเภทห้อง',
+  userCategory: 'ประเภทผู้ใช้', user_category: 'ประเภทผู้ใช้', vehicleType: 'ประเภทรถ', vehicle_type: 'ประเภทรถ',
+  parkingSpaceId: 'รหัสช่องจอด', spaceId: 'รหัสช่องจอด', isSpecial: 'คำขอพิเศษ', specialReason: 'เหตุผลคำขอพิเศษ',
+  finePerHour: 'ค่าปรับต่อชั่วโมง', carSpaces: 'ช่องจอดรถยนต์', motorcycleSpaces: 'ช่องจอดรถจักรยานยนต์',
+  fine_status: 'สถานะค่าปรับ', fine_amount: 'ค่าปรับ',
+  promptpay_id: 'PromptPay', bank_name: 'ธนาคาร', bank_account_no: 'เลขบัญชี', test_mode: 'โหมดทดลอง', verify_mode: 'วิธีตรวจสลิป',
+  dorm_name: 'ชื่อหอพัก', dorm_rules: 'กฎระเบียบ', contract_rules: 'เงื่อนไขสัญญา', gate_close_time: 'เวลาปิดประตู',
+  caretaker_phone: 'เบอร์ผู้ดูแล', technician_phone: 'เบอร์ช่าง',
+  action: 'การดำเนินการ', deduction: 'หักเงิน', is_suspended: 'ระงับใช้งาน', customer_id: 'รหัสผู้เช่า', customerId: 'รหัสผู้เช่า',
+  tenant_request_id: 'เลขคำขอ', checklist: 'รายการตรวจ', inspectionDate: 'วันที่ตรวจ', inspectionDates: 'วันที่ตรวจ',
+  name: 'ชื่อ', room_type_id: 'รหัสประเภทห้อง', roomTypeId: 'รหัสประเภทห้อง', room_numbers: 'ห้อง', roomNumbers: 'ห้อง',
+  room_size: 'ขนาดห้อง (ตร.ม.)', air_conditioner: 'แอร์', wifi: 'Wi-Fi', refrigerator: 'ตู้เย็น', bed: 'เตียง', bathroom: 'ห้องน้ำ',
+  cctv: 'กล้องวงจรปิด', custom_amenities: 'สิ่งอำนวยความสะดวกเพิ่มเติม',
+  electricity_unit_price: 'ค่าไฟต่อหน่วย', water_unit_price: 'ค่าน้ำต่อหน่วย', water_price: 'ค่าน้ำเหมา',
+  expiresInMinutes: 'ลบอัตโนมัติใน (นาที)', popupInMinutes: 'แสดงป๊อปอัป (นาที)', purpose: 'วัตถุประสงค์', sender_name: 'ชื่อผู้ส่ง',
+  username: 'ชื่อผู้ใช้',
 }
 
 const AUDIT_VALUE_LABELS = {
@@ -1800,10 +1821,15 @@ const AUDIT_VALUE_LABELS = {
   vacant: 'ว่าง', occupied: 'มีผู้เช่า', maintenance: 'ปิดซ่อม', rent: 'ค่าเช่า', water: 'ค่าน้ำ', electricity: 'ค่าไฟ',
   self: 'รถของผู้เช่า', family: 'รถครอบครัว', external: 'บุคคลภายนอก', moveout: 'แจ้งย้ายออก', move_room: 'ย้ายห้อง',
   accident: 'อุบัติเหตุ', security: 'ความปลอดภัย', fire: 'ไฟไหม้ / ควัน', medical: 'เจ็บป่วยฉุกเฉิน', other: 'อื่น ๆ',
-  cash: 'เงินสด', transfer: 'โอนเงิน', promptpay: 'พร้อมเพย์',
+  cash: 'เงินสด', transfer: 'โอนเงิน', promptpay: 'พร้อมเพย์', bank: 'โอนเข้าบัญชี', counter: 'ชำระกับเจ้าหน้าที่',
+  vehicle: 'รถ', overnight_guest: 'ผู้มาพักค้างคืน', resident: 'ผู้พักอาศัย', visitor: 'ผู้มาติดต่อ',
+  car: 'รถยนต์', motorcycle: 'รถจักรยานยนต์', none: 'ไม่มี', unpaid: 'ค้างชำระ', pending_review: 'รอตรวจสลิป', paid: 'ชำระแล้ว',
+  auto: 'ตรวจอัตโนมัติ', manual: 'เจ้าหน้าที่ตรวจเอง', refund: 'คืนเงินมัดจำ', forfeit: 'ริบเงินมัดจำ',
+  good: 'ปกติ', damaged: 'ชำรุด', missing: 'สูญหาย', wear: 'เสื่อมสภาพ', not_applicable: 'ไม่มี/ไม่เกี่ยวข้อง', follow_up: 'ต้องติดตาม',
+  Staff: 'พนักงาน', Admin: 'แอดมิน', Customer: 'ลูกค้า',
 }
 
-const AUDIT_MONEY_KEYS = new Set(['amount', 'totalAmount', 'price', 'rent', 'monthly_rent', 'deposit', 'electricity_amount', 'water_amount'])
+const AUDIT_MONEY_KEYS = new Set(['amount', 'totalAmount', 'price', 'rent', 'monthly_rent', 'deposit', 'electricity_amount', 'water_amount', 'finePerHour', 'fine_amount', 'deduction', 'electricity_unit_price', 'water_unit_price', 'water_price'])
 
 function formatAuditFieldValue(value, key) {
   if (typeof value === 'boolean') return value ? 'ใช่' : 'ไม่ใช่'
@@ -1811,8 +1837,8 @@ function formatAuditFieldValue(value, key) {
   if (typeof value === 'number') return value.toLocaleString('th-TH')
   const text = String(value)
   if (AUDIT_VALUE_LABELS[text]) return AUDIT_VALUE_LABELS[text]
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) {
-    const date = new Date(text)
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(text)) {
+    const date = new Date(text.replace(' ', 'T'))
     if (!Number.isNaN(date.getTime())) return date.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T00:00:00`).toLocaleDateString('th-TH', { dateStyle: 'medium' })
@@ -1959,6 +1985,15 @@ function describeAuditActivity(log) {
   if (actionSegment === 'acknowledge') return { action: `รับทราบ${resource}`, detail: recordLabel }
   if (actionSegment === 'cancel') return { action: `ยกเลิก${resource}`, detail: recordLabel }
   if (actionSegment === 'suspend') return { action: `เปลี่ยนสถานะ${resource}`, detail: recordLabel }
+  if (segments.includes('check-in')) return { action: 'เช็คอินรถเข้าที่จอด', detail: recordLabel }
+  if (segments.includes('fine-payment')) return { action: 'ชำระค่าปรับที่จอดรถ', detail: recordLabel }
+  if (segments.includes('fine-review')) return { action: 'ตรวจสลิปค่าปรับที่จอดรถ', detail: recordLabel }
+  if (segments.includes('deposit-settlement')) return { action: 'คืน/ริบเงินมัดจำ', detail: recordLabel }
+  if (segments.includes('transfer-charge')) return { action: 'เรียกเก็บส่วนต่างย้ายห้อง', detail: recordLabel }
+  if (segments.includes('contract-images')) return { action: 'แนบรูปสัญญาย้ายห้อง', detail: recordLabel }
+  if (segments.includes('assets')) return { action: 'แก้ไขอุปกรณ์ในห้อง', detail: recordLabel }
+  if (segments.includes('payments') && segments.includes('confirm')) return { action: 'ส่งสลิปชำระเงิน', detail: 'การชำระเงิน' }
+  if (segments.includes('forgot-password')) return { action: 'ตั้งรหัสผ่านใหม่', detail: 'ลืมรหัสผ่าน' }
   if (segments.includes('collect-payment')) return { action: 'รับชำระเงิน', detail: recordLabel }
   if (segments.includes('utility-bill')) return { action: 'บันทึกบิลค่าน้ำ-ค่าไฟ', detail: recordLabel }
   if (method === 'POST') return { action: `เพิ่ม${resource}`, detail: recordLabel }
@@ -2196,7 +2231,7 @@ function OwnerMain() {
   const [announcementsLoadedAt, setAnnouncementsLoadedAt] = useState(0)
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [tabSummaries, setTabSummaries] = useState({})
-  const summaryReporters = useMemo(() => Object.fromEntries(['parking', 'safety', 'audit'].map((tab) => [
+  const summaryReporters = useMemo(() => Object.fromEntries(['parking', 'safety', 'audit', 'completed-contracts'].map((tab) => [
     tab,
     (summary) => setTabSummaries((current) => ({ ...current, [tab]: summary })),
   ])), [])
@@ -3301,6 +3336,18 @@ function OwnerMain() {
         { key: 'ann-scheduled', tone: 'slate', icon: 'clock', label: 'กำหนดลบอัตโนมัติ', value: scheduledCount, hint: newCount > 0 ? `ใหม่ใน 24 ชม. ${newCount} รายการ` : null },
       ]
     })(),
+    'completed-contracts': (() => {
+      const summary = tabSummaries['completed-contracts']
+      const show = (value) => (summary ? `${value || 0} ฉบับ` : '—')
+      return [
+        { key: 'contract-total', tone: 'blue', icon: 'history', label: 'สัญญาทั้งหมด', value: show(summary?.total), hint: summary?.archived ? `สัญญาเก่า ${summary.archived} ฉบับ` : 'รวมทุกสถานะ' },
+        { key: 'contract-active', tone: 'green', icon: 'rooms', label: 'สัญญามีผล', value: show(summary?.active), hint: 'รวมสัญญาที่ย้ายห้องแล้ว' },
+        { key: 'contract-awaiting', tone: summary?.awaitingPayment > 0 ? 'orange' : 'slate', icon: 'income', label: 'รอชำระงวดแรก', value: show(summary?.awaitingPayment), hint: 'รวมสลิปที่รอตรวจ' },
+        { key: 'contract-deposit', tone: summary?.pendingDeposit > 0 ? 'red' : 'slate', icon: 'overdue', label: 'รอคืน/ริบมัดจำ', value: show(summary?.pendingDeposit), hint: 'สัญญาจบแล้วที่ยังไม่บันทึกมัดจำ' },
+        { key: 'contract-transferred', tone: 'purple', icon: 'staff', label: 'ย้ายห้องแล้ว', value: show(summary?.transferred), hint: 'สัญญาที่มีประวัติย้ายห้อง' },
+        { key: 'contract-early', tone: summary?.endedEarly > 0 ? 'orange' : 'slate', icon: 'expense', label: 'ออกก่อนสัญญา', value: show(summary?.endedEarly), hint: 'ริบเงินมัดจำตามเงื่อนไข' },
+      ]
+    })(),
     audit: (() => {
       const summary = tabSummaries.audit
       const show = (value) => (summary ? `${Number(value).toLocaleString('th-TH')} รายการ` : '—')
@@ -3588,7 +3635,7 @@ function OwnerMain() {
           </>
         )}
 
-        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab />}
+        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={summaryReporters['completed-contracts']} />}
 
         {activeTab === 'parking' && (
           <StaffResidentVisitsTab canManageSettings onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
