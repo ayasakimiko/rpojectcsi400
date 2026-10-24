@@ -17,6 +17,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import CameraMonitor from '../components/CameraMonitor.jsx'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
@@ -1736,6 +1737,7 @@ const OWNER_TABS = [
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
   { key: 'wifi', label: 'Wi-Fi' },
+  { key: 'cameras', label: 'กล้องวงจรปิด' },
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
   { key: 'audit', label: 'ประวัติ Audit' },
@@ -3642,6 +3644,8 @@ function OwnerMain() {
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
+
+        {activeTab === 'cameras' && <CameraMonitor />}
 
         {activeTab === 'safety' && (
           <StaffSafetyTab rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} onSummaryChange={summaryReporters.safety} />

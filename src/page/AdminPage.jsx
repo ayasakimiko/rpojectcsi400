@@ -33,6 +33,8 @@ import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../ut
 import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import CameraMonitor from '../components/CameraMonitor.jsx'
+import { cameraSummaryTiles } from '../utils/cameras.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, TransferContractPendingPanel } from './StaffMain.jsx'
@@ -1102,6 +1104,30 @@ function Modal({ title, onClose, children, variant, headerExtra = null }) {
 }
 
 const SUMMARY_ICON_PATHS = {
+  camera: (
+    <>
+      <path d="M15 10l4.5-2.5v9L15 14" />
+      <rect x="3" y="7" width="12" height="10" rx="2" />
+    </>
+  ),
+  cameraOff: (
+    <>
+      <path d="M3 3l18 18" />
+      <path d="M15 10l4.5-2.5v9L16 14.5M10 7h3a2 2 0 0 1 2 2v3M7 7H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1" />
+    </>
+  ),
+  rec: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3.5" fill="currentColor" />
+    </>
+  ),
+  motion: (
+    <>
+      <circle cx="13" cy="4.5" r="1.5" />
+      <path d="M7 21l3-6 3 2v4M10 15l1-5 4 3 3 1M8 10l3-1" />
+    </>
+  ),
   announce: (
     <>
       <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1Z" />
@@ -1223,6 +1249,7 @@ const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'wifi', label: 'Wi-Fi' },
+  { key: 'cameras', label: 'กล้องวงจรปิด' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
@@ -1246,6 +1273,7 @@ const TAB_GROUPS = [
   { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
+  { key: 'cameras', label: 'กล้องวงจรปิด', tabs: ['cameras'] },
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
   { key: 'finance', label: 'รายจ่าย', tabs: ['expenses'] },
 ]
@@ -7342,6 +7370,7 @@ function AdminBackupPage() {
       },
     ],
     contracts: completedContractSummaryTiles(contractSummary),
+    cameras: cameraSummaryTiles().map((tile) => ({ ...tile, onClick: () => goToTab('cameras') })),
     staff: [
       { key: 'all', icon: 'queue', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
       { key: 'active', icon: 'vacant', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
@@ -7859,6 +7888,8 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
+
+        {activeTab === 'cameras' && <CameraMonitor />}
 
         {activeTab === 'parcels' && (
           <div className="parcel-management-card">

@@ -15,6 +15,8 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
+import CameraMonitor from '../components/CameraMonitor.jsx'
+import { cameraSummaryTiles } from '../utils/cameras.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import {
   InspectionDateCell,
@@ -1304,6 +1306,7 @@ const STAFF_TABS = [
   { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
   { key: 'resident-visits', label: 'คำขอรถ' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
+  { key: 'cameras', label: 'กล้องวงจรปิด' },
 ]
 
 const WAITING_LIST_STATUS = {
@@ -4253,6 +4256,30 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
 }
 
 const SUMMARY_ICON_PATHS = {
+  camera: (
+    <>
+      <path d="M15 10l4.5-2.5v9L15 14" />
+      <rect x="3" y="7" width="12" height="10" rx="2" />
+    </>
+  ),
+  cameraOff: (
+    <>
+      <path d="M3 3l18 18" />
+      <path d="M15 10l4.5-2.5v9L16 14.5M10 7h3a2 2 0 0 1 2 2v3M7 7H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1" />
+    </>
+  ),
+  rec: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3.5" fill="currentColor" />
+    </>
+  ),
+  motion: (
+    <>
+      <circle cx="13" cy="4.5" r="1.5" />
+      <path d="M7 21l3-6 3 2v4M10 15l1-5 4 3 3 1M8 10l3-1" />
+    </>
+  ),
   announce: (
     <>
       <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1Z" />
@@ -9549,6 +9576,7 @@ function StaffMain() {
     ],
   }
   const summaryByView = {
+    cameras: { title: 'กล้องวงจรปิด', tiles: cameraSummaryTiles() },
     'home:rooms': roomsSummary,
     'home:renew': tenantSummary,
     'home:moveout': tenantSummary,
@@ -10496,7 +10524,7 @@ function StaffMain() {
         )}
 
         <RoleTabMenu
-          tabs={STAFF_TABS}
+          tabs={STAFF_TABS.filter((tab) => tab.key !== 'cameras' || staffUser?.role === 'Staff')}
           activeKey={staffTab}
           onSelect={(key) => {
             goToStaffTab(key)
@@ -10594,6 +10622,8 @@ function StaffMain() {
         )}
 
         {staffTab === 'wifi' && <WifiManager />}
+
+        {staffTab === 'cameras' && staffUser?.role === 'Staff' && <CameraMonitor />}
 
         {staffTab === 'parcels' && (
           <div className="parcel-management-card">
