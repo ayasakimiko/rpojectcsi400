@@ -103,6 +103,7 @@ async function copyLegacyData(connection) {
   if (!marker) {
     for (const [service, tables] of Object.entries(TABLES_BY_SERVICE)) {
       for (const table of tables) {
+        if (!legacyTables.has(table)) continue;
         const [[{ count }]] = await connection.query("SELECT COUNT(*) AS count FROM ??.??", [databaseFor(service), table]);
         if (count !== 0) throw new Error(`Refusing legacy copy: ${service}.${table} already contains data`);
       }

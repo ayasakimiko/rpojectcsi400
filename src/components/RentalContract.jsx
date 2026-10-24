@@ -32,6 +32,7 @@ const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('to
 
 function ContractIcon({ type, size = 16 }) {
   const paths = {
+    home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v12h14V9M9 21v-8h6v8" /></>,
     file: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>,
     image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
@@ -805,6 +806,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
   const [dates, setDates] = useState({ from: '', to: '' })
   const [page, setPage] = useState(1)
   const [detail, setDetail] = useState(null)
+  const [detailSection, setDetailSection] = useState('all')
   const [logOpen, setLogOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -971,7 +973,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       ) : (
         <ul className="csc-grid">
           {pageItems.map((contract) => (
-            <StaffContractCard key={contract.booking_id} contract={contract} onOpen={() => setDetail(contract)} />
+            <StaffContractCard key={contract.booking_id} contract={contract} onOpen={() => { setDetailSection('all'); setDetail(contract) }} />
           ))}
         </ul>
       )}
@@ -999,6 +1001,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
                 <ContractStatusBadge status={detail.status} />
               </span>
             </div>
+            <ContractSectionFilter value={detailSection} onChange={setDetailSection} contract={detail} />
             {detail.is_archived && (
               <div className="contract-refund-note is-archived" role="note">
                 <ContractIcon type="file" size={18} />
@@ -1019,7 +1022,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
                 }}
               />
             )}
-            <CustomerContractBody contract={detail} viewer="staff" />
+            <CustomerContractBody contract={detail} viewer="staff" section={detailSection} />
           </div>
         </Modal>
       )}
@@ -1964,12 +1967,44 @@ function ContractTransferTimeline({ contract, viewer }) {
   )
 }
 
+const CONTRACT_SECTIONS = [
+  { key: 'all', label: 'ทั้งหมด', icon: 'file' },
+  { key: 'overview', label: 'ภาพรวม', icon: 'home' },
+  { key: 'detail', label: 'รายละเอียดสัญญา', icon: 'file' },
+  { key: 'payments', label: 'ยอดชำระ', icon: 'wallet' },
+  { key: 'images', label: 'รูปสัญญา', icon: 'image' },
+  { key: 'history', label: 'ประวัติการย้ายห้อง', icon: 'calendar' },
+]
+
+function ContractSectionFilter({ value, onChange, contract }) {
+  return (
+    <div className="ccc-section-filter" role="group" aria-label="กรองส่วนของสัญญาเช่า">
+      <span className="ccc-section-filter-label">เลือกส่วนที่ต้องการดู</span>
+      <div className="ccc-section-options">
+        {CONTRACT_SECTIONS.map(({ key, label, icon }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={value === key}
+            className={value === key ? 'is-active' : ''}
+            onClick={() => onChange(key)}
+          >
+            <ContractIcon type={icon} size={15} />
+            {label}
+            {key === 'images' && <em>{contract.images?.length || 0}</em>}
+            {key === 'history' && <em>{contractTransfers(contract).length}</em>}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function CustomerContractPanel() {
   const [contract, setContract] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState('detail')
-  const transferCount = contractTransfers(contract).length
+  const [section, setSection] = useState('all')
 
   useEffect(() => {
     let cancelled = false
@@ -1990,7 +2025,7 @@ export function CustomerContractPanel() {
   }, [])
 
   return (
-    <section className="dashboard-card contract-panel contract-customer-card" aria-labelledby="customer-contract-title">
+    <section className={`dashboard-card contract-panel contract-customer-card${section === 'all' ? ' is-all-sections' : ''}`} aria-labelledby="customer-contract-title">
       <div className="ccc-header">
         <div>
           <h2 id="customer-contract-title">สัญญาเช่าของฉัน</h2>
@@ -2014,34 +2049,10 @@ export function CustomerContractPanel() {
         </div>
       ) : (
         <>
-          <nav className="ccc-tabs" role="tablist" aria-label="ส่วนของสัญญาเช่า">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'detail'}
-              className={tab === 'detail' ? 'is-active' : ''}
-              onClick={() => setTab('detail')}
-            >
-              <ContractIcon type="file" size={15} />
-              รายละเอียดสัญญา
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'history'}
-              className={tab === 'history' ? 'is-active' : ''}
-              onClick={() => setTab('history')}
-            >
-              <ContractIcon type="calendar" size={15} />
-              ประวัติการย้ายห้อง
-              <em>{transferCount}</em>
-            </button>
-          </nav>
-          {tab === 'detail' ? (
-            <CustomerContractBody contract={contract} viewer="customer" />
-          ) : (
-            <ContractTransferTimeline contract={contract} viewer="customer" />
-          )}
+          <ContractSectionFilter value={section} onChange={setSection} contract={contract} />
+          <div key={section} className="ccc-customer-content" role="region" aria-label="เนื้อหาสัญญาเช่า" tabIndex={0}>
+            <CustomerContractBody contract={contract} viewer="customer" section={section} />
+          </div>
         </>
       )}
     </section>
@@ -2812,7 +2823,7 @@ const SUMMARY_CARD_ICONS = {
   calendar: <><rect x="4" y="5" width="16" height="15" rx="2.5" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
 }
 
-function ContractSummaryCards({ contract, daysLeft }) {
+function ContractSummaryCards({ contract, daysLeft, payments = false }) {
   const depositPaid = Number(contract.deposit_paid) || 0
   const depositLeft = contract.deposit_remaining != null ? Number(contract.deposit_remaining) : depositPaid
   const deducted = Number(contract.deposit_transfer_deducted) || 0
@@ -2820,7 +2831,7 @@ function ContractSummaryCards({ contract, daysLeft }) {
   const originalPrice = Number(contract.original_monthly_price) || 0
   const priceChanged = originalPrice > 0 && originalPrice !== Number(contract.monthly_price)
   const endDate = contract.effective_end_date || contract.current_end_date || contract.rental_end_date
-  const cards = [
+  const overviewCards = [
     {
       key: 'deposit',
       icon: 'wallet',
@@ -2859,6 +2870,29 @@ function ContractSummaryCards({ contract, daysLeft }) {
       hint: endDate ? `สิ้นสุด ${formatContractDate(endDate)}` : null,
     },
   ]
+  const remainingRent = Math.max(0, Number(contract.contract_remaining ?? (Number(contract.contract_total || 0) - Number(contract.rent_paid || 0))))
+  const cards = payments ? [
+    {
+      key: 'total', icon: 'receipt', tone: 'violet',
+      label: 'ยอดค่าเช่าตลอดสัญญา',
+      value: formatContractMoney(contract.contract_total),
+      hint: `${contract.billing_periods || 0} รอบบิล · ไม่รวมเงินมัดจำ`,
+    },
+    {
+      key: 'paid', icon: 'wallet', tone: 'green',
+      label: 'ค่าเช่าที่ชำระแล้ว',
+      value: formatContractMoney(contract.rent_paid),
+      hint: 'ยอดค่าเช่าที่รับชำระแล้วตามสัญญา',
+    },
+    {
+      key: 'remaining', icon: 'receipt', tone: remainingRent > 0 ? 'amber' : 'teal',
+      label: 'ค่าเช่าคงเหลือตามสัญญา',
+      value: formatContractMoney(remainingRent),
+      hint: remainingRent > 0 ? 'รวมงวดถัดไป ยังไม่ใช่ยอดค้างชำระ' : 'ชำระค่าเช่าครบตามสัญญาแล้ว',
+    },
+    overviewCards[0],
+  ] : overviewCards
+
   return (
     <div className="ccc-summary">
       {cards.map((card) => (
@@ -2882,7 +2916,7 @@ function ContractSummaryCards({ contract, daysLeft }) {
   )
 }
 
-function CustomerContractBody({ contract, viewer = 'customer' }) {
+function CustomerContractBody({ contract, viewer = 'customer', section = 'all' }) {
   const [now] = useState(() => Date.now())
   const { daysLeft, totalDays, usedDays } = contractTimeline(contract, now)
   const extended = contract.current_end_date && new Date(contract.current_end_date).getTime() !== new Date(contract.rental_end_date).getTime()
@@ -2923,9 +2957,16 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
   ]
   const depositStatus = contract.deposit_status
   const depositStatusLabel = DEPOSIT_STATUS_LABEL[depositStatus]
+  const showOverview = section === 'all' || section === 'overview'
+  const showDetails = section === 'all' || section === 'detail'
+  const showPayments = section === 'all' || section === 'payments'
+  const showImages = section === 'all' || section === 'images'
+
+  if (section === 'history') return <ContractTransferTimeline contract={contract} viewer={viewer} />
 
   return (
     <>
+      {showOverview && <>
       <div className="ccc-hero">
         <ContractRoomBadge contract={contract} size="hero" />
         <div className="ccc-period csc-period">
@@ -2938,10 +2979,13 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
         </div>
       </div>
 
-      <ContractSummaryCards contract={contract} daysLeft={daysLeft} />
+      </>}
 
-      <div className="ccc-grid">
-        <div className="ccc-pane">
+      {(showOverview || section === 'payments') && <ContractSummaryCards contract={contract} daysLeft={daysLeft} payments={section === 'payments'} />}
+
+      {(showDetails || showPayments || showImages) && <div className={`ccc-grid${section !== 'all' ? ' ccc-grid-filtered' : ''}`}>
+        {(showDetails || showPayments) && <div className="ccc-pane">
+          {showDetails && <>
           <h3>รายละเอียดสัญญา</h3>
           <ContractFirstPaymentNote contract={contract} viewer={viewer} />
           <DepositRefundNote contract={contract} viewer={viewer} />
@@ -2960,28 +3004,35 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
               </div>
             ))}
           </dl>
-          <ContractTransferHistory contract={contract} viewer={viewer} />
-          <div className="ccc-bill">
+          </>}
+          {section === 'all' && <ContractTransferHistory contract={contract} viewer={viewer} />}
+          {showPayments && <div className={`ccc-bill${section === 'payments' ? ' ccc-bill-focused' : ''}`}>
             <h3>
               ยอดตามสัญญารวมทุกเดือน
               <span>{contract.billing_periods || 0} รอบบิล</span>
             </h3>
-            <p className="ccc-bill-period">
-              ค่าเช่าทุกเดือนตลอดสัญญา {formatShortRange(contract.rental_start_date, contract.effective_end_date)}{' '}
+            <div className="ccc-bill-period">
+              <span className="ccc-bill-period-icon"><ContractIcon type="calendar" size={18} /></span>
+              <span className="ccc-bill-period-text">
+                <small>ช่วงเวลาค่าเช่าตามสัญญา</small>
+                <span>{formatShortRange(contract.rental_start_date, contract.effective_end_date)}</span>
+              </span>
               <em>{contract.billing_periods || 0} เดือน</em>
-            </p>
+            </div>
             {transferred && contract.rent_breakdown?.length ? (
               <>
                 {contract.rent_breakdown.map((line, index) => (
-                  <div key={index}>
+                  <div key={index} className="ccc-bill-rent-row">
                     <span className="ccc-bill-line">
                       {line.kind === 'difference' ? (
                         `ส่วนต่างย้ายห้อง ${line.from_room_number} → ${line.room_number}`
                       ) : (
                         <>
-                          {formatShortRange(line.from_date, line.to_date)}
-                          <i>ห้อง {line.room_number}</i>
-                          {line.periods > 1 && <small>{formatContractMoney(line.price)} × {line.periods} เดือน</small>}
+                          <span className="ccc-bill-rent-dates">{formatShortRange(line.from_date, line.to_date)}</span>
+                          <span className="ccc-bill-rent-meta">
+                            <i>ห้อง {line.room_number}</i>
+                            <small>{formatContractMoney(line.price)} × {line.periods || 1} เดือน</small>
+                          </span>
                         </>
                       )}
                     </span>
@@ -2994,8 +3045,14 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
                 </div>
               </>
             ) : (
-              <div>
-                <span>ค่าเช่า {formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0} เดือน</span>
+              <div className="ccc-bill-rent-row">
+                <span className="ccc-bill-line">
+                  <span className="ccc-bill-rent-dates">ค่าเช่าตามสัญญา</span>
+                  <span className="ccc-bill-rent-meta">
+                    <i>ห้อง {contract.room_number || '-'}</i>
+                    <small>{formatContractMoney(contract.monthly_price)} × {contract.billing_periods || 0} เดือน</small>
+                  </span>
+                </span>
                 <strong>{formatContractMoney(contract.contract_total)}</strong>
               </div>
             )}
@@ -3021,9 +3078,9 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
             )}
             <ThisMonthRent thisMonth={contract.this_month ?? null} contract={contract} viewer={viewer} />
             <p>เงินมัดจำ {formatDepositMonths(contract)} {formatContractMoney(contract.deposit_amount || 0)} ชำระพร้อมค่าห้องเดือนแรก · เดือนแรก {formatContractMoney(contract.first_month_total)}</p>
-          </div>
-        </div>
-        <div className="ccc-pane ccc-gallery-pane">
+          </div>}
+        </div>}
+        {showImages && <div className="ccc-pane ccc-gallery-pane">
           <h3>
             รูปสัญญา
             <span>{images.length} รูป</span>
@@ -3031,8 +3088,8 @@ function CustomerContractBody({ contract, viewer = 'customer' }) {
           <div className="ccc-gallery-scroll">
             <ContractGallery images={images} subtitle={`ห้อง ${contract.room_number || '-'}`} />
           </div>
-        </div>
-      </div>
+        </div>}
+      </div>}
     </>
   )
 }

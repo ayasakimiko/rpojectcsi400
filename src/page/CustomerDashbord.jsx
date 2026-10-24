@@ -20,6 +20,18 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
 import { formatPromptPayId, isValidPromptPayId } from '../utils/promptpay.js'
 import readSlipQrPayload from '../utils/slipQr.js'
+import {
+  ParkingChoiceGroup,
+  ParkingFinePayment,
+  ParkingRulesNote,
+  ParkingSessionPanel,
+  ParkingSpacePicker,
+  ParkingQuotaSummary,
+  ParkingStatusPill,
+  ResidentContractWindow,
+} from '../components/ParkingFields.jsx'
+import { PARKING_FORM_TOPICS, VEHICLE_TYPE_LABEL, formatBaht, getVisitorSession, useParkingOptions } from '../utils/parking.js'
+import InspectionTopicFilter from '../components/InspectionTopicFilter.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
@@ -604,7 +616,7 @@ function Modal({ title, onClose, children, variant, onBack, headerAction }) {
       }}
     >
       <div
-        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${variant === 'payment' ? ' dashboard-modal-payment' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${variant === 'payment' ? ' dashboard-modal-payment' : ''}${variant === 'parking' ? ' dashboard-modal-parking' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dashboard-modal-header">
@@ -1521,7 +1533,7 @@ function MoveRoomContractImpact({ request, section = 'all' }) {
             {!impact.final && charge > 0 && (
               <li className="is-danger">
                 {impact.transfer_charge?.due_at
-                  ? `ชำระ ฿${formatCurrency(charge)} ภายใน ${formatDateTime(impact.transfer_charge.due_at)} ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`
+                  ? `ชำระ ฿${formatCurrency(charge)} ภายใน ${formatDateTime(impact.transfer_charge.due_at)} เมื่อสลิปผ่านระบบจะย้ายห้องให้ทันที ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`
                   : `เมื่อเจ้าหน้าที่ตรวจห้องและส่งยอดมา ต้องชำระภายใน 3 วัน ถ้าไม่ชำระ คำขอย้ายห้องและการทำสัญญาจะถูกยกเลิกอัตโนมัติ`}
               </li>
             )}
@@ -1603,6 +1615,9 @@ function TenantRequestDetailCard({ request, roomNumber, section = 'all' }) {
                 </div>
               )}
             </>
+          )}
+          {showDetail && request.transfer_charge_status === 'paid' && ['pending', 'in_progress'].includes(request.status) && (
+            <p>ชำระส่วนต่างย้ายห้องแล้ว ไม่สามารถยกเลิกคำขอได้ เมื่อตรวจสลิปผ่านระบบจะย้ายห้องให้อัตโนมัติ</p>
           )}
           <MoveRoomContractImpact request={request} section={section} />
         </>
@@ -1856,7 +1871,7 @@ function getRequestSubject(kind, request) {
   if (kind === 'resident_visit') {
     return {
       title: `ลงทะเบียนรถ ${getVisitTitle(request)}`,
-      meta: `${request.guest_name ? RESIDENT_VEHICLE_OWNER_LABEL.family : RESIDENT_VEHICLE_OWNER_LABEL.self} · ${meta}`,
+      meta: `${RESIDENT_VEHICLE_OWNER_LABEL[getVisitKind(request)] || RESIDENT_VEHICLE_OWNER_LABEL.self} · ${meta}`,
     }
   }
   if (kind === 'safety') {
@@ -2560,33 +2575,14 @@ function formatRemaining(ms) {
 
 const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แขกค้างคืน' }
 const RESIDENT_VISIT_STATUS_LABEL = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', cancelled: 'ยกเลิกแล้ว' }
-const RESIDENT_VEHICLE_OWNER_LABEL = { self: 'รถของฉัน', family: 'รถครอบครัวที่มาเยี่ยม' }
+const RESIDENT_VEHICLE_OWNER_LABEL = { self: 'ผู้พักอาศัย', family: 'ผู้มาติดต่อ' }
 const EMPTY_RESIDENT_VISIT_FORM = {
-  owner: 'self',
+  vehicleType: 'car',
+  parkingSpaceId: null,
   vehiclePlate: '',
   vehicleModel: '',
-  guestName: '',
-  guestPhone: '',
-  startAt: null,
-  endAt: null,
-  limitTime: true,
   note: '',
   photos: [],
-}
-
-function defaultVisitWindow() {
-  const start = new Date()
-  start.setSeconds(0, 0)
-  start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 1)
-  return { startAt: start, endAt: end }
-}
-
-function startOfToday() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return today
 }
 
 function CarIcon() {
@@ -2670,11 +2666,6 @@ function VisitRange({ start, end }) {
   )
 }
 
-function toLocalDateTime(date) {
-  const pad = (number) => String(number).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`
-}
-
 const RESIDENT_VISIT_FILTERS = [
   { key: 'all', label: 'ทั้งหมด' },
   { key: 'pending', label: 'รออนุมัติ', tone: 'warning' },
@@ -2685,7 +2676,7 @@ const RESIDENT_VISIT_FILTERS = [
 
 function getVisitKind(item) {
   if (item.request_type !== 'vehicle') return item.request_type
-  return item.guest_name ? 'family' : 'self'
+  return item.user_category === 'visitor' || (!item.user_category && item.guest_name) ? 'family' : 'self'
 }
 
 function getVisitKindLabel(item) {
@@ -2720,17 +2711,33 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
   const [detailId, setDetailId] = useState(null)
   const [lightbox, setLightbox] = useState(null)
   const [form, setForm] = useState(EMPTY_RESIDENT_VISIT_FORM)
+  const [parkingSettings, setParkingSettings] = useState(null)
+  const [formSection, setFormSection] = useState('all')
   const token = sessionStorage.getItem('token')
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
+  const parkingOptions = useParkingOptions('/api/customer/parking/options', {
+    enabled: view === 'form',
+    userCategory: 'resident',
+  })
+  const residentUsage = parkingOptions.usage?.resident || { car: 0, motorcycle: 0 }
+  const finePerHour = parkingOptions.settings?.finePerHour ?? parkingSettings?.finePerHour ?? 0
 
   const load = useCallback(
     () =>
       axios
         .get('/api/customer/resident-visit-requests', { headers })
-        .then(({ data }) => setItems(data.requests || []))
+        .then(({ data }) => {
+          setItems(data.requests || [])
+          setParkingSettings(data.settings || null)
+        })
         .catch((requestError) => setError(requestError.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
     [headers],
   )
+
+  const setParkingChoice = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value, parkingSpaceId: null }))
+    if (error) setError('')
+  }
 
   useEffect(() => {
     load()
@@ -2741,28 +2748,10 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
     if (error) setError('')
   }
 
-  const updateDate = (field, date) => {
-    const next = { ...form, [field]: date }
-    if (field === 'startAt' && date && next.endAt && next.endAt <= date) next.endAt = null
-    setForm(next)
-    if (error) setError('')
-  }
-
-  const toggleLimitTime = (enabled) => {
-    const next = { ...form, limitTime: enabled }
-    if (enabled && !next.endAt && next.startAt) {
-      const end = new Date(next.startAt)
-      end.setDate(end.getDate() + 1)
-      next.endAt = end
-    }
-    setForm(next)
-    if (error) setError('')
-  }
-
   const openModal = () => {
     setView('form')
+    setFormSection('all')
     setError('')
-    setForm((current) => (current.startAt ? current : { ...current, ...defaultVisitWindow() }))
     load()
   }
 
@@ -2773,16 +2762,21 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
 
   const submit = async (event) => {
     event.preventDefault()
-    if (!form.startAt) {
-      setError('กรุณาเลือกวันเวลาเริ่ม')
+    if (!form.vehiclePlate.trim()) {
+      setError('กรุณาระบุทะเบียนรถ')
       return
     }
-    if (form.limitTime && !form.endAt) {
-      setError('กรุณาเลือกวันเวลาสิ้นสุด หรือปิด "กำหนดระยะเวลาจอด"')
+    if (residentUsage[form.vehicleType] >= 1) {
+      setError(`ผู้พักอาศัยลงทะเบียน${VEHICLE_TYPE_LABEL[form.vehicleType]}ได้สูงสุด 1 คัน และคุณมีรายการที่ใช้งานอยู่แล้ว`)
       return
     }
-    if (form.limitTime && form.endAt <= form.startAt) {
-      setError('วันสิ้นสุดต้องอยู่หลังวันเริ่ม')
+    const selectedSpace = parkingOptions.spaces.find((space) => space.id === form.parkingSpaceId)
+    if (!selectedSpace) {
+      setError('กรุณาเลือกช่องจอดที่ว่าง')
+      return
+    }
+    if (!selectedSpace.available) {
+      setError(`ช่อง ${selectedSpace.code} ไม่ว่างในช่วงเวลาที่เลือก กรุณาเลือกช่องอื่น`)
       return
     }
     setBusy(true)
@@ -2793,24 +2787,23 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
         '/api/customer/resident-visit-requests',
         {
           requestType: 'vehicle',
+          userCategory: 'resident',
+          vehicleType: form.vehicleType,
+          parkingSpaceId: form.parkingSpaceId,
           vehiclePlate: form.vehiclePlate,
           vehicleModel: form.vehicleModel,
-          guestName: form.owner === 'family' ? form.guestName : '',
-          guestPhone: form.owner === 'family' ? form.guestPhone : '',
           note: form.note,
           photos,
-          startAt: toLocalDateTime(form.startAt),
-          endAt: form.limitTime ? toLocalDateTime(form.endAt) : null,
         },
         { headers },
       )
       setSubmitted({
         type: 'vehicle',
-        owner: form.owner,
-        ownerLabel: RESIDENT_VEHICLE_OWNER_LABEL[form.owner],
+        owner: 'self',
+        ownerLabel: `${RESIDENT_VEHICLE_OWNER_LABEL.self} · ${VEHICLE_TYPE_LABEL[form.vehicleType]} · ช่อง ${selectedSpace.code}`,
         title: form.vehiclePlate.trim(),
-        startAt: form.startAt,
-        endAt: form.limitTime ? form.endAt : null,
+        startAt: new Date(),
+        endAt: parkingOptions.residentWindow?.endAt ? new Date(parkingOptions.residentWindow.endAt.replace(' ', 'T')) : null,
       })
       setForm(EMPTY_RESIDENT_VISIT_FORM)
       setView('success')
@@ -2823,6 +2816,8 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
   }
 
   const pendingCount = items.filter((item) => item.status === 'pending').length
+  const unpaidFineItem = items.find((item) => item.fine_status === 'unpaid')
+  const unpaidFineTotal = items.filter((item) => item.fine_status === 'unpaid').reduce((sum, item) => sum + (Number(item.fine_amount) || 0), 0)
   const historyKeyword = historySearch.trim().toLowerCase()
   const searchedItems = historyKeyword
     ? items.filter((item) =>
@@ -2853,6 +2848,10 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
         <p className="dashboard-request-desc">
           {outstanding > 0 ? (
             <OutstandingNotice amount={outstanding} action="ลงทะเบียนรถและผู้มาติดต่อ" />
+          ) : unpaidFineItem ? (
+            <span className="dashboard-request-desc-status">
+              ค่าปรับจอดเกินเวลาค้างชำระ <strong>{formatBaht(unpaidFineTotal)}</strong>
+            </span>
           ) : pendingCount > 0 ? (
             <>
               <span className="dashboard-request-desc-status">
@@ -2863,7 +2862,7 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
                 <small className="dashboard-request-desc-hint">รอเจ้าหน้าที่พิจารณาก่อนส่งคำขอเพิ่ม</small>
               )}
             </>
-          ) : 'ลงทะเบียนรถของคุณหรือรถครอบครัวที่มาเยี่ยม'}
+          ) : 'ลงทะเบียนรถของผู้เช่าห้องนี้ พร้อมเลือกช่องจอด'}
         </p>
       </div>
       {outstanding > 0 && onPayOutstanding ? (
@@ -2893,7 +2892,7 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
           type="button"
           className="dashboard-maintenance-more"
           onClick={() => {
-            const activeItem = items.find((item) => item.status === 'pending')
+            const activeItem = unpaidFineItem || items.find((item) => item.status === 'pending')
             if (!activeItem) {
               openHistory()
               return
@@ -2902,11 +2901,11 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
             setView('detail')
           }}
         >
-          {items.some((item) => item.status === 'pending') ? 'ดูรายละเอียด' : 'ดูประวัติ'}
+          {unpaidFineItem ? 'ชำระค่าปรับ' : items.some((item) => item.status === 'pending') ? 'ดูรายละเอียด' : 'ดูประวัติ'}
         </button>
       )}
       {view === 'form' && (
-        <Modal title="ลงทะเบียนรถและผู้มาติดต่อ" onClose={() => setView(null)}>
+        <Modal title="ลงทะเบียนรถและผู้มาติดต่อ" onClose={() => setView(null)} variant="parking">
           {(requestClose) => (
             <div className="dashboard-rv">
               <div className="dashboard-rv-top">
@@ -2919,26 +2918,32 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
                 </button>
               </div>
               <form className="dashboard-inline-form dashboard-rv-form" onSubmit={submit}>
-                <p className="dashboard-rv-own-note">
-                  <CarIcon />
-                  ลงทะเบียนได้เฉพาะรถของคุณ และรถของครอบครัวที่มาเยี่ยมเท่านั้น
-                </p>
-
-                <label htmlFor="rv-owner">รถของ</label>
-                <select
-                  id="rv-owner"
-                  value={form.owner}
-                  onChange={(event) => {
-                    setForm({ ...form, owner: event.target.value, guestName: '', guestPhone: '' })
-                    if (error) setError('')
-                  }}
-                >
-                  {Object.entries(RESIDENT_VEHICLE_OWNER_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                {parkingOptions.hasUnpaidFine && (
+                  <p className="dashboard-form-error">มีค่าปรับจอดเกินเวลาที่ยังไม่ได้ชำระ กรุณาชำระจาก "คำขอของฉัน" ก่อนลงทะเบียนรถคันใหม่</p>
+                )}
+                <InspectionTopicFilter topics={PARKING_FORM_TOPICS} value={formSection} onChange={setFormSection} />
+                <section className="parking-form-section" data-topic="owner" hidden={!["all", "owner"].includes(formSection)}>
+                  <h4 className="parking-form-section-title">ผู้ใช้และข้อมูลรถ</h4>
+                <ParkingChoiceGroup
+                  label="ประเภทผู้ใช้"
+                  name="rv-category"
+                  value="resident"
+                  onChange={() => {}}
+                  options={[{ value: 'resident', label: 'ผู้พักอาศัย (ผู้เช่าห้องนี้)', hint: 'ลงทะเบียนได้เฉพาะรถของผู้เช่าห้องนี้ · รถยนต์ 1 คัน และจักรยานยนต์ 1 คัน' }]}
+                />
+                <ParkingChoiceGroup
+                  label="ประเภทรถ"
+                  name="rv-vehicle-type"
+                  value={form.vehicleType}
+                  onChange={(value) => setParkingChoice('vehicleType', value)}
+                  options={['car', 'motorcycle'].map((type) => ({
+                    value: type,
+                    label: VEHICLE_TYPE_LABEL[type],
+                    hint: residentUsage[type] >= 1 ? 'ลงทะเบียนครบแล้ว (1/1)' : `ใช้แล้ว ${residentUsage[type]}/1`,
+                    disabled: residentUsage[type] >= 1,
+                  }))}
+                />
+                <ParkingRulesNote userCategory="resident" finePerHour={finePerHour} />
 
                 <div className="dashboard-rv-grid">
                   <div className="dashboard-rv-field">
@@ -2953,82 +2958,33 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
                   </div>
                 </div>
 
-                {form.owner === 'family' && (
-                  <div className="dashboard-rv-grid">
-                    <div className="dashboard-rv-field">
-                      <label htmlFor="rv-guest">
-                        ชื่อผู้มาเยี่ยม <span className="dashboard-required">*</span>
-                      </label>
-                      <input id="rv-guest" type="text" required value={form.guestName} onChange={updateForm('guestName')} placeholder="ชื่อ - นามสกุล" />
-                    </div>
-                    <div className="dashboard-rv-field">
-                      <label htmlFor="rv-guest-phone">เบอร์ติดต่อ</label>
-                      <input id="rv-guest-phone" type="tel" value={form.guestPhone} onChange={updateForm('guestPhone')} placeholder="08x-xxx-xxxx" />
-                    </div>
-                  </div>
-                )}
+                </section>
+                <section className="parking-form-section" data-topic="time" hidden={!["all", "time"].includes(formSection)}>
+                  <h4 className="parking-form-section-title">วันเวลาจอด</h4>
+                <ResidentContractWindow
+                  startLabel="ทันทีหลังเจ้าหน้าที่อนุมัติ"
+                  endAt={parkingOptions.residentWindow?.endAt}
+                  note="ไม่ต้องกำหนดวันเวลาเอง ระบบใช้ช่วงสัญญาเช่าของห้องนี้ และยกเลิกสิทธิ์อัตโนมัติเมื่อสัญญาสิ้นสุดหรือย้ายออก"
+                />
 
-                <div className="dashboard-rv-time-box">
-                  <label className={`dashboard-rv-switch${form.limitTime ? ' is-on' : ''}`}>
-                    <input type="checkbox" checked={form.limitTime} onChange={(event) => toggleLimitTime(event.target.checked)} />
-                    <span className="dashboard-rv-switch-track" aria-hidden="true" />
-                    <span className="dashboard-rv-switch-text">
-                      <strong>กำหนดระยะเวลาจอด</strong>
-                      <small>{form.limitTime ? 'ระบุวันเวลาเริ่มและสิ้นสุด' : 'จอดได้ไม่จำกัดเวลา หลังเจ้าหน้าที่อนุมัติ'}</small>
-                    </span>
-                  </label>
-                  <div className="dashboard-rv-grid">
-                    <div className="dashboard-rv-field">
-                      <label htmlFor="rv-start">
-                        เริ่ม <span className="dashboard-required">*</span>
-                      </label>
-                      <ThaiDatePicker
-                        id="rv-start"
-                        valueType="date"
-                        className="dashboard-rv-date-input"
-                        placeholder="เลือกวันเวลา"
-                        value={form.startAt}
-                        onChange={(date) => updateDate('startAt', date)}
-                        minDate={startOfToday()}
-                        showTimeSelect
-                        timeIntervals={15}
-                        portalId="dashboard-date-portal"
-                      />
-                    </div>
-                    {form.limitTime ? (
-                      <div className="dashboard-rv-field">
-                        <label htmlFor="rv-end">
-                          สิ้นสุด <span className="dashboard-required">*</span>
-                        </label>
-                        <ThaiDatePicker
-                          id="rv-end"
-                          valueType="date"
-                          className="dashboard-rv-date-input"
-                          placeholder="เลือกวันเวลา"
-                          value={form.endAt}
-                          onChange={(date) => updateDate('endAt', date)}
-                          minDate={form.startAt || startOfToday()}
-                          openToDate={form.endAt || form.startAt || undefined}
-                          filterTime={(time) => !form.startAt || time > form.startAt}
-                          showTimeSelect
-                          timeIntervals={15}
-                          portalId="dashboard-date-portal"
-                        />
-                      </div>
-                    ) : (
-                      <div className="dashboard-rv-field">
-                        <label>สิ้นสุด</label>
-                        <span className="dashboard-rv-open-end">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
-                          </svg>
-                          ไม่จำกัดเวลา
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                </section>
+                <section className="parking-form-section" data-topic="space" hidden={!["all", "space"].includes(formSection)}>
+                  <h4 className="parking-form-section-title">เลือกช่องจอด</h4>
+                <ParkingSpacePicker
+                  spaces={parkingOptions.spaces}
+                  vehicleType={form.vehicleType}
+                  value={form.parkingSpaceId}
+                  loading={parkingOptions.loading}
+                  error={parkingOptions.error}
+                  onChange={(spaceId) => {
+                    setForm((current) => ({ ...current, parkingSpaceId: spaceId }))
+                    if (error) setError('')
+                  }}
+                />
 
+                </section>
+                <section className="parking-form-section" data-topic="extra" hidden={!["all", "extra"].includes(formSection)}>
+                  <h4 className="parking-form-section-title">รูปรถและหมายเหตุ</h4>
                 <div className="dashboard-rv-photo-head">
                   <label htmlFor="rv-photos">รูปรถ / ป้ายทะเบียน</label>
                   <span className="dashboard-rv-photo-tag">ไม่บังคับ</span>
@@ -3049,12 +3005,13 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
                 <label htmlFor="rv-note">หมายเหตุ (ถ้ามี)</label>
                 <textarea id="rv-note" rows={2} maxLength={500} value={form.note} onChange={updateForm('note')} placeholder="ข้อมูลเพิ่มเติมสำหรับเจ้าหน้าที่" />
 
+                </section>
                 {error && <p className="dashboard-form-error">{error}</p>}
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                     ยกเลิก
                   </button>
-                  <button type="submit" className="dashboard-action-btn is-primary" disabled={busy}>
+                  <button type="submit" className="dashboard-action-btn is-primary" disabled={busy || parkingOptions.hasUnpaidFine}>
                     {busy ? 'กำลังส่ง...' : 'ส่งคำขอ'}
                   </button>
                 </div>
@@ -3160,6 +3117,8 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
                                 {getVisitKindLabel(item)}
                               </span>
                               <VisitRange start={item.start_at} end={item.end_at} />
+                              {item.parking_space_code && <span className="dashboard-rv-type-chip">ช่อง {item.parking_space_code}</span>}
+                              <ParkingStatusPill status={item.fine_status} />
                             </span>
                           </span>
                           <span className={`dashboard-badge status-${tenantRequestBadgeClass(item.status)}`}>
@@ -3192,12 +3151,12 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
             const fields =
               detailItem.request_type === 'vehicle'
                 ? [
-                    ['รถของ', getVisitKindLabel(detailItem)],
+                    ['ประเภทผู้ใช้', getVisitKindLabel(detailItem)],
                     ['ทะเบียนรถ', detailItem.vehicle_plate],
                     ['ยี่ห้อ / รุ่น', detailItem.vehicle_model],
                     ...(detailItem.guest_name
                       ? [
-                          ['ผู้มาเยี่ยม', detailItem.guest_name],
+                          ['ผู้มาติดต่อ', detailItem.guest_name],
                           ['เบอร์ติดต่อ', detailItem.guest_phone],
                         ]
                       : []),
@@ -3247,6 +3206,18 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
                     <dd>{detailItem.note || '-'}</dd>
                   </div>
                 </dl>
+
+                {detailItem.request_type === 'vehicle' && (
+                  <ParkingSessionPanel item={detailItem} finePerHour={parkingSettings?.finePerHour} />
+                )}
+                {['unpaid', 'pending_review', 'paid'].includes(detailItem.fine_status) && (
+                  <ParkingFinePayment
+                    item={detailItem}
+                    channels={parkingSettings?.paymentChannels}
+                    endpoint={`/api/customer/resident-visit-requests/${detailItem.id}/fine-payment`}
+                    onDone={load}
+                  />
+                )}
 
                 {detailItem.vehicle_photos?.length > 0 && (
                   <section className="dashboard-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
@@ -3952,7 +3923,11 @@ function SafetyIncidentReportRow() {
 
 const PARKING_PAGE_SIZE = 6
 
-function getParkingPhase(vehicle, now) {
+function getParkingPhase(vehicle, now, finePerHour = 0) {
+  const session = getVisitorSession(vehicle, finePerHour, now)
+  if (session?.state === 'waiting') return { key: 'upcoming', label: 'รอเช็คอิน' }
+  if (session?.state === 'overtime') return { key: 'parked', label: `เกินเวลา ${session.overtimeHours} ชม.` }
+  if (session?.state === 'parked') return { key: 'parked', label: 'กำลังจอด' }
   const start = new Date(vehicle.start_at).getTime()
   if (now < start) return { key: 'upcoming', label: 'รอเข้าจอด' }
   return { key: 'parked', label: 'กำลังจอด' }
@@ -3960,6 +3935,7 @@ function getParkingPhase(vehicle, now) {
 
 function CustomerParkingTab({ onCountChange }) {
   const [rawVehicles, setVehicles] = useState([])
+  const [finePerHour, setFinePerHour] = useState(0)
   const [roomNumber, setRoomNumber] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -3977,6 +3953,7 @@ function CustomerParkingTab({ onCountChange }) {
       .then(({ data }) => {
         if (cancelled) return
         setVehicles(data.vehicles || [])
+        setFinePerHour(data.settings?.finePerHour || 0)
         setRoomNumber(data.roomNumber)
         onCountChange?.((data.vehicles || []).length)
       })
@@ -3993,8 +3970,8 @@ function CustomerParkingTab({ onCountChange }) {
     }
   }, [onCountChange])
 
-  const vehicles = rawVehicles.filter((vehicle) => !vehicle.end_at || new Date(vehicle.end_at).getTime() > now)
-  const parkedVehicles = vehicles.filter((vehicle) => getParkingPhase(vehicle, now).key === 'parked')
+  const vehicles = rawVehicles.filter((vehicle) => !vehicle.end_at || vehicle.parked_at || new Date(vehicle.end_at).getTime() > now)
+  const parkedVehicles = vehicles.filter((vehicle) => getParkingPhase(vehicle, now, finePerHour).key === 'parked')
   const parkedCount = parkedVehicles.length
   const keyword = search.trim().toLowerCase()
   const searched = keyword
@@ -4015,7 +3992,7 @@ function CustomerParkingTab({ onCountChange }) {
           .includes(keyword),
       )
     : vehicles
-  const filtered = filter === 'all' ? searched : searched.filter((vehicle) => getParkingPhase(vehicle, now).key === filter)
+  const filtered = filter === 'all' ? searched : searched.filter((vehicle) => getParkingPhase(vehicle, now, finePerHour).key === filter)
   const totalPages = Math.max(1, Math.ceil(filtered.length / PARKING_PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
   const pageVehicles = filtered.slice((currentPage - 1) * PARKING_PAGE_SIZE, currentPage * PARKING_PAGE_SIZE)
@@ -4053,8 +4030,8 @@ function CustomerParkingTab({ onCountChange }) {
           <DashboardFilterPanel
             segments={[
               { key: 'all', label: 'ทั้งหมด', count: searched.length },
-              { key: 'parked', label: 'กำลังจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now).key === 'parked').length, tone: 'success' },
-              { key: 'upcoming', label: 'รอเข้าจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now).key === 'upcoming').length, tone: 'warning' },
+              { key: 'parked', label: 'กำลังจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now, finePerHour).key === 'parked').length, tone: 'success' },
+              { key: 'upcoming', label: 'รอเข้าจอด', count: searched.filter((vehicle) => getParkingPhase(vehicle, now, finePerHour).key === 'upcoming').length, tone: 'warning' },
             ]}
             active={filter}
             onSegment={(key) => {
@@ -4086,7 +4063,7 @@ function CustomerParkingTab({ onCountChange }) {
           ) : (
         <ul className="dashboard-park-list">
           {pageVehicles.map((vehicle) => {
-            const phase = getParkingPhase(vehicle, now)
+            const phase = getParkingPhase(vehicle, now, finePerHour)
             const approver = vehicle.admin_reviewed_by_name || vehicle.reviewed_by_name
             return (
               <li key={vehicle.id} className={`dashboard-park-item is-${phase.key}`}>
@@ -4112,14 +4089,18 @@ function CustomerParkingTab({ onCountChange }) {
                   <span className="dashboard-park-grid">
                     <span className="dashboard-park-cell">
                       <span className="dashboard-park-label">ประเภท</span>
-                      <span className="dashboard-park-value">{vehicle.guest_name ? 'รถครอบครัว' : 'รถของฉัน'}</span>
+                      <span className="dashboard-park-value">
+                        {VEHICLE_TYPE_LABEL[vehicle.vehicle_type] || 'รถยนต์'} · {getVisitKind(vehicle) === 'family' ? 'ผู้มาติดต่อ' : 'ผู้พักอาศัย'}
+                      </span>
                     </span>
                     <span className="dashboard-park-cell">
-                      <span className="dashboard-park-label">ห้อง</span>
-                      <span className="dashboard-park-value">{vehicle.room_number || roomNumber ? `ห้อง ${vehicle.room_number || roomNumber}` : 'ไม่ระบุ'}</span>
+                      <span className="dashboard-park-label">ช่องจอด</span>
+                      <span className="dashboard-park-value">
+                        {vehicle.parking_space_code || (vehicle.room_number || roomNumber ? `ห้อง ${vehicle.room_number || roomNumber}` : 'ไม่ระบุ')}
+                      </span>
                     </span>
                     <span className="dashboard-park-cell">
-                      <span className="dashboard-park-label">{vehicle.guest_name ? 'ผู้มาเยี่ยม' : 'เจ้าของรถ'}</span>
+                      <span className="dashboard-park-label">{vehicle.guest_name ? 'ผู้มาติดต่อ' : 'เจ้าของรถ'}</span>
                       <span className="dashboard-park-value" title={vehicle.guest_name ? `${vehicle.guest_name}${vehicle.guest_phone ? ` · ${vehicle.guest_phone}` : ''}` : ''}>
                         {vehicle.guest_name || 'ฉัน'}
                       </span>
@@ -4217,7 +4198,7 @@ function CustomerParkingTab({ onCountChange }) {
       {detail && (
         <Modal title="รายละเอียดรถ" onClose={() => setDetail(null)}>
           {(requestClose) => {
-            const phase = getParkingPhase(detail, now)
+            const phase = getParkingPhase(detail, now, finePerHour)
             const approver = detail.admin_reviewed_by_name || detail.reviewed_by_name
             const approvedAt = detail.admin_reviewed_at || detail.reviewed_at
             const fields = [
@@ -4225,8 +4206,8 @@ function CustomerParkingTab({ onCountChange }) {
               ['ยี่ห้อ / รุ่น', detail.vehicle_model],
               ...(detail.guest_name
                 ? [
-                    ['ผู้มาเยี่ยม', detail.guest_name],
-                    ['เบอร์ผู้มาเยี่ยม', detail.guest_phone],
+                    ['ผู้มาติดต่อ', detail.guest_name],
+                    ['เบอร์ผู้มาติดต่อ', detail.guest_phone],
                   ]
                 : []),
               ['เริ่มจอด', formatVisitDateTime(detail.start_at)],
@@ -4243,7 +4224,7 @@ function CustomerParkingTab({ onCountChange }) {
                     <span className="dashboard-rv-meta dashboard-safety-hero-meta">
                       <span className={`dashboard-rv-kind-chip is-${detail.guest_name ? 'family' : 'self'}`}>
                         <CarIcon />
-                        {detail.guest_name ? 'รถครอบครัวที่มาเยี่ยม' : 'รถของฉัน'}
+                        {getVisitKind(detail) === 'family' ? 'รถผู้มาติดต่อ' : 'รถของฉัน'} · {VEHICLE_TYPE_LABEL[detail.vehicle_type] || 'รถยนต์'}
                       </span>
                       {detail.room_number && <RoomChip room={detail.room_number} />}
                     </span>
@@ -4266,6 +4247,8 @@ function CustomerParkingTab({ onCountChange }) {
                     <dd>{detail.note || '-'}</dd>
                   </div>
                 </dl>
+
+                <ParkingSessionPanel item={detail} finePerHour={finePerHour} />
 
                 {detail.vehicle_photos?.length > 0 && (
                   <section className="dashboard-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
@@ -4619,6 +4602,7 @@ function CustomerDashbord() {
   const [paymentChannels, setPaymentChannels] = useState(null)
   const [paymentCopied, setPaymentCopied] = useState(false)
   const [showDueBreakdown, setShowDueBreakdown] = useState(true)
+  const parkingQuota = useParkingOptions('/api/customer/parking/options', { enabled: customerTab === 'home' })
 
   const [activeRequestType, setActiveRequestType] = useState(null)
   const [requestNote, setRequestNote] = useState('')
@@ -7733,6 +7717,9 @@ function CustomerDashbord() {
                           <strong>{formatCurrency(room.water_price)}/เดือน</strong>
                         </div>
                       </div>
+
+                      <h3 className="dashboard-section-title">สิทธิ์ที่จอดรถ</h3>
+                      <ParkingQuotaSummary usage={parkingQuota.usage} />
 
                       {currentDue && currentDue.status !== 'paid' && (
                         <>

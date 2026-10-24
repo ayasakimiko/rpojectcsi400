@@ -6,7 +6,7 @@ x-service-env: &service-env
   DB_NAME: ${DB_NAME:-projectcsi400}
   DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
   PARKING_CAPACITY: ${PARKING_CAPACITY:-}
-  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
   CLIENT_URL: ${CLIENT_URL:-}
   RDCW_CLIENT_ID: ${RDCW_CLIENT_ID:-}
   RDCW_CLIENT_SECRET: ${RDCW_CLIENT_SECRET:-}
@@ -51,7 +51,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
       TZ: Asia/Bangkok
     ports:
-      - "127.0.0.1:${DB_PORT:-3308}:3306"
+      - "${DB_PORT:-3308}:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -101,7 +101,7 @@ services:
     command: ["node", "server.js"]
     restart: unless-stopped
     environment:
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       PORT: 4000
       CLIENT_URL: ${CLIENT_URL:-}
       AUTH_SERVICE_URL: http://auth-service:4001

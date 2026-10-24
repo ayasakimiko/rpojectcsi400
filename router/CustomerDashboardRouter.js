@@ -38,8 +38,24 @@ import {
 import { attachParcelPhotos } from "./ParcelRouter.js";
 import { PARKING_EXPIRED_BY, expireParkedVehicles } from "./residentVisitReview.js";
 import {
+  ParkingError,
+  PARKING_JOIN_SQL,
+  PARKING_SELECT_SQL,
+  assertParkingAllowed,
+  createFinePaymentHandler,
+  createParkingOptionsHandler,
+  loadParkingSettings,
+  loadResidentParkingWindow,
+  parseFineSlip,
+  parseParkingInput,
+  withParkingLock,
+  withParkingState,
+} from "./parking.js";
+import {
   expireRoomTransferCharges,
   loadCustomerContracts,
+  autoApplyPaidTransfers,
+  claimRoomsForPaidTransfers,
   loadHeldTransferRooms,
   loadRoomTransferPreview,
   roomHeldForTransfer,
@@ -56,7 +72,6 @@ const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
 const SAFETY_INCIDENT_MAX_PHOTOS = 4;
 const CUSTOMER_OPEN_REPORT_LIMIT = 10;
 const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
-const AFTER_HISTORY_RESET = "> COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')";
 const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
 const URGENT_INCIDENT_KEYWORDS = [
   "ด่วน", "ช่วยด้วย", "ฉุกเฉิน", "ไฟไหม้", "ควัน", "ระเบิด", "แก๊สรั่ว", "ก๊าซรั่ว", "ไฟช็อต", "ไฟดูด",
@@ -72,7 +87,8 @@ export function withVehiclePhotos(requests) {
 export async function isPlateRegisteredByOther(pool, customerId, plate) {
   const [owners] = await pool.query(
     `SELECT 1 FROM ResidentVisitRequest
-     WHERE request_type = 'vehicle' AND NOT (customer_id <=> ?) AND status IN ('pending', 'approved') AND (end_at IS NULL OR end_at > NOW())
+     WHERE request_type = 'vehicle' AND NOT (customer_id <=> ?) AND status IN ('pending', 'approved') AND checked_out_at IS NULL
+       AND (end_at IS NULL OR end_at > NOW() OR parked_at IS NOT NULL)
        AND REPLACE(UPPER(vehicle_plate), ' ', '') = REPLACE(UPPER(?), ' ', '')
      LIMIT 1`,
     [customerId, String(plate).trim()],
@@ -619,7 +635,7 @@ router.get("/me", async (req, res) => {
       ),
       pool.query(
         `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
-         FROM MaintenanceRequest WHERE customer_id = ? AND created_at ${AFTER_HISTORY_RESET} ORDER BY created_at DESC`,
+         FROM MaintenanceRequest WHERE customer_id = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01') ORDER BY created_at DESC`,
         [customer.id, customer.id],
       ),
       pool.query(
@@ -637,7 +653,7 @@ router.get("/me", async (req, res) => {
          LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
          LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
          LEFT JOIN Payment tcp ON tcp.id = tr.transfer_charge_payment_id
-         WHERE tr.customer_id = ? AND tr.created_at ${AFTER_HISTORY_RESET}
+         WHERE tr.customer_id = ? AND tr.created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
          ORDER BY tr.created_at DESC, tr.id DESC`,
         [customer.id, customer.id],
       ),
@@ -645,7 +661,7 @@ router.get("/me", async (req, res) => {
       listAnnouncements(pool),
       pool.query(
         `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
-         FROM Parcel WHERE customer_id = ? AND room_number = ? AND created_at ${AFTER_HISTORY_RESET}
+         FROM Parcel WHERE customer_id = ? AND room_number = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
          ORDER BY created_at DESC`,
         [customer.id, customer.room_number, customer.id],
       ),
@@ -1064,6 +1080,7 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
          WHERE id IN (?) AND status = 'pending'`,
         [slipPath, methodLabel, verifyLabel, utilityPaymentIds],
       );
+      await claimRoomsForPaidTransfers(connection);
     }
 
     if (currentDue.rentAmount > 0 && currentDue.lumpSumMonths) {
@@ -1094,9 +1111,12 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
       ],
     );
 
+    const autoTransfers = await autoApplyPaidTransfers(connection);
     await connection.commit();
+    const paidMessage = testMode ? "ชำระเงินในโหมดทดลองเรียบร้อย (ไม่ได้ตรวจสลิปกับธนาคาร)" : "ตรวจสอบสลิปผ่านแล้ว ชำระเงินเรียบร้อย";
     return res.status(201).json({
-      message: testMode ? "ชำระเงินในโหมดทดลองเรียบร้อย (ไม่ได้ตรวจสลิปกับธนาคาร)" : "ตรวจสอบสลิปผ่านแล้ว ชำระเงินเรียบร้อย",
+      message: autoTransfers.length ? `${paidMessage} · ระบบย้ายห้องให้อัตโนมัติแล้ว` : paidMessage,
+      autoTransfers,
     });
   } catch (error) {
     if (connection) await connection.rollback();
@@ -1445,54 +1465,86 @@ router.get("/parked-vehicles", async (req, res) => {
   try {
     const pool = getPool();
     await expireParkedVehicles(pool);
+    const settings = await loadParkingSettings(pool);
     const [expired] = await pool.query(
       `SELECT id, vehicle_plate, vehicle_model, guest_name, start_at, end_at, cancelled_at
        FROM ResidentVisitRequest
        WHERE customer_id = ? AND request_type = 'vehicle' AND status = 'cancelled' AND cancelled_by_name = ?
-         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND created_at ${AFTER_HISTORY_RESET}
+         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
        ORDER BY cancelled_at DESC`,
       [req.user.id, PARKING_EXPIRED_BY, req.user.id],
     );
     const [customers] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
     const roomNumber = customers[0]?.room_number;
-    if (!roomNumber) return res.json({ roomNumber: null, vehicles: [], expired });
+    if (!roomNumber) return res.json({ roomNumber: null, vehicles: [], expired, settings });
     const [vehicles] = await pool.query(
-      `SELECT id, room_number, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note,
-              status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at, updated_by_name, updated_at, created_at
-       FROM ResidentVisitRequest
-       WHERE customer_id = ? AND room_number = ? AND request_type = 'vehicle' AND status = 'approved'
-         AND (end_at IS NULL OR end_at > NOW())
-       ORDER BY (start_at <= NOW()) DESC, start_at ASC`,
+      `SELECT r.id, r.room_number, r.vehicle_plate, r.vehicle_model, r.vehicle_photos, r.guest_name, r.guest_phone, r.start_at, r.end_at, r.note,
+              r.status, r.reviewed_by_name, r.reviewed_at, r.admin_reviewed_by_name, r.admin_reviewed_at, r.updated_by_name, r.updated_at, r.created_at,
+              ${PARKING_SELECT_SQL}
+       FROM ResidentVisitRequest r ${PARKING_JOIN_SQL}
+       WHERE r.customer_id = ? AND r.room_number = ? AND r.request_type = 'vehicle' AND r.status = 'approved' AND r.checked_out_at IS NULL
+         AND (r.end_at IS NULL OR r.end_at > NOW() OR r.parked_at IS NOT NULL)
+       ORDER BY (r.start_at <= NOW()) DESC, r.start_at ASC`,
       [req.user.id, roomNumber],
     );
-    return res.json({ roomNumber, vehicles: withVehiclePhotos(vehicles), expired });
+    return res.json({ roomNumber, vehicles: withVehiclePhotos(withParkingState(vehicles, settings.finePerHour)), expired, settings });
   } catch (error) {
     console.error("Fetch parked vehicles error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลรถได้" });
   }
 });
 
+router.get("/parking/options", createParkingOptionsHandler({ customerScoped: true }));
+
 router.get("/resident-visit-requests", async (req, res) => {
   try {
-    await expireParkedVehicles(getPool());
-    const [requests] = await getPool().query(
-      `SELECT id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone,
-              start_at, end_at, note, status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at,
-              updated_by_name, updated_at, cancelled_by_name, cancelled_at, created_at
-       FROM ResidentVisitRequest WHERE customer_id = ? AND created_at ${AFTER_HISTORY_RESET} ORDER BY created_at DESC`,
+    const pool = getPool();
+    await expireParkedVehicles(pool);
+    const settings = await loadParkingSettings(pool);
+    const [requests] = await pool.query(
+      `SELECT r.id, r.room_number, r.request_type, r.vehicle_plate, r.vehicle_model, r.vehicle_photos, r.guest_name, r.guest_phone,
+              r.start_at, r.end_at, r.note, r.status, r.reviewed_by_name, r.reviewed_at, r.admin_reviewed_by_name, r.admin_reviewed_at,
+              r.updated_by_name, r.updated_at, r.cancelled_by_name, r.cancelled_at, r.created_at, ${PARKING_SELECT_SQL}
+       FROM ResidentVisitRequest r ${PARKING_JOIN_SQL}
+       WHERE r.customer_id = ? AND r.created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
+       ORDER BY r.created_at DESC`,
       [req.user.id, req.user.id],
     );
-    return res.json({ requests: withVehiclePhotos(requests) });
+    return res.json({ requests: withVehiclePhotos(withParkingState(requests, settings.finePerHour)), settings });
   } catch (error) {
     console.error("Fetch resident visit requests error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดคำขอได้" });
   }
 });
 
+router.post(
+  "/resident-visit-requests/:id/fine-payment",
+  parseFineSlip,
+  createFinePaymentHandler({
+    getActingName: async (pool, user) => {
+      const [rows] = await pool.query("SELECT first_name, last_name FROM Customer WHERE id = ?", [user.id]);
+      return `${rows[0]?.first_name || ""} ${rows[0]?.last_name || ""}`.trim() || "ผู้เช่า";
+    },
+    scopeCustomerId: (req) => req.user.id,
+  }),
+);
+
 router.post("/resident-visit-requests", async (req, res) => {
   let savedPhotos = [];
   try {
-    const { requestType, vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, isSpecial, specialReason, photos } = req.body ?? {};
+    const { requestType, vehiclePlate, vehicleModel, guestName, guestPhone, note, isSpecial, specialReason, photos } = req.body ?? {};
+    let { startAt, endAt } = req.body ?? {};
+    let parking = null;
+    if (requestType === "vehicle") {
+      const residentWindow = await loadResidentParkingWindow(getPool(), req.user.id);
+      if (residentWindow.expired) return res.status(409).json({ message: "สัญญาเช่าหมดแล้ว ไม่สามารถลงทะเบียนรถได้" });
+      parking = parseParkingInput({ ...req.body, startAt: residentWindow.startAt, endAt: residentWindow.endAt });
+      if (parking.error) return res.status(400).json({ message: parking.error });
+      if (parking.value.userCategory !== "resident") {
+        return res.status(403).json({ code: "RESIDENT_ONLY", message: "ผู้เช่าลงทะเบียนได้เฉพาะรถของผู้เช่าห้องนี้ รถผู้มาติดต่อให้ติดต่อเจ้าหน้าที่" });
+      }
+      ({ startAt, endAt } = parking.value);
+    }
     const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
     const openEnded = requestType === "vehicle" && (endAt === null || endAt === "");
     const endTime = openEnded ? null : typeof endAt === "string" ? Date.parse(endAt) : NaN;
@@ -1543,28 +1595,40 @@ router.post("/resident-visit-requests", async (req, res) => {
       return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนโดยผู้พักอาศัยท่านอื่นแล้ว ลงทะเบียนได้เฉพาะรถของคุณเท่านั้น" });
     }
     savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
-    const [result] = await pool.query(
-      `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note, is_special, special_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        req.user.id,
-        customers[0].room_number,
-        requestType,
-        vehiclePlate?.trim() || null,
-        vehicleModel?.trim() || null,
-        savedPhotos.length ? JSON.stringify(savedPhotos) : null,
-        guestName?.trim() || null,
-        guestPhone?.trim() || null,
-        startAt,
-        openEnded ? null : endAt,
-        note?.trim() || null,
-        Boolean(isSpecial),
-        isSpecial ? specialReason.trim() : null,
-      ],
-    );
+    const insert = async (db) => {
+      if (parking) {
+        await assertParkingAllowed(db, { ...parking.value, customerId: req.user.id, guestPhone: "" });
+      }
+      const [result] = await db.query(
+        `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, user_category, vehicle_type, parking_space_id,
+                                           vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note, is_special, special_reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          req.user.id,
+          customers[0].room_number,
+          requestType,
+          parking?.value.userCategory || "resident",
+          parking?.value.vehicleType || "car",
+          parking?.value.spaceId || null,
+          vehiclePlate?.trim() || null,
+          vehicleModel?.trim() || null,
+          savedPhotos.length ? JSON.stringify(savedPhotos) : null,
+          requestType === "vehicle" ? null : guestName?.trim() || null,
+          requestType === "vehicle" ? null : guestPhone?.trim() || null,
+          startAt,
+          openEnded ? null : endAt,
+          note?.trim() || null,
+          Boolean(isSpecial),
+          isSpecial ? specialReason.trim() : null,
+        ],
+      );
+      return result;
+    };
+    const result = parking ? await withParkingLock(pool, insert) : await insert(pool);
     return res.status(201).json({ id: result.insertId, message: "ส่งคำขอให้เจ้าหน้าที่แล้ว" });
   } catch (error) {
     if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
+    if (error instanceof ParkingError) return res.status(error.status).json({ message: error.message, code: error.code });
     console.error("Create resident visit request error:", error);
     return res.status(500).json({ message: "ไม่สามารถส่งคำขอได้" });
   }
@@ -1575,7 +1639,7 @@ router.get("/safety-incidents", async (req, res) => {
     const [incidents] = await getPool().query(
       `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note,
               cancelled_by_name, cancelled_at, cancel_reason, created_at
-       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? AND created_at ${AFTER_HISTORY_RESET}
+       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
        ORDER BY created_at DESC`,
       [req.user.id, req.user.id],
     );

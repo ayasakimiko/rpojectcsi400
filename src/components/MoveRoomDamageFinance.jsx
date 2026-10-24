@@ -4,7 +4,7 @@ import RoomTransferFinance from './RoomTransferFinance.jsx'
 import { formatContractMoney } from '../utils/rentalContract.js'
 import { damageInputError, damageInputValue } from '../utils/damageCost.js'
 
-export default function MoveRoomDamageFinance({ previewUrl, value, onChange, error = '', inputId = 'move-room-damage-cost' }) {
+export default function MoveRoomDamageFinance({ previewUrl, value, onChange, error = '', inputId = 'move-room-damage-cost', readOnly = false }) {
   const [state, setState] = useState({ preview: null, loading: true, error: '' })
   const inputError = damageInputError(value)
   const query = inputError ? null : damageInputValue(value) || '0'
@@ -46,18 +46,25 @@ export default function MoveRoomDamageFinance({ previewUrl, value, onChange, err
       <div className="staff-form-field">
         <div className="staff-form-label-row">
           <label className="staff-form-label" htmlFor={inputId}>
-            ค่าเสียหาย (หักจากเงินมัดจำ) <span className="staff-form-optional">(ไม่บังคับ)</span>
+            ค่าเสียหาย (หักจากเงินมัดจำ){' '}
+            <span className="staff-form-optional">{readOnly ? '(คำนวณอัตโนมัติ)' : '(ไม่บังคับ)'}</span>
           </label>
-          {depositLeft != null && <span className="staff-form-counter">มัดจำคงเหลือ {formatContractMoney(depositLeft)}</span>}
+          {depositLeft != null && (
+            <span className="staff-form-counter mrdf-deposit-left">
+              มัดจำคงเหลือ <strong>{formatContractMoney(depositLeft)}</strong>
+            </span>
+          )}
         </div>
-        <div className={`mrdf-input${shownError ? ' is-invalid' : ''}`}>
+        <div className={`mrdf-input${shownError ? ' is-invalid' : ''}${readOnly ? ' is-readonly' : ''}`}>
           <span className="mrdf-input-prefix" aria-hidden="true">฿</span>
           <input
             id={inputId}
             inputMode="decimal"
             autoComplete="off"
-            value={value}
-            onChange={(event) => onChange(event.target.value.replace(/[^\d.,]/g, ''))}
+            value={readOnly ? Number(damageInputValue(value) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : value}
+            onChange={(event) => onChange?.(event.target.value.replace(/[^\d.,]/g, ''))}
+            readOnly={readOnly}
+            tabIndex={readOnly ? -1 : undefined}
             placeholder="0.00"
             aria-describedby={`${inputId}-hint`}
           />
@@ -67,7 +74,15 @@ export default function MoveRoomDamageFinance({ previewUrl, value, onChange, err
           <span className="staff-form-field-error" id={`${inputId}-hint`}>{shownError}</span>
         ) : (
           <small className="mrdf-hint" id={`${inputId}-hint`}>
-            <b>เว้นว่างได้</b> ถ้าไม่มีค่าเสียหาย · ยอดนี้หักจากเงินมัดจำห้องเดิมก่อนโอนเป็นมัดจำห้องใหม่ ไม่เกี่ยวกับค่าเช่า
+            {readOnly ? (
+              <>
+                <b>แก้ไขเองไม่ได้</b> ยอดรวมจากค่าเสียหายที่กรอกในหัวข้อตรวจสภาพห้องและอุปกรณ์/ทรัพย์สิน · หักจากเงินมัดจำห้องเดิมก่อนโอนเป็นมัดจำห้องใหม่
+              </>
+            ) : (
+              <>
+                <b>เว้นว่างได้</b> ถ้าไม่มีค่าเสียหาย · ยอดนี้หักจากเงินมัดจำห้องเดิมก่อนโอนเป็นมัดจำห้องใหม่ ไม่เกี่ยวกับค่าเช่า
+              </>
+            )}
           </small>
         )}
       </div>

@@ -26,7 +26,20 @@ import {
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import MoveOutAssetCheck from '../components/MoveOutAssetCheck.jsx'
-import { assetPriceValue, chargeableAssetCost, COSTED_RESULTS, isValidAssetPrice, itemCostTotal } from '../utils/inspectionChecklist.js'
+import FurnitureAssetsRow from '../components/FurnitureAssetsRow.jsx'
+import InspectionCostInput from '../components/InspectionCostInput.jsx'
+import InspectionTopicFilter from '../components/InspectionTopicFilter.jsx'
+import MoveInBaselineCard, { MoveInCompareTag } from '../components/MoveInBaseline.jsx'
+import MoveInComparison from '../components/MoveInComparison.jsx'
+import { useMoveInBaseline } from '../utils/moveInBaseline.js'
+import {
+  assetPriceValue,
+  chargeableAssetCost,
+  COSTED_RESULTS,
+  isValidAssetPrice,
+  itemCostTotal,
+  withFurnitureResult,
+} from '../utils/inspectionChecklist.js'
 import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
 import MoveRoomDamageFinance from '../components/MoveRoomDamageFinance.jsx'
 import { damageInputError, damageInputValue } from '../utils/damageCost.js'
@@ -34,6 +47,18 @@ import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import {
+  ParkingChoiceGroup,
+  ParkingFinePayment,
+  ParkingRulesNote,
+  ParkingSessionPanel,
+  ParkingSettingsForm,
+  ParkingSpacePicker,
+  ParkingStatusPill,
+  ResidentContractWindow,
+  VisitorTimeSummary,
+} from '../components/ParkingFields.jsx'
+import { PARKING_FORM_TOPICS, USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht, getVisitorSession, useParkingOptions } from '../utils/parking.js'
 import {
   ContractGallery,
   ContractImagePicker,
@@ -716,6 +741,10 @@ const CHECKLIST_RESULT_OPTIONS = [
   { key: 'not_applicable', label: 'ไม่มี', title: 'ไม่มีหรือติดตั้งรายการนี้ในห้อง' },
 ]
 const INSPECTION_MAX_PHOTOS = 15
+const INSPECTION_PAGES = [
+  { key: 'move-in', label: 'ตรวจก่อนเข้าอยู่' },
+  { key: 'results', label: 'ผลตรวจห้อง' },
+]
 const STAFF_INSPECTION_STATUS_LABEL = {
   pending: 'รอ Admin ตรวจ',
   reviewed: 'Admin ตรวจแล้ว',
@@ -1134,7 +1163,7 @@ function buildAnnouncementNotif(item) {
 
 const openModalStack = []
 
-function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef }) {
+export function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
@@ -1163,7 +1192,7 @@ function Modal({ title, onClose, children, variant, stickyFilters = false, bodyR
       }}
     >
       <div
-        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'payment-history' ? ' staff-modal-payment-history' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${variant === 'waiting-detail' ? ' staff-modal-waiting-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`staff-modal${variant === 'confirm' ? ' staff-modal-confirm' : ''}${variant === 'wide' ? ' staff-modal-wide' : ''}${variant === 'payment-history' ? ' staff-modal-payment-history' : ''}${variant === 'history' ? ' staff-modal-history' : ''}${variant === 'form' ? ' staff-modal-form' : ''}${variant === 'utility' ? ' staff-modal-utility' : ''}${variant === 'waiting-form' ? ' staff-modal-form staff-modal-waiting-form' : ''}${variant === 'parking-form' ? ' staff-modal-form staff-modal-parking-form' : ''}${variant === 'inspection' ? ' staff-modal-inspection' : ''}${variant === 'detail' ? ' staff-modal-detail' : ''}${variant === 'waiting-detail' ? ' staff-modal-waiting-detail' : ''}${['transfer', 'transfer-approval', 'transfer-detail', 'parcel-detail'].includes(variant) ? ' staff-modal-transfer' : ''}${variant === 'parcel-detail' ? ' staff-modal-parcel-detail' : ''}${variant === 'transfer-approval' ? ' staff-modal-transfer-approval' : ''}${variant === 'transfer-detail' ? ' staff-modal-transfer-detail' : ''}${variant === 'inspection-detail' ? ' staff-modal-inspection-detail' : ''}${stickyFilters ? ' staff-modal-sticky-filters' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="staff-modal-header">
@@ -3536,6 +3565,7 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
   const [loading, setLoading] = useState(Boolean(inspectionId))
   const [loadError, setLoadError] = useState('')
   const [photoIndex, setPhotoIndex] = useState(null)
+  const [view, setView] = useState('latest')
 
   useEffect(() => {
     if (!inspectionId) return undefined
@@ -3584,6 +3614,26 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
         <p className="staff-form-error">{loadError}</p>
       ) : inspection ? (
         <>
+          <div className="mic-view-toggle" role="group" aria-label="มุมมองผลตรวจ">
+            {[
+              { key: 'latest', label: 'ผลตรวจล่าสุด' },
+              { key: 'compare', label: 'ผลตรวจก่อนเข้าอยู่' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={view === item.key ? 'is-active' : ''}
+                aria-pressed={view === item.key}
+                onClick={() => setView(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {view === 'compare' ? (
+            <MoveInComparison baseline={inspection.move_in_baseline} latest={inspection} />
+          ) : (
+          <>
           <p className="staff-insp-meta">
             ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
             {inspection.inspected_by_name && (
@@ -3654,6 +3704,8 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
           ) : (
             <p className="staff-transfer-muted">ไม่มีรูปถ่าย</p>
           )}
+          </>
+          )}
         </>
       ) : null}
       {photoIndex !== null &&
@@ -3716,6 +3768,112 @@ function TransferSettlementSection({ preview, loading, loadError }) {
           <li key={text}>{text}</li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+export function TransferContractPendingPanel({ apiBase, refreshKey = 0 }) {
+  const [transfers, setTransfers] = useState([])
+  const [active, setActive] = useState(null)
+  const [files, setFiles] = useState([])
+  const [fileError, setFileError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [version, setVersion] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    axios
+      .get(`${apiBase}/room-transfers/pending-contracts`, { headers: staffAuthHeaders(), signal: controller.signal })
+      .then(({ data }) => setTransfers(data.transfers || []))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [apiBase, refreshKey, version])
+
+  const changeFiles = (next) => {
+    const invalid = next.map(validateImageFile).find(Boolean)
+    if (invalid) return setFileError(invalid)
+    if (next.length > CONTRACT_MAX_IMAGES) return setFileError(`แนบรูปสัญญาได้ไม่เกิน ${CONTRACT_MAX_IMAGES} รูป`)
+    setFileError('')
+    setFiles(next)
+  }
+
+  const submit = async (requestClose) => {
+    if (files.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
+      setFileError(`กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป (แนบแล้ว ${files.length} รูป)`)
+      return
+    }
+    setBusy(true)
+    try {
+      const body = new FormData()
+      files.forEach((file) => body.append('contract_images', file))
+      const { data } = await axios.post(`${apiBase}/room-transfers/${active.id}/contract-images`, body, { headers: staffAuthHeaders() })
+      setNotice(data.message || 'แนบรูปสัญญาใหม่เรียบร้อยแล้ว')
+      requestClose()
+      setVersion((value) => value + 1)
+    } catch (error) {
+      setFileError(error.response?.data?.message || 'แนบรูปสัญญาไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (transfers.length === 0 && !notice) return null
+  return (
+    <section className="staff-transfer-pending" aria-label="ย้ายห้องอัตโนมัติที่รอแนบสัญญาใหม่">
+      <div className="staff-transfer-pending-head">
+        <strong>ย้ายห้องอัตโนมัติแล้ว · รอแนบรูปสัญญาใหม่</strong>
+        <span>ระบบย้ายห้องให้ทันทีเมื่อชำระยอดย้ายห้องและตรวจสลิปผ่าน กรุณาแนบรูปสัญญาที่เซ็นใหม่อย่างน้อย {ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป</span>
+      </div>
+      {notice && <p className="staff-transfer-pending-notice">{notice}</p>}
+      <ul className="staff-transfer-pending-list">
+        {transfers.map((transfer) => (
+          <li key={transfer.id}>
+            <span>
+              <strong>
+                ห้อง {transfer.from_room_number} → {transfer.to_room_number}
+              </strong>
+              <small>
+                {`${transfer.first_name || ''} ${transfer.last_name || ''}`.trim()}
+                {transfer.phone ? ` · ${transfer.phone}` : ''} · ย้ายเมื่อ {formatDateTime(transfer.transferred_at)}
+              </small>
+            </span>
+            <button
+              type="button"
+              className="staff-action-btn is-primary"
+              onClick={() => {
+                setActive(transfer)
+                setFiles([])
+                setFileError('')
+                setNotice('')
+              }}
+            >
+              แนบสัญญาใหม่
+            </button>
+          </li>
+        ))}
+      </ul>
+      {active && (
+        <Modal title={`แนบรูปสัญญาใหม่ · ห้อง ${active.to_room_number}`} onClose={() => setActive(null)} variant="waiting-form">
+          {(requestClose) => (
+            <div className="staff-rv-form">
+              <p className="staff-rv-form-note">
+                ผู้เช่า {`${active.first_name || ''} ${active.last_name || ''}`.trim()} ย้ายจากห้อง {active.from_room_number} ไปห้อง {active.to_room_number} แล้ว
+                รูปชุดนี้จะใช้แทนรูปสัญญาปัจจุบัน ส่วนรูปเดิมเก็บเป็นประวัติการย้ายห้อง
+              </p>
+              <ContractImagePicker files={files} onChange={changeFiles} error={fileError} min={ROOM_TRANSFER_MIN_CONTRACT_IMAGES} />
+              <div className="staff-form-actions">
+                <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
+                  ยกเลิก
+                </button>
+                <button type="button" className="staff-action-btn is-primary" disabled={busy} onClick={() => submit(requestClose)}>
+                  {busy ? 'กำลังอัปโหลด...' : `บันทึกสัญญา (${files.length}/${ROOM_TRANSFER_MIN_CONTRACT_IMAGES})`}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
     </section>
   )
 }
@@ -4001,7 +4159,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
                   <p className="staff-transfer-muted">
                     ผู้เช่าต้องชำระมัดจำเพิ่ม ฿{formatCurrency(transferCharge.amount)} ภายใน {transferCharge.days} วัน
                     {transferCharge.due_at ? ` (ถึง ${formatDateTime(transferCharge.due_at)})` : ' นับจากกดส่งยอด'}
-                    {' '}ระหว่างนี้ยังไม่ย้ายห้องและยังไม่ทำสัญญาใหม่ ถ้าเลยกำหนดระบบจะยกเลิกคำขอย้ายห้องอัตโนมัติ
+                    {' '}เมื่อชำระและตรวจสลิปผ่าน ระบบจะย้ายห้องให้อัตโนมัติทันที แล้วค่อยแนบรูปสัญญาใหม่ภายหลัง ถ้าเลยกำหนดระบบจะยกเลิกคำขอย้ายห้อง
                   </p>
                 </section>
               )}
@@ -4040,7 +4198,7 @@ function MoveRoomApprovalModal({ request, error, processing, onConfirm, onSendCh
               {awaitingCharge && transferCharge.status !== 'not_sent' && (
                 <button type="button" className="staff-transfer-footer-warning" onClick={() => scrollToSection('money', chargeSectionRef)}>
                   <strong>{TRANSFER_CHARGE_STATUS_TEXT[transferCharge.status]}</strong>
-                  <span>ทำสัญญาย้ายห้องได้หลังผู้เช่าชำระยอดย้ายห้องและตรวจสลิปผ่านแล้ว</span>
+                  <span>เมื่อผู้เช่าชำระยอดย้ายห้องและตรวจสลิปผ่าน ระบบจะย้ายห้องให้อัตโนมัติ ไม่ต้องกดอนุมัติ</span>
                   <em className="staff-transfer-footer-warning-link">ดูรายละเอียด ↓</em>
                 </button>
               )}
@@ -5239,7 +5397,7 @@ const RESIDENT_VISIT_STATUS = {
   rejected: { label: 'ไม่อนุมัติ', badge: 'rejected', tone: 'danger' },
   cancelled: { label: 'ยกเลิกแล้ว', badge: 'cancelled', tone: 'muted' },
 }
-const RESIDENT_VISIT_ACTIVE_PHASES = new Set(['parked', 'pending'])
+const RESIDENT_VISIT_ACTIVE_PHASES = new Set(['parked', 'pending', 'checkin', 'overtime'])
 const RESIDENT_VISIT_VIEWS = {
   main: {
     label: 'หน้าหลัก',
@@ -5247,7 +5405,10 @@ const RESIDENT_VISIT_VIEWS = {
     filters: [
       { key: 'active', label: 'ทั้งหมด' },
       { key: 'parked', label: 'กำลังจอด', tone: 'success' },
+      { key: 'overtime', label: 'เกินเวลา', tone: 'danger' },
+      { key: 'checkin', label: 'รอเช็คอิน', tone: 'info' },
       { key: 'pending', label: 'รออนุมัติ', tone: 'warning' },
+      { key: 'fine', label: 'ค่าปรับค้าง', tone: 'danger' },
     ],
   },
   history: {
@@ -5255,6 +5416,7 @@ const RESIDENT_VISIT_VIEWS = {
     defaultFilter: 'closed',
     filters: [
       { key: 'closed', label: 'ทั้งหมด' },
+      { key: 'checkedout', label: 'ออกจากที่จอดแล้ว', tone: 'muted' },
       { key: 'expired', label: 'หมดเวลาจอด', tone: 'muted' },
       { key: 'rejected', label: 'ไม่อนุมัติ', tone: 'danger' },
       { key: 'cancelled', label: 'ยกเลิกแล้ว', tone: 'muted' },
@@ -5274,34 +5436,35 @@ function StaffEmptyPhotoIcon() {
   )
 }
 
-function getStaffVisitPhase(item, now) {
+function getStaffVisitPhase(item, now, finePerHour = 0) {
+  if (item.checked_out_at) return { key: 'checkedout', label: 'ออกจากที่จอดแล้ว', badge: 'cancelled', tone: 'muted' }
   if (item.status !== 'approved') return { key: item.status, ...(RESIDENT_VISIT_STATUS[item.status] || RESIDENT_VISIT_STATUS.pending) }
+  const session = getVisitorSession(item, finePerHour, now)
+  if (session?.state === 'waiting') return { key: 'checkin', label: 'รอเช็คอิน', badge: 'pending', tone: 'info' }
+  if (session?.state === 'overtime') return { key: 'overtime', label: `เกินเวลา ${session.overtimeHours} ชม.`, badge: 'rejected', tone: 'danger' }
+  if (session?.state === 'parked') return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
   if (!item.end_at) return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
   const end = new Date(item.end_at).getTime()
   if (now >= end) return { key: 'expired', label: 'หมดเวลาจอด', badge: 'expired', tone: 'muted' }
   return { key: 'parked', label: 'กำลังจอด', badge: 'parked', tone: 'success' }
 }
 
-function staffVisitOwnerKey(item) {
-  if (!item.customer_id) return 'external'
-  return item.guest_name ? 'family' : 'self'
-}
 const STAFF_VEHICLE_MAX_PHOTOS = 6
 const RESIDENT_VEHICLE_OWNER_LABEL = {
-  self: 'รถของผู้เช่า',
-  family: 'รถครอบครัวที่มาเยี่ยม',
-  external: 'บุคคลภายนอก (มาขอจอด)',
+  self: 'ผู้พักอาศัย',
+  family: 'ผู้มาติดต่อห้องพัก',
+  external: 'ผู้มาติดต่อภายนอก',
 }
 const EMPTY_STAFF_VEHICLE_FORM = {
   roomNumber: '',
-  owner: 'self',
+  userCategory: 'resident',
+  vehicleType: 'car',
+  parkingSpaceId: null,
   vehiclePlate: '',
   vehicleModel: '',
   guestName: '',
   guestPhone: '',
   startAt: null,
-  endAt: null,
-  limitTime: true,
   note: '',
   photos: [],
 }
@@ -5310,9 +5473,7 @@ function defaultParkingWindow() {
   const start = new Date()
   start.setSeconds(0, 0)
   start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 1)
-  return { startAt: start, endAt: end }
+  return { startAt: start }
 }
 
 function startOfToday() {
@@ -5419,12 +5580,13 @@ function StaffRange({ start, end, openEnded = false }) {
 function getStaffVisitKind(item) {
   if (item.request_type !== 'vehicle') return 'guest'
   if (!item.customer_id) return 'external'
-  return item.guest_name ? 'family' : 'self'
+  return item.user_category === 'visitor' || (!item.user_category && item.guest_name) ? 'family' : 'self'
 }
 
 function getStaffVisitOwner(item) {
   const kind = getStaffVisitKind(item)
-  return kind === 'guest' ? 'แขกค้างคืน' : kind === 'external' ? 'บุคคลภายนอก' : RESIDENT_VEHICLE_OWNER_LABEL[kind]
+  if (kind === 'guest') return 'แขกค้างคืน'
+  return `${RESIDENT_VEHICLE_OWNER_LABEL[kind]}${item.vehicle_type ? ` · ${VEHICLE_TYPE_LABEL[item.vehicle_type]}` : ''}`
 }
 
 function getStaffVisitPerson(item) {
@@ -5433,13 +5595,63 @@ function getStaffVisitPerson(item) {
   return `${item.first_name || ''} ${item.last_name || ''}`.trim() + (item.guest_name ? ` · ผู้มาเยี่ยม ${item.guest_name}` : '')
 }
 
+function getVisitConfirmCopy({ item, decision }, finePerHour, now) {
+  if (decision === 'cancel' && item.user_category === 'visitor' && item.parked_at && !item.checked_out_at) {
+    const session = getVisitorSession(item, finePerHour, now)
+    return {
+      title: 'ยืนยันบันทึกรถออก',
+      message: 'บันทึกว่ารถคันนี้ออกจากที่จอดแล้ว?',
+      note:
+        session?.amount > 0
+          ? `จอดเกินเวลา ${session.overtimeHours} ชั่วโมง ระบบจะคิดค่าปรับประมาณ ${formatBaht(session.amount)} ตามเวลาที่กดยืนยันจริง`
+          : 'ยังจอดไม่เกินเวลา ไม่มีค่าปรับ ช่องจอดจะว่างทันที',
+      action: 'ยืนยันรถออก',
+      positive: true,
+    }
+  }
+  const copy = {
+    approve: { title: 'ยืนยันการอนุมัติ', message: 'อนุมัติคำขอรถคันนี้?', action: 'ยืนยันอนุมัติ', positive: true },
+    reject: { title: 'ยืนยันการปฏิเสธ', message: 'ปฏิเสธคำขอรถคันนี้?', action: 'ยืนยันปฏิเสธ' },
+    cancel: {
+      title: 'ยืนยันการยกเลิกรายการ',
+      message: 'ยกเลิกรายการรถคันนี้?',
+      note: 'รายการจะเปลี่ยนสถานะเป็น "ยกเลิกแล้ว" ช่องจอดจะว่าง และยังเก็บไว้ในประวัติ ไม่ได้ลบออกจากระบบ',
+      action: 'ยืนยันยกเลิก',
+    },
+    checkin: {
+      title: 'ยืนยันเช็คอินเข้าจอด',
+      message: 'บันทึกว่ารถคันนี้เข้าจอดแล้วตอนนี้?',
+      note: 'ระบบจะเริ่มนับเวลาจอด 3 ชั่วโมงจากเวลาที่กดยืนยัน หากเกินจะคิดค่าปรับรายชั่วโมง',
+      action: 'ยืนยันเช็คอิน',
+      positive: true,
+    },
+    'fine-approve': {
+      title: 'ยืนยันรับชำระค่าปรับ',
+      message: `ยืนยันว่าได้รับค่าปรับ ${formatBaht(item.fine_amount)} แล้ว?`,
+      note: item.fine_status === 'pending_review' ? 'ตรวจยอดและบัญชีผู้รับในสลิปให้ถูกต้องก่อนยืนยัน' : 'ใช้เมื่อผู้จอดชำระที่เคาน์เตอร์หรือสแกน QR ต่อหน้าเจ้าหน้าที่แล้ว',
+      action: 'ยืนยันรับชำระ',
+      positive: true,
+    },
+    'fine-reject': {
+      title: 'ปฏิเสธสลิปค่าปรับ',
+      message: 'สลิปไม่ถูกต้อง ให้ผู้จอดชำระใหม่?',
+      note: 'สถานะค่าปรับจะกลับเป็น "ค้างชำระ" และลบสลิปที่แนบไว้',
+      action: 'ยืนยันปฏิเสธสลิป',
+    },
+  }
+  return copy[decision] || copy.reject
+}
+
 function getStaffVisitTitle(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || '-' : item.guest_name || '-'
 }
 
-export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, focusId }) {
+export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, focusId, canManageSettings = false }) {
   const pendingFocusRef = useRef(focusId)
   const [items, setItems] = useState([])
+  const [parkingSettings, setParkingSettings] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [formSection, setFormSection] = useState('all')
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('main')
   const [status, setStatus] = useState(RESIDENT_VISIT_VIEWS.main.defaultFilter)
@@ -5467,6 +5679,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
       .then(({ data }) => {
         const requests = data.requests || []
         setItems(requests)
+        setParkingSettings(data.settings || null)
         onCountChange?.(requests.filter((item) => item.status === 'pending').length)
         if (pendingFocusRef.current) {
           const target = requests.find((item) => item.id === pendingFocusRef.current)
@@ -5486,6 +5699,16 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
   }, [load])
 
   const occupiedRooms = useMemo(() => (rooms || []).filter((room) => room.tenant?.id), [rooms])
+  const finePerHour = parkingSettings?.finePerHour ?? 0
+  const isVisitorForm = form.userCategory === 'visitor'
+  const editingParked = Boolean(editing?.parked_at)
+  const parkingOptions = useParkingOptions('/api/staff/parking/options', {
+    enabled: formOpen,
+    userCategory: form.userCategory,
+    startAt: editingParked ? editing.parked_at : isVisitorForm ? form.startAt : editing?.start_at,
+    excludeId: editing?.id,
+    roomNumber: isVisitorForm ? undefined : form.roomNumber || editing?.room_number,
+  })
   const keyword = search.trim().toLowerCase()
   const searched = keyword
     ? items.filter((item) =>
@@ -5506,11 +5729,13 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
           .includes(keyword),
       )
     : items
-  const isActive = (item) => RESIDENT_VISIT_ACTIVE_PHASES.has(getStaffVisitPhase(item, now).key)
+  const hasOpenFine = (item) => ['unpaid', 'pending_review'].includes(item.fine_status)
+  const isActive = (item) => RESIDENT_VISIT_ACTIVE_PHASES.has(getStaffVisitPhase(item, now, finePerHour).key) || hasOpenFine(item)
   const matchesFilter = (item, key) => {
     if (key === 'active') return isActive(item)
     if (key === 'closed') return !isActive(item)
-    return getStaffVisitPhase(item, now).key === key
+    if (key === 'fine') return hasOpenFine(item)
+    return getStaffVisitPhase(item, now, finePerHour).key === key
   }
   const filtered = searched.filter((item) => matchesFilter(item, status))
   const activeCount = items.filter(isActive).length
@@ -5523,16 +5748,31 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
   const currentPage = Math.min(resolvePage(filtered), Math.max(1, Math.ceil(filtered.length / STAFF_CARD_PAGE_SIZE)))
   const pageItems = filtered.slice((currentPage - 1) * STAFF_CARD_PAGE_SIZE, currentPage * STAFF_CARD_PAGE_SIZE)
   const pendingCount = items.filter((item) => item.status === 'pending').length
-  const parkedCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'parked').length
-  const expiredCount = items.filter((item) => getStaffVisitPhase(item, now).key === 'expired').length
+  const parkedCount = items.filter((item) => ['parked', 'overtime'].includes(getStaffVisitPhase(item, now, finePerHour).key)).length
+  const expiredCount = items.filter((item) => getStaffVisitPhase(item, now, finePerHour).key === 'expired').length
+  const overtimeCount = items.filter((item) => getStaffVisitPhase(item, now, finePerHour).key === 'overtime').length
+  const unpaidFines = items.filter((item) => item.fine_status === 'unpaid')
+  const unpaidFineCount = unpaidFines.length
+  const unpaidFineAmount = unpaidFines.reduce((sum, item) => sum + (Number(item.fine_amount) || 0), 0)
 
   useEffect(() => {
-    if (!loading) onSummaryChange?.({ total: items.length, pending: pendingCount, parked: parkedCount, expired: expiredCount })
-  }, [onSummaryChange, loading, items.length, pendingCount, parkedCount, expiredCount])
+    if (!loading) {
+      onSummaryChange?.({
+        total: items.length,
+        pending: pendingCount,
+        parked: parkedCount,
+        expired: expiredCount,
+        overtime: overtimeCount,
+        unpaidFines: unpaidFineCount,
+        unpaidFineAmount,
+      })
+    }
+  }, [onSummaryChange, loading, items.length, pendingCount, parkedCount, expiredCount, overtimeCount, unpaidFineCount, unpaidFineAmount])
 
   const openCreate = () => {
     setEditing(null)
     setForm({ ...EMPTY_STAFF_VEHICLE_FORM, ...defaultParkingWindow() })
+    setFormSection('all')
     setFormError('')
     setFormOpen(true)
   }
@@ -5542,18 +5782,19 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
     setForm({
       ...EMPTY_STAFF_VEHICLE_FORM,
       roomNumber: item.room_number ? String(item.room_number) : '',
-      owner: staffVisitOwnerKey(item),
+      userCategory: item.user_category || (item.guest_name || !item.customer_id ? 'visitor' : 'resident'),
+      vehicleType: item.vehicle_type || 'car',
+      parkingSpaceId: item.parking_space_id || null,
       vehiclePlate: item.vehicle_plate || '',
       vehicleModel: item.vehicle_model || '',
       guestName: item.guest_name || '',
       guestPhone: item.guest_phone || '',
       startAt: new Date(item.start_at),
-      endAt: item.end_at ? new Date(item.end_at) : null,
-      limitTime: Boolean(item.end_at),
       note: item.note || '',
       photos: [],
       keepPhotos: (item.vehicle_photos || []).map((photo) => photo.url),
     })
+    setFormSection('all')
     setFormError('')
     setDetail(null)
     setFormOpen(true)
@@ -5562,10 +5803,15 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
   const review = async (requestClose) => {
     setBusy(true)
     try {
+      const base = `/api/staff/resident-visit-requests/${confirm.item.id}`
       const { data } =
         confirm.decision === 'cancel'
-          ? await axios.delete(`/api/staff/resident-visit-requests/${confirm.item.id}`, { headers: staffAuthHeaders() })
-          : await axios.post(`/api/staff/resident-visit-requests/${confirm.item.id}/${confirm.decision}`, {}, { headers: staffAuthHeaders() })
+          ? await axios.delete(base, { headers: staffAuthHeaders() })
+          : confirm.decision === 'checkin'
+            ? await axios.post(`${base}/check-in`, {}, { headers: staffAuthHeaders() })
+            : confirm.decision === 'fine-approve' || confirm.decision === 'fine-reject'
+              ? await axios.post(`${base}/fine-review`, { decision: confirm.decision === 'fine-approve' ? 'approve' : 'reject' }, { headers: staffAuthHeaders() })
+              : await axios.post(`${base}/${confirm.decision}`, {}, { headers: staffAuthHeaders() })
       requestClose()
       setDetail(null)
       setNotice({ type: 'success', message: data.message || 'บันทึกผลแล้ว' })
@@ -5581,16 +5827,10 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
   const updateField = (field, value) => {
     setForm((current) => {
       const next = { ...current, [field]: value }
-      if (field === 'owner' && value === 'external') next.roomNumber = ''
-      if (field === 'owner' && value === 'self') {
+      if (field === 'userCategory' || field === 'vehicleType') next.parkingSpaceId = null
+      if (field === 'userCategory' && value === 'resident') {
         next.guestName = ''
         next.guestPhone = ''
-      }
-      if (field === 'startAt' && value && next.endAt && next.endAt <= value) next.endAt = null
-      if (field === 'limitTime' && value && !next.endAt && next.startAt) {
-        const end = new Date(next.startAt)
-        end.setDate(end.getDate() + 1)
-        next.endAt = end
       }
       return next
     })
@@ -5599,22 +5839,26 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
 
   const submitVehicle = async (event, requestClose) => {
     event.preventDefault()
-    if (!editing && form.owner !== 'external' && !form.roomNumber) return setFormError('กรุณาเลือกห้อง')
+    const visitor = form.userCategory === 'visitor'
+    if (!editing && !visitor && !form.roomNumber) return setFormError('กรุณาเลือกห้องของผู้พักอาศัย')
     if (!form.vehiclePlate.trim()) return setFormError('กรุณาระบุทะเบียนรถ')
-    if (form.owner !== 'self' && !form.guestName.trim()) {
-      return setFormError(form.owner === 'external' ? 'กรุณาระบุชื่อผู้ขอจอด' : 'กรุณาระบุชื่อผู้มาเยี่ยม')
+    if (visitor && !form.guestName.trim()) return setFormError('กรุณาระบุชื่อผู้มาติดต่อ')
+    if (visitor && form.guestPhone.replace(/\D/g, '').length < 9) return setFormError('กรุณาระบุเบอร์โทรผู้มาติดต่อให้ถูกต้อง')
+    if (visitor && !form.startAt) return setFormError('กรุณาเลือกวันเวลาเริ่ม')
+    if (!visitor && parkingOptions.residentWindow?.expired) return setFormError('สัญญาเช่าของห้องนี้หมดแล้ว ไม่สามารถลงทะเบียนรถได้')
+    const selectedSpace = parkingOptions.spaces.find((space) => space.id === form.parkingSpaceId)
+    if (!selectedSpace) return setFormError('กรุณาเลือกช่องจอดที่ว่าง')
+    if (!selectedSpace.available && selectedSpace.id !== editing?.parking_space_id) {
+      return setFormError(`ช่อง ${selectedSpace.code} ไม่ว่างในช่วงเวลาที่เลือก กรุณาเลือกช่องอื่น`)
     }
-    if (!form.startAt) return setFormError('กรุณาเลือกวันเวลาเริ่ม')
-    if (form.limitTime && !form.endAt) return setFormError('กรุณาเลือกวันเวลาสิ้นสุด หรือปิด "กำหนดระยะเวลาจอด"')
-    if (form.limitTime && form.endAt <= form.startAt) return setFormError('วันสิ้นสุดต้องอยู่หลังวันเริ่ม')
     setBusy(true)
     try {
       const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
       const payload = {
         ...form,
         photos,
-        startAt: toLocalDateTime(form.startAt),
-        endAt: form.limitTime ? toLocalDateTime(form.endAt) : null,
+        startAt: form.startAt ? toLocalDateTime(form.startAt) : null,
+        endAt: null,
       }
       const { data } = editing
         ? await axios.patch(`/api/staff/resident-visit-requests/${editing.id}`, payload, { headers: staffAuthHeaders() })
@@ -5639,7 +5883,8 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
             คำขอรถ / ผู้มาติดต่อ <span className="staff-count-pill">{items.length}</span>
           </h2>
           <p className="staff-rv-subtitle">
-            {pendingCount > 0 ? `รออนุมัติ ${pendingCount} รายการ` : 'ไม่มีคำขอที่รออนุมัติ'} · เพิ่มรถของผู้เช่าได้โดยตรง
+            {pendingCount > 0 ? `รออนุมัติ ${pendingCount} รายการ` : 'ไม่มีคำขอที่รออนุมัติ'}
+            {overtimeCount > 0 ? ` · จอดเกินเวลา ${overtimeCount} คัน` : ''} · ผู้มาติดต่อจอดได้ 3 ชม. ค่าปรับ {formatBaht(finePerHour)}/ชม.
           </p>
         </div>
         <div className="staff-rv-header-actions">
@@ -5649,6 +5894,24 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
               กำลังจอดอยู่ <strong>{parkedCount}</strong> คัน
             </span>
           </span>
+          {unpaidFineCount > 0 && (
+            <button
+              type="button"
+              className="staff-rv-parked-chip"
+              onClick={() => {
+                setView('main')
+                setStatus('fine')
+                setPage(1)
+              }}
+            >
+              ค่าปรับค้าง <strong>{unpaidFineCount}</strong> รายการ · {formatBaht(unpaidFineAmount)}
+            </button>
+          )}
+          {canManageSettings && (
+            <button type="button" className="staff-action-btn is-ghost" onClick={() => setSettingsOpen(true)}>
+              ตั้งค่าที่จอด
+            </button>
+          )}
           <button type="button" className="staff-action-btn is-primary" onClick={openCreate}>
             + เพิ่มรถ
           </button>
@@ -5723,12 +5986,15 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
       ) : (
         <ul className="staff-rv-list staff-ic-grid is-visit">
           {pageItems.map((item) => {
-            const info = getStaffVisitPhase(item, now)
+            const info = getStaffVisitPhase(item, now, finePerHour)
             const tone = STAFF_IC_TONE[info.tone] || 'pending'
             const canReview = item.status === 'pending'
-            const canCancelParking = info.key === 'parked' && item.request_type === 'vehicle'
+            const canCancelParking = ['parked', 'overtime', 'checkin'].includes(info.key) && item.request_type === 'vehicle'
+            const isCheckedIn = item.user_category === 'visitor' && item.parked_at && !item.checked_out_at
+            const openFine = ['unpaid', 'pending_review'].includes(item.fine_status)
             const photos = item.vehicle_photos || []
             const reviewer = item.reviewed_by_name || item.admin_reviewed_by_name
+            const rangeStart = isCheckedIn ? item.parked_at : item.start_at
             return (
               <li key={item.id} data-staff-focus={item.id} className={`staff-ic-card staff-ic-visit-card is-${tone}`}>
                 <button type="button" className="staff-ic-main" onClick={() => setDetail(item)}>
@@ -5748,8 +6014,10 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                       <span className="staff-vc-value">{getStaffVisitOwner(item)}</span>
                     </span>
                     <span className="staff-vc-cell">
-                      <span className="staff-vc-label">ห้อง</span>
-                      <span className="staff-vc-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                      <span className="staff-vc-label">ช่องจอด / ห้อง</span>
+                      <span className="staff-vc-value">
+                        {item.parking_space_code ? `ช่อง ${item.parking_space_code}` : 'ไม่ระบุช่อง'} · {item.room_number ? `ห้อง ${item.room_number}` : 'ภายนอก'}
+                      </span>
                     </span>
                     <span className="staff-vc-cell">
                       <span className="staff-vc-label">
@@ -5771,9 +6039,12 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                       </svg>
                     </span>
                     <span className="staff-vc-range-body">
-                      <span className="staff-vc-label">ช่วงเวลาจอด</span>
+                      <span className="staff-vc-label">
+                        {isCheckedIn ? 'เข้าจอดจริง → จอดได้ถึง' : 'ช่วงเวลาจอด'}
+                        {openFine && <ParkingStatusPill status={item.fine_status} />}
+                      </span>
                       <span className="staff-vc-value">
-                        {formatStaffPoint(item.start_at).day} {formatStaffPoint(item.start_at).time} น.
+                        {formatStaffPoint(rangeStart).day} {formatStaffPoint(rangeStart).time} น.
                         <span className="staff-vc-arrow" aria-hidden="true">→</span>
                         <span className={item.end_at ? undefined : 'staff-vc-open'}>
                           {item.end_at ? `${formatStaffPoint(item.end_at).day} ${formatStaffPoint(item.end_at).time} น.` : 'ไม่จำกัดเวลา'}
@@ -5821,9 +6092,19 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                     )}
                   </span>
                   <span className="staff-ic-actions">
+                    {openFine && (
+                      <button type="button" className="staff-ic-btn is-danger" onClick={() => setDetail(item)}>
+                        ค่าปรับ {formatBaht(item.fine_amount)}
+                      </button>
+                    )}
                     {canCancelParking && (
                       <button type="button" className="staff-ic-btn is-danger" disabled={busy} onClick={() => setConfirm({ item, decision: 'cancel' })}>
-                        ยกเลิกรายการ
+                        {isCheckedIn ? 'บันทึกรถออก' : 'ยกเลิกรายการ'}
+                      </button>
+                    )}
+                    {info.key === 'checkin' && (
+                      <button type="button" className="staff-ic-btn is-primary" disabled={busy} onClick={() => setConfirm({ item, decision: 'checkin' })}>
+                        เช็คอินเข้าจอด
                       </button>
                     )}
                     {canReview && (
@@ -5853,7 +6134,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
       {detail && (
         <Modal title="รายละเอียดคำขอรถ" onClose={() => setDetail(null)} variant="detail">
           {(requestClose) => {
-            const info = getStaffVisitPhase(detail, now)
+            const info = getStaffVisitPhase(detail, now, finePerHour)
             const canManage = ['pending', 'approved'].includes(detail.status) && detail.request_type === 'vehicle'
             const reviewer = detail.admin_reviewed_by_name || detail.reviewed_by_name
             const reviewedAt = detail.admin_reviewed_at || detail.reviewed_at
@@ -5934,6 +6215,44 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                     <p>{detail.note}</p>
                   </section>
                 )}
+                {detail.request_type === 'vehicle' && <ParkingSessionPanel item={detail} finePerHour={finePerHour} />}
+                {['unpaid', 'pending_review', 'paid'].includes(detail.fine_status) && (
+                  <>
+                    <ParkingFinePayment
+                      item={detail}
+                      channels={parkingSettings?.paymentChannels}
+                      endpoint={`/api/staff/resident-visit-requests/${detail.id}/fine-payment`}
+                      onDone={async () => {
+                        const { data } = await axios.get('/api/staff/resident-visit-requests', { headers: staffAuthHeaders() })
+                        const next = (data.requests || []).find((entry) => entry.id === detail.id)
+                        setItems(data.requests || [])
+                        if (next) setDetail(next)
+                      }}
+                      onCounterPaid={() => setConfirm({ item: detail, decision: 'fine-approve' })}
+                      counterBusy={busy}
+                    />
+                    {detail.fine_status === 'pending_review' && (
+                      <div className="staff-rv-detail-manage">
+                        <span className="staff-rv-detail-manage-label">ตรวจสลิปค่าปรับ</span>
+                        {detail.fine_slip_path && (
+                          <button
+                            type="button"
+                            className="staff-rv-pill"
+                            onClick={() => setLightbox({ photos: [{ url: detail.fine_slip_path, name: 'สลิปค่าปรับ' }], index: 0, plate: getStaffVisitTitle(detail) })}
+                          >
+                            ดูสลิป
+                          </button>
+                        )}
+                        <button type="button" className="staff-rv-pill" onClick={() => setConfirm({ item: detail, decision: 'fine-reject' })}>
+                          ปฏิเสธสลิป
+                        </button>
+                        <button type="button" className="staff-rv-pill" onClick={() => setConfirm({ item: detail, decision: 'fine-approve' })}>
+                          ยืนยันว่าชำระแล้ว
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
                 {detail.vehicle_photos?.length > 0 && (
                   <section className="staff-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
                     <h4 className="staff-rv-timeline-title">รูปรถ / ป้ายทะเบียน ({detail.vehicle_photos.length} รูป)</h4>
@@ -5980,8 +6299,14 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                     detail.updated_at
                       ? { key: 'edit', label: 'แก้ไขข้อมูล', by: detail.updated_by_name, date: detail.updated_at, icon: 'edit' }
                       : null,
+                    detail.parked_at ? { key: 'checkin', label: 'เช็คอินเข้าจอด', date: detail.parked_at, icon: 'check' } : null,
                     detail.status === 'cancelled'
-                      ? { key: 'cancel', label: 'ยกเลิกรายการ', by: detail.cancelled_by_name, date: detail.cancelled_at, icon: 'x', tone: 'danger' }
+                      ? detail.checked_out_at
+                        ? { key: 'checkout', label: 'บันทึกรถออก', by: detail.cancelled_by_name, date: detail.checked_out_at, icon: 'check' }
+                        : { key: 'cancel', label: 'ยกเลิกรายการ', by: detail.cancelled_by_name, date: detail.cancelled_at, icon: 'x', tone: 'danger' }
+                      : null,
+                    detail.fine_status === 'paid'
+                      ? { key: 'fine', label: `ชำระค่าปรับ ${formatBaht(detail.fine_amount)}`, by: detail.fine_paid_by_name, date: detail.fine_paid_at, icon: 'check' }
                       : null,
                   ].filter(Boolean)}
                 />
@@ -6019,6 +6344,16 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                         <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                           ปิด
                         </button>
+                        {canManage && detail.status === 'approved' && (
+                          <button type="button" className="staff-action-btn is-danger" onClick={() => setConfirm({ item: detail, decision: 'cancel' })}>
+                            {detail.user_category === 'visitor' && detail.parked_at ? 'บันทึกรถออก' : 'ยกเลิกรายการ'}
+                          </button>
+                        )}
+                        {info.key === 'checkin' && (
+                          <button type="button" className="staff-action-btn is-primary" onClick={() => setConfirm({ item: detail, decision: 'checkin' })}>
+                            เช็คอินเข้าจอด
+                          </button>
+                        )}
                         {canManage && (
                           <button type="button" className="staff-action-btn is-primary" onClick={() => openEdit(detail)}>
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -6038,66 +6373,54 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
         </Modal>
       )}
 
-      {confirm && (
-        <Modal
-          title={confirm.decision === 'approve' ? 'ยืนยันการอนุมัติ' : confirm.decision === 'cancel' ? 'ยืนยันการยกเลิกรายการ' : 'ยืนยันการปฏิเสธ'}
-          onClose={() => setConfirm(null)}
-          variant="confirm"
-        >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className={`staff-confirm-icon ${confirm.decision === 'approve' ? 'is-success' : 'is-warning'}`}>
-                <StaffCarIcon />
-              </div>
-              <p className="staff-confirm-message">
-                {confirm.decision === 'approve'
-                  ? 'อนุมัติคำขอรถคันนี้?'
-                  : confirm.decision === 'cancel'
-                    ? 'ยกเลิกรายการรถคันนี้?'
-                    : 'ปฏิเสธคำขอรถคันนี้?'}
-              </p>
-              {confirm.decision === 'cancel' && (
-                <p className="staff-confirm-note">รายการจะเปลี่ยนสถานะเป็น "ยกเลิกแล้ว" และยังเก็บไว้ในประวัติ ไม่ได้ลบออกจากระบบ</p>
-              )}
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ทะเบียนรถ</span>
-                  <strong>{getStaffVisitTitle(confirm.item)}</strong>
+      {confirm && (() => {
+        const copy = getVisitConfirmCopy(confirm, finePerHour, now)
+        return (
+          <Modal title={copy.title} onClose={() => setConfirm(null)} variant="confirm">
+            {(requestClose) => (
+              <div className="staff-confirm-body">
+                <div className={`staff-confirm-icon ${copy.positive ? 'is-success' : 'is-warning'}`}>
+                  <StaffCarIcon />
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{confirm.item.room_number || 'บุคคลภายนอก'}</strong>
+                <p className="staff-confirm-message">{copy.message}</p>
+                {copy.note && <p className="staff-confirm-note">{copy.note}</p>}
+                <div className="staff-confirm-details">
+                  <div className="staff-confirm-detail-row">
+                    <span>ทะเบียนรถ</span>
+                    <strong>{getStaffVisitTitle(confirm.item)}</strong>
+                  </div>
+                  <div className="staff-confirm-detail-row">
+                    <span>ช่องจอด / ห้อง</span>
+                    <strong>
+                      {confirm.item.parking_space_code ? `ช่อง ${confirm.item.parking_space_code}` : 'ไม่ระบุช่อง'} ·{' '}
+                      {confirm.item.room_number ? `ห้อง ${confirm.item.room_number}` : 'บุคคลภายนอก'}
+                    </strong>
+                  </div>
+                  <div className="staff-confirm-detail-row">
+                    <span>{confirm.item.parked_at ? 'เข้าจอดจริง' : 'ช่วงเวลา'}</span>
+                    <strong>
+                      <StaffRange start={confirm.item.parked_at || confirm.item.start_at} end={confirm.item.end_at} openEnded />
+                    </strong>
+                  </div>
                 </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ช่วงเวลา</span>
-                  <strong>
-                    <StaffRange start={confirm.item.start_at} end={confirm.item.end_at} openEnded />
-                  </strong>
+                <div className="staff-form-actions">
+                  <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    className={`staff-action-btn ${copy.positive ? 'is-primary' : 'is-danger'}`}
+                    disabled={busy}
+                    onClick={() => review(requestClose)}
+                  >
+                    {busy ? 'กำลังดำเนินการ...' : copy.action}
+                  </button>
                 </div>
               </div>
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className={`staff-action-btn ${confirm.decision === 'approve' ? 'is-primary' : 'is-danger'}`}
-                  disabled={busy}
-                  onClick={() => review(requestClose)}
-                >
-                  {busy
-                    ? 'กำลังดำเนินการ...'
-                    : confirm.decision === 'approve'
-                      ? 'ยืนยันอนุมัติ'
-                      : confirm.decision === 'cancel'
-                        ? 'ยืนยันยกเลิก'
-                        : 'ยืนยันปฏิเสธ'}
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
-      )}
+            )}
+          </Modal>
+        )
+      })()}
 
       {lightbox && createPortal(
         <PhotoLightbox
@@ -6112,23 +6435,23 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
 
       {formOpen && (
         <Modal
-          title={editing ? 'แก้ไขข้อมูลรถ' : 'เพิ่มรถของผู้เช่า'}
+          title={editing ? 'แก้ไขข้อมูลรถและช่องจอด' : 'เพิ่มรถและเลือกช่องจอด'}
           onClose={() => {
             setFormOpen(false)
             setEditing(null)
           }}
-          variant="waiting-form"
+          variant="parking-form"
         >
           {(requestClose) => (
             <form className="staff-rv-form" onSubmit={(event) => submitVehicle(event, requestClose)} noValidate>
               <p className="staff-rv-form-note">
                 {editing ? (
                   <>
-                    {RESIDENT_VEHICLE_OWNER_LABEL[form.owner]}
-                    {editing.room_number ? ` · ห้อง ${editing.room_number}` : ''} · แก้ไขทะเบียน วันเวลา และรูปได้
+                    {USER_CATEGORY_LABEL[form.userCategory]}
+                    {editing.room_number ? ` · ห้อง ${editing.room_number}` : ''} · แก้ไขประเภทรถ ช่องจอด ทะเบียน วันเวลา และรูปได้
                   </>
                 ) : (
-                  'รถที่เจ้าหน้าที่เพิ่มจะได้รับการอนุมัติทันที'
+                  'รถที่เจ้าหน้าที่เพิ่มจะได้รับการอนุมัติและจองช่องจอดทันที'
                 )}
               </p>
               {formError && (
@@ -6136,30 +6459,40 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                   {formError}
                 </p>
               )}
+              <InspectionTopicFilter
+                topics={PARKING_FORM_TOPICS}
+                value={formSection}
+                onChange={setFormSection}
+              />
+              <section className="parking-form-section" data-topic="owner" hidden={!["all", "owner"].includes(formSection)}>
+                <h4 className="parking-form-section-title">ผู้ใช้และข้อมูลรถ</h4>
+              <ParkingChoiceGroup
+                label="ประเภทผู้ใช้"
+                name="staff-rv-category"
+                value={form.userCategory}
+                disabled={Boolean(editing)}
+                onChange={(value) => updateField('userCategory', value)}
+                options={[
+                  { value: 'resident', label: 'ผู้พักอาศัย', hint: 'รถยนต์ 1 คัน + จักรยานยนต์ 1 คัน ต่อผู้เช่า' },
+                  { value: 'visitor', label: 'ผู้มาติดต่อ', hint: `บุคคลภายนอก · จอดได้ครั้งละ ${parkingOptions.settings?.visitorMaxHours || 3} ชั่วโมง` },
+                ]}
+              />
+              <ParkingChoiceGroup
+                label="ประเภทรถ"
+                name="staff-rv-vehicle-type"
+                value={form.vehicleType}
+                onChange={(value) => updateField('vehicleType', value)}
+                options={[
+                  { value: 'car', label: VEHICLE_TYPE_LABEL.car, hint: 'สูงสุด 1 คันต่อคน' },
+                  { value: 'motorcycle', label: VEHICLE_TYPE_LABEL.motorcycle, hint: 'สูงสุด 1 คันต่อคน' },
+                ]}
+              />
+              <ParkingRulesNote userCategory={form.userCategory} finePerHour={parkingOptions.settings?.finePerHour ?? finePerHour} />
               <div className="waiting-form-grid">
                 {!editing && (
-                <div className="staff-form-field">
-                  <label className="staff-form-label" htmlFor="staff-rv-owner">
-                    รถของ
-                  </label>
-                  <select
-                    id="staff-rv-owner"
-                    className="staff-form-input"
-                    value={form.owner}
-                    onChange={(event) => updateField('owner', event.target.value)}
-                  >
-                    {Object.entries(RESIDENT_VEHICLE_OWNER_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                )}
-                {!editing && form.owner !== 'external' && (
                   <div className="staff-form-field">
                     <label className="staff-form-label" htmlFor="staff-rv-room">
-                      ห้อง <span className="staff-form-required">*</span>
+                      {isVisitorForm ? 'มาติดต่อห้อง' : 'ห้อง'} {!isVisitorForm && <span className="staff-form-required">*</span>}
                     </label>
                     <select
                       id="staff-rv-room"
@@ -6167,7 +6500,9 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                       value={form.roomNumber}
                       onChange={(event) => updateField('roomNumber', event.target.value)}
                     >
-                      <option value="">{occupiedRooms.length ? 'เลือกห้อง' : 'ยังไม่มีห้องที่มีผู้เช่า'}</option>
+                      <option value="">
+                        {isVisitorForm ? 'ไม่ระบุห้อง (บุคคลภายนอก)' : occupiedRooms.length ? 'เลือกห้อง' : 'ยังไม่มีห้องที่มีผู้เช่า'}
+                      </option>
                       {(rooms || []).map((room) => (
                         <option key={room.room_number} value={room.room_number} disabled={!room.tenant?.id}>
                           ห้อง {room.room_number} · {room.tenant?.id ? `${room.tenant.first_name} ${room.tenant.last_name}` : 'ห้องว่าง'}
@@ -6197,16 +6532,16 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                     id="staff-rv-model"
                     className="staff-form-input"
                     maxLength={100}
-                    placeholder="เช่น Toyota Yaris"
+                    placeholder={form.vehicleType === 'motorcycle' ? 'เช่น Honda Wave' : 'เช่น Toyota Yaris'}
                     value={form.vehicleModel}
                     onChange={(event) => updateField('vehicleModel', event.target.value)}
                   />
                 </div>
-                {form.owner !== 'self' && (
+                {isVisitorForm && (
                   <>
                     <div className="staff-form-field">
                       <label className="staff-form-label" htmlFor="staff-rv-guest">
-                        {form.owner === 'external' ? 'ชื่อผู้ขอจอด' : 'ชื่อผู้มาเยี่ยม'} <span className="staff-form-required">*</span>
+                        ชื่อผู้มาติดต่อ <span className="staff-form-required">*</span>
                       </label>
                       <input
                         id="staff-rv-guest"
@@ -6219,7 +6554,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                     </div>
                     <div className="staff-form-field">
                       <label className="staff-form-label" htmlFor="staff-rv-guest-phone">
-                        {form.owner === 'external' ? 'เบอร์ผู้ขอจอด' : 'เบอร์ผู้มาเยี่ยม'}
+                        เบอร์ผู้มาติดต่อ <span className="staff-form-required">*</span>
                       </label>
                       <input
                         id="staff-rv-guest-phone"
@@ -6234,70 +6569,70 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                   </>
                 )}
               </div>
-              <div className="staff-rv-time-box">
-                <label className={`staff-rv-switch${form.limitTime ? ' is-on' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.limitTime}
-                    onChange={(event) => updateField('limitTime', event.target.checked)}
-                  />
-                  <span className="staff-rv-switch-track" aria-hidden="true" />
-                  <span className="staff-rv-switch-text">
-                    <strong>กำหนดระยะเวลาจอด</strong>
-                    <small>{form.limitTime ? 'ระบุวันเวลาเริ่มและสิ้นสุด' : 'จอดได้ไม่จำกัดเวลา จนกว่าเจ้าหน้าที่จะยกเลิกรายการ'}</small>
-                  </span>
-                </label>
-                <div className="waiting-form-grid">
-                  <div className="staff-form-field">
-                    <label className="staff-form-label" htmlFor="staff-rv-start">
-                      เริ่ม <span className="staff-form-required">*</span>
-                    </label>
-                    <ThaiDatePicker
-                      id="staff-rv-start"
-                      valueType="date"
-                      className="staff-form-input"
-                      placeholder="เลือกวันเวลา"
-                      value={form.startAt}
-                      onChange={(date) => updateField('startAt', date)}
-                      minDate={startOfToday()}
-                      showTimeSelect
-                      timeIntervals={15}
-                      portalId="staff-date-portal"
-                    />
-                  </div>
-                  {form.limitTime ? (
-                    <div className="staff-form-field">
-                      <label className="staff-form-label" htmlFor="staff-rv-end">
-                        สิ้นสุด <span className="staff-form-required">*</span>
-                      </label>
-                      <ThaiDatePicker
-                        id="staff-rv-end"
-                        valueType="date"
-                        className="staff-form-input"
-                        placeholder="เลือกวันเวลา"
-                        value={form.endAt}
-                        onChange={(date) => updateField('endAt', date)}
-                        minDate={form.startAt || startOfToday()}
-                        openToDate={form.endAt || form.startAt || undefined}
-                        filterTime={(time) => !form.startAt || time > form.startAt}
-                        showTimeSelect
-                        timeIntervals={15}
-                        portalId="staff-date-portal"
-                      />
-                    </div>
+              </section>
+              <section className="parking-form-section" data-topic="time" hidden={!["all", "time"].includes(formSection)}>
+                <h4 className="parking-form-section-title">วันเวลาจอด</h4>
+              {!isVisitorForm ? (
+                <ResidentContractWindow
+                  startLabel={editing ? formatStaffDateTime(editing.start_at) : 'ทันทีที่บันทึก'}
+                  endAt={parkingOptions.residentWindow?.endAt}
+                  note={
+                    !editing && !form.roomNumber
+                      ? 'เลือกห้องก่อน ระบบจะใช้วันสิ้นสุดสัญญาเช่าของห้องนั้นเป็นวันสุดท้ายที่จอดได้'
+                      : 'ผู้พักอาศัยจอดได้ตลอดสัญญาเช่า ไม่ต้องกำหนดวันเวลาเอง ระบบยกเลิกสิทธิ์อัตโนมัติเมื่อสัญญาสิ้นสุดหรือย้ายออก'
+                  }
+                />
+              ) : (
+                <div className="staff-rv-time-box">
+                  {editingParked ? (
+                    <p className="staff-rv-form-note">
+                      เช็คอินเข้าจอดแล้วเมื่อ {formatStaffDateTime(editing.parked_at)} · เวลาจอดนับจากเวลาเช็คอินจริงและแก้ไขไม่ได้
+                    </p>
                   ) : (
-                    <div className="staff-form-field">
-                      <span className="staff-form-label">สิ้นสุด</span>
-                      <span className="staff-rv-open-end">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
-                        </svg>
-                        ไม่จำกัดเวลา
-                      </span>
+                    <div className="waiting-form-grid">
+                      <div className="staff-form-field">
+                        <label className="staff-form-label" htmlFor="staff-rv-start">
+                          เริ่ม <span className="staff-form-required">*</span>
+                        </label>
+                        <ThaiDatePicker
+                          id="staff-rv-start"
+                          valueType="date"
+                          className="staff-form-input"
+                          placeholder="เลือกวันเวลา"
+                          value={form.startAt}
+                          onChange={(date) => updateField('startAt', date)}
+                          minDate={startOfToday()}
+                          showTimeSelect
+                          timeIntervals={15}
+                          portalId="staff-date-portal"
+                        />
+                      </div>
+                      <div className="staff-form-field">
+                        <VisitorTimeSummary startAt={form.startAt} />
+                      </div>
                     </div>
                   )}
+                  {!editing && (
+                    <p className="staff-rv-photo-hint">ถ้าเวลาเริ่มไม่เกินเวลาปัจจุบัน ระบบจะถือว่ารถเข้าจอดแล้ว (เช็คอินอัตโนมัติ) และเริ่มนับ 3 ชั่วโมงจากเวลาเริ่ม</p>
+                  )}
                 </div>
-              </div>
+              )}
+              </section>
+              <section className="parking-form-section" data-topic="space" hidden={!["all", "space"].includes(formSection)}>
+                <h4 className="parking-form-section-title">เลือกช่องจอด</h4>
+              <ParkingSpacePicker
+                spaces={parkingOptions.spaces}
+                vehicleType={form.vehicleType}
+                value={form.parkingSpaceId}
+                loading={parkingOptions.loading}
+                error={parkingOptions.error}
+                showOccupant
+                keepId={editing && editing.vehicle_type === form.vehicleType ? editing.parking_space_id : null}
+                onChange={(spaceId) => updateField('parkingSpaceId', spaceId)}
+              />
+              </section>
+              <section className="parking-form-section" data-topic="extra" hidden={!["all", "extra"].includes(formSection)}>
+                <h4 className="parking-form-section-title">รูปรถและหมายเหตุ</h4>
               <div className="staff-form-field">
                 <div className="staff-rv-photo-head">
                   <span className="staff-form-label">รูปรถ / ป้ายทะเบียน</span>
@@ -6350,6 +6685,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                 />
                 <span className="staff-rv-hint">{form.note.length}/500</span>
               </div>
+              </section>
               <div className="staff-form-actions">
                 <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
                   ยกเลิก
@@ -6359,6 +6695,22 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                 </button>
               </div>
             </form>
+          )}
+        </Modal>
+      )}
+
+      {settingsOpen && (
+        <Modal title="ตั้งค่าที่จอดรถและค่าปรับ" onClose={() => setSettingsOpen(false)} variant="waiting-form">
+          {(requestClose) => (
+            <ParkingSettingsForm
+              endpoint="/api/staff/parking/settings"
+              onCancel={requestClose}
+              onSaved={async (data) => {
+                requestClose()
+                setNotice({ type: 'success', message: data.message || 'บันทึกการตั้งค่าแล้ว' })
+                await load()
+              }}
+            />
           )}
         </Modal>
       )}
@@ -7135,6 +7487,7 @@ function StaffMain() {
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionModal, setInspectionModal] = useState(false)
+  const [inspectionSection, setInspectionSection] = useState('all')
   const [inspectionForm, setInspectionForm] = useState({
     room_number: '',
     checklist: {},
@@ -7154,7 +7507,12 @@ function StaffMain() {
   const [inspectionError, setInspectionError] = useState('')
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
-  const [inspectionAssetsOpen, setInspectionAssetsOpen] = useState(false)
+  const [inspectionAssetsOpen, setInspectionAssetsOpen] = useState(true)
+  const [inspectionPage, setInspectionPage] = useState('move-in')
+  const liveMoveInBaseline = useMoveInBaseline(inspectionModal && !inspectionEditing ? inspectionForm.room_number : null)
+  const inspectionBaseline = inspectionEditing
+    ? { loading: false, baseline: inspectionEditing.move_in_baseline ?? null, error: '' }
+    : liveMoveInBaseline
   const inspectionMoveRoomId = inspectionTenantRequest?.type === 'move_room'
     ? inspectionTenantRequest.id
     : inspectionEditing?.tenant_request_type === 'move_room' ? inspectionEditing.tenant_request_id : null
@@ -7605,6 +7963,8 @@ function StaffMain() {
     setInspectionTenantRequest(null)
     setInspectionError('')
     setInspectionFieldErrors({})
+    setInspectionSection('all')
+    setInspectionAssetsOpen(true)
     setInspectionModal(true)
   }
 
@@ -7623,6 +7983,8 @@ function StaffMain() {
     setInspectionTenantRequest(request)
     setInspectionError('')
     setInspectionFieldErrors({})
+    setInspectionSection('all')
+    setInspectionAssetsOpen(true)
     setInspectionModal(true)
   }
 
@@ -7665,10 +8027,13 @@ function StaffMain() {
         tenant_phone: detail.tenant_phone,
         tenant_request_id: detail.tenant_request_id,
         tenant_request_type: detail.tenant_request_type,
+        move_in_baseline: detail.move_in_baseline ?? null,
       })
       setInspectionTenantRequest(null)
       setInspectionError('')
       setInspectionFieldErrors({})
+      setInspectionSection('all')
+      setInspectionAssetsOpen(true)
       setInspectionModal(true)
     } catch (error) {
       setInspectionListError(error.response?.data?.message || 'โหลดผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -7678,7 +8043,6 @@ function StaffMain() {
     }
   }
 
-  // Keeps the damage amount in step with the per-item and asset costs.
   const withDamageTotal = (form) => {
     const total = itemCostTotal(form.checklist, form.item_costs) + chargeableAssetCost(form.assets || [])
     return { ...form, damage_cost: total > 0 ? String(total) : '' }
@@ -7698,12 +8062,25 @@ function StaffMain() {
   }
 
   const setInspectionAssets = (assets) => {
-    setInspectionForm((form) => withDamageTotal({ ...form, assets }))
-    setInspectionFieldErrors((errors) => ({ ...errors, assets: undefined }))
+    setInspectionForm((form) => withDamageTotal({ ...form, assets, checklist: withFurnitureResult(form.checklist, assets) }))
+    setInspectionFieldErrors((errors) => ({ ...errors, assets: undefined, checklist: (errors.checklist || []).filter((key) => key !== 'furniture') }))
   }
 
   const resetChecklist = () => {
-    setInspectionForm((form) => ({ ...form, checklist: {} }))
+    setInspectionForm((form) => ({ ...form, checklist: form.assets ? withFurnitureResult({}, form.assets) : {} }))
+    setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
+  }
+
+  const setAllChecklistResults = (value) => {
+    setInspectionForm((form) =>
+      withDamageTotal({
+        ...form,
+        checklist: {
+          ...Object.fromEntries(MOVE_OUT_CHECKLIST.filter((item) => item.key !== 'furniture').map((item) => [item.key, value])),
+          ...(form.assets ? withFurnitureResult({}, form.assets) : {}),
+        },
+      }),
+    )
     setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
   }
 
@@ -7714,7 +8091,8 @@ function StaffMain() {
     )
     const fieldErrors = {}
     if (!inspectionEditing && !room) fieldErrors.room = 'กรุณาเลือกห้องที่มีผู้เช่า'
-    const missing = MOVE_OUT_CHECKLIST.filter((item) => !inspectionForm.checklist[item.key]).map((item) => item.key)
+    const checklist = withFurnitureResult(inspectionForm.checklist, inspectionForm.assets)
+    const missing = MOVE_OUT_CHECKLIST.filter((item) => !checklist[item.key]).map((item) => item.key)
     if (missing.length > 0) fieldErrors.checklist = missing
     const costError = (cost) => cost !== undefined && cost !== '' && !isValidAssetPrice(cost)
     const missingAssets = (inspectionForm.assets || [])
@@ -7747,6 +8125,7 @@ function StaffMain() {
     }
     setInspectionFieldErrors(fieldErrors)
     if (Object.keys(fieldErrors).length > 0) {
+      setInspectionSection(fieldErrors.room ? 'all' : missing.length > 0 ? 'checklist' : fieldErrors.damage_note || fieldErrors.photos ? 'photos' : 'finance')
       setInspectionError(
         missing.length > 0
           ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
@@ -7766,7 +8145,7 @@ function StaffMain() {
     try {
       const photos = await Promise.all(inspectionForm.photos.map(compressImageFile))
       const details = {
-        checklist: inspectionForm.checklist,
+        checklist,
         damage_note: inspectionForm.damage_note.trim(),
         photos,
         item_costs: Object.fromEntries(
@@ -7785,8 +8164,6 @@ function StaffMain() {
               })),
             }
           : {}),
-        // Move-out damage is summed on the server from the item and asset costs;
-        // move-room keeps its editable amount, which follows the same total.
         ...(inspectionMoveRoomId ? { damage_cost: damageInputValue(inspectionForm.damage_cost) } : {}),
       }
       const { data } = inspectionEditing
@@ -8307,6 +8684,7 @@ function StaffMain() {
   const renderTenantRequestActions = (request) => {
     const key = `tenant-${request.id}`
     const isProcessing = processingRequestKey === key
+    const cancellationLocked = request.type === 'move_room' && request.transfer_charge_status === 'paid'
     const openAction = (action) => {
       setTenantRequestDetail(null)
       action(request)
@@ -8316,10 +8694,11 @@ function StaffMain() {
         <button
           type="button"
           className="staff-action-btn is-danger-outline"
-          disabled={isProcessing}
+          disabled={isProcessing || cancellationLocked}
+          title={cancellationLocked ? 'ชำระส่วนต่างแล้ว ไม่สามารถยกเลิกหรือปฏิเสธได้' : undefined}
           onClick={() => openAction(setTenantRejectConfirm)}
         >
-          ปฏิเสธ
+          {cancellationLocked ? 'ชำระแล้ว ยกเลิกไม่ได้' : 'ปฏิเสธ'}
         </button>
         {request.type === 'moveout' ? (
           request.status === 'pending' ? (
@@ -9816,7 +10195,19 @@ function StaffMain() {
                   </div>
                 </section>
 
-                <section className="inspection-section">
+                <InspectionTopicFilter
+                  topics={[
+                    { key: 'all', label: 'ทั้งหมด' },
+                    { key: 'checklist', label: 'ตรวจสภาพห้อง' },
+                    ...(inspectionForm.room_number ? [{ key: 'baseline', label: 'ผลตรวจก่อนเข้าอยู่' }] : []),
+                    { key: 'photos', label: 'รายละเอียดและรูปภาพ' },
+                    ...(inspectionMoveRoomId ? [{ key: 'finance', label: 'ค่าเสียหายและเงินมัดจำ' }] : []),
+                  ]}
+                  value={inspectionSection}
+                  onChange={setInspectionSection}
+                />
+
+                <section className="inspection-section" data-topic="checklist" hidden={!['all', 'checklist'].includes(inspectionSection)}>
                   <div className="inspection-section-head">
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">2</span> ตรวจสภาพห้อง
@@ -9837,12 +10228,18 @@ function StaffMain() {
                       <span>
                         ตรวจแล้ว <strong>{inspectionResults.length}</strong> / {MOVE_OUT_CHECKLIST.length} ข้อ
                       </span>
-                      <span className="inspection-counts">
-                        <span className="is-good">ปกติ {inspectionCounts.good}</span>
-                        <span className="is-wear">สึกหรอ {inspectionCounts.wear}</span>
-                        <span className="is-damaged">ชำรุด {inspectionCounts.damaged}</span>
-                        <span className="is-missing">สูญหาย {inspectionCounts.missing}</span>
-                        <span className="is-not_applicable">ไม่มี {inspectionCounts.not_applicable}</span>
+                      <span className="inspection-counts" role="group" aria-label="เลือกผลเดียวกันทุกข้อ">
+                        {CHECKLIST_RESULT_OPTIONS.map((option) => (
+                          <button
+                            key={option.key}
+                            type="button"
+                            className={`is-${option.key}${inspectionCounts[option.key] === MOVE_OUT_CHECKLIST.length ? ' is-all' : ''}`}
+                            title={`ตั้งทุกข้อเป็น "${option.label}"`}
+                            onClick={() => setAllChecklistResults(option.key)}
+                          >
+                            {option.label} {inspectionCounts[option.key]}
+                          </button>
+                        ))}
                       </span>
                     </div>
                     <p className="inspection-guidance">
@@ -9858,7 +10255,36 @@ function StaffMain() {
                       const isMissing = (inspectionFieldErrors.checklist || []).includes(item.key)
                       const isFurniture = item.key === 'furniture'
                       const costInvalid = (inspectionFieldErrors.item_costs || []).includes(item.key)
-                      const assetCount = inspectionForm.assets?.length || 0
+                      if (isFurniture) {
+                        return (
+                          <FurnitureAssetsRow
+                            key={item.key}
+                            label={item.label}
+                            result={inspectionForm.assets ? result : ''}
+                            assets={inspectionForm.assets}
+                            open={inspectionAssetsOpen}
+                            invalid={isMissing || Boolean(inspectionFieldErrors.assets?.length)}
+                            onToggle={() => setInspectionAssetsOpen((open) => !open)}
+                            moveIn={inspectionBaseline.baseline ? inspectionBaseline.baseline.checklist?.[item.key] ?? null : undefined}
+                            onMoveInClick={(event) => {
+                              const form = event.currentTarget.closest('form')
+                              setInspectionSection((section) => (section === 'all' ? 'all' : 'baseline'))
+                              requestAnimationFrame(() =>
+                                requestAnimationFrame(() =>
+                                  form?.querySelector('[data-topic="baseline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                                ),
+                              )
+                            }}
+                          >
+                            <MoveOutAssetCheck
+                              roomNumber={inspectionForm.room_number}
+                              assets={inspectionForm.assets}
+                              onChange={setInspectionAssets}
+                              invalidIndexes={inspectionFieldErrors.assets || []}
+                            />
+                          </FurnitureAssetsRow>
+                        )
+                      }
                       return (
                         <div
                           key={item.key}
@@ -9867,15 +10293,8 @@ function StaffMain() {
                           <span className="inspection-row-label">
                             {item.label}
                             {isMissing && <small>ยังไม่ได้เลือก</small>}
-                            {isFurniture && (
-                              <button
-                                type="button"
-                                className="inspection-assets-toggle"
-                                aria-expanded={inspectionAssetsOpen}
-                                onClick={() => setInspectionAssetsOpen((open) => !open)}
-                              >
-                                {inspectionAssetsOpen ? '▴' : '▾'} อุปกรณ์และทรัพย์สินในห้อง{inspectionForm.assets ? ` (${assetCount})` : ''}
-                              </button>
+                            {inspectionBaseline.baseline && (
+                              <MoveInCompareTag before={inspectionBaseline.baseline.checklist?.[item.key]} after={result} />
                             )}
                           </span>
                           <div className="inspection-choices" role="radiogroup" aria-label={item.label}>
@@ -9893,31 +10312,15 @@ function StaffMain() {
                               </button>
                             ))}
                           </div>
-                          {!isFurniture && COSTED_RESULTS.includes(result) && (
-                            <label className={`inspection-cost${costInvalid ? ' is-invalid' : ''}`}>
-                              <span>ค่าเสียหาย</span>
-                              <input
-                                className="staff-form-input"
-                                inputMode="decimal"
-                                value={inspectionForm.item_costs[item.key] ?? ''}
-                                placeholder="0"
-                                aria-label={`ค่าเสียหาย ${item.label}`}
-                                onChange={(event) => setInspectionItemCost(item.key, event.target.value)}
-                              />
-                              <em>บาท</em>
-                              {costInvalid && <small>ตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง</small>}
-                            </label>
-                          )}
-                          {/* Kept mounted while collapsed so the room's assets still load and get saved. */}
-                          {isFurniture && (
-                            <div className="inspection-assets-panel" hidden={!inspectionAssetsOpen && !COSTED_RESULTS.includes(result)}>
-                              <MoveOutAssetCheck
-                                roomNumber={inspectionForm.room_number}
-                                assets={inspectionForm.assets}
-                                onChange={setInspectionAssets}
-                                invalidIndexes={inspectionFieldErrors.assets || []}
-                              />
-                            </div>
+                          {COSTED_RESULTS.includes(result) && (
+                            <InspectionCostInput
+                              value={inspectionForm.item_costs[item.key]}
+                              onChange={(cost) => setInspectionItemCost(item.key, cost)}
+                              label={item.label}
+                              tone={result}
+                              hint="เว้นว่างหากไม่คิดค่าเสียหาย"
+                              error={costInvalid ? 'กรอกเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง' : ''}
+                            />
                           )}
                         </div>
                       )
@@ -9933,7 +10336,17 @@ function StaffMain() {
                   </div>
                 </section>
 
-                <section className="inspection-section">
+                {inspectionForm.room_number && (
+                  <section className="inspection-section" data-topic="baseline" hidden={!['all', 'baseline'].includes(inspectionSection)}>
+                    <MoveInBaselineCard
+                      baseline={inspectionBaseline.baseline}
+                      loading={inspectionBaseline.loading}
+                      error={inspectionBaseline.error}
+                    />
+                  </section>
+                )}
+
+                <section className="inspection-section" data-topic="photos" hidden={!['all', 'photos'].includes(inspectionSection)}>
                   <h4 className="inspection-section-title">
                     <span className="inspection-step">3</span> รายละเอียดและรูปภาพ
                   </h4>
@@ -9999,7 +10412,7 @@ function StaffMain() {
                 </section>
 
                 {inspectionMoveRoomId && (
-                  <section className="inspection-section">
+                  <section className="inspection-section" data-topic="finance" hidden={!['all', 'finance'].includes(inspectionSection)}>
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">4</span> ค่าเสียหายและเงินมัดจำ
                     </h4>
@@ -10007,10 +10420,7 @@ function StaffMain() {
                       key={inspectionMoveRoomId}
                       previewUrl={`/api/staff/requests/${inspectionMoveRoomId}/transfer-preview`}
                       value={inspectionForm.damage_cost}
-                      onChange={(next) => {
-                        setInspectionForm((form) => ({ ...form, damage_cost: next }))
-                        setInspectionFieldErrors((errors) => ({ ...errors, damage_cost: undefined }))
-                      }}
+                      readOnly
                       error={inspectionFieldErrors.damage_cost}
                       inputId="inspection-damage-cost"
                     />
@@ -10096,6 +10506,22 @@ function StaffMain() {
                   </li>
                 )
               })}
+            </ul>
+          )}
+          {staffTab === 'move-out-inspections' && (
+            <ul className="nav staff-subtabs" aria-label="หมวดหมู่ตรวจสภาพห้อง">
+              {INSPECTION_PAGES.map((page) => (
+                <li className="nav-item" key={page.key}>
+                  <button
+                    type="button"
+                    className={`nav-link staff-subtab-link${inspectionPage === page.key ? ' active' : ''}`}
+                    aria-current={inspectionPage === page.key ? 'page' : undefined}
+                    onClick={() => setInspectionPage(page.key)}
+                  >
+                    {page.label}
+                  </button>
+                </li>
+              ))}
             </ul>
           )}
           <div className="dorm-menu-bar">
@@ -10413,9 +10839,11 @@ function StaffMain() {
           </div>
         )}
 
-        {staffTab === 'move-out-inspections' && <MoveInInspectionPanel Modal={Modal} />}
+        {staffTab === 'move-out-inspections' && inspectionPage === 'move-in' && (
+          <MoveInInspectionPanel Modal={Modal} FilterPanel={StaffFilterPanel} />
+        )}
 
-        {staffTab === 'move-out-inspections' && (
+        {staffTab === 'move-out-inspections' && inspectionPage === 'results' && (
           <div className="staff-card staff-tab-card">
             <div className="staff-card-header">
               <div>
@@ -10952,6 +11380,8 @@ function StaffMain() {
                         </button>
                       </div>
                     </div>
+
+                    {card.type === 'move_room' && <TransferContractPendingPanel apiBase="/api/staff" refreshKey={tenantRequests.length} />}
 
                     {items.length > 0 && (
                       <StaffFilterPanel

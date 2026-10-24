@@ -109,7 +109,7 @@ router.get("/available", async (req, res) => {
       loadHeldTransferRooms(pool),
     ]);
 
-    return res.json({ rooms: rooms.map((room) => ({ ...room, held_for_transfer: heldRooms.has(Number(room.room_number)) })) });
+    return res.json({ rooms: rooms.filter((room) => !heldRooms.has(Number(room.room_number))) });
   } catch (error) {
     console.error("Fetch available rooms error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });

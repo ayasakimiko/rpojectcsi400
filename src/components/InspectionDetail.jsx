@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import { UploadImage } from './UploadMedia.jsx'
 import { PersonIcon } from './ParcelIcons.jsx'
 import { InspectionPurposeBadge } from './InspectionCells.jsx'
 import { getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import { assetCost, chargeableAssetCost } from '../utils/inspectionChecklist.js'
+import MoveInBaselineCard from './MoveInBaseline.jsx'
+import InspectionTopicFilter from './InspectionTopicFilter.jsx'
+import { changeBetween } from '../utils/moveInBaseline.js'
 import './InspectionCells.css'
 import './InspectionDetail.css'
 
@@ -25,7 +29,13 @@ const RESULT_INFO = {
   not_applicable: { label: 'ไม่มี/ไม่ได้ติดตั้ง', tone: 'muted' },
 }
 const RESULT_NONE = { label: 'ไม่ได้ระบุ', tone: 'muted' }
-const TONE_LABEL = { danger: 'พบชำรุด/สูญหาย', warning: 'พบสึกหรอ', success: 'สภาพปกติ' }
+const CHANGE_INFO = {
+  new: { label: 'เกิดขึ้นใหม่', tone: 'danger' },
+  worse: { label: 'แย่ลง', tone: 'warning' },
+  better: { label: 'ดีขึ้น', tone: 'success' },
+  same: { label: 'เหมือนเดิม', tone: 'muted' },
+  unknown: { label: 'เทียบไม่ได้', tone: 'muted' },
+}
 
 const ICON_PATHS = {
   phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
@@ -79,15 +89,44 @@ export default function InspectionDetail({
   purposeInHeader = false,
 }) {
   const summary = summarize(inspection.checklist)
-  const issueCount = summary.counts.damaged + summary.counts.missing
   const isMoveRoom = inspection.tenant_request_type === 'move_room'
   const photos = inspection.photos || []
   const shownPhotos = photoLimit ? photos.slice(0, photoLimit) : photos
   const inspector = inspection.inspected_by || inspection.inspected_by_name
+  const [checklistView, setChecklistView] = useState('result')
+  const [topic, setTopic] = useState('all')
+  const show = (key) => topic === 'all' || topic === key
+  const topics = [
+    { key: 'all', label: 'ทั้งหมด' },
+    { key: 'note', label: 'รายละเอียด' },
+    ...((inspection.assets || []).length > 0 ? [{ key: 'assets', label: 'อุปกรณ์และทรัพย์สิน' }] : []),
+    ...(inspection.move_in_baseline !== undefined ? [{ key: 'baseline', label: 'ผลตรวจก่อนเข้าอยู่' }] : []),
+    { key: 'checklist', label: 'Checklist' },
+    { key: 'photos', label: 'รูปภาพ' },
+  ]
+  const assets = inspection.assets || []
+  const assetTotal = assets.reduce((sum, asset) => sum + (Number(asset.price) || 0), 0)
+  const assetCharge = chargeableAssetCost(assets)
+  const assetIssues = assets.filter((asset) => ['damaged', 'missing'].includes(asset.result)).length
+  const compareRows = CHECKLIST_ITEMS.map((item) => {
+    const beforeKey = inspection.move_in_baseline?.checklist?.[item.key]
+    const afterKey = inspection.checklist?.[item.key]
+    return {
+      key: item.key,
+      label: item.label.replace(/\s*\(.*\)$/, ''),
+      before: RESULT_INFO[beforeKey] || RESULT_NONE,
+      after: RESULT_INFO[afterKey] || RESULT_NONE,
+      change: changeBetween(beforeKey, afterKey),
+      cost: Number(inspection.item_costs?.[item.key]) || 0,
+    }
+  })
+  const compareTally = compareRows.reduce((acc, row) => ({ ...acc, [row.change]: (acc[row.change] || 0) + 1 }), {})
+  const hasBaseline = inspection.move_in_baseline !== undefined
+  const baseline = inspection.move_in_baseline || null
 
   return (
     <div className="idt">
-      <div className="idt-body">
+      <div className="idt-body" data-topic-root>
         <div className={`idt-hero is-${summary.tone}`}>
           <div className="idt-hero-top">
             <span className="idt-avatar" aria-hidden="true"><PersonIcon size={22} /></span>
@@ -139,7 +178,9 @@ export default function InspectionDetail({
           </dl>
         </div>
 
-        <section className="idt-section">
+        <InspectionTopicFilter topics={topics} value={topic} onChange={setTopic} />
+
+        <section className="idt-section" data-topic="note" hidden={!show('note')}>
           <h4><Icon type="note" size={16} />รายละเอียดที่พบ / หมายเหตุ</h4>
           <div className={`idt-note${inspection.damage_note ? '' : ' is-empty'}`}>
             <p>{inspection.damage_note || 'ไม่มีบันทึกความเสียหาย'}</p>
@@ -152,70 +193,151 @@ export default function InspectionDetail({
           )}
         </section>
 
-        {inspection.assets?.length > 0 && (
-          <section className="idt-section">
+        {assets.length > 0 && (
+          <section className="idt-section" data-topic="assets" hidden={!show('assets')}>
             <div className="idt-section-head">
               <h4><Icon type="clipboard" size={16} />อุปกรณ์และทรัพย์สินในห้อง</h4>
-              <span className={`idt-result is-${chargeableAssetCost(inspection.assets) > 0 ? 'danger' : 'success'}`}>
-                คิดค่าเสียหาย {formatBaht(chargeableAssetCost(inspection.assets))}
+              <span className={`idt-result is-${assetCharge > 0 ? 'danger' : 'success'}`}>
+                {assetCharge > 0 ? `คิดค่าเสียหาย ${formatBaht(assetCharge)}` : 'ไม่มีค่าเสียหาย'}
               </span>
             </div>
-            <ul className="idt-checklist">
-              {inspection.assets.map((asset) => {
-                const info = RESULT_INFO[asset.result] || RESULT_NONE
-                const before = RESULT_INFO[asset.move_in_result]?.label || 'ไม่ได้บันทึก'
+            <dl className="idt-asset-summary">
+              <div>
+                <dt>ทั้งหมด</dt>
+                <dd>{assets.length} รายการ</dd>
+              </div>
+              <div>
+                <dt>มูลค่ารวม</dt>
+                <dd>{formatBaht(assetTotal)}</dd>
+              </div>
+              <div className={assetIssues > 0 ? 'is-danger' : ''}>
+                <dt>ชำรุด/สูญหาย</dt>
+                <dd>{assetIssues} รายการ</dd>
+              </div>
+              <div className={assetCharge > 0 ? 'is-danger' : ''}>
+                <dt>ค่าเสียหาย</dt>
+                <dd>{formatBaht(assetCharge)}</dd>
+              </div>
+            </dl>
+            <div className="idt-assets" role="table" aria-label="อุปกรณ์และทรัพย์สินในห้อง">
+              <div className="idt-asset-row is-head" role="row">
+                <span role="columnheader">อุปกรณ์</span>
+                <span role="columnheader">ราคา</span>
+                <span role="columnheader">ตอนเข้าอยู่ → ครั้งนี้</span>
+                <span role="columnheader">ค่าเสียหาย</span>
+              </div>
+              {assets.map((asset) => {
+                const after = RESULT_INFO[asset.result] || RESULT_NONE
+                const before = RESULT_INFO[asset.move_in_result] || RESULT_NONE
+                const change = changeBetween(asset.move_in_result, asset.result)
+                const cost = assetCost(asset)
                 return (
-                  <li key={asset.name} className={`is-${info.tone}`}>
-                    <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
-                    <span className="idt-checklist-label">
-                      {asset.name} · {formatBaht(asset.price)}
-                      <small className="idt-asset-before">
-                        ตอนเข้าอยู่: {before}
-                        {assetCost(asset) > 0 && ` · ค่าเสียหาย ${formatBaht(assetCost(asset))}`}
-                      </small>
+                  <div key={asset.name} role="row" className={`idt-asset-row is-${after.tone}${change === 'new' ? ' is-new' : ''}`}>
+                    <span role="cell" className="idt-asset-name">
+                      {asset.name}
+                      {change === 'new' && <em>เกิดขึ้นใหม่</em>}
                     </span>
-                    <span className={`idt-chip is-${info.tone}`}>{info.label}</span>
-                  </li>
+                    <span role="cell" className="idt-asset-price">{formatBaht(asset.price)}</span>
+                    <span role="cell" className="idt-asset-flow">
+                      <span className={`idt-chip is-${before.tone}`} title="ตอนเข้าอยู่">{asset.move_in_result ? before.label : 'ไม่ได้บันทึก'}</span>
+                      <Icon type="arrow" size={13} />
+                      <span className={`idt-chip is-${after.tone}`} title="ตรวจครั้งนี้">{after.label}</span>
+                    </span>
+                    <span role="cell" className={`idt-asset-cost${cost > 0 ? ' is-charged' : ''}`}>{cost > 0 ? formatBaht(cost) : '—'}</span>
+                  </div>
                 )
               })}
-            </ul>
+            </div>
           </section>
         )}
 
-        <section className="idt-section">
+        {hasBaseline && (
+          <section className="idt-section" data-topic="baseline" hidden={!show('baseline')}>
+            <h4><Icon type="home" size={16} />ผลตรวจก่อนเข้าอยู่</h4>
+            <MoveInBaselineCard baseline={baseline} title="ผลตรวจก่อนเข้าอยู่ของผู้เช่าคนนี้" />
+          </section>
+        )}
+
+        <section className="idt-section" data-topic="checklist" hidden={!show('checklist')}>
           <div className="idt-section-head">
             <h4><Icon type="clipboard" size={16} />Checklist</h4>
-            <span className={`idt-result is-${summary.tone}`}>
-              {TONE_LABEL[summary.tone]}
-              {issueCount > 0 && ` ${issueCount} ข้อ`}
-            </span>
+            <div className="idt-view-toggle" role="tablist" aria-label="มุมมอง Checklist">
+              <button type="button" role="tab" aria-selected={checklistView === 'result'} className={checklistView === 'result' ? 'is-active' : ''} onClick={() => setChecklistView('result')}>
+                ผลตรวจ
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={checklistView === 'compare'}
+                className={checklistView === 'compare' ? 'is-active' : ''}
+                disabled={!baseline}
+                title={baseline ? undefined : 'ไม่มีผลตรวจก่อนเข้าอยู่ให้เปรียบเทียบ'}
+                onClick={() => setChecklistView('compare')}
+              >
+                ผลตรวจก่อนเข้าอยู่
+              </button>
+            </div>
           </div>
-          <div className="idt-counts">
-            <span className="is-success"><strong>{summary.counts.good}</strong>ปกติ</span>
-            <span className="is-warning"><strong>{summary.counts.wear}</strong>สึกหรอ</span>
-            <span className="is-danger"><strong>{summary.counts.damaged}</strong>ชำรุด</span>
-            <span className="is-danger"><strong>{summary.counts.missing}</strong>สูญหาย</span>
-            <span><strong>{summary.counts.not_applicable}</strong>ไม่มี</span>
-          </div>
-          <ul className="idt-checklist">
-            {CHECKLIST_ITEMS.map((item) => {
-              const info = RESULT_INFO[inspection.checklist?.[item.key]] || RESULT_NONE
-              const itemCost = Number(inspection.item_costs?.[item.key]) || 0
-              return (
-                <li key={item.key} className={`is-${info.tone}`}>
-                  <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
-                  <span className="idt-checklist-label">
-                    {item.label}
-                    {itemCost > 0 && <small className="idt-asset-before">ค่าเสียหาย {formatBaht(itemCost)}</small>}
+          {checklistView === 'compare' && baseline ? (
+            <>
+              <div className="idt-compare-tally">
+                {['new', 'worse', 'better', 'same'].map((key) => (
+                  <span key={key} className={`is-${CHANGE_INFO[key].tone}${compareTally[key] ? '' : ' is-zero'}`}>
+                    <strong>{compareTally[key] || 0}</strong>
+                    {CHANGE_INFO[key].label}
                   </span>
-                  <span className={`idt-chip is-${info.tone}`}>{info.label}</span>
-                </li>
-              )
-            })}
-          </ul>
+                ))}
+              </div>
+              <div className="idt-compare" role="table" aria-label="เปรียบเทียบ Checklist กับตอนเข้าอยู่">
+                <div className="idt-compare-row is-head" role="row">
+                  <span role="columnheader">รายการ</span>
+                  <span role="columnheader">ตอนเข้าอยู่</span>
+                  <span role="columnheader">ครั้งนี้</span>
+                  <span role="columnheader">ผลเทียบ</span>
+                </div>
+                {compareRows.map((row) => (
+                  <div key={row.key} role="row" className={`idt-compare-row is-${row.change}`}>
+                    <span role="cell" className="idt-compare-name">
+                      {row.label}
+                      {row.cost > 0 && <small>ค่าเสียหาย {formatBaht(row.cost)}</small>}
+                    </span>
+                    <span role="cell"><span className={`idt-chip is-${row.before.tone}`}>{row.before.label}</span></span>
+                    <span role="cell"><span className={`idt-chip is-${row.after.tone}`}>{row.after.label}</span></span>
+                    <span role="cell" className={`idt-compare-change is-${CHANGE_INFO[row.change].tone}`}>{CHANGE_INFO[row.change].label}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="idt-counts">
+                <span className="is-success"><strong>{summary.counts.good}</strong>ปกติ</span>
+                <span className="is-warning"><strong>{summary.counts.wear}</strong>สึกหรอ</span>
+                <span className="is-danger"><strong>{summary.counts.damaged}</strong>ชำรุด</span>
+                <span className="is-danger"><strong>{summary.counts.missing}</strong>สูญหาย</span>
+                <span><strong>{summary.counts.not_applicable}</strong>ไม่มี</span>
+              </div>
+              <ul className="idt-checklist">
+                {CHECKLIST_ITEMS.map((item) => {
+                  const info = RESULT_INFO[inspection.checklist?.[item.key]] || RESULT_NONE
+                  const itemCost = Number(inspection.item_costs?.[item.key]) || 0
+                  return (
+                    <li key={item.key} className={`is-${info.tone}`}>
+                      <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
+                      <span className="idt-checklist-label">
+                        {item.label}
+                        {itemCost > 0 && <small className="idt-asset-before">ค่าเสียหาย {formatBaht(itemCost)}</small>}
+                      </span>
+                      <span className={`idt-chip is-${info.tone}`}>{info.label}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
         </section>
 
-        <section className="idt-section">
+        <section className="idt-section" data-topic="photos" hidden={!show('photos')}>
           <div className="idt-section-head">
             <h4>
               <Icon type="camera" size={16} />

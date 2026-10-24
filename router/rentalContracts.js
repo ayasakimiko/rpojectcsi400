@@ -325,50 +325,9 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
   };
 }
 
-const CONTRACT_COLUMNS = `
-  b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
-  r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
-  b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
-  COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
-  b.contract_duration_months IS NOT NULL AS duration_selected,
-  COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
-  b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
-  b.deposit_settled_at, b.deposit_settled_by_name,
-  (SELECT moi.damage_note FROM MoveOutInspection moi
-    JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
-    WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
-      AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
-    ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
-  (SELECT moi2.damage_cost FROM MoveOutInspection moi2
-    JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
-    WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
-      AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
-    ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
-  (SELECT MIN(nb.id) FROM Booking nb
-    WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
-  (SELECT MAX(pb.id) FROM Booking pb
-    WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
-  (SELECT MIN(nb4.created_at) FROM Booking nb4
-    WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
-  COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
-    WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
-      AND NOT EXISTS (SELECT 1 FROM Booking nb3
-        WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
-  ), b.ended_at) AS moved_out_at,
-  (SELECT MAX(b2.rental_end_date) FROM Booking b2
-    WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
-      AND NOT EXISTS (SELECT 1 FROM Booking nb2
-        WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date`;
-
 const inContractBookings = (contract, bookingId) =>
   (contract.prev_contract_id == null || bookingId >= contract.booking_id) &&
   (contract.next_contract_id == null || bookingId < contract.next_contract_id);
-
-const CONTRACT_JOINS = `
-  FROM Booking b
-  JOIN Customer c ON c.id = b.customer_id
-  LEFT JOIN Room r ON r.id = b.room_id
-  LEFT JOIN Room cr ON cr.room_number = c.room_number`;
 
 async function attachContractImages(pool, contracts, now) {
   if (contracts.length === 0) return [];
@@ -444,17 +403,52 @@ export async function loadCustomerContracts(pool, customerIds, { currentOnly = f
   if (ids.length === 0) return new Map();
   const [rows] = await pool.query(
     `SELECT * FROM (
-       SELECT ${CONTRACT_COLUMNS},
+       SELECT b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
+              r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
+              b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
+              COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
+              b.contract_duration_months IS NOT NULL AS duration_selected,
+              COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+              b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+              b.deposit_settled_at, b.deposit_settled_by_name,
+              (SELECT moi.damage_note FROM MoveOutInspection moi
+                JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+                WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+                  AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+                ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+              (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+                JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+                WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+                  AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+                ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
+              (SELECT MIN(nb.id) FROM Booking nb
+                WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
+              (SELECT MAX(pb.id) FROM Booking pb
+                WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+              (SELECT MIN(nb4.created_at) FROM Booking nb4
+                WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
+              COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
+                WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
+                  AND NOT EXISTS (SELECT 1 FROM Booking nb3
+                    WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
+              ), b.ended_at) AS moved_out_at,
+              (SELECT MAX(b2.rental_end_date) FROM Booking b2
+                WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
+                  AND NOT EXISTS (SELECT 1 FROM Booking nb2
+                    WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date,
               ROW_NUMBER() OVER (
                 PARTITION BY b.customer_id
                 ORDER BY b.contract_completed_at IS NULL, b.created_at DESC, b.id DESC
               ) AS contract_rank
-       ${CONTRACT_JOINS}
+       FROM Booking b
+       JOIN Customer c ON c.id = b.customer_id
+       LEFT JOIN Room r ON r.id = b.room_id
+       LEFT JOIN Room cr ON cr.room_number = c.room_number
        WHERE b.customer_id IN (?)
-         ${currentOnly ? "AND (c.is_suspended = TRUE OR b.created_at >= COALESCE(c.history_reset_at, '1000-01-01'))" : ""}
+         AND (? = FALSE OR c.is_suspended = TRUE OR b.created_at >= COALESCE(c.history_reset_at, '1000-01-01'))
      ) ranked
      WHERE contract_rank = 1`,
-    [ids],
+    [ids, currentOnly],
   );
   rows.forEach((row) => delete row.contract_rank);
   const contracts = await attachContractImages(pool, rows, new Date());
@@ -475,8 +469,43 @@ export const UNSETTLED_DEPOSIT_MESSAGE = (deposit) =>
 
 export async function loadContractByBooking(pool, bookingId) {
   const [rows] = await pool.query(
-    `SELECT ${CONTRACT_COLUMNS}
-     ${CONTRACT_JOINS}
+    `SELECT b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
+            r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
+            b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
+            COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
+            b.contract_duration_months IS NOT NULL AS duration_selected,
+            COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+            b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+            b.deposit_settled_at, b.deposit_settled_by_name,
+            (SELECT moi.damage_note FROM MoveOutInspection moi
+              JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+              WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+                AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+              ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+            (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+              JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+              WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+                AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+              ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
+            (SELECT MIN(nb.id) FROM Booking nb
+              WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
+            (SELECT MAX(pb.id) FROM Booking pb
+              WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+            (SELECT MIN(nb4.created_at) FROM Booking nb4
+              WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
+            COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
+              WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
+                AND NOT EXISTS (SELECT 1 FROM Booking nb3
+                  WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
+            ), b.ended_at) AS moved_out_at,
+            (SELECT MAX(b2.rental_end_date) FROM Booking b2
+              WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
+                AND NOT EXISTS (SELECT 1 FROM Booking nb2
+                  WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date
+     FROM Booking b
+     JOIN Customer c ON c.id = b.customer_id
+     LEFT JOIN Room r ON r.id = b.room_id
+     LEFT JOIN Room cr ON cr.room_number = c.room_number
      WHERE b.id = ? AND b.contract_completed_at IS NOT NULL`,
     [bookingId],
   );
@@ -485,18 +514,49 @@ export async function loadContractByBooking(pool, bookingId) {
 
 export async function loadCompletedContracts(pool) {
   const [rows] = await pool.query(
-    `SELECT ${CONTRACT_COLUMNS}
-     ${CONTRACT_JOINS}
+    `SELECT b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
+            r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
+            b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
+            COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
+            b.contract_duration_months IS NOT NULL AS duration_selected,
+            COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+            b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+            b.deposit_settled_at, b.deposit_settled_by_name,
+            (SELECT moi.damage_note FROM MoveOutInspection moi
+              JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+              WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+                AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+              ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+            (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+              JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+              WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+                AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+              ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
+            (SELECT MIN(nb.id) FROM Booking nb
+              WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
+            (SELECT MAX(pb.id) FROM Booking pb
+              WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+            (SELECT MIN(nb4.created_at) FROM Booking nb4
+              WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
+            COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
+              WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
+                AND NOT EXISTS (SELECT 1 FROM Booking nb3
+                  WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
+            ), b.ended_at) AS moved_out_at,
+            (SELECT MAX(b2.rental_end_date) FROM Booking b2
+              WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
+                AND NOT EXISTS (SELECT 1 FROM Booking nb2
+                  WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date
+     FROM Booking b
+     JOIN Customer c ON c.id = b.customer_id
+     LEFT JOIN Room r ON r.id = b.room_id
+     LEFT JOIN Room cr ON cr.room_number = c.room_number
      WHERE b.contract_completed_at IS NOT NULL
      ORDER BY b.contract_completed_at DESC, b.id DESC
      LIMIT 1000`,
   );
   return attachContractImages(pool, rows, new Date());
 }
-
-const ROOM_COLUMNS = `id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
-  electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until,
-  billing_start_date, pending_lump_sum_months, rent_credit, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active`;
 
 const formatBaht = (cents) => `฿${(cents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
 
@@ -561,7 +621,10 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   if (!inspection) blockers.push("กรุณาตรวจห้องก่อนอนุมัติย้ายห้อง");
 
   const [rooms] = await db.query(
-    `SELECT ${ROOM_COLUMNS} FROM Room WHERE room_number IN (?, ?) ORDER BY room_number${forUpdate}`,
+    `SELECT id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
+            electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until,
+            billing_start_date, pending_lump_sum_months, rent_credit, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active
+     FROM Room WHERE room_number IN (?, ?) ORDER BY room_number${forUpdate}`,
     [request.room_number, request.target_room_number ?? request.room_number],
   );
   const sourceRoom = rooms.find((room) => room.room_number === request.room_number) ?? null;
@@ -569,7 +632,7 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   if (!targetRoom) blockers.push("ไม่พบห้องปลายทาง");
   else if (targetRoom.is_booked) blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าแล้ว ไม่สามารถย้ายเข้าได้`);
   else if (await roomHeldForTransfer(db, targetRoom.room_number, { exceptRequestId: request.id })) {
-    blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าคนอื่นจองไว้ระหว่างรอชำระส่วนต่าง`);
+    blockers.push(`ห้อง ${targetRoom.room_number} มีผู้เช่าคนอื่นชำระเงินย้ายเข้าก่อนแล้ว`);
   }
   if (!sourceRoom || !sourceRoom.is_booked) blockers.push("ห้องต้นทางเปลี่ยนแปลงแล้ว กรุณาตรวจสอบสถานะห้อง");
   else if (!sourceRoom.contract_active) blockers.push("สัญญาเช่าหมดอายุแล้ว ไม่สามารถย้ายห้องได้");
@@ -647,7 +710,7 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   };
   if (chargePayment && toCents(chargePayment.amount) !== settlement.additionalChargeCents) {
     blockers.push(
-      `ยอดชำระย้ายห้องเปลี่ยนจาก ${formatBaht(toCents(chargePayment.amount))} เป็น ${formatBaht(settlement.additionalChargeCents)} กรุณาปฏิเสธคำขอแล้วให้ผู้เช่าส่งคำขอใหม่`,
+      `ยอดชำระย้ายห้องเปลี่ยนจาก ${formatBaht(toCents(chargePayment.amount))} เป็น ${formatBaht(settlement.additionalChargeCents)} กรุณาติดต่อเจ้าหน้าที่เพื่อตรวจสอบยอดชำระ`,
     );
   }
 
@@ -678,7 +741,7 @@ export async function validateInspectionDamage(db, requestId, damageCents) {
   }
   const payment = plan.transferCharge.payment;
   if (payment && (payment.status === "paid" || payment.slip_path) && damageCents !== plan.damage.inspectionCents) {
-    return "ผู้เช่าชำระหรือส่งสลิปยอดย้ายห้องแล้ว จึงแก้ไขค่าเสียหายไม่ได้ กรุณาปฏิเสธคำขอแล้วให้ผู้เช่าส่งคำขอใหม่";
+    return "ผู้เช่าชำระหรือส่งสลิปยอดย้ายห้องแล้ว จึงแก้ไขค่าเสียหายไม่ได้ กรุณาติดต่อเจ้าหน้าที่เพื่อตรวจสอบยอดชำระ";
   }
   return null;
 }
@@ -687,23 +750,71 @@ export const ROOM_TRANSFER_CHARGE_DAYS = 3;
 
 export async function loadHeldTransferRooms(db, { exceptCustomerId = 0 } = {}) {
   const [rows] = await db.query(
-    `SELECT DISTINCT target_room_number FROM TenantRequest
-     WHERE type = 'move_room' AND status IN ('pending', 'in_progress')
-       AND transfer_charge_payment_id IS NOT NULL AND target_room_number IS NOT NULL AND customer_id <> ?`,
+    `SELECT DISTINCT tr.target_room_number FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+       AND tr.target_room_number IS NOT NULL AND tr.customer_id <> ?`,
     [exceptCustomerId],
   );
   return new Set(rows.map((row) => Number(row.target_room_number)));
 }
 
-export async function roomHeldForTransfer(db, roomNumber, { exceptRequestId = 0, exceptCustomerId = 0 } = {}) {
+export async function roomHeldForTransfer(db, roomNumber, { exceptRequestId = 0, exceptCustomerId = 0, anyRequest = false } = {}) {
   const [rows] = await db.query(
-    `SELECT id FROM TenantRequest
-     WHERE type = 'move_room' AND status IN ('pending', 'in_progress') AND transfer_charge_payment_id IS NOT NULL
-       AND target_room_number = ? AND id <> ? AND customer_id <> ?
+    `SELECT tr.id FROM TenantRequest tr
+     LEFT JOIN Payment p ON p.id = tr.transfer_charge_payment_id
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+       AND (? OR p.status = 'paid')
+       AND tr.target_room_number = ? AND tr.id <> ? AND tr.customer_id <> ?
      LIMIT 1`,
-    [roomNumber, exceptRequestId, exceptCustomerId],
+    [anyRequest, roomNumber, exceptRequestId, exceptCustomerId],
   );
   return rows.length > 0;
+}
+
+export async function claimRoomsForPaidTransfers(db) {
+  const [winners] = await db.query(
+    `SELECT tr.id, tr.target_room_number FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND tr.target_room_number IS NOT NULL
+       AND EXISTS (SELECT 1 FROM TenantRequest other
+         WHERE other.type = 'move_room' AND other.status IN ('pending', 'in_progress')
+           AND other.target_room_number = tr.target_room_number AND other.id <> tr.id
+           AND NOT EXISTS (SELECT 1 FROM Payment op WHERE op.id = other.transfer_charge_payment_id AND op.status = 'paid'))
+     ORDER BY p.id ASC`,
+  );
+  const claimed = new Set();
+  let cancelled = 0;
+  for (const winner of winners) {
+    if (claimed.has(winner.target_room_number)) continue;
+    claimed.add(winner.target_room_number);
+    const [losers] = await db.query(
+      `SELECT id, transfer_charge_payment_id FROM TenantRequest
+       WHERE type = 'move_room' AND status IN ('pending', 'in_progress') AND target_room_number = ? AND id <> ?
+         AND NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid')`,
+      [winner.target_room_number, winner.id],
+    );
+    for (const loser of losers) {
+      const [result] = await db.query(
+        `UPDATE TenantRequest
+         SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (มีผู้เช่าคนอื่นชำระก่อน)', reject_reason = ?
+         WHERE id = ? AND status IN ('pending', 'in_progress')
+         AND NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid')`,
+        [`มีผู้เช่าคนอื่นชำระเงินย้ายเข้าห้อง ${winner.target_room_number} ก่อนแล้ว ระบบยกเลิกคำขอย้ายห้องนี้ กรุณาเลือกห้องอื่น`, loser.id],
+      );
+      if (!result.affectedRows) continue;
+      if (loser.transfer_charge_payment_id) {
+        await db.query(
+          `UPDATE Payment SET status = 'cancelled',
+                  note = LEFT(CONCAT(COALESCE(note, ''), IF(slip_path IS NULL, ' (ยกเลิก: มีผู้เช่าคนอื่นชำระก่อน)', ' (ยกเลิก: มีผู้เช่าคนอื่นชำระก่อน ต้องคืนเงินตามสลิป)')), 255)
+           WHERE id = ? AND status = 'pending'`,
+          [loser.transfer_charge_payment_id],
+        );
+      }
+      cancelled += 1;
+    }
+  }
+  return cancelled;
 }
 
 export const roomTransferNeedsPayment = (plan) => plan.transferCharge.required && plan.transferCharge.status !== "paid";
@@ -776,16 +887,21 @@ export async function cancelTransfersIntoBookedRooms(db, roomNumber = null) {
      FROM TenantRequest tr
      JOIN Room r ON r.room_number = tr.target_room_number
      WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND r.is_booked = TRUE
+       AND NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = tr.transfer_charge_payment_id AND p.status = 'paid')
        AND (? IS NULL OR tr.target_room_number = ?)`,
     [roomNumber, roomNumber],
   );
+  let cancelled = 0;
   for (const row of rows) {
-    await db.query(
+    const [result] = await db.query(
       `UPDATE TenantRequest
        SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (ห้องปลายทางมีผู้เช่าแล้ว)', reject_reason = ?
-       WHERE id = ? AND status IN ('pending', 'in_progress')`,
+       WHERE id = ? AND status IN ('pending', 'in_progress')
+         AND NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid')`,
       [`ห้อง ${row.target_room_number} มีผู้เช่าเข้าพักแล้ว ระบบยกเลิกคำขอย้ายห้องและการทำสัญญาใหม่ กรุณาเลือกห้องอื่น`, row.id],
     );
+    if (!result.affectedRows) continue;
+    cancelled += 1;
     if (row.transfer_charge_payment_id) {
       await db.query(
         `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: ห้องปลายทางมีผู้เช่าแล้ว)'), 255)
@@ -794,11 +910,12 @@ export async function cancelTransfersIntoBookedRooms(db, roomNumber = null) {
       );
     }
   }
-  return rows.length;
+  return cancelled;
 }
 
 export async function expireRoomTransferCharges(db) {
   await cancelTransfersIntoBookedRooms(db);
+  await claimRoomsForPaidTransfers(db);
   const [rows] = await db.query(
     `SELECT tr.id, tr.transfer_charge_payment_id
      FROM TenantRequest tr
@@ -817,7 +934,8 @@ export async function expireRoomTransferCharges(db) {
     await db.query(
       `UPDATE TenantRequest
        SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (ไม่ชำระส่วนต่าง)', reject_reason = ?
-       WHERE id = ? AND status IN ('pending', 'in_progress')`,
+       WHERE id = ? AND status IN ('pending', 'in_progress')
+         AND NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid')`,
       [`ไม่ได้ชำระยอดย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม) ภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน ระบบยกเลิกการย้ายห้องและการทำสัญญาใหม่แล้ว`, row.id],
     );
   }
@@ -877,12 +995,12 @@ export async function loadRoomTransferPreview(db, requestId, { damageCents = nul
   };
 }
 
-export async function applyRoomTransfer(connection, plan, staffName, contractImages = []) {
+export async function applyRoomTransfer(connection, plan, staffName, contractImages = [], { deferContract = false } = {}) {
   const { request, customer, sourceRoom, targetRoom, booking, settlement } = plan;
   if (roomTransferNeedsPayment(plan)) {
     throw Object.assign(new Error("ผู้เช่ายังไม่ได้ชำระยอดย้ายห้อง"), { code: "TRANSFER_CHARGE_UNPAID" });
   }
-  if (contractImages.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
+  if (!deferContract && contractImages.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
     throw Object.assign(new Error(`กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป`), {
       code: "CONTRACT_IMAGES_REQUIRED",
     });
@@ -991,15 +1109,105 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
     ],
   );
   const transferId = transferResult.insertId;
+  if (contractImages.length > 0) {
+    await replaceTransferContractImages(connection, { transferId, contractBookingId, customerId: customer.id }, contractImages);
+  }
+  return { toBookingId, chargePaymentId, rentChargePaymentId, transferId, contractBookingId };
+}
+
+async function replaceTransferContractImages(connection, { transferId, contractBookingId, customerId }, contractImages) {
   await connection.query(
     `UPDATE ContractImage SET replaced_at = NOW(), replaced_by_transfer_id = ? WHERE booking_id = ? AND replaced_at IS NULL`,
     [transferId, contractBookingId],
   );
   await connection.query(
     `INSERT INTO ContractImage (booking_id, customer_id, name, url, room_transfer_id) VALUES ?`,
-    [contractImages.map((image) => [contractBookingId, customer.id, image.name, image.url, transferId])],
+    [contractImages.map((image) => [contractBookingId, customerId, image.name, image.url, transferId])],
   );
-  return { toBookingId, chargePaymentId, rentChargePaymentId, transferId, contractBookingId };
+}
+
+export const AUTO_TRANSFER_ACTOR = "ระบบ (ชำระยอดย้ายห้องแล้ว)";
+
+async function finishAutoTransferRequest(connection, request) {
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'approved', accepted_at = COALESCE(accepted_at, NOW()), accepted_by_name = COALESCE(accepted_by_name, ?),
+         completed_at = NOW(), completed_by_name = ?
+     WHERE id = ?`,
+    [AUTO_TRANSFER_ACTOR, AUTO_TRANSFER_ACTOR, request.id],
+  );
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE customer_id = ? AND status IN ('pending', 'in_progress') AND room_number <> ?
+       AND (type <> 'move_room' OR NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid'))`,
+    [request.customer_id, request.target_room_number],
+  );
+  await cancelTransfersIntoBookedRooms(connection, request.target_room_number);
+  await connection.query(
+    `UPDATE MaintenanceRequest
+     SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE customer_id = ? AND status IN ('pending', 'in_progress') AND room_number <> ?`,
+    [request.customer_id, request.target_room_number],
+  );
+}
+
+export async function autoApplyPaidTransfers(connection) {
+  const [requests] = await connection.query(
+    `SELECT tr.id, tr.customer_id, tr.target_room_number FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND tr.target_room_number IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM RoomTransfer rt WHERE rt.tenant_request_id = tr.id)
+     ORDER BY p.id ASC`,
+  );
+  const applied = [];
+  for (const request of requests) {
+    await connection.query("SAVEPOINT auto_room_transfer");
+    try {
+      const plan = await buildRoomTransferPlan(connection, request.id, { lock: true });
+      if (!plan?.customer || plan.stale || plan.blockers.length > 0 || roomTransferNeedsPayment(plan)) {
+        await connection.query("RELEASE SAVEPOINT auto_room_transfer");
+        continue;
+      }
+      const result = await applyRoomTransfer(connection, plan, AUTO_TRANSFER_ACTOR, [], { deferContract: true });
+      await finishAutoTransferRequest(connection, request);
+      await connection.query("RELEASE SAVEPOINT auto_room_transfer");
+      applied.push({ requestId: request.id, transferId: result.transferId, message: roomTransferApprovalMessage(plan) });
+    } catch (error) {
+      await connection.query("ROLLBACK TO SAVEPOINT auto_room_transfer");
+      console.error("Auto room transfer error:", error);
+    }
+  }
+  return applied;
+}
+
+export async function listPendingTransferContracts(db) {
+  const [rows] = await db.query(
+    `SELECT rt.id, rt.tenant_request_id, rt.customer_id, rt.from_room_number, rt.to_room_number, rt.transferred_at,
+            c.first_name, c.last_name, c.phone
+     FROM RoomTransfer rt JOIN Customer c ON c.id = rt.customer_id
+     WHERE rt.approved_by_name = ?
+       AND NOT EXISTS (SELECT 1 FROM ContractImage ci WHERE ci.room_transfer_id = rt.id)
+     ORDER BY rt.transferred_at ASC`,
+    [AUTO_TRANSFER_ACTOR],
+  );
+  return rows;
+}
+
+export async function attachTransferContractImages(connection, transferId, contractImages) {
+  const [rows] = await connection.query(
+    "SELECT id, customer_id, contract_booking_id, to_booking_id FROM RoomTransfer WHERE id = ? FOR UPDATE",
+    [transferId],
+  );
+  const transfer = rows[0];
+  if (!transfer) throw Object.assign(new Error("ไม่พบรายการย้ายห้องนี้"), { status: 404 });
+  const [existing] = await connection.query("SELECT id FROM ContractImage WHERE room_transfer_id = ? LIMIT 1", [transferId]);
+  if (existing.length > 0) throw Object.assign(new Error("รายการย้ายห้องนี้แนบสัญญาใหม่แล้ว"), { status: 409 });
+  await replaceTransferContractImages(
+    connection,
+    { transferId, contractBookingId: transfer.contract_booking_id ?? transfer.to_booking_id, customerId: transfer.customer_id },
+    contractImages,
+  );
 }
 
 export function roomTransferApprovalMessage(plan) {
@@ -1015,4 +1223,46 @@ export function roomTransferApprovalMessage(plan) {
   if (settlement.excessRefundCents > 0) parts.push(`ต้องคืนเงินส่วนเกินเพดานมัดจำให้ผู้เช่า ${formatBaht(settlement.excessRefundCents)}`);
   parts.push(`เงินมัดจำห้องใหม่ ${formatBaht(settlement.depositAfterCents)}`);
   return parts.join(" · ");
+}
+
+export const parseTransferContractImages = contractImagesParser({ min: ROOM_TRANSFER_MIN_CONTRACT_IMAGES });
+
+export function createPendingTransferContractsHandler(getPool) {
+  return async function pendingTransferContracts(_req, res) {
+    try {
+      return res.json({ transfers: await listPendingTransferContracts(getPool()) });
+    } catch (error) {
+      console.error("Load pending transfer contracts error:", error);
+      return res.status(500).json({ message: "ไม่สามารถโหลดรายการรอแนบสัญญาได้" });
+    }
+  };
+}
+
+export function createAttachTransferContractHandler(getPool) {
+  return async function attachTransferContract(req, res) {
+    const files = req.files ?? [];
+    const transferId = Number(req.params.id);
+    const connection = await getPool().getConnection();
+    let kept = false;
+    try {
+      if (!Number.isSafeInteger(transferId) || transferId <= 0) return res.status(400).json({ message: "รหัสรายการย้ายห้องไม่ถูกต้อง" });
+      await connection.beginTransaction();
+      await attachTransferContractImages(
+        connection,
+        transferId,
+        files.map((file, index) => ({ name: contractImageName(file, index), url: contractImageUrl(file) })),
+      );
+      await connection.commit();
+      kept = true;
+      return res.json({ message: "แนบรูปสัญญาใหม่เรียบร้อยแล้ว" });
+    } catch (error) {
+      await connection.rollback().catch(() => {});
+      if (error.status) return res.status(error.status).json({ message: error.message });
+      console.error("Attach transfer contract error:", error);
+      return res.status(500).json({ message: "ไม่สามารถแนบรูปสัญญาได้" });
+    } finally {
+      connection.release();
+      if (!kept && files.length) await removeContractFiles(files);
+    }
+  };
 }

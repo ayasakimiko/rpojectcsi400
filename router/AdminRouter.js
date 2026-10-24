@@ -5,6 +5,14 @@ import { authenticate, createRequireActiveAccount, requireAdminRole } from "../m
 import { getActingAdminName } from "../middleware/accounts.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
+  createFinePaymentHandler,
+  createFineReviewHandler,
+  createParkingOptionsHandler,
+  getParkingSettings,
+  parseFineSlip,
+  updateParkingSettings,
+} from "./parking.js";
+import {
   hasField,
   isPositiveId,
   MOVE_OUT_INSPECTION_STATUSES,
@@ -27,8 +35,11 @@ import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
 import {
+  createAttachTransferContractHandler,
+  createPendingTransferContractsHandler,
   expireRoomTransferCharges,
   loadCustomerContracts,
+  parseTransferContractImages,
   loadRoomTransferPreview,
   resetCustomerHistory,
   roomHeldForTransfer,
@@ -37,6 +48,7 @@ import {
 } from "./rentalContracts.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
 import { effectiveRoomAssets } from "./roomAssets.js";
+import { loadMoveOutBaseline } from "./moveInBaseline.js";
 
 const router = Router();
 
@@ -45,6 +57,7 @@ async function cancelStaleTenantRequests(connection, customerId, currentRoomNumb
     `UPDATE TenantRequest
      SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
      WHERE customer_id = ? AND status IN ('pending', 'in_progress')
+       AND (type <> 'move_room' OR NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid'))
        AND (? IS NULL OR room_number <> ?)`,
     [customerId, currentRoomNumber, currentRoomNumber],
   );
@@ -111,7 +124,15 @@ router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
 router.get("/resident-visit-requests", listResidentVisitRequests);
+router.get("/parking/options", createParkingOptionsHandler({ withOccupant: true }));
+router.get("/parking/settings", getParkingSettings);
+router.put("/parking/settings", updateParkingSettings);
+router.post("/resident-visit-requests/:id/fine-review", createFineReviewHandler(getActingAdminName));
+router.post("/resident-visit-requests/:id/fine-payment", parseFineSlip, createFinePaymentHandler({ getActingName: getActingAdminName }));
 router.post("/resident-visit-requests/:id/:decision", createResidentVisitReview(getActingAdminName));
+
+router.get("/room-transfers/pending-contracts", createPendingTransferContractsHandler(getPool));
+router.post("/room-transfers/:id/contract-images", parseTransferContractImages, createAttachTransferContractHandler(getPool));
 
 router.get("/waiting-list", async (_req, res) => {
   try {
@@ -419,7 +440,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number, tr.customer_id,
               moi.tenant_name, moi.tenant_phone, moi.checklist, moi.assets, moi.item_costs, moi.damage_note, moi.damage_cost, moi.photos,
               moi.status, moi.inspected_by_name AS inspected_by, moi.reviewed_at, moi.created_at
        FROM MoveOutInspection moi
@@ -438,6 +459,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
         assets: inspection.assets ? JSON.parse(inspection.assets) : null,
         item_costs: inspection.item_costs ? JSON.parse(inspection.item_costs) : null,
         photos: JSON.parse(inspection.photos),
+        move_in_baseline: await loadMoveOutBaseline(pool, inspection),
       },
     });
   } catch (error) {
@@ -523,8 +545,6 @@ router.get("/room-types", async (_req, res) => {
   }
 });
 
-// A room belongs to at most one type, so saving a type's room list also moves
-// those rooms away from any type they had before.
 async function saveRoomType(pool, roomTypeId, value) {
   if (value.roomNumbers.length > 0) {
     const [found] = await pool.query("SELECT room_number FROM Room WHERE room_number IN (?)", [value.roomNumbers]);
@@ -646,7 +666,6 @@ router.get("/rooms", async (req, res) => {
   }
 });
 
-// Assets can be changed while a tenant lives in the room, unlike the other room fields.
 router.put("/rooms/:room_number/assets", async (req, res) => {
   try {
     const roomNumberValue = Number(req.params.room_number);
@@ -656,7 +675,6 @@ router.put("/rooms/:room_number/assets", async (req, res) => {
     const body = req.body ?? {};
     const { error, value } = parseRoomAssetsInput(body);
     if (error) return res.status(400).json({ message: error });
-    // The in-room equipment toggles and chips are edited together with the assets.
     const amenityBody = Object.fromEntries(
       ["air_conditioner", "refrigerator", "custom_amenities"].filter((field) => hasField(body, field)).map((field) => [field, body[field]]),
     );
@@ -1075,7 +1093,7 @@ router.put("/rooms/:room_number", async (req, res) => {
 
     const pool = getPool();
     if (hasField(body, "room_number") && Number(body.room_number) !== roomNumberValue) {
-      if (await roomHeldForTransfer(pool, roomNumberValue)) {
+      if (await roomHeldForTransfer(pool, roomNumberValue, { anyRequest: true })) {
         return res.status(409).json({ message: "ห้องนี้มีผู้เช่ารอย้ายเข้าอยู่ ยังเปลี่ยนเลขห้องไม่ได้" });
       }
     }

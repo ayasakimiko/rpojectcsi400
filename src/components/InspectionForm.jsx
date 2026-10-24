@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PersonIcon } from './ParcelIcons.jsx'
 import InspectionPhotoPicker from './InspectionPhotoPicker.jsx'
+import InspectionTopicFilter from './InspectionTopicFilter.jsx'
 import MoveRoomDamageFinance from './MoveRoomDamageFinance.jsx'
 import { damageInputError, damageInputValue } from '../utils/damageCost.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -20,6 +21,7 @@ function formatDate(value) {
 export default function InspectionForm({ mode, candidates = [], candidatesLoading = false, initial = null, submitting = false, error = '', previewUrlFor = null, onSubmit, onCancel }) {
   const [requestId, setRequestId] = useState(() => (mode === 'create' && candidates.length === 1 ? String(candidates[0].id) : ''))
   const [checklist, setChecklist] = useState(() => ({ ...(initial?.checklist || {}) }))
+  const [topic, setTopic] = useState('all')
   const [damageNote, setDamageNote] = useState(initial?.damage_note || '')
   const [damageCost, setDamageCost] = useState(() => (Number(initial?.damage_cost) > 0 ? String(Number(initial.damage_cost)) : ''))
   const [existingPhotos, setExistingPhotos] = useState(initial?.photos || [])
@@ -55,6 +57,7 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
     if (previewUrl && Number(damageInputValue(damageCost)) > 0 && !damageNote.trim()) errors.damage_note = 'กรุณาระบุรายการความเสียหายที่คิดค่าเสียหาย'
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) {
+      setTopic(errors.room ? 'all' : missing.length > 0 ? 'checklist' : errors.photos || errors.damage_note ? 'photos' : errors.damage_cost ? 'finance' : 'all')
       setLocalError(
         errors.room
           ? errors.room
@@ -87,7 +90,18 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
 
   return (
     <form className="inspection-form admin-inspection-form" onSubmit={submit} noValidate>
-      <section className="inspection-section">
+      <InspectionTopicFilter
+        topics={[
+          { key: 'all', label: 'ทั้งหมด' },
+          { key: 'room', label: 'ห้องที่ตรวจ' },
+          { key: 'checklist', label: 'ตรวจสภาพห้อง' },
+          { key: 'photos', label: 'รายละเอียดและรูปภาพ' },
+          ...(previewUrl ? [{ key: 'finance', label: 'ค่าเสียหายและเงินมัดจำ' }] : []),
+        ]}
+        value={topic}
+        onChange={setTopic}
+      />
+      <section className="inspection-section" data-topic="room" hidden={!['all', 'room'].includes(topic)}>
         <h4 className="inspection-section-title">
           <span className="inspection-step">1</span> {mode === 'create' ? 'เลือกคำขอย้ายห้องที่ตรวจ' : 'ห้องที่ตรวจ'}
         </h4>
@@ -157,7 +171,7 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
         </div>
       </section>
 
-      <section className="inspection-section">
+      <section className="inspection-section" data-topic="checklist" hidden={!['all', 'checklist'].includes(topic)}>
         <div className="inspection-section-head">
           <h4 className="inspection-section-title">
             <span className="inspection-step">2</span> ตรวจสภาพห้อง
@@ -227,7 +241,7 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
         </div>
       </section>
 
-      <section className="inspection-section">
+      <section className="inspection-section" data-topic="photos" hidden={!['all', 'photos'].includes(topic)}>
         <h4 className="inspection-section-title">
           <span className="inspection-step">3</span> รายละเอียดและรูปภาพ
         </h4>
@@ -280,7 +294,7 @@ export default function InspectionForm({ mode, candidates = [], candidatesLoadin
       </section>
 
       {previewUrl && (
-        <section className="inspection-section">
+        <section className="inspection-section" data-topic="finance" hidden={!['all', 'finance'].includes(topic)}>
           <h4 className="inspection-section-title">
             <span className="inspection-step">4</span> ค่าเสียหายและเงินมัดจำ
           </h4>

@@ -29,14 +29,16 @@ import {
 import { getInspectionPurposeLabel, getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionForm from '../components/InspectionForm.jsx'
-import RoomTypeManager from '../components/RoomTypeManager.jsx'
 import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../utils/roomAssets.js'
 import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { StaffCompletedContractsTab, StaffFilterPanel } from './StaffMain.jsx'
+import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, TransferContractPendingPanel } from './StaffMain.jsx'
+import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
+import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
+import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1220,7 +1222,6 @@ const ROWS_PER_PAGE = 15
 const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
-  { key: 'room-types', label: 'ประเภทห้องและทรัพย์สิน' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
@@ -1229,7 +1230,8 @@ const TABS = [
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
   { key: 'waiting-list', label: 'รายชื่อรอห้องว่าง' },
-  { key: 'move-out-inspections', label: 'ตรวจห้องย้ายออก' },
+  { key: 'move-in-inspections', label: 'ตรวจก่อนเข้าอยู่' },
+  { key: 'move-out-inspections', label: 'ผลตรวจห้อง' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'expenses', label: 'รายจ่าย' },
   { key: 'announcements', label: 'ประกาศ' },
@@ -1238,9 +1240,10 @@ const TABS = [
 ]
 
 const TAB_GROUPS = [
-  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'room-types', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
-  { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
+  { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
+  { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
@@ -2061,15 +2064,13 @@ const ROOM_AMENITIES = [
 ]
 
 
-// Air conditioner and fridge are stored as the room's on/off columns (used by
-// tenant pages and room search) but are added and removed like any other asset.
 const BUILTIN_EQUIPMENT = [
-  { field: 'air_conditioner', name: 'เครื่องปรับอากาศ' },
-  { field: 'refrigerator', name: 'ตู้เย็น' },
+  { field: 'air_conditioner', name: 'เครื่องปรับอากาศ', icon: 'aircon' },
+  { field: 'refrigerator', name: 'ตู้เย็น', icon: 'fridge' },
 ]
 
 const ROOM_AMENITY_SUGGESTIONS = [
-  ...BUILTIN_EQUIPMENT.map((item) => ({ name: item.name, icon: 'sparkle' })),
+  ...BUILTIN_EQUIPMENT.map((item) => ({ name: item.name, icon: item.icon })),
   { name: 'โต๊ะทำงาน', icon: 'desk' },
   { name: 'ตู้เสื้อผ้า', icon: 'wardrobe' },
   { name: 'เครื่องทำน้ำอุ่น', icon: 'shower' },
@@ -2087,6 +2088,19 @@ function availableAssetSuggestions(form) {
     ].map((name) => name.toLocaleLowerCase()),
   )
   return ROOM_AMENITY_SUGGESTIONS.filter((suggestion) => !used.has(suggestion.name.toLocaleLowerCase()))
+}
+
+function roomEquipmentItems(form) {
+  const amenities = [
+    ...BUILTIN_EQUIPMENT.filter((item) => form[item.field]).map((item) => ({ name: item.name, icon: item.icon })),
+    ...form.custom_amenities,
+  ]
+  return [
+    ...amenities.map((item) => ({ ...item, asset: form.assetRows.find((row) => row.name.trim() === item.name) })),
+    ...form.assetRows
+      .filter((row) => !amenities.some((item) => item.name === row.name.trim()))
+      .map((row) => ({ name: row.name.trim(), icon: 'sparkle', asset: row })),
+  ]
 }
 
 function RoomDetailIcon({ type, size = 16 }) {
@@ -4737,9 +4751,22 @@ const VISIT_FILTERS = [
   { key: 'approved', label: 'อนุมัติแล้ว' },
   { key: 'rejected', label: 'ไม่อนุมัติ' },
   { key: 'cancelled', label: 'ยกเลิกแล้ว' },
+  { key: 'fine', label: 'ค่าปรับค้าง' },
   { key: 'all', label: 'ทั้งหมด' },
 ]
 const VISIT_PAGE_SIZE = 12
+
+function matchesVisitFilter(item, key) {
+  if (key === 'all') return true
+  if (key === 'fine') return ['unpaid', 'pending_review'].includes(item.fine_status)
+  return item.status === key
+}
+
+function getVisitTypeText(item) {
+  if (item.request_type !== 'vehicle') return RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type
+  const category = item.user_category || (item.guest_name || !item.customer_id ? 'visitor' : 'resident')
+  return `${USER_CATEGORY_LABEL[category]} · ${VEHICLE_TYPE_LABEL[item.vehicle_type] || 'รถยนต์'}`
+}
 
 function VisitCarIcon({ size = 18 }) {
   return (
@@ -4825,6 +4852,8 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
   const [detailId, setDetailId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [parkingSettings, setParkingSettings] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const headers = useAuthHeaders()
 
   const load = useCallback(
@@ -4834,6 +4863,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
         .then(({ data }) => {
           const list = data.requests || []
           setItems(list)
+          setParkingSettings(data.settings || null)
           onCountChange?.(list.filter((item) => item.status === 'pending').length)
           if (pendingFocusRef.current != null) {
             const sorted = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -4876,8 +4906,9 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
           .includes(keyword),
       )
     : items
-  const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
-  const filtered = (filter === 'all' ? searched : searched.filter((item) => item.status === filter))
+  const countOf = (key) => searched.filter((item) => matchesVisitFilter(item, key)).length
+  const filtered = searched
+    .filter((item) => matchesVisitFilter(item, filter))
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   const totalPages = Math.max(1, Math.ceil(filtered.length / VISIT_PAGE_SIZE))
@@ -4894,6 +4925,15 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
     setBusy(true)
     setMessage('')
     try {
+      if (decision === 'fine-approve' || decision === 'fine-reject') {
+        await axios.post(
+          `/api/admin/resident-visit-requests/${detail.id}/fine-review`,
+          { decision: decision === 'fine-approve' ? 'approve' : 'reject' },
+          { headers },
+        )
+        await load()
+        return
+      }
       await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {}, { headers })
       await load()
       requestClose()
@@ -4911,9 +4951,14 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
       <div className="admin-card-header">
         <div>
           <h2>คำขอรถ / ผู้มาพัก</h2>
-          <p className="admin-review-subtitle">อนุมัติหรือปฏิเสธคำขอจากผู้เช่า พร้อมดูประวัติคำขอทั้งหมด</p>
+          <p className="admin-review-subtitle">
+            อนุมัติคำขอ ตรวจช่องจอด และติดตามค่าปรับผู้มาติดต่อ (จอดได้ 3 ชม. · ปรับ {formatBaht(parkingSettings?.finePerHour)}/ชม.)
+          </p>
         </div>
         <span className="admin-review-count">{countOf('pending')} รายการรออนุมัติ</span>
+        <button type="button" className="admin-action-btn" onClick={() => setSettingsOpen(true)}>
+          ตั้งค่าที่จอด
+        </button>
       </div>
 
       <div className="admin-incident-toolbar">
@@ -4985,11 +5030,14 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                   <span className="admin-vc-grid">
                     <span className="admin-vc-cell">
                       <span className="admin-vc-label">ประเภท</span>
-                      <span className="admin-vc-value">{RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type}</span>
+                      <span className="admin-vc-value">{getVisitTypeText(item)}</span>
                     </span>
                     <span className="admin-vc-cell">
-                      <span className="admin-vc-label">ห้อง</span>
-                      <span className="admin-vc-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                      <span className="admin-vc-label">ช่องจอด / ห้อง</span>
+                      <span className="admin-vc-value">
+                        {isVehicle ? `${item.parking_space_code ? `ช่อง ${item.parking_space_code}` : 'ไม่ระบุช่อง'} · ` : ''}
+                        {item.room_number ? `ห้อง ${item.room_number}` : 'ภายนอก'}
+                      </span>
                     </span>
                     <span className="admin-vc-cell">
                       <span className="admin-vc-label">
@@ -5011,9 +5059,12 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                       </svg>
                     </span>
                     <span className="admin-vc-range-body">
-                      <span className="admin-vc-label">{isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}</span>
+                      <span className="admin-vc-label">
+                        {item.parked_at ? 'เข้าจอดจริง' : isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}
+                        <ParkingStatusPill status={item.fine_status} />
+                      </span>
                       <span className="admin-vc-value">
-                        {formatVisitPoint(item.start_at)}
+                        {formatVisitPoint(item.parked_at || item.start_at)}
                         <span className="admin-vc-arrow" aria-hidden="true">→</span>
                         <span className={item.end_at ? undefined : 'admin-vc-open'}>{item.end_at ? formatVisitPoint(item.end_at) : 'ไม่จำกัดเวลา'}</span>
                       </span>
@@ -5094,9 +5145,17 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                   : reviewedAt
                     ? { key: 'review', label: 'อนุมัติแล้ว', by: reviewer, date: reviewedAt, icon: 'check' }
                     : null,
+              detail.parked_at ? { key: 'checkin', label: 'เช็คอินเข้าจอด', date: detail.parked_at, icon: 'check' } : null,
               ...(detail.status === 'cancelled'
-                ? [{ key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' }]
+                ? [
+                    detail.checked_out_at
+                      ? { key: 'checkout', label: 'บันทึกรถออก', by: detail.cancelled_by_name, date: detail.checked_out_at, icon: 'check' }
+                      : { key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' },
+                  ]
                 : []),
+              detail.fine_status === 'paid'
+                ? { key: 'fine', label: `ชำระค่าปรับ ${formatBaht(detail.fine_amount)}`, by: detail.fine_paid_by_name, date: detail.fine_paid_at, icon: 'check' }
+                : null,
             ].filter(Boolean)
             const stepsEnd = detail.status === 'cancelled' ? cancelledAt : detail.status === 'pending' ? null : reviewedAt
             return (
@@ -5108,7 +5167,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     </span>
                     <div>
                       <strong>{getVisitHeading(detail)}</strong>
-                      <span className="admin-incident-chip">{RESIDENT_VISIT_TYPE_LABEL[detail.request_type] || detail.request_type}</span>
+                      <span className="admin-incident-chip">{getVisitTypeText(detail)}</span>
                     </div>
                     <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
                   </div>
@@ -5186,6 +5245,37 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     )}
                   </dl>
 
+                  {isVehicle && <ParkingSessionPanel item={detail} finePerHour={parkingSettings?.finePerHour} />}
+                  {['unpaid', 'pending_review', 'paid'].includes(detail.fine_status) && (
+                    <ParkingFinePayment
+                      item={detail}
+                      channels={parkingSettings?.paymentChannels}
+                      endpoint={`/api/admin/resident-visit-requests/${detail.id}/fine-payment`}
+                      onDone={load}
+                      onCounterPaid={() => review('fine-approve')}
+                      counterBusy={busy}
+                    />
+                  )}
+                  {detail.fine_status === 'pending_review' && (
+                    <div className="admin-incident-actions">
+                      {detail.fine_slip_path && (
+                        <button
+                          type="button"
+                          className="admin-action-btn"
+                          onClick={() => setLightbox({ photos: [{ url: detail.fine_slip_path, name: 'สลิปค่าปรับ' }], index: 0, title: getVisitHeading(detail) })}
+                        >
+                          ดูสลิปค่าปรับ
+                        </button>
+                      )}
+                      <button type="button" className="admin-action-btn is-danger" disabled={busy} onClick={() => review('fine-reject')}>
+                        ปฏิเสธสลิป
+                      </button>
+                      <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => review('fine-approve')}>
+                        ยืนยันว่าชำระแล้ว
+                      </button>
+                    </div>
+                  )}
+
                   {photos.length > 0 && (
                     <section className="admin-incident-gallery">
                       <h4>รูปรถ / ป้ายทะเบียน ({photos.length} รูป)</h4>
@@ -5232,6 +5322,21 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
               </div>
             )
           }}
+        </Modal>
+      )}
+
+      {settingsOpen && (
+        <Modal title="ตั้งค่าที่จอดรถและค่าปรับ" onClose={() => setSettingsOpen(false)}>
+          {(requestClose) => (
+            <ParkingSettingsForm
+              endpoint="/api/admin/parking/settings"
+              onCancel={requestClose}
+              onSaved={async () => {
+                requestClose()
+                await load()
+              }}
+            />
+          )}
         </Modal>
       )}
 
@@ -5814,6 +5919,7 @@ function AdminBackupPage() {
   const [roomsPage, setRoomsPage] = useState(1)
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
+  const equipmentItems = roomEquipmentItems(roomForm)
   const [amenityDraft, setAmenityDraft] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('sparkle')
   const [amenityPrice, setAmenityPrice] = useState('')
@@ -6375,8 +6481,6 @@ function AdminBackupPage() {
     setRoomModal({ mode: 'create' })
   }
 
-  // mode 'amenities' shows only the equipment and assets section; it is allowed
-  // for occupied rooms because it saves through the assets endpoint.
   const openEditRoom = (room, mode = 'edit') => {
     if (room.is_booked && mode === 'edit') return
     setAmenityDraft('')
@@ -6489,8 +6593,6 @@ function AdminBackupPage() {
     setRoomForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  // Custom amenities double as priced room assets: each one added here is shown
-  // to tenants and also used to calculate damage at move-out.
   const addRoomAmenity = (requestClose) => {
     const name = amenityDraft.trim()
     if (!name) {
@@ -6514,7 +6616,6 @@ function AdminBackupPage() {
       ...(builtin
         ? { [builtin.field]: true }
         : {
-            // Only 12 amenities are shown to tenants; extra assets are still priced.
             custom_amenities: prev.custom_amenities.length < 12 ? [...prev.custom_amenities, { name, icon: amenityIcon }] : prev.custom_amenities,
           }),
       assetRows: [...prev.assetRows, ...toAssetRows([{ name, price: amenityPrice.replace(/,/g, '').trim() }])],
@@ -6532,7 +6633,6 @@ function AdminBackupPage() {
     }))
   }
 
-  // Opens the add-asset modal with the first unused suggestion already picked.
   const openAddRoomAsset = () => {
     const [first] = availableAssetSuggestions(roomForm)
     setAmenityDraft(first?.name || '')
@@ -7724,7 +7824,11 @@ function AdminBackupPage() {
 
         {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/admin/dorm-info" />}
 
-        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={setContractSummary} />}
+        {activeTab === 'completed-contracts' && (
+          <div className="admin-contracts">
+            <StaffCompletedContractsTab onSummaryChange={setContractSummary} />
+          </div>
+        )}
 
         {activeTab === 'vehicle-requests' && (
           <AdminVehicleRequestsTab
@@ -7911,8 +8015,6 @@ function AdminBackupPage() {
             <Pagination page={currentParcelPage} totalPages={parcelTotalPages} onChange={setParcelPage} />
           </div>
         )}
-
-        {activeTab === 'room-types' && <RoomTypeManager Modal={Modal} rooms={rooms} onRoomsChanged={loadRooms} />}
 
         {activeTab === 'rooms' && (
           <div className="admin-card">
@@ -8478,6 +8580,8 @@ function AdminBackupPage() {
               <h2>ประวัติคำขอผู้เช่า</h2>
             </div>
 
+            <TransferContractPendingPanel apiBase="/api/admin" />
+
             <div className="admin-toolbar">
               <div className="admin-search-group">
                 <label className="admin-toolbar-label" htmlFor="request-search">
@@ -8853,6 +8957,8 @@ function AdminBackupPage() {
             statusBusyId={waitingListStatusBusyId}
           />
         )}
+
+        {activeTab === 'move-in-inspections' && <MoveInInspectionPanel Modal={StaffModal} FilterPanel={StaffFilterPanel} />}
 
         {activeTab === 'move-out-inspections' && (
           <div className="admin-card">
@@ -10286,7 +10392,6 @@ function AdminBackupPage() {
           <form className="admin-room-form" onSubmit={(event) => submitRoomForm(event, requestClose)} noValidate>
             {roomFormError && <div className="alert alert-danger py-2 px-3">{roomFormError}</div>}
 
-            {/* The "ทรัพย์สิน" button opens only the equipment section, which stays editable while the room is occupied. */}
             {roomModal.mode !== 'amenities' && (
             <>
             <section className="admin-room-form-section">
@@ -10410,11 +10515,8 @@ function AdminBackupPage() {
                 <span className="admin-room-form-icon"><RoomDetailIcon type="sparkle" size={16} /></span>
                 <div>
                   <strong>อุปกรณ์และทรัพย์สินในห้อง</strong>
-                  <small>กดเพื่อเลือกหรือยกเลิก · กด “+ เพิ่มทรัพย์สิน” เพื่อใส่ชื่อและราคา (ใช้คำนวณค่าเสียหายตอนย้ายออก)</small>
+                  <small>จัดการรายการและราคาสำหรับคำนวณค่าเสียหายตอนย้ายออก</small>
                 </div>
-                <span className="admin-room-form-count">
-                  เลือกแล้ว {['air_conditioner', 'refrigerator'].filter((field) => roomForm[field]).length + roomForm.custom_amenities.length}
-                </span>
               </header>
               {roomTypes.length > 0 && (
                 <label className="admin-room-field room-assets-type">
@@ -10431,45 +10533,38 @@ function AdminBackupPage() {
                   </select>
                 </label>
               )}
-              <div className="admin-toggle-grid">
-                {BUILTIN_EQUIPMENT.filter((item) => roomForm[item.field]).map((item) => {
-                  const asset = roomForm.assetRows.find((row) => row.name.trim() === item.name)
-                  return (
-                    <span className="admin-custom-amenity" key={item.field}>
-                      <CustomAmenityIcon name="sparkle" size={15} />{item.name}
-                      {asset && <small className="admin-custom-amenity-price">฿{assetPriceValue(asset.price).toLocaleString('th-TH')}</small>}
-                      <button type="button" onClick={() => removeRoomAsset(item.name)} aria-label={`ลบ ${item.name}`}>×</button>
-                    </span>
-                  )
-                })}
-                {roomForm.custom_amenities.map((amenity) => {
-                  const asset = roomForm.assetRows.find((row) => row.name.trim() === amenity.name)
-                  return (
-                    <span className="admin-custom-amenity" key={amenity.name}>
-                      <CustomAmenityIcon name={amenity.icon} size={15} />{amenity.name}
-                      {asset && <small className="admin-custom-amenity-price">฿{assetPriceValue(asset.price).toLocaleString('th-TH')}</small>}
-                      <button type="button" onClick={() => removeRoomAsset(amenity.name)} aria-label={`ลบ ${amenity.name}`}>×</button>
-                    </span>
-                  )
-                })}
-                {roomForm.assetRows
-                  .filter((row) => !roomForm.custom_amenities.some((amenity) => amenity.name === row.name.trim())
-                    && !BUILTIN_EQUIPMENT.some((item) => roomForm[item.field] && item.name === row.name.trim()))
-                  .map((row) => (
-                    <span className="admin-custom-amenity" key={row.rowId}>
-                      <CustomAmenityIcon name="sparkle" size={15} />{row.name}
-                      <small className="admin-custom-amenity-price">฿{assetPriceValue(row.price).toLocaleString('th-TH')}</small>
-                      <button type="button" onClick={() => removeRoomAsset(row.name.trim())} aria-label={`ลบ ${row.name}`}>×</button>
-                    </span>
-                  ))}
-                <button type="button" className="admin-custom-amenity-add" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
+              <div className="admin-equipment-list-heading">
+                <strong>รายการในห้อง <span>{equipmentItems.length} รายการ</span></strong>
+                <button type="button" className="admin-action-btn is-primary" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
               </div>
-              {roomForm.assetRows.length > 0 && (
-                <p className="admin-room-assets-total">
-                  ทรัพย์สินที่มีราคา {roomForm.assetRows.length} รายการ · มูลค่ารวม{' '}
-                  <strong>฿{roomForm.assetRows.reduce((sum, row) => sum + assetPriceValue(row.price), 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
-                </p>
+              {equipmentItems.length > 0 ? (
+                <ul className="admin-equipment-list">
+                  {equipmentItems.map((item) => (
+                    <li className="admin-equipment-item" key={item.asset?.rowId ?? item.name}>
+                      <span className="admin-equipment-icon" aria-hidden="true"><CustomAmenityIcon name={item.icon} size={20} /></span>
+                      <div className="admin-equipment-info">
+                        <strong>{item.name}</strong>
+                        <span className={item.asset ? 'admin-equipment-price' : 'admin-equipment-unpriced'}>
+                          {item.asset ? '฿' + assetPriceValue(item.asset.price).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'ยังไม่ระบุราคา'}
+                        </span>
+                      </div>
+                      <button type="button" className="admin-equipment-remove" onClick={() => removeRoomAsset(item.name)} aria-label={'ลบ ' + item.name} title={'ลบ ' + item.name}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="admin-equipment-empty">
+                  <RoomDetailIcon type="box" size={28} />
+                  <strong>ยังไม่มีอุปกรณ์หรือทรัพย์สิน</strong>
+                  <span>กด “เพิ่มทรัพย์สิน” เพื่อเริ่มเพิ่มรายการในห้องนี้</span>
+                </div>
               )}
+              <div className="admin-equipment-summary">
+                <div><strong>มูลค่าทรัพย์สินรวม</strong><small>ระบุราคาแล้ว {roomForm.assetRows.length} รายการ</small></div>
+                <strong>฿{roomForm.assetRows.reduce((sum, row) => sum + assetPriceValue(row.price), 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
             </section>
 
             <div className="admin-room-form-actions">

@@ -13,6 +13,7 @@ import {
   parseContractImages,
   removeContractFiles,
   resetCustomerHistory,
+  roomHeldForTransfer,
   UNSETTLED_DEPOSIT_MESSAGE,
 } from "./rentalContracts.js";
 
@@ -172,6 +173,11 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       await connection.rollback();
       await removeContractFiles(files);
       return res.status(409).json({ message: "ห้องพักนี้ถูกจองแล้ว" });
+    }
+    if (await roomHeldForTransfer(connection, normalizedRoomNumber)) {
+      await connection.rollback();
+      await removeContractFiles(files);
+      return res.status(409).json({ message: "ห้องพักนี้มีผู้เช่าเดิมชำระค่าย้ายห้องและรออนุมัติย้ายเข้าแล้ว กรุณาเลือกห้องอื่น" });
     }
     const normalizedDepositAmount = Math.round(Number(room.price) * DEPOSIT_MONTHS * 100) / 100;
 

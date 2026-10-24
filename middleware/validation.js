@@ -730,8 +730,20 @@ export function parseRoomAssetsInput(body = {}) {
   return { value: { roomTypeId, assets: assets.value } };
 }
 
+const MOVE_IN_MAX_DATES = 31;
+
+function parseInspectionDates(body) {
+  const raw = Array.isArray(body.inspection_dates) ? body.inspection_dates : [body.inspection_date];
+  if (raw.length === 0 || raw.length > MOVE_IN_MAX_DATES) {
+    return { error: raw.length === 0 ? "กรุณาเลือกวันที่ตรวจอย่างน้อย 1 วัน" : `เลือกวันที่ตรวจได้ไม่เกิน ${MOVE_IN_MAX_DATES} วัน` };
+  }
+  if (raw.some((value) => !isValidDateString(value))) return { error: "วันที่ตรวจไม่ถูกต้อง" };
+  return { value: [...new Set(raw)].sort() };
+}
+
 function parseMoveInChecklistAndAssets(body) {
-  if (!isValidDateString(body.inspection_date)) return { error: "กรุณาเลือกวันที่ตรวจ" };
+  const dates = parseInspectionDates(body);
+  if (dates.error) return dates;
   const checklist = {};
   for (const key of MOVE_OUT_CHECKLIST_KEYS) {
     const result = body.checklist?.[key];
@@ -746,7 +758,10 @@ function parseMoveInChecklistAndAssets(body) {
   const hasIssue = [...Object.values(checklist), ...assets.value.map((asset) => asset.result)]
     .some((result) => MOVE_OUT_ISSUE_RESULTS.has(result));
   if (hasIssue && !note) return { error: "กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย" };
-  return { value: { inspectionDate: body.inspection_date, checklist, assets: assets.value, note: note || null }, hasIssue };
+  return {
+    value: { inspectionDate: dates.value[dates.value.length - 1], inspectionDates: dates.value, checklist, assets: assets.value, note: note || null },
+    hasIssue,
+  };
 }
 
 export function parseMoveInInspectionInput(body = {}) {
@@ -754,6 +769,8 @@ export function parseMoveInInspectionInput(body = {}) {
   if (!Number.isInteger(roomNumber) || roomNumber < 100 || roomNumber > 999) {
     return { error: "เลขห้องไม่ถูกต้อง" };
   }
+  const customerId = body.customer_id === undefined || body.customer_id === null ? null : Number(body.customer_id);
+  if (customerId !== null && !isPositiveId(customerId)) return { error: "ผู้เช่าไม่ถูกต้อง" };
   const core = parseMoveInChecklistAndAssets(body);
   if (core.error) return core;
   const photos = parsePhotoList(body.photos, MOVE_OUT_MAX_PHOTOS);
@@ -761,7 +778,7 @@ export function parseMoveInInspectionInput(body = {}) {
   if (core.hasIssue && photos.value.length === 0) {
     return { error: "กรุณาแนบภาพประกอบกรณีพบรายการชำรุดหรือสูญหาย" };
   }
-  return { value: { roomNumber, ...core.value, photos: photos.value } };
+  return { value: { roomNumber, customerId, ...core.value, photos: photos.value } };
 }
 
 export function parseMoveInInspectionUpdate(body = {}, existingPhotos = []) {

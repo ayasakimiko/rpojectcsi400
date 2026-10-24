@@ -94,17 +94,29 @@ router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
 router.get("/parking/summary", async (_req, res) => {
   try {
-    const [[{ parkedCount }]] = await getPool().query(
+    const pool = getPool();
+    const [[{ parkedCount }]] = await pool.query(
       `SELECT COUNT(DISTINCT vehicle_plate) AS parkedCount
        FROM ResidentVisitRequest
-       WHERE request_type = 'vehicle' AND status = 'approved'
-         AND (end_at IS NULL OR end_at > NOW())`,
+       WHERE request_type = 'vehicle' AND status = 'approved' AND checked_out_at IS NULL
+         AND (end_at IS NULL OR end_at > NOW() OR parked_at IS NOT NULL)`,
+    );
+    const [[{ spaceCount }]] = await pool.query("SELECT COUNT(*) AS spaceCount FROM ParkingSpace WHERE is_active = TRUE");
+    const [[fines]] = await pool.query(
+      `SELECT COUNT(*) AS unpaidCount, COALESCE(SUM(fine_amount), 0) AS unpaidAmount
+       FROM ResidentVisitRequest WHERE fine_status IN ('unpaid', 'pending_review')`,
     );
     const capacityText = process.env.PARKING_CAPACITY?.trim() || "";
     const parsedCapacity = /^\d+$/.test(capacityText) ? Number(capacityText) : NaN;
-    const capacity = Number.isSafeInteger(parsedCapacity) ? parsedCapacity : null;
+    const capacity = Number(spaceCount) > 0 ? Number(spaceCount) : Number.isSafeInteger(parsedCapacity) ? parsedCapacity : null;
     const count = Number(parkedCount);
-    return res.json({ parkedCount: count, capacity, isFull: capacity !== null && count >= capacity });
+    return res.json({
+      parkedCount: count,
+      capacity,
+      isFull: capacity !== null && count >= capacity,
+      unpaidFineCount: Number(fines.unpaidCount),
+      unpaidFineAmount: Number(fines.unpaidAmount),
+    });
   } catch (error) {
     console.error("Fetch parking summary error:", error);
     return res.status(500).json({ message: "ไม่สามารถโหลดข้อมูลที่จอดรถได้" });
@@ -125,7 +137,6 @@ function buildUpdate(allowedColumns, body) {
 
 const PAYMENT_LOG_PAGE_SIZE = 10;
 
-// แสดงเฉพาะงานที่พนักงาน แอดมิน และลูกค้าทำ ไม่รวมการอัปโหลดไฟล์และการกดรับทราบของลูกค้า
 const AUDIT_ACTOR_ROLES = ["Customer", "Staff", "Admin"];
 const AUDIT_BASE_CONDITIONS = [
   "al.actor_role IN ('Customer', 'Staff', 'Admin')",

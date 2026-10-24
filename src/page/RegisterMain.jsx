@@ -546,21 +546,11 @@ function RegisterMain() {
                         <option key={room.id} value={room.room_number}>
                           ห้อง {room.room_number} · {formatContractMoney(room.price)}/เดือน
                           {room.room_size != null ? ` · ${Number(room.room_size).toLocaleString('th-TH', { maximumFractionDigits: 2 })} ตร.ม.` : ''}
-                          {room.held_for_transfer ? ' · มีผู้เช่ารอย้ายเข้า' : ''}
                         </option>
                       ))}
                     </select>
                     {!roomsLoading && availableRooms.length === 0 && (
                       <div className="form-text text-danger">ขณะนี้ไม่มีห้องว่าง</div>
-                    )}
-                    {selectedRoom?.held_for_transfer && (
-                      <div className="register-room-notice" role="note">
-                        <span className="register-room-notice-icon"><RegisterIcon type="alert" size={16} /></span>
-                        <div>
-                          <strong>มีผู้เช่ารอย้ายเข้าห้องนี้</strong>
-                          <span>ผู้เช่าเดิมกำลังรอชำระส่วนต่าง หากลงทะเบียนห้องนี้ คำขอย้ายห้องของผู้เช่าคนนั้นจะถูกยกเลิกทันที</span>
-                        </div>
-                      </div>
                     )}
                   </div>
 

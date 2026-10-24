@@ -6,7 +6,7 @@ export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "paym
 export const TABLES_BY_SERVICE = {
   room: ["Room", "RoomType", "RoomWifi", "RoomWifiDevice"],
   auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage", "RoomTransfer"],
-  customer: ["TenantRequest", "ResidentVisitRequest", "SafetyIncident"],
+  customer: ["TenantRequest", "ParkingSpace", "ResidentVisitRequest", "SafetyIncident"],
   maintenance: ["MaintenanceRequest", "MaintenancePhoto"],
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],
   staff: ["MoveOutInspection", "DepositSettlementLog", "MoveInInspection"],

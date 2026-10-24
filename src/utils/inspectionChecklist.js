@@ -21,11 +21,27 @@ export const ISSUE_RESULTS = ['damaged', 'missing']
 
 export const RESULT_LABELS = Object.fromEntries(RESULT_OPTIONS.map((option) => [option.key, option.label]))
 
-// Results that can carry a damage amount at move-out.
 export const COSTED_RESULTS = ['wear', 'damaged', 'missing']
 
-// An asset is charged at move-out only when it was fine at move-in but is now
-// damaged or missing; problems recorded at move-in are not the tenant's fault.
+const FURNITURE_RESULT_PRIORITY = ['missing', 'damaged', 'wear', 'good', 'not_applicable']
+
+export function assetResultCounts(assets) {
+  const counts = Object.fromEntries(RESULT_OPTIONS.map((option) => [option.key, 0]))
+  for (const asset of assets || []) if (asset.result in counts) counts[asset.result] += 1
+  return counts
+}
+
+export function furnitureResultFromAssets(assets) {
+  const counts = assetResultCounts(assets)
+  const used = Object.values(counts).some((count) => count > 0)
+  if (!used) return 'not_applicable'
+  return FURNITURE_RESULT_PRIORITY.reduce((best, key) => (counts[key] > counts[best] ? key : best), FURNITURE_RESULT_PRIORITY[0])
+}
+
+export function withFurnitureResult(checklist, assets) {
+  return { ...checklist, furniture: furnitureResultFromAssets(assets) }
+}
+
 export function isChargeableAsset(asset) {
   return ISSUE_RESULTS.includes(asset.result) && !ISSUE_RESULTS.includes(asset.move_in_result)
 }
@@ -34,11 +50,8 @@ export const assetPriceValue = (price) => Number(String(price ?? '').replace(/,/
 
 export const isValidAssetPrice = (price) => /^\d+(\.\d{1,2})?$/.test(String(price ?? '').replace(/,/g, '').trim())
 
-// Starting damage amount when an asset gets a result: its price if chargeable, otherwise 0.
 export const defaultAssetCost = (asset) => (isChargeableAsset(asset) ? String(assetPriceValue(asset.price)) : '0')
 
-// The damage charged for one asset. Inspections saved before per-asset amounts
-// existed have no `cost`, so they fall back to the chargeable rule.
 export function assetCost(asset) {
   if (!COSTED_RESULTS.includes(asset.result)) return 0
   if (asset.cost !== undefined && asset.cost !== null) return assetPriceValue(asset.cost)
