@@ -1,14 +1,28 @@
 .admin-modal.admin-modal-inspection-form {
   width: 100%;
   max-width: 760px;
+  height: min(88dvh, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
 }
 
 .admin-modal-inspection-form .admin-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 0 24px;
 }
 
 .admin-modal-inspection-form .admin-inspection-form {
+  flex: 1 0 auto;
   padding-top: 12px;
+}
+
+.admin-modal-inspection-form .admin-inspection-form > .inspection-footer,
+.staff-modal-inspection .inspection-form > .inspection-footer {
+  margin-top: auto;
 }
 
 .admin-modal-inspection-form .inspection-topic-filter {

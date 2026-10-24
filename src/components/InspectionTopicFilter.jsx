@@ -10,9 +10,19 @@ export default function InspectionTopicFilter({ topics, value, onChange }) {
       requestAnimationFrame(() => {
         const root = barRef.current?.closest('[data-topic-root], form')
         if (!root) return
+        const options = barRef.current.querySelector('.inspection-topic-options')
+        const button = options?.querySelector(`[data-key="${key}"]`)
+        if (options && button) {
+          const bounds = options.getBoundingClientRect()
+          const buttonBounds = button.getBoundingClientRect()
+          const offset = buttonBounds.left < bounds.left
+            ? buttonBounds.left - bounds.left
+            : buttonBounds.right > bounds.right ? buttonBounds.right - bounds.right : 0
+          // Reveal the tab horizontally without cancelling the section's vertical scroll.
+          if (offset) options.scrollBy({ left: offset, behavior: 'smooth' })
+        }
         const target = key === 'all' ? root : root.querySelector(`[data-topic="${key}"]:not([hidden])`)
         target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        barRef.current?.querySelector(`[data-key="${key}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
       })
     })
   }

@@ -29,7 +29,6 @@ import {
 import { getInspectionPurposeLabel, getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import InspectionDetail from '../components/InspectionDetail.jsx'
 import InspectionForm from '../components/InspectionForm.jsx'
-import RoomTypeManager from '../components/RoomTypeManager.jsx'
 import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../utils/roomAssets.js'
 import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
@@ -1220,7 +1219,6 @@ const ROWS_PER_PAGE = 15
 const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
-  { key: 'room-types', label: 'ประเภทห้องและทรัพย์สิน' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
@@ -1238,7 +1236,7 @@ const TABS = [
 ]
 
 const TAB_GROUPS = [
-  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'room-types', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
   { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
@@ -7928,8 +7926,6 @@ function AdminBackupPage() {
             <Pagination page={currentParcelPage} totalPages={parcelTotalPages} onChange={setParcelPage} />
           </div>
         )}
-
-        {activeTab === 'room-types' && <RoomTypeManager Modal={Modal} rooms={rooms} onRoomsChanged={loadRooms} />}
 
         {activeTab === 'rooms' && (
           <div className="admin-card">
