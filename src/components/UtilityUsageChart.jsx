@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './UtilityUsageChart.css'
 
-// Monthly water/electricity bills for the tenant's current room only. Built from
-// the payments already returned by /api/customer/me (rentalHistory).
 const SERIES = [
   { key: 'water', label: 'ค่าน้ำ', color: '#0891b2' },
   { key: 'electricity', label: 'ค่าไฟ', color: '#d97706' },
@@ -103,8 +101,6 @@ export default function UtilityUsageChart({ rentalHistory, roomNumber }) {
   const empty = allMonths.length === 0
   const latest = allMonths[allMonths.length - 1]
   const previous = allMonths[allMonths.length - 2]
-  // The stat cards follow the amount/units toggle: the headline is the selected
-  // metric and the other one sits underneath.
   const otherMetric = metric === 'amount' ? 'units' : 'amount'
   const totals = SERIES.map((series) => {
     const current = latest?.[series.key]
@@ -219,9 +215,9 @@ export default function UtilityUsageChart({ rentalHistory, roomNumber }) {
         ) : (
           <div className="utility-chart" role="img" aria-label={`กราฟ${metricInfo.label}ค่าน้ำและค่าไฟรายเดือน ${months.length} เดือน`}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barGap={2} barCategoryGap="28%">
+              <LineChart data={chartData} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="#e8eef6" />
-                <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#d6e4f5' }} tick={{ fill: '#48627d', fontSize: 12 }} interval={0} />
+                <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#d6e4f5' }} tick={{ fill: '#48627d', fontSize: 12 }} interval={0} padding={{ left: 12, right: 12 }} />
                 <YAxis
                   width={56}
                   tickLine={false}
@@ -230,11 +226,21 @@ export default function UtilityUsageChart({ rentalHistory, roomNumber }) {
                   tickFormatter={(value) => (metric === 'amount' ? `฿${formatNumber(value)}` : formatNumber(value))}
                   allowDecimals={false}
                 />
-                <Tooltip content={<ChartTooltip metric={metric} />} cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }} />
+                <Tooltip content={<ChartTooltip metric={metric} />} cursor={{ stroke: '#c7d8ee', strokeDasharray: '4 4' }} />
                 {SERIES.map((series) => (
-                  <Bar key={series.key} dataKey={series.key} name={series.label} fill={series.color} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Line
+                    key={series.key}
+                    type="monotone"
+                    dataKey={series.key}
+                    name={series.label}
+                    stroke={series.color}
+                    strokeWidth={2.5}
+                    dot={{ r: 3.5, fill: '#fff', stroke: series.color, strokeWidth: 2 }}
+                    activeDot={{ r: 5.5, fill: series.color, stroke: '#fff', strokeWidth: 2 }}
+                    connectNulls
+                  />
                 ))}
-              </BarChart>
+              </LineChart>
             </ResponsiveContainer>
           </div>
         )}

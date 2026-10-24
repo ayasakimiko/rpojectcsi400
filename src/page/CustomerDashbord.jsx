@@ -31,12 +31,14 @@ import {
   ParkingStatusPill,
   ResidentContractWindow,
 } from '../components/ParkingFields.jsx'
-import { PARKING_FORM_TOPICS, VEHICLE_TYPE_LABEL, formatBaht, getVisitorSession, useParkingOptions } from '../utils/parking.js'
+import { PARKING_FORM_TOPICS, USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, VISITOR_MAX_HOURS, formatBaht, getVisitorSession, useNow, useParkingOptions } from '../utils/parking.js'
 import InspectionTopicFilter from '../components/InspectionTopicFilter.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
+import LoadingScreen from '../components/LoadingScreen.jsx'
+import useMinimumLoading from '../utils/useMinimumLoading.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -3935,6 +3937,132 @@ function getParkingPhase(vehicle, now, finePerHour = 0) {
   return { key: 'parked', label: 'กำลังจอด' }
 }
 
+function formatSpan(ms) {
+  const minutes = Math.max(0, Math.floor(ms / 60000))
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const rest = minutes % 60
+  if (days) return hours ? `${days} วัน ${hours} ชม.` : `${days} วัน`
+  if (hours) return rest ? `${hours} ชม. ${rest} นาที` : `${hours} ชม.`
+  return minutes ? `${rest} นาที` : 'น้อยกว่า 1 นาที'
+}
+
+function VehicleTimeCard({ vehicle }) {
+  const now = useNow(1000)
+  const start = new Date(vehicle.start_at).getTime()
+  const end = vehicle.end_at ? new Date(vehicle.end_at).getTime() : null
+  const upcoming = now < start
+  const total = end ? end - start : null
+  const over = end && now >= end
+  const stats = upcoming
+    ? [
+        ['hourglass', 'เริ่มจอดในอีก', formatSpan(start - now), 'is-warning'],
+        ['timer', 'ระยะเวลาที่ขอจอด', total ? formatSpan(total) : 'ไม่จำกัดเวลา', ''],
+      ]
+    : [
+        ['clock', 'จอดมาแล้ว', formatSpan(now - start), 'is-primary'],
+        ['hourglass', 'เหลือเวลา', end ? (over ? 'หมดเวลาแล้ว' : formatSpan(end - now)) : 'ไม่จำกัดเวลา', over ? 'is-danger' : 'is-success'],
+        ['timer', 'ระยะเวลาทั้งหมด', total ? formatSpan(total) : 'ไม่จำกัดเวลา', ''],
+      ]
+  return (
+    <DetailGroup
+      icon="clock"
+      title="ระยะเวลาจอด"
+      rows={[
+        ['play', 'เริ่มจอด', formatVisitDateTime(vehicle.start_at)],
+        ['flag', 'สิ้นสุด', end ? formatVisitDateTime(vehicle.end_at) : 'ไม่จำกัดเวลา'],
+      ]}
+    >
+      <div className="dashboard-rv-time-stats">
+        {stats.map(([icon, label, value, tone]) => (
+          <div key={label} className={tone}>
+            <span className="dashboard-rv-time-icon"><RvIcon name={icon} /></span>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+    </DetailGroup>
+  )
+}
+
+const RV_ICON_PATHS = {
+  clock: ['M12 7v5l3 2', 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z'],
+  hourglass: ['M6 3h12', 'M6 21h12', 'M7 3v3a5 5 0 0 0 10 0V3', 'M7 21v-3a5 5 0 0 1 10 0v3'],
+  timer: ['M10 2h4', 'M12 14l3-3', 'M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z'],
+  play: ['M8 5v14l11-7z'],
+  flag: ['M5 21V4', 'M5 4h11l-2 4 2 4H5'],
+  car: ['M5 17h14', 'M5 17a2 2 0 1 0 4 0', 'M15 17a2 2 0 1 0 4 0', 'M3 17v-5l2-5h14l2 5v5', 'M3 12h18'],
+  plate: ['M3 7h18v10H3z', 'M7 12h.01', 'M11 12h6'],
+  tag: ['M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z', 'M7.5 7.5h.01'],
+  layers: ['M12 2 2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'],
+  user: ['M20 21a8 8 0 0 0-16 0', 'M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'],
+  home: ['M3 10.5 12 3l9 7.5', 'M5 9.5V21h14V9.5', 'M10 21v-6h4v6'],
+  pin: ['M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z', 'M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
+  image: ['M3 5h18v14H3z', 'M8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z', 'm21 15-5-5L5 19'],
+  phone: ['M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z'],
+  shield: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'm9 12 2 2 4-4'],
+  coin: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5', 'M12 6v2M12 16v2'],
+  file: ['M14 3H6v18h12V7z', 'M14 3v4h4', 'M9 13h6M9 17h4'],
+  hash: ['M4 9h16M4 15h16', 'M10 3 8 21M16 3l-2 18'],
+  send: ['M22 2 11 13', 'M22 2 15 22l-4-9-9-4z'],
+  check: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'm8.5 12 2.5 2.5 4.5-5'],
+  badge: ['M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12z', 'M8.2 13.9 7 22l5-3 5 3-1.2-8.1'],
+  edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
+  note: ['M4 4h16v12H8l-4 4z'],
+}
+
+const RV_ICON_TONE = {
+  clock: 'blue', hourglass: 'amber', timer: 'amber', play: 'green', flag: 'rose',
+  car: 'indigo', plate: 'blue', tag: 'violet', layers: 'teal', user: 'violet', home: 'amber', pin: 'rose',
+  image: 'pink', phone: 'green', shield: 'amber', coin: 'amber', file: 'teal', hash: 'slate',
+  send: 'blue', check: 'green', badge: 'indigo', edit: 'amber', note: 'slate',
+}
+
+function RvIconTile({ name, size = 16, className = '' }) {
+  return (
+    <span className={`dashboard-rv-tile is-${RV_ICON_TONE[name] || 'slate'} ${className}`}>
+      <RvIcon name={name} size={size} />
+    </span>
+  )
+}
+
+function RvIcon({ name, size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {(RV_ICON_PATHS[name] || RV_ICON_PATHS.note).map((d) => <path key={d} d={d} />)}
+    </svg>
+  )
+}
+
+function DetailGroup({ icon, title, rows = [], children }) {
+  return (
+    <section className="dashboard-rv-group">
+      <h4 className="dashboard-rv-group-title">
+        <RvIconTile name={icon} size={19} className="is-lg" />
+        {title}
+      </h4>
+      {children}
+      {rows.length > 0 && (
+        <dl className="dashboard-rv-rows">
+          {rows.map(([rowIcon, label, value, sub]) => (
+            <div key={label}>
+              <dt>
+                <RvIconTile name={rowIcon} />
+                {label}
+              </dt>
+              <dd>
+                {value || '-'}
+                {sub && <small>{sub}</small>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
+  )
+}
+
 function CustomerParkingTab({ onCountChange }) {
   const [rawVehicles, setVehicles] = useState([])
   const [finePerHour, setFinePerHour] = useState(0)
@@ -4203,18 +4331,53 @@ function CustomerParkingTab({ onCountChange }) {
             const phase = getParkingPhase(detail, now, finePerHour)
             const approver = detail.admin_reviewed_by_name || detail.reviewed_by_name
             const approvedAt = detail.admin_reviewed_at || detail.reviewed_at
-            const fields = [
-              ['ทะเบียนรถ', detail.vehicle_plate],
-              ['ยี่ห้อ / รุ่น', detail.vehicle_model],
-              ...(detail.guest_name
-                ? [
-                    ['ผู้มาติดต่อ', detail.guest_name],
-                    ['เบอร์ผู้มาติดต่อ', detail.guest_phone],
-                  ]
-                : []),
-              ['เริ่มจอด', formatVisitDateTime(detail.start_at)],
-              ['สิ้นสุด', detail.end_at ? formatVisitDateTime(detail.end_at) : 'ไม่จำกัดเวลา'],
+            const isVisitor = getVisitKind(detail) === 'family'
+            const room = detail.room_number || roomNumber
+            const vehicleRows = [
+              ['plate', 'ทะเบียนรถ', <span className="dashboard-rv-plate">{detail.vehicle_plate}</span>],
+              ['tag', 'ยี่ห้อ / รุ่น', detail.vehicle_model],
+              ['car', 'ประเภทรถ', VEHICLE_TYPE_LABEL[detail.vehicle_type] || 'รถยนต์'],
+              ['layers', 'ประเภทผู้ใช้', USER_CATEGORY_LABEL[detail.user_category] || (isVisitor ? 'ผู้มาติดต่อ' : 'ผู้พักอาศัย')],
+              ['home', 'ห้องพัก', room ? `ห้อง ${room}` : null],
+              [
+                'pin',
+                'ช่องจอด',
+                detail.parking_space_code ? <span className="dashboard-rv-space">{detail.parking_space_code}</span> : 'ไม่ได้ระบุ',
+                detail.parking_space_zone || null,
+              ],
             ]
+            const contactRows = isVisitor
+              ? [
+                  ['user', 'ชื่อผู้มาติดต่อ', detail.guest_name],
+                  [
+                    'phone',
+                    'เบอร์โทรศัพท์',
+                    detail.guest_phone ? <a className="dashboard-rv-tel" href={`tel:${detail.guest_phone}`}>{detail.guest_phone}</a> : null,
+                  ],
+                  ['home', 'ผู้ลงทะเบียนให้', room ? `ฉัน (ห้อง ${room})` : 'ฉัน'],
+                ]
+              : [['user', 'เจ้าของรถ', room ? `ฉัน (ห้อง ${room})` : 'ฉัน']]
+            const ruleRows = isVisitor
+              ? [
+                  ['timer', 'เวลาจอดสูงสุด', `${VISITOR_MAX_HOURS} ชม. นับจากเช็คอิน`],
+                  ['coin', 'ค่าปรับจอดเกินเวลา', finePerHour ? `${formatBaht(finePerHour)} / ชม.` : 'ไม่มีค่าปรับ'],
+                ]
+              : []
+            const requestRows = [
+              ['hash', 'เลขที่คำขอ', `#${String(detail.id).padStart(5, '0')}`],
+              ['send', 'ส่งคำขอเมื่อ', detail.created_at ? formatVisitDateTime(detail.created_at) : null],
+              ...(detail.reviewed_by_name || detail.reviewed_at
+                ? [['check', 'ตรวจสอบโดยเจ้าหน้าที่', detail.reviewed_by_name, detail.reviewed_at && formatVisitDateTime(detail.reviewed_at)]]
+                : []),
+              ...(detail.admin_reviewed_by_name || detail.admin_reviewed_at
+                ? [['badge', 'อนุมัติโดยผู้ดูแล', detail.admin_reviewed_by_name, detail.admin_reviewed_at && formatVisitDateTime(detail.admin_reviewed_at)]]
+                : []),
+              ...(detail.updated_at
+                ? [['edit', 'แก้ไขล่าสุด', detail.updated_by_name, formatVisitDateTime(detail.updated_at)]]
+                : []),
+              ['note', 'หมายเหตุ', detail.note],
+            ]
+            const photos = detail.vehicle_photos || []
             return (
               <div className="dashboard-rv">
                 <div className={`dashboard-rv-detail-hero is-${phase.key === 'parked' ? 'approved' : 'pending'}`}>
@@ -4237,39 +4400,46 @@ function CustomerParkingTab({ onCountChange }) {
                   </span>
                 </div>
 
-                <dl className="dashboard-rv-detail">
-                  {fields.map(([label, value]) => (
-                    <div key={label}>
-                      <dt>{label}</dt>
-                      <dd>{value || '-'}</dd>
-                    </div>
-                  ))}
-                  <div>
-                    <dt>หมายเหตุ</dt>
-                    <dd>{detail.note || '-'}</dd>
-                  </div>
-                </dl>
+                <VehicleTimeCard vehicle={detail} />
 
-                <ParkingSessionPanel item={detail} finePerHour={finePerHour} />
+                <DetailGroup icon="car" title="ข้อมูลรถ" rows={vehicleRows} />
 
-                {detail.vehicle_photos?.length > 0 && (
-                  <section className="dashboard-rv-photos" aria-label="รูปรถและป้ายทะเบียน">
-                    <h4 className="dashboard-rv-timeline-title">รูปรถ / ป้ายทะเบียน</h4>
-                    <div className="dashboard-rv-photo-grid">
-                      {detail.vehicle_photos.map((photo, index) => (
+                <DetailGroup icon="user" title={isVisitor ? 'ข้อมูลผู้มาติดต่อ' : 'ข้อมูลเจ้าของรถ'} rows={contactRows} />
+
+                {isVisitor && (
+                  <DetailGroup icon="shield" title="เงื่อนไขการจอด" rows={ruleRows}>
+                    {getVisitorSession(detail, finePerHour, now) && <ParkingSessionPanel item={detail} finePerHour={finePerHour} />}
+                  </DetailGroup>
+                )}
+
+                <DetailGroup icon="file" title="คำขอและการอนุมัติ" rows={requestRows} />
+
+                <DetailGroup icon="image" title={`รูปรถ / ป้ายทะเบียน · ${photos.length} รูป`}>
+                  {photos.length > 0 ? (
+                    <div className={`dashboard-rv-gallery${photos.length === 1 ? ' is-single' : ''}`}>
+                      {photos.map((photo, index) => (
                         <button
                           key={photo.url}
                           type="button"
-                          className="dashboard-rv-photo"
-                          onClick={() => setLightbox({ photos: detail.vehicle_photos, index, plate: detail.vehicle_plate })}
+                          className="dashboard-rv-gallery-item"
+                          onClick={() => setLightbox({ photos, index, plate: detail.vehicle_plate })}
                           aria-label={`ดูรูปที่ ${index + 1}`}
                         >
                           <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
+                          <span className="dashboard-rv-gallery-zoom" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="11" cy="11" r="7" />
+                              <path d="m20 20-3.5-3.5M11 8v6M8 11h6" />
+                            </svg>
+                            ดูรูปเต็ม
+                          </span>
                         </button>
                       ))}
                     </div>
-                  </section>
-                )}
+                  ) : (
+                    <p className="dashboard-rv-gallery-empty">ไม่มีรูปที่แนบไว้</p>
+                  )}
+                </DetailGroup>
 
                 <ProcessSteps
                   title="ขั้นตอนการดำเนินการ"
@@ -5258,13 +5428,13 @@ function CustomerDashbord() {
     }
   }, [receiptRequest])
 
+  const loader = useMinimumLoading(loading)
+
   if (loading) {
-    return (
-      <div className="dashboard-page d-flex align-items-center justify-content-center">
-        <p className="text-muted">กำลังโหลดข้อมูล...</p>
-      </div>
-    )
+    return <LoadingScreen title="กำลังโหลดข้อมูล" />
   }
+
+  const pageLoader = loader.visible && <LoadingScreen title="กำลังโหลดข้อมูล" leaving={loader.leaving} />
 
   if (error) {
     return (
@@ -5977,6 +6147,7 @@ function CustomerDashbord() {
 
   return (
     <div className="dashboard-page">
+      {pageLoader}
       <div className="container">
         <div className="dashboard-header">
           <div className="dashboard-title-group">

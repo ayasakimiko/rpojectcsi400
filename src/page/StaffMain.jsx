@@ -69,6 +69,8 @@ import {
 import { addContractMonths, completedContractSummaryTiles, CONTRACT_MAX_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
 import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
+import LoadingScreen from '../components/LoadingScreen.jsx'
+import useMinimumLoading from '../utils/useMinimumLoading.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -9498,13 +9500,13 @@ function StaffMain() {
     return filteredHistoryPayments.slice(start, start + historyPageSize)
   }, [filteredHistoryPayments, currentHistoryPage, historyPageSize])
 
+  const loader = useMinimumLoading(loading)
+
   if (loading) {
-    return (
-      <div className="staff-page d-flex align-items-center justify-content-center">
-        <p className="text-muted">กำลังโหลดข้อมูล...</p>
-      </div>
-    )
+    return <LoadingScreen title="กำลังโหลดข้อมูล" />
   }
+
+  const pageLoader = loader.visible && <LoadingScreen title="กำลังโหลดข้อมูล" leaving={loader.leaving} />
 
   if (error) {
     return (
@@ -9688,6 +9690,7 @@ function StaffMain() {
 
   return (
     <div className="staff-page">
+      {pageLoader}
       <div className="staff-container">
         <div className="staff-header">
           <div className="staff-title-group">
