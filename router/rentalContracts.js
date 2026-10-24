@@ -325,50 +325,9 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
   };
 }
 
-const CONTRACT_COLUMNS = `
-  b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
-  r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
-  b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
-  COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
-  b.contract_duration_months IS NOT NULL AS duration_selected,
-  COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
-  b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
-  b.deposit_settled_at, b.deposit_settled_by_name,
-  (SELECT moi.damage_note FROM MoveOutInspection moi
-    JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
-    WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
-      AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
-    ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
-  (SELECT moi2.damage_cost FROM MoveOutInspection moi2
-    JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
-    WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
-      AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
-    ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
-  (SELECT MIN(nb.id) FROM Booking nb
-    WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
-  (SELECT MAX(pb.id) FROM Booking pb
-    WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
-  (SELECT MIN(nb4.created_at) FROM Booking nb4
-    WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
-  COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
-    WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
-      AND NOT EXISTS (SELECT 1 FROM Booking nb3
-        WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
-  ), b.ended_at) AS moved_out_at,
-  (SELECT MAX(b2.rental_end_date) FROM Booking b2
-    WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
-      AND NOT EXISTS (SELECT 1 FROM Booking nb2
-        WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date`;
-
 const inContractBookings = (contract, bookingId) =>
   (contract.prev_contract_id == null || bookingId >= contract.booking_id) &&
   (contract.next_contract_id == null || bookingId < contract.next_contract_id);
-
-const CONTRACT_JOINS = `
-  FROM Booking b
-  JOIN Customer c ON c.id = b.customer_id
-  LEFT JOIN Room r ON r.id = b.room_id
-  LEFT JOIN Room cr ON cr.room_number = c.room_number`;
 
 async function attachContractImages(pool, contracts, now) {
   if (contracts.length === 0) return [];
@@ -444,17 +403,52 @@ export async function loadCustomerContracts(pool, customerIds, { currentOnly = f
   if (ids.length === 0) return new Map();
   const [rows] = await pool.query(
     `SELECT * FROM (
-       SELECT ${CONTRACT_COLUMNS},
+       SELECT b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
+              r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
+              b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
+              COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
+              b.contract_duration_months IS NOT NULL AS duration_selected,
+              COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+              b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+              b.deposit_settled_at, b.deposit_settled_by_name,
+              (SELECT moi.damage_note FROM MoveOutInspection moi
+                JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+                WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+                  AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+                ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+              (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+                JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+                WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+                  AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+                ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
+              (SELECT MIN(nb.id) FROM Booking nb
+                WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
+              (SELECT MAX(pb.id) FROM Booking pb
+                WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+              (SELECT MIN(nb4.created_at) FROM Booking nb4
+                WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
+              COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
+                WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
+                  AND NOT EXISTS (SELECT 1 FROM Booking nb3
+                    WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
+              ), b.ended_at) AS moved_out_at,
+              (SELECT MAX(b2.rental_end_date) FROM Booking b2
+                WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
+                  AND NOT EXISTS (SELECT 1 FROM Booking nb2
+                    WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date,
               ROW_NUMBER() OVER (
                 PARTITION BY b.customer_id
                 ORDER BY b.contract_completed_at IS NULL, b.created_at DESC, b.id DESC
               ) AS contract_rank
-       ${CONTRACT_JOINS}
+       FROM Booking b
+       JOIN Customer c ON c.id = b.customer_id
+       LEFT JOIN Room r ON r.id = b.room_id
+       LEFT JOIN Room cr ON cr.room_number = c.room_number
        WHERE b.customer_id IN (?)
-         ${currentOnly ? "AND (c.is_suspended = TRUE OR b.created_at >= COALESCE(c.history_reset_at, '1000-01-01'))" : ""}
+         AND (? = FALSE OR c.is_suspended = TRUE OR b.created_at >= COALESCE(c.history_reset_at, '1000-01-01'))
      ) ranked
      WHERE contract_rank = 1`,
-    [ids],
+    [ids, currentOnly],
   );
   rows.forEach((row) => delete row.contract_rank);
   const contracts = await attachContractImages(pool, rows, new Date());
@@ -475,8 +469,43 @@ export const UNSETTLED_DEPOSIT_MESSAGE = (deposit) =>
 
 export async function loadContractByBooking(pool, bookingId) {
   const [rows] = await pool.query(
-    `SELECT ${CONTRACT_COLUMNS}
-     ${CONTRACT_JOINS}
+    `SELECT b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
+            r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
+            b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
+            COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
+            b.contract_duration_months IS NOT NULL AS duration_selected,
+            COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+            b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+            b.deposit_settled_at, b.deposit_settled_by_name,
+            (SELECT moi.damage_note FROM MoveOutInspection moi
+              JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+              WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+                AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+              ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+            (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+              JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+              WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+                AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+              ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
+            (SELECT MIN(nb.id) FROM Booking nb
+              WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
+            (SELECT MAX(pb.id) FROM Booking pb
+              WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+            (SELECT MIN(nb4.created_at) FROM Booking nb4
+              WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
+            COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
+              WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
+                AND NOT EXISTS (SELECT 1 FROM Booking nb3
+                  WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
+            ), b.ended_at) AS moved_out_at,
+            (SELECT MAX(b2.rental_end_date) FROM Booking b2
+              WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
+                AND NOT EXISTS (SELECT 1 FROM Booking nb2
+                  WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date
+     FROM Booking b
+     JOIN Customer c ON c.id = b.customer_id
+     LEFT JOIN Room r ON r.id = b.room_id
+     LEFT JOIN Room cr ON cr.room_number = c.room_number
      WHERE b.id = ? AND b.contract_completed_at IS NOT NULL`,
     [bookingId],
   );
@@ -485,18 +514,49 @@ export async function loadContractByBooking(pool, bookingId) {
 
 export async function loadCompletedContracts(pool) {
   const [rows] = await pool.query(
-    `SELECT ${CONTRACT_COLUMNS}
-     ${CONTRACT_JOINS}
+    `SELECT b.id AS booking_id, b.customer_id, c.first_name, c.last_name, c.phone, c.is_suspended,
+            r.room_number, c.room_number AS room_number_current, r.price AS monthly_price,
+            b.rental_start_date, b.rental_end_date, cr.rental_end_date AS current_end_date,
+            COALESCE(b.contract_duration_months, TIMESTAMPDIFF(MONTH, b.rental_start_date, b.rental_end_date)) AS contract_duration_months,
+            b.contract_duration_months IS NOT NULL AS duration_selected,
+            COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
+            b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
+            b.deposit_settled_at, b.deposit_settled_by_name,
+            (SELECT moi.damage_note FROM MoveOutInspection moi
+              JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
+              WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
+                AND itr.completed_at >= b.created_at AND moi.hidden_at IS NULL
+              ORDER BY moi.id DESC LIMIT 1) AS moveout_damage_note,
+            (SELECT moi2.damage_cost FROM MoveOutInspection moi2
+              JOIN TenantRequest itr2 ON itr2.id = moi2.tenant_request_id
+              WHERE itr2.customer_id = b.customer_id AND itr2.type = 'moveout' AND itr2.status = 'approved'
+                AND itr2.completed_at >= b.created_at AND moi2.hidden_at IS NULL
+              ORDER BY moi2.id DESC LIMIT 1) AS moveout_damage_cost,
+            (SELECT MIN(nb.id) FROM Booking nb
+              WHERE nb.customer_id = b.customer_id AND nb.contract_completed_at IS NOT NULL AND nb.id > b.id) AS next_contract_id,
+            (SELECT MAX(pb.id) FROM Booking pb
+              WHERE pb.customer_id = b.customer_id AND pb.contract_completed_at IS NOT NULL AND pb.id < b.id) AS prev_contract_id,
+            (SELECT MIN(nb4.created_at) FROM Booking nb4
+              WHERE nb4.customer_id = b.customer_id AND nb4.contract_completed_at IS NOT NULL AND nb4.id > b.id) AS next_contract_at,
+            COALESCE((SELECT MAX(tr.completed_at) FROM TenantRequest tr
+              WHERE tr.customer_id = b.customer_id AND tr.type = 'moveout' AND tr.status = 'approved' AND tr.completed_at >= b.created_at
+                AND NOT EXISTS (SELECT 1 FROM Booking nb3
+                  WHERE nb3.customer_id = b.customer_id AND nb3.contract_completed_at IS NOT NULL AND nb3.id > b.id AND nb3.created_at <= tr.completed_at)
+            ), b.ended_at) AS moved_out_at,
+            (SELECT MAX(b2.rental_end_date) FROM Booking b2
+              WHERE b2.customer_id = b.customer_id AND b2.id >= b.id
+                AND NOT EXISTS (SELECT 1 FROM Booking nb2
+                  WHERE nb2.customer_id = b.customer_id AND nb2.contract_completed_at IS NOT NULL AND nb2.id > b.id AND nb2.id <= b2.id)) AS latest_end_date
+     FROM Booking b
+     JOIN Customer c ON c.id = b.customer_id
+     LEFT JOIN Room r ON r.id = b.room_id
+     LEFT JOIN Room cr ON cr.room_number = c.room_number
      WHERE b.contract_completed_at IS NOT NULL
      ORDER BY b.contract_completed_at DESC, b.id DESC
      LIMIT 1000`,
   );
   return attachContractImages(pool, rows, new Date());
 }
-
-const ROOM_COLUMNS = `id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
-  electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until,
-  billing_start_date, pending_lump_sum_months, rent_credit, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active`;
 
 const formatBaht = (cents) => `฿${(cents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
 
@@ -561,7 +621,10 @@ export async function buildRoomTransferPlan(db, requestId, { lock = false, now =
   if (!inspection) blockers.push("กรุณาตรวจห้องก่อนอนุมัติย้ายห้อง");
 
   const [rooms] = await db.query(
-    `SELECT ${ROOM_COLUMNS} FROM Room WHERE room_number IN (?, ?) ORDER BY room_number${forUpdate}`,
+    `SELECT id, room_number, is_booked, price, room_size, air_conditioner, wifi, refrigerator, bed, bathroom, cctv, custom_amenities,
+            electricity_unit_price, water_price, rental_duration_months, rental_start_date, rental_end_date, prepaid_until,
+            billing_start_date, pending_lump_sum_months, rent_credit, (rental_end_date IS NULL OR rental_end_date > NOW()) AS contract_active
+     FROM Room WHERE room_number IN (?, ?) ORDER BY room_number${forUpdate}`,
     [request.room_number, request.target_room_number ?? request.room_number],
   );
   const sourceRoom = rooms.find((room) => room.room_number === request.room_number) ?? null;

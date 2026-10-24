@@ -3,6 +3,7 @@ import { PersonIcon } from './ParcelIcons.jsx'
 import { InspectionPurposeBadge } from './InspectionCells.jsx'
 import { getInspectionSourceLabel } from '../utils/inspectionSource.js'
 import { assetCost, chargeableAssetCost } from '../utils/inspectionChecklist.js'
+import MoveInBaselineCard, { MoveInCompareTag } from './MoveInBaseline.jsx'
 import './InspectionCells.css'
 import './InspectionDetail.css'
 
@@ -84,6 +85,8 @@ export default function InspectionDetail({
   const photos = inspection.photos || []
   const shownPhotos = photoLimit ? photos.slice(0, photoLimit) : photos
   const inspector = inspection.inspected_by || inspection.inspected_by_name
+  const hasBaseline = inspection.move_in_baseline !== undefined
+  const baseline = inspection.move_in_baseline || null
 
   return (
     <div className="idt">
@@ -139,6 +142,13 @@ export default function InspectionDetail({
           </dl>
         </div>
 
+        {hasBaseline && (
+          <section className="idt-section">
+            <h4><Icon type="home" size={16} />เทียบกับตอนเข้าอยู่</h4>
+            <MoveInBaselineCard baseline={baseline} title="ผลตรวจก่อนเข้าอยู่ของผู้เช่าคนนี้" />
+          </section>
+        )}
+
         <section className="idt-section">
           <h4><Icon type="note" size={16} />รายละเอียดที่พบ / หมายเหตุ</h4>
           <div className={`idt-note${inspection.damage_note ? '' : ' is-empty'}`}>
@@ -163,16 +173,13 @@ export default function InspectionDetail({
             <ul className="idt-checklist">
               {inspection.assets.map((asset) => {
                 const info = RESULT_INFO[asset.result] || RESULT_NONE
-                const before = RESULT_INFO[asset.move_in_result]?.label || 'ไม่ได้บันทึก'
                 return (
                   <li key={asset.name} className={`is-${info.tone}`}>
                     <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
                     <span className="idt-checklist-label">
                       {asset.name} · {formatBaht(asset.price)}
-                      <small className="idt-asset-before">
-                        ตอนเข้าอยู่: {before}
-                        {assetCost(asset) > 0 && ` · ค่าเสียหาย ${formatBaht(assetCost(asset))}`}
-                      </small>
+                      <MoveInCompareTag before={asset.move_in_result} after={asset.result} />
+                      {assetCost(asset) > 0 && <small className="idt-asset-before">ค่าเสียหาย {formatBaht(assetCost(asset))}</small>}
                     </span>
                     <span className={`idt-chip is-${info.tone}`}>{info.label}</span>
                   </li>
@@ -206,6 +213,7 @@ export default function InspectionDetail({
                   <span className={`idt-dot is-${info.tone}`} aria-hidden="true" />
                   <span className="idt-checklist-label">
                     {item.label}
+                    {baseline && <MoveInCompareTag before={baseline.checklist?.[item.key]} after={inspection.checklist?.[item.key]} />}
                     {itemCost > 0 && <small className="idt-asset-before">ค่าเสียหาย {formatBaht(itemCost)}</small>}
                   </span>
                   <span className={`idt-chip is-${info.tone}`}>{info.label}</span>

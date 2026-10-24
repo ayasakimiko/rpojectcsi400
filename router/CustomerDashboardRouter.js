@@ -57,7 +57,6 @@ const CUSTOMER_VEHICLE_MAX_PHOTOS = 6;
 const SAFETY_INCIDENT_MAX_PHOTOS = 4;
 const CUSTOMER_OPEN_REPORT_LIMIT = 10;
 const SAFETY_REPORTER_TABLE = { Customer: "Customer", Staff: "Staff", Admin: "Admin", Owner: "Owner" };
-const AFTER_HISTORY_RESET = "> COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')";
 const URGENT_INCIDENT_TYPES = new Set(["fire", "medical", "accident"]);
 const URGENT_INCIDENT_KEYWORDS = [
   "ด่วน", "ช่วยด้วย", "ฉุกเฉิน", "ไฟไหม้", "ควัน", "ระเบิด", "แก๊สรั่ว", "ก๊าซรั่ว", "ไฟช็อต", "ไฟดูด",
@@ -620,7 +619,7 @@ router.get("/me", async (req, res) => {
       ),
       pool.query(
         `SELECT id, description, category, contact_phone, preferred_time, status, accepted_at, accepted_by_name, completed_at, completed_by_name, created_at
-         FROM MaintenanceRequest WHERE customer_id = ? AND created_at ${AFTER_HISTORY_RESET} ORDER BY created_at DESC`,
+         FROM MaintenanceRequest WHERE customer_id = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01') ORDER BY created_at DESC`,
         [customer.id, customer.id],
       ),
       pool.query(
@@ -638,7 +637,7 @@ router.get("/me", async (req, res) => {
          LEFT JOIN Room tg ON tg.room_number = tr.target_room_number
          LEFT JOIN MoveOutInspection moi ON moi.tenant_request_id = tr.id
          LEFT JOIN Payment tcp ON tcp.id = tr.transfer_charge_payment_id
-         WHERE tr.customer_id = ? AND tr.created_at ${AFTER_HISTORY_RESET}
+         WHERE tr.customer_id = ? AND tr.created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
          ORDER BY tr.created_at DESC, tr.id DESC`,
         [customer.id, customer.id],
       ),
@@ -646,7 +645,7 @@ router.get("/me", async (req, res) => {
       listAnnouncements(pool),
       pool.query(
         `SELECT id, tracking_number, sender_name, description, status, staff_name, received_at, created_at
-         FROM Parcel WHERE customer_id = ? AND room_number = ? AND created_at ${AFTER_HISTORY_RESET}
+         FROM Parcel WHERE customer_id = ? AND room_number = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
          ORDER BY created_at DESC`,
         [customer.id, customer.room_number, customer.id],
       ),
@@ -1451,7 +1450,7 @@ router.get("/parked-vehicles", async (req, res) => {
       `SELECT id, vehicle_plate, vehicle_model, guest_name, start_at, end_at, cancelled_at
        FROM ResidentVisitRequest
        WHERE customer_id = ? AND request_type = 'vehicle' AND status = 'cancelled' AND cancelled_by_name = ?
-         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND created_at ${AFTER_HISTORY_RESET}
+         AND cancelled_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
        ORDER BY cancelled_at DESC`,
       [req.user.id, PARKING_EXPIRED_BY, req.user.id],
     );
@@ -1481,7 +1480,7 @@ router.get("/resident-visit-requests", async (req, res) => {
       `SELECT id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone,
               start_at, end_at, note, status, reviewed_by_name, reviewed_at, admin_reviewed_by_name, admin_reviewed_at,
               updated_by_name, updated_at, cancelled_by_name, cancelled_at, created_at
-       FROM ResidentVisitRequest WHERE customer_id = ? AND created_at ${AFTER_HISTORY_RESET} ORDER BY created_at DESC`,
+       FROM ResidentVisitRequest WHERE customer_id = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01') ORDER BY created_at DESC`,
       [req.user.id, req.user.id],
     );
     return res.json({ requests: withVehiclePhotos(requests) });
@@ -1577,7 +1576,7 @@ router.get("/safety-incidents", async (req, res) => {
     const [incidents] = await getPool().query(
       `SELECT id, room_number, incident_type, severity, description, photos, status, reviewed_by_name, reviewed_at, review_note,
               cancelled_by_name, cancelled_at, cancel_reason, created_at
-       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? AND created_at ${AFTER_HISTORY_RESET}
+       FROM SafetyIncident WHERE reporter_role = 'Customer' AND reporter_id = ? AND created_at > COALESCE((SELECT history_reset_at FROM Customer WHERE id = ?), '1000-01-01')
        ORDER BY created_at DESC`,
       [req.user.id, req.user.id],
     );

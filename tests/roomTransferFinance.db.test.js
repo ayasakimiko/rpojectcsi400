@@ -17,6 +17,7 @@ const {
   validateInspectionDamage,
 } = await import("../router/rentalContracts.js");
 const { computeProratedRent } = await import("../router/roomTransferFinance.js");
+const { loadMoveInBaseline, loadMoveOutBaseline } = await import("../router/moveInBaseline.js");
 
 const cents = (value) => Math.round(Number(value) * 100);
 const contractImages = () => Array.from({ length: 5 }, (_, index) => ({ name: `test-${index}`, url: `/uploads/contracts/test-${randomUUID()}.jpg` }));
@@ -267,6 +268,31 @@ test("paid transfer awaiting approval hides the target room from registration an
 
     const [[room]] = await connection.query(`SELECT is_booked FROM Room WHERE room_number = ?`, [tenant.targetNumber]);
     assert.equal(Boolean(room.is_booked), false);
+  }));
+
+test("move-out inspections compare against the tenant's move-in inspection including its photos", () =>
+  withRollback(async (connection) => {
+    const tenant = await setupTenant(connection, { oldPrice: 3500, newPrice: 4500, damage: 0 });
+    const checklist = { walls: "damaged", floor: "good", ceiling: "good", doors: "good", windows: "good", electrical: "good", bathroom: "good", furniture: "good" };
+    await connection.query(
+      `INSERT INTO MoveInInspection (room_number, customer_id, tenant_name, inspection_date, checklist, assets, note, photos, inspected_by_name)
+       VALUES (?, ?, 'ทดสอบ ย้ายห้อง', CURDATE(), ?, ?, 'ผนังมีรอยร้าวก่อนเข้าอยู่', ?, 'ทดสอบ')`,
+      [tenant.sourceNumber, tenant.customerId, JSON.stringify(checklist), JSON.stringify([{ name: "ตู้เย็น", price: 5000, result: "missing" }]), JSON.stringify([{ name: "walls.jpg", url: "/uploads/move-in-inspections/walls.jpg" }])],
+    );
+
+    const baseline = await loadMoveInBaseline(connection, { roomNumber: tenant.sourceNumber, customerId: tenant.customerId });
+    assert.equal(baseline.checklist.walls, "damaged");
+    assert.equal(baseline.assets[0].result, "missing");
+    assert.equal(baseline.note, "ผนังมีรอยร้าวก่อนเข้าอยู่");
+    assert.deepEqual(baseline.photos.map((photo) => photo.url), ["/uploads/move-in-inspections/walls.jpg"]);
+
+    const viaRequest = await loadMoveOutBaseline(connection, { room_number: tenant.sourceNumber, customer_id: tenant.customerId });
+    assert.equal(viaRequest.id, baseline.id);
+    const [[now]] = await connection.query("SELECT NOW() + INTERVAL 1 MINUTE AS at");
+    const direct = await loadMoveOutBaseline(connection, { room_number: tenant.sourceNumber, customer_id: null, created_at: now.at });
+    assert.equal(direct.id, baseline.id);
+    assert.equal(await loadMoveInBaseline(connection, { roomNumber: tenant.sourceNumber, customerId: tenant.customerId + 1000000 }), null);
+    assert.equal(await loadMoveInBaseline(connection, { roomNumber: tenant.targetNumber, customerId: tenant.customerId }), null);
   }));
 
 test("unpaid current rent blocks the transfer and never creates credit", () =>

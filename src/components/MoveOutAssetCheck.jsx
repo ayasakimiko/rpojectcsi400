@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import InspectionCostInput from './InspectionCostInput.jsx'
-import { chargeableAssetCost, COSTED_RESULTS, defaultAssetCost, RESULT_LABELS, RESULT_OPTIONS } from '../utils/inspectionChecklist.js'
+import { MoveInCompareTag } from './MoveInBaseline.jsx'
+import { chargeableAssetCost, COSTED_RESULTS, defaultAssetCost, RESULT_OPTIONS } from '../utils/inspectionChecklist.js'
 import './MoveInInspection.css'
 
 const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
@@ -14,6 +15,23 @@ function formatDate(value) {
   if (!value) return '-'
   const date = new Date(`${value}T00:00:00`)
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function AssetPriceInput({ value, label, invalid, onChange }) {
+  return (
+    <label className={`asset-price-field${invalid ? ' is-invalid' : ''}`}>
+      <b aria-hidden="true">฿</b>
+      <input
+        inputMode="decimal"
+        value={value ?? ''}
+        placeholder="0.00"
+        aria-label={`ราคา ${label || 'ทรัพย์สิน'}`}
+        onFocus={(event) => event.target.select()}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <em>บาท</em>
+    </label>
+  )
 }
 
 export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invalidIndexes = [], recordOnly = false }) {
@@ -35,7 +53,7 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
         const moveIn = new Map((data.baseline?.assets || []).map((asset) => [asset.name, asset]))
         const roomItems = data.room_assets.map((asset) => ({
           name: asset.name,
-          price: asset.price,
+          price: moveIn.get(asset.name)?.price ?? asset.price,
           move_in_result: moveIn.get(asset.name)?.result ?? null,
           result: 'good',
         }))
@@ -71,7 +89,7 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
     <div className="move-out-assets">
       <p className="move-out-assets-note">
         {recordOnly ? (
-          'อุปกรณ์ของห้องพร้อมราคาที่ Admin กำหนด เริ่มต้นเป็น “ปกติ” · บันทึกไว้เป็นสภาพก่อนเข้าอยู่ ไม่มีการคิดเงิน'
+          'ราคาเริ่มจากที่ Admin กำหนด แก้ราคาได้ในช่อง ฿ · ราคานี้ใช้เป็นราคาอ้างอิงตอนตรวจย้ายออก · ผลตรวจเริ่มต้นเป็น “ปกติ”'
         ) : (
           <>
             อุปกรณ์ของห้องพร้อมราคา เริ่มต้นเป็น “ปกติ”
@@ -97,22 +115,17 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
                     aria-label="ชื่อทรัพย์สิน"
                     onChange={(event) => update(index, { name: event.target.value })}
                   />
-                  <label className="move-in-asset-price">
-                    <span>฿</span>
-                    <input
-                      className="staff-form-input"
-                      inputMode="decimal"
-                      value={asset.price}
-                      placeholder="ราคา"
-                      aria-label={`ราคา ${asset.name}`}
-                      onChange={(event) => update(index, { price: event.target.value })}
-                    />
-                  </label>
+                  <AssetPriceInput value={asset.price} label={asset.name} invalid={invalid} onChange={(price) => update(index, { price })} />
+                </div>
+              ) : recordOnly ? (
+                <div className="move-in-asset-fields">
+                  <span className="move-out-asset-name">{asset.name}</span>
+                  <AssetPriceInput value={asset.price} label={asset.name} invalid={invalid} onChange={(price) => update(index, { price })} />
                 </div>
               ) : (
                 <span className="move-out-asset-name">
                   {asset.name} <b>{formatBaht(asset.price)}</b>
-                  {!recordOnly && <small>ตอนเข้าอยู่: {RESULT_LABELS[asset.move_in_result] || 'ไม่ได้ตรวจ'}</small>}
+                  <MoveInCompareTag before={asset.move_in_result} after={asset.result} />
                 </span>
               )}
               <div className="move-in-asset-actions">

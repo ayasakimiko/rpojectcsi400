@@ -27,6 +27,10 @@ import InspectionDetail from '../components/InspectionDetail.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import MoveOutAssetCheck from '../components/MoveOutAssetCheck.jsx'
 import InspectionCostInput from '../components/InspectionCostInput.jsx'
+import InspectionTopicFilter from '../components/InspectionTopicFilter.jsx'
+import MoveInBaselineCard, { MoveInCompareTag } from '../components/MoveInBaseline.jsx'
+import MoveInComparison from '../components/MoveInComparison.jsx'
+import { useMoveInBaseline } from '../utils/moveInBaseline.js'
 import { assetPriceValue, chargeableAssetCost, COSTED_RESULTS, isValidAssetPrice, itemCostTotal } from '../utils/inspectionChecklist.js'
 import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
 import MoveRoomDamageFinance from '../components/MoveRoomDamageFinance.jsx'
@@ -716,6 +720,10 @@ const CHECKLIST_RESULT_OPTIONS = [
   { key: 'not_applicable', label: 'ไม่มี', title: 'ไม่มีหรือติดตั้งรายการนี้ในห้อง' },
 ]
 const INSPECTION_MAX_PHOTOS = 15
+const INSPECTION_PAGES = [
+  { key: 'results', label: 'ผลตรวจห้อง' },
+  { key: 'move-in', label: 'ตรวจก่อนเข้าอยู่' },
+]
 const STAFF_INSPECTION_STATUS_LABEL = {
   pending: 'รอ Admin ตรวจ',
   reviewed: 'Admin ตรวจแล้ว',
@@ -3535,6 +3543,7 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
   const [loading, setLoading] = useState(Boolean(inspectionId))
   const [loadError, setLoadError] = useState('')
   const [photoIndex, setPhotoIndex] = useState(null)
+  const [view, setView] = useState('latest')
 
   useEffect(() => {
     if (!inspectionId) return undefined
@@ -3583,6 +3592,26 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
         <p className="staff-form-error">{loadError}</p>
       ) : inspection ? (
         <>
+          <div className="mic-view-toggle" role="group" aria-label="มุมมองผลตรวจ">
+            {[
+              { key: 'latest', label: 'ผลตรวจล่าสุด' },
+              { key: 'compare', label: 'เทียบกับตอนเข้าอยู่' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={view === item.key ? 'is-active' : ''}
+                aria-pressed={view === item.key}
+                onClick={() => setView(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {view === 'compare' ? (
+            <MoveInComparison baseline={inspection.move_in_baseline} latest={inspection} />
+          ) : (
+          <>
           <p className="staff-insp-meta">
             ตรวจเมื่อ {formatDateTime(inspection.updated_at || inspection.reviewed_at || inspection.created_at)}
             {inspection.inspected_by_name && (
@@ -3652,6 +3681,8 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
             </div>
           ) : (
             <p className="staff-transfer-muted">ไม่มีรูปถ่าย</p>
+          )}
+          </>
           )}
         </>
       ) : null}
@@ -7155,6 +7186,11 @@ function StaffMain() {
   const [inspectionFieldErrors, setInspectionFieldErrors] = useState({})
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
   const [inspectionAssetsOpen, setInspectionAssetsOpen] = useState(true)
+  const [inspectionPage, setInspectionPage] = useState('results')
+  const liveMoveInBaseline = useMoveInBaseline(inspectionModal && !inspectionEditing ? inspectionForm.room_number : null)
+  const inspectionBaseline = inspectionEditing
+    ? { loading: false, baseline: inspectionEditing.move_in_baseline ?? null, error: '' }
+    : liveMoveInBaseline
   const inspectionMoveRoomId = inspectionTenantRequest?.type === 'move_room'
     ? inspectionTenantRequest.id
     : inspectionEditing?.tenant_request_type === 'move_room' ? inspectionEditing.tenant_request_id : null
@@ -7669,6 +7705,7 @@ function StaffMain() {
         tenant_phone: detail.tenant_phone,
         tenant_request_id: detail.tenant_request_id,
         tenant_request_type: detail.tenant_request_type,
+        move_in_baseline: detail.move_in_baseline ?? null,
       })
       setInspectionTenantRequest(null)
       setInspectionError('')
@@ -7709,6 +7746,13 @@ function StaffMain() {
 
   const resetChecklist = () => {
     setInspectionForm((form) => ({ ...form, checklist: {} }))
+    setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
+  }
+
+  const setAllChecklistResults = (value) => {
+    setInspectionForm((form) =>
+      withDamageTotal({ ...form, checklist: Object.fromEntries(MOVE_OUT_CHECKLIST.map((item) => [item.key, value])) }),
+    )
     setInspectionFieldErrors((errors) => ({ ...errors, checklist: [] }))
   }
 
@@ -9822,29 +9866,29 @@ function StaffMain() {
                   </div>
                 </section>
 
-                <div className="inspection-topic-filter" role="group" aria-label="กรองหัวข้อการตรวจห้อง">
-                  <span>เลือกหัวข้อที่ต้องการดู</span>
-                  <div className="inspection-topic-options">
-                    {[
-                      { key: 'all', label: 'ทั้งหมด' },
-                      { key: 'checklist', label: 'ตรวจสภาพห้อง' },
-                      { key: 'photos', label: 'รายละเอียดและรูปภาพ' },
-                      ...(inspectionMoveRoomId ? [{ key: 'finance', label: 'ค่าเสียหายและเงินมัดจำ' }] : []),
-                    ].map(({ key, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={inspectionSection === key ? 'is-active' : ''}
-                        aria-pressed={inspectionSection === key}
-                        onClick={() => setInspectionSection(key)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <InspectionTopicFilter
+                  topics={[
+                    { key: 'all', label: 'ทั้งหมด' },
+                    ...(inspectionForm.room_number ? [{ key: 'baseline', label: 'เทียบกับผลตรวจก่อนเข้าอยู่' }] : []),
+                    { key: 'checklist', label: 'ตรวจสภาพห้อง' },
+                    { key: 'photos', label: 'รายละเอียดและรูปภาพ' },
+                    ...(inspectionMoveRoomId ? [{ key: 'finance', label: 'ค่าเสียหายและเงินมัดจำ' }] : []),
+                  ]}
+                  value={inspectionSection}
+                  onChange={setInspectionSection}
+                />
 
-                <section className="inspection-section" hidden={!['all', 'checklist'].includes(inspectionSection)}>
+                {inspectionForm.room_number && (
+                  <section className="inspection-section" data-topic="baseline" hidden={!['all', 'baseline'].includes(inspectionSection)}>
+                    <MoveInBaselineCard
+                      baseline={inspectionBaseline.baseline}
+                      loading={inspectionBaseline.loading}
+                      error={inspectionBaseline.error}
+                    />
+                  </section>
+                )}
+
+                <section className="inspection-section" data-topic="checklist" hidden={!['all', 'checklist'].includes(inspectionSection)}>
                   <div className="inspection-section-head">
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">2</span> ตรวจสภาพห้อง
@@ -9865,12 +9909,18 @@ function StaffMain() {
                       <span>
                         ตรวจแล้ว <strong>{inspectionResults.length}</strong> / {MOVE_OUT_CHECKLIST.length} ข้อ
                       </span>
-                      <span className="inspection-counts">
-                        <span className="is-good">ปกติ {inspectionCounts.good}</span>
-                        <span className="is-wear">สึกหรอ {inspectionCounts.wear}</span>
-                        <span className="is-damaged">ชำรุด {inspectionCounts.damaged}</span>
-                        <span className="is-missing">สูญหาย {inspectionCounts.missing}</span>
-                        <span className="is-not_applicable">ไม่มี {inspectionCounts.not_applicable}</span>
+                      <span className="inspection-counts" role="group" aria-label="เลือกผลเดียวกันทุกข้อ">
+                        {CHECKLIST_RESULT_OPTIONS.map((option) => (
+                          <button
+                            key={option.key}
+                            type="button"
+                            className={`is-${option.key}${inspectionCounts[option.key] === MOVE_OUT_CHECKLIST.length ? ' is-all' : ''}`}
+                            title={`ตั้งทุกข้อเป็น "${option.label}"`}
+                            onClick={() => setAllChecklistResults(option.key)}
+                          >
+                            {option.label} {inspectionCounts[option.key]}
+                          </button>
+                        ))}
                       </span>
                     </div>
                     <p className="inspection-guidance">
@@ -9895,6 +9945,9 @@ function StaffMain() {
                           <span className="inspection-row-label">
                             {item.label}
                             {isMissing && <small>ยังไม่ได้เลือก</small>}
+                            {inspectionBaseline.baseline && (
+                              <MoveInCompareTag before={inspectionBaseline.baseline.checklist?.[item.key]} after={result} />
+                            )}
                             {isFurniture && (
                               <button
                                 type="button"
@@ -9955,7 +10008,7 @@ function StaffMain() {
                   </div>
                 </section>
 
-                <section className="inspection-section" hidden={!['all', 'photos'].includes(inspectionSection)}>
+                <section className="inspection-section" data-topic="photos" hidden={!['all', 'photos'].includes(inspectionSection)}>
                   <h4 className="inspection-section-title">
                     <span className="inspection-step">3</span> รายละเอียดและรูปภาพ
                   </h4>
@@ -10021,7 +10074,7 @@ function StaffMain() {
                 </section>
 
                 {inspectionMoveRoomId && (
-                  <section className="inspection-section" hidden={!['all', 'finance'].includes(inspectionSection)}>
+                  <section className="inspection-section" data-topic="finance" hidden={!['all', 'finance'].includes(inspectionSection)}>
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">4</span> ค่าเสียหายและเงินมัดจำ
                     </h4>
@@ -10118,6 +10171,22 @@ function StaffMain() {
                   </li>
                 )
               })}
+            </ul>
+          )}
+          {staffTab === 'move-out-inspections' && (
+            <ul className="nav staff-subtabs" aria-label="หมวดหมู่ตรวจสภาพห้อง">
+              {INSPECTION_PAGES.map((page) => (
+                <li className="nav-item" key={page.key}>
+                  <button
+                    type="button"
+                    className={`nav-link staff-subtab-link${inspectionPage === page.key ? ' active' : ''}`}
+                    aria-current={inspectionPage === page.key ? 'page' : undefined}
+                    onClick={() => setInspectionPage(page.key)}
+                  >
+                    {page.label}
+                  </button>
+                </li>
+              ))}
             </ul>
           )}
           <div className="dorm-menu-bar">
@@ -10433,9 +10502,11 @@ function StaffMain() {
           </div>
         )}
 
-        {staffTab === 'move-out-inspections' && <MoveInInspectionPanel Modal={Modal} />}
+        {staffTab === 'move-out-inspections' && inspectionPage === 'move-in' && (
+          <MoveInInspectionPanel Modal={Modal} FilterPanel={StaffFilterPanel} />
+        )}
 
-        {staffTab === 'move-out-inspections' && (
+        {staffTab === 'move-out-inspections' && inspectionPage === 'results' && (
           <div className="staff-card staff-tab-card">
             <div className="staff-card-header">
               <div>

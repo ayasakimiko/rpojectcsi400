@@ -66,6 +66,7 @@ import {
   validateInspectionDamage,
 } from "./rentalContracts.js";
 import { depositBalanceAfterTransfers, transferDepositDeductedCents } from "./roomTransferFinance.js";
+import { loadMoveInBaseline, loadMoveOutBaseline, parseMoveInInspectionRow } from "./moveInBaseline.js";
 
 const router = Router();
 
@@ -527,8 +528,6 @@ router.get("/move-out-inspections", async (_req, res) => {
   }
 });
 
-// The current tenant's move-in inspection, used as the baseline when checking
-// the same room at move-out.
 router.get("/move-out-inspections/move-in-baseline/:room_number", async (req, res) => {
   try {
     const roomNumber = Number(req.params.room_number);
@@ -536,17 +535,25 @@ router.get("/move-out-inspections/move-in-baseline/:room_number", async (req, re
       return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
     }
     const pool = getPool();
-    const [tenantRows] = await pool.query(`${MOVE_IN_TENANT_SQL} AND r.room_number = ?`, [roomNumber]);
+    const [tenantRows] = await pool.query(
+      `SELECT r.room_number, r.rental_start_date, r.room_type_id, rt.name AS room_type_name,
+              r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone
+       FROM Room r
+       JOIN Customer c ON c.id = (
+         SELECT c2.id FROM Customer c2
+         WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+         ORDER BY c2.id DESC
+         LIMIT 1
+       )
+       LEFT JOIN RoomType rt ON rt.id = r.room_type_id
+       WHERE r.is_booked = TRUE AND r.room_number = ?`,
+      [roomNumber],
+    );
     const tenant = tenantRows[0];
     if (!tenant) return res.json({ baseline: null, room_assets: [] });
-    const [rows] = await pool.query(
-      `SELECT ${MOVE_IN_INSPECTION_COLUMNS} FROM MoveInInspection
-       WHERE customer_id = ? AND room_number = ?
-       ORDER BY id DESC LIMIT 1`,
-      [tenant.customer_id, roomNumber],
-    );
     return res.json({
-      baseline: rows[0] ? parseMoveInInspectionRow(rows[0]) : null,
+      baseline: await loadMoveInBaseline(pool, { roomNumber, customerId: tenant.customer_id }),
       room_assets: roomEquipmentAssets(tenant),
     });
   } catch (error) {
@@ -564,7 +571,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number, moi.tenant_name, moi.tenant_phone,
+      `SELECT moi.id, moi.room_number, moi.tenant_request_id, tr.type AS tenant_request_type, tr.target_room_number, tr.customer_id, moi.tenant_name, moi.tenant_phone,
               moi.checklist, moi.assets, moi.item_costs, moi.damage_note, moi.damage_cost, moi.photos, moi.status, moi.inspected_by_name,
               moi.reviewed_at, moi.updated_at, moi.created_at
        FROM MoveOutInspection moi
@@ -583,6 +590,7 @@ router.get("/move-out-inspections/:id", async (req, res) => {
         assets: inspection.assets ? JSON.parse(inspection.assets) : null,
         item_costs: inspection.item_costs ? JSON.parse(inspection.item_costs) : null,
         photos: JSON.parse(inspection.photos),
+        move_in_baseline: await loadMoveOutBaseline(pool, inspection),
       },
     });
   } catch (error) {
@@ -811,35 +819,23 @@ router.post("/move-out-inspections", async (req, res) => {
   }
 });
 
-// The current tenant of each booked room, joined with the room type whose asset
-// list pre-fills the move-in checklist.
-const MOVE_IN_TENANT_SQL = `
-  SELECT r.room_number, r.rental_start_date, r.room_type_id, rt.name AS room_type_name,
-         r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities,
-         c.id AS customer_id, c.first_name, c.last_name, c.phone
-  FROM Room r
-  JOIN Customer c ON c.id = (
-    SELECT c2.id FROM Customer c2
-    WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
-    ORDER BY c2.id DESC
-    LIMIT 1
-  )
-  LEFT JOIN RoomType rt ON rt.id = r.room_type_id
-  WHERE r.is_booked = TRUE`;
-
-const MOVE_IN_INSPECTION_COLUMNS = `
-  id, room_number, customer_id, tenant_name, tenant_phone, room_type_id, room_type_name,
-  DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date, checklist, assets, note,
-  inspected_by_name, updated_at, created_at`;
-
-function parseMoveInInspectionRow(row) {
-  return { ...row, checklist: JSON.parse(row.checklist), assets: JSON.parse(row.assets) };
-}
-
 router.get("/move-in-inspections/candidates", async (_req, res) => {
   try {
     const pool = getPool();
-    const [rooms] = await pool.query(`${MOVE_IN_TENANT_SQL} ORDER BY r.room_number ASC`);
+    const [rooms] = await pool.query(
+      `SELECT r.room_number, r.rental_start_date, r.room_type_id, rt.name AS room_type_name,
+              r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone
+       FROM Room r
+       JOIN Customer c ON c.id = (
+         SELECT c2.id FROM Customer c2
+         WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+         ORDER BY c2.id DESC
+         LIMIT 1
+       )
+       LEFT JOIN RoomType rt ON rt.id = r.room_type_id
+       WHERE r.is_booked = TRUE ORDER BY r.room_number ASC`,
+    );
     const [inspected] = await pool.query("SELECT id, customer_id, room_number FROM MoveInInspection");
     const inspectionByTenant = new Map(inspected.map((row) => [`${row.customer_id}:${row.room_number}`, row.id]));
     return res.json({
@@ -858,7 +854,9 @@ router.get("/move-in-inspections/candidates", async (_req, res) => {
 router.get("/move-in-inspections", async (_req, res) => {
   try {
     const [rows] = await getPool().query(
-      `SELECT ${MOVE_IN_INSPECTION_COLUMNS}, JSON_LENGTH(photos) AS photo_count
+      `SELECT id, room_number, customer_id, tenant_name, tenant_phone, room_type_id, room_type_name,
+              DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date, inspection_dates, checklist, assets, note,
+              inspected_by_name, updated_at, created_at, JSON_LENGTH(photos) AS photo_count
        FROM MoveInInspection
        ORDER BY inspection_date DESC, id DESC`,
     );
@@ -876,14 +874,38 @@ router.get("/move-in-inspections/:id", async (req, res) => {
       return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
     }
     const [rows] = await getPool().query(
-      `SELECT ${MOVE_IN_INSPECTION_COLUMNS}, photos FROM MoveInInspection WHERE id = ?`,
+      `SELECT id, room_number, customer_id, tenant_name, tenant_phone, room_type_id, room_type_name,
+              DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date, inspection_dates, checklist, assets, note,
+              inspected_by_name, updated_at, created_at, photos
+       FROM MoveInInspection
+       WHERE id = ?`,
       [inspectionId],
     );
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
     const inspection = parseMoveInInspectionRow(rows[0]);
-    return res.json({ inspection: { ...inspection, photos: JSON.parse(rows[0].photos) } });
+    const [saveRows] = await getPool().query(
+      `SELECT id, DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date, inspection_dates, checklist, assets,
+              inspected_by_name, updated_at, created_at, JSON_LENGTH(photos) AS photo_count
+       FROM MoveInInspection
+       WHERE customer_id = ? AND room_number = ?
+       ORDER BY inspection_date DESC, id DESC`,
+      [inspection.customer_id, inspection.room_number],
+    );
+    const saves = saveRows.map((row) => {
+      const parsed = parseMoveInInspectionRow(row);
+      const results = [...Object.values(parsed.checklist), ...parsed.assets.map((asset) => asset.result)];
+      return {
+        id: parsed.id,
+        inspection_date: parsed.inspection_date,
+        inspected_by_name: parsed.inspected_by_name,
+        saved_at: parsed.updated_at || parsed.created_at,
+        photo_count: Number(parsed.photo_count) || 0,
+        issue_count: results.filter((result) => result === "damaged" || result === "missing").length,
+      };
+    });
+    return res.json({ inspection: { ...inspection, photos: JSON.parse(rows[0].photos), saves } });
   } catch (error) {
     console.error("Fetch move-in inspection error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
@@ -898,17 +920,34 @@ router.post("/move-in-inspections", async (req, res) => {
     }
 
     const pool = getPool();
-    const [tenantRows] = await pool.query(`${MOVE_IN_TENANT_SQL} AND r.room_number = ?`, [value.roomNumber]);
+    const [tenantRows] = await pool.query(
+      `SELECT r.room_number, r.rental_start_date, r.room_type_id, rt.name AS room_type_name,
+              r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities,
+              c.id AS customer_id, c.first_name, c.last_name, c.phone
+       FROM Room r
+       JOIN Customer c ON c.id = (
+         SELECT c2.id FROM Customer c2
+         WHERE c2.room_number = r.room_number AND c2.is_suspended = FALSE
+         ORDER BY c2.id DESC
+         LIMIT 1
+       )
+       LEFT JOIN RoomType rt ON rt.id = r.room_type_id
+       WHERE r.is_booked = TRUE AND r.room_number = ?`,
+      [value.roomNumber],
+    );
     const tenant = tenantRows[0];
     if (!tenant) {
       return res.status(400).json({ message: "กรุณาเลือกห้องที่มีผู้เช่า" });
     }
+    if (value.customerId && value.customerId !== tenant.customer_id) {
+      return res.status(409).json({ message: "ผู้เช่าห้องนี้เปลี่ยนแล้ว ไม่สามารถบันทึกวันใหม่ให้ผู้เช่าเดิมได้" });
+    }
     const [existing] = await pool.query(
-      "SELECT id FROM MoveInInspection WHERE customer_id = ? AND room_number = ?",
-      [tenant.customer_id, value.roomNumber],
+      "SELECT id FROM MoveInInspection WHERE customer_id = ? AND room_number = ? AND inspection_date = ?",
+      [tenant.customer_id, value.roomNumber, value.inspectionDate],
     );
     if (existing.length > 0) {
-      return res.status(409).json({ message: "ผู้เช่านี้มีผลตรวจก่อนเข้าอยู่แล้ว กรุณาแก้ไขผลตรวจเดิม" });
+      return res.status(409).json({ message: "มีบันทึกผลตรวจของวันที่นี้แล้ว กรุณาเลือกวันอื่นหรือเปิดบันทึกวันนั้นแล้วแก้ไข" });
     }
 
     const staffName = await getActingStaffName(pool, req.user);
@@ -917,8 +956,8 @@ router.post("/move-in-inspections", async (req, res) => {
       const [result] = await pool.query(
         `INSERT INTO MoveInInspection
            (room_number, customer_id, tenant_name, tenant_phone, room_type_id, room_type_name,
-            inspection_date, checklist, assets, note, photos, inspected_by_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            inspection_date, inspection_dates, checklist, assets, note, photos, inspected_by_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           value.roomNumber,
           tenant.customer_id,
@@ -927,6 +966,7 @@ router.post("/move-in-inspections", async (req, res) => {
           tenant.room_type_id,
           tenant.room_type_name,
           value.inspectionDate,
+          JSON.stringify(value.inspectionDates),
           JSON.stringify(value.checklist),
           JSON.stringify(value.assets),
           value.note,
@@ -953,7 +993,7 @@ router.patch("/move-in-inspections/:id", async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query("SELECT photos FROM MoveInInspection WHERE id = ?", [inspectionId]);
+    const [rows] = await pool.query("SELECT photos, customer_id, room_number FROM MoveInInspection WHERE id = ?", [inspectionId]);
     if (!rows[0]) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
@@ -962,15 +1002,23 @@ router.patch("/move-in-inspections/:id", async (req, res) => {
     if (error) {
       return res.status(400).json({ message: error });
     }
+    const [sameDay] = await pool.query(
+      "SELECT id FROM MoveInInspection WHERE customer_id = ? AND room_number = ? AND inspection_date = ? AND id <> ?",
+      [rows[0].customer_id, rows[0].room_number, value.inspectionDate, inspectionId],
+    );
+    if (sameDay.length > 0) {
+      return res.status(409).json({ message: "มีบันทึกผลตรวจของวันที่นี้แล้ว กรุณาเลือกวันอื่น" });
+    }
 
     const savedPhotos = await savePublicImages("move-in-inspections", value.newPhotos);
     try {
       await pool.query(
         `UPDATE MoveInInspection
-         SET inspection_date = ?, checklist = ?, assets = ?, note = ?, photos = ?, updated_at = NOW()
+         SET inspection_date = ?, inspection_dates = ?, checklist = ?, assets = ?, note = ?, photos = ?, updated_at = NOW()
          WHERE id = ?`,
         [
           value.inspectionDate,
+          JSON.stringify(value.inspectionDates),
           JSON.stringify(value.checklist),
           JSON.stringify(value.assets),
           value.note,
@@ -988,6 +1036,37 @@ router.patch("/move-in-inspections/:id", async (req, res) => {
     return res.json({ message: "แก้ไขผลตรวจก่อนเข้าอยู่สำเร็จ" });
   } catch (error) {
     console.error("Update move-in inspection error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.delete("/move-in-inspections/:id", async (req, res) => {
+  try {
+    const inspectionId = Number(req.params.id);
+    if (!isPositiveId(inspectionId)) {
+      return res.status(400).json({ message: "รหัสผลตรวจไม่ถูกต้อง" });
+    }
+    const pool = getPool();
+    const [rows] = await pool.query(
+      "SELECT photos, customer_id, room_number, DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date FROM MoveInInspection WHERE id = ?",
+      [inspectionId],
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ message: "ไม่พบบันทึกผลตรวจนี้" });
+    }
+    await pool.query("DELETE FROM MoveInInspection WHERE id = ?", [inspectionId]);
+    await deletePublicImages(JSON.parse(rows[0].photos || "[]").map((photo) => photo.url));
+    const [remaining] = await pool.query(
+      `SELECT id FROM MoveInInspection WHERE customer_id = ? AND room_number = ?
+       ORDER BY inspection_date DESC, id DESC LIMIT 1`,
+      [rows[0].customer_id, rows[0].room_number],
+    );
+    return res.json({
+      message: `ลบบันทึกผลตรวจวันที่ ${rows[0].inspection_date} แล้ว`,
+      next_id: remaining[0]?.id ?? null,
+    });
+  } catch (error) {
+    console.error("Delete move-in inspection error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
 });
