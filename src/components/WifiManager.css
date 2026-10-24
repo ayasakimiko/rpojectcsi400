@@ -63,6 +63,42 @@
   color: #6b859e;
 }
 
+.wifi-manager-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.wifi-sim-tag {
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wifi-sim-tag::after {
+  content: '·';
+  margin-left: 8px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.wifi-total-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: #0f2b52;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.wifi-total-stat strong {
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .wifi-title-icon {
   display: inline-flex;
   align-items: center;

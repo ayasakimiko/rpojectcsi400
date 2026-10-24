@@ -684,7 +684,12 @@ export default function WifiManager() {
           <span className="wifi-title-icon"><WifiIcon size={20} /></span>
           <div>
             <h3>จัดการ Wi-Fi รายห้อง</h3>
-            <p>ระบบจำลองสำหรับทดสอบ · เชื่อมต่อรวม {totalDevices} / {totalCapacity} เครื่อง</p>
+            <div className="wifi-manager-meta">
+              <span className="wifi-sim-tag">ระบบจำลองสำหรับทดสอบ</span>
+              <span className="wifi-total-stat">
+                เชื่อมต่อรวม <strong>{totalDevices}</strong> / {totalCapacity} เครื่อง
+              </span>
+            </div>
           </div>
         </div>
         <input
