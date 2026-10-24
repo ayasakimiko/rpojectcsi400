@@ -71,6 +71,7 @@ async function cancelStaleTenantRequests(connection, customerId, currentRoomNumb
     `UPDATE TenantRequest
      SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
      WHERE customer_id = ? AND status IN ('pending', 'in_progress')
+       AND (type <> 'move_room' OR NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid'))
        AND (? IS NULL OR room_number <> ?)`,
     [customerId, currentRoomNumber, currentRoomNumber],
   );
@@ -1650,10 +1651,22 @@ router.post("/requests/:id/reject", async (req, res) => {
            tr.completed_at = NOW(),
            tr.completed_by_name = ?,
            tr.reject_reason = ?
-       WHERE tr.id = ? AND tr.status IN ('pending', 'in_progress')`,
+       WHERE tr.id = ? AND tr.status IN ('pending', 'in_progress')
+         AND (tr.type <> 'move_room' OR NOT EXISTS (
+           SELECT 1 FROM Payment p WHERE p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+         ))`,
       [staffName, staffName, reason, requestId],
     );
     if (result.affectedRows === 0) {
+      const [paidTransfers] = await pool.query(
+        `SELECT tr.id FROM TenantRequest tr
+         JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+         WHERE tr.id = ? AND tr.type = 'move_room'`,
+        [requestId],
+      );
+      if (paidTransfers.length) {
+        return res.status(409).json({ message: "ชำระส่วนต่างย้ายห้องแล้ว ไม่สามารถยกเลิกหรือปฏิเสธคำขอได้" });
+      }
       return res.status(409).json({ message: "ไม่พบคำขอที่รอดำเนินการนี้" });
     }
 

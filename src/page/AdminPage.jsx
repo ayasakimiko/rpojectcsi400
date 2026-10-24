@@ -7609,7 +7609,11 @@ function AdminBackupPage() {
 
         {activeTab === 'dorm-info' && <DormInfoSettings apiBase="/api/admin/dorm-info" />}
 
-        {activeTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={setContractSummary} />}
+        {activeTab === 'completed-contracts' && (
+          <div className="admin-contracts">
+            <StaffCompletedContractsTab onSummaryChange={setContractSummary} />
+          </div>
+        )}
 
         {activeTab === 'vehicle-requests' && (
           <AdminVehicleRequestsTab

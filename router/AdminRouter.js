@@ -42,6 +42,7 @@ async function cancelStaleTenantRequests(connection, customerId, currentRoomNumb
     `UPDATE TenantRequest
      SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
      WHERE customer_id = ? AND status IN ('pending', 'in_progress')
+       AND (type <> 'move_room' OR NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid'))
        AND (? IS NULL OR room_number <> ?)`,
     [customerId, currentRoomNumber, currentRoomNumber],
   );

@@ -10,6 +10,61 @@
   gap: 12px;
 }
 
+.inspection-form .inspection-section[hidden] {
+  display: none;
+}
+
+.inspection-topic-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.inspection-topic-filter > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inspection-topic-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inspection-topic-options button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #dce7f5;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b6a88;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inspection-topic-options button:hover {
+  border-color: #93baf5;
+  color: #1d4ed8;
+}
+
+.inspection-topic-options button.is-active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.inspection-topic-options button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .inspection-section-head {
   display: flex;
   align-items: center;

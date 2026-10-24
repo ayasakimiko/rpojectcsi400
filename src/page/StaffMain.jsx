@@ -7130,6 +7130,7 @@ function StaffMain() {
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [inspectionModal, setInspectionModal] = useState(false)
+  const [inspectionSection, setInspectionSection] = useState('all')
   const [inspectionForm, setInspectionForm] = useState({
     room_number: '',
     checklist: {},
@@ -7595,6 +7596,7 @@ function StaffMain() {
     setInspectionTenantRequest(null)
     setInspectionError('')
     setInspectionFieldErrors({})
+    setInspectionSection('all')
     setInspectionModal(true)
   }
 
@@ -7611,6 +7613,7 @@ function StaffMain() {
     setInspectionTenantRequest(request)
     setInspectionError('')
     setInspectionFieldErrors({})
+    setInspectionSection('all')
     setInspectionModal(true)
   }
 
@@ -7653,6 +7656,7 @@ function StaffMain() {
       setInspectionTenantRequest(null)
       setInspectionError('')
       setInspectionFieldErrors({})
+      setInspectionSection('all')
       setInspectionModal(true)
     } catch (error) {
       setInspectionListError(error.response?.data?.message || 'โหลดผลตรวจห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -7699,6 +7703,7 @@ function StaffMain() {
     }
     setInspectionFieldErrors(fieldErrors)
     if (Object.keys(fieldErrors).length > 0) {
+      setInspectionSection(fieldErrors.room ? 'all' : missing.length > 0 ? 'checklist' : fieldErrors.damage_note || fieldErrors.photos ? 'photos' : 'finance')
       setInspectionError(
         missing.length > 0
           ? `ยังไม่ได้ตรวจอีก ${missing.length} หัวข้อ (ไฮไลต์สีแดงด้านบน) กรุณาเลือกผลให้ครบ`
@@ -8237,6 +8242,7 @@ function StaffMain() {
   const renderTenantRequestActions = (request) => {
     const key = `tenant-${request.id}`
     const isProcessing = processingRequestKey === key
+    const cancellationLocked = request.type === 'move_room' && request.transfer_charge_status === 'paid'
     const openAction = (action) => {
       setTenantRequestDetail(null)
       action(request)
@@ -8246,10 +8252,11 @@ function StaffMain() {
         <button
           type="button"
           className="staff-action-btn is-danger-outline"
-          disabled={isProcessing}
+          disabled={isProcessing || cancellationLocked}
+          title={cancellationLocked ? 'ชำระส่วนต่างแล้ว ไม่สามารถยกเลิกหรือปฏิเสธได้' : undefined}
           onClick={() => openAction(setTenantRejectConfirm)}
         >
-          ปฏิเสธ
+          {cancellationLocked ? 'ชำระแล้ว ยกเลิกไม่ได้' : 'ปฏิเสธ'}
         </button>
         {request.type === 'moveout' ? (
           request.status === 'pending' ? (
@@ -9742,7 +9749,29 @@ function StaffMain() {
                   </div>
                 </section>
 
-                <section className="inspection-section">
+                <div className="inspection-topic-filter" role="group" aria-label="กรองหัวข้อการตรวจห้อง">
+                  <span>เลือกหัวข้อที่ต้องการดู</span>
+                  <div className="inspection-topic-options">
+                    {[
+                      { key: 'all', label: 'ทั้งหมด' },
+                      { key: 'checklist', label: 'ตรวจสภาพห้อง' },
+                      { key: 'photos', label: 'รายละเอียดและรูปภาพ' },
+                      ...(inspectionMoveRoomId ? [{ key: 'finance', label: 'ค่าเสียหายและเงินมัดจำ' }] : []),
+                    ].map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={inspectionSection === key ? 'is-active' : ''}
+                        aria-pressed={inspectionSection === key}
+                        onClick={() => setInspectionSection(key)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <section className="inspection-section" hidden={!['all', 'checklist'].includes(inspectionSection)}>
                   <div className="inspection-section-head">
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">2</span> ตรวจสภาพห้อง
@@ -9812,7 +9841,7 @@ function StaffMain() {
                   </div>
                 </section>
 
-                <section className="inspection-section">
+                <section className="inspection-section" hidden={!['all', 'photos'].includes(inspectionSection)}>
                   <h4 className="inspection-section-title">
                     <span className="inspection-step">3</span> รายละเอียดและรูปภาพ
                   </h4>
@@ -9878,7 +9907,7 @@ function StaffMain() {
                 </section>
 
                 {inspectionMoveRoomId && (
-                  <section className="inspection-section">
+                  <section className="inspection-section" hidden={!['all', 'finance'].includes(inspectionSection)}>
                     <h4 className="inspection-section-title">
                       <span className="inspection-step">4</span> ค่าเสียหายและเงินมัดจำ
                     </h4>

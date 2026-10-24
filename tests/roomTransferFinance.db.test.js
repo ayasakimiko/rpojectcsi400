@@ -9,7 +9,9 @@ const {
   applyRoomTransfer,
   buildRoomTransferPlan,
   claimRoomsForPaidTransfers,
+  cancelTransfersIntoBookedRooms,
   roomHeldForTransfer,
+  loadHeldTransferRooms,
   loadCustomerContracts,
   syncRoomTransferCharge,
   validateInspectionDamage,
@@ -229,6 +231,42 @@ test("two tenants can ask for the same room and whoever pays the deposit top-up 
     assert.equal(await roomHeldForTransfer(connection, first.targetNumber, { exceptCustomerId: second.customerId }), true);
     const plan = await buildRoomTransferPlan(connection, first.requestId, { lock: true });
     assert.deepEqual(plan.blockers, []);
+  }));
+
+test("paid transfer cannot be automatically cancelled when the target becomes booked", () =>
+  withRollback(async (connection) => {
+    const tenant = await setupTenant(connection, { oldPrice: 3500, newPrice: 4500, damage: 0 });
+    await syncRoomTransferCharge(connection, tenant.requestId, "ทดสอบ");
+    await connection.query(
+      `UPDATE Payment p JOIN TenantRequest tr ON tr.transfer_charge_payment_id = p.id
+       SET p.status = 'paid' WHERE tr.id = ?`, [tenant.requestId],
+    );
+    await connection.query(`UPDATE Room SET is_booked = TRUE WHERE room_number = ?`, [tenant.targetNumber]);
+    assert.equal(await cancelTransfersIntoBookedRooms(connection, tenant.targetNumber), 0);
+    const [[request]] = await connection.query(`SELECT status FROM TenantRequest WHERE id = ?`, [tenant.requestId]);
+    assert.equal(request.status, "in_progress");
+  }));
+
+test("paid transfer awaiting approval hides the target room from registration and other tenants", () =>
+  withRollback(async (connection) => {
+    const tenant = await setupTenant(connection, { oldPrice: 3500, newPrice: 4500, damage: 0 });
+    const other = await setupTenant(connection, { oldPrice: 3500, newPrice: 4500, damage: 0 });
+    await syncRoomTransferCharge(connection, tenant.requestId, "ทดสอบ");
+    assert.equal(await roomHeldForTransfer(connection, tenant.targetNumber), false);
+    assert.equal((await loadHeldTransferRooms(connection)).has(tenant.targetNumber), false);
+
+    await connection.query(
+      `UPDATE Payment p JOIN TenantRequest tr ON tr.transfer_charge_payment_id = p.id
+       SET p.status = 'paid', p.slip_path = 'test.jpg' WHERE tr.id = ?`, [tenant.requestId],
+    );
+    assert.equal(await roomHeldForTransfer(connection, tenant.targetNumber), true);
+    assert.equal((await loadHeldTransferRooms(connection)).has(tenant.targetNumber), true);
+    assert.equal((await loadHeldTransferRooms(connection, { exceptCustomerId: other.customerId })).has(tenant.targetNumber), true);
+    assert.equal(await roomHeldForTransfer(connection, tenant.targetNumber, { exceptCustomerId: other.customerId }), true);
+    assert.equal((await loadHeldTransferRooms(connection, { exceptCustomerId: tenant.customerId })).has(tenant.targetNumber), false);
+
+    const [[room]] = await connection.query(`SELECT is_booked FROM Room WHERE room_number = ?`, [tenant.targetNumber]);
+    assert.equal(Boolean(room.is_booked), false);
   }));
 
 test("unpaid current rent blocks the transfer and never creates credit", () =>

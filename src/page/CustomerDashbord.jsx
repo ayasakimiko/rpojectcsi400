@@ -1583,6 +1583,9 @@ function TenantRequestDetailCard({ request, roomNumber }) {
               </strong>
             </div>
           )}
+          {request.transfer_charge_status === 'paid' && ['pending', 'in_progress'].includes(request.status) && (
+            <p>ชำระส่วนต่างย้ายห้องแล้ว ไม่สามารถยกเลิกคำขอได้ กรุณารอเจ้าหน้าที่ดำเนินการย้ายห้อง</p>
+          )}
           <MoveRoomContractImpact request={request} />
         </>
       )}
