@@ -13,6 +13,7 @@ import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { CustomerContractPanel } from '../components/RentalContract.jsx'
+import { CustomerWifiCard } from '../components/WifiManager.jsx'
 import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
 import { PackageIcon } from '../components/ParcelIcons.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
@@ -2374,6 +2375,7 @@ const CUSTOMER_TABS = [
   { key: 'contract', label: 'สัญญาเช่าของฉัน' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'vehicles', label: 'รถของฉัน' },
+  { key: 'wifi', label: 'Wi-Fi' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'profile', label: 'โปรไฟล์และรหัสผ่าน' },
 ]
@@ -7577,6 +7579,8 @@ function CustomerDashbord() {
         )}
 
         {customerTab === 'vehicles' && <CustomerParkingTab />}
+
+        {customerTab === 'wifi' && <CustomerWifiCard />}
 
         {customerTab === 'contract' && <CustomerContractPanel />}
 

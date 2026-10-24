@@ -33,6 +33,7 @@ import RoomTypeManager from '../components/RoomTypeManager.jsx'
 import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../utils/roomAssets.js'
 import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
+import WifiManager from '../components/WifiManager.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { StaffCompletedContractsTab, StaffFilterPanel } from './StaffMain.jsx'
@@ -1220,6 +1221,7 @@ const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'room-types', label: 'ประเภทห้องและทรัพย์สิน' },
+  { key: 'wifi', label: 'Wi-Fi' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
@@ -1236,7 +1238,7 @@ const TABS = [
 ]
 
 const TAB_GROUPS = [
-  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'room-types', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'room-types', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'move-out-inspections', 'vehicle-requests', 'safety'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
@@ -7751,6 +7753,8 @@ function AdminBackupPage() {
             onChange={loadAnnouncements}
           />
         )}
+
+        {activeTab === 'wifi' && <WifiManager />}
 
         {activeTab === 'parcels' && (
           <div className="parcel-management-card">

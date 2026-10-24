@@ -100,3 +100,28 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+-- Simulated per-room Wi-Fi (test system, no real router). A room's settings are
+-- created on first use from its `wifi` amenity flag; devices are added by staff.
+CREATE TABLE IF NOT EXISTS RoomWifi (
+    room_number INT UNSIGNED NOT NULL PRIMARY KEY,
+    ssid VARCHAR(32) NOT NULL,
+    password VARCHAR(63) NOT NULL,
+    max_devices TINYINT UNSIGNED NOT NULL DEFAULT 3 CHECK (max_devices BETWEEN 1 AND 20),
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_number) REFERENCES Room (room_number) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS RoomWifiDevice (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    room_number INT UNSIGNED NOT NULL,
+    device_name VARCHAR(60) NOT NULL,
+    device_type ENUM('phone', 'laptop', 'tablet', 'tv', 'other') NOT NULL DEFAULT 'other',
+    mac_address CHAR(17) NOT NULL,
+    is_online BOOLEAN NOT NULL DEFAULT TRUE,
+    connected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_room_wifi_device_room (room_number),
+    FOREIGN KEY (room_number) REFERENCES RoomWifi (room_number) ON DELETE CASCADE ON UPDATE CASCADE
+);
