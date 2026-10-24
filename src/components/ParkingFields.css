@@ -913,3 +913,49 @@
     transform: rotate(90deg);
   }
 }
+
+.parking-form-section[data-topic='extra'] .parcel-photo-list {
+  gap: 12px;
+}
+
+.parking-form-section[data-topic='extra'] .parcel-photo-item,
+.parking-form-section[data-topic='extra'] .parcel-photo-add {
+  width: 168px;
+  height: 168px;
+  flex: 0 0 168px;
+}
+
+.parking-form-section[data-topic='extra'] .parcel-photo-item img {
+  height: 132px;
+}
+
+.parking-form-section[data-topic='extra'] .maint-photo-dropzone {
+  min-height: 220px;
+}
+
+.parking-form-section[data-topic='extra'] .maint-photo-grid {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.parking-form-section[data-topic='extra'] .maint-photo-add {
+  min-height: 160px;
+}
+
+.parking-form-section[data-topic='extra'] textarea {
+  min-height: 150px;
+  resize: vertical;
+}
+
+@media (max-width: 520px) {
+  .parking-form-section[data-topic='extra'] .parcel-photo-item,
+  .parking-form-section[data-topic='extra'] .parcel-photo-add {
+    width: calc(50% - 6px);
+    height: 140px;
+    flex-basis: calc(50% - 6px);
+  }
+
+  .parking-form-section[data-topic='extra'] .parcel-photo-item img {
+    height: 104px;
+  }
+}
