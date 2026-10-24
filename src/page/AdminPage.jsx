@@ -34,8 +34,10 @@ import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel } from './StaffMain.jsx'
+import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, TransferContractPendingPanel } from './StaffMain.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
+import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
+import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -4747,9 +4749,22 @@ const VISIT_FILTERS = [
   { key: 'approved', label: 'อนุมัติแล้ว' },
   { key: 'rejected', label: 'ไม่อนุมัติ' },
   { key: 'cancelled', label: 'ยกเลิกแล้ว' },
+  { key: 'fine', label: 'ค่าปรับค้าง' },
   { key: 'all', label: 'ทั้งหมด' },
 ]
 const VISIT_PAGE_SIZE = 12
+
+function matchesVisitFilter(item, key) {
+  if (key === 'all') return true
+  if (key === 'fine') return ['unpaid', 'pending_review'].includes(item.fine_status)
+  return item.status === key
+}
+
+function getVisitTypeText(item) {
+  if (item.request_type !== 'vehicle') return RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type
+  const category = item.user_category || (item.guest_name || !item.customer_id ? 'visitor' : 'resident')
+  return `${USER_CATEGORY_LABEL[category]} · ${VEHICLE_TYPE_LABEL[item.vehicle_type] || 'รถยนต์'}`
+}
 
 function VisitCarIcon({ size = 18 }) {
   return (
@@ -4835,6 +4850,8 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
   const [detailId, setDetailId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [parkingSettings, setParkingSettings] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const headers = useAuthHeaders()
 
   const load = useCallback(
@@ -4844,6 +4861,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
         .then(({ data }) => {
           const list = data.requests || []
           setItems(list)
+          setParkingSettings(data.settings || null)
           onCountChange?.(list.filter((item) => item.status === 'pending').length)
           if (pendingFocusRef.current != null) {
             const sorted = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -4886,8 +4904,9 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
           .includes(keyword),
       )
     : items
-  const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
-  const filtered = (filter === 'all' ? searched : searched.filter((item) => item.status === filter))
+  const countOf = (key) => searched.filter((item) => matchesVisitFilter(item, key)).length
+  const filtered = searched
+    .filter((item) => matchesVisitFilter(item, filter))
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   const totalPages = Math.max(1, Math.ceil(filtered.length / VISIT_PAGE_SIZE))
@@ -4904,6 +4923,15 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
     setBusy(true)
     setMessage('')
     try {
+      if (decision === 'fine-approve' || decision === 'fine-reject') {
+        await axios.post(
+          `/api/admin/resident-visit-requests/${detail.id}/fine-review`,
+          { decision: decision === 'fine-approve' ? 'approve' : 'reject' },
+          { headers },
+        )
+        await load()
+        return
+      }
       await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {}, { headers })
       await load()
       requestClose()
@@ -4921,9 +4949,14 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
       <div className="admin-card-header">
         <div>
           <h2>คำขอรถ / ผู้มาพัก</h2>
-          <p className="admin-review-subtitle">อนุมัติหรือปฏิเสธคำขอจากผู้เช่า พร้อมดูประวัติคำขอทั้งหมด</p>
+          <p className="admin-review-subtitle">
+            อนุมัติคำขอ ตรวจช่องจอด และติดตามค่าปรับผู้มาติดต่อ (จอดได้ 3 ชม. · ปรับ {formatBaht(parkingSettings?.finePerHour)}/ชม.)
+          </p>
         </div>
         <span className="admin-review-count">{countOf('pending')} รายการรออนุมัติ</span>
+        <button type="button" className="admin-action-btn" onClick={() => setSettingsOpen(true)}>
+          ตั้งค่าที่จอด
+        </button>
       </div>
 
       <div className="admin-incident-toolbar">
@@ -4995,11 +5028,14 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                   <span className="admin-vc-grid">
                     <span className="admin-vc-cell">
                       <span className="admin-vc-label">ประเภท</span>
-                      <span className="admin-vc-value">{RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type}</span>
+                      <span className="admin-vc-value">{getVisitTypeText(item)}</span>
                     </span>
                     <span className="admin-vc-cell">
-                      <span className="admin-vc-label">ห้อง</span>
-                      <span className="admin-vc-value">{item.room_number ? `ห้อง ${item.room_number}` : 'ไม่ระบุ'}</span>
+                      <span className="admin-vc-label">ช่องจอด / ห้อง</span>
+                      <span className="admin-vc-value">
+                        {isVehicle ? `${item.parking_space_code ? `ช่อง ${item.parking_space_code}` : 'ไม่ระบุช่อง'} · ` : ''}
+                        {item.room_number ? `ห้อง ${item.room_number}` : 'ภายนอก'}
+                      </span>
                     </span>
                     <span className="admin-vc-cell">
                       <span className="admin-vc-label">
@@ -5021,9 +5057,12 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                       </svg>
                     </span>
                     <span className="admin-vc-range-body">
-                      <span className="admin-vc-label">{isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}</span>
+                      <span className="admin-vc-label">
+                        {item.parked_at ? 'เข้าจอดจริง' : isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}
+                        <ParkingStatusPill status={item.fine_status} />
+                      </span>
                       <span className="admin-vc-value">
-                        {formatVisitPoint(item.start_at)}
+                        {formatVisitPoint(item.parked_at || item.start_at)}
                         <span className="admin-vc-arrow" aria-hidden="true">→</span>
                         <span className={item.end_at ? undefined : 'admin-vc-open'}>{item.end_at ? formatVisitPoint(item.end_at) : 'ไม่จำกัดเวลา'}</span>
                       </span>
@@ -5104,9 +5143,17 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                   : reviewedAt
                     ? { key: 'review', label: 'อนุมัติแล้ว', by: reviewer, date: reviewedAt, icon: 'check' }
                     : null,
+              detail.parked_at ? { key: 'checkin', label: 'เช็คอินเข้าจอด', date: detail.parked_at, icon: 'check' } : null,
               ...(detail.status === 'cancelled'
-                ? [{ key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' }]
+                ? [
+                    detail.checked_out_at
+                      ? { key: 'checkout', label: 'บันทึกรถออก', by: detail.cancelled_by_name, date: detail.checked_out_at, icon: 'check' }
+                      : { key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' },
+                  ]
                 : []),
+              detail.fine_status === 'paid'
+                ? { key: 'fine', label: `ชำระค่าปรับ ${formatBaht(detail.fine_amount)}`, by: detail.fine_paid_by_name, date: detail.fine_paid_at, icon: 'check' }
+                : null,
             ].filter(Boolean)
             const stepsEnd = detail.status === 'cancelled' ? cancelledAt : detail.status === 'pending' ? null : reviewedAt
             return (
@@ -5118,7 +5165,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     </span>
                     <div>
                       <strong>{getVisitHeading(detail)}</strong>
-                      <span className="admin-incident-chip">{RESIDENT_VISIT_TYPE_LABEL[detail.request_type] || detail.request_type}</span>
+                      <span className="admin-incident-chip">{getVisitTypeText(detail)}</span>
                     </div>
                     <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
                   </div>
@@ -5196,6 +5243,37 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
                     )}
                   </dl>
 
+                  {isVehicle && <ParkingSessionPanel item={detail} finePerHour={parkingSettings?.finePerHour} />}
+                  {['unpaid', 'pending_review', 'paid'].includes(detail.fine_status) && (
+                    <ParkingFinePayment
+                      item={detail}
+                      channels={parkingSettings?.paymentChannels}
+                      endpoint={`/api/admin/resident-visit-requests/${detail.id}/fine-payment`}
+                      onDone={load}
+                      onCounterPaid={() => review('fine-approve')}
+                      counterBusy={busy}
+                    />
+                  )}
+                  {detail.fine_status === 'pending_review' && (
+                    <div className="admin-incident-actions">
+                      {detail.fine_slip_path && (
+                        <button
+                          type="button"
+                          className="admin-action-btn"
+                          onClick={() => setLightbox({ photos: [{ url: detail.fine_slip_path, name: 'สลิปค่าปรับ' }], index: 0, title: getVisitHeading(detail) })}
+                        >
+                          ดูสลิปค่าปรับ
+                        </button>
+                      )}
+                      <button type="button" className="admin-action-btn is-danger" disabled={busy} onClick={() => review('fine-reject')}>
+                        ปฏิเสธสลิป
+                      </button>
+                      <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => review('fine-approve')}>
+                        ยืนยันว่าชำระแล้ว
+                      </button>
+                    </div>
+                  )}
+
                   {photos.length > 0 && (
                     <section className="admin-incident-gallery">
                       <h4>รูปรถ / ป้ายทะเบียน ({photos.length} รูป)</h4>
@@ -5242,6 +5320,21 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
               </div>
             )
           }}
+        </Modal>
+      )}
+
+      {settingsOpen && (
+        <Modal title="ตั้งค่าที่จอดรถและค่าปรับ" onClose={() => setSettingsOpen(false)}>
+          {(requestClose) => (
+            <ParkingSettingsForm
+              endpoint="/api/admin/parking/settings"
+              onCancel={requestClose}
+              onSaved={async () => {
+                requestClose()
+                await load()
+              }}
+            />
+          )}
         </Modal>
       )}
 
@@ -8482,6 +8575,8 @@ function AdminBackupPage() {
             <div className="admin-card-header">
               <h2>ประวัติคำขอผู้เช่า</h2>
             </div>
+
+            <TransferContractPendingPanel apiBase="/api/admin" />
 
             <div className="admin-toolbar">
               <div className="admin-search-group">

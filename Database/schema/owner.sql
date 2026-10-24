@@ -1,5 +1,3 @@
--- Schema owned by the owner service. Applied by Database/migrate.js.
-
 CREATE TABLE IF NOT EXISTS Expense (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     category VARCHAR(50) NOT NULL DEFAULT 'other',
@@ -231,6 +229,15 @@ SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'slip_verify_mode'),
     'SELECT 1',
     'ALTER TABLE `DormConfig` ADD COLUMN `slip_verify_mode` VARCHAR(10) NOT NULL DEFAULT ''auto'''
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'parking_fine_per_hour'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `parking_fine_per_hour` DECIMAL(10,2) NOT NULL DEFAULT 20.00'
 );
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;

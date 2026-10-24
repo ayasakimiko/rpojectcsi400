@@ -16921,3 +16921,78 @@ tr.staff-focus-row.is-fading > td {
     justify-content: flex-start;
   }
 }
+
+.staff-transfer-pending {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid #fdecc8;
+  border-radius: 12px;
+  background: #fffcf5;
+}
+
+.staff-transfer-pending-head {
+  display: grid;
+  gap: 3px;
+}
+
+.staff-transfer-pending-head strong {
+  color: #b45309;
+  font-size: 14.5px;
+}
+
+.staff-transfer-pending-head span {
+  color: #6b859e;
+  font-size: 13px;
+}
+
+.staff-transfer-pending-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #d1f2df;
+  border-radius: 10px;
+  color: #027a48;
+  background: #f6fdf9;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.staff-transfer-pending-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.staff-transfer-pending-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e8eff8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.staff-transfer-pending-list li > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.staff-transfer-pending-list strong {
+  color: #0f2b52;
+  font-size: 14px;
+}
+
+.staff-transfer-pending-list small {
+  color: #6b859e;
+  font-size: 12.5px;
+}

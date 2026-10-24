@@ -3267,8 +3267,15 @@ function OwnerMain() {
       return [
         { key: 'parking-parked', tone: 'green', icon: 'car', label: 'กำลังจอด', value: show(summary?.parked), hint: 'รถที่อนุมัติและยังอยู่ในเวลาจอด' },
         { key: 'parking-pending', tone: summary?.pending > 0 ? 'orange' : 'slate', icon: 'overdue', label: 'รออนุมัติ', value: show(summary?.pending), hint: 'คำขอที่ยังไม่ได้ตรวจสอบ' },
-        { key: 'parking-expired', tone: 'indigo', icon: 'history', label: 'หมดเวลาจอด', value: show(summary?.expired), hint: 'อนุมัติแล้วแต่เลยเวลาที่ขอ' },
-        { key: 'parking-total', tone: 'blue', icon: 'car', label: 'คำขอทั้งหมด', value: summary ? `${summary.total} รายการ` : '—', hint: 'รวมทุกสถานะ' },
+        { key: 'parking-overtime', tone: summary?.overtime > 0 ? 'orange' : 'slate', icon: 'history', label: 'ผู้มาติดต่อจอดเกินเวลา', value: show(summary?.overtime), hint: 'เกิน 3 ชั่วโมงนับจากเช็คอิน' },
+        {
+          key: 'parking-fines',
+          tone: summary?.unpaidFines > 0 ? 'orange' : 'blue',
+          icon: 'overdue',
+          label: 'ค่าปรับค้างชำระ',
+          value: summary ? `฿${(summary.unpaidFineAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '—',
+          hint: summary ? `${summary.unpaidFines || 0} รายการ` : 'ค่าปรับจอดเกินเวลา',
+        },
       ]
     })(),
     safety: (() => {
@@ -3582,7 +3589,7 @@ function OwnerMain() {
         {activeTab === 'completed-contracts' && <StaffCompletedContractsTab />}
 
         {activeTab === 'parking' && (
-          <StaffResidentVisitsTab onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
+          <StaffResidentVisitsTab canManageSettings onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
         )}
 
         {activeTab === 'safety' && (

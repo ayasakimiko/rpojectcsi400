@@ -53,8 +53,11 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
            UNION ALL
            SELECT r.id FROM PaymentSlipRejection r
            WHERE r.slip_path = ?${isCustomer ? " AND r.customer_id = ?" : ""}
+           UNION ALL
+           SELECT v.id FROM ResidentVisitRequest v
+           WHERE v.fine_slip_path = ?${isCustomer ? " AND v.customer_id = ?" : ""}
            LIMIT 1`,
-          isCustomer ? [storedUrl, id, storedUrl, id] : [storedUrl, storedUrl],
+          isCustomer ? [storedUrl, id, storedUrl, id, storedUrl, id] : [storedUrl, storedUrl, storedUrl],
         );
         if (payments.length === 0) return res.status(404).json({ message: NOT_FOUND });
       }

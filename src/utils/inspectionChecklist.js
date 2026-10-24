@@ -23,6 +23,25 @@ export const RESULT_LABELS = Object.fromEntries(RESULT_OPTIONS.map((option) => [
 
 export const COSTED_RESULTS = ['wear', 'damaged', 'missing']
 
+const FURNITURE_RESULT_PRIORITY = ['missing', 'damaged', 'wear', 'good', 'not_applicable']
+
+export function assetResultCounts(assets) {
+  const counts = Object.fromEntries(RESULT_OPTIONS.map((option) => [option.key, 0]))
+  for (const asset of assets || []) if (asset.result in counts) counts[asset.result] += 1
+  return counts
+}
+
+export function furnitureResultFromAssets(assets) {
+  const counts = assetResultCounts(assets)
+  const used = Object.values(counts).some((count) => count > 0)
+  if (!used) return 'not_applicable'
+  return FURNITURE_RESULT_PRIORITY.reduce((best, key) => (counts[key] > counts[best] ? key : best), FURNITURE_RESULT_PRIORITY[0])
+}
+
+export function withFurnitureResult(checklist, assets) {
+  return { ...checklist, furniture: furnitureResultFromAssets(assets) }
+}
+
 export function isChargeableAsset(asset) {
   return ISSUE_RESULTS.includes(asset.result) && !ISSUE_RESULTS.includes(asset.move_in_result)
 }

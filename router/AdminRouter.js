@@ -5,6 +5,14 @@ import { authenticate, createRequireActiveAccount, requireAdminRole } from "../m
 import { getActingAdminName } from "../middleware/accounts.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
+  createFinePaymentHandler,
+  createFineReviewHandler,
+  createParkingOptionsHandler,
+  getParkingSettings,
+  parseFineSlip,
+  updateParkingSettings,
+} from "./parking.js";
+import {
   hasField,
   isPositiveId,
   MOVE_OUT_INSPECTION_STATUSES,
@@ -27,8 +35,11 @@ import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
 import {
+  createAttachTransferContractHandler,
+  createPendingTransferContractsHandler,
   expireRoomTransferCharges,
   loadCustomerContracts,
+  parseTransferContractImages,
   loadRoomTransferPreview,
   resetCustomerHistory,
   roomHeldForTransfer,
@@ -113,7 +124,15 @@ router.get("/safety-incidents", listSafetyIncidents);
 router.patch("/safety-incidents/:id/review", reviewSafetyIncident);
 
 router.get("/resident-visit-requests", listResidentVisitRequests);
+router.get("/parking/options", createParkingOptionsHandler({ withOccupant: true }));
+router.get("/parking/settings", getParkingSettings);
+router.put("/parking/settings", updateParkingSettings);
+router.post("/resident-visit-requests/:id/fine-review", createFineReviewHandler(getActingAdminName));
+router.post("/resident-visit-requests/:id/fine-payment", parseFineSlip, createFinePaymentHandler({ getActingName: getActingAdminName }));
 router.post("/resident-visit-requests/:id/:decision", createResidentVisitReview(getActingAdminName));
+
+router.get("/room-transfers/pending-contracts", createPendingTransferContractsHandler(getPool));
+router.post("/room-transfers/:id/contract-images", parseTransferContractImages, createAttachTransferContractHandler(getPool));
 
 router.get("/waiting-list", async (_req, res) => {
   try {

@@ -1,5 +1,3 @@
--- Schema owned by the customer service. Applied by Database/migrate.js.
-
 CREATE TABLE IF NOT EXISTS TenantRequest (
     id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
     customer_id INT UNSIGNED NOT NULL,
@@ -213,8 +211,6 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
--- Close active vehicle and visitor requests for tenants who no longer occupy a room.
--- Completed visits remain unchanged in the request history.
 UPDATE ResidentVisitRequest r
      JOIN Customer c ON c.id = r.customer_id
      SET r.status = 'cancelled', r.cancelled_at = NOW(),
@@ -223,6 +219,66 @@ UPDATE ResidentVisitRequest r
      WHERE (c.is_suspended = TRUE OR c.room_number IS NULL)
        AND (r.status = 'pending'
          OR (r.status = 'approved' AND (r.end_at IS NULL OR r.end_at > NOW())));
+
+CREATE TABLE IF NOT EXISTS ParkingSpace (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    code VARCHAR(10) NOT NULL,
+    vehicle_type ENUM('car', 'motorcycle') NOT NULL,
+    zone VARCHAR(100) NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_parking_space_code (code),
+    INDEX idx_parking_space_type (vehicle_type, is_active)
+);
+
+INSERT INTO ParkingSpace (code, vehicle_type, zone)
+SELECT seed.code, seed.vehicle_type, seed.zone
+FROM (
+    SELECT CONCAT('C', LPAD(n.number, 2, '0')) AS code, 'car' AS vehicle_type, 'ลานจอดรถยนต์' AS zone, n.number
+    FROM (SELECT 1 AS number UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6
+          UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12) n
+    UNION ALL
+    SELECT CONCAT('M', LPAD(n.number, 2, '0')), 'motorcycle', 'ลานจอดรถจักรยานยนต์', n.number
+    FROM (SELECT 1 AS number UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6
+          UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
+          UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18
+          UNION ALL SELECT 19 UNION ALL SELECT 20) n
+) seed
+WHERE NOT EXISTS (SELECT 1 FROM ParkingSpace);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ResidentVisitRequest' AND COLUMN_NAME = 'parking_space_id'),
+    'SELECT 1',
+    'ALTER TABLE `ResidentVisitRequest`
+       ADD COLUMN `user_category` ENUM(''resident'', ''visitor'') NOT NULL DEFAULT ''resident'' AFTER request_type,
+       ADD COLUMN `vehicle_type` ENUM(''car'', ''motorcycle'') NOT NULL DEFAULT ''car'' AFTER user_category,
+       ADD COLUMN `parking_space_id` INT UNSIGNED NULL AFTER vehicle_type,
+       ADD COLUMN `parked_at` DATETIME NULL AFTER end_at,
+       ADD COLUMN `checked_out_at` DATETIME NULL AFTER parked_at,
+       ADD COLUMN `fine_hours` INT UNSIGNED NOT NULL DEFAULT 0 AFTER checked_out_at,
+       ADD COLUMN `fine_rate` DECIMAL(10,2) NULL AFTER fine_hours,
+       ADD COLUMN `fine_amount` DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER fine_rate,
+       ADD COLUMN `fine_status` ENUM(''none'', ''unpaid'', ''pending_review'', ''paid'') NOT NULL DEFAULT ''none'' AFTER fine_amount,
+       ADD COLUMN `fine_payment_method` VARCHAR(20) NULL AFTER fine_status,
+       ADD COLUMN `fine_slip_path` VARCHAR(255) NULL AFTER fine_payment_method,
+       ADD COLUMN `fine_qr_payload` VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER fine_slip_path,
+       ADD COLUMN `fine_trans_ref` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER fine_qr_payload,
+       ADD COLUMN `fine_paid_at` DATETIME NULL AFTER fine_trans_ref,
+       ADD COLUMN `fine_paid_by_name` VARCHAR(255) NULL AFTER fine_paid_at,
+       ADD CONSTRAINT `fk_resident_visit_space` FOREIGN KEY (`parking_space_id`) REFERENCES `ParkingSpace` (`id`),
+       ADD UNIQUE KEY `uq_resident_visit_fine_trans_ref` (`fine_trans_ref`),
+       ADD UNIQUE KEY `uq_resident_visit_fine_qr_payload` (`fine_qr_payload`),
+       ADD INDEX `idx_resident_visit_space` (`parking_space_id`, `status`),
+       ADD INDEX `idx_resident_visit_fine` (`fine_status`)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+UPDATE ResidentVisitRequest
+     SET user_category = 'visitor'
+     WHERE request_type = 'vehicle' AND user_category = 'resident' AND (guest_name IS NOT NULL OR customer_id IS NULL);
 
 CREATE TABLE IF NOT EXISTS SafetyIncident (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -285,7 +341,6 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
--- Preserve resolved incidents and move pending reports from former tenants into the existing log.
 UPDATE SafetyIncident s
      JOIN Customer c ON s.reporter_role = 'Customer' AND c.id = s.reporter_id
      SET s.status = 'cancelled', s.cancelled_at = NOW(),

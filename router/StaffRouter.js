@@ -43,8 +43,29 @@ import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
+  ParkingError,
+  assertParkingAllowed,
+  createCheckInHandler,
+  createFinePaymentHandler,
+  createFineReviewHandler,
+  createParkingOptionsHandler,
+  endParkingSession,
+  getParkingSettings,
+  loadRoomParkingWindow,
+  parseFineSlip,
+  parseParkingInput,
+  toSqlDateTime,
+  updateParkingSettings,
+  validateVisitorContact,
+  withParkingLock,
+} from "./parking.js";
+import {
   applyRoomTransfer,
+  autoApplyPaidTransfers,
   buildRoomTransferPlan,
+  createAttachTransferContractHandler,
+  createPendingTransferContractsHandler,
+  parseTransferContractImages,
   cancelTransfersIntoBookedRooms,
   claimRoomsForPaidTransfers,
   closeCustomerTenancy,
@@ -395,8 +416,12 @@ router.patch("/payment-verifications/:id", async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [`MANUAL-${payment.id}`, payment.booking_id, booking.customer_id, payment.slip_path, slipAmount, reviewerName, isTestSlip],
     );
+    const autoTransfers = await autoApplyPaidTransfers(connection);
     await connection.commit();
-    return res.json({ message: `อนุมัติสลิปแล้ว (${relatedPayments.length} รายการ)` });
+    return res.json({
+      message: `อนุมัติสลิปแล้ว (${relatedPayments.length} รายการ)${autoTransfers.length ? " · ระบบย้ายห้องให้อัตโนมัติแล้ว กรุณาแนบรูปสัญญาใหม่ภายหลัง" : ""}`,
+      autoTransfers,
+    });
   } catch (error) {
     await connection.rollback();
     console.error("Review payment slip error:", error);
@@ -1287,6 +1312,7 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
       await claimRoomsForPaidTransfers(connection);
     }
 
+    const autoTransfers = await autoApplyPaidTransfers(connection);
     await connection.commit();
     recordAuditFields({
       roomNumber: roomNumberValue,
@@ -1294,7 +1320,10 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
       totalAmount: currentDue.amount,
       paymentMethod: "cash",
     });
-    return res.status(201).json({ message: "บันทึกการเก็บเงินสำเร็จ" });
+    return res.status(201).json({
+      message: `บันทึกการเก็บเงินสำเร็จ${autoTransfers.length ? " · ระบบย้ายห้องให้อัตโนมัติแล้ว กรุณาแนบรูปสัญญาใหม่ภายหลัง" : ""}`,
+      autoTransfers,
+    });
   } catch (error) {
     if (connection) await connection.rollback();
     if (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code)) {
@@ -1697,6 +1726,9 @@ router.post("/requests/:id/transfer-charge", async (req, res) => {
   }
 });
 
+router.get("/room-transfers/pending-contracts", createPendingTransferContractsHandler(getPool));
+router.post("/room-transfers/:id/contract-images", parseTransferContractImages, createAttachTransferContractHandler(getPool));
+
 router.post("/requests/:id/approve", parseOptionalContractImages, async (req, res) => {
   const pool = getPool();
   const connection = await pool.getConnection();
@@ -2042,21 +2074,27 @@ router.post("/maintenance/:id/:action", async (req, res) => {
 });
 
 router.get("/resident-visit-requests", listResidentVisitRequests);
+router.get("/parking/options", createParkingOptionsHandler({ withOccupant: true }));
+router.get("/parking/settings", getParkingSettings);
+router.put("/parking/settings", updateParkingSettings);
 
 router.post("/resident-visit-requests", async (req, res) => {
   let savedPhotos = [];
   try {
-    const { roomNumber, owner, vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, photos } = req.body ?? {};
+    const { roomNumber, vehiclePlate, vehicleModel, guestName, guestPhone, note, photos } = req.body ?? {};
+    const isVisitor = req.body?.userCategory === "visitor";
+    const hasRoom = roomNumber !== undefined && roomNumber !== null && roomNumber !== "";
     const room = Number(roomNumber);
-    const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
-    const openEnded = endAt === null || endAt === undefined || endAt === "";
-    const endTime = openEnded ? null : typeof endAt === "string" ? Date.parse(endAt) : NaN;
-    if (!["self", "family", "external"].includes(owner)) return res.status(400).json({ message: "กรุณาเลือกประเภทรถ" });
-    const isExternal = owner === "external";
-    if (!isExternal && !isPositiveId(room)) return res.status(400).json({ message: "กรุณาเลือกห้อง" });
-    if (!Number.isFinite(startTime) || (!openEnded && (!Number.isFinite(endTime) || endTime <= startTime))) {
-      return res.status(400).json({ message: "กรุณาระบุช่วงเวลาให้ถูกต้อง" });
+    if (!isVisitor && !isPositiveId(room)) return res.status(400).json({ message: "กรุณาเลือกห้องของผู้พักอาศัย" });
+    if (isVisitor && hasRoom && !isPositiveId(room)) return res.status(400).json({ message: "ห้องที่มาติดต่อไม่ถูกต้อง" });
+    let contractWindow = null;
+    if (!isVisitor) {
+      contractWindow = await loadRoomParkingWindow(getPool(), room);
+      if (contractWindow.expired) return res.status(409).json({ message: "สัญญาเช่าของห้องนี้หมดแล้ว ไม่สามารถลงทะเบียนรถได้" });
     }
+    const parking = parseParkingInput(contractWindow ? { ...req.body, startAt: contractWindow.startAt, endAt: contractWindow.endAt } : req.body);
+    if (parking.error) return res.status(400).json({ message: parking.error });
+    const { userCategory } = parking.value;
     const textFields = [[vehiclePlate, 20], [vehicleModel, 100], [guestName, 255], [guestPhone, 20], [note, 500]];
     if (textFields.some(([value, maxLength]) => value != null && (typeof value !== "string" || value.trim().length > maxLength))) {
       return res.status(400).json({ message: "ข้อมูลข้อความไม่ถูกต้องหรือยาวเกินที่กำหนด" });
@@ -2064,13 +2102,14 @@ router.post("/resident-visit-requests", async (req, res) => {
     if (!String(vehiclePlate ?? "").trim()) return res.status(400).json({ message: "กรุณาระบุทะเบียนรถ" });
     const parsedPhotos = parsePhotoList(photos, VEHICLE_MAX_PHOTOS);
     if (parsedPhotos.error) return res.status(400).json({ message: parsedPhotos.error });
-    if (owner !== "self" && !String(guestName ?? "").trim()) {
-      return res.status(400).json({ message: isExternal ? "กรุณาระบุชื่อผู้ขอจอด" : "กรุณาระบุชื่อผู้มาเยี่ยม" });
+    if (isVisitor) {
+      const contactError = validateVisitorContact(guestName, guestPhone);
+      if (contactError) return res.status(400).json({ message: contactError });
     }
 
     const pool = getPool();
     let customerId = null;
-    if (!isExternal) {
+    if (!isVisitor || hasRoom) {
       const [customers] = await pool.query(
         "SELECT id FROM Customer WHERE room_number = ? AND is_suspended = FALSE ORDER BY id DESC LIMIT 1",
         [room],
@@ -2082,29 +2121,40 @@ router.post("/resident-visit-requests", async (req, res) => {
       return res.status(409).json({ message: "ทะเบียนรถนี้ถูกลงทะเบียนกับห้องพักอยู่แล้ว" });
     }
     const staffName = await getActingStaffName(pool, req.user);
-    const hasVisitor = owner !== "self";
     savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
-    const [result] = await pool.query(
-      `INSERT INTO ResidentVisitRequest
-         (customer_id, room_number, request_type, vehicle_plate, vehicle_model, vehicle_photos, guest_name, guest_phone, start_at, end_at, note, status, reviewed_by_name, reviewed_at)
-       VALUES (?, ?, 'vehicle', ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, NOW())`,
-      [
-        customerId,
-        isExternal ? null : room,
-        vehiclePlate.trim(),
-        vehicleModel?.trim() || null,
-        savedPhotos.length ? JSON.stringify(savedPhotos) : null,
-        hasVisitor ? guestName.trim() : null,
-        hasVisitor ? guestPhone?.trim() || null : null,
-        startAt,
-        openEnded ? null : endAt,
-        note?.trim() || null,
-        staffName,
-      ],
-    );
-    return res.status(201).json({ id: result.insertId, message: "เพิ่มรถเรียบร้อยแล้ว" });
+    const result = await withParkingLock(pool, async (connection) => {
+      await assertParkingAllowed(connection, { ...parking.value, customerId, guestPhone: isVisitor ? guestPhone : "" });
+      const [inserted] = await connection.query(
+        `INSERT INTO ResidentVisitRequest
+           (customer_id, room_number, request_type, user_category, vehicle_type, parking_space_id, vehicle_plate, vehicle_model, vehicle_photos,
+            guest_name, guest_phone, start_at, end_at, parked_at, note, status, reviewed_by_name, reviewed_at)
+         VALUES (?, ?, 'vehicle', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, IF(? = 'visitor' AND ? <= NOW(), ?, NULL), ?, 'approved', ?, NOW())`,
+        [
+          customerId,
+          customerId ? room : null,
+          userCategory,
+          parking.value.vehicleType,
+          parking.value.spaceId,
+          vehiclePlate.trim(),
+          vehicleModel?.trim() || null,
+          savedPhotos.length ? JSON.stringify(savedPhotos) : null,
+          isVisitor ? guestName.trim() : null,
+          isVisitor ? guestPhone.trim() : null,
+          parking.value.startAt,
+          parking.value.endAt,
+          userCategory,
+          parking.value.startAt,
+          parking.value.startAt,
+          note?.trim() || null,
+          staffName,
+        ],
+      );
+      return inserted;
+    });
+    return res.status(201).json({ id: result.insertId, message: "เพิ่มรถและจองช่องจอดเรียบร้อยแล้ว" });
   } catch (error) {
     if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
+    if (error instanceof ParkingError) return res.status(error.status).json({ message: error.message, code: error.code });
     console.error("Staff create resident vehicle error:", error);
     return res.status(500).json({ message: "ไม่สามารถเพิ่มรถได้" });
   }
@@ -2115,13 +2165,7 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
-    const { vehiclePlate, vehicleModel, guestName, guestPhone, startAt, endAt, note, keepPhotos, photos } = req.body ?? {};
-    const startTime = typeof startAt === "string" ? Date.parse(startAt) : NaN;
-    const openEnded = endAt === null || endAt === undefined || endAt === "";
-    const endTime = openEnded ? null : typeof endAt === "string" ? Date.parse(endAt) : NaN;
-    if (!Number.isFinite(startTime) || (!openEnded && (!Number.isFinite(endTime) || endTime <= startTime))) {
-      return res.status(400).json({ message: "กรุณาระบุช่วงเวลาให้ถูกต้อง" });
-    }
+    const { vehiclePlate, vehicleModel, guestName, guestPhone, note, keepPhotos, photos } = req.body ?? {};
     const textFields = [[vehiclePlate, 20], [vehicleModel, 100], [guestName, 255], [guestPhone, 20], [note, 500]];
     if (textFields.some(([value, maxLength]) => value != null && (typeof value !== "string" || value.trim().length > maxLength))) {
       return res.status(400).json({ message: "ข้อมูลข้อความไม่ถูกต้องหรือยาวเกินที่กำหนด" });
@@ -2129,7 +2173,8 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
 
     const pool = getPool();
     const [rows] = await pool.query(
-      "SELECT id, customer_id, request_type, status, vehicle_plate, vehicle_photos, guest_name FROM ResidentVisitRequest WHERE id = ?",
+      `SELECT id, customer_id, room_number, request_type, user_category, status, vehicle_plate, vehicle_photos, guest_name, start_at, end_at, parked_at
+       FROM ResidentVisitRequest WHERE id = ?`,
       [id],
     );
     const current = withVehiclePhotos(rows)[0];
@@ -2138,11 +2183,25 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
     if (!["pending", "approved"].includes(current.status)) {
       return res.status(409).json({ message: "คำขอนี้ถูกปิดแล้ว แก้ไขไม่ได้" });
     }
+    const contractWindow = current.user_category === "resident" && current.room_number
+      ? await loadRoomParkingWindow(pool, current.room_number, toSqlDateTime(new Date(current.start_at)))
+      : null;
+    const parking = parseParkingInput({
+      ...req.body,
+      userCategory: current.user_category,
+      ...(contractWindow ? { startAt: contractWindow.startAt, endAt: contractWindow.endAt } : {}),
+    });
+    if (parking.error) return res.status(400).json({ message: parking.error });
     if (!String(vehiclePlate ?? "").trim()) return res.status(400).json({ message: "กรุณาระบุทะเบียนรถ" });
-    const hasVisitor = Boolean(current.guest_name) || !current.customer_id;
-    if (hasVisitor && !String(guestName ?? "").trim()) {
-      return res.status(400).json({ message: current.customer_id ? "กรุณาระบุชื่อผู้มาเยี่ยม" : "กรุณาระบุชื่อผู้ขอจอด" });
+    const isVisitor = current.user_category === "visitor";
+    if (isVisitor) {
+      const contactError = validateVisitorContact(guestName, guestPhone);
+      if (contactError) return res.status(400).json({ message: contactError });
     }
+    const parked = Boolean(current.parked_at);
+    const window = parked
+      ? { startAt: toSqlDateTime(new Date(current.parked_at)), endAt: null }
+      : { startAt: parking.value.startAt, endAt: parking.value.endAt };
 
     const keep = new Set(Array.isArray(keepPhotos) ? keepPhotos.filter((url) => typeof url === "string") : []);
     const keptPhotos = current.vehicle_photos.filter((photo) => keep.has(photo.url));
@@ -2159,24 +2218,37 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
     const staffName = await getActingStaffName(pool, req.user);
     savedPhotos = await savePublicImages("vehicles", parsedPhotos.value);
     const nextPhotos = [...keptPhotos, ...savedPhotos];
-    const [result] = await pool.query(
-      `UPDATE ResidentVisitRequest
-       SET vehicle_plate = ?, vehicle_model = ?, vehicle_photos = ?, guest_name = ?, guest_phone = ?, start_at = ?, end_at = ?, note = ?,
-           updated_by_name = ?, updated_at = NOW()
-       WHERE id = ? AND status IN ('pending', 'approved')`,
-      [
-        plate,
-        vehicleModel?.trim() || null,
-        nextPhotos.length ? JSON.stringify(nextPhotos) : null,
-        hasVisitor ? guestName.trim() : null,
-        hasVisitor ? guestPhone?.trim() || null : null,
-        startAt,
-        openEnded ? null : endAt,
-        note?.trim() || null,
-        staffName,
-        id,
-      ],
-    );
+    const result = await withParkingLock(pool, async (connection) => {
+      await assertParkingAllowed(connection, {
+        ...parking.value,
+        ...window,
+        customerId: current.customer_id,
+        guestPhone: isVisitor ? guestPhone : "",
+        excludeId: id,
+      });
+      const [updated] = await connection.query(
+        `UPDATE ResidentVisitRequest
+         SET vehicle_type = ?, parking_space_id = ?, vehicle_plate = ?, vehicle_model = ?, vehicle_photos = ?, guest_name = ?, guest_phone = ?,
+             start_at = IF(parked_at IS NULL, ?, start_at), end_at = IF(parked_at IS NULL, ?, end_at), note = ?,
+             updated_by_name = ?, updated_at = NOW()
+         WHERE id = ? AND status IN ('pending', 'approved')`,
+        [
+          parking.value.vehicleType,
+          parking.value.spaceId,
+          plate,
+          vehicleModel?.trim() || null,
+          nextPhotos.length ? JSON.stringify(nextPhotos) : null,
+          isVisitor ? guestName.trim() : null,
+          isVisitor ? guestPhone.trim() : null,
+          parking.value.startAt,
+          parking.value.endAt,
+          note?.trim() || null,
+          staffName,
+          id,
+        ],
+      );
+      return updated;
+    });
     if (!result.affectedRows) {
       await deletePublicImages(savedPhotos.map((photo) => photo.url));
       return res.status(409).json({ message: "คำขอนี้ถูกปิดแล้ว แก้ไขไม่ได้" });
@@ -2185,6 +2257,7 @@ router.patch("/resident-visit-requests/:id", async (req, res) => {
     return res.json({ message: "บันทึกการแก้ไขแล้ว" });
   } catch (error) {
     if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
+    if (error instanceof ParkingError) return res.status(error.status).json({ message: error.message, code: error.code });
     console.error("Staff update resident vehicle error:", error);
     return res.status(500).json({ message: "ไม่สามารถบันทึกการแก้ไขได้" });
   }
@@ -2196,19 +2269,24 @@ router.delete("/resident-visit-requests/:id", async (req, res) => {
     if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสคำขอไม่ถูกต้อง" });
     const pool = getPool();
     const staffName = await getActingStaffName(pool, req.user);
-    const [result] = await pool.query(
-      `UPDATE ResidentVisitRequest SET status = 'cancelled', cancelled_by_name = ?, cancelled_at = NOW()
-       WHERE id = ? AND status IN ('pending', 'approved')`,
-      [staffName, id],
-    );
-    if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกปิดแล้ว" });
-    return res.json({ message: "ยกเลิกรายการรถแล้ว" });
+    const outcome = await endParkingSession(pool, id, staffName);
+    if (!outcome.checkedOut) return res.json({ message: "ยกเลิกรายการรถแล้ว", ...outcome });
+    return res.json({
+      message: outcome.amount > 0
+        ? `บันทึกรถออกจากที่จอดแล้ว · จอดเกินเวลา ${outcome.overtimeHours} ชั่วโมง · ค่าปรับ ฿${outcome.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })}`
+        : "บันทึกรถออกจากที่จอดแล้ว · ไม่เกินเวลา ไม่มีค่าปรับ",
+      ...outcome,
+    });
   } catch (error) {
+    if (error instanceof ParkingError) return res.status(error.status).json({ message: error.message });
     console.error("Staff cancel resident vehicle error:", error);
     return res.status(500).json({ message: "ไม่สามารถยกเลิกรายการได้" });
   }
 });
 
+router.post("/resident-visit-requests/:id/check-in", createCheckInHandler(getActingStaffName));
+router.post("/resident-visit-requests/:id/fine-payment", parseFineSlip, createFinePaymentHandler({ getActingName: getActingStaffName }));
+router.post("/resident-visit-requests/:id/fine-review", createFineReviewHandler(getActingStaffName));
 router.post("/resident-visit-requests/:id/:decision", createResidentVisitReview(getActingStaffName));
 
 export default router;

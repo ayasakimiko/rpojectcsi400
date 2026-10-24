@@ -5,7 +5,8 @@ import InspectionTopicFilter from './InspectionTopicFilter.jsx'
 import MoveOutAssetCheck from './MoveOutAssetCheck.jsx'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile from '../utils/compressImageFile.js'
-import { assetPriceValue, CHECKLIST_ITEMS, ISSUE_RESULTS, isValidAssetPrice, RESULT_OPTIONS } from '../utils/inspectionChecklist.js'
+import FurnitureAssetsRow from './FurnitureAssetsRow.jsx'
+import { assetPriceValue, CHECKLIST_ITEMS, ISSUE_RESULTS, isValidAssetPrice, RESULT_OPTIONS, withFurnitureResult } from '../utils/inspectionChecklist.js'
 import './InspectionCells.css'
 import './InspectionStaffForm.css'
 import './InspectionForm.css'
@@ -82,7 +83,8 @@ function MoveInInspectionForm({ candidates, initial, startNew = false, submittin
 
   const selected = isCreate ? candidates.find((item) => String(item.room_number) === roomNumber) || null : null
   const assetRoom = isCreate ? selected?.room_number : initial.room_number
-  const results = CHECKLIST_ITEMS.map((item) => checklist[item.key]).filter(Boolean)
+  const shownChecklist = withFurnitureResult(checklist, assets)
+  const results = CHECKLIST_ITEMS.map((item) => shownChecklist[item.key]).filter(Boolean)
   const counts = Object.fromEntries(RESULT_OPTIONS.map((option) => [option.key, results.filter((result) => result === option.key).length]))
   const hasIssue = [...results, ...assets.map((asset) => asset.result)].some((result) => ISSUE_RESULTS.includes(result))
 
@@ -90,7 +92,9 @@ function MoveInInspectionForm({ candidates, initial, startNew = false, submittin
 
   const selectRoom = (candidate) => {
     setRoomNumber(String(candidate.room_number))
-    setAssets(candidate.room_assets.map(assetRow))
+    const nextAssets = candidate.room_assets.map(assetRow)
+    setAssets(nextAssets)
+    setChecklist((current) => withFurnitureResult(current, nextAssets))
     setFieldErrors((errors) => ({ ...errors, room: undefined, assets: undefined }))
   }
 
@@ -104,16 +108,17 @@ function MoveInInspectionForm({ candidates, initial, startNew = false, submittin
 
   const changeAssets = (next) => {
     setAssets(next)
+    setChecklist((current) => withFurnitureResult(current, next))
     clearFieldError('assets')
   }
 
   const resetChecklist = () => {
-    setChecklist({})
+    setChecklist(withFurnitureResult({}, assets))
     setFieldErrors((errors) => ({ ...errors, checklist: [] }))
   }
 
   const setAllResults = (value) => {
-    setChecklist(Object.fromEntries(CHECKLIST_ITEMS.map((item) => [item.key, value])))
+    setChecklist(withFurnitureResult(Object.fromEntries(CHECKLIST_ITEMS.map((item) => [item.key, value])), assets))
     setFieldErrors((errors) => ({ ...errors, checklist: [] }))
   }
 
@@ -152,7 +157,8 @@ function MoveInInspectionForm({ candidates, initial, startNew = false, submittin
     if (isCreate && !selected) errors.room = 'กรุณาเลือกห้องที่ต้องการตรวจ'
     if (!inspectionDate) errors.date = 'กรุณาเลือกวันที่ตรวจ'
     else if (dateTaken) errors.date = `มีบันทึกของวันที่ ${formatDate(inspectionDate)} แล้ว กรุณาเลือกวันอื่น หรือเปิดบันทึกวันนั้นแล้วแก้ไข`
-    const missing = CHECKLIST_ITEMS.filter((item) => !checklist[item.key]).map((item) => item.key)
+    const finalChecklist = withFurnitureResult(checklist, assets)
+    const missing = CHECKLIST_ITEMS.filter((item) => !finalChecklist[item.key]).map((item) => item.key)
     if (missing.length > 0) errors.checklist = missing
     const seenNames = new Set()
     const invalidAssets = []
@@ -186,7 +192,7 @@ function MoveInInspectionForm({ candidates, initial, startNew = false, submittin
       const compressed = await Promise.all(photos.map((file) => compressImageFile(file)))
       const payload = {
         inspection_date: inspectionDate,
-        checklist,
+        checklist: finalChecklist,
         assets: assets.map((asset) => ({ name: String(asset.name).trim(), price: assetPriceValue(asset.price), result: asset.result })),
         note: note.trim(),
         photos: compressed,
@@ -437,32 +443,30 @@ function MoveInInspectionForm({ candidates, initial, startNew = false, submittin
         </div>
         <div className="inspection-list">
           {CHECKLIST_ITEMS.map((item) => {
-            const result = checklist[item.key] || ''
+            const result = shownChecklist[item.key] || ''
             const isMissing = (fieldErrors.checklist || []).includes(item.key)
-            const isFurniture = item.key === 'furniture'
+            if (item.key === 'furniture') {
+              return (
+                <FurnitureAssetsRow
+                  key={item.key}
+                  label={item.label}
+                  result={result}
+                  assets={assets}
+                  open={assetsOpen}
+                  invalid={isMissing || Boolean(fieldErrors.assets?.length)}
+                  onToggle={() => setAssetsOpen((open) => !open)}
+                >
+                  <MoveOutAssetCheck roomNumber={assetRoom} assets={assets} onChange={changeAssets} invalidIndexes={fieldErrors.assets || []} recordOnly />
+                </FurnitureAssetsRow>
+              )
+            }
             return (
               <div key={item.key} className={`inspection-row has-extra${result ? ` is-${result}` : ''}${isMissing ? ' is-missing' : ''}`}>
                 <span className="inspection-row-label">
                   {item.label}
                   {isMissing && <small>ยังไม่ได้เลือก</small>}
-                  {isFurniture && (
-                    <button type="button" className="inspection-assets-toggle" aria-expanded={assetsOpen} onClick={() => setAssetsOpen((open) => !open)}>
-                      {assetsOpen ? '▴' : '▾'} อุปกรณ์และทรัพย์สินในห้อง ({assets.length})
-                    </button>
-                  )}
                 </span>
                 <ResultChoices label={item.label} value={result} onChange={(value) => setResult(item.key, value)} />
-                {isFurniture && (
-                  <div className="inspection-assets-panel" hidden={!assetsOpen && !ISSUE_RESULTS.includes(result)}>
-                    <MoveOutAssetCheck
-                      roomNumber={assetRoom}
-                      assets={assets}
-                      onChange={changeAssets}
-                      invalidIndexes={fieldErrors.assets || []}
-                      recordOnly
-                    />
-                  </div>
-                )}
               </div>
             )
           })}

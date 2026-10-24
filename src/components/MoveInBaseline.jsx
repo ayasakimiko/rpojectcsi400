@@ -16,9 +16,19 @@ export function MoveInCompareTag({ before, after }) {
   const compare = compareWithMoveIn(before, after)
   return (
     <span className={`mib-tag is-${compare.tone}`}>
-      {compare.label}
-      {compare.isNew && <b>เกิดขึ้นใหม่</b>}
-      {!compare.isNew && ISSUE_RESULTS.includes(before) && ISSUE_RESULTS.includes(after) && <b>มีมาตั้งแต่ก่อนเข้าอยู่</b>}
+      <svg className="mib-tag-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5M12 7v5l3 2" />
+      </svg>
+      <span className="mib-tag-label">ตอนเข้าอยู่</span>
+      <span className={`mib-tag-value is-${before || 'none'}`}>
+        <i aria-hidden="true" />
+        {before ? RESULT_LABELS[before] || before : 'ไม่ได้บันทึก'}
+      </span>
+      {compare.isNew && <span className="mib-tag-note is-new">เกิดขึ้นใหม่</span>}
+      {!compare.isNew && ISSUE_RESULTS.includes(before) && ISSUE_RESULTS.includes(after) && (
+        <span className="mib-tag-note">มีมาตั้งแต่ก่อนเข้าอยู่</span>
+      )}
     </span>
   )
 }

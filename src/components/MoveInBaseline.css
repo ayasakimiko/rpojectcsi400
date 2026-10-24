@@ -118,6 +118,7 @@
 }
 
 .mib-pill.is-good {
+  border: 1px solid #a7e9c4;
   background: #ecfdf3;
   color: #067647;
 }
@@ -501,6 +502,7 @@
 }
 
 .mib-status.is-good {
+  border: 1px solid #a7e9c4;
   background: #ecfdf3;
   color: #067647;
 }
@@ -641,39 +643,76 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin-top: 3px;
-  color: #6b859e;
+  color: #8aa0b6;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
-.mib-tag b {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11.5px;
+.mib-tag-icon {
+  flex-shrink: 0;
+  color: #a7b8cb;
 }
 
-.mib-tag.is-good {
-  color: #067647;
+.mib-tag-label {
+  color: #8aa0b6;
 }
 
-.mib-tag.is-wear,
-.mib-tag.is-issue {
+.mib-tag-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #6b859e;
+  font-weight: 700;
+}
+
+.mib-tag-value i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b8c7d8;
+}
+
+.mib-tag-value.is-good {
+  color: #027a48;
+}
+
+.mib-tag-value.is-good i {
+  background: #12b76a;
+}
+
+.mib-tag-value.is-wear {
   color: #b45309;
 }
 
-.mib-tag.is-issue b {
-  background: #fffaeb;
-  color: #b45309;
+.mib-tag-value.is-wear i {
+  background: #f79009;
 }
 
-.mib-tag.is-new {
+.mib-tag-value.is-damaged,
+.mib-tag-value.is-missing {
   color: #b42318;
 }
 
-.mib-tag.is-new b {
-  background: #fef3f2;
+.mib-tag-value.is-damaged i,
+.mib-tag-value.is-missing i {
+  background: #f04438;
+}
+
+.mib-tag-note {
+  color: #8aa0b6;
+  font-weight: 600;
+}
+
+.mib-tag-note::before {
+  content: "·";
+  margin-right: 5px;
+  color: #c4d1df;
+}
+
+.mib-tag-note.is-new {
   color: #b42318;
 }
 

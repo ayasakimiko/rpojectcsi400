@@ -665,3 +665,37 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.mrdf-input.is-readonly,
+.mrdf-input.is-readonly:hover,
+.mrdf-input.is-readonly:focus-within {
+  border-color: #e8eff8;
+  box-shadow: none;
+  background: #f8fafc;
+}
+
+.mrdf-input.is-readonly input {
+  color: #0f2b52;
+  background: transparent;
+  font-weight: 700;
+  cursor: default;
+}
+
+.staff-form-counter.mrdf-deposit-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid #c7dbfb;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eff5ff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.mrdf-deposit-left strong {
+  color: #0f2b52;
+  font-size: 14px;
+  font-weight: 800;
+}

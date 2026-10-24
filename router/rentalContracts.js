@@ -995,12 +995,12 @@ export async function loadRoomTransferPreview(db, requestId, { damageCents = nul
   };
 }
 
-export async function applyRoomTransfer(connection, plan, staffName, contractImages = []) {
+export async function applyRoomTransfer(connection, plan, staffName, contractImages = [], { deferContract = false } = {}) {
   const { request, customer, sourceRoom, targetRoom, booking, settlement } = plan;
   if (roomTransferNeedsPayment(plan)) {
     throw Object.assign(new Error("ผู้เช่ายังไม่ได้ชำระยอดย้ายห้อง"), { code: "TRANSFER_CHARGE_UNPAID" });
   }
-  if (contractImages.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
+  if (!deferContract && contractImages.length < ROOM_TRANSFER_MIN_CONTRACT_IMAGES) {
     throw Object.assign(new Error(`กรุณาแนบรูปสัญญาใหม่อย่างน้อย ${ROOM_TRANSFER_MIN_CONTRACT_IMAGES} รูป`), {
       code: "CONTRACT_IMAGES_REQUIRED",
     });
@@ -1109,15 +1109,105 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
     ],
   );
   const transferId = transferResult.insertId;
+  if (contractImages.length > 0) {
+    await replaceTransferContractImages(connection, { transferId, contractBookingId, customerId: customer.id }, contractImages);
+  }
+  return { toBookingId, chargePaymentId, rentChargePaymentId, transferId, contractBookingId };
+}
+
+async function replaceTransferContractImages(connection, { transferId, contractBookingId, customerId }, contractImages) {
   await connection.query(
     `UPDATE ContractImage SET replaced_at = NOW(), replaced_by_transfer_id = ? WHERE booking_id = ? AND replaced_at IS NULL`,
     [transferId, contractBookingId],
   );
   await connection.query(
     `INSERT INTO ContractImage (booking_id, customer_id, name, url, room_transfer_id) VALUES ?`,
-    [contractImages.map((image) => [contractBookingId, customer.id, image.name, image.url, transferId])],
+    [contractImages.map((image) => [contractBookingId, customerId, image.name, image.url, transferId])],
   );
-  return { toBookingId, chargePaymentId, rentChargePaymentId, transferId, contractBookingId };
+}
+
+export const AUTO_TRANSFER_ACTOR = "ระบบ (ชำระยอดย้ายห้องแล้ว)";
+
+async function finishAutoTransferRequest(connection, request) {
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'approved', accepted_at = COALESCE(accepted_at, NOW()), accepted_by_name = COALESCE(accepted_by_name, ?),
+         completed_at = NOW(), completed_by_name = ?
+     WHERE id = ?`,
+    [AUTO_TRANSFER_ACTOR, AUTO_TRANSFER_ACTOR, request.id],
+  );
+  await connection.query(
+    `UPDATE TenantRequest
+     SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE customer_id = ? AND status IN ('pending', 'in_progress') AND room_number <> ?
+       AND (type <> 'move_room' OR NOT EXISTS (SELECT 1 FROM Payment p WHERE p.id = TenantRequest.transfer_charge_payment_id AND p.status = 'paid'))`,
+    [request.customer_id, request.target_room_number],
+  );
+  await cancelTransfersIntoBookedRooms(connection, request.target_room_number);
+  await connection.query(
+    `UPDATE MaintenanceRequest
+     SET status = 'cancelled', completed_at = NOW(), completed_by_name = 'ระบบ (เปลี่ยนห้อง)'
+     WHERE customer_id = ? AND status IN ('pending', 'in_progress') AND room_number <> ?`,
+    [request.customer_id, request.target_room_number],
+  );
+}
+
+export async function autoApplyPaidTransfers(connection) {
+  const [requests] = await connection.query(
+    `SELECT tr.id, tr.customer_id, tr.target_room_number FROM TenantRequest tr
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id AND p.status = 'paid'
+     WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress') AND tr.target_room_number IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM RoomTransfer rt WHERE rt.tenant_request_id = tr.id)
+     ORDER BY p.id ASC`,
+  );
+  const applied = [];
+  for (const request of requests) {
+    await connection.query("SAVEPOINT auto_room_transfer");
+    try {
+      const plan = await buildRoomTransferPlan(connection, request.id, { lock: true });
+      if (!plan?.customer || plan.stale || plan.blockers.length > 0 || roomTransferNeedsPayment(plan)) {
+        await connection.query("RELEASE SAVEPOINT auto_room_transfer");
+        continue;
+      }
+      const result = await applyRoomTransfer(connection, plan, AUTO_TRANSFER_ACTOR, [], { deferContract: true });
+      await finishAutoTransferRequest(connection, request);
+      await connection.query("RELEASE SAVEPOINT auto_room_transfer");
+      applied.push({ requestId: request.id, transferId: result.transferId, message: roomTransferApprovalMessage(plan) });
+    } catch (error) {
+      await connection.query("ROLLBACK TO SAVEPOINT auto_room_transfer");
+      console.error("Auto room transfer error:", error);
+    }
+  }
+  return applied;
+}
+
+export async function listPendingTransferContracts(db) {
+  const [rows] = await db.query(
+    `SELECT rt.id, rt.tenant_request_id, rt.customer_id, rt.from_room_number, rt.to_room_number, rt.transferred_at,
+            c.first_name, c.last_name, c.phone
+     FROM RoomTransfer rt JOIN Customer c ON c.id = rt.customer_id
+     WHERE rt.approved_by_name = ?
+       AND NOT EXISTS (SELECT 1 FROM ContractImage ci WHERE ci.room_transfer_id = rt.id)
+     ORDER BY rt.transferred_at ASC`,
+    [AUTO_TRANSFER_ACTOR],
+  );
+  return rows;
+}
+
+export async function attachTransferContractImages(connection, transferId, contractImages) {
+  const [rows] = await connection.query(
+    "SELECT id, customer_id, contract_booking_id, to_booking_id FROM RoomTransfer WHERE id = ? FOR UPDATE",
+    [transferId],
+  );
+  const transfer = rows[0];
+  if (!transfer) throw Object.assign(new Error("ไม่พบรายการย้ายห้องนี้"), { status: 404 });
+  const [existing] = await connection.query("SELECT id FROM ContractImage WHERE room_transfer_id = ? LIMIT 1", [transferId]);
+  if (existing.length > 0) throw Object.assign(new Error("รายการย้ายห้องนี้แนบสัญญาใหม่แล้ว"), { status: 409 });
+  await replaceTransferContractImages(
+    connection,
+    { transferId, contractBookingId: transfer.contract_booking_id ?? transfer.to_booking_id, customerId: transfer.customer_id },
+    contractImages,
+  );
 }
 
 export function roomTransferApprovalMessage(plan) {
@@ -1133,4 +1223,46 @@ export function roomTransferApprovalMessage(plan) {
   if (settlement.excessRefundCents > 0) parts.push(`ต้องคืนเงินส่วนเกินเพดานมัดจำให้ผู้เช่า ${formatBaht(settlement.excessRefundCents)}`);
   parts.push(`เงินมัดจำห้องใหม่ ${formatBaht(settlement.depositAfterCents)}`);
   return parts.join(" · ");
+}
+
+export const parseTransferContractImages = contractImagesParser({ min: ROOM_TRANSFER_MIN_CONTRACT_IMAGES });
+
+export function createPendingTransferContractsHandler(getPool) {
+  return async function pendingTransferContracts(_req, res) {
+    try {
+      return res.json({ transfers: await listPendingTransferContracts(getPool()) });
+    } catch (error) {
+      console.error("Load pending transfer contracts error:", error);
+      return res.status(500).json({ message: "ไม่สามารถโหลดรายการรอแนบสัญญาได้" });
+    }
+  };
+}
+
+export function createAttachTransferContractHandler(getPool) {
+  return async function attachTransferContract(req, res) {
+    const files = req.files ?? [];
+    const transferId = Number(req.params.id);
+    const connection = await getPool().getConnection();
+    let kept = false;
+    try {
+      if (!Number.isSafeInteger(transferId) || transferId <= 0) return res.status(400).json({ message: "รหัสรายการย้ายห้องไม่ถูกต้อง" });
+      await connection.beginTransaction();
+      await attachTransferContractImages(
+        connection,
+        transferId,
+        files.map((file, index) => ({ name: contractImageName(file, index), url: contractImageUrl(file) })),
+      );
+      await connection.commit();
+      kept = true;
+      return res.json({ message: "แนบรูปสัญญาใหม่เรียบร้อยแล้ว" });
+    } catch (error) {
+      await connection.rollback().catch(() => {});
+      if (error.status) return res.status(error.status).json({ message: error.message });
+      console.error("Attach transfer contract error:", error);
+      return res.status(500).json({ message: "ไม่สามารถแนบรูปสัญญาได้" });
+    } finally {
+      connection.release();
+      if (!kept && files.length) await removeContractFiles(files);
+    }
+  };
 }
