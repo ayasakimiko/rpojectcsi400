@@ -5014,6 +5014,12 @@ tr.admin-focus-flash.is-fading > td {
   line-height: 1;
 }
 
+.admin-subtab-badge.admin-tab-badge {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.admin-tabs .nav-link.admin-tab-link.active .admin-tab-badge,
 .admin-subtabs .nav-link.admin-tab-link.active .admin-subtab-badge {
   background: #fff;
   color: #2563eb;

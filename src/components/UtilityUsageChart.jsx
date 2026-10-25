@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './UtilityUsageChart.css'
 
 const SERIES = [
@@ -215,6 +215,32 @@ export default function UtilityUsageChart({ rentalHistory, roomNumber }) {
         ) : (
           <div className="utility-chart" role="img" aria-label={`กราฟ${metricInfo.label}ค่าน้ำและค่าไฟรายเดือน ${months.length} เดือน`}>
             <ResponsiveContainer width="100%" height="100%">
+              {chartData.length === 1 ? (
+                <BarChart data={chartData} margin={{ top: 28, right: 16, bottom: 0, left: 0 }} barCategoryGap="34%" barGap={14}>
+                  <CartesianGrid vertical={false} stroke="#e8eef6" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#d6e4f5' }} tick={{ fill: '#48627d', fontSize: 12 }} />
+                  <YAxis
+                    width={56}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: '#6b859e', fontSize: 12 }}
+                    tickFormatter={(value) => (metric === 'amount' ? `฿${formatNumber(value)}` : formatNumber(value))}
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<ChartTooltip metric={metric} />} cursor={{ fill: 'rgba(37, 99, 235, 0.05)' }} />
+                  {SERIES.map((series) => (
+                    <Bar key={series.key} dataKey={series.key} name={series.label} fill={series.color} radius={[8, 8, 0, 0]} maxBarSize={88}>
+                      <LabelList
+                        dataKey={series.key}
+                        position="top"
+                        offset={8}
+                        formatter={(value) => (value == null ? '' : formatValue(value, metric))}
+                        style={{ fill: series.color, fontSize: 12.5, fontWeight: 700 }}
+                      />
+                    </Bar>
+                  ))}
+                </BarChart>
+              ) : (
               <LineChart data={chartData} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="#e8eef6" />
                 <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#d6e4f5' }} tick={{ fill: '#48627d', fontSize: 12 }} interval={0} padding={{ left: 12, right: 12 }} />
@@ -241,6 +267,7 @@ export default function UtilityUsageChart({ rentalHistory, roomNumber }) {
                   />
                 ))}
               </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
         )}

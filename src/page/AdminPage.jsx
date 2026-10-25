@@ -35,6 +35,7 @@ import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
+import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, TransferContractPendingPanel } from './StaffMain.jsx'
@@ -5972,6 +5973,24 @@ function AdminBackupPage() {
   const [expensesPage, setExpensesPage] = useState(1)
   const [expensesTotalPages, setExpensesTotalPages] = useState(1)
   const [expensesTotal, setExpensesTotal] = useState(0)
+  const [expenseSeenId, setExpenseSeenId] = useState(() => readExpenseSeen('admin'))
+  const viewingExpenses = activeTab === 'expenses'
+  const pendingBadges = {
+    requests: serviceCounts.requestPending,
+    maintenance: serviceCounts.maintenancePending,
+    expenses: viewingExpenses ? 0 : countNewExpenses(expenses, expenseSeenId),
+  }
+  const tabBadgeCount = (tabKey) => (tabKey in pendingBadges ? pendingBadges[tabKey] : tabBadges[tabKey] || 0)
+  const groupBadgeCount = (groupKey) =>
+    (TAB_GROUPS.find((group) => group.key === groupKey)?.tabs || []).reduce((sum, tabKey) => sum + tabBadgeCount(tabKey), 0)
+
+  useEffect(() => {
+    if (!viewingExpenses) return
+    const maxId = maxExpenseId(expenses)
+    if (expenseSeenId !== null && maxId <= expenseSeenId) return
+    writeExpenseSeen('admin', maxId)
+    setExpenseSeenId(maxId)
+  }, [viewingExpenses, expenses, expenseSeenId])
   const [expenseModal, setExpenseModal] = useState(null)
   const [expenseForm, setExpenseForm] = useState(emptyExpenseForm)
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
@@ -6006,6 +6025,11 @@ function AdminBackupPage() {
       })
       .then(({ data }) => {
         setExpenses(data.expenses)
+        if (readExpenseSeen('admin') === null) {
+          const maxId = maxExpenseId(data.expenses)
+          writeExpenseSeen('admin', maxId)
+          setExpenseSeenId(maxId)
+        }
         setExpensesPage(data.page)
         setExpensesTotal(data.total || 0)
         setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || EXPENSES_PAGE_SIZE))))
@@ -7276,8 +7300,10 @@ function AdminBackupPage() {
     loadMoveOutInspections()
     loadParcels()
     loadNotifSources()
+    loadExpenses(1)
     const refreshNotifications = () => {
       loadNotifSources()
+      loadExpenses(1)
       loadStaff()
       loadParcels()
       loadMoveOutInspections()
@@ -7813,6 +7839,10 @@ function AdminBackupPage() {
           linkClassName="admin-tab-link"
           logoutClassName="admin-logout-btn"
           onLogout={handleLogout}
+          renderBadge={(groupKey) => {
+            const count = groupBadgeCount(groupKey)
+            return count > 0 && <span className="admin-subtab-badge admin-tab-badge" aria-label={`${count} รายการรอตรวจ`}>{count}</span>
+          }}
         />
         <div className="admin-subtabs-row">
           {TAB_GROUPS.filter((group) => group.tabs.length > 1).map((group) => (
@@ -7834,7 +7864,7 @@ function AdminBackupPage() {
                     }}
                   >
                     {TAB_LABEL[tabKey]}
-                    {tabBadges[tabKey] > 0 && <span className="admin-subtab-badge">{tabBadges[tabKey]}</span>}
+                    {tabBadgeCount(tabKey) > 0 && <span className="admin-subtab-badge" aria-label={`${tabBadgeCount(tabKey)} รายการรอตรวจ`}>{tabBadgeCount(tabKey)}</span>}
                   </button>
                 </li>
               ))}

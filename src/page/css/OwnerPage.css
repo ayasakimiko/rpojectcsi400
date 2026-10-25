@@ -2324,7 +2324,8 @@ table tbody td.owner-empty-row:last-child {
 }
 
 .owner-modal-backdrop.is-closing {
-  animation: owner-backdrop-out 0.06s ease-in forwards;
+  animation: owner-backdrop-out 0.18s ease-in forwards;
+  pointer-events: none;
 }
 
 .owner-modal {
@@ -2341,7 +2342,7 @@ table tbody td.owner-empty-row:last-child {
 }
 
 .owner-modal.is-closing {
-  animation: owner-modal-out 0.06s ease-in forwards;
+  animation: owner-modal-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .owner-modal-body {
@@ -2428,7 +2429,7 @@ table tbody td.owner-empty-row:last-child {
 
 @keyframes owner-modal-out {
   from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 0; transform: translateY(14px) scale(0.96); }
 }
 
 @keyframes owner-backdrop-in {

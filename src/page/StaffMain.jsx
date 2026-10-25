@@ -17,6 +17,7 @@ import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusI
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
+import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import {
   InspectionDateCell,
@@ -8287,6 +8288,7 @@ function StaffMain() {
   const [expensesPage, setExpensesPage] = useState(1)
   const [expensesTotalPages, setExpensesTotalPages] = useState(1)
   const [expensesTotal, setExpensesTotal] = useState(0)
+  const [expenseSeenId, setExpenseSeenId] = useState(() => readExpenseSeen('staff'))
   const [expenseModal, setExpenseModal] = useState(null)
   const [expenseDelete, setExpenseDelete] = useState(null)
   const [expenseDeleting, setExpenseDeleting] = useState(false)
@@ -8326,6 +8328,11 @@ function StaffMain() {
       })
       .then(({ data }) => {
         setExpenses(data.expenses)
+        if (readExpenseSeen('staff') === null) {
+          const maxId = maxExpenseId(data.expenses)
+          writeExpenseSeen('staff', maxId)
+          setExpenseSeenId(maxId)
+        }
         setExpensesPage(data.page)
         setExpensesTotal(data.total || 0)
         setExpensesTotalPages(Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || EXPENSES_PAGE_SIZE))))
@@ -9210,6 +9217,24 @@ function StaffMain() {
     .filter((parcel) => parcel.status === 'pending')
     .reduce((max, parcel) => Math.max(max, Math.floor((Date.now() - new Date(parcel.created_at).getTime()) / 86400000)), 0)
   const pendingMaintenanceCount = maintenanceRequests.filter((request) => request.status === 'pending').length
+  const viewingExpenses = staffTab === 'home' && homeSection === 'expenses'
+  const pendingTenantCount = (type) => tenantRequests.filter((request) => request.type === type && request.status === 'pending').length
+  const pendingSectionCounts = {
+    renew: pendingTenantCount('renew'),
+    moveout: pendingTenantCount('moveout'),
+    move_room: pendingTenantCount('move_room'),
+    maintenance: pendingMaintenanceCount,
+    expenses: viewingExpenses ? 0 : countNewExpenses(expenses, expenseSeenId),
+  }
+  const homePendingTotal = Object.values(pendingSectionCounts).reduce((sum, count) => sum + count, 0)
+
+  useEffect(() => {
+    if (!viewingExpenses) return
+    const maxId = maxExpenseId(expenses)
+    if (expenseSeenId !== null && maxId <= expenseSeenId) return
+    writeExpenseSeen('staff', maxId)
+    setExpenseSeenId(maxId)
+  }, [viewingExpenses, expenses, expenseSeenId])
 
   const openSummaryTarget = (tab, roomFilter, section) => {
     goToStaffTab(tab)
@@ -10534,17 +10559,20 @@ function StaffMain() {
           linkClassName="staff-tab-link"
           logoutClassName="staff-logout-btn"
           onLogout={handleLogout}
-          renderBadge={(key) => newTabItemCount(key) > 0 && (
-            <span className="staff-tab-badge" aria-label={`${newTabItemCount(key)} รายการใหม่`}>
-              {newTabItemCount(key)}
-            </span>
-          )}
+          renderBadge={(key) => {
+            const count = key === 'home' ? homePendingTotal : newTabItemCount(key)
+            return count > 0 && (
+              <span className="staff-tab-badge" aria-label={`${count} ${key === 'home' ? 'รายการรอตรวจ' : 'รายการใหม่'}`}>
+                {count}
+              </span>
+            )
+          }}
         />
         <div className="staff-subtabs-row">
           {staffTab === 'home' && (
             <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
               {HOME_SECTIONS.map((section) => {
-                const count = newSectionItemCount(section.key)
+                const count = section.key in pendingSectionCounts ? pendingSectionCounts[section.key] : newSectionItemCount(section.key)
                 return (
                   <li className="nav-item" key={section.key}>
                     <button
@@ -10553,7 +10581,7 @@ function StaffMain() {
                       onClick={() => setHomeSection(section.key)}
                     >
                       {section.label}
-                      {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการใหม่`}>{count}</span>}
+                      {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการรอตรวจ`}>{count}</span>}
                     </button>
                   </li>
                 )

@@ -18,6 +18,8 @@ import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import CameraMonitor from '../components/CameraMonitor.jsx'
+import { cameraSummaryTiles } from '../utils/cameras.js'
+import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
@@ -481,7 +483,8 @@ function ExpenseCategoryBadge({ category }) {
   )
 }
 
-function OwnerExpenseDetailDialog({ expense, onClose, onEdit, onDelete }) {
+function OwnerExpenseDetailDialog({ expense, onClose: closeNow, onEdit, onDelete }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const [photoIndex, setPhotoIndex] = useState(null)
   const photos = Array.isArray(expense.photos) ? expense.photos : []
   const style = expenseCategoryStyle(expense.category)
@@ -506,8 +509,8 @@ function OwnerExpenseDetailDialog({ expense, onClose, onEdit, onDelete }) {
     { key: 'at', icon: 'clock', label: 'บันทึกเมื่อ', value: recordedAt },
   ]
   return (
-    <div className="owner-modal-backdrop owner-xl-overlay" onClick={onClose}>
-      <section className="owner-modal owner-xl-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-xl-dialog-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-xl-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section className={`owner-modal owner-xl-dialog${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-xl-dialog-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header owner-xl-dialog-header">
           <span className="owner-xl-dialog-icon" style={{ color: style.color, background: style.bg }}><ExpenseCategoryIcon category={expense.category} size={22} /></span>
           <div><h3 id="owner-xl-dialog-title">รายละเอียดรายจ่าย</h3><p className="owner-modal-subtext">รายการ #{expense.id}</p></div>
@@ -698,7 +701,8 @@ function paymentLogNote(payment) {
   return payment.note || ''
 }
 
-function OwnerPaymentLogDialog({ payment, onClose, onReview, reviewing }) {
+function OwnerPaymentLogDialog({ payment, onClose: closeNow, onReview, reviewing }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const [zoom, setZoom] = useState(false)
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = zoom ? () => {} : onClose }, [onClose, zoom])
@@ -725,8 +729,8 @@ function OwnerPaymentLogDialog({ payment, onClose, onReview, reviewing }) {
   ]
   const note = paymentLogNote(payment)
   return (
-    <div className="owner-modal-backdrop owner-pl-overlay" onClick={onClose}>
-      <section className="owner-modal owner-pl-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-pl-dialog-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-pl-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section className={`owner-modal owner-pl-dialog${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-pl-dialog-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header owner-pl-dialog-header">
           <span className="owner-pl-dialog-icon"><PaymentTypeIcon type={payment.type || payment.payment_types?.split(',')[0]} /></span>
           <div><h3 id="owner-pl-dialog-title">รายละเอียดการชำระเงิน</h3><p className="owner-modal-subtext">{payment.room_number ? `ห้อง ${payment.room_number} · ` : ''}{name}</p></div>
@@ -773,11 +777,13 @@ function OwnerPaymentLogDialog({ payment, onClose, onReview, reviewing }) {
   )
 }
 
-function OwnerOccupancyLogDialog({ eventId, onClose }) {
+function OwnerOccupancyLogDialog({ eventId, onClose: closeNow }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const [response, setResponse] = useState(null)
   const [retry, setRetry] = useState(0)
   const [paymentId, setPaymentId] = useState(null)
   const [showAllPayments, setShowAllPayments] = useState(false)
+  const [displayShowAllPayments, isShowAllClosing] = useClosingValue(showAllPayments)
   const [paymentSearch, setPaymentSearch] = useState('')
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = paymentId !== null ? () => {} : showAllPayments ? () => setShowAllPayments(false) : onClose }, [onClose, paymentId, showAllPayments])
@@ -815,8 +821,8 @@ function OwnerOccupancyLogDialog({ eventId, onClose }) {
     </article>
   )
   return (
-    <div className="owner-modal-backdrop owner-olog-overlay" onClick={onClose}>
-      <section className="owner-modal owner-olog-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-olog-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-olog-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section className={`owner-modal owner-olog-dialog${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-olog-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header"><span className="owner-ip-heading-icon"><OwnerListIcon name="receipt" size={20} /></span><div><h3 id="owner-olog-title">รายละเอียดบันทึกการเข้าพักและย้ายออก</h3><p className="owner-modal-subtext">เลขบันทึก {eventId}</p></div><button type="button" className="owner-modal-close" autoFocus onClick={onClose} aria-label="ปิดรายละเอียดบันทึก">×</button></header>
         <div className="owner-modal-body">
           {!response ? <div className="owner-empty" role="status">กำลังโหลดรายละเอียด...</div> : response.error ? <div className="owner-income-error" role="alert"><h4>โหลดข้อมูลไม่สำเร็จ</h4><p>{response.error}</p><button type="button" onClick={() => { setResponse(null); setRetry((value) => value + 1) }}>ลองอีกครั้ง</button></div> : (
@@ -862,9 +868,9 @@ function OwnerOccupancyLogDialog({ eventId, onClose }) {
             </>
           )}
         </div>
-        {showAllPayments && response?.payments && (
-          <div className="owner-modal-backdrop owner-olog-all-overlay" onClick={() => setShowAllPayments(false)}>
-            <section className="owner-modal owner-olog-all-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-olog-all-title" onClick={(event) => event.stopPropagation()}>
+        {displayShowAllPayments && response?.payments && (
+          <div className={`owner-modal-backdrop owner-olog-all-overlay${isShowAllClosing ? ' is-closing' : ''}`} onClick={() => setShowAllPayments(false)}>
+            <section className={`owner-modal owner-olog-all-dialog${isShowAllClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-olog-all-title" onClick={(event) => event.stopPropagation()}>
               <header className="owner-modal-header"><span className="owner-ip-heading-icon"><OwnerListIcon name="receipt" size={20} /></span><div><h3 id="owner-olog-all-title">การชำระเงินทั้งหมดของการจองนี้</h3><p className="owner-modal-subtext">ทั้งหมด {response.payments.length} รายการ</p></div><button type="button" className="owner-modal-close" autoFocus onClick={() => setShowAllPayments(false)} aria-label="ปิดรายการการชำระเงินทั้งหมด">×</button></header>
               <div className="owner-modal-body">
                 <label className="owner-fp-search owner-olog-all-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} aria-label="ค้นหารายการชำระเงิน" placeholder="ค้นหาประเภท วันที่ เลขรายการ ยอดเงิน หรือสถานะ" /></label>
@@ -896,7 +902,8 @@ function OwnerModalRowToggle({ expanded, onToggle }) {
   )
 }
 
-function OwnerFinancePeriodDialog({ period, range, onClose }) {
+function OwnerFinancePeriodDialog({ period, range, onClose: closeNow }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const [tab, setTab] = useState('income')
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -943,8 +950,8 @@ function OwnerFinancePeriodDialog({ period, range, onClose }) {
   const pages = Math.max(1, Math.ceil((data?.total || 0) / (data?.pageSize || 30)))
   const net = Number(period.income || 0) - Number(period.expense || 0)
   return (
-    <div className="owner-modal-backdrop owner-finance-period-overlay" onClick={onClose}>
-      <section className="owner-modal owner-finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-finance-period-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-finance-period-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section className={`owner-modal owner-finance-period-dialog${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-finance-period-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header"><div><h3 id="owner-finance-period-title">รายละเอียดการเงิน · {period.monthLabel}</h3><p className="owner-modal-subtext">{formatDate(from)} – {formatDate(to)}</p></div><button type="button" className="owner-modal-close" aria-label="ปิดรายละเอียดช่วงเวลา" onClick={onClose} autoFocus>×</button></header>
         <div className="owner-finance-period-summary">
           {[
@@ -993,7 +1000,8 @@ function OwnerFinancePeriodDialog({ period, range, onClose }) {
   )
 }
 
-function OwnerIncomePaymentDialog({ id, onClose }) {
+function OwnerIncomePaymentDialog({ id, onClose: closeNow }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const [response, setResponse] = useState(null)
   const [retry, setRetry] = useState(0)
   const [zoom, setZoom] = useState(false)
@@ -1023,8 +1031,8 @@ function OwnerIncomePaymentDialog({ id, onClose }) {
   }, [onClose, zoom])
   const payment = response?.payment
   return (
-    <div className="owner-modal-backdrop owner-income-payment-overlay" onClick={onClose}>
-      <section ref={dialogRef} className="owner-modal owner-income-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-income-payment-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-income-payment-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section ref={dialogRef} className={`owner-modal owner-income-payment-dialog${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-income-payment-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header owner-ip-header"><span className="owner-ip-heading-icon" aria-hidden="true"><OwnerListIcon name="receipt" size={20} /></span><div><h3 id="owner-income-payment-title">รายละเอียดการชำระเงิน</h3><p className="owner-modal-subtext">รายการ #{id}</p></div><button type="button" className="owner-modal-close" aria-label="ปิดรายละเอียดการชำระเงิน" autoFocus onClick={onClose}>×</button></header>
         <div className="owner-modal-body">
           {!response ? <div className="owner-empty" role="status">กำลังโหลดรายละเอียด...</div> : response.error ? <div className="owner-income-error" role="alert"><h4>โหลดรายละเอียดไม่สำเร็จ</h4><p>{response.error}</p><button type="button" onClick={() => { setResponse(null); setRetry((value) => value + 1) }}>ลองอีกครั้ง</button></div> : (
@@ -1049,7 +1057,8 @@ function OwnerIncomePaymentDialog({ id, onClose }) {
   )
 }
 
-function OwnerIncomeItemsDialog({ initialType, types, range, onClose }) {
+function OwnerIncomeItemsDialog({ initialType, types, range, onClose: closeNow }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const [filters, setFilters] = useState({ type: initialType, from: range.from || '', to: range.to || '', search: '', page: 1 })
   const [search, setSearch] = useState('')
   useEffect(() => {
@@ -1087,8 +1096,8 @@ function OwnerIncomeItemsDialog({ initialType, types, range, onClose }) {
   const pages = Math.max(1, Math.ceil((data?.total || 0) / 30))
   const change = (field, value) => setFilters((previous) => ({ ...previous, [field]: value, page: 1 }))
   return (
-    <div className="owner-modal-backdrop owner-income-dialog-overlay" onClick={onClose}>
-      <section className="owner-modal owner-income-dialog" role="dialog" aria-modal="true" aria-labelledby="owner-income-items-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-income-dialog-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section className={`owner-modal owner-income-dialog${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-income-items-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header"><div><h3 id="owner-income-items-title">รายการรายรับทั้งหมด</h3><p className="owner-modal-subtext">เฉพาะรายการที่ชำระแล้ว · {data?.total || 0} รายการ</p></div><button type="button" className="owner-modal-close" autoFocus onClick={onClose} aria-label="ปิดรายการรายรับ">×</button></header>
         <form className="owner-income-dialog-filters" role="search" onSubmit={(event) => event.preventDefault()}>
           <label>ประเภทรายรับ<select value={filters.type} onChange={(event) => change('type', event.target.value)}><option value="all">ทุกประเภท</option>{types.map((item) => <option key={item.type} value={item.type}>{formatPaymentType(item.type)}</option>)}</select></label>
@@ -1228,7 +1237,8 @@ function useOwnerUtilityReceipts(enabled, from, to) {
   return { result: current?.result || { trends: [], granularity: 'month' }, loading: !current, error: current?.error || '' }
 }
 
-function OwnerUtilityPeriodDialog({ period, onClose }) {
+function OwnerUtilityPeriodDialog({ period, onClose: closeNow }) {
+  const [closing, onClose] = useAnimatedClose(closeNow)
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = onClose }, [onClose])
   useEffect(() => {
@@ -1241,8 +1251,8 @@ function OwnerUtilityPeriodDialog({ period, onClose }) {
   const water = Number(period.water || 0)
   const electricity = Number(period.electricity || 0)
   return (
-    <div className="owner-modal-backdrop owner-ur-detail-overlay" onClick={onClose}>
-      <section className="owner-modal owner-ur-detail" role="dialog" aria-modal="true" aria-labelledby="owner-ur-detail-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`owner-modal-backdrop owner-ur-detail-overlay${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <section className={`owner-modal owner-ur-detail${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-ur-detail-title" onClick={(event) => event.stopPropagation()}>
         <header className="owner-modal-header">
           <div><h3 id="owner-ur-detail-title">รายละเอียดรายรับ · {period.label}</h3><p className="owner-modal-subtext">สรุปยอดที่รับชำระแล้วในช่วงเวลานี้</p></div>
           <button type="button" className="owner-modal-close" aria-label="ปิดรายละเอียด" autoFocus onClick={onClose}>×</button>
@@ -1418,6 +1428,30 @@ function OwnerSlipDownloadButton({ url, fileName }) {
 }
 
 const STAT_ICON_PATHS = {
+  camera: (
+    <>
+      <path d="M15 10l4.5-2.5v9L15 14" />
+      <rect x="3" y="7" width="12" height="10" rx="2" />
+    </>
+  ),
+  cameraOff: (
+    <>
+      <path d="M3 3l18 18" />
+      <path d="M15 10l4.5-2.5v9L16 14.5M10 7h3a2 2 0 0 1 2 2v3M7 7H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1" />
+    </>
+  ),
+  rec: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3.5" fill="currentColor" />
+    </>
+  ),
+  motion: (
+    <>
+      <circle cx="13" cy="4.5" r="1.5" />
+      <path d="M7 21l3-6 3 2v4M10 15l1-5 4 3 3 1M8 10l3-1" />
+    </>
+  ),
   rooms: (
     <>
       <rect x="3" y="9" width="18" height="12" rx="2" />
@@ -2180,7 +2214,7 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-const MODAL_CLOSE_ANIMATION_MS = 60
+const MODAL_CLOSE_ANIMATION_MS = 180
 
 function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
   const prevValue = useRef(value)
@@ -2204,6 +2238,19 @@ function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
   const display = value || closingValue
   const isClosing = !value && Boolean(closingValue)
   return [display, isClosing]
+}
+
+function useAnimatedClose(close, duration = MODAL_CLOSE_ANIMATION_MS) {
+  const [closing, setClosing] = useState(false)
+  const closeRef = useRef(close)
+  useEffect(() => { closeRef.current = close }, [close])
+  useEffect(() => {
+    if (!closing) return undefined
+    const timeoutId = setTimeout(() => closeRef.current(), duration)
+    return () => clearTimeout(timeoutId)
+  }, [closing, duration])
+  const requestClose = useCallback(() => setClosing(true), [])
+  return [closing, requestClose]
 }
 
 const DATE_DEPENDENT_GROUPS = ['overview', 'roomsOverview', 'roomsOccupancy', 'roomsLogs', 'finance']
@@ -2267,6 +2314,8 @@ function OwnerMain() {
   const [viewingPaymentSlip, setViewingPaymentSlip] = useState(null)
   const [paymentSlipZoomOpen, setPaymentSlipZoomOpen] = useState(false)
   const [pendingSlipReviews, setPendingSlipReviews] = useState([])
+  const [latestExpenses, setLatestExpenses] = useState([])
+  const [expenseSeenId, setExpenseSeenId] = useState(() => readExpenseSeen('owner'))
   const [reviewingSlipId, setReviewingSlipId] = useState(null)
   const [occupancyLogs, setOccupancyLogs] = useState({ logs: [], total: 0, page: 1, pageSize: 10 })
   const [occupancyFilter, setOccupancyFilter] = useState({ search: '', type: 'all' })
@@ -2374,6 +2423,8 @@ function OwnerMain() {
   const [displayViewingStaff, isViewingStaffClosing] = useClosingValue(viewingStaff)
   const [displayExpenseEditModal, isExpenseEditClosing] = useClosingValue(expenseEditModal)
   const [displayExpenseDeleteConfirm, isExpenseDeleteClosing] = useClosingValue(expenseDeleteConfirm)
+  const [displayOccupancyPeriodDetail, isOccupancyPeriodClosing] = useClosingValue(occupancyPeriodDetail)
+  const [displayNotice, isNoticeClosing] = useClosingValue(notice.message ? notice : null)
 
   const totalIncome = Number(overview?.finance?.totalIncome ?? incomeSummary?.totalIncome ?? 0)
   const totalExpense = Number(overview?.finance?.totalExpense ?? 0)
@@ -2877,6 +2928,45 @@ function OwnerMain() {
     setPendingSlipReviews(data.payments || [])
   }
 
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => {
+      axios.get('/api/owner/expenses', { headers: getAuthHeaders(), params: { page: 1 } })
+        .then(({ data }) => {
+          if (cancelled) return
+          const list = data.expenses || []
+          setLatestExpenses(list)
+          if (readExpenseSeen('owner') === null) {
+            const maxId = maxExpenseId(list)
+            writeExpenseSeen('owner', maxId)
+            setExpenseSeenId(maxId)
+          }
+        })
+        .catch(() => {})
+      axios.get('/api/staff/payment-verifications', { headers: getAuthHeaders() })
+        .then(({ data }) => { if (!cancelled) setPendingSlipReviews(data.payments || []) })
+        .catch(() => {})
+    }
+    refresh()
+    const timer = setInterval(refresh, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+
+  const viewingExpenses = activeTab === 'finance' && financeSection === 'expenses'
+  const knownExpenses = [...new Map([...latestExpenses, ...(expenses.expenses || [])].map((expense) => [expense.id, expense])).values()]
+  const newExpenseCount = viewingExpenses ? 0 : countNewExpenses(knownExpenses, expenseSeenId)
+  const financeBadgeCount = pendingSlipReviews.length + newExpenseCount
+
+  const markExpensesSeen = () => {
+    const maxId = maxExpenseId(knownExpenses)
+    if (expenseSeenId !== null && maxId <= expenseSeenId) return
+    writeExpenseSeen('owner', maxId)
+    setExpenseSeenId(maxId)
+  }
+
   const reviewOwnerPaymentSlip = async (payment, decision) => {
     const paymentId = payment.payment_id ?? payment.id
     const action = decision === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ'
@@ -3242,6 +3332,7 @@ function OwnerMain() {
     localStorage.setItem(getOwnerNotificationStorageKey(), JSON.stringify(keys))
   }
   const ownerSummaryTiles = {
+    cameras: cameraSummaryTiles(),
     utilities: [
       { key: 'water', tone: 'blue', icon: 'water', label: 'รายรับค่าน้ำ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.water)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
       { key: 'electricity', tone: 'orange', icon: 'electricity', label: 'รายรับค่าไฟ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.electricity)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
@@ -3523,19 +3614,19 @@ function OwnerMain() {
           </div>
         </header>
 
-        {notice.message && (
-          <div className="owner-modal-backdrop owner-confirm-backdrop owner-notice-backdrop" role="presentation" onClick={closeNotice} onKeyDown={(event) => { if (event.key === 'Escape') closeNotice() }}>
-            <section className={`owner-modal owner-confirm-modal is-${notice.type === 'danger' ? 'danger' : 'success'}`} role="alertdialog" aria-modal="true" aria-labelledby="owner-notice-title" aria-describedby="owner-notice-message" onClick={(event) => event.stopPropagation()}>
+        {displayNotice && (
+          <div className={`owner-modal-backdrop owner-confirm-backdrop owner-notice-backdrop${isNoticeClosing ? ' is-closing' : ''}`} role="presentation" onClick={closeNotice} onKeyDown={(event) => { if (event.key === 'Escape') closeNotice() }}>
+            <section className={`owner-modal owner-confirm-modal is-${displayNotice.type === 'danger' ? 'danger' : 'success'}${isNoticeClosing ? ' is-closing' : ''}`} role="alertdialog" aria-modal="true" aria-labelledby="owner-notice-title" aria-describedby="owner-notice-message" onClick={(event) => event.stopPropagation()}>
               <div className="owner-confirm-body">
                 <span className="owner-confirm-icon" aria-hidden="true">
-                  {notice.type === 'danger' ? (
+                  {displayNotice.type === 'danger' ? (
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
                   ) : (
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 10" /></svg>
                   )}
                 </span>
-                <h3 id="owner-notice-title">{notice.type === 'danger' ? 'ดำเนินการไม่สำเร็จ' : 'ดำเนินการสำเร็จ'}</h3>
-                <p id="owner-notice-message">{notice.message}</p>
+                <h3 id="owner-notice-title">{displayNotice.type === 'danger' ? 'ดำเนินการไม่สำเร็จ' : 'ดำเนินการสำเร็จ'}</h3>
+                <p id="owner-notice-message">{displayNotice.message}</p>
               </div>
               <div className="owner-confirm-actions owner-notice-actions">
                 <button type="button" className="owner-confirm-ok" onClick={closeNotice} autoFocus>ตกลง</button>
@@ -3555,11 +3646,17 @@ function OwnerMain() {
         <RoleTabMenu
           tabs={OWNER_TABS}
           activeKey={activeTab}
-          onSelect={setActiveTab}
+          onSelect={(key) => {
+            if (viewingExpenses) markExpensesSeen()
+            setActiveTab(key)
+          }}
           listClassName="owner-tabs"
           linkClassName="owner-tab-link"
           logoutClassName="owner-logout-btn"
           onLogout={handleLogout}
+          renderBadge={(key) => key === 'finance' && financeBadgeCount > 0 && (
+            <span className="owner-subtab-count" aria-label={`${financeBadgeCount} รายการรอตรวจ`}>{financeBadgeCount}</span>
+          )}
         />
 
         {(activeTab === 'rooms' || activeTab === 'finance' || activeTab === 'utilities') && (
@@ -3584,7 +3681,7 @@ function OwnerMain() {
               <ul className="nav staff-subtabs owner-subtabs" aria-label="หมวดหมู่รายละเอียดการเงิน">
                 {OWNER_FINANCE_SECTIONS.map((section) => (
                   <li className="nav-item" key={section.key}>
-                    <button type="button" className={`nav-link staff-subtab-link${financeSection === section.key ? ' active' : ''}`} aria-pressed={financeSection === section.key} onClick={() => setFinanceSection(section.key)}>{section.label}{section.key === 'slips' && pendingSlipReviews.length > 0 && <span className="owner-subtab-count">{pendingSlipReviews.length}</span>}</button>
+                    <button type="button" className={`nav-link staff-subtab-link${financeSection === section.key ? ' active' : ''}`} aria-pressed={financeSection === section.key} onClick={() => { if (section.key === 'expenses' || viewingExpenses) markExpensesSeen(); setFinanceSection(section.key) }}>{section.label}{section.key === 'slips' && pendingSlipReviews.length > 0 && <span className="owner-subtab-count">{pendingSlipReviews.length}</span>}{section.key === 'expenses' && newExpenseCount > 0 && <span className="owner-subtab-count" aria-label={`${newExpenseCount} รายจ่ายใหม่`}>{newExpenseCount}</span>}</button>
                   </li>
                 ))}
               </ul>
@@ -4687,9 +4784,9 @@ function OwnerMain() {
         {occupancyLogId !== null && <OwnerOccupancyLogDialog key={occupancyLogId} eventId={occupancyLogId} onClose={() => setOccupancyLogId(null)} />}
         {financePeriodDetail && <OwnerFinancePeriodDialog key={financePeriodDetail.period} period={financePeriodDetail} range={paymentFilter} onClose={() => setFinancePeriodDetail(null)} />}
 
-        {occupancyPeriodDetail && (() => {
-          const detailItem = occupancyPeriodDetail.item
-          const detailLogs = occupancyPeriodDetail.logs || []
+        {displayOccupancyPeriodDetail && (() => {
+          const detailItem = displayOccupancyPeriodDetail.item
+          const detailLogs = displayOccupancyPeriodDetail.logs || []
           const periodKeyword = periodDetailSearch.trim().toLowerCase()
           const searchedLogs = detailLogs.filter((log) => !periodKeyword || [log.room_number, `${log.first_name || ''} ${log.last_name || ''}`, log.phone, log.note, log.event_date, log.event_type === 'move_in' ? 'ย้ายเข้า' : 'ย้ายออก'].filter(Boolean).join(' ').toLowerCase().includes(periodKeyword))
           const visibleLogs = periodDetailFilter === 'all' ? searchedLogs : searchedLogs.filter((log) => log.event_type === periodDetailFilter)
@@ -4705,8 +4802,8 @@ function OwnerMain() {
             { key: 'move_out', label: 'ย้ายออก', count: searchedLogs.filter((log) => log.event_type === 'move_out').length },
           ]
           return (
-            <div className="owner-modal-backdrop" role="presentation" onClick={() => setOccupancyPeriodDetail(null)}>
-              <section className="owner-modal owner-pdx-modal" role="dialog" aria-modal="true" aria-labelledby="owner-occupancy-period-title" onClick={(event) => event.stopPropagation()}>
+            <div className={`owner-modal-backdrop${isOccupancyPeriodClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setOccupancyPeriodDetail(null)}>
+              <section className={`owner-modal owner-pdx-modal${isOccupancyPeriodClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="owner-occupancy-period-title" onClick={(event) => event.stopPropagation()}>
                 <div className="owner-modal-header">
                   <span className="owner-modal-header-icon" aria-hidden="true">
                     <OwnerListIcon name="calendar" size={18} />
@@ -4754,12 +4851,12 @@ function OwnerMain() {
                       </button>
                     ))}
                   </div>
-                  <label className="owner-pdx-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={periodDetailSearch} onChange={(event) => setPeriodDetailSearch(event.target.value)} aria-label="ค้นหารายละเอียดผู้เข้าพัก" placeholder="ค้นหาชื่อ ห้อง เบอร์โทร หรือหมายเหตุ" disabled={occupancyPeriodDetail.loading} /></label>
+                  <label className="owner-pdx-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" value={periodDetailSearch} onChange={(event) => setPeriodDetailSearch(event.target.value)} aria-label="ค้นหารายละเอียดผู้เข้าพัก" placeholder="ค้นหาชื่อ ห้อง เบอร์โทร หรือหมายเหตุ" disabled={displayOccupancyPeriodDetail.loading} /></label>
                   </div>
                 </div>
 
                 <div className="owner-modal-body owner-pdx-body">
-                  {occupancyPeriodDetail.loading ? (
+                  {displayOccupancyPeriodDetail.loading ? (
                     <div className="owner-ov-list-empty owner-pdx-state">กำลังโหลดรายละเอียด...</div>
                   ) : visibleLogs.length ? (
                     <div className="owner-pdx-list">
