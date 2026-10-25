@@ -76,11 +76,13 @@ after(async () => {
 const setConfig = (fields) => getPool().query("UPDATE DormConfig SET ? WHERE id = 1", [fields]);
 const paymentRows = async () => (await getPool().query("SELECT status, slip_path FROM Payment WHERE booking_id = ?", [fx.bookingId]))[0];
 
-test("payment channels count as configured only with a PromptPay id or bank account", () => {
+test("payment channels count as configured with a PromptPay id, a bank account, or test mode", () => {
   assert.equal(paymentChannelsConfigured({}), false);
   assert.equal(paymentChannelsConfigured({ promptpay_id: "  ", bank_name: "กสิกร" }), false);
+  assert.equal(paymentChannelsConfigured({ payment_test_mode: 0 }), false);
   assert.equal(paymentChannelsConfigured({ promptpay_id: "0812345678" }), true);
   assert.equal(paymentChannelsConfigured({ bank_account_no: "123-4-56789-0" }), true);
+  assert.equal(paymentChannelsConfigured({ payment_test_mode: 1 }), true);
 });
 
 test("the tenant is told the dorm has no transfer channel yet", async () => {
@@ -97,15 +99,18 @@ test("a slip is refused when no transfer channel is configured", async () => {
   assert.equal((await paymentRows()).length, 0);
 });
 
-test("test mode also refuses slips until a real transfer channel is configured", async () => {
+test("test mode uses the demo channels without a real transfer channel", async () => {
   await setConfig({ payment_test_mode: true });
   const channels = (await (await fetch(`${API}/api/customer/payment-channels`, { headers: headers() })).json()).channels;
   assert.equal(channels.test_mode, true);
-  assert.equal(channels.configured, false);
+  assert.equal(channels.configured, true);
+  assert.equal(channels.promptpay_id, "0000000000");
   const { status, body } = await sendSlip();
-  assert.equal(status, 400);
-  assert.equal(body.message, PAYMENT_CHANNELS_MISSING_MESSAGE);
-  assert.equal((await paymentRows()).length, 0);
+  assert.ok(status < 300, body.message);
+  assert.notEqual(body.message, PAYMENT_CHANNELS_MISSING_MESSAGE);
+  await getPool().query("DELETE FROM PaymentSlipRejection WHERE customer_id = ?", [fx.customerId]);
+  await getPool().query("DELETE FROM PaymentSlip WHERE customer_id = ?", [fx.customerId]);
+  await getPool().query("DELETE FROM Payment WHERE booking_id = ?", [fx.bookingId]);
 });
 
 test("manual review mode also refuses slips without a transfer channel", async () => {

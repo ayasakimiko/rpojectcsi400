@@ -14,7 +14,7 @@ export const DEMO_PAYMENT_CHANNELS = {
 export const TEST_PAYMENT_MARK = "โหมดทดลอง";
 
 export function paymentChannelsConfigured(config) {
-  return Boolean(String(config?.promptpay_id ?? "").trim() || String(config?.bank_account_no ?? "").trim());
+  return Boolean(config?.payment_test_mode) || Boolean(String(config?.promptpay_id ?? "").trim() || String(config?.bank_account_no ?? "").trim());
 }
 
 export const PAYMENT_CHANNELS_MISSING_MESSAGE = "หอพักยังไม่ได้ตั้งค่าช่องทางรับโอน จึงยังส่งสลิปไม่ได้ กรุณาติดต่อเจ้าหน้าที่";
