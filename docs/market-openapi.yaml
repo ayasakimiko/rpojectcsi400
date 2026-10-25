@@ -1,0 +1,226 @@
+openapi: 3.0.3
+info:
+  title: Market API
+  version: "1.3"
+  description: |
+    อ่านและแก้ข้อมูลร้านและสินค้าในล็อกเช่าใต้ตึกของหอพัก เฉพาะล็อกที่หอพักเปิดสิทธิ์ให้ key ของคุณ
+    ทุก request ต้องส่ง header X-Market-Api-Key ห้ามส่ง Authorization, cookie หรือ token อื่น
+servers:
+  - url: https://backend.ayasakimioweb.com/api/market/v1
+    description: Production
+  - url: http://localhost:4000/api/market/v1
+    description: Local (docker compose)
+security:
+  - MarketApiKey: []
+paths:
+  /me:
+    get:
+      summary: ข้อมูล key ที่ใช้อยู่ (ใช้ทดสอบการเชื่อมต่อ)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Error" }
+  /stalls:
+    get:
+      summary: รายการร้านที่ key เข้าถึงได้
+      description: ต้องมี scope stalls:read
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stalls: { type: array, items: { $ref: "#/components/schemas/Stall" } }
+                  page: { type: integer }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /stalls/{id}:
+    patch:
+      summary: แก้ชื่อร้าน
+      description: ต้องมี scope stalls:write และล็อกต้องมีสัญญาเช่ามีผลอยู่ ส่งได้แค่ shop_name
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shop_name]
+              properties:
+                shop_name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: ข้อมูลร้านหลังแก้
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stall" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /stalls/{id}/products:
+    get:
+      summary: สินค้าทั้งหมดของร้าน
+      description: ต้องมี scope products:read
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stall: { $ref: "#/components/schemas/Stall" }
+                  products: { type: array, items: { $ref: "#/components/schemas/Product" } }
+        "404": { $ref: "#/components/responses/Error" }
+  /products/{id}:
+    get:
+      summary: สินค้าชิ้นเดียว
+      description: ต้องมี scope products:read ตอบ header ETag เป็นเลข version
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag: { schema: { type: string }, description: 'version ปัจจุบัน เช่น "3"' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      summary: แก้ชื่อ ราคา หรือจำนวนสินค้า
+      description: |
+        ต้องมี scope products:write ส่งอย่างน้อยหนึ่งฟิลด์ quantity เป็นค่าตั้งทับ (ไม่ใช่บวกเพิ่ม)
+        ส่ง If-Match เป็น version ที่อ่านมาได้ ถ้ามีคนแก้ก่อนจะได้ 409 CONFLICT
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - in: header
+          name: If-Match
+          required: false
+          schema: { type: string, example: '"3"' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                price: { type: number, minimum: 0, multipleOf: 0.01 }
+                quantity: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: สินค้าหลังแก้ ใช้เป็นค่าจริงเสมอ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /products/{id}/adjust:
+    post:
+      summary: ปรับจำนวนแบบบวก/ลบ (เช่น -1 ตอนขาย)
+      description: ต้องมี scope products:write ทำในคำสั่งเดียว กันขายพร้อมกันจากหลายเครื่อง
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [delta]
+              properties:
+                delta: { type: integer, not: { enum: [0] }, minimum: -100000, maximum: 100000 }
+      responses:
+        "200":
+          description: สินค้าหลังปรับ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    MarketApiKey:
+      type: apiKey
+      in: header
+      name: X-Market-Api-Key
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    Error:
+      description: "ข้อผิดพลาดรูปแบบเดียวกันทุกตัว"
+      headers:
+        X-Request-Id: { schema: { type: string }, description: ส่งค่านี้ให้หอพักเวลาแจ้งปัญหา }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: เรียกเกินจำนวนต่อนาที
+      headers:
+        Retry-After: { schema: { type: integer }, description: วินาทีที่ต้องรอ }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Me:
+      type: object
+      properties:
+        name: { type: string }
+        project_name: { type: string }
+        mode: { type: string, enum: [live, test] }
+        scopes: { type: array, items: { type: string, enum: ["stalls:read", "stalls:write", "products:read", "products:write"] } }
+        rate_limit_per_min: { type: integer }
+        expires_at: { type: string, format: date-time, nullable: true }
+        stall_count: { type: integer }
+    Stall:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, example: R-01 }
+        zone: { type: string, nullable: true }
+        shop_name: { type: string, nullable: true }
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        stall_id: { type: integer }
+        name: { type: string }
+        unit: { type: string, description: แก้ไม่ได้ }
+        price: { type: number }
+        quantity: { type: integer }
+        quantity_limit: { type: integer, description: แก้ไม่ได้ หอพักเป็นผู้กำหนด }
+        version: { type: integer }
+        updated_at: { type: string, format: date-time, nullable: true }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [VALIDATION_ERROR, FIELD_NOT_ALLOWED, QUANTITY_OUT_OF_RANGE, INVALID_API_KEY, SCOPE_REQUIRED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, SERVER_ERROR]
+        message: { type: string }

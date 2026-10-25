@@ -1,7 +1,7 @@
 import http from "node:http";
 import "dotenv/config";
 import { createCorsMiddleware } from "./middleware/cors.js";
-import { serviceForPath } from "./src/config/serviceRoutes.js";
+import { MARKET_API_KEY_HEADER, isMarketPublicPath, serviceForPath } from "./src/config/serviceRoutes.js";
 
 const PORT = process.env.PORT || 4000;
 
@@ -17,6 +17,7 @@ const SERVICE_TARGETS = Object.fromEntries(Object.entries({
   parcels: [process.env.PARCEL_SERVICE_URL, 4007],
   maintenance: [process.env.MAINTENANCE_SERVICE_URL, 4008],
   payment: [process.env.PAYMENT_SERVICE_URL, 4009],
+  market: [process.env.MARKET_SERVICE_URL, 4010],
 }).map(([service, [url, port]]) => [service, new URL(url || `http://localhost:${port}`)]));
 
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-connection", "proxy-authenticate", "proxy-authorization", "te", "trailer", "upgrade"]);
@@ -73,6 +74,12 @@ function proxy(req, res, target) {
 }
 
 const server = http.createServer((req, res) => {
+  const marketPublic = isMarketPublicPath(req.url);
+  if (req.headers[MARKET_API_KEY_HEADER] !== undefined && !marketPublic) {
+    return sendJson(res, 403, { code: "FORBIDDEN", message: "API key ใช้ได้เฉพาะ /api/market/v1" });
+  }
+  if (marketPublic) return proxy(req, res, SERVICE_TARGETS.market);
+
   cors(req, res, (corsError) => {
     if (corsError) return sendJson(res, 500, { message: corsError.message });
 

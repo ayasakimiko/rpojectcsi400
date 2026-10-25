@@ -1,10 +1,15 @@
-export const SERVICE_PORTS = { auth: 4001, rooms: 4002, customer: 4003, staff: 4004, admin: 4005, owner: 4006, parcels: 4007, maintenance: 4008, payment: 4009 }
-export const SERVICE_HEALTH_NAMES = { auth: 'auth', rooms: 'room', customer: 'customer', staff: 'staff', admin: 'admin', owner: 'owner', parcels: 'parcel', maintenance: 'maintenance', payment: 'payment' }
+export const SERVICE_PORTS = { auth: 4001, rooms: 4002, customer: 4003, staff: 4004, admin: 4005, owner: 4006, parcels: 4007, maintenance: 4008, payment: 4009, market: 4010 }
+export const SERVICE_HEALTH_NAMES = { auth: 'auth', rooms: 'room', customer: 'customer', staff: 'staff', admin: 'admin', owner: 'owner', parcels: 'parcel', maintenance: 'maintenance', payment: 'payment', market: 'market' }
 
-// Keep this order in sync with the gateway: parcel paths and files are more
-// specific than the role prefixes.
+export const MARKET_PUBLIC_PREFIX = '/api/market/v1'
+export const MARKET_API_KEY_HEADER = 'x-market-api-key'
+
+// Keep this order in sync with the gateway: parcel and market paths and files
+// are more specific than the role prefixes.
 const ROUTES = [
   ['/api/files', 'customer'],
+  [MARKET_PUBLIC_PREFIX, 'market'],
+  ['/api/admin/market', 'market'],
   ['/api/admin/parcels', 'parcels'],
   ['/api/staff/parcels', 'parcels'],
   ['/api/customer/parcels', 'parcels'],
@@ -26,8 +31,17 @@ const ROUTES = [
   ['/api/owner', 'owner'],
 ]
 
+function pathnameOf(url = '') {
+  return url.split(/[?#]/, 1)[0].toLowerCase()
+}
+
+export function isMarketPublicPath(url = '') {
+  const pathname = pathnameOf(url)
+  return pathname === MARKET_PUBLIC_PREFIX || pathname.startsWith(`${MARKET_PUBLIC_PREFIX}/`)
+}
+
 export function serviceForPath(url = '') {
-  const pathname = url.split(/[?#]/, 1)[0].toLowerCase()
+  const pathname = pathnameOf(url)
   if (/^\/api\/staff\/rooms\/[^/]+\/(collect-payment|utility-bill)(\/|$)/.test(pathname)) return 'payment'
   if (/^\/api\/admin\/rooms\/[^/]+\/maintenance(\/|$)/.test(pathname)) return 'maintenance'
   return ROUTES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || null

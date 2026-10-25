@@ -6,6 +6,7 @@ import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import loginRouter from "../router/LoginRouter.js";
 import registerRouter from "../router/Register.js";
 import forgotPasswordRouter from "../router/ForgotPasswordRouter.js";
+import accountRouter from "../router/AccountRouter.js";
 
 configureDatabaseService("auth");
 
@@ -23,6 +24,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", loginRouter);
 app.use("/api/auth", registerRouter);
 app.use("/api/auth", forgotPasswordRouter);
+app.use("/api/auth", accountRouter);
 
 const server = app.listen(PORT, () => {
   console.log(`Auth service is running on http://localhost:${PORT}`);

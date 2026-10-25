@@ -4,6 +4,7 @@ export const CAMERAS = [
   { id: 'CAM-03', name: 'ลานจอดรถ', location: 'พื้นที่ด้านหน้า', scene: 'parking', online: true, recording: true, motion: true },
   { id: 'CAM-04', name: 'ทางเดินชั้น 2', location: 'อาคาร A', scene: 'corridor', online: true, recording: true, motion: false },
   { id: 'CAM-05', name: 'ทางเดินชั้น 3', location: 'อาคาร A', scene: 'corridor', online: false, recording: false, motion: false },
+  { id: 'CAM-06', name: 'ร้านเช่าใต้ตึก', location: 'ทางเท้าหน้าร้าน ชั้นล่าง', scene: 'lobby', online: true, recording: true, motion: true },
 ]
 
 export function cameraSummaryTiles(cameras = CAMERAS) {

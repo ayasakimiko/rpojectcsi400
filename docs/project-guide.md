@@ -28,6 +28,17 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 - รูปที่ผูกกับผู้เช่า (`payment-slips`, `parcels`, `contracts`, `vehicles`, `maintenance`, `incidents`, `move-in-inspections`, `move-out-inspections`) เก็บแยกโฟลเดอร์ย่อย `customer-<id>` ส่วนรูปที่ไม่มีผู้เช่า เช่น ผู้มาติดต่อ เก็บใน `guest` ฝั่ง multer ถ้ายังไม่รู้ผู้เช่าตอนอัปโหลดจะย้ายไฟล์ด้วย `moveUploadedFiles` หลังหาผู้เช่าได้ และ `npm run db:migrate` จะย้ายรูปเก่าที่ยังอยู่ชั้นนอกเข้าโฟลเดอร์ย่อยพร้อมแก้ path ในฐานข้อมูลและ AuditLog ให้อัตโนมัติ
 - auth-service ใน Docker เมานต์ `./public/uploads` เพิ่มเพื่อบันทึกรูปสัญญา หลังอัปเดตให้รัน `npm run db:migrate` (หรือ `docker compose up -d --build`)
 
+## ร้านเช่าใต้ตึก (market-service)
+
+- Admin และ Owner ใช้แท็บ **พื้นที่ขายของ** จัดการผังล็อกใต้ห้องพัก สินค้า ผู้ค้า การจอง สัญญาเช่าร้าน บิลรายเดือน API key domain log และการตั้งค่า แจ้งเตือนของระบบนี้รวมอยู่ในกระดิ่งของทั้งสองหน้า
+- ข้อมูลอยู่ในฐานข้อมูลแยก `projectcsi400_market` ไม่มี view หรือ foreign key ข้ามไปฐานข้อมูลอื่น (`ISOLATED_SERVICES` ใน `Database/connection.js`) และ market-service ต่อฐานข้อมูลด้วย user ของตัวเองที่มีสิทธิ์แค่ SELECT/INSERT/UPDATE/DELETE บนฐานนี้ ตั้งค่าใน `.env` ด้วย `MARKET_DB_USER` และ `MARKET_DB_PASSWORD` (ไม่มีค่า default ถ้าไม่ตั้ง service จะไม่ start) แล้วรัน `npm run db:migrate` เพื่อสร้าง user และสิทธิ์
+- สัญญาเช่าร้านเป็นสัญญาอีกประเภท แยกจากสัญญาห้องพัก: ตาราง `MarketLeaseContract` แบ่งเป็นสัญญาเช่าร้านอาหาร / ร้านค้า ตามประเภทสินค้าที่ต้องใช้น้ำ อนุมัติการจองแล้วระบบออกสัญญา (`ML-ปี-เลขที่`) ต้องแนบรูปสัญญาที่เซ็นแล้วตามจำนวนใน `MarketConfig.contract_min_images` ก่อนสัญญามีผล รูปเก็บใน `uploads/contracts/market-leases` และเปิดได้ผ่าน API ที่ต้องล็อกอินเท่านั้น
+- market-service ตรวจบัญชี Admin/Owner ผ่าน auth-service (`GET /api/auth/account`, ตั้งที่ `MARKET_ACCOUNT_CHECK_URL`) เพราะอ่านตาราง Staff/Admin เองไม่ได้
+- ค่าที่ Owner ปรับได้ (เวลาเปิดปิด ค่าไฟ ค่าน้ำ เงินประกัน สัญญาขั้นต่ำ rate limit อายุ key ฯลฯ) อยู่ในตาราง `MarketConfig` และหน้า **ตั้งค่า** ของแท็บ ขอบเขตของแต่ละค่ากำหนดที่เดียวใน `src/utils/marketConfigFields.js`
+- ผังเริ่มต้น 5 ล็อก (R-01, R-02 ร้านอาหาร · S-01 ถึง S-03 ร้านค้า) ล็อบบี้ และล็อกทดลอง T-01, T-02 seed ครั้งเดียวตอน migrate ครั้งแรก ล็อกเริ่มเป็นสถานะปิด ราคา 0 ต้องตั้งราคาแล้วเปิดเอง
+- API ภายนอกสำหรับเพื่อนต่างโปรเจกต์อยู่ที่ `/api/market/v1` ใช้ header `X-Market-Api-Key` เท่านั้น gateway ปฏิเสธ key นี้ทุก path อื่น และไม่ใช้ CORS ของเว็บหลักกับ path นี้ (domain ที่อนุญาตเก็บใน `MarketAllowedOrigin`) คู่มืออยู่ที่ `docs/market-api.md` และ `docs/market-openapi.yaml`
+- ทดสอบ: `DB_HOST=127.0.0.1 DB_PORT=3307 node --test tests/market.db.test.js tests/marketApiContract.test.js` (ต้องรัน docker compose อยู่ และมีบัญชี Admin อย่างน้อย 1 บัญชี)
+
 ## Tech Stack
 
 - **Frontend:** React 19, Vite, React Router, Bootstrap, Axios
@@ -50,6 +61,7 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 | `/api/admin/parcels`, `/api/staff/parcels`, `/api/customer/parcels` | `services/parcelService.js` | 4007 |
 | `/api/customer/maintenance`, `/api/staff/maintenance`, `/api/admin/rooms/:room/maintenance`, `/api/admin/logs/maintenance` | `services/maintenanceService.js` | 4008 |
 | `/api/customer/payments`, `/api/customer/payment-channels`, `/api/staff/payment-*`, `/api/staff/rooms/:room/collect-payment`, `/api/staff/rooms/:room/utility-bill`, `/api/owner/income`, `/api/owner/utility-receipts`, `/api/owner/logs/payments` | `services/paymentService.js` | 4009 |
+| `/api/admin/market`, `/api/market/v1` | `services/marketService.js` | 4010 |
 
 path ของพัสดุถูกจับก่อน prefix `/api/admin`, `/api/staff`, `/api/customer` ใน gateway จึงไปที่ parcel service แทน
 
@@ -63,7 +75,7 @@ Frontend ใช้ API Gateway เป็นปลายทางหลัก ห
 docker compose up -d --build
 ```
 
-รวม 12 container สำหรับบริการที่ทำงานต่อเนื่อง (และ `migrate` ที่ทำงานครั้งเดียว):
+รวม 13 container สำหรับบริการที่ทำงานต่อเนื่อง (และ `migrate` ที่ทำงานครั้งเดียว):
 | Service | Container | Port |
 |---|---|---|
 | MySQL | `projectcsi400-mysql` | 3308 |
@@ -78,6 +90,7 @@ docker compose up -d --build
 | Parcel service | `projectcsi400-parcel` | 4007 |
 | Maintenance service | `projectcsi400-maintenance` | 4008 |
 | Payment service | `projectcsi400-payment` | 4009 |
+| Market service | `projectcsi400-market` | 4010 |
 
 Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
 

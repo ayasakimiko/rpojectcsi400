@@ -33,6 +33,8 @@ import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../ut
 import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import MarketManager from '../components/MarketManager.jsx'
+import { MARKET_TAB, toBellNotification, useMarketNotifications } from '../utils/marketNotifications.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
@@ -1002,6 +1004,14 @@ function NotifKindIcon({ kind }) {
       </svg>
     )
   }
+  if (kind === 'market') {
+    return (
+      <svg {...props}>
+        <path d="M3 9 5 4h14l2 5" />
+        <path d="M4 9v11h16V9M9 20v-6h6v6" />
+      </svg>
+    )
+  }
   if (kind === 'inspection') {
     return (
       <svg {...props}>
@@ -1261,6 +1271,7 @@ const TABS = [
   { key: 'move-in-inspections', label: 'ตรวจก่อนเข้าอยู่' },
   { key: 'move-out-inspections', label: 'ผลตรวจห้อง' },
   { key: 'parcels', label: 'พัสดุ' },
+  MARKET_TAB,
   { key: 'expenses', label: 'รายจ่าย' },
   { key: 'announcements', label: 'ประกาศ' },
   { key: 'vehicle-requests', label: 'คำขอรถ' },
@@ -1273,6 +1284,7 @@ const TAB_GROUPS = [
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
   { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
+  { key: MARKET_TAB.key, label: MARKET_TAB.label, tabs: [MARKET_TAB.key] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'cameras', label: 'กล้องวงจรปิด', tabs: ['cameras'] },
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
@@ -5775,6 +5787,8 @@ function AdminBackupPage() {
   const [contractSummary, setContractSummary] = useState(null)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [tabFocus, setTabFocus] = useState(null)
+  const [marketFocus, setMarketFocus] = useState(null)
+  const marketNotifications = useMarketNotifications()
   const requestRowFocus = useFocusScroll()
   useEffect(() => {
     if (tabFocus && activeTab !== tabFocus.tab) setTabFocus(null)
@@ -7487,8 +7501,9 @@ function AdminBackupPage() {
       ...moveOutInspections.flatMap(buildAdminInspectionNotifs),
       ...staffList.flatMap(buildAdminStaffNotifs),
       ...announcements.map(buildAnnouncementNotif),
+      ...marketNotifications.items.map(toBellNotification),
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements])
+  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, marketNotifications.items])
 
   const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
 
@@ -7563,6 +7578,11 @@ function AdminBackupPage() {
       return
     }
     setAnnouncementFocus(null)
+    if (notif.kind === 'market') {
+      setMarketFocus((current) => ({ section: notif.marketSection, nonce: (current?.nonce ?? 0) + 1 }))
+      setActiveTab(MARKET_TAB.key)
+      return
+    }
     if (notif.kind === 'safety' || notif.kind === 'visit') {
       const tab = notif.kind === 'safety' ? 'safety' : 'vehicle-requests'
       setTabFocus({ tab, id: notif.request.id, nonce: Date.now() })
@@ -7918,6 +7938,8 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
+
+        {activeTab === MARKET_TAB.key && <MarketManager focusSection={marketFocus} onNotificationsChange={marketNotifications.setItems} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

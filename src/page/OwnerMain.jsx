@@ -17,6 +17,8 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import MarketManager from '../components/MarketManager.jsx'
+import { MARKET_TAB, toBellNotification, useMarketNotifications } from '../utils/marketNotifications.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
@@ -1770,6 +1772,7 @@ const OWNER_TABS = [
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
+  MARKET_TAB,
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'cameras', label: 'กล้องวงจรปิด' },
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
@@ -2269,6 +2272,8 @@ function getNeededDataGroups(tab, roomsSection) {
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
+  const [marketFocus, setMarketFocus] = useState(null)
+  const marketNotifications = useMarketNotifications()
   const [financeSection, setFinanceSection] = useState('overview')
   const [paymentLogDetail, setPaymentLogDetail] = useState(null)
   const [slipSearch, setSlipSearch] = useState('')
@@ -3317,8 +3322,10 @@ function OwnerMain() {
     : pendingSlipReviews
   const paymentPage = Number(paymentLogs.page || 1)
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = announcements
-    .map(buildOwnerAnnouncementNotification)
+  const notifications = [
+    ...announcements.map(buildOwnerAnnouncementNotification),
+    ...marketNotifications.items.map(toBellNotification),
+  ]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
   const newNotifications = notifications.filter((item) => !seenNotificationKeys.includes(item.key))
   const notificationPageSize = 30
@@ -3456,6 +3463,12 @@ function OwnerMain() {
   const closeNotifPanel = () => setNotifClosing(true)
 
   const openNotification = (notification) => {
+    if (notification.kind === 'market') {
+      setMarketFocus((current) => ({ section: notification.marketSection, nonce: (current?.nonce ?? 0) + 1 }))
+      setActiveTab(MARKET_TAB.key)
+      closeNotifPanel()
+      return
+    }
     setActiveTab('announcements')
     setAnnouncementFocus((current) => ({ id: notification.announcementId, nonce: (current?.nonce || 0) + 1 }))
     closeNotifPanel()
@@ -3741,6 +3754,8 @@ function OwnerMain() {
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
+
+        {activeTab === MARKET_TAB.key && <MarketManager focusSection={marketFocus} onNotificationsChange={marketNotifications.setItems} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

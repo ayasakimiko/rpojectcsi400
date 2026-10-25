@@ -2,7 +2,15 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename } from "node:fs/promises";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { DB_CONFIG, SCHEMA_SERVICES, TABLE_OWNER, TABLES_BY_SERVICE, serviceDatabaseName } from "./connection.js";
+import {
+  DB_CONFIG,
+  ISOLATED_SERVICES,
+  SCHEMA_SERVICES,
+  TABLE_OWNER,
+  TABLES_BY_SERVICE,
+  serviceCredentials,
+  serviceDatabaseName,
+} from "./connection.js";
 import { PUBLIC_UPLOAD_DIR, customerUploadFolder, parseStoredPhotos, savePublicImages } from "../middleware/publicUploads.js";
 
 const PHOTO_BATCH_SIZE = 20;
@@ -41,9 +49,10 @@ async function createServiceDatabases(connection) {
 }
 
 async function createForeignViews(connection, service, availableServices = SCHEMA_SERVICES) {
+  if (ISOLATED_SERVICES.has(service)) return;
   const database = databaseFor(service);
   for (const sourceService of availableServices) {
-    if (sourceService === service) continue;
+    if (sourceService === service || ISOLATED_SERVICES.has(sourceService)) continue;
     for (const table of TABLES_BY_SERVICE[sourceService]) {
       await connection.query("CREATE OR REPLACE VIEW ??.?? AS SELECT * FROM ??.??", [
         database, table, databaseFor(sourceService), table,
@@ -238,6 +247,21 @@ async function moveCustomerUploadsToFolders(connection) {
   return moved.length;
 }
 
+async function grantIsolatedServiceUsers(connection) {
+  for (const service of ISOLATED_SERVICES) {
+    const credentials = serviceCredentials(service);
+    if (!credentials) {
+      console.warn(`No dedicated database user for ${service}; set ${service.toUpperCase()}_DB_USER and ${service.toUpperCase()}_DB_PASSWORD`);
+      continue;
+    }
+    if (!/^[A-Za-z0-9_]{1,32}$/.test(credentials.user)) throw new Error(`Invalid database user name for ${service}`);
+    await connection.query("CREATE USER IF NOT EXISTS ?@'%' IDENTIFIED BY ?", [credentials.user, credentials.password]);
+    await connection.query("ALTER USER ?@'%' IDENTIFIED BY ?", [credentials.user, credentials.password]);
+    await connection.query("REVOKE ALL PRIVILEGES, GRANT OPTION FROM ?@'%'", [credentials.user]);
+    await connection.query("GRANT SELECT, INSERT, UPDATE, DELETE ON ??.* TO ?@'%'", [databaseFor(service), credentials.user]);
+  }
+}
+
 async function migrate() {
   const { database, ...serverConfig } = DB_CONFIG;
   const connection = await mysql.createConnection({ ...serverConfig, multipleStatements: true });
@@ -252,6 +276,7 @@ async function migrate() {
     await applySchema(connection);
     const copied = await copyLegacyData(connection);
     if (copied) await applySchema(connection, true);
+    await grantIsolatedServiceUsers(connection);
     await connection.changeUser({ database: databaseFor("maintenance") });
     const moved = await moveMaintenancePhotosToFiles(connection);
     const relocated = await moveCustomerUploadsToFolders(connection);

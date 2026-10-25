@@ -14,6 +14,10 @@ x-service-env: &service-env
   UV_THREADPOOL_SIZE: 2
   TZ: Asia/Bangkok
 
+x-market-db-env: &market-db-env
+  MARKET_DB_USER: ${MARKET_DB_USER:-market}
+  MARKET_DB_PASSWORD: ${MARKET_DB_PASSWORD:-}
+
 x-upload-env: &upload-env
   <<: *service-env
   NODE_OPTIONS: --max-old-space-size=160 --max-semi-space-size=1
@@ -69,7 +73,7 @@ services:
     command: ["node", "Database/migrate.js"]
     restart: "no"
     environment:
-      <<: *service-env
+      <<: [*service-env, *market-db-env]
       NODE_OPTIONS: --max-old-space-size=192 --max-semi-space-size=1
     volumes:
       - ./public/uploads:/app/public/uploads
@@ -113,6 +117,7 @@ services:
       PARCEL_SERVICE_URL: http://parcel-service:4007
       MAINTENANCE_SERVICE_URL: http://maintenance-service:4008
       PAYMENT_SERVICE_URL: http://payment-service:4009
+      MARKET_SERVICE_URL: http://market-service:4010
       NODE_OPTIONS: --max-old-space-size=48 --max-semi-space-size=1
       UV_THREADPOOL_SIZE: 1
       TZ: Asia/Bangkok
@@ -128,6 +133,7 @@ services:
       - parcel-service
       - maintenance-service
       - payment-service
+      - market-service
 
   auth-service: &service-defaults
     build:
@@ -240,6 +246,25 @@ services:
       - "${PAYMENT_PORT:-4009}:4009"
     volumes:
       - ./public/uploads:/app/public/uploads
+
+  market-service:
+    <<: *service-defaults
+    container_name: projectcsi400-market
+    command: ["node", "services/marketService.js"]
+    environment:
+      <<: [*upload-env, *market-db-env]
+      MARKET_PORT: 4010
+      MARKET_ACCOUNT_CHECK_URL: ${MARKET_ACCOUNT_CHECK_URL:-http://auth-service:4001/api/auth/account}
+      MARKET_API_V1_SUNSET: ${MARKET_API_V1_SUNSET:-}
+    ports:
+      - "${MARKET_PORT:-4010}:4010"
+    volumes:
+      - ./public/uploads:/app/public/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_started
 
 volumes:
   db_data:
