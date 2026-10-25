@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomInt } from "node:crypto";
 import { getPool } from "../Database/connection.js";
-import { isValidPassword } from "../middleware/validation.js";
+import { isValidIdcard, isValidPassword } from "../middleware/validation.js";
+import { MESSAGES, isValidOtp } from "../src/utils/validators.js";
 
 const router = Router();
 
@@ -13,10 +14,6 @@ const OTP_RESEND_MS = 30 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 const RESET_PURPOSE = "password-reset";
 const otpStore = new Map();
-
-function isIdcard(value) {
-  return typeof value === "string" && /^\d{13}$/.test(value.trim());
-}
 
 function maskPhone(phone) {
   return phone ? `${phone.slice(0, 3)}-xxx-${phone.slice(-4)}` : "";
@@ -34,8 +31,8 @@ async function findCustomer(idcard) {
 router.post("/forgot-password/lookup", async (req, res) => {
   try {
     const { idcard } = req.body ?? {};
-    if (!isIdcard(idcard)) {
-      return res.status(400).json({ message: "กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง" });
+    if (!isValidIdcard(idcard)) {
+      return res.status(400).json({ message: MESSAGES.idcard });
     }
     const customer = await findCustomer(idcard.trim());
     if (!customer) {
@@ -73,8 +70,8 @@ router.post("/forgot-password/lookup", async (req, res) => {
 router.post("/forgot-password/verify-otp", async (req, res) => {
   try {
     const { idcard, otp } = req.body ?? {};
-    if (!isIdcard(idcard) || typeof otp !== "string" || !/^\d{6}$/.test(otp.trim())) {
-      return res.status(400).json({ message: "กรุณากรอกรหัส OTP 6 หลักให้ถูกต้อง" });
+    if (!isValidIdcard(idcard) || typeof otp !== "string" || !isValidOtp(otp.trim())) {
+      return res.status(400).json({ message: MESSAGES.otp });
     }
     const key = idcard.trim();
     const entry = otpStore.get(key);
@@ -108,7 +105,7 @@ router.post("/forgot-password/reset", async (req, res) => {
   try {
     const { reset_token: resetToken, new_password: newPassword } = req.body ?? {};
     if (!isValidPassword(newPassword)) {
-      return res.status(400).json({ message: "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร" });
+      return res.status(400).json({ message: MESSAGES.password });
     }
     let payload;
     try {

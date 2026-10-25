@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { AuthAlert, AuthLayout } from '../components/AuthLayout.jsx'
+import { PASSWORD_MAX_LENGTH, digitsOnly, firstError, validateLoginForm } from '../utils/validators.js'
 
 const HOME_ICON = (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -20,10 +21,13 @@ function LoginPage() {
   const [availableRoles, setAvailableRoles] = useState([])
   const [notice, setNotice] = useState(() => ({ type: 'warning', message: sessionStorage.getItem('apiBackendNotice') || '' }))
   const [loggedIn, setLoggedIn] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   const handleLoginChange = (e) => {
-    const { name, value } = e.target
+    const { name } = e.target
+    const value = name === 'username' ? digitsOnly(e.target.value, 13) : e.target.value
     if (name !== 'role') setAvailableRoles([])
+    setFieldErrors((prev) => ({ ...prev, [name]: null }))
     setLoginForm((prev) => ({ ...prev, ...(name !== 'role' ? { role: '' } : {}), [name]: value }))
   }
 
@@ -32,8 +36,10 @@ function LoginPage() {
     sessionStorage.removeItem('apiBackendNotice')
     setNotice(null)
 
-    if (!loginForm.username || !loginForm.password) {
-      setNotice({ type: 'warning', message: 'กรุณากรอกเลขบัตรประชาชนหรือเลขห้อง และรหัสผ่าน' })
+    const errors = validateLoginForm(loginForm)
+    setFieldErrors(errors)
+    if (firstError(errors)) {
+      setNotice({ type: 'warning', message: firstError(errors) })
       return
     }
 
@@ -80,12 +86,15 @@ function LoginPage() {
               inputMode="numeric"
               maxLength={13}
               name="username"
-              className="form-control"
+              className={`form-control${fieldErrors.username ? ' is-invalid' : ''}`}
               placeholder="เลขบัตรประชาชน 13 หลัก หรือ เลขห้อง"
               value={loginForm.username}
               onChange={handleLoginChange}
               autoComplete="username"
+              aria-invalid={Boolean(fieldErrors.username)}
+              aria-describedby={fieldErrors.username ? 'login-username-error' : undefined}
             />
+            {fieldErrors.username && <div id="login-username-error" className="invalid-feedback">{fieldErrors.username}</div>}
           </div>
           <div className="col-12">
             <label className="form-label" htmlFor="login-password">
@@ -95,12 +104,16 @@ function LoginPage() {
               id="login-password"
               type="password"
               name="password"
-              className="form-control"
+              className={`form-control${fieldErrors.password ? ' is-invalid' : ''}`}
               placeholder="กรอกรหัสผ่าน"
               value={loginForm.password}
               onChange={handleLoginChange}
               autoComplete="current-password"
+              maxLength={PASSWORD_MAX_LENGTH}
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
             />
+            {fieldErrors.password && <div id="login-password-error" className="invalid-feedback">{fieldErrors.password}</div>}
             <div className="auth-forgot-link">
               <Link to="/forgot-password">ลืมรหัสผ่าน?</Link>
             </div>

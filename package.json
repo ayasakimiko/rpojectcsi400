@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build --configLoader native",
     "lint": "eslint .",
+    "test:validation": "node --test --test-concurrency=1 tests/validators.test.js tests/validation.middleware.test.js tests/validation.http.test.js",
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.js\"",
     "preview": "vite preview",
     "db:migrate": "node Database/migrate.js",

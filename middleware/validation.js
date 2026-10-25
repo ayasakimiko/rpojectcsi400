@@ -1,7 +1,33 @@
 import { ROOM_AMENITY_ICON_KEYS } from "../src/utils/roomAmenities.js";
+import {
+  MAX_MONEY,
+  MAX_NAME_LENGTH,
+  MESSAGES,
+  isPositiveId,
+  isValidAge,
+  isValidDateString,
+  isValidDateTimeString,
+  isValidIdcard,
+  isValidPassword,
+  isValidPhone,
+  validateName,
+  validateText,
+} from "../src/utils/validators.js";
 
-export const MAX_MONEY = 99_999_999.99;
-export const MAX_NAME_LENGTH = 100;
+export {
+  MAX_MONEY,
+  MAX_NAME_LENGTH,
+  isPositiveId,
+  isValidAge,
+  isValidDateString,
+  isValidDateTimeString,
+  isValidIdcard,
+  isValidPassword,
+  isValidPhone,
+  validateName,
+  validateText,
+};
+
 const MAX_SEARCH_LENGTH = 100;
 const MAX_PAGE = 100_000;
 
@@ -22,24 +48,12 @@ export function parseSearch(value) {
   return typeof value === "string" ? value.trim().slice(0, MAX_SEARCH_LENGTH) : "";
 }
 
-export function isPositiveId(value) {
-  const id = Number(value);
-  return Number.isSafeInteger(id) && id >= 1;
-}
-
-export function isValidDateString(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
 export function validateDateQuery(query, keys) {
   for (const key of keys) {
     const value = query[key];
     if (value === undefined || value === "") continue;
     if (!isValidDateString(value)) {
-      return "รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)";
+      return MESSAGES.date;
     }
   }
   return null;
@@ -60,37 +74,6 @@ export function isValidMoney(value, { allowZero = true } = {}) {
   return (allowZero ? num >= 0 : num > 0) && num <= MAX_MONEY;
 }
 
-export function validateText(value, label, { maxLength, required = true }) {
-  if (value === undefined || value === null) {
-    return required ? `กรุณาระบุ${label}` : null;
-  }
-  if (typeof value !== "string") return `รูปแบบ${label}ไม่ถูกต้อง`;
-  if (required && !value.trim()) return `กรุณาระบุ${label}`;
-  if (value.trim().length > maxLength) return `${label}ยาวเกินไป (สูงสุด ${maxLength} ตัวอักษร)`;
-  return null;
-}
-
-export function validateName(value, label) {
-  return validateText(value, label, { maxLength: MAX_NAME_LENGTH });
-}
-
-export function isValidPhone(value) {
-  return typeof value === "string" && /^0\d{8,9}$/.test(value.trim());
-}
-
-export function isValidIdcard(value) {
-  return typeof value === "string" && /^\d{13}$/.test(value.trim());
-}
-
-export function isValidAge(value) {
-  const age = Number(value);
-  return Number.isInteger(age) && age >= 1 && age <= 120;
-}
-
-export function isValidPassword(value) {
-  return typeof value === "string" && value.length >= 6 && value.length <= 128;
-}
-
 export function validatePersonInput({ idcard, password, phone, first_name, last_name, age }) {
   const textFields = [idcard, password, phone, first_name, last_name];
   if (textFields.some((value) => value !== undefined && value !== null && typeof value !== "string")) {
@@ -99,10 +82,10 @@ export function validatePersonInput({ idcard, password, phone, first_name, last_
   if (textFields.some((value) => !value || !value.trim()) || age === undefined || age === null || age === "") {
     return "กรุณากรอกข้อมูลให้ครบทุกช่อง";
   }
-  if (!isValidIdcard(idcard)) return "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก";
-  if (!isValidPassword(password)) return "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร";
-  if (!isValidPhone(phone)) return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
-  return validateName(first_name, "ชื่อ") || validateName(last_name, "นามสกุล") || (isValidAge(age) ? null : "อายุไม่ถูกต้อง");
+  if (!isValidIdcard(idcard)) return MESSAGES.idcard;
+  if (!isValidPassword(password)) return MESSAGES.password;
+  if (!isValidPhone(phone)) return MESSAGES.phone;
+  return validateName(first_name, "ชื่อ") || validateName(last_name, "นามสกุล") || (isValidAge(age) ? null : MESSAGES.age);
 }
 
 export function validatePersonUpdateInput(body) {
@@ -115,13 +98,13 @@ export function validatePersonUpdateInput(body) {
     if (error) return error;
   }
   if (hasField(body, "phone") && !isValidPhone(body.phone)) {
-    return "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก";
+    return MESSAGES.phone;
   }
   if (hasField(body, "age") && !isValidAge(body.age)) {
-    return "อายุไม่ถูกต้อง";
+    return MESSAGES.age;
   }
   if (hasField(body, "password") && body.password !== "" && body.password !== null && !isValidPassword(body.password)) {
-    return "รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร";
+    return MESSAGES.password;
   }
   return null;
 }
@@ -211,14 +194,6 @@ export function validateLoginInput({ username, password }) {
     return "เลขบัตรประชาชน เลขห้อง หรือรหัสผ่านไม่ถูกต้อง";
   }
   return null;
-}
-
-export function isValidDateTimeString(value) {
-  return (
-    typeof value === "string" &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value) &&
-    !Number.isNaN(new Date(value).getTime())
-  );
 }
 
 export function validateRegisterInput(body) {

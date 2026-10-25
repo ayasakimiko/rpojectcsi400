@@ -6,6 +6,7 @@ import './css/Login.css'
 import './css/RegisterPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
+import { digitsOnly, firstError, validatePersonForm } from '../utils/validators.js'
 import { ContractImagePicker, DepositSettlementForm } from '../components/RentalContract.jsx'
 import {
   addContractMonths,
@@ -106,6 +107,7 @@ function RegisterMain() {
   const [registerForm, setRegisterForm] = useState(initialRegisterForm)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [success, setSuccess] = useState('')
   const [availableRooms, setAvailableRooms] = useState([])
   const [roomsLoading, setRoomsLoading] = useState(true)
@@ -166,14 +168,22 @@ function RegisterMain() {
     }
   }, [])
 
+  const clearFieldError = (name) => setFieldErrors((prev) => (prev[name] ? { ...prev, [name]: null } : prev))
+
+  const fieldClass = (name) => `form-control${fieldErrors[name] ? ' is-invalid' : ''}`
+
+  const fieldFeedback = (name) =>
+    fieldErrors[name] ? <div id={`register-${name}-error`} className="invalid-feedback d-block">{fieldErrors[name]}</div> : null
+
   const handleRegisterChange = (e) => {
     const { name, value } = e.target
+    clearFieldError(name)
     setRegisterForm((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleIdcardChange = (e) => {
-    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 13)
-    setRegisterForm((prev) => ({ ...prev, idcard: digitsOnly }))
+    clearFieldError('idcard')
+    setRegisterForm((prev) => ({ ...prev, idcard: digitsOnly(e.target.value, 13) }))
     setIdcardLookup(null)
     setIdcardSuggestOpen(true)
   }
@@ -235,13 +245,13 @@ function RegisterMain() {
   }, [registerForm.idcard])
 
   const handlePhoneChange = (e) => {
-    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10)
-    setRegisterForm((prev) => ({ ...prev, phone: digitsOnly }))
+    clearFieldError('phone')
+    setRegisterForm((prev) => ({ ...prev, phone: digitsOnly(e.target.value, 10) }))
   }
 
   const handleAgeChange = (e) => {
-    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 2)
-    setRegisterForm((prev) => ({ ...prev, age: digitsOnly }))
+    clearFieldError('age')
+    setRegisterForm((prev) => ({ ...prev, age: digitsOnly(e.target.value, 2) }))
   }
 
   const handleRoomChange = (e) => {
@@ -271,6 +281,13 @@ function RegisterMain() {
       confirmPassword,
     } = registerForm
 
+    const personErrors = validatePersonForm({ idcard, first_name, last_name, phone, age, password, confirmPassword })
+    setFieldErrors(personErrors)
+    if (firstError(personErrors)) {
+      setError(firstError(personErrors))
+      return
+    }
+
     if (
       !idcard ||
       !first_name ||
@@ -292,11 +309,6 @@ function RegisterMain() {
       return
     }
 
-    if (!/^0\d{8,9}$/.test(phone)) {
-      setError('เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก')
-      return
-    }
-
     if (contractImages.length < CONTRACT_MIN_IMAGES) {
       const message = `กรุณาแนบรูปสัญญาเช่าอย่างน้อย ${CONTRACT_MIN_IMAGES} รูป (แนบแล้ว ${contractImages.length} รูป)`
       setContractImageError(message)
@@ -306,11 +318,6 @@ function RegisterMain() {
 
     if (Number(deposit_months) !== DEPOSIT_MONTHS) {
       setError(`เงินมัดจำต้องเป็น ${DEPOSIT_MONTHS} เดือน`)
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setError('รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน')
       return
     }
 
@@ -381,12 +388,15 @@ function RegisterMain() {
                       id="register-firstname"
                       type="text"
                       name="first_name"
-                      className="form-control"
+                      className={fieldClass('first_name')}
+                      aria-invalid={Boolean(fieldErrors.first_name)}
+                      aria-describedby={fieldErrors.first_name ? 'register-first_name-error' : undefined}
                       placeholder="ชื่อจริง"
                       value={registerForm.first_name}
                       onChange={handleRegisterChange}
                       autoComplete="given-name"
                     />
+                    {fieldFeedback('first_name')}
                   </div>
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-lastname">
@@ -396,12 +406,15 @@ function RegisterMain() {
                       id="register-lastname"
                       type="text"
                       name="last_name"
-                      className="form-control"
+                      className={fieldClass('last_name')}
+                      aria-invalid={Boolean(fieldErrors.last_name)}
+                      aria-describedby={fieldErrors.last_name ? 'register-last_name-error' : undefined}
                       placeholder="นามสกุล"
                       value={registerForm.last_name}
                       onChange={handleRegisterChange}
                       autoComplete="family-name"
                     />
+                    {fieldFeedback('last_name')}
                   </div>
 
                   <div className="col-12 col-md-6">
@@ -415,7 +428,9 @@ function RegisterMain() {
                         inputMode="numeric"
                         maxLength={13}
                         name="idcard"
-                        className="form-control"
+                        className={fieldClass('idcard')}
+                        aria-invalid={Boolean(fieldErrors.idcard)}
+                        aria-describedby={fieldErrors.idcard ? 'register-idcard-error' : undefined}
                         placeholder="เลขบัตรประชาชน 13 หลัก"
                         value={registerForm.idcard}
                         onChange={handleIdcardChange}
@@ -452,6 +467,7 @@ function RegisterMain() {
                         </ul>
                       )}
                     </div>
+                    {fieldFeedback('idcard')}
                     {idcardLookup?.depositMessage ? (
                       <p className="register-field-hint is-danger" role="alert">
                         <RegisterIcon type="alert" size={14} />
@@ -481,12 +497,15 @@ function RegisterMain() {
                       inputMode="numeric"
                       maxLength={10}
                       name="phone"
-                      className="form-control"
+                      className={fieldClass('phone')}
+                      aria-invalid={Boolean(fieldErrors.phone)}
+                      aria-describedby={fieldErrors.phone ? 'register-phone-error' : undefined}
                       placeholder="0812345678"
                       value={registerForm.phone}
                       onChange={handlePhoneChange}
                       autoComplete="tel"
                     />
+                    {fieldFeedback('phone')}
                   </div>
                   <div className="col-5 col-md-3">
                     <label className="form-label" htmlFor="register-age">
@@ -499,11 +518,14 @@ function RegisterMain() {
                       min={1}
                       max={99}
                       name="age"
-                      className="form-control"
+                      className={fieldClass('age')}
+                      aria-invalid={Boolean(fieldErrors.age)}
+                      aria-describedby={fieldErrors.age ? 'register-age-error' : undefined}
                       placeholder="ปี"
                       value={registerForm.age}
                       onChange={handleAgeChange}
                     />
+                    {fieldFeedback('age')}
                   </div>
                   {idcardLookup?.depositContract && (
                     <div className="col-12 register-deposit-settle">
@@ -667,12 +689,15 @@ function RegisterMain() {
                       id="register-password"
                       type="password"
                       name="password"
-                      className="form-control"
+                      className={fieldClass('password')}
+                      aria-invalid={Boolean(fieldErrors.password)}
+                      aria-describedby={fieldErrors.password ? 'register-password-error' : undefined}
                       placeholder="อย่างน้อย 6 ตัวอักษร"
                       value={registerForm.password}
                       onChange={handleRegisterChange}
                       autoComplete="new-password"
                     />
+                    {fieldFeedback('password')}
                   </div>
                   <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-confirm-password">
@@ -682,13 +707,16 @@ function RegisterMain() {
                       id="register-confirm-password"
                       type="password"
                       name="confirmPassword"
-                      className="form-control"
+                      className={fieldClass('confirmPassword')}
+                      aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                      aria-describedby={fieldErrors.confirmPassword ? 'register-confirmPassword-error' : undefined}
                       placeholder="ยืนยันรหัสผ่าน"
                       value={registerForm.confirmPassword}
                       onChange={handleRegisterChange}
                       autoComplete="new-password"
                     />
-                    {registerForm.confirmPassword && registerForm.password !== registerForm.confirmPassword && (
+                    {fieldFeedback('confirmPassword')}
+                    {!fieldErrors.confirmPassword && registerForm.confirmPassword && registerForm.password !== registerForm.confirmPassword && (
                       <div className="form-text text-danger">รหัสผ่านไม่ตรงกัน</div>
                     )}
                   </div>

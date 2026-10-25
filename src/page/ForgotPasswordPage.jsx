@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { AuthAlert, AuthLayout } from '../components/AuthLayout.jsx'
+import { MESSAGES, digitsOnly, firstError, isValidIdcard, isValidOtp, validatePasswordPair } from '../utils/validators.js'
 
 const LOCK_ICON = (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -114,7 +115,7 @@ function ForgotPasswordPage() {
   }
 
   const handleIdcardChange = (e) => {
-    setIdcard(e.target.value.replace(/\D/g, '').slice(0, 13))
+    setIdcard(digitsOnly(e.target.value, 13))
     if (step !== 'lookup') {
       setStep('lookup')
       setCustomer(null)
@@ -124,8 +125,8 @@ function ForgotPasswordPage() {
 
   const handleLookup = (e) => {
     e.preventDefault()
-    if (!/^\d{13}$/.test(idcard)) {
-      showWarning('กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง')
+    if (!isValidIdcard(idcard)) {
+      showWarning(MESSAGES.idcard)
       return
     }
     run(async () => {
@@ -139,8 +140,8 @@ function ForgotPasswordPage() {
 
   const handleVerify = (e) => {
     e.preventDefault()
-    if (!/^\d{6}$/.test(otp)) {
-      showWarning('กรุณากรอกรหัส OTP 6 หลัก')
+    if (!isValidOtp(otp)) {
+      showWarning(MESSAGES.otp)
       return
     }
     run(async () => {
@@ -153,12 +154,9 @@ function ForgotPasswordPage() {
 
   const handleReset = (e) => {
     e.preventDefault()
-    if (newPassword.length < 6 || newPassword.length > 128) {
-      showWarning('รหัสผ่านต้องมีความยาว 6-128 ตัวอักษร')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      showWarning('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน')
+    const passwordError = firstError(validatePasswordPair(newPassword, confirmPassword))
+    if (passwordError) {
+      showWarning(passwordError)
       return
     }
     run(async () => {
@@ -262,7 +260,7 @@ function ForgotPasswordPage() {
             className="form-control auth-otp-input"
             placeholder="------"
             value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={(e) => setOtp(digitsOnly(e.target.value, 6))}
             autoComplete="one-time-code"
           />
           <div className="form-text">รหัส OTP มีอายุ 5 นาที</div>
