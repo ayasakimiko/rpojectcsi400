@@ -4,6 +4,8 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../Database/connection.js";
 import { isPositiveId } from "../middleware/validation.js";
+import { actorOf } from "../middleware/notifications.js";
+import { fineIssued, fineReviewed } from "./notificationEvents.js";
 import { PUBLIC_UPLOAD_DIR, customerUploadFolder, moveUploadedFiles } from "../middleware/publicUploads.js";
 import {
   DEMO_PAYMENT_CHANNELS,
@@ -379,7 +381,7 @@ export function createCheckInHandler(getActingName) {
 }
 
 export async function endParkingSession(pool, id, actorName) {
-  return withParkingLock(pool, async (connection) => {
+  const outcome = await withParkingLock(pool, async (connection) => {
     const [rows] = await connection.query(
       `SELECT id, request_type, user_category, status, parked_at, checked_out_at,
               TIMESTAMPDIFF(SECOND, parked_at, NOW()) AS parked_seconds
@@ -407,6 +409,8 @@ export async function endParkingSession(pool, id, actorName) {
     );
     return { checkedOut: false, overtimeHours: 0, amount: 0 };
   });
+  if (outcome.amount > 0) await fineIssued(id, outcome.amount);
+  return outcome;
 }
 
 fs.mkdirSync(FINE_SLIP_DIR, { recursive: true });
@@ -549,6 +553,7 @@ export function createFineReviewHandler(getActingName) {
           [actorName, id],
         );
         if (!result.affectedRows) return res.status(409).json({ message: "รายการนี้ไม่มีค่าปรับที่รอชำระ" });
+        await fineReviewed(id, actorOf(req.user, actorName), true);
         return res.json({ message: "บันทึกการชำระค่าปรับแล้ว" });
       }
       const [rows] = await pool.query("SELECT fine_slip_path FROM ResidentVisitRequest WHERE id = ? AND fine_status = 'pending_review'", [id]);
@@ -561,6 +566,7 @@ export function createFineReviewHandler(getActingName) {
       );
       const slipFile = rows[0].fine_slip_path ? path.join(FINE_SLIP_DIR, path.basename(rows[0].fine_slip_path)) : null;
       if (slipFile && fs.existsSync(slipFile)) fs.unlinkSync(slipFile);
+      await fineReviewed(id, actorOf(req.user, actorName), false);
       return res.json({ message: "ปฏิเสธสลิปค่าปรับแล้ว ผู้จอดต้องชำระใหม่" });
     } catch (error) {
       console.error("Review parking fine error:", error);

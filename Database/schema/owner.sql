@@ -242,3 +242,45 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DormConfig' AND COLUMN_NAME = 'contract_warning_days'),
+    'SELECT 1',
+    'ALTER TABLE `DormConfig` ADD COLUMN `contract_warning_days` INT UNSIGNED NOT NULL DEFAULT 10'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+-- One row per event. Staff-side rows leave recipient_id NULL and reach every role in audience;
+-- Customer rows always name the tenant in recipient_id.
+CREATE TABLE IF NOT EXISTS Notification (
+    id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    audience SET('Customer', 'Staff', 'Admin', 'Owner') NOT NULL,
+    recipient_id INT UNSIGNED NULL,
+    type VARCHAR(40) NOT NULL,
+    tone VARCHAR(10) NOT NULL DEFAULT 'info',
+    ref_table VARCHAR(40) NULL,
+    ref_id INT UNSIGNED NULL,
+    target VARCHAR(60) NULL,
+    title VARCHAR(160) NOT NULL,
+    message VARCHAR(500) NOT NULL,
+    detail VARCHAR(1000) NULL,
+    actor_role VARCHAR(20) NULL,
+    actor_id INT UNSIGNED NULL,
+    actor_name VARCHAR(255) NULL,
+    dedupe_key VARCHAR(120) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_notification_dedupe (dedupe_key),
+    INDEX idx_notification_recipient (recipient_id, created_at),
+    INDEX idx_notification_created (created_at, id)
+);
+
+CREATE TABLE IF NOT EXISTS NotificationRead (
+    notification_id BIGINT UNSIGNED NOT NULL,
+    user_role VARCHAR(20) NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_role, user_id, notification_id),
+    INDEX idx_notification_read_notification (notification_id)
+);

@@ -40,6 +40,7 @@ import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
+import { isUnread, useServerNotifications } from '../utils/serverNotifications.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -2387,6 +2388,9 @@ function ParcelProgress({ parcel, compact = false }) {
 }
 
 const NOTIF_PAGE_SIZE = 30
+const RENT_DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000
+const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles' }
+const CUSTOMER_TARGET_SCROLL = { due: 'due', renew: 'tenant-renew' }
 
 const CUSTOMER_TABS = [
   { key: 'home', label: 'หน้าแรก' },
@@ -4677,6 +4681,7 @@ function CustomerDashbord() {
     customerTab === key ? 0 : (customerTabKeys[key] || []).filter((itemKey) => !seenTabKeys.has(itemKey)).length
 
   const [expiredVehicles, setExpiredVehicles] = useState([])
+  const [recentExpiredVehicles, setRecentExpiredVehicles] = useState([])
   useEffect(() => {
     let cancelled = false
     const loadParking = () =>
@@ -4685,6 +4690,7 @@ function CustomerDashbord() {
         .then(({ data }) => {
           if (cancelled) return
           setActiveVehicleIds((data.vehicles || []).map((vehicle) => vehicle.id))
+          setRecentExpiredVehicles(data.expired || [])
           const unseen = (data.expired || []).filter((vehicle) => !localStorage.getItem(`parking_expired_seen_${vehicle.id}`))
           if (unseen.length > 0) {
             setExpiredVehicles((current) => [...current, ...unseen.filter((vehicle) => !current.some((item) => item.id === vehicle.id))])
@@ -4698,6 +4704,7 @@ function CustomerDashbord() {
       clearInterval(timer)
     }
   }, [])
+  const serverFeed = useServerNotifications('/api/customer', { onNewEvents: () => loadDashboard() })
   const closeExpiredVehicles = () => {
     expiredVehicles.forEach((vehicle) => localStorage.setItem(`parking_expired_seen_${vehicle.id}`, '1'))
     setExpiredVehicles([])
@@ -5667,10 +5674,49 @@ function CustomerDashbord() {
 
   const utilityPayments = (rentalHistory || []).flatMap((entry) => entry.payments || [])
 
+  // Rent and deposit reminders come straight from the amount due now (C12, C23).
+  const buildDueNotifs = () => {
+    const dueDate = currentDue?.dueDate ? new Date(currentDue.dueDate) : null
+    return (currentDue?.items || []).flatMap((item) => {
+      if (!['rent', 'deposit'].includes(item.type) || item.status === 'pending') return []
+      const overdue = item.status === 'overdue'
+      const dueSoon = dueDate && dueDate.getTime() - Date.now() <= RENT_DUE_SOON_MS
+      if (item.type === 'rent' && !overdue && !dueSoon) return []
+      return [{
+        key: `due-${item.type}-${currentDue.dueDate || 'now'}-${overdue ? 'overdue' : 'due'}`,
+        title: item.type === 'deposit' ? 'เงินมัดจำค้างชำระ' : overdue ? 'ค่าเช่าเลยกำหนดชำระ' : 'ค่าเช่าใกล้ครบกำหนด',
+        label: item.label,
+        tone: overdue ? 'danger' : 'pending',
+        date: currentDue.dueDate || currentDue.periodStart || new Date().toISOString(),
+        preview: `฿${formatCurrency(item.amount)}${dueDate ? ` · กำหนดชำระ ${formatDate(dueDate)}` : ''}`,
+        previewLabel: 'ยอดที่ต้องชำระ',
+        detail: `ยอด ฿${formatCurrency(item.amount)}${dueDate ? ` กำหนดชำระ ${formatDate(dueDate)}` : ''}`,
+        kind: 'utility',
+        paymentType: item.type,
+      }]
+    })
+  }
+
+  const buildExpiredVehicleNotifs = () => recentExpiredVehicles.map((vehicle) => ({
+    key: `parking-expired-${vehicle.id}`,
+    title: 'รถหมดเวลาจอด',
+    label: 'ระบบยกเลิกสิทธิ์จอดแล้ว',
+    tone: 'pending',
+    date: vehicle.cancelled_at || vehicle.end_at,
+    preview: vehicle.vehicle_plate || vehicle.guest_name,
+    previewLabel: 'ทะเบียนรถ',
+    detail: `${vehicle.vehicle_plate || '-'}${vehicle.vehicle_model ? ` · ${vehicle.vehicle_model}` : ''}`,
+    kind: 'parking',
+    target: 'visits',
+  }))
+
   const notifications = [
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
+    ...buildDueNotifs(),
+    ...buildExpiredVehicleNotifs(),
+    ...serverFeed.events,
     ...parcels
       .map((parcel) => ({
         key: `parcel-${parcel.id}`,
@@ -5712,10 +5758,11 @@ function CustomerDashbord() {
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
-  const newNotifications = notifications.filter((notif) => !seenNotifKeys.has(notif.key))
+  const newNotifications = notifications.filter((notif) => isUnread(notif, seenNotifKeys))
 
   const markNotificationsSeen = () => {
     setFreshNotifKeys(new Set(newNotifications.map((notif) => notif.key)))
+    serverFeed.markAllRead()
     if (newNotifications.length === 0) return
     try {
       if (notifSeenStorageKey) {
@@ -6294,6 +6341,17 @@ function CustomerDashbord() {
                               if (notif.kind === 'announcement') {
                                 selectCustomerTab('announcements')
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
+                                return
+                              }
+                              if (notif.target && !notif.request) {
+                                const area = notif.target.split(':')[0]
+                                if (CUSTOMER_TARGET_TABS[area]) {
+                                  selectCustomerTab(CUSTOMER_TARGET_TABS[area])
+                                  return
+                                }
+                                selectCustomerTab('home')
+                                if (CUSTOMER_TARGET_SCROLL[area]) scrollFocusRef.current = CUSTOMER_TARGET_SCROLL[area]
+                                setNotifDetail(notif)
                                 return
                               }
                               if (notif.kind === 'parcel') {

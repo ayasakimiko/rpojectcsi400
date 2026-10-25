@@ -75,6 +75,7 @@ import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
+import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1436,6 +1437,14 @@ const EXPENSE_PAYMENT_METHOD_LABEL = {
 const EXPENSE_MAX_PHOTOS = 6
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 30
+// Pending work computed by the server that this page does not already build itself
+// (slips, vehicle requests, incidents, tenant requests and repairs come from its own lists).
+const STAFF_SERVER_PENDING_KINDS = [
+  'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'transfer_charge', 'move_in',
+  'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
+]
+const STAFF_FOCUS_TABS = { slips: 'payment-review', visits: 'resident-visits', safety: 'safety' }
+const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections' }
 const PAYMENT_HISTORY_INITIAL_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
@@ -7687,6 +7696,7 @@ function StaffMain() {
     )
   }
   const [tabFocus, setTabFocus] = useState(null)
+  const [peerRefresh, setPeerRefresh] = useState(0)
   const [seenTabKeys, setSeenTabKeys] = useState(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(getNotificationStorageKey('staff-tabs')) || '[]'))
@@ -7750,7 +7760,7 @@ function StaffMain() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [])
+  }, [peerRefresh])
 
   const [utilityRoom, setUtilityRoom] = useState(null)
   const [utilityForm, setUtilityForm] = useState({
@@ -9052,6 +9062,15 @@ function StaffMain() {
     }
   }
 
+  const serverFeed = useServerNotifications('/api/staff', {
+    pendingKinds: STAFF_SERVER_PENDING_KINDS,
+    onNewEvents: () => {
+      loadRequests()
+      loadPendingSlipCount()
+      setPeerRefresh((count) => count + 1)
+    },
+  })
+
   const notifications = useMemo(() => {
     return [
       ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
@@ -9060,10 +9079,12 @@ function StaffMain() {
       ...tenantRequests.flatMap(buildStaffTenantNotifs),
       ...maintenanceRequests.flatMap(buildStaffMaintenanceNotifs),
       ...announcements.map(buildAnnouncementNotif),
+      ...serverFeed.events,
+      ...serverFeed.pending,
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements])
+  }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements, serverFeed.events, serverFeed.pending])
 
-  const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
+  const newNotifications = notifications.filter((notification) => isUnread(notification, seenNotificationKeys))
 
   const tabItemKeys = {
     'payment-review': pendingSlips.map(buildStaffSlipNotif).map((item) => item.key),
@@ -9095,7 +9116,48 @@ function StaffMain() {
     const keys = notifications.map((notification) => notification.key)
     setSeenNotificationKeys(keys)
     localStorage.setItem(getNotificationStorageKey('staff'), JSON.stringify(keys))
+    serverFeed.markAllRead()
   }
+
+  const openServerNotification = (notif) => {
+    const [area, section] = (notif.target || '').split(':')
+    setAnnouncementFocus(null)
+    if (STAFF_FOCUS_TABS[area]) {
+      goToStaffTab(STAFF_FOCUS_TABS[area])
+      setTabFocus({ tab: STAFF_FOCUS_TABS[area], id: notif.refId, nonce: Date.now() })
+      return
+    }
+    if (STAFF_PLAIN_TABS[area]) {
+      goToStaffTab(STAFF_PLAIN_TABS[area])
+      return
+    }
+    if (area === 'move-in') {
+      goToStaffTab('move-out-inspections')
+      setInspectionPage('move-in')
+      return
+    }
+    const homeSection = { requests: section, 'transfer-contracts': 'move_room', maintenance: 'maintenance', rooms: 'rooms', expenses: 'expenses' }[area]
+    if (homeSection) {
+      goToStaffTab('home')
+      setHomeSection(homeSection)
+      return
+    }
+    setNotifDetail(notif)
+  }
+
+  useEffect(() => {
+    const link = takeNotificationDeepLink()
+    if (!link) return
+    if (link.tab === 'move-in') {
+      setStaffTab('move-out-inspections')
+      setInspectionPage('move-in')
+      return
+    }
+    if (!STAFF_TABS.some((tab) => tab.key === link.tab)) return
+    setStaffTab(link.tab)
+    if (link.section) setHomeSection(link.section)
+    if (link.focus) setTabFocus({ tab: link.tab, id: Number(link.focus), nonce: Date.now() })
+  }, [])
 
   const inspectionResults = MOVE_OUT_CHECKLIST.map((item) => inspectionForm.checklist[item.key]).filter(Boolean)
   const inspectionCounts = {
@@ -9866,6 +9928,10 @@ function StaffMain() {
                             className={`staff-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
+                              if (notif.server) {
+                                openServerNotification(notif)
+                                return
+                              }
                               if (notif.kind === 'announcement') {
                                 goToStaffTab('announcements')
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })

@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole } from "../middleware/authMiddleware.js";
 import { getActingAdminName } from "../middleware/accounts.js";
+import { actorOf } from "../middleware/notifications.js";
+import { moveOutInspectionSaved, safetyHandled, staffAccountChanged } from "./notificationEvents.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
   createFinePaymentHandler,
@@ -31,6 +33,8 @@ import {
 } from "../middleware/validation.js";
 import { customerUploadFolder, deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
 import announcementRouter from "./AnnouncementRouter.js";
+import { createNotificationRoutes } from "./notificationRoutes.js";
+import { loadPendingNotifications, PENDING_KINDS } from "./pendingNotifications.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import { attachMaintenancePhotos } from "./CustomerDashboardRouter.js";
@@ -64,6 +68,7 @@ async function cancelStaleTenantRequests(connection, customerId, currentRoomNumb
 }
 
 router.use(authenticate, requireAdminRole, createRequireActiveAccount(getPool));
+router.use("/notifications", createNotificationRoutes({ loadPending: loadPendingNotifications, pendingKinds: PENDING_KINDS }));
 router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
 router.use("/announcements", announcementRouter);
@@ -113,6 +118,7 @@ export async function reviewSafetyIncident(req, res) {
       [reviewerName, note || null, id],
     );
     if (!result.affectedRows) return res.status(409).json({ message: "รายงานนี้ถูกตรวจสอบหรือยกเลิกไปแล้ว" });
+    await safetyHandled(id, actorOf(req.user, reviewerName), "reviewed", note);
     return res.json({ message: "บันทึกผลตรวจสอบแล้ว" });
   } catch (error) {
     console.error("Review safety incident error:", error);
@@ -347,6 +353,7 @@ router.post("/move-out-inspections", async (req, res) => {
     );
     const sentChargeCents = await syncRoomTransferCharge(connection, tenantRequestId, adminName);
     await connection.commit();
+    await moveOutInspectionSaved(result.insertId, actorOf(req.user, adminName));
     return res.status(201).json({
       message: sentChargeCents > 0
         ? `บันทึกผลตรวจห้องสำเร็จ ส่งยอดชำระย้ายห้อง ฿${(sentChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าแล้ว`
@@ -495,6 +502,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
+    await moveOutInspectionSaved(inspectionId, actorOf(req.user, await getActingAdminName(pool, req.user)));
     return res.json({ message: "เปลี่ยนสถานะผลตรวจสำเร็จ" });
   } catch (error) {
     console.error("Update move-out inspection error:", error);
@@ -1178,6 +1186,7 @@ router.post("/staff", async (req, res) => {
       [idcard.trim(), hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age)],
     );
 
+    await staffAccountChanged({ role: "Staff", id: result.insertId }, "created", req.user);
     return res.status(201).json({ message: "เพิ่มพนักงานสำเร็จ", staffId: result.insertId });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
@@ -1225,6 +1234,7 @@ router.put("/staff/:id", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบพนักงานนี้" });
     }
 
+    await staffAccountChanged({ role: "Staff", id: staffId }, "updated", req.user);
     return res.json({ message: "แก้ไขข้อมูลพนักงานสำเร็จ" });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
@@ -1252,6 +1262,7 @@ router.patch("/staff/:id/suspend", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบพนักงานนี้" });
     }
 
+    await staffAccountChanged({ role: "Staff", id: staffId }, is_suspended ? "suspended" : "unsuspended", req.user);
     return res.json({ message: is_suspended ? "ระงับการใช้งานพนักงานสำเร็จ" : "เปิดการใช้งานพนักงานสำเร็จ" });
   } catch (error) {
     console.error("Admin suspend staff error:", error);
@@ -1267,6 +1278,7 @@ router.delete("/staff/:id", async (req, res) => {
     }
 
     const pool = getPool();
+    await staffAccountChanged({ role: "Staff", id: staffId }, "deleted", req.user);
     const [result] = await pool.query(`DELETE FROM Staff WHERE id = ?`, [staffId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "ไม่พบพนักงานนี้" });

@@ -17,6 +17,7 @@ import {
   roomHeldForTransfer,
   UNSETTLED_DEPOSIT_MESSAGE,
 } from "./rentalContracts.js";
+import { tenantRegistered } from "./notificationEvents.js";
 
 const router = Router();
 
@@ -243,6 +244,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
 
     await connection.commit();
     committed = true;
+    await tenantRegistered(customerId, normalizedRoomNumber, req.user);
 
     return res.status(201).json({
       message: `${returningCustomer ? "ทำสัญญาใหม่ให้ผู้เช่าเดิมสำเร็จ ประวัติสัญญาเก่ายังเก็บไว้" : "สมัครสมาชิกสำเร็จ"}${
