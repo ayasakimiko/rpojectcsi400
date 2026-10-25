@@ -245,6 +245,17 @@
   border-left: 1px dashed #e3ebf6;
 }
 
+.thai-dp.is-time-only .react-datepicker__time-container {
+  width: 160px;
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.thai-dp.is-time-only .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list {
+  height: 220px !important;
+}
+
 .thai-dp .react-datepicker__header--time {
   box-sizing: border-box;
   height: 46px;

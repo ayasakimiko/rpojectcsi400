@@ -13,6 +13,7 @@ BackupPage
 *.local
 .env
 Database/backups/
+storage/
 uploads
 
 .vscode/*

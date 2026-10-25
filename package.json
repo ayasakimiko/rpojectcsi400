@@ -21,13 +21,15 @@
     "server:parcel": "node services/parcelService.js",
     "server:maintenance": "node services/maintenanceService.js",
     "server:payment": "node services/paymentService.js",
-    "server:all": "npm run db:migrate && concurrently -n gateway,auth,room,customer,staff,admin,owner,parcel,maintenance,payment -c white,blue,green,yellow,magenta,cyan,red,gray,blueBright,greenBright \"npm:server\" \"npm:server:auth\" \"npm:server:room\" \"npm:server:customer\" \"npm:server:staff\" \"npm:server:admin\" \"npm:server:owner\" \"npm:server:parcel\" \"npm:server:maintenance\" \"npm:server:payment\""
+    "server:market": "node services/marketService.js",
+    "server:all": "npm run db:migrate && concurrently -n gateway,auth,room,customer,staff,admin,owner,parcel,maintenance,payment,market -c white,blue,green,yellow,magenta,cyan,red,gray,blueBright,greenBright,yellowBright \"npm:server\" \"npm:server:auth\" \"npm:server:room\" \"npm:server:customer\" \"npm:server:staff\" \"npm:server:admin\" \"npm:server:owner\" \"npm:server:parcel\" \"npm:server:maintenance\" \"npm:server:payment\" \"npm:server:market\""
   },
   "dependencies": {
     "axios": "^1.20.0",
     "bcryptjs": "^3.0.3",
     "bootstrap": "^5.3.8",
     "cors": "^2.8.6",
+    "docx": "^9.5.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "html2canvas": "^1.4.1",

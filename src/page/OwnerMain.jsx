@@ -17,6 +17,8 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import MarketManager from '../components/MarketManager.jsx'
+import { marketSummaryTiles } from '../utils/marketSummary.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
@@ -1773,6 +1775,7 @@ const OWNER_TABS = [
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
   { key: 'wifi', label: 'Wi-Fi' },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
   { key: 'cameras', label: 'กล้องวงจรปิด' },
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
@@ -2290,6 +2293,7 @@ function getNeededDataGroups(tab, roomsSection) {
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
+  const [marketSummary, setMarketSummary] = useState(null)
   const [financeSection, setFinanceSection] = useState('overview')
   const [paymentLogDetail, setPaymentLogDetail] = useState(null)
   const [slipSearch, setSlipSearch] = useState('')
@@ -3362,6 +3366,13 @@ function OwnerMain() {
   }
   const ownerSummaryTiles = {
     cameras: cameraSummaryTiles(),
+    market: marketSummaryTiles(marketSummary, {
+      shops: { icon: 'rooms', tone: 'blue' },
+      rented: { icon: 'staff', tone: 'indigo' },
+      vacant: { icon: 'rooms', tone: 'green' },
+      income: { icon: 'income', tone: 'purple' },
+      expiring: { icon: 'clock', tone: 'amber' },
+    }),
     utilities: [
       { key: 'water', tone: 'blue', icon: 'water', label: 'รายรับค่าน้ำ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.water)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
       { key: 'electricity', tone: 'orange', icon: 'electricity', label: 'รายรับค่าไฟ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.electricity)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
@@ -3804,6 +3815,7 @@ function OwnerMain() {
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
+        {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

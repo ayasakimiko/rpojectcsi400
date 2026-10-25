@@ -50,10 +50,13 @@ React (Vite) + Express + MySQL สำหรับระบบจัดการ�
 | `/api/admin/parcels`, `/api/staff/parcels`, `/api/customer/parcels` | `services/parcelService.js` | 4007 |
 | `/api/customer/maintenance`, `/api/staff/maintenance`, `/api/admin/rooms/:room/maintenance`, `/api/admin/logs/maintenance` | `services/maintenanceService.js` | 4008 |
 | `/api/customer/payments`, `/api/customer/payment-channels`, `/api/staff/payment-*`, `/api/staff/rooms/:room/collect-payment`, `/api/staff/rooms/:room/utility-bill`, `/api/owner/income`, `/api/owner/utility-receipts`, `/api/owner/logs/payments` | `services/paymentService.js` | 4009 |
+| `/api/market` (พนักงาน/ผู้ดูแล/เจ้าของ), `/api/market/v1` (API key ผู้เช่าร้านค้า) | `services/marketService.js` | 4010 |
 
 path ของพัสดุถูกจับก่อน prefix `/api/admin`, `/api/staff`, `/api/customer` ใน gateway จึงไปที่ parcel service แทน
 
-Frontend ใช้ API Gateway เป็นปลายทางหลัก หาก gateway ติดต่อไม่ได้ จะเลือก service ที่รับ path นั้นโดยตรงตามพอร์ตในตาราง บน VPS ให้ Nginx รับ HTTPS และส่ง `/__api/direct/<service>/api/...` ไปยังพอร์ต 4001–4009 โดยไม่ผ่าน gateway
+Frontend ใช้ API Gateway เป็นปลายทางหลัก หาก gateway ติดต่อไม่ได้ จะเลือก service ที่รับ path นั้นโดยตรงตามพอร์ตในตาราง บน VPS ให้ Nginx รับ HTTPS และส่ง `/__api/direct/<service>/api/...` ไปยังพอร์ต 4001–4010 โดยไม่ผ่าน gateway
+
+รายละเอียดระบบร้านค้าเช่าข้างหอ (ฐานข้อมูลแยก, สิทธิ์แต่ละ role, API สำหรับผู้เช่า) ดูที่ [market-shop-system.md](market-shop-system.md)
 
 ## การรันโปรเจกต์
 
@@ -63,7 +66,7 @@ Frontend ใช้ API Gateway เป็นปลายทางหลัก ห
 docker compose up -d --build
 ```
 
-รวม 12 container สำหรับบริการที่ทำงานต่อเนื่อง (และ `migrate` ที่ทำงานครั้งเดียว):
+รวม 13 container สำหรับบริการที่ทำงานต่อเนื่อง (และ `migrate` ที่ทำงานครั้งเดียว):
 | Service | Container | Port |
 |---|---|---|
 | MySQL | `projectcsi400-mysql` | 3308 |
@@ -78,6 +81,7 @@ docker compose up -d --build
 | Parcel service | `projectcsi400-parcel` | 4007 |
 | Maintenance service | `projectcsi400-maintenance` | 4008 |
 | Payment service | `projectcsi400-payment` | 4009 |
+| Market service | `projectcsi400-market` | 4010 |
 
 Gateway คุยกับ service ย่อยผ่าน Docker network โดยตรง (เช่น `http://auth-service:4001`) ไม่ผ่าน `localhost`
 

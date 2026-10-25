@@ -51,6 +51,8 @@ import InspectionPhotoPicker from '../components/InspectionPhotoPicker.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import MarketManager from '../components/MarketManager.jsx'
+import { marketSummaryTiles } from '../utils/marketSummary.js'
 import {
   ParkingChoiceGroup,
   ParkingFinePayment,
@@ -1304,6 +1306,7 @@ const STAFF_TABS = [
   { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'wifi', label: 'Wi-Fi' },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
@@ -7547,6 +7550,7 @@ function StaffMain() {
   const [waitingNow] = useState(() => Date.now())
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
+  const [marketSummary, setMarketSummary] = useState(null)
   const [inspectionModal, setInspectionModal] = useState(false)
   const [inspectionSection, setInspectionSection] = useState('all')
   const [inspectionForm, setInspectionForm] = useState({
@@ -9788,6 +9792,16 @@ function StaffMain() {
         },
       ],
     },
+    market: {
+      title: 'ร้านค้าเช่าข้างหอ',
+      tiles: marketSummaryTiles(marketSummary, {
+        shops: { icon: 'total', tone: 'blue' },
+        rented: { icon: 'booked', tone: 'indigo' },
+        vacant: { icon: 'vacant', tone: 'green' },
+        income: { icon: 'due', tone: 'teal' },
+        expiring: { icon: 'clock', tone: 'amber' },
+      }),
+    },
     safety: {
       title: 'แจ้งเหตุฉุกเฉิน',
       tiles: [
@@ -10720,6 +10734,7 @@ function StaffMain() {
         )}
 
         {staffTab === 'wifi' && <WifiManager />}
+        {staffTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
 
         {staffTab === 'cameras' && staffUser?.role === 'Staff' && <CameraMonitor />}
 

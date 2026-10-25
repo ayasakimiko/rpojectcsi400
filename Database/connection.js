@@ -1,7 +1,9 @@
 import mysql from "mysql2/promise";
 import "dotenv/config";
 
-export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "payment", "staff", "admin", "owner", "parcel"];
+export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "payment", "staff", "admin", "owner", "parcel", "market"];
+
+export const ISOLATED_SERVICES = new Set(["market"]);
 
 export const TABLES_BY_SERVICE = {
   room: ["Room", "RoomType", "RoomWifi", "RoomWifiDevice"],
@@ -13,6 +15,7 @@ export const TABLES_BY_SERVICE = {
   admin: ["Announcement", "AnnouncementAcknowledgement", "WaitingList"],
   owner: ["Expense", "RoomOccupancySnapshot", "AuditLog", "DormConfig", "Notification", "NotificationRead"],
   parcel: ["Parcel", "ParcelPhoto"],
+  market: ["Shop", "ShopLease", "ShopProduct", "ShopApiKey", "ShopLeaseImage", "ShopLeasePayment", "ShopSeed"],
 };
 
 export const TABLE_OWNER = Object.fromEntries(
@@ -35,6 +38,8 @@ const {
   DB_PASSWORD = "",
   DB_NAME = "projectcsi400",
   DB_POOL_SIZE,
+  MARKET_DB_USER,
+  MARKET_DB_PASSWORD,
 } = process.env;
 
 export const DB_CONFIG = {
@@ -44,6 +49,15 @@ export const DB_CONFIG = {
   password: DB_PASSWORD,
   database: DB_NAME,
 };
+
+const SERVICE_DB_CREDENTIALS = {
+  market: { user: MARKET_DB_USER, password: MARKET_DB_PASSWORD },
+};
+
+export function serviceCredentials(service) {
+  const credentials = SERVICE_DB_CREDENTIALS[service];
+  return credentials?.user && credentials?.password ? credentials : null;
+}
 
 const poolSize = Number(DB_POOL_SIZE) || 4;
 
@@ -63,6 +77,7 @@ export function getPool() {
   if (!pool) {
     pool = mysql.createPool({
       ...DB_CONFIG,
+      ...serviceCredentials(databaseService),
       database: serviceDatabaseName(DB_CONFIG.database, databaseService),
       waitForConnections: true,
       connectionLimit: poolSize,

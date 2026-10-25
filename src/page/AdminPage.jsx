@@ -33,6 +33,8 @@ import { assetRowsError, saveRoomAssets, toAssetRows, useRoomTypes } from '../ut
 import { assetPriceValue, isValidAssetPrice } from '../utils/inspectionChecklist.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
+import MarketManager from '../components/MarketManager.jsx'
+import { marketSummaryTiles } from '../utils/marketSummary.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
@@ -1252,6 +1254,7 @@ const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'wifi', label: 'Wi-Fi' },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
   { key: 'cameras', label: 'กล้องวงจรปิด' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
@@ -1275,6 +1278,7 @@ const TAB_GROUPS = [
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
   { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'cameras', label: 'กล้องวงจรปิด', tabs: ['cameras'] },
   { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
@@ -6853,6 +6857,7 @@ function AdminBackupPage() {
   }, [currentRoomsPage, activeTab])
 
   const [staffList, setStaffList] = useState([])
+  const [marketSummary, setMarketSummary] = useState(null)
   const [staffLoading, setStaffLoading] = useState(true)
   const [staffError, setStaffError] = useState('')
   const [staffSearch, setStaffSearch] = useState('')
@@ -7413,6 +7418,13 @@ function AdminBackupPage() {
     ],
     contracts: completedContractSummaryTiles(contractSummary),
     cameras: cameraSummaryTiles().map((tile) => ({ ...tile, onClick: () => goToTab('cameras') })),
+    market: marketSummaryTiles(marketSummary, {
+      shops: { icon: 'total', tone: 'blue' },
+      rented: { icon: 'booked', tone: 'indigo' },
+      vacant: { icon: 'vacant', tone: 'green' },
+      income: { icon: 'due', tone: 'violet' },
+      expiring: { icon: 'clock', tone: 'amber' },
+    }),
     staff: [
       { key: 'all', icon: 'queue', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
       { key: 'active', icon: 'vacant', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
@@ -7964,6 +7976,8 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
+
+        {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

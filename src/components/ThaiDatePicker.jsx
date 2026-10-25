@@ -57,6 +57,7 @@ function ThaiDatePicker({
   invalid = false,
   compact = false,
   showTimeSelect = false,
+  timeOnly = false,
   minDate,
   maxDate,
   ...rest
@@ -73,7 +74,7 @@ function ThaiDatePicker({
   const todayDisabled = (minDate && today < startOfDay(minDate)) || (maxDate && today > startOfDay(maxDate))
 
   const selectToday = () => {
-    if (showTimeSelect) {
+    if (showTimeSelect || timeOnly) {
       const now = new Date()
       now.setSeconds(0, 0)
       emit(minDate && now < minDate ? minDate : now)
@@ -83,7 +84,7 @@ function ThaiDatePicker({
     pickerRef.current?.setOpen(false)
   }
 
-  const displayValue = selected ? (showTimeSelect ? `${formatFull(selected)} เวลา ${formatTime(selected)}` : formatFull(selected)) : ''
+  const displayValue = !selected ? '' : timeOnly ? `${formatTime(selected)} น.` : showTimeSelect ? `${formatFull(selected)} เวลา ${formatTime(selected)}` : formatFull(selected)
 
   return (
     <DatePicker
@@ -96,13 +97,14 @@ function ThaiDatePicker({
       placeholderText={placeholder}
       className={`${className} thai-dp-input${invalid ? ' is-invalid' : ''}`.trim()}
       wrapperClassName={`thai-dp-wrapper${compact ? ' is-compact' : ''}`}
-      calendarClassName="thai-dp"
+      calendarClassName={`thai-dp${timeOnly ? ' is-time-only' : ''}`}
       popperClassName="thai-dp-popper"
       popperPlacement="bottom-start"
       showPopperArrow={false}
       fixedHeight
       autoComplete="off"
-      showTimeSelect={showTimeSelect}
+      showTimeSelect={showTimeSelect || timeOnly}
+      showTimeSelectOnly={timeOnly}
       timeFormat="HH:mm"
       timeCaption="เวลา"
       minDate={minDate}
@@ -124,9 +126,9 @@ function ThaiDatePicker({
       {...rest}
     >
       <div className="thai-dp-footer">
-        <span className="thai-dp-hint">{getRangeHint(minDate, maxDate, selected)}</span>
+        <span className="thai-dp-hint">{timeOnly ? 'เลือกเวลา' : getRangeHint(minDate, maxDate, selected)}</span>
         <button type="button" className="thai-dp-today" onClick={selectToday} disabled={todayDisabled}>
-          {showTimeSelect ? 'ตอนนี้' : 'วันนี้'}
+          {showTimeSelect || timeOnly ? 'ตอนนี้' : 'วันนี้'}
         </button>
       </div>
     </DatePicker>

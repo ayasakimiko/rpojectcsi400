@@ -1,0 +1,180 @@
+import test, { after, before } from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import jwt from "jsonwebtoken";
+import mysql from "mysql2/promise";
+import { DB_CONFIG, serviceDatabaseName } from "../Database/connection.js";
+import { removeLeaseFiles } from "../middleware/marketUploads.js";
+
+const API = process.env.MARKET_TEST_API_URL || "http://localhost:4000";
+const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+const TAG = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+const MARKET_DB = serviceDatabaseName(DB_CONFIG.database, "market");
+const AUTH_DB = serviceDatabaseName(DB_CONFIG.database, "auth");
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const fx = {};
+let root;
+
+async function call(method, url, { token, key, body } = {}) {
+  const response = await fetch(`${API}${url}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(key ? { "X-Market-Api-Key": key } : {}),
+      ...(body === undefined || body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined || body instanceof FormData ? body : JSON.stringify(body),
+  });
+  return { status: response.status, data: await response.json().catch(() => ({})) };
+}
+
+const as = (role) => (method, url, body) => call(method, `/api/market${url}`, { token: fx[role], body });
+const api = (method, url, key, body) => call(method, `/api/market/v1${url}`, { key, body });
+
+async function expectStatus(promise, status) {
+  const result = await promise;
+  assert.equal(result.status, status, JSON.stringify(result.data));
+  return result.data;
+}
+
+async function tokenFor(role) {
+  const [[row]] = await root.query("SELECT id FROM ??.?? WHERE is_suspended = FALSE LIMIT 1", [AUTH_DB, role]);
+  return row ? jwt.sign({ id: row.id, role }, SECRET, { expiresIn: "15m" }) : null;
+}
+
+function leaseForm(fields, imageCount = 3) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
+  for (let index = 0; index < imageCount; index += 1) form.append("contract_images", new Blob([PNG], { type: "image/png" }), `contract-${index}.png`);
+  return form;
+}
+
+const leaseBody = (shopId, extra = {}) => ({
+  shop_id: shopId,
+  tenant_name: `ผู้เช่าทดสอบ ${TAG}`,
+  tenant_phone: "0899999999",
+  tenant_idcard: "1234567890123",
+  business_name: `ร้านทดสอบ ${TAG}`,
+  start_date: "2026-01-01",
+  end_date: "2099-12-31",
+  monthly_rent: 5000,
+  deposit: 10000,
+  ...extra,
+});
+
+before(async () => {
+  root = await mysql.createConnection(DB_CONFIG);
+  for (const role of ["Staff", "Admin", "Owner"]) fx[role] = await tokenFor(role);
+});
+
+after(async () => {
+  if (fx.shopIds?.length) {
+    const [images] = await root.query("SELECT i.file_name FROM ??.ShopLeaseImage i JOIN ??.ShopLease l ON l.id = i.lease_id WHERE l.shop_id IN (?)", [MARKET_DB, MARKET_DB, fx.shopIds]);
+    await removeLeaseFiles(images.map((image) => image.file_name));
+    await root.query("DELETE k FROM ??.ShopApiKey k JOIN ??.ShopLease l ON l.id = k.lease_id WHERE l.shop_id IN (?)", [MARKET_DB, MARKET_DB, fx.shopIds]);
+    await root.query("DELETE FROM ??.ShopLease WHERE shop_id IN (?)", [MARKET_DB, fx.shopIds]);
+    await root.query("DELETE FROM ??.Shop WHERE id IN (?)", [MARKET_DB, fx.shopIds]);
+  }
+  await root?.end();
+});
+
+test("market roles, leases and tenant API key permissions", async (t) => {
+  if (!fx.Staff || !fx.Admin || !fx.Owner) return t.skip("ต้องมีบัญชี Staff, Admin และ Owner ในฐานข้อมูล");
+  fx.shopIds = [];
+
+  const shopBody = (code) => ({
+    code, name: `ร้านทดสอบ ${code}`, shop_type: "มินิมาร์ท", location: "ทดสอบ", area_sqm: 10, monthly_rent: 5000,
+    open_time: "08:00", close_time: "20:00",
+  });
+
+  await expectStatus(as("Staff")("POST", "/shops", shopBody(`T${TAG}S`)), 403);
+  const { shop } = await expectStatus(as("Owner")("POST", "/shops", shopBody(`T${TAG}A`)), 201);
+  fx.shopIds.push(shop.id);
+  const { shop: other } = await expectStatus(as("Admin")("POST", "/shops", shopBody(`T${TAG}B`)), 201);
+  fx.shopIds.push(other.id);
+  await expectStatus(as("Admin")("POST", "/shops", shopBody(`T${TAG}A`)), 409);
+
+  await expectStatus(as("Owner")("POST", `/shops/${shop.id}/products`, { name: "น้ำ", category: "เครื่องดื่ม", price: 10 }), 403);
+  await expectStatus(as("Staff")("POST", `/shops/${shop.id}/products`, { name: "น้ำ", category: "เครื่องดื่ม", price: 10, stock: 5, sku: "W1" }), 201);
+  const { product: otherProduct } = await expectStatus(as("Staff")("POST", `/shops/${other.id}/products`, { name: "ขนม", category: "ขนม", price: 20 }), 201);
+
+  const paid = (extra = {}) => leaseBody(shop.id, { payment_method: "counter", ...extra });
+  await expectStatus(as("Owner")("POST", "/leases", leaseForm(paid())), 403);
+  await expectStatus(as("Staff")("POST", "/leases", leaseForm(paid(), 2)), 400);
+  await expectStatus(as("Staff")("POST", "/leases", leaseForm(leaseBody(shop.id))), 400);
+  await expectStatus(as("Staff")("POST", "/leases", leaseForm(leaseBody(shop.id, { payment_method: "promptpay" }))), 400);
+  const before = await expectStatus(as("Owner")("GET", "/leases"), 200);
+  assert.equal(before.leases.filter((item) => item.shop_id === shop.id).length, 0);
+  const { lease } = await expectStatus(as("Staff")("POST", "/leases", leaseForm(paid())), 201);
+  assert.match(lease.contract_no, /^SL-\d{4}-\d{4,}$/);
+  assert.equal(lease.status, "active");
+  await expectStatus(as("Admin")("POST", "/leases", leaseForm(paid({ start_date: "2030-01-01", end_date: "2031-01-01" }))), 409);
+  const detail = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
+  assert.equal(detail.images.length, 3);
+  assert.equal(detail.payments.length, 1);
+  assert.equal(detail.payments[0].amount, 15000);
+  assert.equal(detail.payments[0].method, "counter");
+
+  const renewForm = (fields) => leaseForm(fields, 0);
+  await expectStatus(as("Owner")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "monthly", payment_method: "counter" })), 403);
+  await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 0, renew_plan: "monthly", payment_method: "counter" })), 400);
+  await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "monthly" })), 400);
+  await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "lump_sum", payment_method: "bank" })), 400);
+  const unchanged = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
+  assert.equal(unchanged.lease.end_date, "2099-12-31");
+  const renewed = await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "lump_sum", payment_method: "counter" })), 200);
+  assert.equal(renewed.lease.end_date, "2100-06-30");
+  const afterRenew = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
+  const renewal = afterRenew.payments.find((item) => item.payment_type === "renewal");
+  assert.equal(renewal.amount, 30000);
+  assert.equal(renewal.renew_months, 6);
+  assert.equal(renewal.renew_plan, "lump_sum");
+  const imageResponse = await fetch(`${API}${detail.images[0].url}`, { headers: { Authorization: `Bearer ${fx.Owner}` } });
+  assert.equal(imageResponse.status, 200);
+  assert.equal((await fetch(`${API}${detail.images[0].url}`)).status, 401);
+  const added = await expectStatus(as("Staff")("POST", `/leases/${lease.id}/images`, leaseForm({}, 1)), 201);
+  assert.equal(added.images.length, 4);
+
+  const overview = await expectStatus(as("Owner")("GET", "/overview"), 200);
+  assert.equal(overview.permissions.operate, false);
+  assert.equal(overview.shops.find((item) => item.id === shop.id).current_lease.contract_no, lease.contract_no);
+
+  await expectStatus(as("Owner")("POST", `/leases/${lease.id}/api-keys`, { label: "POS" }), 403);
+  const { api_key: key } = await expectStatus(as("Staff")("POST", `/leases/${lease.id}/api-keys`, { label: "POS" }), 201);
+  assert.match(key, /^shk_/);
+  const keyDetail = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
+  const keyRow = keyDetail.api_keys.find((item) => key.startsWith(item.key_prefix));
+  assert.equal(keyRow.can_reveal, true);
+  await expectStatus(as("Owner")("GET", `/api-keys/${keyRow.id}/reveal`), 403);
+  const revealed = await expectStatus(as("Staff")("GET", `/api-keys/${keyRow.id}/reveal`), 200);
+  assert.equal(revealed.api_key, key);
+
+  await expectStatus(api("GET", "/shop", "shk_invalid"), 401);
+  const shopInfo = await expectStatus(api("GET", "/shop", key), 200);
+  assert.equal(shopInfo.shop.code, shop.code);
+  const { contract } = await expectStatus(api("GET", "/contract", key), 200);
+  assert.equal(contract.contract_no, lease.contract_no);
+  assert.notEqual(contract.tenant_idcard, "1234567890123");
+  const readOnly = await expectStatus(api("PUT", "/contract", key, { monthly_rent: 1 }), 403);
+  assert.equal(readOnly.code, "READ_ONLY");
+  await expectStatus(api("PATCH", "/shop", key, { name: "x" }), 403);
+
+  const { products } = await expectStatus(api("GET", "/products", key), 200);
+  assert.equal(products.length, 1);
+  const { product } = await expectStatus(api("POST", "/products", key, { name: "กาแฟ", category: "เครื่องดื่ม", price: 35.5, stock: 3 }), 201);
+  assert.equal(product.updated_by, "API: POS");
+  const updated = await expectStatus(api("PATCH", `/products/${product.id}`, key, { price: 40, is_available: false }), 200);
+  assert.equal(updated.product.price, 40);
+  assert.equal(updated.product.is_available, false);
+  const notAllowed = await expectStatus(api("PATCH", `/products/${product.id}`, key, { shop_id: other.id }), 400);
+  assert.equal(notAllowed.code, "FIELD_NOT_ALLOWED");
+  await expectStatus(api("POST", "/products", key, { name: "ซ้ำ", category: "x", price: 1, sku: "W1" }), 409);
+  await expectStatus(api("PATCH", `/products/${otherProduct.id}`, key, { price: 1 }), 404);
+  await expectStatus(api("DELETE", `/products/${otherProduct.id}`, key), 404);
+  await expectStatus(api("DELETE", `/products/${product.id}`, key), 200);
+
+  await expectStatus(as("Owner")("DELETE", `/shops/${shop.id}`), 409);
+  await expectStatus(as("Staff")("POST", `/leases/${lease.id}/terminate`, { reason: "ทดสอบ" }), 200);
+  await expectStatus(api("GET", "/shop", key), 401);
+  await expectStatus(as("Owner")("DELETE", `/shops/${shop.id}`), 200);
+});
