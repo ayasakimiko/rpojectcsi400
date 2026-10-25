@@ -17,6 +17,7 @@ import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusI
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
+import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import {
@@ -9745,9 +9746,9 @@ function StaffMain() {
     <div className="staff-page">
       {pageLoader}
       <div className="staff-container">
-        <div className="staff-header">
-          <div className="staff-title-group">
-            <div className="auth-icon">
+        <div className="staff-header app-header">
+          <div className="staff-title-group app-header-title">
+            <div className="auth-icon app-header-icon">
               <svg
                 width="22"
                 height="22"
@@ -9765,15 +9766,16 @@ function StaffMain() {
               </svg>
             </div>
             <div>
+              <AppHeaderMeta role="staff" />
               <h1>สวัสดี, {staffUser ? `${staffUser.first_name} ${staffUser.last_name}` : 'เจ้าหน้าที่'}</h1>
-              <p>แดชบอร์ดเจ้าหน้าที่ - จัดการห้องพักและการเก็บเงิน</p>
+              <p>จัดการห้องพัก คำขอผู้เช่า และการเก็บเงินประจำวัน</p>
             </div>
           </div>
-          <div className="staff-header-actions">
+          <div className="staff-header-actions app-header-actions">
             <div className="staff-notif-wrap" ref={notifRef}>
               <button
                 type="button"
-                className="staff-notif-btn"
+                className="staff-notif-btn app-header-icon-btn"
                 aria-label="การแจ้งเตือน"
                 onClick={() => {
                   if (notifOpen) {
@@ -9956,10 +9958,12 @@ function StaffMain() {
             <button type="button" className="staff-action-btn is-primary" onClick={() => navigate('/register')}>
               ลงทะเบียนลูกค้าใหม่
             </button>
-            <button type="button" className="staff-logout-btn" onClick={handleLogout}>
+            <button type="button" className="staff-logout-btn app-header-logout" onClick={handleLogout}>
+              <LogoutIcon />
               ออกจากระบบ
             </button>
           </div>
+          <AppHeaderDate />
         </div>
 
         {notifDetail && (

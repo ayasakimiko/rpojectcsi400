@@ -38,6 +38,7 @@ import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
+import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
 
 function compressImageFile(file) {
@@ -6149,9 +6150,9 @@ function CustomerDashbord() {
     <div className="dashboard-page">
       {pageLoader}
       <div className="container">
-        <div className="dashboard-header">
-          <div className="dashboard-title-group">
-            <div className="auth-icon">
+        <div className="dashboard-header app-header">
+          <div className="dashboard-title-group app-header-title">
+            <div className="auth-icon app-header-icon">
               <svg
                 width="22"
                 height="22"
@@ -6168,17 +6169,18 @@ function CustomerDashbord() {
               </svg>
             </div>
             <div>
+              <AppHeaderMeta role="customer" />
               <h1>
                 สวัสดี, {customer.first_name} {customer.last_name}
               </h1>
-              <p>แดชบอร์ดของฉัน</p>
+              <p>ดูห้องพัก บิลค่าใช้จ่าย และส่งคำขอต่างๆ ได้ในที่เดียว</p>
             </div>
           </div>
-          <div className="dashboard-header-actions">
+          <div className="dashboard-header-actions app-header-actions">
             <div className="dashboard-notif-wrap" ref={notifRef}>
               <button
                 type="button"
-                className="dashboard-notif-btn"
+                className="dashboard-notif-btn app-header-icon-btn"
                 aria-label="การแจ้งเตือน"
                 onClick={() => {
                   if (notifOpen) {
@@ -6477,10 +6479,12 @@ function CustomerDashbord() {
                 {room.is_booked ? 'กำลังเช่าอยู่' : 'ว่าง'}
               </span>
             )}
-            <button type="button" className="dashboard-logout-btn" onClick={handleLogout}>
+            <button type="button" className="dashboard-logout-btn app-header-logout" onClick={handleLogout}>
+              <LogoutIcon />
               ออกจากระบบ
             </button>
           </div>
+          <AppHeaderDate />
         </div>
 
         {maintenanceDetail && (

@@ -19,6 +19,7 @@ import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
+import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
@@ -2315,6 +2316,13 @@ function OwnerMain() {
   const [paymentSlipZoomOpen, setPaymentSlipZoomOpen] = useState(false)
   const [pendingSlipReviews, setPendingSlipReviews] = useState([])
   const [latestExpenses, setLatestExpenses] = useState([])
+  const [ownerUser] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('user') || 'null')
+    } catch {
+      return null
+    }
+  })
   const [expenseSeenId, setExpenseSeenId] = useState(() => readExpenseSeen('owner'))
   const [reviewingSlipId, setReviewingSlipId] = useState(null)
   const [occupancyLogs, setOccupancyLogs] = useState({ logs: [], total: 0, page: 1, pageSize: 10 })
@@ -3464,20 +3472,27 @@ function OwnerMain() {
   return (
     <div className="owner-page">
       <div className="owner-container">
-        <header className="owner-header">
-          <div className="owner-title-group">
-            <div className="auth-icon owner-building-icon" aria-hidden="true" />
+        <header className="owner-header app-header">
+          <div className="owner-title-group app-header-title">
+            <div className="auth-icon app-header-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18" />
+                <path d="M5 21V7l7-4 7 4v14" />
+                <path d="M9 21v-5h6v5M9 10h.01M15 10h.01M9 13h.01M15 13h.01" />
+              </svg>
+            </div>
             <div>
-              <h1>Owner Dashboard</h1>
-              <p>ระบบจัดการหอพักและการเงินรายวัน</p>
+              <AppHeaderMeta role="owner" />
+              <h1>สวัสดี, {ownerUser?.first_name ? `${ownerUser.first_name} ${ownerUser.last_name || ''}`.trim() : 'เจ้าของหอพัก'}</h1>
+              <p>ภาพรวมหอพัก รายรับรายจ่าย และการดำเนินงานรายวัน</p>
             </div>
           </div>
 
-          <div className="owner-header-actions">
+          <div className="owner-header-actions app-header-actions">
             <div className="staff-notif-wrap" ref={notifRef}>
               <button
                 type="button"
-                className="staff-notif-btn"
+                className="staff-notif-btn app-header-icon-btn"
                 aria-label="การแจ้งเตือน"
                 aria-expanded={notifOpen}
                 onClick={() => {
@@ -3608,10 +3623,12 @@ function OwnerMain() {
                 </div>
               )}
             </div>
-            <button type="button" className="owner-logout-btn" onClick={handleLogout}>
+            <button type="button" className="owner-logout-btn app-header-logout" onClick={handleLogout}>
+              <LogoutIcon />
               ออกจากระบบ
             </button>
           </div>
+          <AppHeaderDate />
         </header>
 
         {displayNotice && (

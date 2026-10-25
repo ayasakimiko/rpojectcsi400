@@ -35,6 +35,7 @@ import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
+import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
@@ -7623,23 +7624,24 @@ function AdminBackupPage() {
   return (
     <div className="admin-page">
       <div className="admin-container">
-        <div className="admin-header">
-          <div className="admin-title-group">
-            <div className="admin-icon">
+        <div className="admin-header app-header">
+          <div className="admin-title-group app-header-title">
+            <div className="admin-icon app-header-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4Z" />
               </svg>
             </div>
             <div>
+              <AppHeaderMeta role="admin" />
               <h1>สวัสดี, {adminUser ? `${adminUser.first_name} ${adminUser.last_name}` : 'ผู้ดูแลระบบ'}</h1>
-              <p>แดชบอร์ดผู้ดูแลระบบ - จัดการห้องพัก พนักงาน ลูกค้า และตรวจสอบกิจกรรม</p>
+              <p>จัดการห้องพัก พนักงาน ลูกค้า และตรวจสอบกิจกรรมทั้งหมดของหอพัก</p>
             </div>
           </div>
-          <div className="admin-header-actions">
+          <div className="admin-header-actions app-header-actions">
             <div className="admin-notif-wrap" ref={notifRef}>
               <button
                 type="button"
-                className="admin-notif-btn"
+                className="admin-notif-btn app-header-icon-btn"
                 aria-label="การแจ้งเตือน"
                 onClick={() => {
                   if (notifOpen) {
@@ -7773,10 +7775,12 @@ function AdminBackupPage() {
                 </div>
               )}
             </div>
-            <button type="button" className="admin-logout-btn" onClick={handleLogout}>
+            <button type="button" className="admin-logout-btn app-header-logout" onClick={handleLogout}>
+              <LogoutIcon />
               ออกจากระบบ
             </button>
           </div>
+          <AppHeaderDate />
         </div>
 
         {pageError && (
