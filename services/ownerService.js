@@ -4,6 +4,7 @@ import { configureDatabaseService } from "../Database/connection.js";
 import { createCorsMiddleware } from "../middleware/cors.js";
 import { auditDetailsMiddleware } from "../middleware/auditDetails.js";
 import ownerRouter from "../router/OwnerRouter.js";
+import { startNotificationJobs } from "../router/notificationJobs.js";
 import { withoutDomainRoutes } from "./domainRoutes.js";
 
 configureDatabaseService("owner");
@@ -20,6 +21,8 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/owner", withoutDomainRoutes(ownerRouter, "owner"));
+
+startNotificationJobs();
 
 const server = app.listen(PORT, () => {
   console.log(`Owner service is running on http://localhost:${PORT}`);

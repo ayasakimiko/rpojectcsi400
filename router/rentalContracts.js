@@ -5,6 +5,9 @@ import { randomUUID } from "node:crypto";
 import { PUBLIC_UPLOAD_DIR, customerUploadFolder, deletePublicImages, moveUploadedFiles, uploadedFileUrl } from "../middleware/publicUploads.js";
 import { IMAGE_TYPES, isRealImage } from "./ParcelRouter.js";
 import { CONTRACT_MIN_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from "../middleware/validation.js";
+import { getActingStaffName } from "../middleware/accounts.js";
+import { actorOf } from "../middleware/notifications.js";
+import { transferChargeSent, transferContractAttached } from "./notificationEvents.js";
 import {
   computeRentCoverage,
   loadDepositPayments,
@@ -833,6 +836,7 @@ export async function requestRoomTransferCharge(connection, plan, staffName) {
       `ย้ายห้อง ${sourceRoom.room_number} → ${targetRoom.room_number}: ${parts.join(" + ")} ชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน`.slice(0, 255),
     ],
   );
+  await transferChargeSent(connection, plan, settlement.additionalChargeCents);
   await connection.query(
     `UPDATE TenantRequest
      SET status = 'in_progress',
@@ -1258,6 +1262,7 @@ export function createAttachTransferContractHandler(getPool) {
       );
       await connection.commit();
       kept = true;
+      await transferContractAttached(transferId, actorOf(req.user, await getActingStaffName(getPool(), req.user)));
       return res.json({ message: "แนบรูปสัญญาใหม่เรียบร้อยแล้ว" });
     } catch (error) {
       await connection.rollback().catch(() => {});

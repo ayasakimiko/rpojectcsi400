@@ -68,7 +68,7 @@ export function buildAuditDetails(body, extraImages = [], { extraFields = [], re
 }
 
 export function auditDetailsMiddleware(req, res, next) {
-  if (!MUTATING_METHODS.has(req.method)) return next();
+  if (!MUTATING_METHODS.has(req.method) || /\/notifications\/read$/.test(req.path)) return next();
   const store = { images: [], fields: [], resultMessage: null };
   let details = null;
   res.on("finish", () => {

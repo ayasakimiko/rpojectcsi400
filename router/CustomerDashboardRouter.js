@@ -18,6 +18,9 @@ import {
   withIncidentPhotos,
 } from "../middleware/publicUploads.js";
 import { listAnnouncements } from "./AnnouncementRouter.js";
+import { createNotificationRoutes } from "./notificationRoutes.js";
+import { maintenanceCancelledByCustomer } from "./notificationEvents.js";
+import { actorOf } from "../middleware/notifications.js";
 import {
   isPositiveId,
   isValidPassword,
@@ -203,6 +206,7 @@ export async function createSafetyIncident(req, res) {
 }
 
 router.use(authenticate, requireCustomerRole, requireActiveCustomer);
+router.use("/notifications", createNotificationRoutes());
 router.post("/dorm-info/acknowledge", async (req, res) => {
   try {
     await getPool().query(
@@ -1227,6 +1231,7 @@ router.post("/maintenance/:id/cancel", async (req, res) => {
       return res.status(409).json({ message: "ไม่สามารถยกเลิกได้ เนื่องจากเจ้าหน้าที่รับเรื่องหรือรายการเปลี่ยนแปลงแล้ว" });
     }
 
+    await maintenanceCancelledByCustomer(maintenanceRequest.id, actorOf(req.user, null));
     return res.json({ message: "ยกเลิกรายการแจ้งซ่อมสำเร็จ" });
   } catch (error) {
     console.error("Cancel maintenance request error:", error);

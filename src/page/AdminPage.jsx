@@ -43,6 +43,7 @@ import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, Tran
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
 import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
+import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1399,6 +1400,18 @@ function calcStayDays(start, end) {
 }
 
 const NOTIF_PAGE_SIZE = 30
+// Pending work computed by the server that this page does not already build itself.
+// Rent/utility slips are left out: Admin has no slip review screen (A14), only the "approved by" feed.
+const ADMIN_SERVER_PENDING_KINDS = [
+  'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'move_in', 'contract_expiry', 'rent_overdue',
+  'waiting_list', 'parcel_stale',
+]
+const ADMIN_TARGET_TABS = {
+  visits: 'vehicle-requests', safety: 'safety', requests: 'requests', 'transfer-contracts': 'requests',
+  maintenance: 'maintenance', contracts: 'completed-contracts', 'move-in': 'move-in-inspections',
+  inspections: 'move-out-inspections', rooms: 'rooms', 'waiting-list': 'waiting-list', parcels: 'parcels',
+  staff: 'staff', expenses: 'expenses',
+}
 const ADMIN_STAFF_NOTIF_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 const ADMIN_TENANT_NOTIF_INFO = {
@@ -1422,7 +1435,6 @@ function getNotificationStorageKey(role) {
 }
 
 function buildAdminTenantNotifs(request) {
-  if (request.type === 'move_room') return []
   const info = ADMIN_TENANT_NOTIF_INFO[request.status]
   if (!info) return []
   return [
@@ -5813,6 +5825,7 @@ function AdminBackupPage() {
     }
   }, [activeTab, pendingTabIds, seenTabItems])
 
+  const [peerRefresh, setPeerRefresh] = useState(0)
   useEffect(() => {
     let cancelled = false
     const loadReviewCounts = () => {
@@ -5844,7 +5857,7 @@ function AdminBackupPage() {
       clearInterval(interval)
       window.removeEventListener('focus', loadReviewCounts)
     }
-  }, [])
+  }, [peerRefresh])
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -7264,13 +7277,15 @@ function AdminBackupPage() {
       .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { page: 1, status: 'pending' } })
       .then(({ data }) => setServiceCounts((current) => ({ ...current, maintenancePending: data.total || 0 })))
       .catch(() => {})
-    axios
-      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { page: 1 } })
-      .then(({ data }) => setNotifTenantItems(data.requests))
+    const loadOpen = (url) =>
+      Promise.all(['pending', 'in_progress'].map((status) =>
+        axios.get(url, { headers: authHeaders(), params: { page: 1, status } }).then(({ data }) => data.requests || []),
+      )).then((lists) => lists.flat())
+    loadOpen('/api/admin/logs/requests')
+      .then(setNotifTenantItems)
       .catch((err) => handleUnauthorized(err))
-    axios
-      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { page: 1 } })
-      .then(({ data }) => setNotifMaintenanceItems(data.requests))
+    loadOpen('/api/admin/logs/maintenance')
+      .then(setNotifMaintenanceItems)
       .catch((err) => handleUnauthorized(err))
     loadAnnouncements()
   }
@@ -7479,6 +7494,15 @@ function AdminBackupPage() {
   const currentParcelPage = Math.min(parcelPage, parcelTotalPages)
   const pagedParcels = filteredParcels.slice((currentParcelPage - 1) * ROWS_PER_PAGE, currentParcelPage * ROWS_PER_PAGE)
 
+  const serverFeed = useServerNotifications('/api/admin', {
+    pendingKinds: ADMIN_SERVER_PENDING_KINDS,
+    onNewEvents: () => {
+      loadNotifSources()
+      loadMoveOutInspections()
+      setPeerRefresh((count) => count + 1)
+    },
+  })
+
   const notifications = useMemo(() => {
     return [
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
@@ -7488,17 +7512,27 @@ function AdminBackupPage() {
       ...moveOutInspections.flatMap(buildAdminInspectionNotifs),
       ...staffList.flatMap(buildAdminStaffNotifs),
       ...announcements.map(buildAnnouncementNotif),
+      ...serverFeed.events,
+      ...serverFeed.pending,
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
-  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements])
+  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, serverFeed.events, serverFeed.pending])
 
-  const newNotifications = notifications.filter((notification) => !seenNotificationKeys.includes(notification.key))
+  const newNotifications = notifications.filter((notification) => isUnread(notification, seenNotificationKeys))
 
   const markNotificationsRead = () => {
     setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
     const keys = notifications.map((notification) => notification.key)
     setSeenNotificationKeys(keys)
     localStorage.setItem(getNotificationStorageKey('admin'), JSON.stringify(keys))
+    serverFeed.markAllRead()
   }
+
+  useEffect(() => {
+    const link = takeNotificationDeepLink()
+    if (!link || !Object.values(ADMIN_TARGET_TABS).includes(link.tab)) return
+    setActiveTab(link.tab)
+    if (link.focus && ['vehicle-requests', 'safety'].includes(link.tab)) setTabFocus({ tab: link.tab, id: Number(link.focus), nonce: Date.now() })
+  }, [])
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
   const notifCurrentPage = Math.min(notifPage, notifTotalPages)
@@ -7558,6 +7592,14 @@ function AdminBackupPage() {
 
   const openNotification = (notif) => {
     closeNotifPanel()
+    if (notif.server) {
+      const tab = ADMIN_TARGET_TABS[(notif.target || '').split(':')[0]]
+      setAnnouncementFocus(null)
+      if (!tab) return
+      if (['vehicle-requests', 'safety'].includes(tab)) setTabFocus({ tab, id: notif.refId, nonce: Date.now() })
+      setActiveTab(tab)
+      return
+    }
     if (notif.kind === 'announcement') {
       setActiveTab('announcements')
       setAnnouncementFocus((focus) => ({ id: notif.announcementId, nonce: (focus?.nonce ?? 0) + 1 }))

@@ -1,5 +1,7 @@
 import { getPool } from "../Database/connection.js";
 import { isPositiveId } from "../middleware/validation.js";
+import { actorOf } from "../middleware/notifications.js";
+import { visitReviewed } from "./notificationEvents.js";
 import { parseStoredPhotos } from "../middleware/publicUploads.js";
 import { PARKING_JOIN_SQL, PARKING_SELECT_SQL, loadParkingSettings, withParkingState } from "./parking.js";
 
@@ -50,6 +52,7 @@ export function createResidentVisitReview(getActingName) {
         [status, reviewerName, id],
       );
       if (!result.affectedRows) return res.status(409).json({ message: "คำขอนี้ถูกดำเนินการแล้ว" });
+      await visitReviewed(id, actorOf(req.user, reviewerName), status);
       return res.json({ message: status === "approved" ? "อนุมัติคำขอแล้ว" : "ปฏิเสธคำขอแล้ว" });
     } catch (error) {
       console.error("Review resident visit request error:", error);

@@ -17,12 +17,16 @@ import { listSafetyIncidents, reviewSafetyIncident } from "./AdminRouter.js";
 import expenseRouter from "./ExpenseRouter.js";
 import dormInfoRouter from "./DormInfoRouter.js";
 import announcementRouter from "./AnnouncementRouter.js";
+import { createNotificationRoutes } from "./notificationRoutes.js";
+import { loadPendingNotifications, PENDING_KINDS } from "./pendingNotifications.js";
+import { staffAccountChanged } from "./notificationEvents.js";
 
 const router = Router();
 
 const requireActiveOwner = createRequireActiveAccount(getPool);
 
 router.use(authenticate, requireOwnerRole, requireActiveOwner);
+router.use("/notifications", createNotificationRoutes({ loadPending: loadPendingNotifications, pendingKinds: PENDING_KINDS }));
 router.use("/dorm-info", dormInfoRouter);
 router.use("/expenses", expenseRouter);
 
@@ -1135,6 +1139,7 @@ router.post("/staff", async (req, res) => {
       [role, idcard.trim(), hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age)],
     );
 
+    await staffAccountChanged({ role: table, id: result.insertId }, "created", req.user);
     return res.status(201).json({
       message: role === "Admin" ? "เพิ่มผู้ดูแลระบบสำเร็จ" : "เพิ่มพนักงานสำเร็จ",
       id: result.insertId,
@@ -1189,6 +1194,7 @@ router.put("/staff/:role/:id", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบพนักงานนี้" });
     }
 
+    await staffAccountChanged({ role: table, id: staffId }, "updated", req.user);
     return res.json({ message: "แก้ไขข้อมูลสำเร็จ" });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
@@ -1220,6 +1226,7 @@ router.patch("/staff/:role/:id/suspend", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบพนักงานนี้" });
     }
 
+    await staffAccountChanged({ role: table, id: staffId }, is_suspended ? "suspended" : "unsuspended", req.user);
     return res.json({ message: is_suspended ? "ระงับการใช้งานสำเร็จ" : "เปิดการใช้งานสำเร็จ" });
   } catch (error) {
     console.error("Owner suspend staff error:", error);
@@ -1239,6 +1246,7 @@ router.delete("/staff/:role/:id", async (req, res) => {
     }
 
     const pool = getPool();
+    await staffAccountChanged({ role: table, id: staffId }, "deleted", req.user);
     const [result] = await pool.query(`DELETE FROM ${table} WHERE id = ?`, [staffId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "ไม่พบพนักงานนี้" });

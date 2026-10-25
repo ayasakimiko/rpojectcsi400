@@ -21,6 +21,7 @@ import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
+import { isUnread, useServerNotifications } from '../utils/serverNotifications.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
@@ -2181,6 +2182,25 @@ function getOwnerNotificationStorageKey() {
   }
 }
 
+// Owner sees everything Staff and Admin are notified about. Work the Owner page has no
+// screen for opens the Staff or Admin page (both allow the Owner role) on the right tab.
+const OWNER_PENDING_KINDS = [
+  'slip', 'visit', 'safety', 'tenant', 'maintenance', 'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract',
+  'transfer_charge', 'move_in', 'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
+]
+const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance' }
+
+function ownerNotificationLink({ target, refId }) {
+  const [area, section] = (target || '').split(':')
+  const focus = refId != null ? `&focus=${encodeURIComponent(refId)}` : ''
+  if (area === 'slips') return `/staff?tab=payment-review${focus}`
+  if (area === 'requests') return `/staff?tab=home&section=${encodeURIComponent(section || 'renew')}`
+  if (area === 'maintenance') return '/staff?tab=home&section=maintenance'
+  if (area === 'transfer-contracts') return '/staff?tab=home&section=move_room'
+  const adminTab = { visits: 'vehicle-requests', 'move-in': 'move-in-inspections', inspections: 'move-out-inspections', 'waiting-list': 'waiting-list', parcels: 'parcels' }[area]
+  return adminTab ? `/admin?tab=${adminTab}${area === 'visits' ? focus : ''}` : null
+}
+
 function buildOwnerAnnouncementNotification(item) {
   return {
     key: `announcement-${item.id}`,
@@ -3324,11 +3344,11 @@ function OwnerMain() {
     ].some((value) => String(value ?? '').toLowerCase().includes(slipKeyword)))
     : pendingSlipReviews
   const paymentPage = Number(paymentLogs.page || 1)
+  const serverFeed = useServerNotifications('/api/owner', { pendingKinds: OWNER_PENDING_KINDS })
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = announcements
-    .map(buildOwnerAnnouncementNotification)
+  const notifications = [...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
-  const newNotifications = notifications.filter((item) => !seenNotificationKeys.includes(item.key))
+  const newNotifications = notifications.filter((item) => isUnread(item, seenNotificationKeys))
   const notificationPageSize = 30
   const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))
   const notificationPage = Math.min(notifPage, notificationPages)
@@ -3338,6 +3358,7 @@ function OwnerMain() {
     setFreshNotificationKeys(new Set(newNotifications.map((item) => item.key)))
     setSeenNotificationKeys(keys)
     localStorage.setItem(getOwnerNotificationStorageKey(), JSON.stringify(keys))
+    serverFeed.markAllRead()
   }
   const ownerSummaryTiles = {
     cameras: cameraSummaryTiles(),
@@ -3464,6 +3485,17 @@ function OwnerMain() {
   const closeNotifPanel = () => setNotifClosing(true)
 
   const openNotification = (notification) => {
+    if (notification.server) {
+      closeNotifPanel()
+      const tab = OWNER_TARGET_TABS[(notification.target || '').split(':')[0]]
+      if (tab) {
+        setActiveTab(tab)
+        return
+      }
+      const link = ownerNotificationLink(notification)
+      if (link) navigate(link)
+      return
+    }
     setActiveTab('announcements')
     setAnnouncementFocus((current) => ({ id: notification.announcementId, nonce: (current?.nonce || 0) + 1 }))
     closeNotifPanel()
@@ -3558,8 +3590,17 @@ function OwnerMain() {
                           >
                             <span className="staff-notif-item-icon">
                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="m3 11 18-5v12L3 14v-3z" />
-                                <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                                {notification.server ? (
+                                  <>
+                                    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                                    <path d="M14 3v6h6M8 13h8M8 17h5" />
+                                  </>
+                                ) : (
+                                  <>
+                                    <path d="m3 11 18-5v12L3 14v-3z" />
+                                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                                  </>
+                                )}
                               </svg>
                             </span>
                             <span className="staff-notif-item-main">
@@ -3573,6 +3614,11 @@ function OwnerMain() {
                                 </time>
                               </span>
                               <span className="staff-notif-item-status">{notification.label}</span>
+                              {notification.preview && (
+                                <span className="staff-notif-item-preview">
+                                  <span className="staff-notif-item-preview-text">{notification.preview}</span>
+                                </span>
+                              )}
                             </span>
                           </button>
                         ))}

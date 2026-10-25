@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
+import { expenseRecorded } from "./notificationEvents.js";
 import {
   EXPENSE_MAX_PHOTOS,
   isPositiveId,
@@ -177,6 +178,7 @@ router.post("/", async (req, res) => {
           recordedByName,
         ],
       );
+      await expenseRecorded({ id: result.insertId, ...expense }, req.user);
       return res.status(201).json({ message: "บันทึกรายจ่ายสำเร็จ", expenseId: result.insertId });
     } catch (insertError) {
       await deletePublicImages(photoUrls(savedPhotos));

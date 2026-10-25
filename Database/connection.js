@@ -11,7 +11,7 @@ export const TABLES_BY_SERVICE = {
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],
   staff: ["MoveOutInspection", "DepositSettlementLog", "MoveInInspection"],
   admin: ["Announcement", "AnnouncementAcknowledgement", "WaitingList"],
-  owner: ["Expense", "RoomOccupancySnapshot", "AuditLog", "DormConfig"],
+  owner: ["Expense", "RoomOccupancySnapshot", "AuditLog", "DormConfig", "Notification", "NotificationRead"],
   parcel: ["Parcel", "ParcelPhoto"],
 };
 

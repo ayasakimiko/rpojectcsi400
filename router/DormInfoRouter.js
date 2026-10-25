@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { requireAdminRole } from "../middleware/authMiddleware.js";
 import { contractSystemRules } from "../middleware/validation.js";
+import { dormRulesChanged } from "./notificationEvents.js";
 
 const FIELDS = ["dorm_name", "dorm_rules", "contract_rules", "gate_close_time", "caretaker_phone", "technician_phone"];
 const DEFAULT_INFO = {
@@ -56,11 +57,15 @@ export function createDormInfoRouter(poolProvider = getPool) {
     const { value, error } = parseDormInfo(req.body);
     if (error) return res.status(400).json({ message: error });
     try {
+      const [[before]] = await poolProvider().query("SELECT dorm_rules, contract_rules FROM DormConfig WHERE id = 1");
       await poolProvider().query(
         `INSERT INTO DormConfig (id, ${FIELDS.join(", ")}) VALUES (1, ${FIELDS.map(() => "?").join(", ")})
          ON DUPLICATE KEY UPDATE ${FIELDS.map((field) => `${field} = ?`).join(", ")}`,
         [...FIELDS.map((field) => value[field]), ...FIELDS.map((field) => value[field])],
       );
+      if ((before?.dorm_rules ?? "") !== value.dorm_rules || (before?.contract_rules ?? "") !== value.contract_rules) {
+        await dormRulesChanged(req.user);
+      }
       return res.json({
         message: "บันทึกกฎระเบียบและเบอร์ติดต่อเรียบร้อยแล้ว",
         config: { ...value, contract_system: contractSystemRules() },
