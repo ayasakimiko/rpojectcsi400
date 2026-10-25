@@ -57,7 +57,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
       TZ: Asia/Bangkok
     ports:
-      - "${DB_PORT:-3308}:3306"
+      - "127.0.0.1:${DB_PORT:-3308}:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -91,7 +91,7 @@ services:
       PMA_HOST: db
       PMA_PORT: 3306
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
       - ./docker/phpmyadmin/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf:ro
       - ./docker/phpmyadmin/low-memory.ini:/usr/local/etc/php/conf.d/zz-low-memory.ini:ro
@@ -124,7 +124,7 @@ services:
       UV_THREADPOOL_SIZE: 1
       TZ: Asia/Bangkok
     ports:
-      - "${PORT:-4000}:4000"
+      - "127.0.0.1:${PORT:-4000}:4000"
     depends_on:
       - auth-service
       - room-service
@@ -148,7 +148,7 @@ services:
       <<: *upload-env
       AUTH_PORT: 4001
     ports:
-      - "${AUTH_PORT:-4001}:4001"
+      - "127.0.0.1:${AUTH_PORT:-4001}:4001"
     volumes:
       - ./public/uploads:/app/public/uploads
     depends_on:
@@ -163,7 +163,7 @@ services:
       <<: *service-env
       ROOM_PORT: 4002
     ports:
-      - "${ROOM_PORT:-4002}:4002"
+      - "127.0.0.1:${ROOM_PORT:-4002}:4002"
     volumes: []
 
   customer-service:
@@ -174,7 +174,7 @@ services:
       <<: *upload-env
       CUSTOMER_PORT: 4003
     ports:
-      - "${CUSTOMER_PORT:-4003}:4003"
+      - "127.0.0.1:${CUSTOMER_PORT:-4003}:4003"
     volumes:
       - ./public/uploads:/app/public/uploads
 
@@ -186,7 +186,7 @@ services:
       <<: *upload-env
       STAFF_PORT: 4004
     ports:
-      - "${STAFF_PORT:-4004}:4004"
+      - "127.0.0.1:${STAFF_PORT:-4004}:4004"
     volumes:
       - ./public/uploads:/app/public/uploads
 
@@ -198,7 +198,7 @@ services:
       <<: *upload-env
       ADMIN_PORT: 4005
     ports:
-      - "${ADMIN_PORT:-4005}:4005"
+      - "127.0.0.1:${ADMIN_PORT:-4005}:4005"
     volumes:
       - ./public/uploads:/app/public/uploads
 
@@ -210,7 +210,7 @@ services:
       <<: *service-env
       OWNER_PORT: 4006
     ports:
-      - "${OWNER_PORT:-4006}:4006"
+      - "127.0.0.1:${OWNER_PORT:-4006}:4006"
     volumes: []
 
   parcel-service:
@@ -221,7 +221,7 @@ services:
       <<: *upload-env
       PARCEL_PORT: 4007
     ports:
-      - "${PARCEL_PORT:-4007}:4007"
+      - "127.0.0.1:${PARCEL_PORT:-4007}:4007"
     volumes:
       - ./public/uploads:/app/public/uploads
 
@@ -233,7 +233,7 @@ services:
       <<: *upload-env
       MAINTENANCE_PORT: 4008
     ports:
-      - "${MAINTENANCE_PORT:-4008}:4008"
+      - "127.0.0.1:${MAINTENANCE_PORT:-4008}:4008"
     volumes:
       - ./public/uploads:/app/public/uploads
 
@@ -245,7 +245,7 @@ services:
       <<: *upload-env
       PAYMENT_PORT: 4009
     ports:
-      - "${PAYMENT_PORT:-4009}:4009"
+      - "127.0.0.1:${PAYMENT_PORT:-4009}:4009"
     volumes:
       - ./public/uploads:/app/public/uploads
 
@@ -259,7 +259,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:4001
       PAYMENT_SERVICE_URL: http://payment-service:4009
     ports:
-      - "${MARKET_PORT:-4010}:4010"
+      - "127.0.0.1:${MARKET_PORT:-4010}:4010"
     volumes:
       - ./storage/market-contracts:/app/storage/market-contracts
     depends_on:
