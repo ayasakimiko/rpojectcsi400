@@ -3186,6 +3186,11 @@ textarea.market-input {
   cursor: pointer;
 }
 
+.market-payment-method:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .market-payment-method > span:last-child {
   display: flex;
   flex-direction: column;
@@ -4198,6 +4203,33 @@ textarea.market-input {
 .market-client-samples .market-code {
   max-height: 320px;
   overflow: auto;
+}
+
+.market-code code {
+  display: block;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.market-client-hint {
+  margin: 0;
+  color: #4b6584;
+  font-size: 12.5px;
+}
+
+.market-client-hint code {
+  border: 1px solid #e1ebf7;
+  border-radius: 6px;
+  background: #f8fbff;
+  padding: 1px 6px;
+  color: #1d4ed8;
+  font-size: 12px;
 }
 
 .market-prompt-steps {

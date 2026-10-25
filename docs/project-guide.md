@@ -193,10 +193,11 @@ VPS และ Local ใช้ฐานข้อมูลและไฟล์ข
 { "username": "101", "password": "test1234" }
 ```
 
-เมื่อสำเร็จ server ตั้ง JWT เป็น cookie `auth_token` (HttpOnly, SameSite=Lax, Path=/) และตอบกลับเฉพาะ `user` โดยไม่ส่ง token ใน body
-- Frontend ส่ง cookie อัตโนมัติ (`withCredentials`) และไม่เก็บ token ใน sessionStorage อีกต่อไป เก็บเพียง `session` (รหัสสุ่มฝั่งเบราว์เซอร์) กับ `user` ไว้ตรวจว่าแท็บนี้เข้าสู่ระบบอยู่
+เมื่อสำเร็จ server ตั้ง JWT เป็น cookie แยกตาม role คือ `auth_token_customer`, `auth_token_staff`, `auth_token_admin`, `auth_token_owner` (HttpOnly, SameSite=Lax, Path=/) และตอบกลับเฉพาะ `user` (id, role, ชื่อ, นามสกุล) โดยไม่ส่ง token ใน body
+- Frontend ส่ง cookie อัตโนมัติ (`withCredentials`) และแนบ header `X-Auth-Role` ตาม role ของแท็บนั้น server เลือก cookie ตาม header และตรวจว่า role ใน JWT ตรงกัน จึงเปิดผู้เช่า/Staff/Admin/Owner พร้อมกันคนละแท็บได้ (บัญชี role เดียวกันสองบัญชีในเบราว์เซอร์เดียวยังใช้ cookie ร่วมกัน)
+- sessionStorage เก็บเพียง `session` (รหัสสุ่มฝั่งเบราว์เซอร์) กับ `user` ไว้ตรวจว่าแท็บนี้เข้าสู่ระบบอยู่
 - คำขอที่เขียนข้อมูล (POST/PUT/PATCH/DELETE) ที่ยืนยันตัวตนด้วย cookie ต้องมี header `X-Requested-With: XMLHttpRequest` (axios ตั้งให้แล้ว) เพื่อกัน CSRF ไม่มีจะได้ 403
-- `POST /api/auth/logout` ล้าง cookie
+- `POST /api/auth/logout` ล้าง cookie ของ role ที่ส่งมาใน `X-Auth-Role` (ไม่ส่งจะล้างทุก role)
 - ยังรับ `Authorization: Bearer <token>` ได้ สำหรับการเรียกกันระหว่าง service และชุดทดสอบ
 - ถ้า frontend อยู่คนละโดเมน (cross-site) กับ backend ให้ตั้ง `COOKIE_SAMESITE=none` (ระบบจะเปิด `Secure` ให้อัตโนมัติ ต้องใช้ HTTPS) และใส่ origin ของ frontend ใน `CLIENT_URL`
 

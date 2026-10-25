@@ -2,6 +2,7 @@ import { UploadImage } from '../components/UploadMedia.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { DormInfoMenu } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
@@ -599,17 +600,24 @@ function flashHighlight(element, className) {
   )
 }
 
+const openModalStack = []
+
 function Modal({ title, onClose, children, variant, onBack, headerAction }) {
   const [isClosing, setIsClosing] = useState(false)
 
   const requestClose = () => setIsClosing(true)
 
   useEffect(() => {
+    const token = {}
+    openModalStack.push(token)
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') requestClose()
+      if (event.key === 'Escape' && openModalStack[openModalStack.length - 1] === token) requestClose()
     }
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      openModalStack.splice(openModalStack.indexOf(token), 1)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [])
 
   return (
@@ -621,7 +629,7 @@ function Modal({ title, onClose, children, variant, onBack, headerAction }) {
       }}
     >
       <div
-        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${variant === 'payment' ? ' dashboard-modal-payment' : ''}${variant === 'parking' ? ' dashboard-modal-parking' : ''}${isClosing ? ' is-closing' : ''}`}
+        className={`dashboard-modal${variant === 'confirm' || variant === 'success' ? ' dashboard-modal-confirm' : ''}${variant === 'success' ? ' dashboard-modal-success' : ''}${variant === 'status' ? ' dashboard-modal-confirm dashboard-modal-status' : ''}${variant === 'pinned' ? ' dashboard-modal-pinned' : ''}${variant === 'request' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-request' : ''}${variant === 'parcel' ? ' dashboard-modal-confirm dashboard-modal-status dashboard-modal-parcel' : ''}${variant === 'payment' ? ' dashboard-modal-payment' : ''}${variant === 'parking' ? ' dashboard-modal-parking' : ''}${variant === 'error' ? ' dashboard-modal-confirm dashboard-modal-error' : ''}${isClosing ? ' is-closing' : ''}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dashboard-modal-header">
@@ -654,11 +662,37 @@ function Modal({ title, onClose, children, variant, onBack, headerAction }) {
           </button>
         </div>
         <div className="dashboard-modal-body">
-          {(variant === 'confirm' || variant === 'success') && <h3 className="dashboard-modal-alert-title">{title}</h3>}
+          {(variant === 'confirm' || variant === 'success' || variant === 'error') && <h3 className="dashboard-modal-alert-title">{title}</h3>}
           {typeof children === 'function' ? children(requestClose) : children}
         </div>
       </div>
     </div>
+  )
+}
+
+function ErrorPopup({ message, onClose }) {
+  if (!message) return null
+  return createPortal(
+    <Modal title="ทำรายการไม่สำเร็จ" onClose={onClose} variant="error">
+      {(requestClose) => (
+        <div className="dashboard-confirm-body" role="alert">
+          <div className="dashboard-confirm-icon is-error">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </div>
+          <p className="dashboard-confirm-message dashboard-error-message">{message}</p>
+          <div className="dashboard-form-actions">
+            <button type="button" className="dashboard-action-btn is-danger" onClick={requestClose} autoFocus>
+              รับทราบ
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>,
+    document.body,
   )
 }
 
@@ -3022,7 +3056,7 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding, paymentUnd
                 <textarea id="rv-note" rows={2} maxLength={500} value={form.note} onChange={updateForm('note')} placeholder="ข้อมูลเพิ่มเติมสำหรับเจ้าหน้าที่" />
 
                 </section>
-                {error && <p className="dashboard-form-error">{error}</p>}
+                <ErrorPopup message={error} onClose={() => setError('')} />
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                     ยกเลิก
@@ -3753,7 +3787,7 @@ function SafetyIncidentReportRow() {
                   onError={setError}
                 />
 
-                {error && <p className="dashboard-form-error">{error}</p>}
+                <ErrorPopup message={error} onClose={() => setError('')} />
                 <div className="dashboard-form-actions">
                   <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                     ยกเลิก
@@ -5127,6 +5161,10 @@ function CustomerDashbord() {
 
   const handleConfirmPayment = async (event) => {
     event.preventDefault()
+    if (paymentChannelsMissing) {
+      setPaymentError('หอพักยังไม่ได้ตั้งค่าช่องทางรับโอน จึงยังส่งสลิปไม่ได้ กรุณาติดต่อเจ้าหน้าที่')
+      return
+    }
     if (!paymentMethod) {
       setPaymentError('กรุณาเลือกช่องทางการชำระเงิน')
       return
@@ -5529,6 +5567,7 @@ function CustomerDashbord() {
   }, [])
   const currentBooking = rentalHistory?.[0]
   const paymentUnderReview = currentBooking?.payments?.some((payment) => payment.status === 'pending' && payment.slip_path)
+  const paymentChannelsMissing = paymentChannels !== null && !paymentChannels.configured
   const prepaidUntilDate = room?.prepaid_until ? new Date(room.prepaid_until) : null
   const isPrepaid = prepaidUntilDate && !currentDue && prepaidUntilDate > new Date()
   const msUntilStart = room?.is_booked ? msUntil(room.rental_start_date) : null
@@ -7768,7 +7807,7 @@ function CustomerDashbord() {
                   />
                 </section>
               </div>
-              {profileError && <p className="dashboard-form-error">{profileError}</p>}
+              <ErrorPopup message={profileError} onClose={() => setProfileError('')} />
               <div className="dashboard-form-actions">
                 <button type="button" className="dashboard-action-btn is-ghost" onClick={resetProfileForm}>
                   คืนค่าเดิม
@@ -8030,7 +8069,6 @@ function CustomerDashbord() {
                                     const channels = paymentChannels || {}
                                     const hasPromptPay = isValidPromptPayId(channels.promptpay_id)
                                     const hasBank = Boolean(channels.bank_name && channels.bank_account_no)
-                                    const noChannels = paymentChannels !== null && !hasPromptPay && !hasBank
                                     return (
                                       <>
                                         <div className="dashboard-pay-amount">
@@ -8058,7 +8096,7 @@ function CustomerDashbord() {
                                               role="radio"
                                               aria-checked={paymentMethod === method.key}
                                               className={`dashboard-pay-method${paymentMethod === method.key ? ' is-active' : ''}`}
-                                              disabled={paymentChannels !== null && !method.available && !noChannels}
+                                              disabled={paymentChannels !== null && (!method.available || paymentChannelsMissing)}
                                               onClick={() => {
                                                 setPaymentMethod(method.key)
                                                 setPaymentError('')
@@ -8081,7 +8119,7 @@ function CustomerDashbord() {
                                               </span>
                                               <span className="dashboard-pay-method-text">
                                                 <strong>{method.label}</strong>
-                                                <small>{paymentChannels !== null && !method.available && !noChannels ? 'หอพักยังไม่ได้ตั้งค่า' : method.hint}</small>
+                                                <small>{paymentChannels !== null && (!method.available || paymentChannelsMissing) ? 'หอพักยังไม่ได้ตั้งค่า' : method.hint}</small>
                                               </span>
                                             </button>
                                           ))}
@@ -8089,8 +8127,8 @@ function CustomerDashbord() {
 
                                         {paymentChannels === null ? (
                                           <div className="dashboard-pay-panel is-loading">กำลังโหลดช่องทางชำระเงิน...</div>
-                                        ) : noChannels ? (
-                                          <div className="dashboard-pay-panel is-empty">หอพักยังไม่ได้ตั้งค่าช่องทางชำระเงินในระบบ ชำระตามที่เจ้าหน้าที่แจ้ง แล้วแนบสลิปไว้ เจ้าหน้าที่จะตรวจสอบให้</div>
+                                        ) : paymentChannelsMissing ? (
+                                          <div className="dashboard-pay-panel is-empty">หอพักยังไม่ได้ตั้งค่าช่องทางรับโอน จึงยังชำระผ่านระบบไม่ได้ กรุณาติดต่อเจ้าหน้าที่</div>
                                         ) : paymentMethod === 'promptpay' ? (
                                           hasPromptPay ? (
                                             <div className="dashboard-pay-panel is-promptpay">
@@ -8133,23 +8171,29 @@ function CustomerDashbord() {
                                   </div>
                                   <div className="dashboard-pay-right">
                                   <span className="slip-field-label">แนบสลิปโอนเงิน <em className="dashboard-pay-required">จำเป็น</em></span>
-                                  <SlipDropZone
-                                    id="payment-slip-file"
-                                    file={paymentSlip}
-                                    onChange={setPaymentSlip}
-                                    onError={setPaymentError}
-                                  />
-                                  {paymentError && <p className="dashboard-form-error">{paymentError}</p>}
+                                  {paymentChannelsMissing ? (
+                                    <div className="dashboard-pay-panel is-empty">ยังแนบสลิปไม่ได้ จนกว่าหอพักจะตั้งค่าช่องทางรับโอน</div>
+                                  ) : (
+                                    <SlipDropZone
+                                      id="payment-slip-file"
+                                      file={paymentSlip}
+                                      onChange={setPaymentSlip}
+                                      onError={setPaymentError}
+                                    />
+                                  )}
+                                  <ErrorPopup message={paymentError} onClose={() => setPaymentError('')} />
                                   </div>
                                   </div>
                                   <div className="dashboard-form-actions">
                                     <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                                       ยกเลิก
                                     </button>
-                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting || !paymentSlip}>
+                                    <button type="submit" className="dashboard-action-btn is-primary" disabled={paymentSubmitting || !paymentSlip || paymentChannels === null || paymentChannelsMissing}>
                                       {paymentSubmitting
                                         ? paymentChannels?.verify_mode === 'manual' ? 'กำลังส่งสลิป...' : 'กำลังตรวจสอบสลิป...'
-                                        : !paymentSlip
+                                        : paymentChannelsMissing
+                                          ? 'ยังไม่ได้ตั้งค่าช่องทางรับโอน'
+                                          : !paymentSlip
                                           ? 'แนบสลิปก่อนส่ง'
                                           : paymentChannels?.verify_mode === 'manual' ? 'ส่งสลิปให้เจ้าหน้าที่ตรวจ' : 'ตรวจสอบสลิปและชำระเงิน'}
                                     </button>
@@ -8313,9 +8357,15 @@ function CustomerDashbord() {
                                     : 'ขณะนี้ไม่มีห้องว่างให้เลือก'}
                           </p>
                         </div>
-                        {moveRoomChargeDue && !moveRoomChargeDue.transfer_charge_has_slip ? (
-                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                            ชำระยอดย้ายห้อง
+                        {moveRoomChargeDue ? (
+                          <button
+                            type="button"
+                            className="dashboard-action-btn is-primary"
+                            onClick={openPaymentForm}
+                            disabled={Boolean(moveRoomChargeDue.transfer_charge_has_slip) || paymentUnderReview}
+                            title={moveRoomChargeDue.transfer_charge_has_slip || paymentUnderReview ? 'ส่งสลิปแล้ว รอเจ้าหน้าที่ตรวจสอบ' : undefined}
+                          >
+                            {moveRoomChargeDue.transfer_charge_has_slip || paymentUnderReview ? 'รอตรวจสอบสลิป' : 'ชำระยอดย้ายห้อง'}
                           </button>
                         ) : moveRoomActive ? (
                           <button
@@ -8518,7 +8568,7 @@ function CustomerDashbord() {
                               }
                               required={activeRequestType === 'moveout'}
                             />
-                            {requestError && <p className="dashboard-form-error">{requestError}</p>}
+                            <ErrorPopup message={requestError} onClose={() => setRequestError('')} />
                             <div className="dashboard-form-actions">
                               <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                                 ยกเลิก
@@ -8647,7 +8697,7 @@ function CustomerDashbord() {
                             onError={setMaintenanceError}
                           />
 
-                          {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
+                          <ErrorPopup message={maintenanceError} onClose={() => setMaintenanceError('')} />
                           <div className="dashboard-form-actions">
                             <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                               ยกเลิก
@@ -8802,7 +8852,7 @@ function CustomerDashbord() {
                             <br />
                             เมื่อยกเลิกแล้วจะไม่สามารถกู้คืนได้
                           </p>
-                          {maintenanceError && <p className="dashboard-form-error">{maintenanceError}</p>}
+                          <ErrorPopup message={maintenanceError} onClose={() => setMaintenanceError('')} />
                           <div className="dashboard-form-actions">
                             <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
                               ไม่ยกเลิก

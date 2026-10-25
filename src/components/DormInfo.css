@@ -1453,3 +1453,8 @@
     animation-duration: 0.01ms;
   }
 }
+.dorm-settings-category-payment .dorm-settings-main > .dorm-settings-editor:not(.owner-payment-settings),
+.dorm-settings-category-info .dorm-settings-main > .owner-payment-settings {
+  display: none;
+}
+

@@ -1048,9 +1048,14 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
 
   useEffect(() => {
     axios.get('/api/payment/channels')
-      .then(({ data }) => setChannels(data.channels))
+      .then(({ data }) => {
+        setChannels(data.channels)
+        if (!data.channels?.configured) setPayment((current) => ({ ...current, method: 'counter', slip: null, qrPayload: '' }))
+      })
       .catch((error) => setChannelError(errorMessage(error, 'โหลดช่องทางชำระเงินไม่สำเร็จ')))
-  }, [])
+  }, [setPayment])
+
+  const channelsMissing = Boolean(channels) && !channels.configured
 
   const chooseSlip = async (file) => {
     if (!file) return
@@ -1077,6 +1082,7 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
 
       {channels?.test_mode && <p className="market-payment-test">ระบบชำระเงินอยู่ในโหมดทดลอง สลิปจะไม่ถูกตรวจกับธนาคาร</p>}
       {channelError && <p className="market-error">{channelError}</p>}
+      {channelsMissing && <p className="market-payment-test">หอพักยังไม่ได้ตั้งค่าช่องทางรับโอน จึงรับชำระด้วยสลิปไม่ได้ รับชำระเป็นเงินสดที่เคาน์เตอร์ได้</p>}
 
       <div className="market-payment-methods" role="radiogroup" aria-label="วิธีชำระเงิน">
         {methods.map((method) => (
@@ -1085,6 +1091,7 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
             type="button"
             role="radio"
             aria-checked={payment.method === method.key}
+            disabled={channelsMissing && method.key !== 'counter'}
             className={`market-payment-method${payment.method === method.key ? ' is-selected' : ''}`}
             onClick={() => setPayment((current) => ({ ...current, method: method.key }))}
           >
@@ -1116,7 +1123,7 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
         </div>
       )}
 
-      {payment.method !== 'counter' ? (
+      {channelsMissing && payment.method !== 'counter' ? null : payment.method !== 'counter' ? (
         <div className="market-slip-drop">
           {slipPreview ? (
             <div className="market-slip-preview">
@@ -2578,6 +2585,7 @@ function GuidePrintDocument({ base, nodeRef }) {
       {guideClientSamples(base).map((sample) => (
         <div key={sample.id} className="market-guide-print-example">
           <small>{sample.title}</small>
+          {sample.setup && <p>ต้องใช้ Node.js 18 ขึ้นไป · ติดตั้ง {sample.setup[0]} · บันทึกเป็น market.mjs แล้วรัน {sample.setup[1]}</p>}
           <pre><code>{sample.code}</code></pre>
         </div>
       ))}
@@ -2715,6 +2723,11 @@ function ApiExamplesSection({ base }) {
           ))}
           <CopyButton value={sample.code} />
         </div>
+        {sample.setup && (
+          <p className="market-client-hint">
+            ต้องใช้ Node.js 18 ขึ้นไป · ติดตั้ง <code>{sample.setup[0]}</code> · บันทึกเป็นไฟล์ market.mjs แล้วรัน <code>{sample.setup[1]}</code>
+          </p>
+        )}
         <pre className="market-code"><code>{sample.code}</code></pre>
       </div>
       <p className="market-api-example-note">แทน &lt;API_KEY&gt; ด้วย key จริงของร้าน (แนะนำให้เก็บในตัวแปรสภาพแวดล้อม MARKET_API_KEY) และแทน id สินค้าด้วยค่าที่ได้จาก GET /products</p>

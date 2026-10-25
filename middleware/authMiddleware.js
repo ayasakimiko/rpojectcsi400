@@ -5,7 +5,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 export const STAFF_ROLES = new Set(["Staff", "Admin", "Owner"]);
 export const ADMIN_ROLES = new Set(["Admin", "Owner"]);
 
-export const AUTH_COOKIE = "auth_token";
+export const AUTH_ROLES = ["Customer", "Staff", "Admin", "Owner"];
+export const LEGACY_AUTH_COOKIE = "auth_token";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const SAME_SITE_VALUES = new Set(["strict", "lax", "none"]);
 
@@ -23,11 +24,24 @@ function readCookie(req, name) {
   return null;
 }
 
+export function authCookieName(role) {
+  return `auth_token_${String(role).toLowerCase()}`;
+}
+
+export function requestedAuthRole(req) {
+  const role = req.headers["x-auth-role"];
+  return AUTH_ROLES.includes(role) ? role : null;
+}
+
 export function readAuthToken(req) {
   const header = req.headers.authorization;
-  if (header?.startsWith("Bearer ")) return { token: header.slice(7), fromCookie: false };
-  const cookie = readCookie(req, AUTH_COOKIE);
-  return cookie ? { token: cookie, fromCookie: true } : null;
+  if (header?.startsWith("Bearer ")) return { token: header.slice(7), fromCookie: false, role: null };
+  const requested = requestedAuthRole(req);
+  const roles = requested ? [requested] : AUTH_ROLES;
+  const found = roles
+    .map((role) => ({ token: readCookie(req, authCookieName(role)), fromCookie: true, role }))
+    .filter((auth) => auth.token);
+  return found.length === 1 ? found[0] : null;
 }
 
 export function authCookieOptions() {
@@ -47,6 +61,9 @@ export function authenticate(req, res, next) {
 
   try {
     req.user = jwt.verify(auth.token, JWT_SECRET);
+    if (auth.role && req.user.role !== auth.role) {
+      return res.status(401).json({ message: "เซสชันไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่" });
+    }
     req.authorization = `Bearer ${auth.token}`;
     return next();
   } catch {

@@ -20,7 +20,7 @@ import {
 import { customerUploadFolder, deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
 import { recordAuditFields } from "../middleware/auditDetails.js";
 import { roomEquipmentAssets } from "./roomAssets.js";
-import { TEST_PAYMENT_MARK, effectiveVerifyMode } from "../middleware/slipVerification.js";
+import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";
 import announcementRouter from "./AnnouncementRouter.js";
 import { createNotificationRoutes } from "./notificationRoutes.js";
 import { loadPendingNotifications, PENDING_KINDS } from "./pendingNotifications.js";
@@ -324,9 +324,9 @@ router.get("/payment-slips", async (_req, res) => {
        ORDER BY sr.created_at DESC, sr.id DESC
        LIMIT 500`,
     );
-    const [configRows] = await getPool().query("SELECT promptpay_id, bank_account_no, payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1");
+    const [configRows] = await getPool().query("SELECT payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1");
     const testMode = Boolean(configRows[0]?.payment_test_mode);
-    const verifyMode = effectiveVerifyMode(configRows[0]);
+    const verifyMode = configRows[0]?.slip_verify_mode === "manual" ? "manual" : "auto";
     return res.json({ slips, rejected, mode: testMode ? "test" : verifyMode });
   } catch (error) {
     console.error("Fetch payment slip history error:", error);

@@ -245,7 +245,7 @@ export function ParkingSessionPanel({ item, finePerHour, alwaysShow = false }) {
 export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounterPaid, counterBusy = false }) {
   const hasPromptPay = isValidPromptPayId(channels?.promptpay_id)
   const hasBank = Boolean(channels?.bank_account_no)
-  const noChannels = Boolean(channels) && !hasPromptPay && !hasBank
+  const channelsMissing = Boolean(channels) && !channels.configured
   const [method, setMethod] = useState(hasPromptPay || !hasBank ? 'promptpay' : 'bank')
   const [slip, setSlip] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -312,7 +312,7 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
                 type="button"
                 role="radio"
                 aria-checked={method === option.key}
-                disabled={!option.available && !noChannels}
+                disabled={!option.available || channelsMissing}
                 className={`parking-pay-method${method === option.key ? ' is-active' : ''}`}
                 onClick={() => setMethod(option.key)}
               >
@@ -320,8 +320,8 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
               </button>
             ))}
           </div>
-          {noChannels ? (
-            <p className="parking-pay-wait">หอพักยังไม่ได้ตั้งค่าช่องทางชำระเงินในระบบ แนบสลิปไว้ เจ้าหน้าที่จะตรวจสอบให้</p>
+          {channelsMissing ? (
+            <p className="parking-pay-wait">หอพักยังไม่ได้ตั้งค่าช่องทางรับโอน จึงยังส่งสลิปไม่ได้ กรุณาติดต่อเจ้าหน้าที่</p>
           ) : method === 'promptpay' ? (
             hasPromptPay ? (
               <div className="parking-pay-qr">
@@ -338,17 +338,19 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
               <strong>{channels?.bank_account_no || '-'}</strong>
             </div>
           )}
-          <label className="parking-pay-file">
-            <span>แนบสลิปการโอน</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) => {
-                setSlip(event.target.files?.[0] || null)
-                setError('')
-              }}
-            />
-          </label>
+          {!channelsMissing && (
+            <label className="parking-pay-file">
+              <span>แนบสลิปการโอน</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => {
+                  setSlip(event.target.files?.[0] || null)
+                  setError('')
+                }}
+              />
+            </label>
+          )}
           {error && <p className="parking-pay-error" role="alert">{error}</p>}
           {message && <p className="parking-pay-done">{message}</p>}
           <div className="parking-pay-actions">
@@ -357,7 +359,7 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
                 ยืนยันรับชำระที่เคาน์เตอร์
               </button>
             )}
-            <button type="submit" className="parking-btn is-primary" disabled={busy || !slip}>
+            <button type="submit" className="parking-btn is-primary" disabled={busy || !slip || channelsMissing}>
               {busy ? 'กำลังตรวจสอบสลิป...' : 'ส่งสลิปชำระค่าปรับ'}
             </button>
           </div>

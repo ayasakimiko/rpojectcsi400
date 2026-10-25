@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoSettings, SettingsDialog } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
@@ -105,15 +105,112 @@ function OwnerSlipPreview({ settings }) {
   )
 }
 
+const SETTINGS_CATEGORIES = [
+  { key: 'all', label: 'ทั้งหมด', hint: 'แสดงการตั้งค่าทุกหมวดในหน้าเดียว', icon: 'grid' },
+  { key: 'info', label: 'กฎระเบียบและสัญญา', hint: 'กฎหอพัก สัญญาเช่า เวลาปิดประตู และเบอร์ติดต่อ', icon: 'doc' },
+  { key: 'payment', label: 'รับเงินและสลิป', hint: 'ช่องทางรับโอน โหมดทดลอง และวิธีตรวจสอบสลิป', icon: 'wallet' },
+]
+
+function SettingsCategoryIcon({ name, size = 16 }) {
+  const paths = {
+    sliders: <><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></>,
+    grid: <><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></>,
+    doc: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></>,
+    wallet: <><rect x="3" y="6" width="18" height="13" rx="2.5" /><path d="M3 10h18M16 15h2" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  )
+}
+
+function OwnerSettingsFilter({ value, onChange }) {
+  const trackRef = useRef(null)
+  const thumbRef = useRef(null)
+  const active = SETTINGS_CATEGORIES.find((item) => item.key === value) || SETTINGS_CATEGORIES[0]
+
+  useLayoutEffect(() => {
+    const track = trackRef.current
+    const thumb = thumbRef.current
+    if (!track || !thumb) return undefined
+    const place = () => {
+      const button = track.querySelector('[aria-checked="true"]')
+      if (!button) return
+      thumb.style.width = `${button.offsetWidth}px`
+      thumb.style.height = `${button.offsetHeight}px`
+      thumb.style.transform = `translate(${button.offsetLeft}px, ${button.offsetTop}px)`
+      thumb.dataset.ready = 'true'
+    }
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(track)
+    return () => observer.disconnect()
+  }, [value])
+
+  const handleKeyDown = (event, index) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    if (!step) return
+    event.preventDefault()
+    const next = SETTINGS_CATEGORIES[(index + step + SETTINGS_CATEGORIES.length) % SETTINGS_CATEGORIES.length]
+    onChange(next.key)
+    trackRef.current?.querySelector(`[data-key="${next.key}"]`)?.focus()
+  }
+
+  return (
+    <div className="owner-settings-filter">
+      <div className="owner-settings-filter-caption">
+        <span className="owner-settings-filter-icon"><SettingsCategoryIcon name="sliders" size={20} /></span>
+        <div className="owner-settings-filter-text">
+          <strong>เลือกหมวดการตั้งค่า</strong>
+          <span key={active.key} className="owner-settings-filter-hint">{active.hint}</span>
+        </div>
+      </div>
+      <div className="owner-settings-segment" role="radiogroup" aria-label="หมวดการตั้งค่า" ref={trackRef}>
+        <span className="owner-settings-segment-thumb" ref={thumbRef} aria-hidden="true" />
+        {SETTINGS_CATEGORIES.map((item, index) => (
+          <button
+            key={item.key}
+            type="button"
+            role="radio"
+            data-key={item.key}
+            aria-checked={value === item.key}
+            tabIndex={value === item.key ? 0 : -1}
+            className={`owner-settings-segment-option${value === item.key ? ' is-active' : ''}`}
+            onClick={() => onChange(item.key)}
+            onKeyDown={(event) => handleKeyDown(event, index)}
+          >
+            <SettingsCategoryIcon name={item.icon} />
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function OwnerDormInfoSettings() {
   const [paymentPreview, setPaymentPreview] = useState(null)
+  const [category, setCategory] = useState('all')
+  const [swap, setSwap] = useState(false)
+  const selectCategory = (next) => {
+    if (next === category) return
+    setCategory(next)
+    setSwap((current) => !current)
+  }
   return (
-    <DormInfoSettings
-      apiBase="/api/owner/dorm-info"
-      slipPreview={paymentPreview && { changed: paymentPreview.changed, content: <OwnerSlipPreview settings={paymentPreview.settings} /> }}
-    >
-      <OwnerPaymentSettings onPreviewChange={setPaymentPreview} />
-    </DormInfoSettings>
+    <>
+    <OwnerSettingsFilter value={category} onChange={selectCategory} />
+    <div className={`owner-settings-content ${swap ? 'is-swap-b' : 'is-swap-a'}`}>
+      <DormInfoSettings
+        apiBase="/api/owner/dorm-info"
+        category={category}
+        slipPreview={paymentPreview && { changed: paymentPreview.changed, content: <OwnerSlipPreview settings={paymentPreview.settings} /> }}
+      >
+        <OwnerPaymentSettings onPreviewChange={setPaymentPreview} />
+      </DormInfoSettings>
+    </div>
+    </>
   )
 }
 
@@ -1778,7 +1875,7 @@ const OWNER_TABS = [
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
   { key: 'audit', label: 'ประวัติ Audit' },
-  { key: 'dorm-info', label: 'ตั้งแค่ากฎและการจ่ายเงิน' },
+  { key: 'dorm-info', label: 'ตั้งค่ากฎและการจ่ายเงิน' },
 ]
 
 const OWNER_TAB_GROUPS = [
@@ -1788,7 +1885,7 @@ const OWNER_TAB_GROUPS = [
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'people', label: 'พนักงาน', tabs: ['staff'] },
   { key: 'security', label: 'ความปลอดภัย', tabs: ['safety', 'cameras'] },
-  { key: 'system', label: 'ระบบและตั้งค่า', tabs: ['audit', 'dorm-info'] },
+  { key: 'system', label: 'ระบบและตั้งค่า', tabs: ['dorm-info', 'audit'] },
 ]
 const OWNER_TAB_LABEL = Object.fromEntries(OWNER_TABS.map((tab) => [tab.key, tab.label]))
 const OWNER_GROUP_OF = Object.fromEntries(OWNER_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab, group.key])))

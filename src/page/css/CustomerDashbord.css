@@ -10934,6 +10934,21 @@
   margin-bottom: 0;
 }
 
+.dashboard-pay-left > .dashboard-pay-panel,
+.dashboard-pay-right > .dashboard-pay-panel {
+  flex: 1 1 auto;
+}
+
+.dashboard-pay-right > .dashboard-pay-panel.is-empty {
+  min-height: 220px;
+}
+
+@media (max-width: 760px) {
+  .dashboard-pay-right > .dashboard-pay-panel.is-empty {
+    min-height: 120px;
+  }
+}
+
 @media (max-width: 760px) {
   .dashboard-pay-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -10949,7 +10964,6 @@
   }
 }
 
-/* Rental history: keep controls visible while the payment rows scroll. */
 .dashboard-rental-history-card > .dashboard-rental-entry > .table-responsive {
   overflow: auto;
   scrollbar-width: thin;
@@ -12004,5 +12018,98 @@
   .dashboard-rv-rows dt {
     gap: 8px;
     font-size: 13.5px;
+  }
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) {
+  width: min(380px, 100%);
+  max-width: 380px;
+  position: relative;
+  overflow: hidden;
+  border-color: #fde2e2;
+  padding: 28px 24px 22px;
+  background: radial-gradient(120% 70% at 50% 0%, #fff1f1 0%, #ffffff 58%);
+  box-shadow: 0 24px 60px rgba(127, 29, 29, 0.18), 0 2px 6px rgba(15, 43, 82, 0.06);
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body)::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, #f87171, #dc2626, #f87171);
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-confirm-icon.is-error {
+  --alert-tint: linear-gradient(145deg, #fee2e2, #fecaca);
+  width: 68px;
+  height: 68px;
+  margin: 0 0 14px;
+  background: linear-gradient(145deg, #fff1f1, #fee2e2);
+  box-shadow: 0 0 0 8px rgba(254, 226, 226, 0.55), 0 10px 22px rgba(220, 38, 38, 0.18);
+  color: #dc2626;
+  animation: dashboard-error-icon-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-confirm-icon.is-error svg {
+  transform: translateY(-1px);
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-modal-alert-title {
+  color: #7f1d1d;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-error-message {
+  box-sizing: border-box;
+  margin: 10px 0 14px;
+  border: 1px solid #fde2e2;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fff7f7;
+  color: #8a3b3b;
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-form-actions {
+  margin-top: 0;
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-action-btn.is-danger {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #dc2626;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.22);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-action-btn.is-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.28);
+}
+
+.dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-action-btn.is-danger:focus-visible {
+  outline: 3px solid rgba(248, 113, 113, 0.45);
+  outline-offset: 2px;
+}
+
+@keyframes dashboard-error-icon-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  70% { opacity: 1; transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-modal.dashboard-modal-confirm.dashboard-modal-error:not(.dashboard-modal-status):has(> .dashboard-modal-body > .dashboard-confirm-body) .dashboard-confirm-icon.is-error {
+    animation: none;
   }
 }

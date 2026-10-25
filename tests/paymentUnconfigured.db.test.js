@@ -2,7 +2,7 @@ import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
 import { configureDatabaseService, getPool } from "../Database/connection.js";
-import { effectiveVerifyMode, paymentChannelsConfigured } from "../middleware/slipVerification.js";
+import { PAYMENT_CHANNELS_MISSING_MESSAGE, paymentChannelsConfigured } from "../middleware/slipVerification.js";
 
 configureDatabaseService("staff");
 
@@ -11,7 +11,7 @@ const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 const fx = {};
 
-const headers = () => ({ Cookie: `auth_token=${fx.token}`, "X-Requested-With": "XMLHttpRequest" });
+const headers = () => ({ Cookie: `auth_token_customer=${fx.token}`, "X-Auth-Role": "Customer", "X-Requested-With": "XMLHttpRequest" });
 
 async function sendSlip() {
   const form = new FormData();
@@ -73,45 +73,69 @@ after(async () => {
   await db.end();
 });
 
-test("slips go to staff review when the dorm has no PromptPay or bank account", () => {
+const setConfig = (fields) => getPool().query("UPDATE DormConfig SET ? WHERE id = 1", [fields]);
+const paymentRows = async () => (await getPool().query("SELECT status, slip_path FROM Payment WHERE booking_id = ?", [fx.bookingId]))[0];
+
+test("payment channels count as configured only with a PromptPay id or bank account", () => {
   assert.equal(paymentChannelsConfigured({}), false);
-  assert.equal(paymentChannelsConfigured({ promptpay_id: "  " }), false);
+  assert.equal(paymentChannelsConfigured({ promptpay_id: "  ", bank_name: "กสิกร" }), false);
+  assert.equal(paymentChannelsConfigured({ promptpay_id: "0812345678" }), true);
   assert.equal(paymentChannelsConfigured({ bank_account_no: "123-4-56789-0" }), true);
-  assert.equal(effectiveVerifyMode({ slip_verify_mode: "auto" }), "manual");
-  assert.equal(effectiveVerifyMode({ slip_verify_mode: "auto", promptpay_id: "0812345678" }), "auto");
-  assert.equal(effectiveVerifyMode({ slip_verify_mode: "manual", promptpay_id: "0812345678" }), "manual");
-  assert.equal(effectiveVerifyMode({ slip_verify_mode: "auto", payment_test_mode: 1 }), "auto");
 });
 
-test("unconfigured payment channels report manual review to the tenant", async () => {
+test("the tenant is told the dorm has no transfer channel yet", async () => {
   const response = await fetch(`${API}/api/customer/payment-channels`, { headers: headers() });
   assert.equal(response.status, 200);
   const { channels } = await response.json();
-  assert.equal(channels.promptpay_id, "");
-  assert.equal(channels.bank_account_no, "");
-  assert.equal(channels.verify_mode, "manual");
+  assert.equal(channels.configured, false);
 });
 
-test("tenant can send a slip without configured channels and it waits for staff review", async () => {
+test("a slip is refused when no transfer channel is configured", async () => {
   const { status, body } = await sendSlip();
-  assert.equal(status, 201, JSON.stringify(body));
-  const [payments] = await getPool().query("SELECT status, slip_path FROM Payment WHERE booking_id = ?", [fx.bookingId]);
-  assert.ok(payments.some((payment) => payment.status === "pending" && payment.slip_path));
-
-  const me = await (await fetch(`${API}/api/customer/me`, { headers: headers() })).json();
-  assert.ok(me.rentalHistory[0].payments.some((payment) => payment.status === "pending" && payment.slip_path));
+  assert.equal(status, 400);
+  assert.equal(body.message, PAYMENT_CHANNELS_MISSING_MESSAGE);
+  assert.equal((await paymentRows()).length, 0);
 });
 
-test("a second slip is refused while the first one is under review", async () => {
+test("test mode also refuses slips until a real transfer channel is configured", async () => {
+  await setConfig({ payment_test_mode: true });
+  const channels = (await (await fetch(`${API}/api/customer/payment-channels`, { headers: headers() })).json()).channels;
+  assert.equal(channels.test_mode, true);
+  assert.equal(channels.configured, false);
   const { status, body } = await sendSlip();
-  assert.equal(status, 409);
-  assert.equal(body.message, "มีสลิปที่รอตรวจสอบอยู่แล้ว");
+  assert.equal(status, 400);
+  assert.equal(body.message, PAYMENT_CHANNELS_MISSING_MESSAGE);
+  assert.equal((await paymentRows()).length, 0);
 });
 
-test("staff slip history switches to manual review mode", async () => {
+test("manual review mode also refuses slips without a transfer channel", async () => {
+  await setConfig({ payment_test_mode: false, slip_verify_mode: "manual" });
+  const { status } = await sendSlip();
+  assert.equal(status, 400);
+  assert.equal((await paymentRows()).length, 0);
+});
+
+test("once a PromptPay id is set the slip goes through and further slips wait for review", async () => {
+  await setConfig({ promptpay_id: "0812345678", payment_test_mode: false, slip_verify_mode: "manual" });
+  const channels = (await (await fetch(`${API}/api/customer/payment-channels`, { headers: headers() })).json()).channels;
+  assert.equal(channels.configured, true);
+  const first = await sendSlip();
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+  assert.ok((await paymentRows()).some((payment) => payment.status === "pending" && payment.slip_path));
+  const second = await sendSlip();
+  assert.equal(second.status, 409);
+  assert.equal(second.body.message, "มีสลิปที่รอตรวจสอบอยู่แล้ว");
+});
+
+test("parking fine and market channels report the same configured flag", async () => {
+  await setConfig({ promptpay_id: null, bank_account_no: null });
   const [[staff]] = await getPool().query("SELECT id FROM Staff WHERE is_suspended = FALSE ORDER BY id LIMIT 1");
   const staffToken = jwt.sign({ id: staff.id, role: "Staff" }, SECRET, { expiresIn: "15m" });
-  const response = await fetch(`${API}/api/staff/payment-slips`, { headers: { Authorization: `Bearer ${staffToken}` } });
+  const response = await fetch(`${API}/api/payment/channels`, { headers: { Authorization: `Bearer ${staffToken}` } });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).mode, "manual");
+  assert.equal((await response.json()).channels.configured, false);
+  const parking = await fetch(`${API}/api/customer/resident-visit-requests`, { headers: headers() });
+  assert.equal(parking.status, 200);
+  const settings = (await parking.json()).settings;
+  assert.equal(settings.paymentChannels.configured, false);
 });

@@ -17,10 +17,10 @@ export function paymentChannelsConfigured(config) {
   return Boolean(String(config?.promptpay_id ?? "").trim() || String(config?.bank_account_no ?? "").trim());
 }
 
-export function effectiveVerifyMode(config) {
-  if (config?.slip_verify_mode === "manual") return "manual";
-  if (config?.payment_test_mode) return "auto";
-  return paymentChannelsConfigured(config) ? "auto" : "manual";
+export const PAYMENT_CHANNELS_MISSING_MESSAGE = "หอพักยังไม่ได้ตั้งค่าช่องทางรับโอน จึงยังส่งสลิปไม่ได้ กรุณาติดต่อเจ้าหน้าที่";
+
+export function assertPaymentChannelsConfigured(config) {
+  if (!paymentChannelsConfigured(config)) throw new SlipVerificationError(400, PAYMENT_CHANNELS_MISSING_MESSAGE);
 }
 
 export class SlipVerificationError extends Error {

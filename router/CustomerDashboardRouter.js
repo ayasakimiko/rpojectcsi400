@@ -33,7 +33,8 @@ import {
 import {
   DEMO_PAYMENT_CHANNELS,
   TEST_PAYMENT_MARK,
-  effectiveVerifyMode,
+  assertPaymentChannelsConfigured,
+  paymentChannelsConfigured,
   inquireSlip,
   normalizeSlipPayload,
   SlipVerificationError,
@@ -850,7 +851,8 @@ router.get("/payment-channels", async (_req, res) => {
         bank_name: source.bank_name || "",
         bank_account_no: source.bank_account_no || "",
         test_mode: testMode,
-        verify_mode: effectiveVerifyMode(config),
+        verify_mode: config.slip_verify_mode === "manual" ? "manual" : "auto",
+        configured: paymentChannelsConfigured(config),
       },
     });
   } catch (error) {
@@ -972,8 +974,9 @@ router.post("/payments/confirm", parsePaymentSlip, async (req, res) => {
     );
     const config = configRows[0] || {};
     const testMode = Boolean(config.payment_test_mode);
+    assertPaymentChannelsConfigured(config);
 
-    if (effectiveVerifyMode(config) === "manual") {
+    if (config.slip_verify_mode === "manual") {
       const used = !testMode && qrPayload ? await findUsedSlip(pool, "qr_payload", qrPayload) : null;
       if (used) {
         attempt = { bookingId: booking.id, customerId: customer.id, qrPayload, slip: null, used };

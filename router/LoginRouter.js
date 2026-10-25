@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getPool } from "../Database/connection.js";
-import { AUTH_COOKIE, authCookieOptions } from "../middleware/authMiddleware.js";
+import { AUTH_ROLES, LEGACY_AUTH_COOKIE, authCookieName, authCookieOptions, requestedAuthRole } from "../middleware/authMiddleware.js";
 import { validateLoginInput } from "../middleware/validation.js";
 
 const router = Router();
@@ -82,7 +82,8 @@ router.post("/login", async (req, res) => {
       [user.id, user.role, ipAddress || null],
     ).catch((error) => console.error("Login audit log write error:", error));
 
-    res.cookie(AUTH_COOKIE, token, authCookieOptions());
+    res.clearCookie(LEGACY_AUTH_COOKIE, authCookieOptions());
+    res.cookie(authCookieName(user.role), token, authCookieOptions());
     return res.json({ message: "เข้าสู่ระบบสำเร็จ", user: toPublicUser(user) });
   } catch (error) {
     console.error("Login error:", error);
@@ -90,8 +91,11 @@ router.post("/login", async (req, res) => {
   }
 });
 
-router.post("/logout", (_req, res) => {
-  res.clearCookie(AUTH_COOKIE, authCookieOptions());
+router.post("/logout", (req, res) => {
+  const role = requestedAuthRole(req);
+  for (const name of role ? [authCookieName(role)] : [...AUTH_ROLES.map(authCookieName), LEGACY_AUTH_COOKIE]) {
+    res.clearCookie(name, authCookieOptions());
+  }
   return res.json({ message: "ออกจากระบบแล้ว" });
 });
 

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
-import { DEMO_PAYMENT_CHANNELS, effectiveVerifyMode, normalizeSlipPayload } from "../middleware/slipVerification.js";
+import { DEMO_PAYMENT_CHANNELS, normalizeSlipPayload, paymentChannelsConfigured } from "../middleware/slipVerification.js";
 
 const router = Router();
 
@@ -23,7 +23,8 @@ router.get("/channels", async (_req, res) => {
         bank_name: source.bank_name || "",
         bank_account_no: source.bank_account_no || "",
         test_mode: testMode,
-        verify_mode: effectiveVerifyMode(config),
+        verify_mode: config.slip_verify_mode === "manual" ? "manual" : "auto",
+        configured: paymentChannelsConfigured(config),
       },
     });
   } catch (error) {

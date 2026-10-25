@@ -10,7 +10,8 @@ import { PUBLIC_UPLOAD_DIR, customerUploadFolder, moveUploadedFiles } from "../m
 import {
   DEMO_PAYMENT_CHANNELS,
   TEST_PAYMENT_MARK,
-  effectiveVerifyMode,
+  assertPaymentChannelsConfigured,
+  paymentChannelsConfigured,
   inquireSlip,
   normalizeSlipPayload,
   SlipVerificationError,
@@ -229,7 +230,8 @@ export async function loadParkingSettings(db) {
       bank_name: source.bank_name || "",
       bank_account_no: source.bank_account_no || "",
       test_mode: testMode,
-      verify_mode: effectiveVerifyMode(config),
+      verify_mode: config.slip_verify_mode === "manual" ? "manual" : "auto",
+      configured: paymentChannelsConfigured(config),
     },
   };
 }
@@ -494,13 +496,14 @@ export function createFinePaymentHandler({ getActingName, scopeCustomerId = () =
       );
       const config = configRows[0] || {};
       const testMode = Boolean(config.payment_test_mode);
+      assertPaymentChannelsConfigured(config);
       const [slipPath] = await moveUploadedFiles([req.file], customerUploadFolder(FINE_SLIP_FOLDER, request.customer_id));
       const actorName = await getActingName(pool, req.user);
       const methodLabel = FINE_METHOD_LABELS[method];
       let nextStatus = "paid";
       let transRef = null;
       let message;
-      if (effectiveVerifyMode(config) === "manual") {
+      if (config.slip_verify_mode === "manual") {
         if (!testMode && qrPayload && (await isSlipUsed(pool, { qrPayload }))) throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
         nextStatus = "pending_review";
         message = "ส่งสลิปค่าปรับแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบ";

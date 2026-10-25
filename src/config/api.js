@@ -145,7 +145,19 @@ export function configureApiClient({
     return error
   }
 
+  function sessionRole() {
+    try {
+      return JSON.parse(storage.getItem('user') || 'null')?.role || null
+    } catch {
+      return null
+    }
+  }
+
   const requestInterceptor = client.interceptors.request.use(async (config) => {
+    const headers = axios.AxiosHeaders.from(config.headers)
+    const role = sessionRole()
+    if (role && !headers.has('X-Auth-Role')) headers.set('X-Auth-Role', role)
+    config.headers = headers
     const service = serviceForPath(config.url)
     if (!service) return config
     const safe = ['get', 'head'].includes((config.method || 'get').toLowerCase())

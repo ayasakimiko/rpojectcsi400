@@ -49,10 +49,10 @@ function useDormInfo(apiBase) {
   return { config, setConfig, loading, error, reload }
 }
 
-export function DormInfoSettings({ apiBase, children = null, slipPreview = null }) {
+export function DormInfoSettings({ apiBase, children = null, slipPreview = null, category = 'all' }) {
   const { config, setConfig, loading, error, reload } = useDormInfo(apiBase)
   const [previewTab, setPreviewTab] = useState('info')
-  const showSlip = Boolean(slipPreview) && previewTab === 'slip'
+  const showSlip = Boolean(slipPreview) && (category === 'payment' || (category === 'all' && previewTab === 'slip'))
   const previewChanged = showSlip ? slipPreview.changed : null
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -185,7 +185,7 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
   }
 
   return (
-    <div className="dorm-settings">
+    <div className={`dorm-settings dorm-settings-category-${category}`}>
       <div className="dorm-settings-main">
       <section className="dorm-settings-editor" aria-labelledby={`${formId}-title`}>
         <div className="dorm-settings-head">
@@ -431,7 +431,7 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
             <span>ตัวอย่างที่ผู้เช่าเห็น</span>
             <span className={`dorm-settings-status ${(showSlip ? previewChanged : changed) ? 'is-draft' : 'is-saved'}`}>{(showSlip ? previewChanged : changed) ? 'ตัวอย่างก่อนบันทึก' : 'ข้อมูลปัจจุบัน'}</span>
           </div>
-          {slipPreview && (
+          {slipPreview && category === 'all' && (
             <div className="dorm-settings-preview-tabs" role="tablist" aria-label="เลือกตัวอย่าง">
               <button type="button" role="tab" aria-selected={!showSlip} className={!showSlip ? 'is-active' : ''} onClick={() => setPreviewTab('info')}>
                 <Icon name="rules" size={15} />
