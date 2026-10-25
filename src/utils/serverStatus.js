@@ -1,10 +1,13 @@
 import { BACKENDS } from '../config/api.js'
 
 export function serviceHealthTargets({ backends = BACKENDS, development = false } = {}) {
-  return backends.flatMap((backend) => Object.values(backend.services || {}).map((service) => ({
-    url: `${development ? service.proxy : service.origin}/api/health`,
-    healthService: service.healthService,
-  })))
+  return backends.flatMap((backend) => [
+    { url: `${development ? backend.proxy : backend.origin}/api/health`, healthService: 'gateway' },
+    ...Object.values(backend.services || {}).map((service) => ({
+      url: `${development ? service.proxy : service.origin}/api/health`,
+      healthService: service.healthService,
+    })),
+  ])
 }
 
 export async function anyServiceUp({
@@ -12,6 +15,15 @@ export async function anyServiceUp({
   fetchImpl = (...args) => globalThis.fetch(...args),
   timeoutMs = 3000,
 } = {}) {
+  const gateways = targets.filter((target) => target.healthService === 'gateway')
+  for (const gateway of gateways) {
+    if (await probeTargets([gateway], fetchImpl, timeoutMs)) return true
+  }
+  const services = targets.filter((target) => target.healthService !== 'gateway')
+  return services.length > 0 && probeTargets(services, fetchImpl, timeoutMs)
+}
+
+async function probeTargets(targets, fetchImpl, timeoutMs) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
