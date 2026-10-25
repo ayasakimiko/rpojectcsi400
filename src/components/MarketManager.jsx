@@ -1050,12 +1050,13 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
     axios.get('/api/payment/channels')
       .then(({ data }) => {
         setChannels(data.channels)
-        if (!data.channels?.configured) setPayment((current) => ({ ...current, method: 'counter', slip: null, qrPayload: '' }))
+        if (data.channels?.test_mode) setPayment((current) => ({ ...current, method: 'promptpay' }))
+        else if (!data.channels?.configured) setPayment((current) => ({ ...current, method: 'counter', slip: null, qrPayload: '' }))
       })
       .catch((error) => setChannelError(errorMessage(error, 'โหลดช่องทางชำระเงินไม่สำเร็จ')))
   }, [setPayment])
 
-  const channelsMissing = Boolean(channels) && !channels.configured
+  const channelsMissing = Boolean(channels) && !channels.configured && !channels.test_mode
 
   const chooseSlip = async (file) => {
     if (!file) return

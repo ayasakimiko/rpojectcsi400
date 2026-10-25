@@ -50,7 +50,7 @@ export async function verifyLeasePayment({ db, authorization, method, slipFile, 
   if (method === "counter") {
     return { method, verifyMode: "counter", transRef: null, qrPayload: null, paidAt: null, payerName: null, testMode: Boolean(channels.test_mode) };
   }
-  if (!channels.configured) throw new MarketError(400, PAYMENT_CHANNELS_MISSING_MESSAGE);
+  if (!channels.configured && !channels.test_mode) throw new MarketError(400, PAYMENT_CHANNELS_MISSING_MESSAGE);
   if (!slipFile) throw new MarketError(400, "กรุณาแนบสลิปการโอนเงิน");
   const qrPayload = normalizeSlipPayload(rawPayload);
   if (channels.test_mode) {

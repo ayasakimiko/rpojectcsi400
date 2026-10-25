@@ -5567,7 +5567,7 @@ function CustomerDashbord() {
   }, [])
   const currentBooking = rentalHistory?.[0]
   const paymentUnderReview = currentBooking?.payments?.some((payment) => payment.status === 'pending' && payment.slip_path)
-  const paymentChannelsMissing = paymentChannels !== null && !paymentChannels.configured
+  const paymentChannelsMissing = paymentChannels !== null && !paymentChannels.configured && !paymentChannels.test_mode
   const prepaidUntilDate = room?.prepaid_until ? new Date(room.prepaid_until) : null
   const isPrepaid = prepaidUntilDate && !currentDue && prepaidUntilDate > new Date()
   const msUntilStart = room?.is_booked ? msUntil(room.rental_start_date) : null
