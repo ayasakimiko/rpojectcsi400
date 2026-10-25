@@ -42,8 +42,8 @@ services:
       - --temptable-max-ram=16M
       - --thread-cache-size=8
       - --host-cache-size=0
-      - --innodb-buffer-pool-size=${DB_BUFFER_POOL_SIZE:-32M}
-      - --innodb-log-buffer-size=4M
+      - --innodb-buffer-pool-size=${DB_BUFFER_POOL_SIZE:-16M}
+      - --innodb-log-buffer-size=1M
       - --innodb-adaptive-hash-index=OFF
       - --innodb-read-io-threads=1
       - --innodb-write-io-threads=1
