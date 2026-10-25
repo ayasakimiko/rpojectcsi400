@@ -169,7 +169,7 @@ async function loadShop(db, shopId) {
 
 async function resolveCaretaker(req, staffId) {
   if (!staffId) return { caretaker_staff_id: null, caretaker_name: null };
-  const { status, body } = await fetchAuthService("/api/auth/staff-directory", req.headers.authorization);
+  const { status, body } = await fetchAuthService("/api/auth/staff-directory", req.authorization);
   if (status !== 200 || !Array.isArray(body.staff)) throw fail("ตรวจสอบรายชื่อพนักงานไม่ได้ กรุณาลองใหม่", 503);
   const staff = body.staff.find((item) => item.id === staffId);
   if (!staff) throw fail("ไม่พบพนักงานผู้ดูแลที่เลือก หรือบัญชีถูกระงับ");
@@ -373,7 +373,7 @@ router.post("/leases", canOperateMarket, parseLeaseImages({ min: LEASE_MIN_IMAGE
     if (overlap) throw fail(`ช่วงวันที่ซ้อนกับสัญญา ${overlap.contract_no} ของร้านนี้`, 409, "CONFLICT");
     payment = await verifyLeasePayment({
       db: getPool(),
-      authorization: req.headers.authorization,
+      authorization: req.authorization,
       method: req.body.payment_method,
       slipFile,
       qrPayload: req.body.qr_payload,
@@ -448,7 +448,7 @@ router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: LEASE
     amount = Math.round(lease.monthly_rent * (plan === "lump_sum" ? months : 1) * 100) / 100;
     payment = await verifyLeasePayment({
       db,
-      authorization: req.headers.authorization,
+      authorization: req.authorization,
       method: req.body.payment_method,
       slipFile,
       qrPayload: req.body.qr_payload,

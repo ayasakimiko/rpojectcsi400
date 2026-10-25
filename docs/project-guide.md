@@ -193,6 +193,13 @@ VPS และ Local ใช้ฐานข้อมูลและไฟล์ข
 { "username": "101", "password": "test1234" }
 ```
 
+เมื่อสำเร็จ server ตั้ง JWT เป็น cookie `auth_token` (HttpOnly, SameSite=Lax, Path=/) และตอบกลับเฉพาะ `user` โดยไม่ส่ง token ใน body
+- Frontend ส่ง cookie อัตโนมัติ (`withCredentials`) และไม่เก็บ token ใน sessionStorage อีกต่อไป เก็บเพียง `session` (รหัสสุ่มฝั่งเบราว์เซอร์) กับ `user` ไว้ตรวจว่าแท็บนี้เข้าสู่ระบบอยู่
+- คำขอที่เขียนข้อมูล (POST/PUT/PATCH/DELETE) ที่ยืนยันตัวตนด้วย cookie ต้องมี header `X-Requested-With: XMLHttpRequest` (axios ตั้งให้แล้ว) เพื่อกัน CSRF ไม่มีจะได้ 403
+- `POST /api/auth/logout` ล้าง cookie
+- ยังรับ `Authorization: Bearer <token>` ได้ สำหรับการเรียกกันระหว่าง service และชุดทดสอบ
+- ถ้า frontend อยู่คนละโดเมน (cross-site) กับ backend ให้ตั้ง `COOKIE_SAMESITE=none` (ระบบจะเปิด `Secure` ให้อัตโนมัติ ต้องใช้ HTTPS) และใส่ origin ของ frontend ใน `CLIENT_URL`
+
 ### `GET /api/rooms/available`
 คืนรายการห้องที่ยังไม่ถูกจอง ใช้แสดงใน dropdown เลือกห้องตอนสมัครสมาชิก
 
@@ -269,7 +276,7 @@ VPS และ Local ใช้ฐานข้อมูลและไฟล์ข
 
 - Backend รวมไว้ใน `router/UploadRouter.js` ไฟล์เดียว เปิด `/api/files/<folder>/<fileName>` ผ่าน customer service และ gateway
 - Frontend รวม `UploadImage`, `UploadLink` และ hook ภายในไว้ใน `src/components/UploadMedia.jsx` ไฟล์เดียว แล้วแต่ละ Page นำไปใช้ โดยไม่เปลี่ยนพาธเดิมที่ใช้แก้ไขหรือลบรูป
-- การอ่านรูปใช้ Bearer token และ Blob URL โดยไม่ใส่ token ลง URL ผู้เช่าดูสลิปของตนและพัสดุของตนในห้องปัจจุบันได้ เจ้าหน้าที่ดูตามสิทธิ์บัญชี รูปตรวจห้องจำกัดเฉพาะเจ้าหน้าที่
+- การอ่านรูปใช้ cookie เข้าสู่ระบบและ Blob URL โดยไม่ใส่ token ลง URL ผู้เช่าดูสลิปของตนและพัสดุของตนในห้องปัจจุบันได้ เจ้าหน้าที่ดูตามสิทธิ์บัญชี รูปตรวจห้องจำกัดเฉพาะเจ้าหน้าที่
 - ไฟล์อ่านจาก `public/uploads` ของ Backend ที่เลือก บน Docker ใช้ bind mount ของ customer service เดิม และไม่ต้องเพิ่ม Nginx alias หรือพอร์ต
 - ตอน build Frontend จะไม่คัดลอก `public/uploads` ลง `dist` ส่วนไฟล์สาธารณะอื่น เช่น favicon ยังคงอยู่
 

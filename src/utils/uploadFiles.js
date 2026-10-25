@@ -22,10 +22,9 @@ export function getUploadApiPath(value) {
 
 export async function downloadUploadFile(source, fileName = 'download') {
   const apiPath = getUploadApiPath(source)
-  const token = sessionStorage.getItem('token')
   const response = await axios.get(apiPath || source, {
     responseType: 'blob',
-    headers: apiPath && token ? { Authorization: `Bearer ${token}` } : undefined,
+    withCredentials: Boolean(apiPath),
   })
   const blob = response.data
   const extension = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')

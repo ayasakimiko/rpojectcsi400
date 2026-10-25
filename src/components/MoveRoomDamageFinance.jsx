@@ -15,7 +15,7 @@ export default function MoveRoomDamageFinance({ previewUrl, value, onChange, err
     const timer = setTimeout(() => {
       setState((current) => ({ ...current, loading: true }))
       axios
-        .get(previewUrl, { params: { damage: query }, headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+        .get(previewUrl, { params: { damage: query } })
         .then(({ data }) => {
           if (active) setState({ preview: data.preview, loading: false, error: '' })
         })

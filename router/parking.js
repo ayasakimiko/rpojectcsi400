@@ -36,6 +36,24 @@ const SLIP_USED_MESSAGE = "สลิปนี้ถูกใช้ชำระ�
 export const ACTIVE_VEHICLE_SQL = `r.request_type = 'vehicle' AND r.status IN ('pending', 'approved') AND r.checked_out_at IS NULL
   AND (r.end_at IS NULL OR r.end_at > NOW() OR r.parked_at IS NOT NULL)`;
 
+export async function moveResidentVehicles(db, customerId, fromRoomNumber, toRoomNumber) {
+  await db.query(
+    `UPDATE ResidentVisitRequest r SET r.room_number = ?
+     WHERE r.customer_id = ? AND r.room_number = ? AND ${ACTIVE_VEHICLE_SQL}`,
+    [toRoomNumber, customerId, fromRoomNumber],
+  );
+}
+
+export async function cancelCustomerVisitRequests(db, customerId, cancelledBy) {
+  await db.query(
+    `UPDATE ResidentVisitRequest r
+     SET r.status = 'cancelled', r.cancelled_by_name = ?, r.cancelled_at = NOW()
+     WHERE r.customer_id = ? AND (r.status = 'pending'
+       OR (r.status = 'approved' AND r.checked_out_at IS NULL AND (r.end_at IS NULL OR r.end_at > NOW() OR r.parked_at IS NOT NULL)))`,
+    [cancelledBy, customerId],
+  );
+}
+
 export const PARKING_SELECT_SQL = `r.user_category, r.vehicle_type, r.parking_space_id, ps.code AS parking_space_code, ps.zone AS parking_space_zone,
   r.parked_at, r.checked_out_at, DATE_ADD(r.parked_at, INTERVAL ${VISITOR_MAX_HOURS} HOUR) AS allowed_until,
   TIMESTAMPDIFF(SECOND, r.parked_at, COALESCE(r.checked_out_at, NOW())) AS parked_seconds,

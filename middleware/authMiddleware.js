@@ -5,15 +5,49 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 export const STAFF_ROLES = new Set(["Staff", "Admin", "Owner"]);
 export const ADMIN_ROLES = new Set(["Admin", "Owner"]);
 
+export const AUTH_COOKIE = "auth_token";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const SAME_SITE_VALUES = new Set(["strict", "lax", "none"]);
+
+function readCookie(req, name) {
+  for (const part of String(req.headers.cookie || "").split(";")) {
+    const index = part.indexOf("=");
+    if (index > 0 && part.slice(0, index).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(index + 1).trim());
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+export function readAuthToken(req) {
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) return { token: header.slice(7), fromCookie: false };
+  const cookie = readCookie(req, AUTH_COOKIE);
+  return cookie ? { token: cookie, fromCookie: true } : null;
+}
+
+export function authCookieOptions() {
+  const configured = String(process.env.COOKIE_SAMESITE || "").toLowerCase();
+  const sameSite = SAME_SITE_VALUES.has(configured) ? configured : "lax";
+  return { httpOnly: true, sameSite, secure: sameSite === "none" || process.env.COOKIE_SECURE === "true", path: "/" };
+}
+
 export function authenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const auth = readAuthToken(req);
+  if (!auth) {
     return res.status(401).json({ message: "กรุณาเข้าสู่ระบบ" });
   }
+  if (auth.fromCookie && !SAFE_METHODS.has(req.method) && req.get("x-requested-with") !== "XMLHttpRequest") {
+    return res.status(403).json({ message: "คำขอไม่ถูกต้อง กรุณาโหลดหน้าเว็บใหม่" });
+  }
 
-  const token = authHeader.slice(7);
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    req.user = jwt.verify(auth.token, JWT_SECRET);
+    req.authorization = `Bearer ${auth.token}`;
     return next();
   } catch {
     return res.status(401).json({ message: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่" });

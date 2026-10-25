@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { AuthAlert, AuthLayout } from '../components/AuthLayout.jsx'
+import { startSession } from '../utils/session.js'
 import { PASSWORD_MAX_LENGTH, digitsOnly, firstError, validateLoginForm } from '../utils/validators.js'
 
 const HOME_ICON = (
@@ -46,8 +47,7 @@ function LoginPage() {
     try {
       setLoading(true)
       const { data } = await axios.post('/api/auth/login', loginForm)
-      sessionStorage.setItem('token', data.token)
-      sessionStorage.setItem('user', JSON.stringify(data.user))
+      startSession(data.user)
       sessionStorage.setItem('justLoggedIn', '1')
       setLoggedIn(true)
       setNotice({ type: 'success', message: data.message || 'เข้าสู่ระบบสำเร็จ' })

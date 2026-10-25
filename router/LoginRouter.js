@@ -2,19 +2,18 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getPool } from "../Database/connection.js";
+import { AUTH_COOKIE, authCookieOptions } from "../middleware/authMiddleware.js";
 import { validateLoginInput } from "../middleware/validation.js";
 
-// ตั้งค่า Router อายุโทเคน และข้อมูลผู้ใช้ที่ส่งกลับหลังเข้าสู่ระบบ
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const JWT_EXPIRES_IN = "7d";
 
-function toPublicUser({ id, role, idcard, first_name, last_name }) {
-  return { id, role, idcard, first_name, last_name };
+function toPublicUser({ id, role, first_name, last_name }) {
+  return { id, role, first_name, last_name };
 }
 
-// ตรวจสอบบัญชีและรหัสผ่าน เลือกบทบาทผู้ใช้ และออกโทเคนเข้าสู่ระบบ
 router.post("/login", async (req, res) => {
   try {
     const { username, password, role: selectedRole } = req.body ?? {};
@@ -76,7 +75,6 @@ router.post("/login", async (req, res) => {
       expiresIn: JWT_EXPIRES_IN,
     });
 
-    // บันทึกการเข้าสู่ระบบลงประวัติการใช้งาน หากบันทึกไม่สำเร็จจะไม่กระทบการเข้าสู่ระบบ
     const ipAddress = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim().slice(0, 45);
     pool.query(
       `INSERT INTO AuditLog (actor_id, actor_role, method, endpoint, status_code, ip_address)
@@ -84,11 +82,17 @@ router.post("/login", async (req, res) => {
       [user.id, user.role, ipAddress || null],
     ).catch((error) => console.error("Login audit log write error:", error));
 
-    return res.json({ message: "เข้าสู่ระบบสำเร็จ", token, user: toPublicUser(user) });
+    res.cookie(AUTH_COOKIE, token, authCookieOptions());
+    return res.json({ message: "เข้าสู่ระบบสำเร็จ", user: toPublicUser(user) });
   } catch (error) {
     console.error("Login error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   }
+});
+
+router.post("/logout", (_req, res) => {
+  res.clearCookie(AUTH_COOKIE, authCookieOptions());
+  return res.json({ message: "ออกจากระบบแล้ว" });
 });
 
 export default router;

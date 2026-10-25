@@ -5,16 +5,16 @@ import { getUploadApiPath } from '../utils/uploadFiles.js'
 const RELEASE_DELAY_MS = 30000
 const blobCache = new Map()
 
-function fetchBlobUrl(apiPath, token) {
+function fetchBlobUrl(apiPath, session) {
   return new Promise((resolve, reject) => {
     let retries = 0
     const load = () => {
-      if (sessionStorage.getItem('token') !== token) {
+      if (sessionStorage.getItem('session') !== session) {
         reject(new Error('Session changed'))
         return
       }
       axios
-        .get(apiPath, { responseType: 'blob', headers: { Authorization: `Bearer ${token}` } })
+        .get(apiPath, { responseType: 'blob' })
         .then(({ data }) => resolve(URL.createObjectURL(data)))
         .catch((error) => {
           const temporaryFailure = !error.response || [502, 503, 504].includes(error.response.status)
@@ -30,12 +30,12 @@ function fetchBlobUrl(apiPath, token) {
   })
 }
 
-function acquireBlobUrl(apiPath, token) {
-  const key = `${token}|${apiPath}`
+function acquireBlobUrl(apiPath, session) {
+  const key = `${session}|${apiPath}`
   let entry = blobCache.get(key)
   if (!entry) {
     entry = { refs: 0, url: null, releaseTimer: null, promise: null }
-    entry.promise = fetchBlobUrl(apiPath, token).then(
+    entry.promise = fetchBlobUrl(apiPath, session).then(
       (url) => {
         entry.url = url
         return url
@@ -67,8 +67,8 @@ function releaseBlobUrl(key) {
 
 function useUploadUrl(source, { lazy = false, nodeRef = null } = {}) {
   const apiPath = getUploadApiPath(source)
-  const token = apiPath ? sessionStorage.getItem('token') : null
-  const resource = useMemo(() => ({ apiPath, token }), [apiPath, token])
+  const session = apiPath ? sessionStorage.getItem('session') : null
+  const resource = useMemo(() => ({ apiPath, session }), [apiPath, session])
   const [loaded, setLoaded] = useState(null)
   const [visible, setVisible] = useState(() => !lazy || typeof IntersectionObserver === 'undefined')
 
@@ -87,9 +87,9 @@ function useUploadUrl(source, { lazy = false, nodeRef = null } = {}) {
   }, [visible, nodeRef])
 
   useEffect(() => {
-    if (!apiPath || !token || !visible) return undefined
+    if (!apiPath || !session || !visible) return undefined
     let active = true
-    const { key, promise } = acquireBlobUrl(apiPath, token)
+    const { key, promise } = acquireBlobUrl(apiPath, session)
     promise
       .then((url) => {
         if (active) setLoaded({ resource, url })
@@ -99,7 +99,7 @@ function useUploadUrl(source, { lazy = false, nodeRef = null } = {}) {
       active = false
       releaseBlobUrl(key)
     }
-  }, [apiPath, token, resource, visible])
+  }, [apiPath, session, resource, visible])
 
   if (!apiPath) return source || undefined
   return loaded?.resource === resource ? loaded.url : undefined

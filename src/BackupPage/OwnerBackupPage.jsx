@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -15,8 +15,17 @@ import {
 } from 'recharts'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './OwnerBackupPage.css'
+import { clearSession, hasSession, logout } from '../utils/session.js'
 
 let openModalCount = 0
+
+function readStoredUser() {
+  try {
+    return JSON.parse(sessionStorage.getItem('user') || 'null')
+  } catch {
+    return null
+  }
+}
 
 function lockBodyScroll() {
   openModalCount += 1
@@ -166,17 +175,14 @@ const emptyStaffForm = { role: 'Staff', idcard: '', password: '', phone: '', fir
 
 function OwnerBackupPage() {
   const navigate = useNavigate()
-  const [ownerUser, setOwnerUser] = useState(null)
+  const [ownerUser] = useState(readStoredUser)
   const [activeTab, setActiveTab] = useState('overview')
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
-  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
   const handleUnauthorized = (err) => {
     if (err.response?.status === 401 || err.response?.status === 403) {
-      sessionStorage.removeItem('token')
-      sessionStorage.removeItem('user')
+      clearSession()
       navigate('/login', { replace: true })
       return true
     }
@@ -184,8 +190,7 @@ function OwnerBackupPage() {
   }
 
   const handleLogout = () => {
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('user')
+    logout()
     navigate('/login', { replace: true })
   }
 
@@ -194,9 +199,8 @@ function OwnerBackupPage() {
   const [overviewError, setOverviewError] = useState('')
 
   const loadOverview = () => {
-    setOverviewLoading(true)
     return axios
-      .get('/api/owner/overview', { headers: authHeaders() })
+      .get('/api/owner/overview')
       .then(({ data }) => {
         setOverview(data)
         setOverviewError('')
@@ -213,10 +217,9 @@ function OwnerBackupPage() {
   const [trendsLoading, setTrendsLoading] = useState(true)
   const [trendsError, setTrendsError] = useState('')
 
-  useEffect(() => {
-    setTrendsLoading(true)
+  const loadTrends = (months) => {
     axios
-      .get('/api/owner/trends', { headers: authHeaders(), params: { months: trendMonths } })
+      .get('/api/owner/trends', { params: { months } })
       .then(({ data }) => {
         setTrends(data.trends || [])
         setTrendsError('')
@@ -226,15 +229,20 @@ function OwnerBackupPage() {
         setTrendsError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลแนวโน้มได้')
       })
       .finally(() => setTrendsLoading(false))
-  }, [trendMonths])
+  }
+
+  const selectTrendMonths = (months) => {
+    setTrendMonths(months)
+    setTrendsLoading(true)
+    loadTrends(months)
+  }
 
   const [incomeByType, setIncomeByType] = useState([])
   const [incomeByTypeLoading, setIncomeByTypeLoading] = useState(true)
 
   const loadIncomeByType = () => {
-    setIncomeByTypeLoading(true)
     return axios
-      .get('/api/owner/income', { headers: authHeaders() })
+      .get('/api/owner/income')
       .then(({ data }) => setIncomeByType(data.byType || []))
       .catch((err) => handleUnauthorized(err))
       .finally(() => setIncomeByTypeLoading(false))
@@ -245,9 +253,8 @@ function OwnerBackupPage() {
   const [roomStatusError, setRoomStatusError] = useState('')
 
   const loadRoomStatus = () => {
-    setRoomStatusLoading(true)
     return axios
-      .get('/api/owner/rooms/status', { headers: authHeaders() })
+      .get('/api/owner/rooms/status')
       .then(({ data }) => {
         setRoomStatus(data)
         setRoomStatusError('')
@@ -274,7 +281,6 @@ function OwnerBackupPage() {
     setExpensesLoading(true)
     return axios
       .get('/api/owner/expenses', {
-        headers: authHeaders(),
         params: { page, from: from || undefined, to: to || undefined },
       })
       .then(({ data }) => {
@@ -289,10 +295,12 @@ function OwnerBackupPage() {
   }
 
   const refreshFinancials = () => {
+    setOverviewLoading(true)
+    setIncomeByTypeLoading(true)
     loadOverview()
     loadIncomeByType()
     axios
-      .get('/api/owner/trends', { headers: authHeaders(), params: { months: trendMonths } })
+      .get('/api/owner/trends', { params: { months: trendMonths } })
       .then(({ data }) => setTrends(data.trends || []))
       .catch((err) => handleUnauthorized(err))
   }
@@ -331,10 +339,10 @@ function OwnerBackupPage() {
     }
     try {
       if (expenseModal.mode === 'create') {
-        const { data } = await axios.post('/api/owner/expenses', payload, { headers: authHeaders() })
+        const { data } = await axios.post('/api/owner/expenses', payload)
         setSuccessMessage(data.message || 'บันทึกรายจ่ายสำเร็จ')
       } else {
-        const { data } = await axios.put(`/api/owner/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+        const { data } = await axios.put(`/api/owner/expenses/${expenseModal.expense.id}`, payload)
         setSuccessMessage(data.message || 'แก้ไขรายจ่ายสำเร็จ')
       }
       requestClose()
@@ -350,7 +358,7 @@ function OwnerBackupPage() {
   const confirmDeleteExpense = async (requestClose) => {
     if (!expenseDeleteConfirm) return
     try {
-      const { data } = await axios.delete(`/api/owner/expenses/${expenseDeleteConfirm.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/owner/expenses/${expenseDeleteConfirm.id}`)
       setSuccessMessage(data.message || 'ลบรายจ่ายสำเร็จ')
       requestClose()
       await loadExpenses(expenseLogs.page)
@@ -364,13 +372,15 @@ function OwnerBackupPage() {
   const expensesTotalPages = Math.max(1, Math.ceil(expenseLogs.total / expenseLogs.pageSize))
 
   const isExpenseFilterMount = useRef(true)
+  const reloadExpenses = useEffectEvent((from, to) => {
+    if (activeTab === 'expenses') loadExpenses(1, from, to)
+  })
   useEffect(() => {
     if (isExpenseFilterMount.current) {
       isExpenseFilterMount.current = false
       return
     }
-    if (activeTab !== 'expenses') return
-    const timeout = setTimeout(() => loadExpenses(1, expensesFrom, expensesTo), 400)
+    const timeout = setTimeout(() => reloadExpenses(expensesFrom, expensesTo), 400)
     return () => clearTimeout(timeout)
   }, [expensesFrom, expensesTo])
 
@@ -385,7 +395,6 @@ function OwnerBackupPage() {
     setPaymentsLoading(true)
     return axios
       .get('/api/owner/logs/payments', {
-        headers: authHeaders(),
         params: { page, search: search || undefined, from: from || undefined, to: to || undefined },
       })
       .then(({ data }) => {
@@ -402,13 +411,15 @@ function OwnerBackupPage() {
   const paymentsTotalPages = Math.max(1, Math.ceil(paymentLogs.total / paymentLogs.pageSize))
 
   const isPaymentsFilterMount = useRef(true)
+  const reloadPayments = useEffectEvent((search, from, to) => {
+    if (activeTab === 'payments') loadPayments(1, search, from, to)
+  })
   useEffect(() => {
     if (isPaymentsFilterMount.current) {
       isPaymentsFilterMount.current = false
       return
     }
-    if (activeTab !== 'payments') return
-    const timeout = setTimeout(() => loadPayments(1, paymentsSearch, paymentsFrom, paymentsTo), 400)
+    const timeout = setTimeout(() => reloadPayments(paymentsSearch, paymentsFrom, paymentsTo), 400)
     return () => clearTimeout(timeout)
   }, [paymentsSearch, paymentsFrom, paymentsTo])
 
@@ -438,7 +449,7 @@ function OwnerBackupPage() {
   const loadStaff = () => {
     setStaffLoading(true)
     return axios
-      .get('/api/owner/staff', { headers: authHeaders() })
+      .get('/api/owner/staff')
       .then(({ data }) => {
         setStaffList(data.staff)
         setStaffError('')
@@ -481,7 +492,7 @@ function OwnerBackupPage() {
     setStaffFormError('')
     try {
       if (staffModal.mode === 'create') {
-        const { data } = await axios.post('/api/owner/staff', staffForm, { headers: authHeaders() })
+        const { data } = await axios.post('/api/owner/staff', staffForm)
         setSuccessMessage(data.message || 'เพิ่มบัญชีสำเร็จ')
       } else {
         const payload = {
@@ -493,8 +504,7 @@ function OwnerBackupPage() {
         if (staffForm.password) payload.password = staffForm.password
         const { data } = await axios.put(
           `/api/owner/staff/${staffModal.staff.role}/${staffModal.staff.id}`,
-          payload,
-          { headers: authHeaders() },
+          payload
         )
         setSuccessMessage(data.message || 'แก้ไขข้อมูลสำเร็จ')
       }
@@ -511,8 +521,7 @@ function OwnerBackupPage() {
     try {
       const { data } = await axios.patch(
         `/api/owner/staff/${member.role}/${member.id}/suspend`,
-        { is_suspended: !member.is_suspended },
-        { headers: authHeaders() },
+        { is_suspended: !member.is_suspended }
       )
       setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
       requestClose()
@@ -526,9 +535,7 @@ function OwnerBackupPage() {
   const confirmDeleteStaff = async (requestClose) => {
     if (!staffDeleteConfirm) return
     try {
-      const { data } = await axios.delete(`/api/owner/staff/${staffDeleteConfirm.role}/${staffDeleteConfirm.id}`, {
-        headers: authHeaders(),
-      })
+      const { data } = await axios.delete(`/api/owner/staff/${staffDeleteConfirm.role}/${staffDeleteConfirm.id}`)
       setSuccessMessage(data.message || 'ลบบัญชีสำเร็จ')
       requestClose()
       await loadStaff()
@@ -556,39 +563,32 @@ function OwnerBackupPage() {
     return filteredStaff.slice(start, start + ROWS_PER_PAGE)
   }, [filteredStaff, currentStaffPage])
 
-  useEffect(() => {
-    setStaffPage(1)
-  }, [staffSearch, staffRoleFilter])
-
-  useEffect(() => {
-    const token = sessionStorage.getItem('token')
-    if (!token) {
+  const startOwnerSession = useEffectEvent(() => {
+    if (!hasSession()) {
       navigate('/login', { replace: true })
       return
     }
-    const storedUser = sessionStorage.getItem('user')
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser)
-        if (parsed?.role !== 'Owner') {
-          navigate('/login', { replace: true })
-          return
-        }
-        setOwnerUser(parsed)
-      } catch {
-        setOwnerUser(null)
-      }
+    if (sessionStorage.getItem('user') && ownerUser?.role !== 'Owner') {
+      navigate('/login', { replace: true })
+      return
     }
     loadOverview()
     loadIncomeByType()
     loadRoomStatus()
-  }, [])
+    loadTrends(trendMonths)
+  })
 
   useEffect(() => {
-    if (activeTab === 'expenses') loadExpenses(1, expensesFrom, expensesTo)
-    if (activeTab === 'payments') loadPayments(1, paymentsSearch, paymentsFrom, paymentsTo)
-    if (activeTab === 'staff') loadStaff()
-  }, [activeTab])
+    startOwnerSession()
+  }, [])
+
+  const selectTab = (tab) => {
+    setActiveTab(tab)
+    if (tab === activeTab) return
+    if (tab === 'expenses') loadExpenses(1, expensesFrom, expensesTo)
+    if (tab === 'payments') loadPayments(1, paymentsSearch, paymentsFrom, paymentsTo)
+    if (tab === 'staff') loadStaff()
+  }
 
   const netProfit = overview ? overview.finance.netProfit : 0
 
@@ -735,7 +735,7 @@ function OwnerBackupPage() {
               <button
                 type="button"
                 className={`nav-link owner-tab-link${activeTab === tab.key ? ' active' : ''}`}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => selectTab(tab.key)}
               >
                 {tab.label}
               </button>
@@ -758,7 +758,7 @@ function OwnerBackupPage() {
                         key={m}
                         type="button"
                         className={`owner-chart-range-btn${trendMonths === m ? ' active' : ''}`}
-                        onClick={() => setTrendMonths(m)}
+                        onClick={() => selectTrendMonths(m)}
                       >
                         {m} เดือน
                       </button>
@@ -1076,12 +1076,18 @@ function OwnerBackupPage() {
                   className="form-control owner-search-input"
                   placeholder="ค้นหาชื่อ, เบอร์โทร, เลขบัตรประชาชน"
                   value={staffSearch}
-                  onChange={(e) => setStaffSearch(e.target.value)}
+                  onChange={(e) => {
+                    setStaffSearch(e.target.value)
+                    setStaffPage(1)
+                  }}
                 />
               </div>
               <div className="owner-filter-group">
                 <span className="owner-toolbar-label">ตำแหน่ง</span>
-                <select className="form-select owner-filter-select" value={staffRoleFilter} onChange={(e) => setStaffRoleFilter(e.target.value)}>
+                <select className="form-select owner-filter-select" value={staffRoleFilter} onChange={(e) => {
+                  setStaffRoleFilter(e.target.value)
+                  setStaffPage(1)
+                }}>
                   <option value="all">ทั้งหมด</option>
                   <option value="Staff">พนักงาน</option>
                   <option value="Admin">ผู้ดูแลระบบ</option>

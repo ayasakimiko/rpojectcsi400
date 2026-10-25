@@ -7,6 +7,7 @@ import { actorOf } from "../middleware/notifications.js";
 import { moveOutInspectionSaved, safetyHandled, staffAccountChanged } from "./notificationEvents.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
+  cancelCustomerVisitRequests,
   createFinePaymentHandler,
   createFineReviewHandler,
   createParkingOptionsHandler,
@@ -1506,13 +1507,7 @@ router.patch("/customers/:id/suspend", async (req, res) => {
     );
     await cancelStaleTenantRequests(connection, customerId, is_suspended || wasSuspended ? null : roomNumber);
     if (is_suspended || wasSuspended) {
-      await connection.query(
-        `UPDATE ResidentVisitRequest
-         SET status = 'cancelled', cancelled_by_name = 'ระบบ (ระงับผู้เช่า)', cancelled_at = NOW()
-         WHERE customer_id = ? AND (status = 'pending'
-           OR (status = 'approved' AND (end_at IS NULL OR end_at > NOW())))`,
-        [customerId],
-      );
+      await cancelCustomerVisitRequests(connection, customerId, "ระบบ (ระงับผู้เช่า)");
       await connection.query(
         `UPDATE SafetyIncident
          SET status = 'cancelled', cancelled_by_name = 'ระบบ (ระงับผู้เช่า)',

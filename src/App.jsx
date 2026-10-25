@@ -6,19 +6,25 @@ import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
 import AdminPage from './page/AdminPage.jsx'
 import OwnerMain from './page/OwnerMain.jsx'
+import { clearSession, hasSession } from './utils/session.js'
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
 const ADMIN_ROLES = new Set(['Admin', 'Owner'])
 const USER_ROLES = new Set(['Customer', ...STAFF_ROLES])
 
-function readSessionUser() {
-  if (!sessionStorage.getItem('token')) return null
+function parseUser(raw) {
   try {
-    const user = JSON.parse(sessionStorage.getItem('user') || 'null')
-    if (user && USER_ROLES.has(user.role)) return user
+    return JSON.parse(raw || 'null')
   } catch {
+    return null
   }
-  for (const key of ['token', 'user', 'justLoggedIn', 'apiBackend']) sessionStorage.removeItem(key)
+}
+
+function readSessionUser() {
+  if (!hasSession()) return null
+  const user = parseUser(sessionStorage.getItem('user'))
+  if (user && USER_ROLES.has(user.role)) return user
+  clearSession()
   sessionStorage.setItem('apiBackendNotice', 'ข้อมูลการเข้าสู่ระบบไม่สมบูรณ์ กรุณาเข้าสู่ระบบใหม่')
   return null
 }

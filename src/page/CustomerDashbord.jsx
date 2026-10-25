@@ -1,7 +1,7 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
 import StepTimeline from '../components/StepTimeline.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoMenu } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
@@ -41,6 +41,7 @@ import LoadingScreen from '../components/LoadingScreen.jsx'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
 import { isUnread, useServerNotifications } from '../utils/serverNotifications.js'
+import { clearSession, hasSession, logout } from '../utils/session.js'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -440,7 +441,6 @@ const AMENITIES = [
   { key: 'air_conditioner', label: 'แอร์', color: 'blue' },
   { key: 'refrigerator', label: 'ตู้เย็น', color: 'teal' },
 ]
-
 
 const AMENITY_ICON_PATHS = {
   air_conditioner: (
@@ -1444,9 +1444,7 @@ function MoveRoomContractImpact({ request, section = 'all' }) {
     if (!tracked) return undefined
     let active = true
     axios
-      .get(`/api/customer/requests/${request.id}/transfer-impact`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      })
+      .get(`/api/customer/requests/${request.id}/transfer-impact`)
       .then(({ data }) => {
         if (active) setState({ impact: data.impact, loading: false, error: '' })
       })
@@ -2722,8 +2720,6 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
   const [form, setForm] = useState(EMPTY_RESIDENT_VISIT_FORM)
   const [parkingSettings, setParkingSettings] = useState(null)
   const [formSection, setFormSection] = useState('all')
-  const token = sessionStorage.getItem('token')
-  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
   const parkingOptions = useParkingOptions('/api/customer/parking/options', {
     enabled: view === 'form',
     userCategory: 'resident',
@@ -2734,13 +2730,13 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
   const load = useCallback(
     () =>
       axios
-        .get('/api/customer/resident-visit-requests', { headers })
+        .get('/api/customer/resident-visit-requests')
         .then(({ data }) => {
           setItems(data.requests || [])
           setParkingSettings(data.settings || null)
         })
         .catch((requestError) => setError(requestError.response?.data?.message || 'โหลดคำขอไม่สำเร็จ')),
-    [headers],
+    [],
   )
 
   const setParkingChoice = (field, value) => {
@@ -2803,8 +2799,7 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
           vehicleModel: form.vehicleModel,
           note: form.note,
           photos,
-        },
-        { headers },
+        }
       )
       setSubmitted({
         type: 'vehicle',
@@ -3555,16 +3550,14 @@ function SafetyIncidentReportRow() {
   const [historyFilter, setHistoryFilter] = useState('all')
   const [historySearch, setHistorySearch] = useState('')
   const [detailId, setDetailId] = useState(null)
-  const token = sessionStorage.getItem('token')
-  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
 
   const load = useCallback(
     () =>
       axios
-        .get('/api/customer/safety-incidents', { headers })
+        .get('/api/customer/safety-incidents')
         .then(({ data }) => setIncidents(data.incidents || []))
         .catch((requestError) => setError(requestError.response?.data?.message || 'โหลดประวัติการแจ้งเหตุไม่สำเร็จ')),
-    [headers],
+    [],
   )
 
   useEffect(() => {
@@ -3589,8 +3582,7 @@ function SafetyIncidentReportRow() {
       const photos = (await Promise.all(form.photos.map(compressImageFile))).map(({ name, dataUrl }) => ({ name, dataUrl }))
       const { data } = await axios.post(
         '/api/customer/safety-incidents',
-        { incidentType: form.incidentType, description: form.description, photos },
-        { headers },
+        { incidentType: form.incidentType, description: form.description, photos }
       )
       setSentSeverity(data.severity || '')
       setForm(EMPTY_SAFETY_FORM)
@@ -4084,7 +4076,7 @@ function CustomerParkingTab({ onCountChange }) {
   useEffect(() => {
     let cancelled = false
     axios
-      .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+      .get('/api/customer/parked-vehicles')
       .then(({ data }) => {
         if (cancelled) return
         setVehicles(data.vehicles || [])
@@ -4630,11 +4622,8 @@ function CustomerDashbord() {
   const [acknowledgedAnnouncementIds, setAcknowledgedAnnouncementIds] = useState(() => new Set())
 
   const acknowledgeAnnouncement = async (announcementId) => {
-    const token = sessionStorage.getItem('token')
     try {
-      await axios.post(`/api/customer/announcements/${announcementId}/acknowledge`, null, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      await axios.post(`/api/customer/announcements/${announcementId}/acknowledge`, null)
     } catch (requestError) {
       if (requestError.response?.status !== 404) throw requestError
     }
@@ -4643,9 +4632,7 @@ function CustomerDashbord() {
 
   const [dormInfoAcknowledged, setDormInfoAcknowledged] = useState(false)
   const acknowledgeDormInfo = async () => {
-    await axios.post('/api/customer/dorm-info/acknowledge', null, {
-      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-    })
+    await axios.post('/api/customer/dorm-info/acknowledge', null)
     setDormInfoAcknowledged(true)
   }
 
@@ -4686,7 +4673,7 @@ function CustomerDashbord() {
     let cancelled = false
     const loadParking = () =>
       axios
-        .get('/api/customer/parked-vehicles', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+        .get('/api/customer/parked-vehicles')
         .then(({ data }) => {
           if (cancelled) return
           setActiveVehicleIds((data.vehicles || []).map((vehicle) => vehicle.id))
@@ -4855,6 +4842,19 @@ function CustomerDashbord() {
     for (const animation of homePaymentAnimationsRef.current.values()) animation.cancel()
   }, [])
 
+  const toggleHomePayment = (homePaymentKey, row) => {
+    if (row && window.matchMedia('(max-width: 768px) and (prefers-reduced-motion: no-preference)').matches) {
+      homePaymentHeightsRef.current.set(homePaymentKey, row.getBoundingClientRect().height)
+      homePaymentAnimationsRef.current.get(homePaymentKey)?.cancel()
+    }
+    setExpandedHomePayments((previous) => {
+      const next = new Set(previous)
+      if (next.has(homePaymentKey)) next.delete(homePaymentKey)
+      else next.add(homePaymentKey)
+      return next
+    })
+  }
+
   useEffect(() => {
     const isAnyOverlayOpen =
       showPaymentForm ||
@@ -4950,8 +4950,7 @@ function CustomerDashbord() {
   }
 
   const loadDashboard = () => {
-    const token = sessionStorage.getItem('token')
-    if (!token) {
+    if (!hasSession()) {
       navigate('/login', { replace: true })
       return Promise.resolve()
     }
@@ -4959,7 +4958,7 @@ function CustomerDashbord() {
     if (dashboardLoadRef.current) return dashboardLoadRef.current
 
     dashboardLoadRef.current = axios
-      .get('/api/customer/me', { headers: { Authorization: `Bearer ${token}` } })
+      .get('/api/customer/me')
       .then(({ data }) => {
         setData(data)
         setError('')
@@ -4967,8 +4966,7 @@ function CustomerDashbord() {
       })
       .catch((err) => {
         if (err.response?.status === 401) {
-          sessionStorage.removeItem('token')
-          sessionStorage.removeItem('user')
+          clearSession()
           navigate('/login', { replace: true })
           return
         }
@@ -4989,8 +4987,7 @@ function CustomerDashbord() {
     try {
       await axios.post(
         `/api/customer/parcels/${parcel.id}/receive`,
-        {},
-        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } },
+        {}
       )
       setData((current) =>
         current
@@ -5022,15 +5019,13 @@ function CustomerDashbord() {
 
   useEffect(() => {
     let isMounted = true
-    const token = sessionStorage.getItem('token')
-
-    if (!token) {
+    if (!hasSession()) {
       navigate('/login', { replace: true })
       return
     }
 
     axios
-      .get('/api/customer/me', { headers: { Authorization: `Bearer ${token}` } })
+      .get('/api/customer/me')
       .then(({ data }) => {
         if (isMounted) {
           setData(data)
@@ -5042,8 +5037,7 @@ function CustomerDashbord() {
       .catch((err) => {
         if (!isMounted) return
         if (err.response?.status === 401) {
-          sessionStorage.removeItem('token')
-          sessionStorage.removeItem('user')
+          clearSession()
           navigate('/login', { replace: true })
           return
         }
@@ -5056,14 +5050,16 @@ function CustomerDashbord() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [navigate])
+
+  const refreshDashboard = useEffectEvent(() => loadDashboard())
 
   useEffect(() => {
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') loadDashboard()
+      if (document.visibilityState === 'visible') refreshDashboard()
     }
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') loadDashboard()
+      if (document.visibilityState === 'visible') refreshDashboard()
     }, 20000)
     window.addEventListener('focus', refreshWhenVisible)
     document.addEventListener('visibilitychange', refreshWhenVisible)
@@ -5080,13 +5076,12 @@ function CustomerDashbord() {
       .map((item) => (item.expires_epoch ? item.expires_epoch * 1000 - now : Number.NaN))
       .filter((wait) => Number.isFinite(wait) && wait > 0)
     if (upcoming.length === 0) return undefined
-    const timer = setTimeout(loadDashboard, Math.min(Math.min(...upcoming) + 1000, 2147483647))
+    const timer = setTimeout(() => refreshDashboard(), Math.min(Math.min(...upcoming) + 1000, 2147483647))
     return () => clearTimeout(timer)
   }, [data])
 
   const handleLogout = () => {
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('user')
+    logout()
     navigate('/login', { replace: true })
   }
 
@@ -5096,7 +5091,7 @@ function CustomerDashbord() {
     setPaymentCopied(false)
     setShowPaymentForm(true)
     axios
-      .get('/api/customer/payment-channels', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+      .get('/api/customer/payment-channels')
       .then(({ data: result }) => {
         const channels = result.channels || {}
         setPaymentChannels(channels)
@@ -5119,7 +5114,6 @@ function CustomerDashbord() {
 
   const handleConfirmPayment = async (event) => {
     event.preventDefault()
-    const token = sessionStorage.getItem('token')
     if (!paymentMethod) {
       setPaymentError('กรุณาเลือกช่องทางการชำระเงิน')
       return
@@ -5139,7 +5133,7 @@ function CustomerDashbord() {
       const { data: result } = await axios.post(
         '/api/customer/payments/confirm',
         formData,
-        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
+        { headers: { 'Content-Type': 'multipart/form-data' } },
       )
       setShowPaymentForm(false)
       setPaymentSlip(null)
@@ -5193,7 +5187,6 @@ function CustomerDashbord() {
     setProfileSubmitting(true)
     setProfileError('')
     try {
-      const token = sessionStorage.getItem('token')
       const payload = {
         phone: profileForm.phone.trim(),
       }
@@ -5201,9 +5194,7 @@ function CustomerDashbord() {
         payload.current_password = profileForm.current_password
         payload.new_password = profileForm.new_password
       }
-      const { data: result } = await axios.patch('/api/customer/profile', payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const { data: result } = await axios.patch('/api/customer/profile', payload)
       setSuccessPopup(result.message || 'บันทึกข้อมูลสำเร็จ')
       setProfileForm((form) => ({ ...form, current_password: '', new_password: '', confirm_password: '' }))
       await loadDashboard()
@@ -5258,7 +5249,6 @@ function CustomerDashbord() {
         return
       }
     }
-    const token = sessionStorage.getItem('token')
     setRequestSubmitting(true)
     setRequestError('')
     try {
@@ -5273,9 +5263,7 @@ function CustomerDashbord() {
         payload.preferred_move_date = preferredMoveDate
       }
       if (activeRequestType === 'moveout') payload.preferred_move_date = preferredMoveDate
-      const { data: result } = await axios.post('/api/customer/requests', payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const { data: result } = await axios.post('/api/customer/requests', payload)
       setActiveRequestType(null)
       setSuccessPopup(result.message || 'ส่งคำขอสำเร็จ')
       await loadDashboard()
@@ -5316,7 +5304,6 @@ function CustomerDashbord() {
       setMaintenanceError('กรุณาแนบรูปปัญหาอย่างน้อย 1 รูป')
       return
     }
-    const token = sessionStorage.getItem('token')
     setMaintenanceSubmitting(true)
     setMaintenanceError('')
     try {
@@ -5329,8 +5316,7 @@ function CustomerDashbord() {
           preferredTime: maintenancePreferredTime,
           contactPhone: maintenanceContactPhone.trim() || undefined,
           photos: compressedPhotos,
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
+        }
       )
       setMaintenanceText('')
       setMaintenancePhotos([])
@@ -5345,14 +5331,12 @@ function CustomerDashbord() {
   }
 
   const handleCancelMaintenance = async (id) => {
-    const token = sessionStorage.getItem('token')
     setMaintenanceError('')
     setCancelingMaintenanceId(id)
     try {
       const { data: result } = await axios.post(
         `/api/customer/maintenance/${id}/cancel`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } },
+        {}
       )
       setSuccessPopup(result.message || 'ยกเลิกรายการแจ้งซ่อมสำเร็จ')
       await loadDashboard()
@@ -5674,7 +5658,6 @@ function CustomerDashbord() {
 
   const utilityPayments = (rentalHistory || []).flatMap((entry) => entry.payments || [])
 
-  // Rent and deposit reminders come straight from the amount due now (C12, C23).
   const buildDueNotifs = () => {
     const dueDate = currentDue?.dueDate ? new Date(currentDue.dueDate) : null
     return (currentDue?.items || []).flatMap((item) => {
@@ -6099,19 +6082,7 @@ function CustomerDashbord() {
                           <button
                             type="button"
                             aria-expanded={isHomePaymentExpanded}
-                            onClick={(event) => {
-                              const row = event.currentTarget.closest('tr')
-                              if (row && window.matchMedia('(max-width: 768px) and (prefers-reduced-motion: no-preference)').matches) {
-                                homePaymentHeightsRef.current.set(homePaymentKey, row.getBoundingClientRect().height)
-                                homePaymentAnimationsRef.current.get(homePaymentKey)?.cancel()
-                              }
-                              setExpandedHomePayments((previous) => {
-                                const next = new Set(previous)
-                                if (next.has(homePaymentKey)) next.delete(homePaymentKey)
-                                else next.add(homePaymentKey)
-                                return next
-                              })
-                            }}
+                            onClick={(event) => toggleHomePayment(homePaymentKey, event.currentTarget.closest('tr'))}
                           >
                             {isHomePaymentExpanded ? 'ย่อรายละเอียด' : 'ดูเพิ่มเติม'}
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>

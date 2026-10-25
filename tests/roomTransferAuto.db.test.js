@@ -12,6 +12,7 @@ const {
   listPendingTransferContracts,
   syncRoomTransferCharge,
 } = await import("../router/rentalContracts.js");
+const { ACTIVE_VEHICLE_SQL, cancelCustomerVisitRequests } = await import("../router/parking.js");
 
 const contractImages = () => Array.from({ length: 5 }, (_, index) => ({ name: `auto-${index}`, url: `/uploads/contracts/auto-${randomUUID()}.jpg` }));
 
@@ -146,4 +147,71 @@ test("a failing automatic transfer does not undo the payment", () =>
     );
     assert.equal(request.status, "in_progress");
     assert.equal(request.payment_status, "paid");
+  }));
+
+async function addVehicle(connection, { customerId, roomNumber, plate, type = "car", status = "approved", endOffsetDays = 30, parkedAt = null, checkedOutAt = null }) {
+  const [result] = await connection.query(
+    `INSERT INTO ResidentVisitRequest (customer_id, room_number, request_type, user_category, vehicle_type, vehicle_plate, start_at, end_at, status, parked_at, checked_out_at)
+     VALUES (?, ?, 'vehicle', 'resident', ?, ?, DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL ? DAY), ?, ?, ?)`,
+    [customerId, roomNumber, type, plate, endOffsetDays, status, parkedAt, checkedOutAt],
+  );
+  return result.insertId;
+}
+
+async function vehicleRow(connection, id) {
+  const [[row]] = await connection.query("SELECT room_number, status, cancelled_by_name FROM ResidentVisitRequest WHERE id = ?", [id]);
+  return { ...row, room_number: Number(row.room_number) };
+}
+
+test("room transfer moves the tenant's active vehicles to the new room and leaves the old room clear", () =>
+  withRollback(async (connection) => {
+    const tenant = await setupTenant(connection);
+    const owner = { customerId: tenant.customerId, roomNumber: tenant.sourceNumber };
+    const car = await addVehicle(connection, { ...owner, plate: "ทส 1001" });
+    const pendingBike = await addVehicle(connection, { ...owner, plate: "ทส 1002", type: "motorcycle", status: "pending" });
+    const parkedPastEnd = await addVehicle(connection, { ...owner, plate: "ทส 1003", endOffsetDays: -1, parkedAt: new Date(Date.now() - 2 * 86400000) });
+    const expired = await addVehicle(connection, { ...owner, plate: "ทส 1004", endOffsetDays: -1 });
+    const checkedOut = await addVehicle(connection, { ...owner, plate: "ทส 1005", parkedAt: new Date(Date.now() - 86400000), checkedOutAt: new Date() });
+
+    await syncRoomTransferCharge(connection, tenant.requestId, "ทดสอบ");
+    await payTransferCharge(connection, tenant.requestId);
+    assert.equal((await autoApplyPaidTransfers(connection)).length, 1);
+
+    for (const id of [car, pendingBike, parkedPastEnd]) {
+      const row = await vehicleRow(connection, id);
+      assert.equal(row.room_number, tenant.targetNumber);
+      assert.notEqual(row.status, "cancelled");
+    }
+    for (const id of [expired, checkedOut]) assert.equal((await vehicleRow(connection, id)).room_number, tenant.sourceNumber);
+
+    const [[{ left }]] = await connection.query(
+      `SELECT COUNT(*) AS \`left\` FROM ResidentVisitRequest r
+       WHERE r.room_number = ? AND ${ACTIVE_VEHICLE_SQL}`,
+      [tenant.sourceNumber],
+    );
+    assert.equal(Number(left), 0);
+  }));
+
+test("move-out and suspension cancel every vehicle the tenant still holds, including one parked past its end", () =>
+  withRollback(async (connection) => {
+    const tenant = await setupTenant(connection);
+    const owner = { customerId: tenant.customerId, roomNumber: tenant.sourceNumber };
+    const car = await addVehicle(connection, { ...owner, plate: "ทส 2001" });
+    const pendingBike = await addVehicle(connection, { ...owner, plate: "ทส 2002", type: "motorcycle", status: "pending" });
+    const parkedPastEnd = await addVehicle(connection, { ...owner, plate: "ทส 2003", endOffsetDays: -1, parkedAt: new Date(Date.now() - 2 * 86400000) });
+    const checkedOut = await addVehicle(connection, { ...owner, plate: "ทส 2004", parkedAt: new Date(Date.now() - 86400000), checkedOutAt: new Date() });
+
+    await cancelCustomerVisitRequests(connection, tenant.customerId, "ระบบ (ผู้เช่าย้ายออก)");
+
+    for (const id of [car, pendingBike, parkedPastEnd]) {
+      const row = await vehicleRow(connection, id);
+      assert.equal(row.status, "cancelled");
+      assert.equal(row.cancelled_by_name, "ระบบ (ผู้เช่าย้ายออก)");
+    }
+    assert.equal((await vehicleRow(connection, checkedOut)).status, "approved");
+    const [[{ active }]] = await connection.query(
+      `SELECT COUNT(*) AS active FROM ResidentVisitRequest r WHERE r.customer_id = ? AND ${ACTIVE_VEHICLE_SQL}`,
+      [tenant.customerId],
+    );
+    assert.equal(Number(active), 0);
   }));

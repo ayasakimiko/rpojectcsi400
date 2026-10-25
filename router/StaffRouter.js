@@ -47,6 +47,7 @@ import { createResidentVisitReview, listResidentVisitRequests } from "./resident
 import {
   ParkingError,
   assertParkingAllowed,
+  cancelCustomerVisitRequests,
   createCheckInHandler,
   createFinePaymentHandler,
   createFineReviewHandler,
@@ -1891,13 +1892,7 @@ router.post("/requests/:id/approve", parseOptionalContractImages, async (req, re
     }
 
     if (tenantRequest.type === "moveout") {
-      await connection.query(
-        `UPDATE ResidentVisitRequest
-         SET status = 'cancelled', cancelled_by_name = 'ระบบ (ผู้เช่าย้ายออก)', cancelled_at = NOW()
-         WHERE customer_id = ? AND (status = 'pending'
-           OR (status = 'approved' AND (end_at IS NULL OR end_at > NOW())))`,
-        [tenantRequest.customer_id],
-      );
+      await cancelCustomerVisitRequests(connection, tenantRequest.customer_id, "ระบบ (ผู้เช่าย้ายออก)");
       await connection.query(
         `UPDATE SafetyIncident
          SET status = 'cancelled', cancelled_by_name = 'ระบบ (ผู้เช่าย้ายออก)',

@@ -18,16 +18,12 @@ function hasDormInfoChanges(current, saved) {
   return PUBLISHED_FIELDS.some((field) => (current?.[field] || '') !== (saved[field] || ''))
 }
 
-function dormInfoHeaders() {
-  return { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-}
-
 function useDormInfo(apiBase) {
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const load = useCallback((signal) => {
-    return axios.get(apiBase, { headers: dormInfoHeaders(), signal }).then(({ data }) => {
+    return axios.get(apiBase, { signal }).then(({ data }) => {
       if (!signal?.aborted) {
         setConfig(data.config)
         setError('')
@@ -175,7 +171,7 @@ export function DormInfoSettings({ apiBase, children = null, slipPreview = null 
     setNotice(null)
     try {
       const payload = { ...form, dorm_rules: cleanLines(ruleLines), contract_rules: cleanContractLines(contractLines) }
-      const { data } = await axios.put(apiBase, payload, { headers: dormInfoHeaders() })
+      const { data } = await axios.put(apiBase, payload)
       setConfig(data.config)
       setDraft(null)
       setSuccessMessage(data.message || 'บันทึกกฎระเบียบและเบอร์ติดต่อเรียบร้อยแล้ว')

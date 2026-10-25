@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import './RoomTypeManager.css'
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
 function formatBaht(value) {
   return `฿${Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -199,7 +197,7 @@ export default function RoomTypeManager({ Modal, rooms, onRoomsChanged }) {
   const load = useCallback(
     () =>
       axios
-        .get('/api/admin/room-types', { headers: authHeaders() })
+        .get('/api/admin/room-types')
         .then(({ data }) => {
           setRoomTypes(data.roomTypes)
           setListError('')
@@ -227,8 +225,8 @@ export default function RoomTypeManager({ Modal, rooms, onRoomsChanged }) {
     setSubmitError('')
     try {
       const { data } = editing.type
-        ? await axios.put(`/api/admin/room-types/${editing.type.id}`, payload, { headers: authHeaders() })
-        : await axios.post('/api/admin/room-types', payload, { headers: authHeaders() })
+        ? await axios.put(`/api/admin/room-types/${editing.type.id}`, payload)
+        : await axios.post('/api/admin/room-types', payload)
       afterChange(data.message, requestClose)
     } catch (error) {
       setSubmitError(error.response?.data?.message || 'ไม่สามารถบันทึกประเภทห้องได้')
@@ -241,7 +239,7 @@ export default function RoomTypeManager({ Modal, rooms, onRoomsChanged }) {
     setSubmitting(true)
     setSubmitError('')
     try {
-      const { data } = await axios.delete(`/api/admin/room-types/${deleting.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/admin/room-types/${deleting.id}`)
       afterChange(data.message, requestClose)
     } catch (error) {
       setSubmitError(error.response?.data?.message || 'ไม่สามารถลบประเภทห้องได้')

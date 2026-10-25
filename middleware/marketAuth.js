@@ -32,7 +32,7 @@ async function requireMarketActor(req, res, next) {
     return res.status(403).json({ message: "ไม่ได้รับอนุญาต (เฉพาะพนักงาน ผู้ดูแลระบบ และเจ้าของ)" });
   }
   try {
-    const { status, body } = await fetchAccount(req.headers.authorization);
+    const { status, body } = await fetchAccount(req.authorization);
     if (status === 401) return res.status(401).json({ message: body.message || "กรุณาเข้าสู่ระบบใหม่" });
     if (status !== 200 || body.id !== req.user.id || body.role !== req.user.role) {
       return res.status(503).json({ message: "ตรวจสอบบัญชีไม่ได้ กรุณาลองใหม่อีกครั้ง" });

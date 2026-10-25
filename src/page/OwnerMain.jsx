@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoSettings, SettingsDialog } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
@@ -24,13 +24,13 @@ import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import { isUnread, useServerNotifications } from '../utils/serverNotifications.js'
+import { logout } from '../utils/session.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
   { key: 'auto', label: 'ตรวจอัตโนมัติ', hint: 'ตรวจสลิปกับธนาคารผ่าน RDCW ผ่านแล้วเป็น “ชำระแล้ว” ทันที และใช้สลิปซ้ำไม่ได้' },
   { key: 'manual', label: 'เจ้าหน้าที่ตรวจเอง', hint: 'ไม่ส่งไปตรวจที่ RDCW สลิปจะรอให้เจ้าหน้าที่กดอนุมัติหรือปฏิเสธ' },
 ]
-const headers = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 
 const SLIP_PREVIEW_AMOUNT = 3500
 
@@ -131,7 +131,7 @@ function OwnerPaymentSettings({ onPreviewChange }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    axios.get('/api/owner/payment-settings', { headers: headers(), signal: controller.signal })
+    axios.get('/api/owner/payment-settings', { signal: controller.signal })
       .then(({ data }) => {
         const settings = { ...data.settings, test_mode: Boolean(data.testMode), verify_mode: data.verifyMode === 'manual' ? 'manual' : 'auto' }
         setSaved(settings)
@@ -172,7 +172,7 @@ function OwnerPaymentSettings({ onPreviewChange }) {
     setSaving(true)
     setMessage(null)
     try {
-      const { data } = await axios.put('/api/owner/payment-settings', draft, { headers: headers() })
+      const { data } = await axios.put('/api/owner/payment-settings', draft)
       const settings = { ...data.settings, test_mode: Boolean(data.testMode), verify_mode: data.verifyMode === 'manual' ? 'manual' : 'auto' }
       setSaved(settings)
       setDraft(settings)
@@ -602,7 +602,6 @@ function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
   useEffect(() => {
     const controller = new AbortController()
     axios.get('/api/owner/expenses', {
-      headers: getAuthHeaders(),
       signal: controller.signal,
       params: { page, pageSize: EXPENSE_LEDGER_PAGE_SIZE, from: from || undefined, to: to || undefined, category: category || undefined, search: query || undefined },
     })
@@ -793,7 +792,7 @@ function OwnerOccupancyLogDialog({ eventId, onClose: closeNow }) {
   useEffect(() => { closeRef.current = paymentId !== null ? () => {} : showAllPayments ? () => setShowAllPayments(false) : onClose }, [onClose, paymentId, showAllPayments])
   useEffect(() => {
     const controller = new AbortController()
-    axios.get(`/api/owner/logs/occupancy/${eventId}`, { headers: getAuthHeaders(), signal: controller.signal })
+    axios.get(`/api/owner/logs/occupancy/${eventId}`, { signal: controller.signal })
       .then(({ data }) => { if (!controller.signal.aborted) setResponse(data) })
       .catch((error) => { if (!controller.signal.aborted) setResponse({ error: error.response?.data?.message || 'โหลดรายละเอียดไม่สำเร็จ' }) })
     return () => controller.abort()
@@ -935,7 +934,7 @@ function OwnerFinancePeriodDialog({ period, range, onClose: closeNow }) {
     const controller = new AbortController()
     const { tab: kind, retry: ignored, ...params } = JSON.parse(requestKey)
     void ignored
-    axios.get(kind === 'income' ? '/api/owner/income/items' : '/api/owner/expenses', { headers: getAuthHeaders(), params, signal: controller.signal })
+    axios.get(kind === 'income' ? '/api/owner/income/items' : '/api/owner/expenses', { params, signal: controller.signal })
       .then(({ data }) => { if (!controller.signal.aborted) setResponse({ key: requestKey, data }) })
       .catch((error) => { if (!controller.signal.aborted) setResponse({ key: requestKey, error: error.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ' }) })
     return () => controller.abort()
@@ -1012,7 +1011,7 @@ function OwnerIncomePaymentDialog({ id, onClose: closeNow }) {
   const dialogRef = useRef(null)
   useEffect(() => {
     const controller = new AbortController()
-    axios.get(`/api/owner/income/items/${id}`, { headers: getAuthHeaders(), signal: controller.signal })
+    axios.get(`/api/owner/income/items/${id}`, { signal: controller.signal })
       .then(({ data }) => { if (!controller.signal.aborted) setResponse({ payment: data.payment }) })
       .catch((error) => { if (!controller.signal.aborted) setResponse({ error: error.response?.data?.message || 'โหลดรายละเอียดไม่สำเร็จ' }) })
     return () => controller.abort()
@@ -1090,7 +1089,7 @@ function OwnerIncomeItemsDialog({ initialType, types, range, onClose: closeNow }
     const controller = new AbortController()
     const params = JSON.parse(requestKey)
     delete params.retry
-    axios.get('/api/owner/income/items', { headers: getAuthHeaders(), params, signal: controller.signal })
+    axios.get('/api/owner/income/items', { params, signal: controller.signal })
       .then(({ data }) => { if (!controller.signal.aborted) setResponse({ key: requestKey, data }) })
       .catch((error) => { if (!controller.signal.aborted) setResponse({ key: requestKey, error: error.response?.data?.message || 'โหลดรายการไม่สำเร็จ' }) })
     return () => controller.abort()
@@ -1230,7 +1229,6 @@ function useOwnerUtilityReceipts(enabled, from, to) {
     if (!enabled) return
     const controller = new AbortController()
     axios.get('/api/owner/utility-receipts', {
-      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
       params: { from: from || undefined, to: to || undefined },
       signal: controller.signal,
     }).then(({ data }) => { if (!controller.signal.aborted) setResponse({ key, result: data, error: '' }) })
@@ -2079,7 +2077,6 @@ function OwnerAuditLog({ onSummaryChange }) {
   useEffect(() => {
     let cancelled = false
     axios.get('/api/owner/logs/audit', {
-      headers: getAuthHeaders(),
       params: { page, role: role !== 'all' ? role : undefined, method: method !== 'all' ? method : undefined, search: appliedSearch || undefined },
     }).then(({ data }) => {
       if (!cancelled) {
@@ -2191,14 +2188,12 @@ function OwnerAuditLog({ onSummaryChange }) {
 function getOwnerNotificationStorageKey() {
   try {
     const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-    return `owner-notifications-seen-${user.id ?? user.idcard ?? user.username ?? 'current'}`
+    return `owner-notifications-seen-${user.id ?? user.username ?? 'current'}`
   } catch {
     return 'owner-notifications-seen-current'
   }
 }
 
-// Owner sees everything Staff and Admin are notified about. Work the Owner page has no
-// screen for opens the Staff or Admin page (both allow the Owner role) on the right tab.
 const OWNER_PENDING_KINDS = [
   'slip', 'visit', 'safety', 'tenant', 'maintenance', 'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract',
   'transfer_charge', 'move_in', 'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
@@ -2245,24 +2240,19 @@ function parseInputDate(value) {
   return value ? new Date(`${value}T00:00:00`) : null
 }
 
-function getAuthHeaders() {
-  const token = sessionStorage.getItem('token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
 const MODAL_CLOSE_ANIMATION_MS = 180
 
 function useClosingValue(value, duration = MODAL_CLOSE_ANIMATION_MS) {
-  const prevValue = useRef(value)
+  const [prevValue, setPrevValue] = useState(value)
   const [closingValue, setClosingValue] = useState(null)
 
-  if (value !== prevValue.current) {
-    if (!value && prevValue.current) {
-      setClosingValue(prevValue.current)
+  if (value !== prevValue) {
+    if (!value && prevValue) {
+      setClosingValue(prevValue)
     } else if (value && closingValue) {
       setClosingValue(null)
     }
-    prevValue.current = value
+    setPrevValue(value)
   }
 
   useEffect(() => {
@@ -2417,7 +2407,7 @@ function OwnerMain() {
   const [expenseDeleteConfirm, setExpenseDeleteConfirm] = useState(null)
 
   const loadAnnouncements = useCallback(() => axios
-    .get('/api/owner/announcements', { headers: getAuthHeaders() })
+    .get('/api/owner/announcements')
     .then(({ data }) => {
       setAnnouncements(data.announcements || [])
       setAnnouncementsLoadedAt(Date.now() / 1000)
@@ -2478,7 +2468,6 @@ function OwnerMain() {
   const SUMMARY_PAGE_SIZE = 5
 
   const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
-
 
   const financeExpensePage = Number(expenses.page || 1)
 
@@ -2782,14 +2771,13 @@ function OwnerMain() {
   const loadOverview = async (overrides = {}) => {
     const nextFilters = { ...paymentFilter, ...overrides }
     const { data } = await axios.get('/api/owner/overview', {
-      headers: getAuthHeaders(),
       params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
     })
     setOverview(data)
   }
 
   const loadRoomStatus = async () => {
-    const { data } = await axios.get('/api/owner/rooms/status', { headers: getAuthHeaders() })
+    const { data } = await axios.get('/api/owner/rooms/status')
     setRoomStatus(data)
   }
 
@@ -2798,7 +2786,6 @@ function OwnerMain() {
     setIsOccupancySummaryLoading(true)
     try {
       const { data } = await axios.get('/api/owner/rooms/occupancy-summary', {
-        headers: getAuthHeaders(),
         params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
       })
       setOccupancySummary(data)
@@ -2810,7 +2797,6 @@ function OwnerMain() {
   const loadIncome = async (overrides = {}) => {
     const nextFilters = { ...paymentFilter, ...overrides }
     const { data } = await axios.get('/api/owner/income', {
-      headers: getAuthHeaders(),
       params: {
         month: nextFilters.month || selectedPeriod.month,
         year: nextFilters.year || selectedPeriod.year,
@@ -2825,7 +2811,6 @@ function OwnerMain() {
   const loadExpenses = async (page = expenses.page || 1, overrides = {}) => {
     const nextFilters = { ...paymentFilter, ...overrides }
     const { data } = await axios.get('/api/owner/expenses', {
-      headers: getAuthHeaders(),
       params: { page, from: nextFilters.from || undefined, to: nextFilters.to || undefined },
     })
     setExpenses(data)
@@ -2896,8 +2881,7 @@ function OwnerMain() {
           payment_method: expenseEditForm.payment_method || null,
           receipt_number: (expenseEditForm.receipt_number || '').trim(),
           room_number: roomValue || null,
-        },
-        { headers: getAuthHeaders() },
+        }
       )
       setMessage('success', 'แก้ไขรายจ่ายสำเร็จ')
       requestClose()
@@ -2911,7 +2895,7 @@ function OwnerMain() {
 
   const confirmDeleteExpenseRecord = async (requestClose) => {
     try {
-      await axios.delete(`/api/owner/expenses/${expenseDeleteConfirm.id}`, { headers: getAuthHeaders() })
+      await axios.delete(`/api/owner/expenses/${expenseDeleteConfirm.id}`)
       setMessage('success', 'ลบรายจ่ายสำเร็จ')
       requestClose()
       await loadExpenses(financeExpensePage)
@@ -2925,7 +2909,6 @@ function OwnerMain() {
     setIsTrendsLoading(true)
     try {
       const { data } = await axios.get('/api/owner/trends', {
-        headers: getAuthHeaders(),
         params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
       })
       setFinanceTrends(data)
@@ -2939,7 +2922,6 @@ function OwnerMain() {
     setIsOccupancyTrendLoading(true)
     try {
       const { data } = await axios.get('/api/owner/rooms/occupancy-trend', {
-        headers: getAuthHeaders(),
         params: { from: nextFilters.from || undefined, to: nextFilters.to || undefined },
       })
       setOccupancyTrend(data)
@@ -2949,14 +2931,13 @@ function OwnerMain() {
   }
 
    const loadStaff = async () => {
-    const { data } = await axios.get('/api/owner/staff', { headers: getAuthHeaders() })
+    const { data } = await axios.get('/api/owner/staff')
     setStaffList(data.staff || [])
   }
 
   const loadPaymentLogs = async (page = paymentLogs.page || 1, overrides = {}) => {
     const nextFilters = { ...paymentLogFilter, ...overrides }
     const { data } = await axios.get('/api/owner/logs/payments', {
-      headers: getAuthHeaders(),
       params: {
         page,
         from: nextFilters.from || undefined,
@@ -2969,14 +2950,14 @@ function OwnerMain() {
   }
 
   const loadPendingSlipReviews = async () => {
-    const { data } = await axios.get('/api/staff/payment-verifications', { headers: getAuthHeaders() })
+    const { data } = await axios.get('/api/staff/payment-verifications')
     setPendingSlipReviews(data.payments || [])
   }
 
   useEffect(() => {
     let cancelled = false
     const refresh = () => {
-      axios.get('/api/owner/expenses', { headers: getAuthHeaders(), params: { page: 1 } })
+      axios.get('/api/owner/expenses', { params: { page: 1 } })
         .then(({ data }) => {
           if (cancelled) return
           const list = data.expenses || []
@@ -2988,7 +2969,7 @@ function OwnerMain() {
           }
         })
         .catch(() => {})
-      axios.get('/api/staff/payment-verifications', { headers: getAuthHeaders() })
+      axios.get('/api/staff/payment-verifications')
         .then(({ data }) => { if (!cancelled) setPendingSlipReviews(data.payments || []) })
         .catch(() => {})
     }
@@ -3030,14 +3011,13 @@ function OwnerMain() {
     try {
       const { data } = await axios.patch(
         `/api/staff/payment-verifications/${paymentId}`,
-        { decision },
-        { headers: getAuthHeaders() },
+        { decision }
       )
       setMessage('success', data.message || `บันทึกผลการ${action}สลิปแล้ว`)
       await Promise.all([loadPendingSlipReviews(), loadPaymentLogs(paymentLogs.page || 1)])
       const roomNumber = displayRoomDetail?.room?.room_number
       if (roomNumber) {
-        const { data: roomData } = await axios.get(`/api/owner/rooms/${roomNumber}`, { headers: getAuthHeaders() })
+        const { data: roomData } = await axios.get(`/api/owner/rooms/${roomNumber}`)
         setRoomDetail(roomData)
       }
       return true
@@ -3052,7 +3032,6 @@ function OwnerMain() {
   const loadOccupancyLogs = async (page = occupancyLogs.page || 1, overrides = {}) => {
     const nextFilters = { search: occupancyFilter.search, type: occupancyFilter.type, from: paymentFilter.from, to: paymentFilter.to, ...overrides }
     const { data } = await axios.get('/api/owner/logs/occupancy', {
-      headers: getAuthHeaders(),
       params: {
         page,
         from: nextFilters.from || undefined,
@@ -3064,10 +3043,15 @@ function OwnerMain() {
     setOccupancyLogs(data)
   }
 
-  const openPeriodLogRoom = (log) => {
-    if (!log.room_number) return
-    const room = (roomStatus.rooms || []).find((item) => Number(item.room_number) === Number(log.room_number))
-    handleRoomClick(room || { room_number: log.room_number })
+  const openPeriodLogRoom = (event) => {
+    if (event.type === 'keydown') {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      event.preventDefault()
+    }
+    const roomNumber = event.currentTarget.dataset.roomNumber
+    if (!roomNumber) return
+    const room = (roomStatus.rooms || []).find((item) => Number(item.room_number) === Number(roomNumber))
+    handleRoomClick(room || { room_number: roomNumber })
   }
 
   const openOccupancyPeriodDetail = async (item) => {
@@ -3081,10 +3065,10 @@ function OwnerMain() {
     setOccupancyPeriodDetail({ item, logs: [], loading: true })
     try {
       const params = { from, to, page: 1 }
-      const { data: firstPage } = await axios.get('/api/owner/logs/occupancy', { headers: getAuthHeaders(), params })
+      const { data: firstPage } = await axios.get('/api/owner/logs/occupancy', { params })
       const pageCount = Math.ceil((Number(firstPage.total) || 0) / (Number(firstPage.pageSize) || 10))
       const otherPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
-        axios.get('/api/owner/logs/occupancy', { headers: getAuthHeaders(), params: { ...params, page: index + 2 } }),
+        axios.get('/api/owner/logs/occupancy', { params: { ...params, page: index + 2 } }),
       ))
       const logs = [...(firstPage.logs || []), ...otherPages.flatMap((response) => response.data.logs || [])]
       setOccupancyPeriodDetail({ item, logs, loading: false })
@@ -3100,9 +3084,9 @@ function OwnerMain() {
     setRoomDetail({ room, tenant: null, payments: [] })
     setIsRoomDetailLoading(true)
     setIsRoomHistoryLoading(true)
-    const historyRequest = axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: getAuthHeaders() }).catch(() => null)
+    const historyRequest = axios.get(`/api/staff/rooms/${room.room_number}/history`).catch(() => null)
     try {
-      const { data } = await axios.get(`/api/owner/rooms/${room.room_number}`, { headers: getAuthHeaders() })
+      const { data } = await axios.get(`/api/owner/rooms/${room.room_number}`)
       if (requestId !== roomDetailRequestIdRef.current) return
       setRoomDetail(data)
       setIsRoomDetailLoading(false)
@@ -3170,8 +3154,10 @@ function OwnerMain() {
   const neededDataGroups = getNeededDataGroups(activeTab, roomsSection)
   const isLoading = neededDataGroups.some((group) => !loadedDataGroups.has(group))
 
+  const loadNeededDataGroups = useEffectEvent((groups) => ensureDataGroups(groups))
+
   useEffect(() => {
-    ensureDataGroups(getNeededDataGroups(activeTab, roomsSection))
+    loadNeededDataGroups(getNeededDataGroups(activeTab, roomsSection))
   }, [activeTab, roomsSection])
 
   useEffect(() => {
@@ -3250,10 +3236,10 @@ function OwnerMain() {
           age: staffForm.age,
         }
         if (staffForm.password) payload.password = staffForm.password
-        await axios.put(`/api/owner/staff/${editingStaff.role}/${editingStaff.id}`, payload, { headers: getAuthHeaders() })
+        await axios.put(`/api/owner/staff/${editingStaff.role}/${editingStaff.id}`, payload)
         setMessage('success', 'แก้ไขข้อมูลพนักงานสำเร็จ')
       } else {
-        await axios.post('/api/owner/staff', staffForm, { headers: getAuthHeaders() })
+        await axios.post('/api/owner/staff', staffForm)
         setMessage('success', 'เพิ่มพนักงานสำเร็จ')
       }
 
@@ -3317,8 +3303,7 @@ function OwnerMain() {
     try {
       await axios.patch(
         `/api/owner/staff/${staffMember.role}/${staffMember.id}/suspend`,
-        { is_suspended: !staffMember.is_suspended },
-        { headers: getAuthHeaders() },
+        { is_suspended: !staffMember.is_suspended }
       )
       setMessage('success', `${action} สำเร็จ`)
       await loadStaff()
@@ -3340,7 +3325,7 @@ function OwnerMain() {
     })
     if (!confirmed) return
     try {
-      await axios.delete(`/api/owner/staff/${staffMember.role}/${staffMember.id}`, { headers: getAuthHeaders() })
+      await axios.delete(`/api/owner/staff/${staffMember.role}/${staffMember.id}`)
       setMessage('success', 'ลบพนักงานสำเร็จ')
       await loadStaff()
     } catch (error) {
@@ -3349,6 +3334,7 @@ function OwnerMain() {
   }
 
   const handleLogout = () => {
+    logout()
     sessionStorage.clear()
     navigate('/login')
   }
@@ -4757,7 +4743,6 @@ function OwnerMain() {
               )}
             </section>
 
-
             <OwnerIncomeTypeCards summary={incomeSummary} range={{ ...paymentFilter, ...selectedPeriod }} />
 
           </>
@@ -4985,13 +4970,9 @@ function OwnerMain() {
                             role="button"
                             tabIndex={0}
                             aria-label={`ดูรายละเอียดห้อง ${log.room_number || ''} ของ ${name}`}
-                            onClick={() => openPeriodLogRoom(log)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault()
-                                openPeriodLogRoom(log)
-                              }
-                            }}
+                            data-room-number={log.room_number || ''}
+                            onClick={openPeriodLogRoom}
+                            onKeyDown={openPeriodLogRoom}
                           >
                             <div className="owner-pdx-item-row">
                               <span className="owner-pdx-item-icon" aria-hidden="true">
@@ -5100,7 +5081,6 @@ function OwnerMain() {
             onClose={() => setPaymentSlipZoomOpen(false)}
           />
         )}
-
 
         {displayExpenseEditModal && (
           <div className={`owner-modal-backdrop${isExpenseEditClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setExpenseEditModal(null)}>

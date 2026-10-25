@@ -136,11 +136,8 @@ export function configureApiClient({
     onSelect: (target) => storage.setItem('apiBackendLast', target.backendId),
   })
   client.defaults.baseURL = development ? '/' : backends[0].origin
-
-  function bearer(config) {
-    const value = axios.AxiosHeaders.from(config.headers).get('Authorization')
-    return typeof value === 'string' && value.startsWith('Bearer ') ? value.slice(7) : null
-  }
+  client.defaults.withCredentials = true
+  client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest'
 
   function staleSession(config) {
     const error = new axios.CanceledError('ข้ามคำตอบจากการเข้าสู่ระบบครั้งก่อน', config)
@@ -153,19 +150,19 @@ export function configureApiClient({
     if (!service) return config
     const safe = ['get', 'head'].includes((config.method || 'get').toLowerCase())
     const target = await selector.select({ service, force: !safe || !!config.backendRetried, exclude: config.backendExclude })
-    const token = storage.getItem('token')
-    const suppliedToken = bearer(config)
-    if (suppliedToken && suppliedToken !== token) throw staleSession(config)
+    const session = config.session === undefined ? storage.getItem('session') : config.session
+    if (session && session !== storage.getItem('session')) throw staleSession(config)
+    config.session = session
 
     const sessionBackend = storage.getItem('apiBackend') || 'vps'
-    if (token && sessionBackend !== target.backendId) {
-      for (const key of ['token', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
+    if (session && sessionBackend !== target.backendId) {
+      for (const key of ['session', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
       const message = 'เปลี่ยนเซิร์ฟเวอร์ที่ใช้งานแล้ว กรุณาเข้าสู่ระบบใหม่'
       storage.setItem('apiBackendNotice', message)
       redirectToLogin()
       throw connectionError(message, 'ERR_BACKEND_CHANGED', config, 401)
     }
-    if (token) storage.setItem('apiBackend', target.backendId)
+    if (session) storage.setItem('apiBackend', target.backendId)
     config.baseURL = baseUrl(target)
     config.backendId = target.backendId
     config.backendTarget = target.targetId
@@ -174,9 +171,9 @@ export function configureApiClient({
   })
 
   const responseInterceptor = client.interceptors.response.use((response) => {
-    const token = bearer(response.config)
-    if (token && token !== storage.getItem('token')) throw staleSession(response.config)
-    if (response.config.url === '/api/auth/login' && response.data?.token) {
+    const session = response.config.session
+    if (session && session !== storage.getItem('session')) throw staleSession(response.config)
+    if (response.config.url === '/api/auth/login' && response.data?.user) {
       storage.setItem('apiBackend', response.config.backendId)
       storage.removeItem('apiBackendNotice')
     }
@@ -186,13 +183,13 @@ export function configureApiClient({
     if (!config?.backendTarget || axios.isCancel(error) || error.code?.startsWith('ERR_BACKEND_') || error.code === 'ERR_STALE_SESSION') {
       throw error
     }
-    const token = bearer(config)
-    if (token && token !== storage.getItem('token')) {
+    const session = config.session
+    if (session && session !== storage.getItem('session')) {
       throw staleSession(config)
     }
     if (error.response?.status === 401 && !/^\/api\/auth\/login(?:[/?#]|$)/.test(config.url || '')) {
-      if (token) {
-        for (const key of ['token', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
+      if (session) {
+        for (const key of ['session', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
         storage.setItem('apiBackendNotice', 'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่')
         redirectToLogin()
       }

@@ -5,8 +5,6 @@ import { MoveInCompareTag } from './MoveInBaseline.jsx'
 import { chargeableAssetCost, COSTED_RESULTS, defaultAssetCost, RESULT_OPTIONS } from '../utils/inspectionChecklist.js'
 import './MoveInInspection.css'
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
 function formatBaht(value) {
   return `฿${Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -46,7 +44,7 @@ export default function MoveOutAssetCheck({ roomNumber, assets, onChange, invali
     if (recordOnly || assets !== null || !roomNumber) return undefined
     let active = true
     axios
-      .get(`/api/staff/move-out-inspections/move-in-baseline/${roomNumber}`, { headers: authHeaders() })
+      .get(`/api/staff/move-out-inspections/move-in-baseline/${roomNumber}`)
       .then(({ data }) => {
         if (!active) return
         setSource({ room: roomNumber, inspection: data.baseline, error: '' })

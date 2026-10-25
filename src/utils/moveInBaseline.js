@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { ISSUE_RESULTS, RESULT_LABELS } from './inspectionChecklist.js'
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
 export function useMoveInBaseline(roomNumber) {
   const [state, setState] = useState({ room: null, baseline: null, error: '' })
 
@@ -11,7 +9,7 @@ export function useMoveInBaseline(roomNumber) {
     if (!roomNumber) return undefined
     let active = true
     axios
-      .get(`/api/staff/move-out-inspections/move-in-baseline/${roomNumber}`, { headers: authHeaders() })
+      .get(`/api/staff/move-out-inspections/move-in-baseline/${roomNumber}`)
       .then(({ data }) => {
         if (active) setState({ room: String(roomNumber), baseline: data.baseline, error: '' })
       })

@@ -1,5 +1,5 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoMenu, DormInfoSettings } from '../components/DormInfo'
 import { useNavigate } from 'react-router-dom'
@@ -46,6 +46,7 @@ import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
 import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
 import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
+import { clearSession, hasSession, logout } from '../utils/session.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1407,8 +1408,6 @@ function calcStayDays(start, end) {
 }
 
 const NOTIF_PAGE_SIZE = 30
-// Pending work computed by the server that this page does not already build itself.
-// Rent/utility slips are left out: Admin has no slip review screen (A14), only the "approved by" feed.
 const ADMIN_SERVER_PENDING_KINDS = [
   'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'move_in', 'contract_expiry', 'rent_overdue',
   'waiting_list', 'parcel_stale',
@@ -1434,7 +1433,7 @@ const ADMIN_MAINTENANCE_NOTIF_INFO = {
 function getNotificationStorageKey(role) {
   try {
     const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-    const userId = user.id ?? user.idcard ?? user.username ?? 'current'
+    const userId = user.id ?? user.username ?? 'current'
     return `${role}-notifications-seen-${userId}`
   } catch {
     return `${role}-notifications-seen-current`
@@ -1518,7 +1517,7 @@ function useExpandedRows() {
       return next
     })
   }
-  const reset = () => setExpanded(new Set())
+  const reset = useCallback(() => setExpanded(new Set()), [])
   return [expanded, toggle, reset]
 }
 
@@ -2022,7 +2021,6 @@ function CustomerProfile({ customer, contract, rentalHistory, loading, error, id
           )}
         </section>
 
-
         <section className="customer-profile-history">
           <header>
             <span className="admin-room-form-icon"><RoomDetailIcon type="history" size={16} /></span>
@@ -2111,7 +2109,6 @@ const ROOM_AMENITIES = [
   { key: 'air_conditioner', label: 'เครื่องปรับอากาศ' },
   { key: 'refrigerator', label: 'ตู้เย็น' },
 ]
-
 
 const BUILTIN_EQUIPMENT = [
   { field: 'air_conditioner', name: 'เครื่องปรับอากาศ', icon: 'aircon' },
@@ -4748,12 +4745,6 @@ const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const RESIDENT_VISIT_TYPE_LABEL = { vehicle: 'รถ / ที่จอดรถ', overnight_guest: 'แจ้งแขกค้างคืน' }
 
-function useAuthHeaders() {
-  const token = sessionStorage.getItem('token')
-  return useMemo(() => ({ Authorization: `Bearer ${token}` }), [token])
-}
-
-
 const SAFETY_INCIDENT_TYPE_LABEL = {
   accident: 'อุบัติเหตุ',
   security: 'ความปลอดภัย',
@@ -4903,12 +4894,11 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
   const [message, setMessage] = useState('')
   const [parkingSettings, setParkingSettings] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const headers = useAuthHeaders()
 
   const load = useCallback(
     () =>
       axios
-        .get('/api/admin/resident-visit-requests', { headers })
+        .get('/api/admin/resident-visit-requests')
         .then(({ data }) => {
           const list = data.requests || []
           setItems(list)
@@ -4929,7 +4919,7 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
         })
         .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ'))
         .finally(() => setLoading(false)),
-    [headers, onCountChange, requestFocus],
+    [onCountChange, requestFocus],
   )
 
   useEffect(() => {
@@ -4977,13 +4967,12 @@ function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
       if (decision === 'fine-approve' || decision === 'fine-reject') {
         await axios.post(
           `/api/admin/resident-visit-requests/${detail.id}/fine-review`,
-          { decision: decision === 'fine-approve' ? 'approve' : 'reject' },
-          { headers },
+          { decision: decision === 'fine-approve' ? 'approve' : 'reject' }
         )
         await load()
         return
       }
-      await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {}, { headers })
+      await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {})
       await load()
       requestClose()
     } catch (error) {
@@ -5415,12 +5404,11 @@ function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const headers = useAuthHeaders()
 
   const load = useCallback(
     () =>
       axios
-        .get('/api/admin/safety-incidents', { headers })
+        .get('/api/admin/safety-incidents')
         .then(({ data }) => {
           const list = data.incidents || []
           setIncidents(list)
@@ -5441,7 +5429,7 @@ function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
         })
         .catch((error) => setMessage(error.response?.data?.message || 'โหลดรายงานเหตุไม่สำเร็จ'))
         .finally(() => setLoading(false)),
-    [headers, onCountChange, requestFocus],
+    [onCountChange, requestFocus],
   )
 
   useEffect(() => {
@@ -5484,7 +5472,7 @@ function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
     setBusy(true)
     setMessage('')
     try {
-      await axios.patch(`/api/admin/safety-incidents/${detail.id}/review`, { reviewNote: note }, { headers })
+      await axios.patch(`/api/admin/safety-incidents/${detail.id}/review`, { reviewNote: note })
       await load()
       requestClose()
     } catch (error) {
@@ -5836,9 +5824,8 @@ function AdminBackupPage() {
   useEffect(() => {
     let cancelled = false
     const loadReviewCounts = () => {
-      const headers = { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
       axios
-        .get('/api/admin/resident-visit-requests', { headers })
+        .get('/api/admin/resident-visit-requests')
         .then(({ data }) => {
           if (cancelled) return
           const list = data.requests || []
@@ -5847,7 +5834,7 @@ function AdminBackupPage() {
         })
         .catch(() => {})
       axios
-        .get('/api/admin/safety-incidents', { headers })
+        .get('/api/admin/safety-incidents')
         .then(({ data }) => {
           if (cancelled) return
           const list = data.incidents || []
@@ -5949,13 +5936,9 @@ function AdminBackupPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [notifOpen])
 
-  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
-
   const handleUnauthorized = (err) => {
     if (err.response?.status === 401 || err.response?.status === 403) {
-      sessionStorage.removeItem('token')
-      sessionStorage.removeItem('user')
+      clearSession()
       navigate('/login', { replace: true })
       return true
     }
@@ -6034,7 +6017,6 @@ function AdminBackupPage() {
     setExpensesLoading(true)
     return axios
       .get('/api/admin/expenses', {
-        headers: authHeaders(),
         params: {
           page,
           pageSize: EXPENSES_PAGE_SIZE,
@@ -6189,7 +6171,7 @@ function AdminBackupPage() {
 
   const loadWaitingList = () => {
     return axios
-      .get('/api/admin/waiting-list', { headers: authHeaders() })
+      .get('/api/admin/waiting-list')
       .then(({ data }) => setWaitingList(data.waitingList || []))
       .catch((err) => {
         if (handleUnauthorized(err)) return
@@ -6199,17 +6181,14 @@ function AdminBackupPage() {
 
   const loadParcels = useCallback(() => {
     return axios
-      .get('/api/admin/parcels', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      })
+      .get('/api/admin/parcels')
       .then(({ data }) => {
         setParcels(data.parcels || [])
         setParcelsError('')
       })
       .catch((err) => {
         if (err.response?.status === 401 || err.response?.status === 403) {
-          sessionStorage.removeItem('token')
-          sessionStorage.removeItem('user')
+          clearSession()
           navigate('/login', { replace: true })
           return
         }
@@ -6235,7 +6214,7 @@ function AdminBackupPage() {
       const payload = new FormData()
       Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
       parcelPhotos.forEach((photo) => payload.append('photos', photo))
-      const { data } = await axios.post('/api/admin/parcels', payload, { headers: authHeaders() })
+      const { data } = await axios.post('/api/admin/parcels', payload)
       requestClose()
       setParcelFormOpen(false)
       setSuccessMessage(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
@@ -6254,7 +6233,7 @@ function AdminBackupPage() {
 
   const loadMoveOutInspections = () => {
     return axios
-      .get('/api/admin/move-out-inspections', { headers: authHeaders() })
+      .get('/api/admin/move-out-inspections')
       .then(({ data }) => setMoveOutInspections(data.inspections))
       .catch((err) => {
         if (handleUnauthorized(err)) return
@@ -6264,18 +6243,19 @@ function AdminBackupPage() {
 
   const loadAnnouncements = () => {
     return axios
-      .get('/api/admin/announcements', { headers: authHeaders() })
+      .get('/api/admin/announcements')
       .then(({ data }) => setAnnouncements(data.announcements))
       .catch((err) => handleUnauthorized(err))
   }
 
+  const reloadAnnouncements = useEffectEvent(() => loadAnnouncements())
   useEffect(() => {
     const now = Date.now()
     const upcoming = announcements
       .map((item) => (item.expires_epoch ? item.expires_epoch * 1000 - now : Number.NaN))
       .filter((wait) => Number.isFinite(wait) && wait > 0)
     if (upcoming.length === 0) return undefined
-    const timer = setTimeout(loadAnnouncements, Math.min(Math.min(...upcoming) + 1000, 2147483647))
+    const timer = setTimeout(() => reloadAnnouncements(), Math.min(Math.min(...upcoming) + 1000, 2147483647))
     return () => clearTimeout(timer)
   }, [announcements])
 
@@ -6303,8 +6283,8 @@ function AdminBackupPage() {
     try {
       const { data } =
         waitingListModal.mode === 'create'
-          ? await axios.post('/api/admin/waiting-list', payload, { headers: authHeaders() })
-          : await axios.patch(`/api/admin/waiting-list/${waitingListModal.entry.id}`, payload, { headers: authHeaders() })
+          ? await axios.post('/api/admin/waiting-list', payload)
+          : await axios.patch(`/api/admin/waiting-list/${waitingListModal.entry.id}`, payload)
       setWaitingListFormError('')
       setSuccessMessage(data.message)
       requestClose()
@@ -6322,7 +6302,7 @@ function AdminBackupPage() {
     setWaitingListStatusBusyId(entry.id)
     setWaitingListActionError('')
     try {
-      await axios.patch('/api/admin/waiting-list/' + entry.id, { status }, { headers: authHeaders() })
+      await axios.patch('/api/admin/waiting-list/' + entry.id, { status })
       await loadWaitingList()
     } catch (err) {
       if (handleUnauthorized(err)) return
@@ -6339,7 +6319,7 @@ function AdminBackupPage() {
     setWaitingListDeleting(true)
     setWaitingListDeleteError('')
     try {
-      const { data } = await axios.delete('/api/admin/waiting-list/' + waitingListDelete.id, { headers: authHeaders() })
+      const { data } = await axios.delete('/api/admin/waiting-list/' + waitingListDelete.id)
       setSuccessMessage(data.message)
       requestClose()
       if (waitingListDetail?.id === waitingListDelete.id) setWaitingListDetail(null)
@@ -6355,7 +6335,7 @@ function AdminBackupPage() {
   const openCreateInspection = () => {
     setInspectionEditor({ mode: 'create', initial: null, candidates: [], candidatesLoading: true, submitting: false, error: '' })
     axios
-      .get('/api/admin/move-out-inspections/move-room-candidates', { headers: authHeaders() })
+      .get('/api/admin/move-out-inspections/move-room-candidates')
       .then(({ data }) => {
         setInspectionEditor((prev) => (prev?.mode === 'create' ? { ...prev, candidates: data.requests || [], candidatesLoading: false } : prev))
       })
@@ -6379,7 +6359,7 @@ function AdminBackupPage() {
   const openEditInspectionFromRow = async (inspection) => {
     setInspectionEditLoadingId(inspection.id)
     try {
-      const { data } = await axios.get(`/api/admin/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/admin/move-out-inspections/${inspection.id}`)
       openEditInspectionForm(data.inspection)
     } catch (err) {
       if (handleUnauthorized(err)) return
@@ -6395,8 +6375,8 @@ function AdminBackupPage() {
     try {
       const { data } =
         inspectionEditor.mode === 'create'
-          ? await axios.post('/api/admin/move-out-inspections', payload, { headers: authHeaders() })
-          : await axios.put(`/api/admin/move-out-inspections/${inspectionEditor.initial.id}`, payload, { headers: authHeaders() })
+          ? await axios.post('/api/admin/move-out-inspections', payload)
+          : await axios.put(`/api/admin/move-out-inspections/${inspectionEditor.initial.id}`, payload)
       setSuccessMessage(data.message || 'บันทึกผลตรวจห้องสำเร็จ')
       requestClose()
       await loadMoveOutInspections()
@@ -6410,7 +6390,7 @@ function AdminBackupPage() {
 
   const openInspectionDetail = async (inspection) => {
     try {
-      const { data } = await axios.get(`/api/admin/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/admin/move-out-inspections/${inspection.id}`)
       setInspectionDetail(data.inspection)
     } catch (err) {
       if (handleUnauthorized(err)) return
@@ -6420,7 +6400,7 @@ function AdminBackupPage() {
 
   const setMoveOutInspectionStatus = async (inspection, status) => {
     try {
-      await axios.patch(`/api/admin/move-out-inspections/${inspection.id}`, { status }, { headers: authHeaders() })
+      await axios.patch(`/api/admin/move-out-inspections/${inspection.id}`, { status })
       setInspectionDetail((current) => (current?.id === inspection.id ? { ...current, status } : current))
       await loadMoveOutInspections()
     } catch (err) {
@@ -6433,7 +6413,7 @@ function AdminBackupPage() {
     setExpenseDeleting(true)
     setExpenseDeleteError('')
     try {
-      const { data } = await axios.delete(`/api/admin/expenses/${expenseDelete.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/admin/expenses/${expenseDelete.id}`)
       setSuccessMessage(data.message || 'ลบรายจ่ายสำเร็จ')
       requestClose()
       loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
@@ -6487,9 +6467,9 @@ function AdminBackupPage() {
         keep_photos: expenseForm.keptPhotos.map((photo) => photo.url),
       }
       if (expenseModal.mode === 'create') {
-        await axios.post('/api/admin/expenses', payload, { headers: authHeaders() })
+        await axios.post('/api/admin/expenses', payload)
       } else {
-        await axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+        await axios.put(`/api/admin/expenses/${expenseModal.expense.id}`, payload)
       }
       setSuccessMessage(expenseModal.mode === 'create' ? 'บันทึกรายจ่ายสำเร็จ' : 'แก้ไขรายจ่ายสำเร็จ')
       requestClose()
@@ -6502,11 +6482,10 @@ function AdminBackupPage() {
     }
   }
 
-
   const loadRooms = () => {
     setRoomsLoading(true)
     return axios
-      .get('/api/admin/rooms', { headers: authHeaders() })
+      .get('/api/admin/rooms')
       .then(({ data }) => {
         setRooms(data.rooms)
         setRoomsError('')
@@ -6528,7 +6507,7 @@ function AdminBackupPage() {
       return
     }
     try {
-      const { data } = await axios.get('/api/staff/rooms', { headers: authHeaders() })
+      const { data } = await axios.get('/api/staff/rooms')
       const count = printMonthlyInvoices(data.rooms, printWindow)
       if (count === 0) {
         setInvoicePrintError('ไม่มีห้องที่มีผู้เช่าให้ออกใบแจ้งหนี้')
@@ -6583,7 +6562,7 @@ function AdminBackupPage() {
   const openRoomDetail = (room) => {
     setRoomDetail({ room, data: null, loading: true, error: '' })
     axios
-      .get(`/api/admin/rooms/${room.room_number}/detail`, { headers: authHeaders() })
+      .get(`/api/admin/rooms/${room.room_number}/detail`)
       .then(({ data }) => {
         setRoomDetail((prev) => (prev?.room.id === room.id ? { ...prev, data, loading: false } : prev))
       })
@@ -6601,7 +6580,7 @@ function AdminBackupPage() {
     setMaintenanceDetail(null)
     setRoomMaintenance({ room, data: null, loading: true, error: '' })
     axios
-      .get(`/api/admin/rooms/${room.room_number}/maintenance`, { headers: authHeaders() })
+      .get(`/api/admin/rooms/${room.room_number}/maintenance`)
       .then(({ data }) => {
         setRoomMaintenance((prev) => (prev?.room.id === room.id ? { ...prev, data: data.requests, loading: false } : prev))
         const target = focusId ? data.requests.find((request) => request.id === focusId) : null
@@ -6620,7 +6599,7 @@ function AdminBackupPage() {
   const openRoomTenants = (room, focusId = null) => {
     setRoomTenants({ room, data: null, loading: true, error: '', focusId })
     axios
-      .get(`/api/admin/rooms/${room.room_number}/tenants`, { headers: authHeaders() })
+      .get(`/api/admin/rooms/${room.room_number}/tenants`)
       .then(({ data }) => {
         setRoomTenants((prev) => (prev?.room.id === room.id ? { ...prev, data: data.tenants, loading: false } : prev))
       })
@@ -6637,7 +6616,7 @@ function AdminBackupPage() {
   const openRoomHistory = (room, initialSearch = '') => {
     setRoomHistory({ room, data: null, loading: true, error: '', initialSearch })
     axios
-      .get(`/api/admin/rooms/${room.room_number}/history`, { headers: authHeaders() })
+      .get(`/api/admin/rooms/${room.room_number}/history`)
       .then(({ data }) => {
         setRoomHistory((prev) => (prev?.room.id === room.id ? { ...prev, data: data.rentalHistory, loading: false } : prev))
       })
@@ -6797,15 +6776,14 @@ function AdminBackupPage() {
     }
     try {
       if (roomModal.mode === 'create') {
-        const { data } = await axios.post('/api/admin/rooms', payload, { headers: authHeaders() })
+        const { data } = await axios.post('/api/admin/rooms', payload)
         setSuccessMessage(data.message || 'สร้างห้องพักสำเร็จ')
       } else {
         const { room_number, ...editable } = payload
         const renamed = room_number !== Number(roomModal.room.room_number)
         const { data } = await axios.put(
           `/api/admin/rooms/${roomModal.room.room_number}`,
-          renamed ? { ...editable, room_number } : editable,
-          { headers: authHeaders() },
+          renamed ? { ...editable, room_number } : editable
         )
         setSuccessMessage(data.message || 'แก้ไขข้อมูลห้องพักสำเร็จ')
       }
@@ -6826,7 +6804,7 @@ function AdminBackupPage() {
   const confirmDeleteRoom = async (requestClose) => {
     if (!roomDeleteConfirm) return
     try {
-      const { data } = await axios.delete(`/api/admin/rooms/${roomDeleteConfirm.room_number}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/admin/rooms/${roomDeleteConfirm.room_number}`)
       setSuccessMessage(data.message || 'ลบห้องพักสำเร็จ')
       requestClose()
       await loadRooms()
@@ -6857,7 +6835,7 @@ function AdminBackupPage() {
   const [expandedRoomRows, toggleRoomRow, resetRoomRows] = useExpandedRows()
   useEffect(() => {
     resetRoomRows()
-  }, [currentRoomsPage, activeTab])
+  }, [currentRoomsPage, activeTab, resetRoomRows])
 
   const [staffList, setStaffList] = useState([])
   const [marketSummary, setMarketSummary] = useState(null)
@@ -6885,7 +6863,7 @@ function AdminBackupPage() {
   const loadStaff = () => {
     setStaffLoading(true)
     return axios
-      .get('/api/admin/staff', { headers: authHeaders() })
+      .get('/api/admin/staff')
       .then(({ data }) => {
         setStaffList(data.staff)
         setStaffError('')
@@ -6940,7 +6918,7 @@ function AdminBackupPage() {
           last_name: staffForm.last_name,
           age: staffForm.age,
         }
-        const { data } = await axios.post('/api/admin/staff', createPayload, { headers: authHeaders() })
+        const { data } = await axios.post('/api/admin/staff', createPayload)
         setSuccessMessage(data.message || 'เพิ่มพนักงานสำเร็จ')
       } else {
         const payload = {
@@ -6950,7 +6928,7 @@ function AdminBackupPage() {
           age: Number(staffForm.age),
         }
         if (staffForm.password) payload.password = staffForm.password
-        const { data } = await axios.put(`/api/admin/staff/${staffModal.staff.id}`, payload, { headers: authHeaders() })
+        const { data } = await axios.put(`/api/admin/staff/${staffModal.staff.id}`, payload)
         setSuccessMessage(data.message || 'แก้ไขข้อมูลพนักงานสำเร็จ')
       }
       requestClose()
@@ -6966,8 +6944,7 @@ function AdminBackupPage() {
     try {
       const { data } = await axios.patch(
         `/api/admin/staff/${member.id}/suspend`,
-        { is_suspended: !member.is_suspended },
-        { headers: authHeaders() },
+        { is_suspended: !member.is_suspended }
       )
       setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
       requestClose()
@@ -6981,7 +6958,7 @@ function AdminBackupPage() {
   const confirmDeleteStaff = async (requestClose) => {
     if (!staffDeleteConfirm) return
     try {
-      const { data } = await axios.delete(`/api/admin/staff/${staffDeleteConfirm.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/admin/staff/${staffDeleteConfirm.id}`)
       setSuccessMessage(data.message || 'ลบพนักงานสำเร็จ')
       requestClose()
       await loadStaff()
@@ -7043,7 +7020,7 @@ function AdminBackupPage() {
   const loadCustomers = () => {
     setCustomersLoading(true)
     return axios
-      .get('/api/admin/customers', { headers: authHeaders() })
+      .get('/api/admin/customers')
       .then(({ data }) => {
         setCustomers(data.customers)
         setCustomersError('')
@@ -7095,7 +7072,7 @@ function AdminBackupPage() {
         age: Number(customerForm.age),
         ...(password ? { password } : {}),
       }
-      const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload, { headers: authHeaders() })
+      const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload)
       setSuccessMessage(data.message || 'แก้ไขข้อมูลลูกค้าสำเร็จ')
       requestClose()
       await loadCustomers()
@@ -7110,8 +7087,7 @@ function AdminBackupPage() {
     try {
       const { data } = await axios.patch(
         `/api/admin/customers/${customer.id}/suspend`,
-        { is_suspended: !customer.is_suspended },
-        { headers: authHeaders() },
+        { is_suspended: !customer.is_suspended }
       )
       setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
       requestClose()
@@ -7125,7 +7101,7 @@ function AdminBackupPage() {
   const openCustomerProfile = async (customer) => {
     setCustomerProfile({ id: customer.id, customer, detail: null, loading: true, error: '' })
     try {
-      const { data } = await axios.get(`/api/admin/customers/${customer.id}`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/admin/customers/${customer.id}`)
       setCustomerProfile((prev) => (prev?.id === customer.id ? { ...prev, detail: data, loading: false } : prev))
     } catch (err) {
       if (handleUnauthorized(err)) return
@@ -7180,7 +7156,7 @@ function AdminBackupPage() {
   const [expandedCustomerRows, toggleCustomerRow, resetCustomerRows] = useExpandedRows()
   useEffect(() => {
     resetCustomerRows()
-  }, [currentCustomersPage, activeTab])
+  }, [currentCustomersPage, activeTab, resetCustomerRows])
 
   const [requestLogs, setRequestLogs] = useState({ items: [], total: 0, page: 1, pageSize: 20 })
   const [requestLogsLoading, setRequestLogsLoading] = useState(false)
@@ -7192,7 +7168,7 @@ function AdminBackupPage() {
   const loadRequestLogs = () => {
     setRequestLogsLoading(true)
     return axios
-      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { all: 1 } })
+      .get('/api/admin/logs/requests', { params: { all: 1 } })
       .then(({ data }) => {
         setRequestLogs((current) => ({ items: data.requests, total: data.total, page: current.page, pageSize: data.pageSize }))
         setRequestLogsError('')
@@ -7213,7 +7189,7 @@ function AdminBackupPage() {
   const loadMaintenanceLogs = () => {
     setMaintenanceLogsLoading(true)
     return axios
-      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { all: 1 } })
+      .get('/api/admin/logs/maintenance', { params: { all: 1 } })
       .then(({ data }) => {
         setMaintenanceLogs((current) => ({ items: data.requests, total: data.total, page: current.page, pageSize: data.pageSize }))
         setMaintenanceLogsError('')
@@ -7235,7 +7211,7 @@ function AdminBackupPage() {
   const openMoveoutDetail = (row) => {
     setMoveoutDetail({ row, data: null, loading: true, error: '' })
     axios
-      .get(`/api/admin/moveouts/${row.id}`, { headers: authHeaders() })
+      .get(`/api/admin/moveouts/${row.id}`)
       .then(({ data }) => {
         setMoveoutDetail((prev) => (prev?.row.id === row.id ? { ...prev, data, loading: false } : prev))
       })
@@ -7262,7 +7238,6 @@ function AdminBackupPage() {
     setMoveoutLogsLoading(true)
     return axios
       .get('/api/admin/logs/moveouts', {
-        headers: authHeaders(),
         params: { all: 1 },
       })
       .then(({ data }) => {
@@ -7278,16 +7253,16 @@ function AdminBackupPage() {
 
   const loadNotifSources = () => {
     axios
-      .get('/api/admin/logs/requests', { headers: authHeaders(), params: { page: 1, status: 'pending' } })
+      .get('/api/admin/logs/requests', { params: { page: 1, status: 'pending' } })
       .then(({ data }) => setServiceCounts((current) => ({ ...current, requestPending: data.total || 0 })))
       .catch(() => {})
     axios
-      .get('/api/admin/logs/maintenance', { headers: authHeaders(), params: { page: 1, status: 'pending' } })
+      .get('/api/admin/logs/maintenance', { params: { page: 1, status: 'pending' } })
       .then(({ data }) => setServiceCounts((current) => ({ ...current, maintenancePending: data.total || 0 })))
       .catch(() => {})
     const loadOpen = (url) =>
       Promise.all(['pending', 'in_progress'].map((status) =>
-        axios.get(url, { headers: authHeaders(), params: { page: 1, status } }).then(({ data }) => data.requests || []),
+        axios.get(url, { params: { page: 1, status } }).then(({ data }) => data.requests || []),
       )).then((lists) => lists.flat())
     loadOpen('/api/admin/logs/requests')
       .then(setNotifTenantItems)
@@ -7298,11 +7273,10 @@ function AdminBackupPage() {
     loadAnnouncements()
   }
 
-  useEffect(() => {
-    const token = sessionStorage.getItem('token')
-    if (!token) {
+  const startAdminSession = useEffectEvent(() => {
+    if (!hasSession()) {
       navigate('/login', { replace: true })
-      return
+      return false
     }
     const storedUser = sessionStorage.getItem('user')
     if (storedUser) {
@@ -7310,7 +7284,7 @@ function AdminBackupPage() {
         const parsed = JSON.parse(storedUser)
         if (!['Admin', 'Owner'].includes(parsed?.role)) {
           navigate('/login', { replace: true })
-          return
+          return false
         }
         setAdminUser(parsed)
       } catch {
@@ -7325,31 +7299,41 @@ function AdminBackupPage() {
     loadParcels()
     loadNotifSources()
     loadExpenses(1)
-    const refreshNotifications = () => {
-      loadNotifSources()
-      loadExpenses(1)
-      loadStaff()
-      loadParcels()
-      loadMoveOutInspections()
-    }
+    return true
+  })
+
+  const refreshAdminNotifications = useEffectEvent(() => {
+    loadNotifSources()
+    loadExpenses(1)
+    loadStaff()
+    loadParcels()
+    loadMoveOutInspections()
+  })
+
+  useEffect(() => {
+    if (!startAdminSession()) return undefined
+    const refreshNotifications = () => refreshAdminNotifications()
     const interval = setInterval(refreshNotifications, 60000)
     window.addEventListener('focus', refreshNotifications)
     return () => {
       clearInterval(interval)
       window.removeEventListener('focus', refreshNotifications)
     }
-  }, [loadParcels])
+  }, [])
+
+  const loadActiveTab = useEffectEvent((tab) => {
+    if (tab === 'requests') loadRequestLogs()
+    if (tab === 'maintenance') loadMaintenanceLogs()
+    if (tab === 'moveouts') loadMoveoutLogs()
+    if (tab === 'expenses') loadExpenses(1)
+  })
 
   useEffect(() => {
-    if (activeTab === 'requests') loadRequestLogs()
-    if (activeTab === 'maintenance') loadMaintenanceLogs()
-    if (activeTab === 'moveouts') loadMoveoutLogs()
-    if (activeTab === 'expenses') loadExpenses(1)
+    loadActiveTab(activeTab)
   }, [activeTab])
 
   const handleLogout = () => {
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('user')
+    logout()
     navigate('/login', { replace: true })
   }
 
@@ -7603,8 +7587,6 @@ function AdminBackupPage() {
   const currentMoveoutPage = Math.min(moveoutLogs.page, moveoutLogsTotalPages)
   const pagedMoveouts = filteredMoveouts.slice((currentMoveoutPage - 1) * moveoutLogs.pageSize, currentMoveoutPage * moveoutLogs.pageSize)
 
-
-
   const openNotification = (notif) => {
     closeNotifPanel()
     if (notif.server) {
@@ -7676,7 +7658,7 @@ function AdminBackupPage() {
       requestRowFocus(`${tab}-${id}`)
     }
     notifTargetRef.current = null
-  }, [notifTargetReady, activeTab, requestLogs.items, maintenanceLogs.items, staffList])
+  }, [notifTargetReady, activeTab, requestLogs.items, maintenanceLogs.items, staffList, requestRowFocus])
 
   return (
     <div className="admin-page">
@@ -10499,7 +10481,6 @@ function AdminBackupPage() {
           />
         </Modal>
       )}
-
 
       {roomModal && (
         <Modal

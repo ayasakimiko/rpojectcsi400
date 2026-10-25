@@ -65,7 +65,6 @@ const ROLE_HINT = {
   Staff: 'ดูแลร้านค้า ทำสัญญาเช่า จัดการสินค้า และออก API key ให้ผู้เช่า',
 }
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 const errorMessage = (error, fallback) => error.response?.data?.message || fallback
 const currentRole = () => {
   try {
@@ -311,7 +310,7 @@ function ShopFormModal({ shop, shops = [], onClose, onSaved }) {
   const { busy, error, run } = useSubmit((data) => onSaved(data.message))
 
   useEffect(() => {
-    axios.get('/api/auth/staff-directory', { headers: authHeaders() })
+    axios.get('/api/auth/staff-directory')
       .then(({ data }) => setStaff(data.staff || []))
       .catch(() => setStaff([]))
   }, [])
@@ -348,7 +347,7 @@ function ShopFormModal({ shop, shops = [], onClose, onSaved }) {
     if (missing.length > 0) return
     run(() => {
       const body = { ...form, caretaker_staff_id: form.caretaker_staff_id ? Number(form.caretaker_staff_id) : null, area_sqm: form.area_sqm || 0 }
-      return shop ? axios.put(`${API_BASE}/shops/${shop.id}`, body, { headers: authHeaders() }) : axios.post(`${API_BASE}/shops`, body, { headers: authHeaders() })
+      return shop ? axios.put(`${API_BASE}/shops/${shop.id}`, body) : axios.post(`${API_BASE}/shops`, body)
     }, 'บันทึกร้านค้าไม่สำเร็จ')
   }
 
@@ -473,7 +472,7 @@ function ProductFormModal({ shop, product, categories, onClose, onSaved }) {
   const submit = () => run(() => {
     const body = { ...form, price: Number(form.price), stock: Number(form.stock || 0) }
     const url = product ? `${API_BASE}/shops/${shop.id}/products/${product.id}` : `${API_BASE}/shops/${shop.id}/products`
-    return product ? axios.put(url, body, { headers: authHeaders() }) : axios.post(url, body, { headers: authHeaders() })
+    return product ? axios.put(url, body) : axios.post(url, body)
   }, 'บันทึกสินค้าไม่สำเร็จ')
 
   return (
@@ -652,7 +651,7 @@ function LeaseFormModal({ shops, initialShopId, onClose, onSaved }) {
       body.append('payment_slip', payment.slip)
       if (payment.qrPayload) body.append('qr_payload', payment.qrPayload)
     }
-    run(() => axios.post(`${API_BASE}/leases`, body, { headers: authHeaders() }), 'ชำระเงินหรือทำสัญญาไม่สำเร็จ')
+    run(() => axios.post(`${API_BASE}/leases`, body), 'ชำระเงินหรือทำสัญญาไม่สำเร็จ')
   }
 
   return (
@@ -897,7 +896,7 @@ function RenewModal({ lease, currentImageCount, onClose }) {
       body.append('payment_slip', payment.slip)
       if (payment.qrPayload) body.append('qr_payload', payment.qrPayload)
     }
-    run(() => axios.post(`${API_BASE}/leases/${lease.id}/renew`, body, { headers: authHeaders() }), 'ชำระเงินหรือต่อสัญญาไม่สำเร็จ')
+    run(() => axios.post(`${API_BASE}/leases/${lease.id}/renew`, body), 'ชำระเงินหรือต่อสัญญาไม่สำเร็จ')
   }
 
   return (
@@ -1006,7 +1005,7 @@ function TerminateModal({ lease, activeKeys, onClose }) {
       busy={busy}
       error={error}
       onClose={() => onClose()}
-      onSubmit={() => run(() => axios.post(`${API_BASE}/leases/${lease.id}/terminate`, { reason: reason.trim() }, { headers: authHeaders() }), 'ยกเลิกสัญญาไม่สำเร็จ')}
+      onSubmit={() => run(() => axios.post(`${API_BASE}/leases/${lease.id}/terminate`, { reason: reason.trim() }), 'ยกเลิกสัญญาไม่สำเร็จ')}
       submitLabel="ยืนยันยกเลิกสัญญา"
       submitDisabled={!reason.trim() || !confirmed}
     >
@@ -1048,7 +1047,7 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
   }, [slipPreview])
 
   useEffect(() => {
-    axios.get('/api/payment/channels', { headers: authHeaders() })
+    axios.get('/api/payment/channels')
       .then(({ data }) => setChannels(data.channels))
       .catch((error) => setChannelError(errorMessage(error, 'โหลดช่องทางชำระเงินไม่สำเร็จ')))
   }, [])
@@ -1162,7 +1161,7 @@ function KeyToken({ apiKey, canReveal, onRotate }) {
     if (full) return full
     setLoading(true)
     try {
-      const { data } = await axios.get(`${API_BASE}/api-keys/${apiKey.id}/reveal`, { headers: authHeaders() })
+      const { data } = await axios.get(`${API_BASE}/api-keys/${apiKey.id}/reveal`)
       setFull(data.api_key)
       return data.api_key
     } catch (error) {
@@ -1276,7 +1275,7 @@ function ApiKeyPanel({ lease, apiKeys, canOperate, onChanged }) {
       {canOperate && usable && (
         <form className="market-key-form" onSubmit={(event) => {
           event.preventDefault()
-          if (label.trim()) run(() => axios.post(`${API_BASE}/leases/${lease.id}/api-keys`, { label: label.trim() }, { headers: authHeaders() }), 'สร้าง API key ไม่สำเร็จ')
+          if (label.trim()) run(() => axios.post(`${API_BASE}/leases/${lease.id}/api-keys`, { label: label.trim() }), 'สร้าง API key ไม่สำเร็จ')
         }}>
           <input className="market-input" placeholder="ชื่อเรียก เช่น ระบบ POS หน้าร้าน" value={label} maxLength={100} onChange={(event) => setLabel(event.target.value)} />
           <button type="submit" className="market-btn is-primary" disabled={busy || !label.trim()}><Icon name="plus" size={14} /> ออก API key</button>
@@ -1317,7 +1316,7 @@ function ApiKeyPanel({ lease, apiKeys, canOperate, onChanged }) {
           icon="key"
           onClose={() => setRotating(null)}
           onConfirm={async () => {
-            const response = await axios.post(`${API_BASE}/api-keys/${rotating.id}/rotate`, {}, { headers: authHeaders() })
+            const response = await axios.post(`${API_BASE}/api-keys/${rotating.id}/rotate`, {})
             setNewKey(response.data.api_key)
             onChanged(response.data.api_keys)
             return response
@@ -1332,7 +1331,7 @@ function ApiKeyPanel({ lease, apiKeys, canOperate, onChanged }) {
           icon="key"
           onClose={() => setRevoking(null)}
           onConfirm={async () => {
-            const response = await axios.post(`${API_BASE}/api-keys/${revoking.id}/revoke`, {}, { headers: authHeaders() })
+            const response = await axios.post(`${API_BASE}/api-keys/${revoking.id}/revoke`, {})
             onChanged(response.data.api_keys)
             return response
           }}
@@ -1347,7 +1346,7 @@ function useMarketImageUrls(images) {
   useEffect(() => {
     let active = true
     const created = []
-    Promise.all(images.map((image) => (image.local ? Promise.resolve([image.id, image.url]) : axios.get(image.url, { responseType: 'blob', headers: authHeaders() })
+    Promise.all(images.map((image) => (image.local ? Promise.resolve([image.id, image.url]) : axios.get(image.url, { responseType: 'blob' })
       .then(({ data }) => {
         const url = URL.createObjectURL(data)
         created.push(url)
@@ -1612,7 +1611,7 @@ function LeaseGallery({ lease, images, canUpload, onUploaded }) {
     if (!files.length) return
     const body = new FormData()
     for (const file of files) body.append('contract_images', file)
-    run(() => axios.post(`${API_BASE}/leases/${lease.id}/images`, body, { headers: authHeaders() }), 'แนบรูปสัญญาไม่สำเร็จ')
+    run(() => axios.post(`${API_BASE}/leases/${lease.id}/images`, body), 'แนบรูปสัญญาไม่สำเร็จ')
   }
   return (
     <section className="market-section market-lease-gallery-section">
@@ -1836,7 +1835,7 @@ function LeaseDetailModal({ leaseId, onClose, onChanged }) {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/leases/${leaseId}`, { headers: authHeaders() })
+      const { data } = await axios.get(`${API_BASE}/leases/${leaseId}`)
       setState({ loading: false, error: '', lease: data.lease, apiKeys: data.api_keys, images: data.images, imageHistory: data.image_history || [], payments: data.payments || [], permissions: data.permissions })
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: errorMessage(error, 'โหลดสัญญาไม่สำเร็จ') }))
@@ -2090,7 +2089,7 @@ function ShopDetailModal({ shopId, onClose, onChanged, onOpenLease, onCreateLeas
 
   const load = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/shops/${shopId}`, { headers: authHeaders() })
+      const { data } = await axios.get(`${API_BASE}/shops/${shopId}`)
       setState({ loading: false, error: '', shop: data.shop, products: data.products, leases: data.leases, permissions: data.permissions })
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: errorMessage(error, 'โหลดข้อมูลร้านไม่สำเร็จ') }))
@@ -2214,7 +2213,7 @@ function ShopDetailModal({ shopId, onClose, onChanged, onOpenLease, onCreateLeas
           message={`ลบ "${dialog.product.name}" ออกจากร้าน ${shop.name}?`}
           submitLabel="ลบสินค้า"
           onClose={done}
-          onConfirm={() => axios.delete(`${API_BASE}/shops/${shop.id}/products/${dialog.product.id}`, { headers: authHeaders() })}
+          onConfirm={() => axios.delete(`${API_BASE}/shops/${shop.id}/products/${dialog.product.id}`)}
         />
       )}
       {dialog?.type === 'close-shop' && (
@@ -2230,7 +2229,7 @@ function ShopDetailModal({ shopId, onClose, onChanged, onOpenLease, onCreateLeas
               onClose()
             }
           }}
-          onConfirm={() => axios.delete(`${API_BASE}/shops/${shop.id}`, { headers: authHeaders() })}
+          onConfirm={() => axios.delete(`${API_BASE}/shops/${shop.id}`)}
         />
       )}
     </MarketModal>
@@ -2478,7 +2477,7 @@ function LeasesSection({ refreshKey, canOperate, onOpenLease, onCreateLease, onR
 
   useEffect(() => {
     let active = true
-    axios.get(`${API_BASE}/leases`, { headers: authHeaders() })
+    axios.get(`${API_BASE}/leases`)
       .then(({ data }) => active && setState({ loading: false, error: '', leases: data.leases }))
       .catch((error) => active && setState({ loading: false, error: errorMessage(error, 'โหลดสัญญาไม่สำเร็จ'), leases: [] }))
     return () => {
@@ -2832,7 +2831,7 @@ export default function MarketManager({ onSummary }) {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/overview`, { headers: authHeaders() })
+      const { data } = await axios.get(`${API_BASE}/overview`)
       setState({ loading: false, error: '', data })
       summaryRef.current?.(data.summary)
     } catch (error) {

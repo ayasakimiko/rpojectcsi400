@@ -4,8 +4,6 @@ import axios from 'axios'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import './WifiManager.css'
 
-// Simulated per-room Wi-Fi (test system). Staff, admins and owners share the
-// same /api/rooms/wifi endpoints; customers only read their own room.
 const API_BASE = '/api/rooms/wifi'
 const MAX_DEVICE_LIMIT = 20
 
@@ -25,7 +23,6 @@ const STATUS_FILTERS = [
   { key: 'disabled', label: 'ปิดใช้งาน', match: (room) => !room.is_enabled },
 ]
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
 const errorMessage = (error, fallback) => error.response?.data?.message || fallback
 
 function WifiIcon({ size = 18 }) {
@@ -39,8 +36,6 @@ function WifiIcon({ size = 18 }) {
   )
 }
 
-// One chip per allowed device: used slots show the device's icon, free slots
-// are dashed placeholders.
 function SlotMeter({ devices, max }) {
   const slots = Array.from({ length: Math.max(max, devices.length) }, (_, index) => devices[index] || null)
   return (
@@ -251,7 +246,6 @@ function LimitModal({ room, busy, error, onClose, onSubmit }) {
   const valid = Number.isInteger(number) && number >= min && number <= MAX_DEVICE_LIMIT
   const preview = valid ? number : room.max_devices
   const diff = preview - room.max_devices
-  // Keep focus in the number field so Enter saves after a stepper or preset click.
   const choose = (next) => {
     setValue(String(next))
     inputRef.current?.focus()
@@ -393,8 +387,6 @@ function PasswordModal({ room, busy, error, onClose, onRename, onToggle, onReset
   const used = room.devices.length
   const trimmed = ssid.trim()
 
-  // Turning Wi-Fi off or resetting the password drops every device, so ask first
-  // when anything is connected.
   const request = async (action) => {
     if (used > 0 && confirm !== action) {
       setConfirm(action)
@@ -518,7 +510,7 @@ function WifiRoomCard({ room, onChange }) {
   }
 
   const url = `${API_BASE}/${room.room_number}`
-  const saveSettings = (body, options) => run(() => axios.patch(url, body, { headers: authHeaders() }), options)
+  const saveSettings = (body, options) => run(() => axios.patch(url, body), options)
 
   return (
     <article className={`wifi-room-card${room.is_enabled ? '' : ' is-disabled'}`}>
@@ -569,7 +561,7 @@ function WifiRoomCard({ room, onChange }) {
                   className={`wifi-online-toggle${item.is_online ? ' is-online' : ''}`}
                   disabled={busy}
                   title="กดเพื่อสลับสถานะ (จำลอง)"
-                  onClick={() => run(() => axios.patch(`${url}/devices/${item.id}`, { is_online: !item.is_online }, { headers: authHeaders() }))}
+                  onClick={() => run(() => axios.patch(`${url}/devices/${item.id}`, { is_online: !item.is_online }))}
                 >
                   {item.is_online ? 'ออนไลน์' : 'ออฟไลน์'}
                 </button>
@@ -603,7 +595,7 @@ function WifiRoomCard({ room, onChange }) {
           busy={busy}
           error={error}
           onClose={closeModal}
-          onSubmit={(body) => run(() => axios.post(`${url}/devices`, body, { headers: authHeaders() }))}
+          onSubmit={(body) => run(() => axios.post(`${url}/devices`, body))}
         />
       )}
       {modal?.type === 'limit' && (
@@ -622,7 +614,7 @@ function WifiRoomCard({ room, onChange }) {
           busy={busy}
           error={error}
           onClose={closeModal}
-          onSubmit={() => run(() => axios.delete(modal.device ? `${url}/devices/${modal.device.id}` : `${url}/devices`, { headers: authHeaders() }))}
+          onSubmit={() => run(() => axios.delete(modal.device ? `${url}/devices/${modal.device.id}` : `${url}/devices`))}
         />
       )}
       {modal?.type === 'password' && (
@@ -633,7 +625,7 @@ function WifiRoomCard({ room, onChange }) {
           onClose={closeModal}
           onRename={(ssid) => saveSettings({ ssid }, { keepOpen: true })}
           onToggle={() => saveSettings({ is_enabled: !room.is_enabled }, { keepOpen: true })}
-          onReset={() => run(() => axios.post(`${url}/reset-password`, {}, { headers: authHeaders() }), { keepOpen: true })}
+          onReset={() => run(() => axios.post(`${url}/reset-password`, {}), { keepOpen: true })}
         />
       )}
     </article>
@@ -649,7 +641,7 @@ export default function WifiManager() {
 
   const load = useCallback(() => {
     return axios
-      .get(API_BASE, { headers: authHeaders() })
+      .get(API_BASE)
       .then(({ data }) => setRooms(data.rooms || []))
       .catch((error) => setNotice({ type: 'error', message: errorMessage(error, 'โหลดข้อมูล Wi-Fi ไม่สำเร็จ') }))
       .finally(() => setLoading(false))
@@ -753,12 +745,11 @@ export function CustomerWifiCard() {
     return () => clearTimeout(timer)
   }, [notice])
 
-  // Test button: simulate this tenant connecting a device, same rules as staff.
   const connectDevice = async (body) => {
     setAdding(true)
     setAddError('')
     try {
-      const { data } = await axios.post(`${API_BASE}/me/devices`, body, { headers: authHeaders() })
+      const { data } = await axios.post(`${API_BASE}/me/devices`, body)
       setRoom(data.room)
       setNotice(data.message || 'เชื่อมต่ออุปกรณ์แล้ว')
       setAddOpen(false)
@@ -773,7 +764,7 @@ export function CustomerWifiCard() {
     setRemoving(true)
     setRemoveError('')
     try {
-      const { data } = await axios.delete(`${API_BASE}/me/devices/${removeTarget.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`${API_BASE}/me/devices/${removeTarget.id}`)
       setRoom(data.room)
       setNotice(data.message || 'ยกเลิกการเชื่อมต่ออุปกรณ์แล้ว')
       setRemoveTarget(null)
@@ -787,7 +778,7 @@ export function CustomerWifiCard() {
   useEffect(() => {
     let cancelled = false
     axios
-      .get(`${API_BASE}/me`, { headers: authHeaders() })
+      .get(`${API_BASE}/me`)
       .then(({ data }) => { if (!cancelled) setRoom(data.room) })
       .catch((requestError) => { if (!cancelled) setError(errorMessage(requestError, 'โหลดข้อมูล Wi-Fi ไม่สำเร็จ')) })
       .finally(() => { if (!cancelled) setLoading(false) })

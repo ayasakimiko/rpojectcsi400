@@ -71,7 +71,6 @@ export function useParkingOptions(endpoint, { enabled = true, userCategory, star
     const controller = new AbortController()
     axios
       .get(endpoint, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
         params: { userCategory, startAt: startKey || undefined, endAt: endKey || undefined, excludeId: excludeId || undefined, roomNumber: roomNumber || undefined },
         signal: controller.signal,
       })

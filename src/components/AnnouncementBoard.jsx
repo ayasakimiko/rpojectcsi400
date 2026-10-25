@@ -419,8 +419,6 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isCreating, confirm, result, detail, submitting])
 
-  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
   const openCreateForm = () => {
     setFormClosing(false)
     setEditingId(null)
@@ -532,9 +530,9 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
       payload.photos = await Promise.all(form.newPhotos.map((file) => compressImageFile(file)))
       let response
       if (editingId) {
-        response = await axios.patch(`${apiBase}/${editingId}`, payload, { headers: authHeaders() })
+        response = await axios.patch(`${apiBase}/${editingId}`, payload)
       } else {
-        response = await axios.post(apiBase, payload, { headers: authHeaders() })
+        response = await axios.post(apiBase, payload)
         setVisibleCount(ANNOUNCEMENTS_PER_PAGE)
       }
       closeConfirm()
@@ -558,7 +556,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
   const deleteAnnouncement = async () => {
     setSubmitting(true)
     try {
-      const response = await axios.delete(`${apiBase}/${confirm.id}`, { headers: authHeaders() })
+      const response = await axios.delete(`${apiBase}/${confirm.id}`)
       setError('')
       closeConfirm()
       showResult({ title: confirm.title, message: response?.data?.message || 'ลบประกาศสำเร็จ' })

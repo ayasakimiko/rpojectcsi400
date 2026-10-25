@@ -28,8 +28,7 @@ export function assetRowsError(rows) {
 export function saveRoomAssets(roomNumber, roomTypeId, rows, extra = {}) {
   return axios.put(
     `/api/admin/rooms/${roomNumber}/assets`,
-    { ...extra, room_type_id: roomTypeId, assets: rowsToAssets(rows) },
-    { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } },
+    { ...extra, room_type_id: roomTypeId, assets: rowsToAssets(rows) }
   )
 }
 
@@ -38,7 +37,7 @@ export function useRoomTypes() {
   useEffect(() => {
     let active = true
     axios
-      .get('/api/admin/room-types', { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+      .get('/api/admin/room-types')
       .then(({ data }) => {
         if (active) setRoomTypes(data.roomTypes)
       })

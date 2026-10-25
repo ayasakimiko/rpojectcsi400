@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import jwt from "jsonwebtoken";
+import { readAuthToken } from "./authMiddleware.js";
 import { uploadedFileUrl } from "./publicUploads.js";
 import { getPool } from "../Database/connection.js";
 
@@ -73,11 +74,11 @@ export function auditDetailsMiddleware(req, res, next) {
   let details = null;
   res.on("finish", () => {
     if (res.statusCode < 200 || res.statusCode >= 300) return;
-    const authorization = req.headers.authorization;
-    if (!authorization?.startsWith("Bearer ")) return;
+    const auth = readAuthToken(req);
+    if (!auth) return;
     let actor;
     try {
-      actor = jwt.verify(authorization.slice(7), process.env.JWT_SECRET || "dev-secret-change-me");
+      actor = jwt.verify(auth.token, process.env.JWT_SECRET || "dev-secret-change-me");
     } catch {
       return;
     }

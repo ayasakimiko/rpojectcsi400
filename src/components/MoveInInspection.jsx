@@ -14,8 +14,6 @@ import './MoveInInspection.css'
 
 const MAX_PHOTOS = 15
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
 const pad2 = (number) => String(number).padStart(2, '0')
 
 function todayKey() {
@@ -601,8 +599,8 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
   const load = useCallback(
     () =>
       Promise.all([
-        axios.get('/api/staff/move-in-inspections', { headers: authHeaders() }),
-        axios.get('/api/staff/move-in-inspections/candidates', { headers: authHeaders() }),
+        axios.get('/api/staff/move-in-inspections'),
+        axios.get('/api/staff/move-in-inspections/candidates'),
       ])
         .then(([list, rooms]) => {
           setInspections(list.data.inspections)
@@ -644,7 +642,7 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
 
   const openEdit = async (inspection, { startNew = false } = {}) => {
     try {
-      const { data } = await axios.get(`/api/staff/move-in-inspections/${inspection.id}`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/staff/move-in-inspections/${inspection.id}`)
       setSubmitError('')
       setModal({ inspection: data.inspection, startNew })
     } catch (error) {
@@ -656,7 +654,7 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
     setDeleting(true)
     setDeleteError('')
     try {
-      const { data } = await axios.delete(`/api/staff/move-in-inspections/${id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/staff/move-in-inspections/${id}`)
       requestClose()
       load()
       if (modal?.inspection?.id !== id) await openEdit({ id: modal.inspection.id })
@@ -675,8 +673,8 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
     setSubmitError('')
     try {
       const { data } = modal.inspection && !asNewSave
-        ? await axios.patch(`/api/staff/move-in-inspections/${modal.inspection.id}`, payload, { headers: authHeaders() })
-        : await axios.post('/api/staff/move-in-inspections', payload, { headers: authHeaders() })
+        ? await axios.patch(`/api/staff/move-in-inspections/${modal.inspection.id}`, payload)
+        : await axios.post('/api/staff/move-in-inspections', payload)
       setNotice(asNewSave ? 'บันทึกผลตรวจวันใหม่สำเร็จ บันทึกเดิมยังอยู่ครบ' : data.message)
       requestClose()
       load()

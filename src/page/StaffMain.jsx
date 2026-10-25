@@ -1,6 +1,6 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoMenu } from '../components/DormInfo'
 import { createPortal } from 'react-dom'
@@ -78,6 +78,7 @@ import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
 import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
+import { clearSession, hasSession, logout } from '../utils/session.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1451,8 +1452,6 @@ const EXPENSE_PAYMENT_METHOD_LABEL = {
 const EXPENSE_MAX_PHOTOS = 6
 const MODAL_ITEMS_PER_PAGE = 10
 const NOTIF_PAGE_SIZE = 30
-// Pending work computed by the server that this page does not already build itself
-// (slips, vehicle requests, incidents, tenant requests and repairs come from its own lists).
 const STAFF_SERVER_PENDING_KINDS = [
   'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'transfer_charge', 'move_in',
   'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
@@ -1474,7 +1473,7 @@ const STAFF_MAINTENANCE_NOTIF_INFO = {
 function getNotificationStorageKey(role) {
   try {
     const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-    const userId = user.id ?? user.idcard ?? user.username ?? 'current'
+    const userId = user.id ?? user.username ?? 'current'
     return `${role}-notifications-seen-${userId}`
   } catch {
     return `${role}-notifications-seen-current`
@@ -2381,10 +2380,11 @@ const REJECT_REASON_PRESETS = {
 function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
   const [reason, setReason] = useState('')
   const [reasonError, setReasonError] = useState('')
+  const [openedAt] = useState(() => Date.now())
   const typeLabel = TENANT_REQUEST_TYPE_LABEL[request.type] || ''
   const facts = getTenantRequestFacts(request)
   const contractEnd = request.source_rental_end_date
-  const msLeft = contractEnd ? new Date(contractEnd).getTime() - Date.now() : null
+  const msLeft = contractEnd ? new Date(contractEnd).getTime() - openedAt : null
   const deposit = Number(request.deposit_amount) || 0
   const depositPaid = request.deposit_paid == null ? null : Number(request.deposit_paid) || 0
   const outstanding = Number(request.outstanding?.amount) || 0
@@ -3081,9 +3081,7 @@ function useRoomTransferPreview(requestId, enabled = true) {
     if (!enabled) return undefined
     let active = true
     axios
-      .get(`/api/staff/requests/${requestId}/transfer-preview`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      })
+      .get(`/api/staff/requests/${requestId}/transfer-preview`)
       .then(({ data }) => {
         if (active) setState({ preview: data.preview, loading: false, error: '' })
       })
@@ -3601,9 +3599,7 @@ function InspectionSummary({ inspectionId, roomNumber, tenantName }) {
     if (!inspectionId) return undefined
     let active = true
     axios
-      .get(`/api/staff/move-out-inspections/${inspectionId}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      })
+      .get(`/api/staff/move-out-inspections/${inspectionId}`)
       .then(({ data }) => {
         if (active) setInspection(data.inspection)
       })
@@ -3814,7 +3810,7 @@ export function TransferContractPendingPanel({ apiBase, refreshKey = 0 }) {
   useEffect(() => {
     const controller = new AbortController()
     axios
-      .get(`${apiBase}/room-transfers/pending-contracts`, { headers: staffAuthHeaders(), signal: controller.signal })
+      .get(`${apiBase}/room-transfers/pending-contracts`, { signal: controller.signal })
       .then(({ data }) => setTransfers(data.transfers || []))
       .catch(() => {})
     return () => controller.abort()
@@ -3837,7 +3833,7 @@ export function TransferContractPendingPanel({ apiBase, refreshKey = 0 }) {
     try {
       const body = new FormData()
       files.forEach((file) => body.append('contract_images', file))
-      const { data } = await axios.post(`${apiBase}/room-transfers/${active.id}/contract-images`, body, { headers: staffAuthHeaders() })
+      const { data } = await axios.post(`${apiBase}/room-transfers/${active.id}/contract-images`, body)
       setNotice(data.message || 'แนบรูปสัญญาใหม่เรียบร้อยแล้ว')
       requestClose()
       setVersion((value) => value + 1)
@@ -4792,17 +4788,15 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const [previewClosing, setPreviewClosing] = useState(false)
   const { setPage, resolvePage } = useListFocus(STAFF_CARD_PAGE_SIZE)
 
-  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
   const showError = (message) => {
     setError(message)
     setNotice({ type: 'error', message })
   }
 
-  const fetchSlips = (headers) =>
+  const fetchSlips = () =>
     Promise.all([
-      axios.get('/api/staff/payment-verifications', { headers }),
-      axios.get('/api/staff/payment-slips', { headers }),
+      axios.get('/api/staff/payment-verifications'),
+      axios.get('/api/staff/payment-slips'),
     ]).then(([pending, history]) => ({
       pending: pending.data.payments || [],
       history: history.data.slips || [],
@@ -4822,25 +4816,27 @@ function StaffPaymentReview({ onCountChange, focusId }) {
 
   const loadPayments = () => {
     setLoading(true)
-    return fetchSlips(authHeaders())
+    return fetchSlips()
       .then(applySlips)
       .catch((err) => showError(err.response?.data?.message || 'โหลดประวัติสลิปไม่สำเร็จ'))
       .finally(() => setLoading(false))
   }
 
+  const applyInitialSlips = useEffectEvent((result) => {
+    applySlips(result)
+    if (result.mode === 'manual' || (result.mode === 'test' && result.pending.length > 0)) setSlipView('pending')
+    const target = focusId ? result.pending.find((payment) => payment.id === focusId) : null
+    if (target) {
+      setSlipView('pending')
+      setPreview({ payment: target, url: target.slip_path })
+    }
+  })
+
   useEffect(() => {
     let cancelled = false
-    fetchSlips({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
+    fetchSlips()
       .then((result) => {
-        if (!cancelled) {
-          applySlips(result)
-          if (result.mode === 'manual' || (result.mode === 'test' && result.pending.length > 0)) setSlipView('pending')
-          const target = focusId ? result.pending.find((payment) => payment.id === focusId) : null
-          if (target) {
-            setSlipView('pending')
-            setPreview({ payment: target, url: target.slip_path })
-          }
-        }
+        if (!cancelled) applyInitialSlips(result)
       })
       .catch((err) => {
         if (!cancelled) showError(err.response?.data?.message || 'โหลดประวัติสลิปไม่สำเร็จ')
@@ -4925,8 +4921,7 @@ function StaffPaymentReview({ onCountChange, focusId }) {
     try {
       const { data } = await axios.patch(
         `/api/staff/payment-verifications/${payment.id}`,
-        { decision },
-        { headers: authHeaders() },
+        { decision }
       )
       setNotice({ type: 'success', message: data.message || 'บันทึกผลการตรวจสลิปแล้ว' })
       if (preview?.payment.id === payment.id) setPreviewClosing(true)
@@ -5536,10 +5531,6 @@ function startOfToday() {
   return today
 }
 
-function staffAuthHeaders() {
-  return { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-}
-
 function toLocalDateTime(date) {
   const pad = (number) => String(number).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`
@@ -5629,7 +5620,6 @@ function StaffRange({ start, end, openEnded = false }) {
     </span>
   )
 }
-
 
 function getStaffVisitKind(item) {
   if (item.request_type !== 'vehicle') return 'guest'
@@ -5729,7 +5719,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
 
   const load = useCallback(() => {
     return axios
-      .get('/api/staff/resident-visit-requests', { headers: staffAuthHeaders() })
+      .get('/api/staff/resident-visit-requests')
       .then(({ data }) => {
         const requests = data.requests || []
         setItems(requests)
@@ -5860,12 +5850,12 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
       const base = `/api/staff/resident-visit-requests/${confirm.item.id}`
       const { data } =
         confirm.decision === 'cancel'
-          ? await axios.delete(base, { headers: staffAuthHeaders() })
+          ? await axios.delete(base)
           : confirm.decision === 'checkin'
-            ? await axios.post(`${base}/check-in`, {}, { headers: staffAuthHeaders() })
+            ? await axios.post(`${base}/check-in`, {})
             : confirm.decision === 'fine-approve' || confirm.decision === 'fine-reject'
-              ? await axios.post(`${base}/fine-review`, { decision: confirm.decision === 'fine-approve' ? 'approve' : 'reject' }, { headers: staffAuthHeaders() })
-              : await axios.post(`${base}/${confirm.decision}`, {}, { headers: staffAuthHeaders() })
+              ? await axios.post(`${base}/fine-review`, { decision: confirm.decision === 'fine-approve' ? 'approve' : 'reject' })
+              : await axios.post(`${base}/${confirm.decision}`, {})
       requestClose()
       setDetail(null)
       setNotice({ type: 'success', message: data.message || 'บันทึกผลแล้ว' })
@@ -5915,8 +5905,8 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
         endAt: null,
       }
       const { data } = editing
-        ? await axios.patch(`/api/staff/resident-visit-requests/${editing.id}`, payload, { headers: staffAuthHeaders() })
-        : await axios.post('/api/staff/resident-visit-requests', payload, { headers: staffAuthHeaders() })
+        ? await axios.patch(`/api/staff/resident-visit-requests/${editing.id}`, payload)
+        : await axios.post('/api/staff/resident-visit-requests', payload)
       requestClose()
       setForm(EMPTY_STAFF_VEHICLE_FORM)
       setEditing(null)
@@ -6298,7 +6288,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
                       channels={parkingSettings?.paymentChannels}
                       endpoint={`/api/staff/resident-visit-requests/${detail.id}/fine-payment`}
                       onDone={async () => {
-                        const { data } = await axios.get('/api/staff/resident-visit-requests', { headers: staffAuthHeaders() })
+                        const { data } = await axios.get('/api/staff/resident-visit-requests')
                         const next = (data.requests || []).find((entry) => entry.id === detail.id)
                         setItems(data.requests || [])
                         if (next) setDetail(next)
@@ -6852,7 +6842,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
 
   const load = useCallback(() => {
     return axios
-      .get('/api/staff/safety-incidents', { headers: staffAuthHeaders() })
+      .get('/api/staff/safety-incidents')
       .then(({ data }) => {
         const list = data.incidents || []
         setIncidents(list)
@@ -6915,8 +6905,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
     try {
       const { data } = await axios.patch(
         `/api/staff/safety-incidents/${reviewTarget.id}/review`,
-        { reviewNote },
-        { headers: staffAuthHeaders() },
+        { reviewNote }
       )
       requestClose()
       setDetail(null)
@@ -6940,8 +6929,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
     try {
       const { data } = await axios.patch(
         `/api/staff/safety-incidents/${cancelTarget.id}/cancel`,
-        { reason: cancelReason },
-        { headers: staffAuthHeaders() },
+        { reason: cancelReason }
       )
       requestClose()
       setDetail(null)
@@ -6968,8 +6956,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
           description: form.description,
           roomNumber: form.roomNumber || undefined,
           photos,
-        },
-        { headers: staffAuthHeaders() },
+        }
       )
       requestClose()
       setForm(EMPTY_SAFETY_FORM)
@@ -7736,9 +7723,8 @@ function StaffMain() {
   useEffect(() => {
     let cancelled = false
     const loadOperationalCounts = () => {
-      const headers = { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
       axios
-        .get('/api/staff/resident-visit-requests', { headers })
+        .get('/api/staff/resident-visit-requests')
         .then(({ data }) => {
           if (cancelled) return
           const requests = data.requests || []
@@ -7757,7 +7743,7 @@ function StaffMain() {
         })
         .catch(() => {})
       axios
-        .get('/api/staff/safety-incidents', { headers })
+        .get('/api/staff/safety-incidents')
         .then(({ data }) => {
           if (cancelled) return
           const pending = (data.incidents || []).filter((item) => item.status === 'pending')
@@ -7837,11 +7823,9 @@ function StaffMain() {
   const [maintenanceHistorySearch, setMaintenanceHistorySearch] = useState('')
   const [maintenanceHistoryStatusFilter, setMaintenanceHistoryStatusFilter] = useState('all')
 
-  const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
   const loadWaitingList = () => {
     return axios
-      .get('/api/staff/waiting-list', { headers: authHeaders() })
+      .get('/api/staff/waiting-list')
       .then(({ data }) => setWaitingList(data.waitingList))
       .catch(() => {})
   }
@@ -7851,7 +7835,7 @@ function StaffMain() {
     setWaitingListStatusBusyId(entry.id)
     setWaitingListActionError('')
     try {
-      await axios.patch(`/api/staff/waiting-list/${entry.id}/status`, { status }, { headers: authHeaders() })
+      await axios.patch(`/api/staff/waiting-list/${entry.id}/status`, { status })
       await loadWaitingList()
     } catch (err) {
       setWaitingListActionError(err.response?.data?.message || 'เปลี่ยนสถานะไม่สำเร็จ')
@@ -7862,9 +7846,7 @@ function StaffMain() {
 
   const loadParcels = useCallback(() => {
     return axios
-      .get('/api/staff/parcels', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      })
+      .get('/api/staff/parcels')
       .then(({ data }) => {
         setParcels(data.parcels || [])
         setParcelsError('')
@@ -7892,7 +7874,7 @@ function StaffMain() {
       const payload = new FormData()
       Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
       parcelPhotos.forEach((photo) => payload.append('photos', photo))
-      const { data } = await axios.post('/api/staff/parcels', payload, { headers: authHeaders() })
+      const { data } = await axios.post('/api/staff/parcels', payload)
       requestClose()
       setParcelFormOpen(false)
       setActionSuccess(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
@@ -7910,7 +7892,7 @@ function StaffMain() {
 
   const loadMoveOutInspections = () => {
     return axios
-      .get('/api/staff/move-out-inspections', { headers: authHeaders() })
+      .get('/api/staff/move-out-inspections')
       .then(({ data }) => {
         setMoveOutInspections(data.inspections)
         setInspectionListError('')
@@ -7922,7 +7904,7 @@ function StaffMain() {
 
   const loadPendingSlipCount = () => {
     return axios
-      .get('/api/staff/payment-verifications', { headers: authHeaders() })
+      .get('/api/staff/payment-verifications')
       .then(({ data }) => {
         setPendingSlipCount((data.payments || []).length)
         setPendingSlips(data.payments || [])
@@ -7932,7 +7914,7 @@ function StaffMain() {
 
   const loadAnnouncements = () => {
     return axios
-      .get('/api/staff/announcements', { headers: authHeaders() })
+      .get('/api/staff/announcements')
       .then(({ data }) => setAnnouncements(data.announcements))
       .catch(() => {})
   }
@@ -7951,7 +7933,7 @@ function StaffMain() {
     setWaitingListDeleting(true)
     setWaitingListDeleteError('')
     try {
-      const { data } = await axios.delete(`/api/staff/waiting-list/${waitingListDelete.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/staff/waiting-list/${waitingListDelete.id}`)
       setActionSuccess(data.message || 'ลบรายชื่อผู้สนใจสำเร็จ')
       requestClose()
       await loadWaitingList()
@@ -8009,9 +7991,9 @@ function StaffMain() {
         desired_move_in_date: waitingListForm.desired_move_in_date || '',
       }
       if (waitingListEditing) {
-        await axios.patch(`/api/staff/waiting-list/${waitingListEditing.id}`, payload, { headers: authHeaders() })
+        await axios.patch(`/api/staff/waiting-list/${waitingListEditing.id}`, payload)
       } else {
-        await axios.post('/api/staff/waiting-list', payload, { headers: authHeaders() })
+        await axios.post('/api/staff/waiting-list', payload)
         setWaitingListPage(1)
       }
       setWaitingListForm({ full_name: '', phone: '', room_preference: '', note: '', desired_move_in_date: '' })
@@ -8070,7 +8052,7 @@ function StaffMain() {
   const openInspectionView = async (inspection) => {
     setInspectionView({ summary: inspection, data: null, loading: true, error: '' })
     try {
-      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`)
       setInspectionView((prev) => (prev?.summary.id === inspection.id ? { ...prev, data: data.inspection, loading: false } : prev))
     } catch (err) {
       setInspectionView((prev) =>
@@ -8085,7 +8067,7 @@ function StaffMain() {
     setInspectionLoadingId(inspection.id)
     setInspectionListError('')
     try {
-      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/staff/move-out-inspections/${inspection.id}`)
       const detail = data.inspection
       setInspectionForm({
         room_number: String(detail.room_number),
@@ -8248,8 +8230,7 @@ function StaffMain() {
       const { data } = inspectionEditing
         ? await axios.patch(
             `/api/staff/move-out-inspections/${inspectionEditing.id}`,
-            { ...details, keep_photos: inspectionForm.existingPhotos.map((photo) => photo.url) },
-            { headers: authHeaders() },
+            { ...details, keep_photos: inspectionForm.existingPhotos.map((photo) => photo.url) }
           )
         : await axios.post(
             '/api/staff/move-out-inspections',
@@ -8257,8 +8238,7 @@ function StaffMain() {
               room_number: room.room_number,
               ...(inspectionTenantRequest ? { tenant_request_id: inspectionTenantRequest.id } : {}),
               ...details,
-            },
-            { headers: authHeaders() },
+            }
           )
       setActionSuccess(data.message || (inspectionEditing ? 'แก้ไขผลตรวจห้องสำเร็จ' : 'บันทึกผลตรวจห้องสำเร็จ'))
       if (!inspectionEditing) setInspectionsPage(1)
@@ -8282,7 +8262,7 @@ function StaffMain() {
     }
     setInvoiceGenerating(true)
     try {
-      const { data } = await axios.get('/api/staff/rooms', { headers: authHeaders() })
+      const { data } = await axios.get('/api/staff/rooms')
       const targetRooms = roomNumber
         ? data.rooms.filter((room) => String(room.room_number) === String(roomNumber))
         : data.rooms
@@ -8299,8 +8279,7 @@ function StaffMain() {
     } catch (error) {
       printWindow.close()
       if (error.response?.status === 401 || error.response?.status === 403) {
-        sessionStorage.removeItem('token')
-        sessionStorage.removeItem('user')
+        clearSession()
         navigate('/login', { replace: true })
         return
       }
@@ -8344,7 +8323,6 @@ function StaffMain() {
     setExpensesError('')
     return axios
       .get('/api/staff/expenses', {
-        headers: authHeaders(),
         params: {
           page,
           pageSize: EXPENSES_PAGE_SIZE,
@@ -8422,7 +8400,7 @@ function StaffMain() {
     setExpenseDeleting(true)
     setExpenseDeleteError('')
     try {
-      const { data } = await axios.delete(`/api/staff/expenses/${expenseDelete.id}`, { headers: authHeaders() })
+      const { data } = await axios.delete(`/api/staff/expenses/${expenseDelete.id}`)
       setActionSuccess(data.message || 'ลบรายจ่ายสำเร็จ')
       requestClose()
       loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
@@ -8475,9 +8453,9 @@ function StaffMain() {
         keep_photos: expenseForm.keptPhotos.map((photo) => photo.url),
       }
       if (expenseModal.mode === 'create') {
-        await axios.post('/api/staff/expenses', payload, { headers: authHeaders() })
+        await axios.post('/api/staff/expenses', payload)
       } else {
-        await axios.put(`/api/staff/expenses/${expenseModal.expense.id}`, payload, { headers: authHeaders() })
+        await axios.put(`/api/staff/expenses/${expenseModal.expense.id}`, payload)
       }
       requestClose()
       loadExpenses(expenseModal.mode === 'create' ? 1 : expensesPage)
@@ -8490,7 +8468,7 @@ function StaffMain() {
 
   const loadRequests = () => {
     return axios
-      .get('/api/staff/requests', { headers: authHeaders() })
+      .get('/api/staff/requests')
       .then(({ data }) => {
         setTenantRequests(data.tenantRequests)
         setMaintenanceRequests(data.maintenanceRequests)
@@ -8511,7 +8489,6 @@ function StaffMain() {
     setTenantHistoryError('')
     return axios
       .get('/api/staff/requests/history', {
-        headers: authHeaders(),
         params: {
           page,
           search: search || undefined,
@@ -8543,7 +8520,6 @@ function StaffMain() {
     setMaintenanceHistoryError('')
     return axios
       .get('/api/staff/maintenance/history', {
-        headers: authHeaders(),
         params: { page, search: search || undefined, status: status !== 'all' ? status : undefined },
       })
       .then(({ data }) => {
@@ -8566,15 +8542,14 @@ function StaffMain() {
 
   const loadRooms = () => {
     return axios
-      .get('/api/staff/rooms', { headers: authHeaders() })
+      .get('/api/staff/rooms')
       .then(({ data }) => {
         setRooms(data.rooms)
         setError('')
       })
       .catch((err) => {
         if (err.response?.status === 401 || err.response?.status === 403) {
-          sessionStorage.removeItem('token')
-          sessionStorage.removeItem('user')
+          clearSession()
           navigate('/login', { replace: true })
           return
         }
@@ -8582,14 +8557,15 @@ function StaffMain() {
       })
   }
 
+  const loadInitialRooms = useEffectEvent(() => loadRooms())
+
   useEffect(() => {
-    const token = sessionStorage.getItem('token')
-    if (!token) {
+    if (!hasSession()) {
       navigate('/login', { replace: true })
       return
     }
     let isMounted = true
-    loadRooms().finally(() => {
+    loadInitialRooms().finally(() => {
       if (isMounted) setLoading(false)
     })
     loadParcels()
@@ -8615,11 +8591,10 @@ function StaffMain() {
       clearInterval(parcelsInterval)
       window.removeEventListener('focus', refreshRequestsOnFocus)
     }
-  }, [loadParcels])
+  }, [loadParcels, navigate])
 
   const handleLogout = () => {
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('user')
+    logout()
     setStaffUser(null)
     navigate('/login', { replace: true })
   }
@@ -8629,7 +8604,7 @@ function StaffMain() {
     setProcessingRequestKey(key)
     setRequestsError('')
     try {
-      const { data } = await axios.post(`/api/staff/requests/${request.id}/approve`, body, { headers: authHeaders() })
+      const { data } = await axios.post(`/api/staff/requests/${request.id}/approve`, body)
       setActionSuccess(data.message || 'อนุมัติคำขอสำเร็จ')
       await Promise.all([loadRequests(), loadRooms()])
       return true
@@ -8651,7 +8626,7 @@ function StaffMain() {
     setProcessingRequestKey(key)
     setRequestsError('')
     try {
-      const { data } = await axios.post(`/api/staff/requests/${request.id}/acknowledge`, {}, { headers: authHeaders() })
+      const { data } = await axios.post(`/api/staff/requests/${request.id}/acknowledge`, {})
       setActionSuccess(data.message || 'รับเรื่องสำเร็จ')
       await loadRequests()
       return true
@@ -8682,7 +8657,7 @@ function StaffMain() {
     setProcessingRequestKey(key)
     setRequestsError('')
     try {
-      const { data } = await axios.post(`/api/staff/requests/${renewApproveConfirm.id}/transfer-charge`, {}, { headers: authHeaders() })
+      const { data } = await axios.post(`/api/staff/requests/${renewApproveConfirm.id}/transfer-charge`, {})
       setActionSuccess(data.message || 'ส่งยอดชำระย้ายห้องให้ผู้เช่าแล้ว')
       setRenewApproveConfirm(null)
       await loadRequests()
@@ -8727,7 +8702,7 @@ function StaffMain() {
     setProcessingRequestKey(key)
     setRequestsError('')
     try {
-      const { data } = await axios.post(`/api/staff/requests/${request.id}/reject`, { reason }, { headers: authHeaders() })
+      const { data } = await axios.post(`/api/staff/requests/${request.id}/reject`, { reason })
       setActionSuccess(data.message || 'ปฏิเสธคำขอสำเร็จ')
       await loadRequests()
       return true
@@ -8752,8 +8727,7 @@ function StaffMain() {
     try {
       const { data } = await axios.post(
         `/api/staff/maintenance/${request.id}/${action}`,
-        {},
-        { headers: authHeaders() },
+        {}
       )
       setActionSuccess(data.message || 'ดำเนินการสำเร็จ')
       await loadRequests()
@@ -9003,7 +8977,7 @@ function StaffMain() {
     setHistoryPage(1)
     setHistoryLoading(true)
     try {
-      const { data } = await axios.get(`/api/staff/rooms/${room.room_number}/history`, { headers: authHeaders() })
+      const { data } = await axios.get(`/api/staff/rooms/${room.room_number}/history`)
       setHistoryData(data.rentalHistory)
     } catch (err) {
       setHistoryError(err.response?.data?.message || 'ไม่สามารถโหลดประวัติการจ่ายเงินได้')
@@ -9028,8 +9002,7 @@ function StaffMain() {
     try {
       const { data } = await axios.post(
         `/api/staff/rooms/${collectRoom.room_number}/collect-payment`,
-        {},
-        { headers: authHeaders() },
+        {}
       )
       setActionSuccess(data.message || 'บันทึกการเก็บเงินสำเร็จ')
       setCollectRoom(null)
@@ -9066,8 +9039,7 @@ function StaffMain() {
           electricity_amount: utilityForm.electricity_mode === 'amount' ? utilityForm.electricity_amount : '',
           water_units: utilityForm.water_mode === 'units' ? utilityForm.water_units : '',
           water_amount: utilityForm.water_mode === 'amount' ? utilityForm.water_amount : '',
-        },
-        { headers: authHeaders() },
+        }
       )
       setActionSuccess(data.message || 'ส่งบิลค่าน้ำ-ค่าไฟสำเร็จ')
       setUtilityRoom(null)

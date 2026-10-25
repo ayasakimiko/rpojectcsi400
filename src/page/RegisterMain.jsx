@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import axios from 'axios'
 import { useLocation, useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -143,18 +143,20 @@ function RegisterMain() {
     setContractImages(files)
   }
 
+  const applyAvailableRooms = useEffectEvent((rooms) => {
+    setAvailableRooms(rooms)
+    if (preselectedRoomNumber && rooms.some((room) => room.room_number === preselectedRoomNumber)) {
+      setRegisterForm((prev) => ({ ...prev, room_number: preselectedRoomNumber }))
+    }
+  })
+
   useEffect(() => {
     let isMounted = true
 
     axios
       .get('/api/rooms/available')
       .then(({ data }) => {
-        if (!isMounted) return
-        const rooms = data.rooms || []
-        setAvailableRooms(rooms)
-        if (preselectedRoomNumber && rooms.some((room) => room.room_number === preselectedRoomNumber)) {
-          setRegisterForm((prev) => ({ ...prev, room_number: preselectedRoomNumber }))
-        }
+        if (isMounted) applyAvailableRooms(data.rooms || [])
       })
       .catch(() => {
         if (isMounted) setError('ไม่สามารถโหลดรายการห้องว่างได้ กรุณาลองใหม่อีกครั้ง')
@@ -198,7 +200,6 @@ function RegisterMain() {
     let isActive = true
     axios
       .get('/api/auth/register/suggest', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
       })
       .then(({ data }) => {
         if (isActive) setIdcardCandidates(data.customers || [])
@@ -215,7 +216,6 @@ function RegisterMain() {
     let isActive = true
     axios
       .get(`/api/auth/register/lookup/${idcard}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
       })
       .then(({ data }) => {
         if (!isActive) return
@@ -342,7 +342,6 @@ function RegisterMain() {
       const files = await Promise.all(compressed.map(({ name, dataUrl }) => dataUrlToFile(dataUrl, name)))
       files.forEach((file) => payload.append('contract_images', file))
       const { data } = await axios.post('/api/auth/register', payload, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
       })
       setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
       setRegisterForm({ ...initialRegisterForm, rental_start_date: getNow() })

@@ -28,8 +28,6 @@ const CONTRACT_STATUS = {
   ended_early: { label: 'ออกก่อนสัญญา', tone: 'unpaid' },
 }
 
-const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}` })
-
 function ContractIcon({ type, size = 16 }) {
   const paths = {
     home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v12h14V9M9 21v-8h6v8" /></>,
@@ -813,7 +811,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
   useEffect(() => {
     let cancelled = false
     axios
-      .get('/api/staff/contracts/completed', { headers: authHeaders() })
+      .get('/api/staff/contracts/completed')
       .then(({ data }) => {
         if (cancelled) return
         setContracts(data.contracts || [])
@@ -1099,7 +1097,6 @@ function DepositContractTerms({ contract, title = 'เงื่อนไขส�
 function DepositSettlementModal({ contract, onClose, onSaved }) {
   const action = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
   const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
-  // Pre-fill the deduction with the asset damage from the move-out inspection.
   const inspectionDamage = action === 'refund' ? Math.min(Number(contract.moveout_damage_cost) || 0, paid) : 0
   const [deduction, setDeduction] = useState(inspectionDamage > 0 ? String(inspectionDamage) : '')
   const [note, setNote] = useState(inspectionDamage > 0 ? (contract.moveout_damage_note || '').slice(0, 500) : '')
@@ -1135,8 +1132,7 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
     try {
       const { data } = await axios.post(
         `/api/staff/contracts/${contract.booking_id}/deposit-settlement`,
-        { action, deduction: action === 'refund' ? deductionValue : undefined, note: note.trim() || undefined },
-        { headers: authHeaders() },
+        { action, deduction: action === 'refund' ? deductionValue : undefined, note: note.trim() || undefined }
       )
       onSaved(data.contract)
     } catch (requestError) {
@@ -1457,7 +1453,7 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
       ? `/api/staff/contracts/${bookingId}/deposit-settlement-logs`
       : '/api/staff/contracts/deposit-settlement-logs'
     axios
-      .get(url, { headers: authHeaders() })
+      .get(url)
       .then(({ data }) => {
         if (active) setLogs(data.logs ?? [])
       })
@@ -2011,7 +2007,7 @@ export function CustomerContractPanel() {
   useEffect(() => {
     let cancelled = false
     axios
-      .get('/api/customer/contract', { headers: authHeaders() })
+      .get('/api/customer/contract')
       .then(({ data }) => {
         if (!cancelled) setContract(data.contract || null)
       })

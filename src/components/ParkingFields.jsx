@@ -268,7 +268,7 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
       if (qrPayload) formData.append('qr_payload', qrPayload)
       formData.append('slip', slip)
       const { data } = await axios.post(endpoint, formData, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
       setSlip(null)
       setMessage(data.message || 'บันทึกการชำระค่าปรับแล้ว')
@@ -372,7 +372,7 @@ export function ParkingSettingsForm({ endpoint, onSaved, onCancel }) {
   useEffect(() => {
     const controller = new AbortController()
     axios
-      .get(endpoint, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }, signal: controller.signal })
+      .get(endpoint, { signal: controller.signal })
       .then(({ data }) =>
         setDraft({ finePerHour: String(data.finePerHour ?? ''), carSpaces: String(data.carSpaces ?? ''), motorcycleSpaces: String(data.motorcycleSpaces ?? '') }),
       )
@@ -394,8 +394,7 @@ export function ParkingSettingsForm({ endpoint, onSaved, onCancel }) {
     try {
       const { data } = await axios.put(
         endpoint,
-        { finePerHour: Number(draft.finePerHour), carSpaces: Number(draft.carSpaces), motorcycleSpaces: Number(draft.motorcycleSpaces) },
-        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } },
+        { finePerHour: Number(draft.finePerHour), carSpaces: Number(draft.carSpaces), motorcycleSpaces: Number(draft.motorcycleSpaces) }
       )
       onSaved?.(data)
     } catch (requestError) {

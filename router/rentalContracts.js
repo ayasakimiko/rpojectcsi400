@@ -8,6 +8,7 @@ import { CONTRACT_MIN_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from "../middl
 import { getActingStaffName } from "../middleware/accounts.js";
 import { actorOf } from "../middleware/notifications.js";
 import { transferChargeSent, transferContractAttached } from "./notificationEvents.js";
+import { moveResidentVehicles } from "./parking.js";
 import {
   computeRentCoverage,
   loadDepositPayments,
@@ -1043,6 +1044,7 @@ export async function applyRoomTransfer(connection, plan, staffName, contractIma
     ],
   );
   await connection.query(`UPDATE Customer SET room_number = ? WHERE id = ?`, [targetRoom.room_number, customer.id]);
+  await moveResidentVehicles(connection, customer.id, sourceRoom.room_number, targetRoom.room_number);
   const [bookingResult] = await connection.query(
     `INSERT INTO Booking (customer_id, room_id, rental_start_date, rental_end_date) VALUES (?, ?, NOW(), ?)`,
     [customer.id, targetRoom.id, sourceRoom.rental_end_date],
