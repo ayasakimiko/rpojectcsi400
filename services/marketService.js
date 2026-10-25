@@ -18,7 +18,7 @@ const TENANT_API_PREFIX = "/api/market/v1";
 app.set("trust proxy", "loopback, uniquelocal");
 app.disable("x-powered-by");
 
-app.get("/api/health", (req, res) => {
+app.get("/api/health", createCorsMiddleware(), (req, res) => {
   res.json({ status: "ok", service: "market" });
 });
 
