@@ -16996,3 +16996,11 @@ tr.staff-focus-row.is-fading > td {
   color: #6b859e;
   font-size: 12.5px;
 }
+
+.staff-subtabs-row > .staff-group-subtabs:not(:only-of-type) {
+  flex-basis: 100%;
+}
+
+.owner-group-subtabs {
+  margin: -12px 0 -4px;
+}

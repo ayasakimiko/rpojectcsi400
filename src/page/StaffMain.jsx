@@ -1315,6 +1315,17 @@ const STAFF_TABS = [
   { key: 'cameras', label: 'กล้องวงจรปิด' },
 ]
 
+const STAFF_TAB_GROUPS = [
+  { key: 'home', label: 'หน้าแรก', tabs: ['home'] },
+  { key: 'finance', label: 'การเงินและสัญญา', tabs: ['payment-review', 'completed-contracts'] },
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['move-out-inspections', 'waiting-list', 'wifi'] },
+  { key: 'services', label: 'บริการผู้เช่า', tabs: ['parcels', 'resident-visits'] },
+  { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
+  { key: 'security', label: 'ความปลอดภัย', tabs: ['safety', 'cameras'] },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
+]
+const STAFF_TAB_LABEL = Object.fromEntries(STAFF_TABS.map((tab) => [tab.key, tab.label]))
+
 const WAITING_LIST_STATUS = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
   contacted: { label: 'ติดต่อแล้ว', tone: 'info' },
@@ -7647,6 +7658,7 @@ function StaffMain() {
 
   const [actionSuccess, setActionSuccess] = useState('')
   const [staffTab, setStaffTab] = useState('home')
+  const [lastStaffTabByGroup, setLastStaffTabByGroup] = useState({})
   const [homeSection, setHomeSection] = useState('rooms')
   const [homePages, setHomePages] = useState({})
   const [homeRequestFilters, setHomeRequestFilters] = useState({})
@@ -9817,6 +9829,10 @@ function StaffMain() {
   const summaryTiles = activeSummary
     ? [...activeSummary.tiles, ...(staffTab !== 'safety' && urgentSafetyCount > 0 ? [safetyTile] : [])]
     : []
+  const staffTabGroups = STAFF_TAB_GROUPS
+    .map((group) => ({ ...group, tabs: group.tabs.filter((key) => key !== 'cameras' || staffUser?.role === 'Staff') }))
+    .filter((group) => group.tabs.length > 0)
+  const staffGroupOf = (tab) => staffTabGroups.find((group) => group.tabs.includes(tab))?.key
 
   return (
     <div className="staff-page">
@@ -10633,26 +10649,53 @@ function StaffMain() {
         )}
 
         <RoleTabMenu
-          tabs={STAFF_TABS.filter((tab) => tab.key !== 'cameras' || staffUser?.role === 'Staff')}
-          activeKey={staffTab}
+          tabs={staffTabGroups}
+          activeKey={staffGroupOf(staffTab)}
+          activeLabel={STAFF_TAB_LABEL[staffTab]}
           onSelect={(key) => {
-            goToStaffTab(key)
+            if (staffGroupOf(staffTab) === key) return
+            const group = staffTabGroups.find((item) => item.key === key)
+            goToStaffTab(lastStaffTabByGroup[key] && group.tabs.includes(lastStaffTabByGroup[key]) ? lastStaffTabByGroup[key] : group.tabs[0])
             setAnnouncementFocus(null)
           }}
           listClassName="staff-tabs mb-0"
           linkClassName="staff-tab-link"
           logoutClassName="staff-logout-btn"
           onLogout={handleLogout}
-          renderBadge={(key) => {
-            const count = key === 'home' ? homePendingTotal : newTabItemCount(key)
+          renderBadge={(groupKey) => {
+            const tabs = staffTabGroups.find((group) => group.key === groupKey)?.tabs || []
+            const count = tabs.reduce((sum, key) => sum + (key === 'home' ? homePendingTotal : newTabItemCount(key)), 0)
             return count > 0 && (
-              <span className="staff-tab-badge" aria-label={`${count} ${key === 'home' ? 'รายการรอตรวจ' : 'รายการใหม่'}`}>
+              <span className="staff-tab-badge" aria-label={`${count} ${groupKey === 'home' ? 'รายการรอตรวจ' : 'รายการใหม่'}`}>
                 {count}
               </span>
             )
           }}
         />
         <div className="staff-subtabs-row">
+          {staffTabGroups.filter((group) => group.tabs.length > 1 && group.key === staffGroupOf(staffTab)).map((group) => (
+            <ul key={group.key} className="nav staff-subtabs staff-group-subtabs" aria-label={group.label}>
+              {group.tabs.map((key) => {
+                const count = newTabItemCount(key)
+                return (
+                  <li className="nav-item" key={key}>
+                    <button
+                      type="button"
+                      className={`nav-link staff-subtab-link${staffTab === key ? ' active' : ''}`}
+                      onClick={() => {
+                        goToStaffTab(key)
+                        setLastStaffTabByGroup((current) => ({ ...current, [group.key]: key }))
+                        setAnnouncementFocus(null)
+                      }}
+                    >
+                      {STAFF_TAB_LABEL[key]}
+                      {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการใหม่`}>{count}</span>}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ))}
           {staffTab === 'home' && (
             <ul className="nav staff-subtabs" aria-label="หมวดหมู่หน้าแรก">
               {HOME_SECTIONS.map((section) => {

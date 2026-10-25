@@ -135,6 +135,36 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ShopLeaseImage' AND COLUMN_NAME = 'archived_at'),
+    'SELECT 1',
+    'ALTER TABLE `ShopLeaseImage` ADD COLUMN `archived_at` DATETIME NULL AFTER `created_at`, ADD COLUMN `archive_note` VARCHAR(255) NULL AFTER `archived_at`, ADD COLUMN `archived_by_name` VARCHAR(255) NULL AFTER `archive_note`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Shop' AND COLUMN_NAME = 'updated_by_name'),
+    'SELECT 1',
+    'ALTER TABLE `Shop` ADD COLUMN `updated_by_name` VARCHAR(255) NULL AFTER `created_by_name`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ShopLeaseImage' AND COLUMN_NAME = 'archived_prev_end'),
+    'SELECT 1',
+    'ALTER TABLE `ShopLeaseImage` ADD COLUMN `archived_prev_start` DATE NULL AFTER `archived_by_name`, ADD COLUMN `archived_prev_end` DATE NULL AFTER `archived_prev_start`, ADD COLUMN `archived_new_end` DATE NULL AFTER `archived_prev_end`, ADD COLUMN `archived_months` TINYINT UNSIGNED NULL AFTER `archived_new_end`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 CREATE TABLE IF NOT EXISTS ShopSeed (
     name VARCHAR(50) NOT NULL PRIMARY KEY,
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -159,7 +189,7 @@ JOIN Shop s ON s.id = l.shop_id;
 CREATE OR REPLACE VIEW ShopInfo AS
 SELECT s.id, s.code, s.name, s.shop_type, s.location, s.area_sqm, s.monthly_rent,
        TIME_FORMAT(s.open_time, '%H:%i') AS open_time, TIME_FORMAT(s.close_time, '%H:%i') AS close_time,
-       s.description, s.caretaker_staff_id, s.caretaker_name, s.created_by_role, s.created_by_name, s.created_at, s.updated_at,
+       s.description, s.caretaker_staff_id, s.caretaker_name, s.created_by_role, s.created_by_name, s.updated_by_name, s.created_at, s.updated_at,
        l.id AS lease_id, l.contract_no AS lease_contract_no, l.tenant_name AS lease_tenant_name,
        l.business_name AS lease_business_name, l.tenant_phone AS lease_tenant_phone,
        DATE_FORMAT(l.start_date, '%Y-%m-%d') AS lease_start_date, DATE_FORMAT(l.end_date, '%Y-%m-%d') AS lease_end_date,

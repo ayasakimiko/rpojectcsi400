@@ -12,10 +12,13 @@ import {
   GUIDE_ERRORS,
   GUIDE_FIELDS,
   GUIDE_RULES,
+  GUIDE_SHOP_FIELDS,
   GUIDE_TITLE,
   GUIDE_VERSION,
   downloadGuideDocx,
   downloadGuidePdf,
+  guideAiPrompt,
+  guideClientSamples,
   guideExamples,
 } from '../utils/marketApiGuide.js'
 import { ContractImagePicker } from './RentalContract.jsx'
@@ -106,6 +109,7 @@ const ICON_PATHS = {
   image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m21 16-5-5-9 9" /></>,
   eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
   eyeOff: <><path d="M3 3l18 18" /><path d="M10.6 5.1A10.5 10.5 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 4.4-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 10" /></>,
   coin: <><circle cx="12" cy="12" r="9" /><path d="M14.8 9.2A2.6 2.6 0 0 0 12.4 8H11a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-1.6a2.6 2.6 0 0 1-2.4-1.2M12 6v2M12 16v2" /></>,
 }
 
@@ -136,6 +140,23 @@ function InfoGroup({ title, icon, items, columns = 3 }) {
   )
 }
 
+function NoticeModal({ message, onClose }) {
+  return (
+    <MarketModal
+      title="ดำเนินการสำเร็จ"
+      icon="check"
+      tone="success"
+      size="sm"
+      onClose={onClose}
+      onSubmit={onClose}
+      submitLabel="ตกลง"
+      hideCancel
+    >
+      <p className="market-notice-message">{message}</p>
+    </MarketModal>
+  )
+}
+
 function StatusPill({ status }) {
   const info = LEASE_STATUS[status] || { label: 'ว่าง', tone: 'vacant' }
   return <span className={`market-pill is-${info.tone}`}>{info.label}</span>
@@ -144,7 +165,7 @@ function StatusPill({ status }) {
 const openModals = []
 const MODAL_EXIT_MS = 180
 
-function MarketModal({ title, subtitle, icon = 'shop', tone = 'primary', size = 'md', busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', footer, children }) {
+function MarketModal({ title, subtitle, icon = 'shop', tone = 'primary', size = 'md', busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', hideCancel = false, footer, children }) {
   const titleId = useId()
   const closeRef = useRef(onClose)
   const busyRef = useRef(busy)
@@ -209,7 +230,7 @@ function MarketModal({ title, subtitle, icon = 'shop', tone = 'primary', size = 
             {footer}
             {onSubmit && (
               <>
-                <button type="button" className="market-btn" disabled={busy} onClick={requestClose}>{cancelLabel}</button>
+                {!hideCancel && <button type="button" className="market-btn" disabled={busy} onClick={requestClose}>{cancelLabel}</button>}
                 <button type="submit" className={`market-btn ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} disabled={busy || submitDisabled}>
                   {busy ? 'กำลังดำเนินการ...' : submitLabel}
                 </button>
@@ -843,8 +864,10 @@ const RENEW_PLAN_OPTIONS = [
   { key: 'lump_sum', label: 'จ่ายล่วงหน้าทั้งก้อน', hint: 'ชำระค่าเช่าครบทุกเดือนที่ต่อในครั้งเดียว' },
 ]
 
-function RenewModal({ lease, onClose }) {
+function RenewModal({ lease, currentImageCount, onClose }) {
   const [months, setMonths] = useState(12)
+  const [images, setImages] = useState([])
+  const [touched, setTouched] = useState(false)
   const [plan, setPlan] = useState('monthly')
   const [stage, setStage] = useState('plan')
   const [payment, setPayment] = useState({ method: 'promptpay', slip: null, qrPayload: '', cashConfirmed: false })
@@ -853,13 +876,20 @@ function RenewModal({ lease, onClose }) {
   const amount = lease.monthly_rent * (plan === 'lump_sum' ? months : 1)
   const paymentReady = payment.method === 'counter' ? payment.cashConfirmed : Boolean(payment.slip)
 
+  const imagesReady = images.length >= LEASE_MIN_IMAGES
   const submit = () => {
     if (stage === 'plan') {
+      setTouched(true)
+      if (!imagesReady) {
+        document.querySelector('[data-field="renew-images"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        return
+      }
       setStage('payment')
       return
     }
-    if (!paymentReady) return
+    if (!paymentReady || !imagesReady) return
     const body = new FormData()
+    for (const file of images) body.append('contract_images', file)
     body.append('months', String(months))
     body.append('renew_plan', plan)
     body.append('payment_method', payment.method)
@@ -889,7 +919,7 @@ function RenewModal({ lease, onClose }) {
       ) : null}
     >
       <div className="market-stage-bar" aria-hidden="true">
-        <span className={stage === 'plan' ? 'is-active' : 'is-done'}><b>1</b> เลือกระยะเวลา</span>
+        <span className={stage === 'plan' ? 'is-active' : 'is-done'}><b>1</b> ระยะเวลาและรูปสัญญา</span>
         <i />
         <span className={stage === 'payment' ? 'is-active' : ''}><b>2</b> ชำระเงิน</span>
         <i />
@@ -934,6 +964,12 @@ function RenewModal({ lease, onClose }) {
               ))}
             </div>
           </Field>
+          <Field label="รูปสัญญาฉบับใหม่ *" hint={`แนบอย่างน้อย ${LEASE_MIN_IMAGES} รูป รูปนี้จะแทนรูปสัญญาเดิม`}>
+            <div className={`market-field-block${touched && !imagesReady ? ' is-invalid' : ''}`} data-field="renew-images">
+              <ContractImagePicker files={images} onChange={setImages} min={LEASE_MIN_IMAGES} error={touched && !imagesReady ? `กรุณาแนบรูปสัญญาฉบับใหม่อย่างน้อย ${LEASE_MIN_IMAGES} รูป` : ''} />
+            </div>
+          </Field>
+          <p className="market-renew-archive"><Icon name="image" size={15} /> รูปสัญญาเดิม{currentImageCount ? ` ${currentImageCount} รูป` : ''}จะถูกย้ายไปเก็บเป็นประวัติ (log) ดูย้อนหลังได้ในหน้ารายละเอียดสัญญา</p>
           <p className="market-renew-note">ค่าเช่า ฿{money(lease.monthly_rent)}/เดือน ชำระทุกวันที่ {lease.payment_due_day} · ต่อสัญญาจะเกิดขึ้นหลังชำระเงินสำเร็จเท่านั้น</p>
         </>
       ) : (
@@ -1114,7 +1150,7 @@ function LeasePaymentStep({ amount, label = 'ยอดที่ต้องช�
   )
 }
 
-function KeyToken({ apiKey, canReveal }) {
+function KeyToken({ apiKey, canReveal, onRotate }) {
   const [full, setFull] = useState('')
   const [shown, setShown] = useState(false)
   const [status, setStatus] = useState('')
@@ -1164,7 +1200,16 @@ function KeyToken({ apiKey, canReveal }) {
     return (
       <div className="market-key-token">
         <code className="market-key-code">{masked}</code>
-        {canReveal && !apiKey.can_reveal && <small className="market-key-token-note">ออกก่อนเปิดระบบดูย้อนหลัง</small>}
+        {canReveal && !apiKey.can_reveal && (
+          <>
+            <small className="market-key-token-note">key นี้ออกก่อนเปิดระบบดูย้อนหลัง จึงดู/คัดลอกไม่ได้</small>
+            {onRotate && (
+              <button type="button" className="market-key-copy is-rotate" onClick={() => onRotate(apiKey)}>
+                <Icon name="key" size={13} /> ออก key ใหม่แทน
+              </button>
+            )}
+          </>
+        )}
       </div>
     )
   }
@@ -1196,6 +1241,7 @@ function ApiKeyPanel({ lease, apiKeys, canOperate, onChanged }) {
   const [newKey, setNewKey] = useState('')
   const [copied, setCopied] = useState(false)
   const [revoking, setRevoking] = useState(null)
+  const [rotating, setRotating] = useState(null)
   const { busy, error, run } = useSubmit((data) => {
     setNewKey(data.api_key)
     setLabel('')
@@ -1249,7 +1295,7 @@ function ApiKeyPanel({ lease, apiKeys, canOperate, onChanged }) {
                   {key.revoked_at ? 'ยกเลิกแล้ว' : key.last_used_at ? 'ใช้งานอยู่' : 'ยังไม่เคยใช้'}
                 </span>
               </div>
-              <KeyToken apiKey={key} canReveal={canOperate && !key.revoked_at} />
+              <KeyToken apiKey={key} canReveal={canOperate && !key.revoked_at} onRotate={setRotating} />
               <div className="market-key-meta">
                 <span><Icon name="user" size={12} /> {key.created_by_name}</span>
                 <span><Icon name="calendar" size={12} /> ออก {thaiDateTime(key.created_at)}</span>
@@ -1262,6 +1308,22 @@ function ApiKeyPanel({ lease, apiKeys, canOperate, onChanged }) {
           </li>
         ))}
       </ul>
+      {rotating && (
+        <ConfirmModal
+          title="ออก key ใหม่แทน"
+          message={`ระบบจะยกเลิก "${rotating.label}" เดิม และออก key ใหม่ชื่อเดียวกันที่ดูและคัดลอกได้ ระบบของผู้เช่าต้องเปลี่ยนไปใช้ key ใหม่`}
+          submitLabel="ออก key ใหม่"
+          tone="primary"
+          icon="key"
+          onClose={() => setRotating(null)}
+          onConfirm={async () => {
+            const response = await axios.post(`${API_BASE}/api-keys/${rotating.id}/rotate`, {}, { headers: authHeaders() })
+            setNewKey(response.data.api_key)
+            onChanged(response.data.api_keys)
+            return response
+          }}
+        />
+      )}
       {revoking && (
         <ConfirmModal
           title="ยกเลิก API key"
@@ -1301,6 +1363,243 @@ function useMarketImageUrls(images) {
     }
   }, [images])
   return urls
+}
+
+const HISTORY_PREVIEW_COUNT = 5
+const HISTORY_NOTE_PATTERN = /ต่อสัญญา (\d+) เดือน \(เดิมสิ้นสุด (\d{4}-\d{2}-\d{2}) → ใหม่ (\d{4}-\d{2}-\d{2})\)/
+
+function historyInfo(group) {
+  const parsed = HISTORY_NOTE_PATTERN.exec(group.note || '')
+  return {
+    months: group.months ?? (parsed ? Number(parsed[1]) : null),
+    prevStart: group.prev_start || null,
+    prevEnd: group.prev_end || parsed?.[2] || null,
+    newEnd: group.new_end || parsed?.[3] || null,
+  }
+}
+
+function matchRenewalPayment(group, payments) {
+  const archivedAt = new Date(group.archived_at).getTime()
+  return payments.find((payment) => payment.payment_type === 'renewal' && Math.abs(new Date(payment.paid_at).getTime() - archivedAt) < 5 * 60 * 1000) || null
+}
+
+function HistoryCard({ group, version, onOpen }) {
+  const preview = useMemo(() => group.images.slice(0, 4), [group.images])
+  const urls = useMarketImageUrls(preview)
+  const info = historyInfo(group)
+  const extra = group.images.length - preview.length
+  return (
+    <li>
+      <button type="button" className="market-history-card" onClick={() => onOpen(group, version)}>
+        <span className="market-history-card-version">
+          <small>ฉบับที่</small>
+          <strong>{version}</strong>
+        </span>
+        <span className="market-history-card-main">
+          <span className="market-history-card-title">
+            <strong>สัญญาก่อนต่อ{info.months ? ` ${info.months} เดือน` : ''}</strong>
+            <span className="market-pill is-muted">เก็บเป็นประวัติ</span>
+          </span>
+          <span className="market-history-card-period">
+            <Icon name="calendar" size={13} />
+            {info.prevStart ? `${thaiDate(info.prevStart)} – ` : 'สิ้นสุดเดิม '}{info.prevEnd ? thaiDate(info.prevEnd) : '-'}
+            <b>→</b>
+            <span className="is-new">ต่อถึง {info.newEnd ? thaiDate(info.newEnd) : '-'}</span>
+          </span>
+          <span className="market-history-card-meta">
+            <span><Icon name="user" size={12} /> {group.archived_by_name || '-'}</span>
+            <span><Icon name="clock" size={12} /> {thaiDateTime(group.archived_at)}</span>
+          </span>
+        </span>
+        <span className="market-history-card-thumbs" aria-hidden="true">
+          {preview.map((image, index) => (
+            <span key={image.id} className="market-history-card-thumb">
+              {urls[image.id] ? <img src={urls[image.id]} alt="" /> : <span className="market-gallery-loading" />}
+              {index === preview.length - 1 && extra > 0 && <em>+{extra}</em>}
+            </span>
+          ))}
+        </span>
+        <span className="market-history-card-open">ดูรายละเอียด <span aria-hidden="true">›</span></span>
+      </button>
+    </li>
+  )
+}
+
+function RenewalPaymentBlock({ lease, payment, number }) {
+  const slip = useMemo(() => (payment.slip_url ? [{ id: payment.id, url: payment.slip_url }] : []), [payment])
+  const urls = useMarketImageUrls(slip)
+  const [openSlip, setOpenSlip] = useState(false)
+  const [openDetail, setOpenDetail] = useState(false)
+  const verify = VERIFY_LABELS[payment.verify_mode] || VERIFY_LABELS.counter
+  const slipUrl = urls[payment.id]
+  return (
+    <section className="market-section">
+      <div className="market-section-head">
+        <h4><span className="market-section-icon"><Icon name="coin" size={15} /></span> การชำระเงินตอนต่อสัญญา</h4>
+        <button type="button" className="market-link-btn" onClick={() => setOpenDetail(true)}>ดูรายละเอียดการชำระ <span aria-hidden="true">›</span></button>
+      </div>
+      <div className="market-renewal-payment">
+        {payment.slip_url ? (
+          <button type="button" className="market-renewal-payment-slip" disabled={!slipUrl} onClick={() => setOpenSlip(true)} aria-label="ดูสลิปเต็มจอ">
+            {slipUrl ? <img src={slipUrl} alt="สลิปการโอนเงิน" /> : <span className="market-gallery-loading" />}
+            <span className="market-renewal-payment-zoom"><Icon name="search" size={13} /> ดูสลิป</span>
+          </button>
+        ) : (
+          <span className="market-renewal-payment-slip is-empty">
+            <Icon name="wallet" size={22} />
+            <small>{payment.method === 'counter' ? 'เงินสด' : 'ไม่มีสลิป'}</small>
+          </span>
+        )}
+        <div className="market-renewal-payment-main">
+          <div className="market-renewal-payment-head">
+            <strong>฿{money(payment.amount)}</strong>
+            <span className={`market-pill is-${verify.tone}`}>{verify.text}</span>
+          </div>
+          <span className="market-renewal-payment-plan">
+            {payment.renew_plan_label || 'ต่อสัญญา'} · ต่อ {payment.renew_months || '-'} เดือน
+          </span>
+          <dl className="market-renewal-payment-facts">
+            <div><dt>วิธีชำระ</dt><dd>{payment.method_label}</dd></div>
+            <div><dt>รับเงินโดย</dt><dd>{payment.received_by_name}</dd></div>
+            <div><dt>บันทึกเมื่อ</dt><dd>{thaiDateTime(payment.paid_at)}</dd></div>
+            <div><dt>เลขอ้างอิง</dt><dd>{payment.trans_ref && payment.verify_mode === 'auto' ? payment.trans_ref : '-'}</dd></div>
+          </dl>
+        </div>
+      </div>
+      {openSlip && slipUrl && createPortal(
+        <div className="market-lightbox-layer" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <PhotoLightbox photos={[{ url: slipUrl }]} initialIndex={0} title={`สลิปการชำระเงิน #${number}`} subtitle={lease.contract_no} label="สลิป" onClose={() => setOpenSlip(false)} />
+        </div>,
+        document.body,
+      )}
+      {openDetail && <PaymentDetailModal lease={lease} payment={payment} number={number} onClose={() => setOpenDetail(false)} />}
+    </section>
+  )
+}
+
+function HistoryDetailModal({ lease, group, version, payment, paymentNumber, onClose }) {
+  const urls = useMarketImageUrls(group.images)
+  const [openIndex, setOpenIndex] = useState(null)
+  const info = historyInfo(group)
+  const photos = group.images.map((image) => ({ url: urls[image.id], name: image.name })).filter((photo) => photo.url)
+  return (
+    <MarketModal
+      title={`สัญญาเดิม ฉบับที่ ${version}`}
+      subtitle={`${lease.contract_no} · ${lease.shop_name}`}
+      icon="clock"
+      size="lg"
+      onClose={onClose}
+    >
+      <div className="market-renew-timeline">
+        <span><small>ช่วงสัญญาเดิม</small><strong>{info.prevStart ? `${thaiDate(info.prevStart)} – ` : ''}{info.prevEnd ? thaiDate(info.prevEnd) : '-'}</strong></span>
+        <span className="market-lease-span">
+          <i aria-hidden="true" />
+          <b>{info.months ? `+${info.months} เดือน` : 'ต่อสัญญา'}</b>
+          <i className="is-arrow" aria-hidden="true" />
+        </span>
+        <span className="is-end"><small>ต่อถึง</small><strong>{info.newEnd ? thaiDate(info.newEnd) : '-'}</strong></span>
+      </div>
+      <InfoGroup title="ข้อมูลฉบับนี้" icon="contract" items={[
+        { icon: 'user', label: 'ผู้เช่า', value: lease.tenant_name, tone: 'blue' },
+        { icon: 'clock', label: 'เก็บเป็นประวัติเมื่อ', value: thaiDateTime(group.archived_at), tone: 'orange' },
+        { icon: 'edit', label: 'เก็บโดย', value: group.archived_by_name || '-', tone: 'purple' },
+        { icon: 'image', label: 'จำนวนรูป', value: `${group.images.length} รูป`, tone: 'teal' },
+        { icon: 'coin', label: 'ค่าเช่า / เดือน', value: `${money(lease.monthly_rent)} บาท`, tone: 'green' },
+        { icon: 'calendar', label: 'ต่อสัญญาเพิ่ม', value: info.months ? `${info.months} เดือน` : '-', tone: 'rose' },
+      ]} />
+      {payment && <RenewalPaymentBlock lease={lease} payment={payment} number={paymentNumber} />}
+      <section className="market-section">
+        <div className="market-section-head">
+          <h4><span className="market-section-icon"><Icon name="image" size={15} /></span> รูปสัญญาฉบับเดิม <span className="market-count">{group.images.length}</span></h4>
+          <small>กดรูปเพื่อดูเต็มจอ</small>
+        </div>
+        <ul className="market-gallery is-history">
+          {group.images.map((image, index) => (
+            <li key={image.id}>
+              <button type="button" disabled={!urls[image.id]} aria-label={`ดูรูปสัญญาเดิม ${index + 1}`} onClick={() => setOpenIndex(photos.findIndex((photo) => photo.url === urls[image.id]))}>
+                {urls[image.id] ? <img src={urls[image.id]} alt="" /> : <span className="market-gallery-loading" />}
+                <span className="market-gallery-index">{index + 1}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+      {group.note && <p className="market-terms">{group.note}</p>}
+      {openIndex !== null && openIndex >= 0 && createPortal(
+        <div className="market-lightbox-layer" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <PhotoLightbox photos={photos} initialIndex={openIndex} title={`สัญญาเดิม ฉบับที่ ${version}`} subtitle={lease.contract_no} label="รูปสัญญาเดิม" onClose={() => setOpenIndex(null)} />
+        </div>,
+        document.body,
+      )}
+    </MarketModal>
+  )
+}
+
+function historySearchText(group) {
+  const info = historyInfo(group)
+  return [group.note, group.archived_by_name, thaiDateTime(group.archived_at), info.prevEnd && thaiDate(info.prevEnd), info.newEnd && thaiDate(info.newEnd), info.months && `${info.months} เดือน`]
+    .filter(Boolean).join(' ').toLowerCase()
+}
+
+function AllHistoryModal({ lease, history, onOpen, onClose }) {
+  const [search, setSearch] = useState('')
+  const term = search.trim().toLowerCase()
+  const items = history.map((group, index) => ({ group, version: history.length - index }))
+  const visible = items.filter(({ group, version }) => !term || `ฉบับที่ ${version} ${historySearchText(group)}`.toLowerCase().includes(term))
+  return (
+    <MarketModal title="ประวัติรูปสัญญาเดิมทั้งหมด" subtitle={`${lease.contract_no} · ${history.length} ฉบับ`} icon="clock" size="xl" onClose={onClose}>
+      <div className="market-all-products">
+        <div className="market-product-tools">
+          <div className="market-search">
+            <Icon name="search" size={16} />
+            <input placeholder="ค้นหาจากวันที่ จำนวนเดือน ผู้เก็บ หรือฉบับที่" value={search} onChange={(event) => setSearch(event.target.value)} autoFocus />
+            {search && <button type="button" className="market-search-clear" aria-label="ล้างคำค้นหา" onClick={() => setSearch('')}>×</button>}
+          </div>
+        </div>
+        <p className="market-result-count">แสดง {visible.length} จาก {history.length} ฉบับ</p>
+        <ul className="market-history-cards is-all">
+          {visible.length === 0 && <li className="market-empty-line">ไม่พบประวัติที่ตรงกับการค้นหา</li>}
+          {visible.map(({ group, version }) => <HistoryCard key={group.archived_at} group={group} version={version} onOpen={onOpen} />)}
+        </ul>
+      </div>
+    </MarketModal>
+  )
+}
+
+function LeaseImageHistory({ lease, history, payments = [] }) {
+  const [showAll, setShowAll] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const preview = history.slice(0, HISTORY_PREVIEW_COUNT)
+  const openDetail = (group, version) => setDetail({ group, version })
+  return (
+    <section className="market-section">
+      <div className="market-section-head">
+        <h4><span className="market-section-icon"><Icon name="clock" size={15} /></span> ประวัติรูปสัญญาเดิม <span className="market-count">{history.length}</span></h4>
+        <div className="market-section-actions">
+          <small>แสดงล่าสุด {Math.min(HISTORY_PREVIEW_COUNT, history.length)} ฉบับ</small>
+          {history.length > 0 && <button type="button" className="market-link-btn" onClick={() => setShowAll(true)}>ดูทั้งหมด ({history.length}) <span aria-hidden="true">›</span></button>}
+        </div>
+      </div>
+      {history.length === 0 ? (
+        <p className="market-empty-line">ยังไม่มีประวัติ รูปสัญญาเดิมจะถูกเก็บไว้ที่นี่เมื่อต่อสัญญา</p>
+      ) : (
+        <ul className="market-history-cards">
+          {preview.map((group, index) => <HistoryCard key={group.archived_at} group={group} version={history.length - index} onOpen={openDetail} />)}
+        </ul>
+      )}
+      {showAll && <AllHistoryModal lease={lease} history={history} onOpen={openDetail} onClose={() => setShowAll(false)} />}
+      {detail && (
+        <HistoryDetailModal
+          lease={lease}
+          group={detail.group}
+          version={detail.version}
+          payment={matchRenewalPayment(detail.group, payments)}
+          paymentNumber={payments.indexOf(matchRenewalPayment(detail.group, payments)) + 1}
+          onClose={() => setDetail(null)}
+        />
+      )}
+    </section>
+  )
 }
 
 function LeaseGallery({ lease, images, canUpload, onUploaded }) {
@@ -1366,59 +1665,179 @@ const VERIFY_LABELS = {
   test: { text: 'โหมดทดลอง', tone: 'warning' },
   counter: { text: 'รับเงินสด', tone: 'muted' },
 }
+const PAYMENT_PREVIEW_COUNT = 5
+const PAYMENT_TYPE_FILTERS = [
+  { key: 'all', label: 'ทั้งหมด' },
+  { key: 'initial', label: 'ชำระแรกเข้า' },
+  { key: 'renewal', label: 'ต่อสัญญา' },
+]
 
-function LeasePaymentSection({ payments }) {
-  const slips = useMemo(() => payments.filter((payment) => payment.slip_url).map((payment) => ({ id: payment.id, url: payment.slip_url })), [payments])
-  const urls = useMarketImageUrls(slips)
-  const [openUrl, setOpenUrl] = useState(null)
+const paymentTitle = (payment) => (payment.payment_type === 'initial' ? 'ชำระแรกเข้า' : `ต่อสัญญา ${payment.renew_months || ''} เดือน`.trim())
+const paymentBreakdown = (payment) => (payment.payment_type === 'initial'
+  ? `ค่าเช่า ฿${money(payment.rent_amount)} + มัดจำ ฿${money(payment.deposit_amount)}`
+  : payment.renew_plan_label || 'ค่าเช่าต่อสัญญา')
+
+function PaymentCard({ payment, number, onOpen }) {
+  const verify = VERIFY_LABELS[payment.verify_mode] || VERIFY_LABELS.counter
+  return (
+    <li>
+      <button type="button" className={`market-payment-card is-${payment.payment_type}`} onClick={() => onOpen(payment, number)}>
+        <span className="market-payment-card-icon"><Icon name={payment.method === 'counter' ? 'wallet' : 'coin'} size={20} /></span>
+        <span className="market-payment-card-main">
+          <span className="market-payment-card-title">
+            <strong>฿{money(payment.amount)}</strong>
+            <span className={`market-pill ${payment.payment_type === 'initial' ? 'is-info' : 'is-vacant'}`}>{paymentTitle(payment)}</span>
+          </span>
+          <small>{paymentBreakdown(payment)} · {payment.method_label}</small>
+          <span className="market-history-card-meta">
+            <span><Icon name="user" size={12} /> {payment.received_by_name}</span>
+            <span><Icon name="clock" size={12} /> {thaiDateTime(payment.paid_at)}</span>
+          </span>
+        </span>
+        <span className={`market-pill is-${verify.tone}`}>{verify.text}</span>
+        <span className="market-history-card-open is-payment">#{number} รายละเอียด <span aria-hidden="true">›</span></span>
+      </button>
+    </li>
+  )
+}
+
+function PaymentDetailModal({ lease, payment, number, onClose }) {
+  const slip = useMemo(() => (payment.slip_url ? [{ id: payment.id, url: payment.slip_url }] : []), [payment])
+  const urls = useMarketImageUrls(slip)
+  const [open, setOpen] = useState(false)
+  const verify = VERIFY_LABELS[payment.verify_mode] || VERIFY_LABELS.counter
+  const slipUrl = urls[payment.id]
+  return (
+    <MarketModal title={`การชำระเงิน #${number}`} subtitle={`${lease.contract_no} · ${lease.shop_name}`} icon="coin" size="lg" onClose={onClose}>
+      <div className={`market-payment-hero is-${payment.payment_type}`}>
+        <div>
+          <small>{paymentTitle(payment)}</small>
+          <strong>฿{money(payment.amount)}</strong>
+          <span>{paymentBreakdown(payment)}</span>
+        </div>
+        <span className={`market-pill is-${verify.tone}`}>{verify.text}</span>
+      </div>
+      <InfoGroup title="รายละเอียดการชำระ" icon="contract" items={[
+        { icon: payment.method === 'counter' ? 'wallet' : 'coin', label: 'วิธีชำระ', value: payment.method_label, tone: 'blue' },
+        { icon: 'user', label: 'รับเงินโดย', value: payment.received_by_name, tone: 'purple' },
+        { icon: 'clock', label: 'บันทึกเมื่อ', value: thaiDateTime(payment.paid_at), tone: 'orange' },
+        { icon: 'calendar', label: 'เวลาโอนในสลิป', value: payment.transferred_at ? thaiDateTime(payment.transferred_at) : '-', tone: 'teal' },
+        { icon: 'idcard', label: 'ผู้โอน', value: payment.payer_name || '-', tone: 'green' },
+        { icon: 'key', label: 'เลขอ้างอิง (Ref)', value: payment.trans_ref && payment.verify_mode === 'auto' ? payment.trans_ref : '-', tone: 'rose' },
+      ]} />
+      {payment.payment_type === 'initial' ? (
+        <div className="market-payment-split">
+          <span><small>ค่าเช่าเดือนแรก</small><strong>฿{money(payment.rent_amount)}</strong></span>
+          <b>+</b>
+          <span><small>เงินมัดจำ</small><strong>฿{money(payment.deposit_amount)}</strong></span>
+          <b>=</b>
+          <span className="is-total"><small>รวม</small><strong>฿{money(payment.amount)}</strong></span>
+        </div>
+      ) : (
+        <div className="market-payment-split">
+          <span><small>ต่อสัญญา</small><strong>{payment.renew_months || '-'} เดือน</strong></span>
+          <b>·</b>
+          <span><small>รูปแบบ</small><strong>{payment.renew_plan_label || '-'}</strong></span>
+          <b>=</b>
+          <span className="is-total"><small>ชำระ</small><strong>฿{money(payment.amount)}</strong></span>
+        </div>
+      )}
+      <section className="market-section">
+        <div className="market-section-head"><h4><span className="market-section-icon"><Icon name="image" size={15} /></span> สลิปการโอนเงิน</h4></div>
+        {payment.slip_url ? (
+          <button type="button" className="market-payment-slip-large" disabled={!slipUrl} onClick={() => setOpen(true)} aria-label="ดูสลิปเต็มจอ">
+            {slipUrl ? <img src={slipUrl} alt="สลิปการโอนเงิน" /> : <span className="market-gallery-loading" />}
+          </button>
+        ) : (
+          <div className="market-gallery-empty is-compact">
+            <Icon name="wallet" size={22} />
+            <strong>{payment.method === 'counter' ? 'รับเงินสดที่เคาน์เตอร์' : 'ไม่มีสลิปในระบบ'}</strong>
+            <span>{payment.method === 'counter' ? 'รายการนี้ไม่มีสลิปการโอน' : 'รายการนี้ไม่ได้แนบสลิป'}</span>
+          </div>
+        )}
+      </section>
+      {open && slipUrl && createPortal(
+        <div className="market-lightbox-layer" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <PhotoLightbox photos={[{ url: slipUrl }]} initialIndex={0} title={`สลิปการชำระเงิน #${number}`} subtitle={lease.contract_no} label="สลิป" onClose={() => setOpen(false)} />
+        </div>,
+        document.body,
+      )}
+    </MarketModal>
+  )
+}
+
+function AllPaymentsModal({ lease, items, onOpen, onClose }) {
+  const [search, setSearch] = useState('')
+  const [type, setType] = useState('all')
+  const term = search.trim().toLowerCase()
+  const visible = items.filter(({ payment, number }) => (type === 'all' || payment.payment_type === type)
+    && (!term || [`#${number}`, paymentTitle(payment), paymentBreakdown(payment), payment.method_label, payment.received_by_name, payment.payer_name, payment.trans_ref, thaiDateTime(payment.paid_at), money(payment.amount), String(payment.amount)]
+      .filter(Boolean).join(' ').toLowerCase().includes(term)))
+  const total = visible.reduce((sum, { payment }) => sum + payment.amount, 0)
+  return (
+    <MarketModal title="การชำระเงินทั้งหมด" subtitle={`${lease.contract_no} · ${items.length} รายการ`} icon="coin" size="xl" onClose={onClose}>
+      <div className="market-all-products">
+        <div className="market-product-tools">
+          <div className="market-search">
+            <Icon name="search" size={16} />
+            <input placeholder="ค้นหาจากยอดเงิน วิธีชำระ ผู้รับเงิน ผู้โอน เลขอ้างอิง หรือวันที่" value={search} onChange={(event) => setSearch(event.target.value)} autoFocus />
+            {search && <button type="button" className="market-search-clear" aria-label="ล้างคำค้นหา" onClick={() => setSearch('')}>×</button>}
+          </div>
+          <div className="market-chips" role="group" aria-label="ประเภทการชำระ">
+            {PAYMENT_TYPE_FILTERS.map((item) => (
+              <button key={item.key} type="button" className={`market-chip${type === item.key ? ' is-active' : ''}`} onClick={() => setType(item.key)}>
+                {item.label} <span>{item.key === 'all' ? items.length : items.filter(({ payment }) => payment.payment_type === item.key).length}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="market-result-count">แสดง {visible.length} จาก {items.length} รายการ · รวม ฿{money(total)}</p>
+        <ul className="market-history-cards is-all">
+          {visible.length === 0 && <li className="market-empty-line">ไม่พบรายการที่ตรงกับการค้นหา</li>}
+          {visible.map(({ payment, number }) => <PaymentCard key={payment.id} payment={payment} number={number} onOpen={onOpen} />)}
+        </ul>
+      </div>
+    </MarketModal>
+  )
+}
+
+function LeasePaymentSection({ lease, payments }) {
+  const [showAll, setShowAll] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const items = useMemo(() => payments.map((payment, index) => ({ payment, number: index + 1 })).reverse(), [payments])
+  const total = payments.reduce((sum, payment) => sum + payment.amount, 0)
+  const openDetail = (payment, number) => setDetail({ payment, number })
   return (
     <section className="market-section">
       <div className="market-section-head">
-        <h4><span className="market-section-icon"><Icon name="coin" size={15} /></span> การชำระเงิน</h4>
+        <h4><span className="market-section-icon"><Icon name="coin" size={15} /></span> การชำระเงิน <span className="market-count">{payments.length}</span></h4>
+        <div className="market-section-actions">
+          {payments.length > 0 && <small>รวม ฿{money(total)} · แสดงล่าสุด {Math.min(PAYMENT_PREVIEW_COUNT, payments.length)} รายการ</small>}
+          {payments.length > 0 && <button type="button" className="market-link-btn" onClick={() => setShowAll(true)}>ดูทั้งหมด ({payments.length}) <span aria-hidden="true">›</span></button>}
+        </div>
       </div>
       {payments.length === 0 ? (
         <p className="market-empty-line">สัญญานี้สร้างก่อนเปิดระบบชำระเงิน จึงไม่มีรายการชำระในระบบ</p>
       ) : (
-        <ul className="market-payment-list">
-          {payments.map((payment) => {
-            const verify = VERIFY_LABELS[payment.verify_mode] || VERIFY_LABELS.counter
-            return (
-              <li key={payment.id}>
-                {payment.slip_url && urls[payment.id] ? (
-                  <button type="button" className="market-payment-slip" onClick={() => setOpenUrl(urls[payment.id])} aria-label="ดูสลิป">
-                    <img src={urls[payment.id]} alt="" />
-                  </button>
-                ) : <span className="market-info-icon"><Icon name={payment.method === 'counter' ? 'wallet' : 'coin'} size={18} /></span>}
-                <div className="market-payment-list-main">
-                  <strong>฿{money(payment.amount)} <small>· {payment.payment_type === 'initial' ? 'ชำระแรกเข้า' : `ต่อสัญญา ${payment.renew_months} เดือน`}</small></strong>
-                  <small>{payment.payment_type === 'initial' ? `ค่าเช่า ฿${money(payment.rent_amount)} + มัดจำ ฿${money(payment.deposit_amount)}` : payment.renew_plan_label} · {payment.method_label}</small>
-                  <small>รับโดย {payment.received_by_name} · {thaiDateTime(payment.paid_at)}{payment.trans_ref && payment.verify_mode === 'auto' ? ` · Ref ${payment.trans_ref}` : ''}</small>
-                </div>
-                <span className={`market-pill is-${verify.tone}`}>{verify.text}</span>
-              </li>
-            )
-          })}
+        <ul className="market-history-cards is-payments">
+          {items.slice(0, PAYMENT_PREVIEW_COUNT).map(({ payment, number }) => <PaymentCard key={payment.id} payment={payment} number={number} onOpen={openDetail} />)}
         </ul>
       )}
-      {openUrl && createPortal(
-        <div className="market-lightbox-layer" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-          <PhotoLightbox photos={[{ url: openUrl }]} initialIndex={0} title="สลิปการชำระเงิน" label="สลิป" onClose={() => setOpenUrl(null)} />
-        </div>,
-        document.body,
-      )}
+      {showAll && <AllPaymentsModal lease={lease} items={items} onOpen={openDetail} onClose={() => setShowAll(false)} />}
+      {detail && <PaymentDetailModal lease={lease} payment={detail.payment} number={detail.number} onClose={() => setDetail(null)} />}
     </section>
   )
 }
 
 function LeaseDetailModal({ leaseId, onClose, onChanged }) {
-  const [state, setState] = useState({ loading: true, error: '', lease: null, apiKeys: [], images: [], payments: [], permissions: {} })
+  const [state, setState] = useState({ loading: true, error: '', lease: null, apiKeys: [], images: [], imageHistory: [], payments: [], permissions: {} })
   const [dialog, setDialog] = useState(null)
   const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API_BASE}/leases/${leaseId}`, { headers: authHeaders() })
-      setState({ loading: false, error: '', lease: data.lease, apiKeys: data.api_keys, images: data.images, payments: data.payments || [], permissions: data.permissions })
+      setState({ loading: false, error: '', lease: data.lease, apiKeys: data.api_keys, images: data.images, imageHistory: data.image_history || [], payments: data.payments || [], permissions: data.permissions })
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: errorMessage(error, 'โหลดสัญญาไม่สำเร็จ') }))
     }
@@ -1456,7 +1875,7 @@ function LeaseDetailModal({ leaseId, onClose, onChanged }) {
       ) : null}
     >
       {state.loading && <p className="market-empty-line">กำลังโหลด...</p>}
-      {notice && <p className="market-notice" role="status">{notice}</p>}
+      {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
       {lease && (
         <>
           <section className={`market-contract-hero is-${lease.status}`}>
@@ -1494,7 +1913,7 @@ function LeaseDetailModal({ leaseId, onClose, onChanged }) {
             </div>
           </section>
 
-          <LeasePaymentSection payments={state.payments} />
+          <LeasePaymentSection lease={lease} payments={state.payments} />
 
           {lease.status === 'terminated' && (
             <p className="market-terminated">ยกเลิกเมื่อ {thaiDateTime(lease.terminated_at)} โดย {lease.terminated_by_name} · เหตุผล: {lease.termination_reason}</p>
@@ -1516,6 +1935,9 @@ function LeaseDetailModal({ leaseId, onClose, onChanged }) {
               onUploaded={(images) => setState((current) => ({ ...current, images }))}
             />
           </div>
+          <div className="market-contract-history-wrap">
+            <LeaseImageHistory lease={lease} history={state.imageHistory} payments={state.payments} />
+          </div>
 
           <section className="market-section">
             <div className="market-section-head">
@@ -1531,7 +1953,7 @@ function LeaseDetailModal({ leaseId, onClose, onChanged }) {
           }} />
         </>
       )}
-      {dialog === 'renew' && <RenewModal lease={lease} onClose={closeDialog} />}
+      {dialog === 'renew' && <RenewModal lease={lease} currentImageCount={state.images.length} onClose={closeDialog} />}
       {dialog === 'terminate' && (
         <TerminateModal lease={lease} activeKeys={state.apiKeys.filter((key) => !key.revoked_at).length} onClose={closeDialog} />
       )}
@@ -1704,7 +2126,7 @@ function ShopDetailModal({ shopId, onClose, onChanged, onOpenLease, onCreateLeas
       ) : null}
     >
       {state.loading && <p className="market-empty-line">กำลังโหลด...</p>}
-      {notice && <p className="market-notice" role="status">{notice}</p>}
+      {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
       {shop && (
         <>
           <InfoGroup title="ข้อมูลร้านค้า" icon="shop" items={[
@@ -1713,7 +2135,7 @@ function ShopDetailModal({ shopId, onClose, onChanged, onOpenLease, onCreateLeas
             { icon: 'coin', label: 'ค่าเช่าตั้งต้น', value: `${money(shop.monthly_rent)} บาท/เดือน`, tone: 'blue' },
             { icon: 'clock', label: 'เวลาเปิด-ปิด', value: hours(shop), tone: 'orange' },
             { icon: 'user', label: 'พนักงานผู้ดูแล', value: shop.caretaker_name || 'ยังไม่กำหนด', tone: 'green' },
-            { icon: 'edit', label: 'สร้างโดย', value: shop.created_by_name, tone: 'purple' },
+            { icon: 'edit', label: shop.updated_by_name ? 'แก้ไขล่าสุดโดย' : 'สร้างโดย', value: shop.updated_by_name || shop.created_by_name, tone: 'purple' },
           ]} />
           {shop.description && <p className="market-terms">{shop.description}</p>}
 
@@ -2130,24 +2552,45 @@ function GuidePrintDocument({ base, nodeRef }) {
           ))}
         </tbody>
       </table>
-      <h2>4. ฟิลด์ของสินค้า</h2>
+      <h2>4. ฟิลด์ข้อมูลร้านที่แก้ไขได้ (PATCH /shop)</h2>
+      <p>ส่งเฉพาะฟิลด์ที่ต้องการเปลี่ยน ถ้าส่งฟิลด์อื่น เช่น location หรือ monthly_rent จะได้ 400 FIELD_NOT_ALLOWED</p>
+      <table>
+        <thead><tr><th>ฟิลด์</th><th>ชนิดข้อมูล</th><th>หมายเหตุ</th></tr></thead>
+        <tbody>{GUIDE_SHOP_FIELDS.map((item) => <tr key={item.name}><td><code>{item.name}</code></td><td>{item.type}</td><td>{item.note}</td></tr>)}</tbody>
+      </table>
+      <h2>5. ฟิลด์ของสินค้า</h2>
       <table>
         <thead><tr><th>ฟิลด์</th><th>ชนิดข้อมูล</th><th>หมายเหตุ</th></tr></thead>
         <tbody>{GUIDE_FIELDS.map((item) => <tr key={item.name}><td><code>{item.name}</code></td><td>{item.type}</td><td>{item.note}</td></tr>)}</tbody>
       </table>
-      <h2>5. ตัวอย่างการเรียกใช้งาน</h2>
+      <h2>6. ตัวอย่างการเรียกใช้งาน</h2>
+      <p>ทุกตัวอย่างใช้ cURL แทน &lt;API_KEY&gt; ด้วย key จริงของร้าน และแทน id สินค้าด้วยค่าที่ได้จาก GET /products</p>
       {guideExamples(base).map((example) => (
-        <div key={example.title} className="market-guide-print-example">
-          <h3>{example.title}</h3>
+        <div key={example.id} className="market-guide-print-example">
+          <h3><span className={`market-method is-${example.method.toLowerCase()}`}>{example.method}</span> {example.path} — {example.title}</h3>
+          <p className="market-guide-print-muted">{example.description}</p>
+          <small>Request</small>
           <pre><code>{example.code}</code></pre>
+          <small>Response</small>
+          <pre><code>{example.response}</code></pre>
         </div>
       ))}
-      <h2>6. รหัสข้อผิดพลาด</h2>
+      <h3>ตัวอย่างโค้ดเรียกใช้งาน</h3>
+      {guideClientSamples(base).map((sample) => (
+        <div key={sample.id} className="market-guide-print-example">
+          <small>{sample.title}</small>
+          <pre><code>{sample.code}</code></pre>
+        </div>
+      ))}
+      <h2>7. รหัสข้อผิดพลาด</h2>
       <p>เมื่อเกิดข้อผิดพลาด API จะตอบกลับเป็น JSON รูปแบบ {'{ "code": "...", "message": "..." }'}</p>
       <table>
         <thead><tr><th>รหัส</th><th>ความหมาย</th></tr></thead>
         <tbody>{GUIDE_ERRORS.map(([code, meaning]) => <tr key={code}><td><code>{code}</code></td><td>{meaning}</td></tr>)}</tbody>
       </table>
+      <h2>8. Prompt สำหรับให้ AI ใช้งาน API</h2>
+      <p>คัดลอกข้อความด้านล่างไปใส่เป็น system prompt หรือคำสั่งเริ่มต้นของ AI (เช่น ChatGPT, Claude หรือ agent ของคุณ) แล้วให้ AI เรียก API แทนคุณ อย่าใส่ API key จริงลงใน prompt ให้เก็บไว้ในตัวแปรของระบบ</p>
+      <pre><code>{guideAiPrompt(base)}</code></pre>
     </div>,
     document.body,
   )
@@ -2203,12 +2646,106 @@ function GuideDownloads({ base }) {
   )
 }
 
+function CopyButton({ value, label = 'คัดลอก' }) {
+  const [state, setState] = useState('')
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setState('คัดลอกแล้ว')
+    } catch {
+      setState('คัดลอกไม่สำเร็จ')
+    }
+    setTimeout(() => setState(''), 1600)
+  }
+  return (
+    <button type="button" className={`market-copy-btn${state === 'คัดลอกแล้ว' ? ' is-done' : ''}`} onClick={copy}>
+      <Icon name={state === 'คัดลอกแล้ว' ? 'check' : 'copy'} size={13} /> {state || label}
+    </button>
+  )
+}
+
+function ApiExamplesSection({ base }) {
+  const examples = useMemo(() => guideExamples(base), [base])
+  const samples = useMemo(() => guideClientSamples(base), [base])
+  const [activeId, setActiveId] = useState(examples[0].id)
+  const [sampleId, setSampleId] = useState(samples[0].id)
+  const active = examples.find((example) => example.id === activeId) || examples[0]
+  const sample = samples.find((item) => item.id === sampleId) || samples[0]
+  return (
+    <section className="market-section market-api-example">
+      <div className="market-endpoints-head">
+        <div><h4><Icon name="code" size={18} /> ตัวอย่างการเรียกใช้งาน</h4><p>เลือก endpoint เพื่อดูคำสั่งที่ส่งและผลลัพธ์ที่จะได้รับ</p></div>
+        <span className="market-endpoints-count">{examples.length} ตัวอย่าง</span>
+      </div>
+      <div className="market-example-browser">
+        <ul className="market-example-list" role="tablist" aria-label="ตัวอย่าง endpoint">
+          {examples.map((example) => (
+            <li key={example.id}>
+              <button type="button" role="tab" aria-selected={example.id === active.id} className={example.id === active.id ? 'is-active' : ''} onClick={() => setActiveId(example.id)}>
+                <span className={`market-method is-${example.method.toLowerCase()}`}>{example.method}</span>
+                <span><strong>{example.title}</strong><small>{example.path}</small></span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="market-example-detail">
+          <p className="market-example-desc">{active.description}</p>
+          <div className="market-api-terminal">
+            <div className="market-api-terminal-head">
+              <span className={`market-method is-${active.method.toLowerCase()}`}>{active.method}</span>
+              <span>{active.path}</span>
+              <small>Request</small>
+              <CopyButton value={active.code} />
+            </div>
+            <pre className="market-code"><code>{active.code}</code></pre>
+          </div>
+          <div className="market-api-terminal is-response">
+            <div className="market-api-terminal-head">
+              <span className={`market-status-badge${active.id === 'error' ? ' is-error' : ''}`}>{active.id === 'error' ? '403' : active.method === 'POST' ? '201' : '200'}</span>
+              <span>application/json</span>
+              <small>Response</small>
+            </div>
+            <pre className="market-code"><code>{active.response}</code></pre>
+          </div>
+        </div>
+      </div>
+      <div className="market-client-samples">
+        <div className="market-client-tabs" role="tablist" aria-label="ภาษาโปรแกรม">
+          {samples.map((item) => (
+            <button key={item.id} type="button" role="tab" aria-selected={item.id === sample.id} className={item.id === sample.id ? 'is-active' : ''} onClick={() => setSampleId(item.id)}>{item.title}</button>
+          ))}
+          <CopyButton value={sample.code} />
+        </div>
+        <pre className="market-code"><code>{sample.code}</code></pre>
+      </div>
+      <p className="market-api-example-note">แทน &lt;API_KEY&gt; ด้วย key จริงของร้าน (แนะนำให้เก็บในตัวแปรสภาพแวดล้อม MARKET_API_KEY) และแทน id สินค้าด้วยค่าที่ได้จาก GET /products</p>
+    </section>
+  )
+}
+
+function ApiAiPromptSection({ base }) {
+  const prompt = useMemo(() => guideAiPrompt(base), [base])
+  return (
+    <section className="market-section market-api-prompt">
+      <div className="market-endpoints-head">
+        <div>
+          <h4><Icon name="user" size={18} /> Prompt สำหรับให้ AI ใช้งาน API</h4>
+          <p>คัดลอกไปใส่เป็น system prompt ของ AI หรือ agent แล้วให้ AI เรียก API จัดการร้านแทนคุณ</p>
+        </div>
+        <CopyButton value={prompt} label="คัดลอก Prompt" />
+      </div>
+      <ol className="market-prompt-steps">
+        <li>คัดลอก Prompt ด้านล่างไปตั้งเป็นคำสั่งเริ่มต้นของ AI</li>
+        <li>เก็บ API key ไว้ในตัวแปรของระบบหรือ tool ของ AI อย่าวาง key จริงลงในแชต</li>
+        <li>สั่งงานเป็นภาษาธรรมดา เช่น "ลดราคากาแฟทุกเมนู 5 บาท" หรือ "สินค้าตัวไหนใกล้หมด"</li>
+      </ol>
+      <pre className="market-code market-prompt-box"><code>{prompt}</code></pre>
+    </section>
+  )
+}
+
 function ApiGuideSection() {
   const base = `${API_ORIGIN}${MARKET_TENANT_API_PREFIX}`
-  const example = `curl -X PATCH "${base}/products/12" \\
-  -H "X-Market-Api-Key: shk_xxxxxxxxxx_xxxxxxxx..." \\
-  -H "Content-Type: application/json" \\
-  -d '{"price": 25, "stock": 40, "is_available": true}'`
   return (
     <div className="market-scroll market-api-guide">
       <section className="market-section market-api-connect">
@@ -2244,7 +2781,7 @@ function ApiGuideSection() {
         <div className="market-endpoint-groups">
           {[
             { access: 'อ่าน', title: 'เรียกดูข้อมูล', description: 'ข้อมูลร้าน สัญญาเช่า และสินค้า', icon: 'shop' },
-            { access: 'แก้ไข', title: 'จัดการสินค้า', description: 'เพิ่ม แก้ไข และลบสินค้าในร้านที่เช่า', icon: 'edit' },
+            { access: 'แก้ไข', title: 'แก้ไขข้อมูล', description: 'เปลี่ยนชื่อ/ประเภทร้าน และเพิ่ม แก้ไข ลบสินค้าในร้านที่เช่า', icon: 'edit' },
           ].map((group) => (
             <section className="market-endpoint-group" key={group.access} aria-label={group.title}>
               <div className="market-endpoint-group-head">
@@ -2266,17 +2803,8 @@ function ApiGuideSection() {
           ))}
         </div>
       </section>
-      <section className="market-section market-api-example">
-        <div className="market-endpoints-head">
-          <div><h4><Icon name="code" size={18} /> ตัวอย่างการเรียกใช้งาน</h4><p>อัปเดตราคา จำนวนคงเหลือ และสถานะพร้อมขายของสินค้า</p></div>
-          <span className="market-endpoints-count">cURL</span>
-        </div>
-        <div className="market-api-terminal">
-          <div className="market-api-terminal-head"><span className="market-method is-patch">PATCH</span><span>/products/12</span><small>Request</small></div>
-          <pre className="market-code"><code>{example}</code></pre>
-        </div>
-        <p className="market-api-example-note">แทนที่ API key และรหัสสินค้า 12 ด้วยข้อมูลของร้านคุณก่อนเรียกใช้งาน</p>
-      </section>
+      <ApiExamplesSection base={base} />
+      <ApiAiPromptSection base={base} />
       <section className="market-section market-api-error-section">
         <div className="market-endpoints-head">
           <div><h4><Icon name="code" size={18} /> รหัสข้อผิดพลาด</h4><p>ตรวจสอบ HTTP status และรหัสที่ได้รับ เพื่อหาสาเหตุของคำขอที่ไม่สำเร็จ</p></div>
@@ -2316,12 +2844,6 @@ export default function MarketManager({ onSummary }) {
     load()
   }, [load, refreshKey])
 
-  useEffect(() => {
-    if (!notice) return undefined
-    const timer = setTimeout(() => setNotice(''), 3500)
-    return () => clearTimeout(timer)
-  }, [notice])
-
   const refresh = (message) => {
     if (typeof message === 'string') setNotice(message)
     setRefreshKey((value) => value + 1)
@@ -2348,7 +2870,7 @@ export default function MarketManager({ onSummary }) {
         </nav>
       </header>
 
-      {notice && <p className="market-notice" role="status">{notice}</p>}
+      {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
       {state.loading && !data && <p className="market-empty">กำลังโหลด...</p>}
 
@@ -2365,7 +2887,7 @@ export default function MarketManager({ onSummary }) {
         />
       )}
       {modal?.type === 'renew' && (
-        <RenewModal lease={modal.lease} onClose={(message) => {
+        <RenewModal lease={modal.lease} currentImageCount={modal.lease.images?.length || 0} onClose={(message) => {
           setModal(null)
           if (message) refresh(message)
         }} />

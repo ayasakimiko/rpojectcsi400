@@ -1274,16 +1274,19 @@ const TABS = [
 
 const TAB_GROUPS = [
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
-  { key: 'contracts', label: 'สัญญาที่เสร็จสมบูรณ์', tabs: ['completed-contracts'] },
+  { key: 'contracts', label: 'สัญญาและตรวจห้อง', tabs: ['completed-contracts', 'move-in-inspections', 'move-out-inspections'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
-  { key: 'inspections', label: 'ตรวจสภาพห้อง', tabs: ['move-in-inspections', 'move-out-inspections'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
-  { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
-  { key: 'cameras', label: 'กล้องวงจรปิด', tabs: ['cameras'] },
-  { key: 'staff', label: 'พนักงาน', tabs: ['staff'] },
-  { key: 'finance', label: 'รายจ่าย', tabs: ['expenses'] },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
+  { key: 'management', label: 'จัดการหอพัก', tabs: ['staff', 'expenses', 'cameras'] },
 ]
+const SUMMARY_GROUP_OF = {
+  rooms: 'residents', wifi: 'residents', customers: 'residents', moveouts: 'residents', 'waiting-list': 'residents',
+  'completed-contracts': 'contracts', 'move-in-inspections': 'inspections', 'move-out-inspections': 'inspections',
+  requests: 'services', maintenance: 'services', 'vehicle-requests': 'services', safety: 'services',
+  parcels: 'parcels', announcements: 'announcements', market: 'market', cameras: 'cameras', staff: 'staff', expenses: 'finance',
+}
 const formatRoomSize = (value) => `${Number(value).toLocaleString('th-TH', { maximumFractionDigits: 2 })} ตร.ม.`
 
 const isCustomerMovedOut = (customer) =>
@@ -7452,7 +7455,7 @@ function AdminBackupPage() {
       },
     ],
   }
-  const activeSummaryTiles = summaryByGroup[TAB_GROUP_OF[activeTab]] || summaryByGroup.residents
+  const activeSummaryTiles = summaryByGroup[SUMMARY_GROUP_OF[activeTab]] || summaryByGroup.residents
 
   const inspectionKindCounts = moveOutInspections.reduce((counts, inspection) => {
     const kind = inspectionKindOf(inspection)

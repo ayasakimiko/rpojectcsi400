@@ -40,7 +40,7 @@ const SQL = {
       caretaker_staff_id, caretaker_name, created_by_role, created_by_name)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   updateShop: `UPDATE Shop SET code = ?, name = ?, shop_type = ?, location = ?, area_sqm = ?, monthly_rent = ?, open_time = ?,
-      close_time = ?, description = ?, caretaker_staff_id = ?, caretaker_name = ?
+      close_time = ?, description = ?, caretaker_staff_id = ?, caretaker_name = ?, updated_by_name = ?
     WHERE id = ?`,
   currentLeaseOfShop: "SELECT id FROM ShopLease WHERE shop_id = ? AND status = 'active' AND end_date >= CURDATE() LIMIT 1",
   closeShop: "UPDATE Shop SET is_active = FALSE WHERE id = ?",
@@ -67,10 +67,18 @@ const SQL = {
   apiKeyLease: "SELECT lease_id FROM ShopApiKey WHERE id = ?",
   revokeKey: "UPDATE ShopApiKey SET revoked_at = NOW(), revoked_by_name = ? WHERE id = ? AND revoked_at IS NULL",
   insertImages: "INSERT INTO ShopLeaseImage (lease_id, name, file_name, uploaded_by_name) VALUES ?",
-  leaseImages: "SELECT id, name, uploaded_by_name, created_at FROM ShopLeaseImage WHERE lease_id = ? ORDER BY id",
-  leaseImageCount: "SELECT COUNT(*) AS count FROM ShopLeaseImage WHERE lease_id = ?",
+  leaseImages: "SELECT id, name, uploaded_by_name, created_at FROM ShopLeaseImage WHERE lease_id = ? AND archived_at IS NULL ORDER BY id",
+  archivedLeaseImages: `SELECT id, name, uploaded_by_name, created_at, archived_at, archive_note, archived_by_name,
+      DATE_FORMAT(archived_prev_start, '%Y-%m-%d') AS prev_start, DATE_FORMAT(archived_prev_end, '%Y-%m-%d') AS prev_end,
+      DATE_FORMAT(archived_new_end, '%Y-%m-%d') AS new_end, archived_months
+    FROM ShopLeaseImage WHERE lease_id = ? AND archived_at IS NOT NULL ORDER BY archived_at DESC, id`,
+  archiveLeaseImages: `UPDATE ShopLeaseImage SET archived_at = NOW(), archive_note = ?, archived_by_name = ?,
+      archived_prev_start = ?, archived_prev_end = ?, archived_new_end = ?, archived_months = ?
+    WHERE lease_id = ? AND archived_at IS NULL`,
+  leaseImageCount: "SELECT COUNT(*) AS count FROM ShopLeaseImage WHERE lease_id = ? AND archived_at IS NULL",
   leaseImageFile: "SELECT file_name FROM ShopLeaseImage WHERE id = ?",
-  allLeaseImages: "SELECT id, lease_id FROM ShopLeaseImage ORDER BY lease_id, id",
+  allLeaseImages: "SELECT id, lease_id FROM ShopLeaseImage WHERE archived_at IS NULL ORDER BY lease_id, id",
+  apiKeyForRotate: "SELECT id, lease_id, label, revoked_at FROM ShopApiKey WHERE id = ?",
   insertPayment: `INSERT INTO ShopLeasePayment (lease_id, payment_type, amount, rent_amount, deposit_amount, method, verify_mode, slip_file,
       qr_payload, trans_ref, payer_name, transferred_at, received_by_name)
     VALUES (?, 'initial', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -84,6 +92,30 @@ const SQL = {
   renewLease: "UPDATE ShopLease SET end_date = DATE_ADD(end_date, INTERVAL ? MONTH) WHERE id = ? AND status = 'active'",
   renewPreview: "SELECT DATE_FORMAT(DATE_ADD(end_date, INTERVAL ? MONTH), '%Y-%m-%d') AS new_end FROM ShopLease WHERE id = ?",
 };
+
+async function loadImageHistory(db, leaseId) {
+  const [rows] = await db.query(SQL.archivedLeaseImages, [leaseId]);
+  const groups = new Map();
+  for (const row of rows) {
+    const key = new Date(row.archived_at).toISOString();
+    if (!groups.has(key)) {
+      groups.set(key, {
+        archived_at: row.archived_at,
+        note: row.archive_note,
+        archived_by_name: row.archived_by_name,
+        prev_start: row.prev_start,
+        prev_end: row.prev_end,
+        new_end: row.new_end,
+        months: row.archived_months,
+        images: [],
+      });
+    }
+    groups.get(key).images.push({
+      id: row.id, name: row.name, created_at: row.created_at, uploaded_by_name: row.uploaded_by_name, url: "/api/market/lease-images/" + row.id,
+    });
+  }
+  return [...groups.values()];
+}
 
 async function loadLeaseImages(db, leaseId) {
   const [rows] = await db.query(SQL.leaseImages, [leaseId]);
@@ -214,7 +246,7 @@ router.put("/shops/:id", canManageShops, async (req, res) => {
   const input = validateShopInput(req.body);
   const caretaker = await resolveCaretaker(req, input.caretaker_staff_id);
   try {
-    await db.query(SQL.updateShop, [...shopValues(input, caretaker), shopId]);
+    await db.query(SQL.updateShop, [...shopValues(input, caretaker), req.actor.name, shopId]);
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") throw fail("รหัสร้านนี้ถูกใช้แล้ว", 409, "CONFLICT");
     throw error;
@@ -277,6 +309,7 @@ router.get("/leases/:id", async (req, res) => {
     lease: await loadLease(db, leaseId),
     api_keys: await loadApiKeys(db, leaseId),
     images: await loadLeaseImages(db, leaseId),
+    image_history: await loadImageHistory(db, leaseId),
     payments: (await db.query(SQL.leasePayments, [leaseId]))[0].map((payment) => ({
       ...payment,
       amount: Number(payment.amount),
@@ -387,7 +420,7 @@ router.post("/leases", canOperateMarket, parseLeaseImages({ min: LEASE_MIN_IMAGE
 
 const RENEW_PLANS = { monthly: "จ่ายรายเดือน", lump_sum: "จ่ายล่วงหน้าทั้งก้อน" };
 
-router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: 0, slip: true }), async (req, res) => {
+router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: LEASE_MIN_IMAGES, slip: true }), async (req, res) => {
   const db = getPool();
   const slipFile = req.paymentSlip;
   const uploaded = [...req.leaseImages.map((image) => image.file_name), ...(slipFile ? [slipFile.filename] : [])];
@@ -397,8 +430,9 @@ router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: 0, sl
   let amount;
   let newEnd;
   let payment;
+  let previousEnd;
+  let previousStart;
   try {
-    if (req.leaseImages.length > 0) throw fail("การต่อสัญญาไม่รับรูปสัญญา");
     leaseId = parseId(req.params.id);
     months = Number(req.body?.months);
     plan = req.body?.renew_plan;
@@ -406,6 +440,8 @@ router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: 0, sl
     if (!Object.hasOwn(RENEW_PLANS, plan)) throw fail("กรุณาเลือกรูปแบบการชำระเงิน");
     const lease = await loadLease(db, leaseId);
     if (lease.status === "terminated") throw fail("สัญญานี้ถูกยกเลิกแล้ว ต่อสัญญาไม่ได้", 409, "CONFLICT");
+    previousEnd = lease.end_date;
+    previousStart = lease.start_date;
     [[{ new_end: newEnd }]] = await db.query(SQL.renewPreview, [months, leaseId]);
     const [[overlap]] = await db.query(SQL.extendOverlap, [lease.shop_id, leaseId, newEnd, lease.end_date]);
     if (overlap) throw fail(`ต่อสัญญาไม่ได้ เพราะซ้อนกับสัญญา ${overlap.contract_no}`, 409, "CONFLICT");
@@ -428,6 +464,11 @@ router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: 0, sl
     await connection.beginTransaction();
     const [result] = await connection.query(SQL.renewLease, [months, leaseId]);
     if (result.affectedRows === 0) throw fail("สถานะสัญญาเปลี่ยนแปลง กรุณาโหลดใหม่", 409, "CONFLICT");
+    await connection.query(SQL.archiveLeaseImages, [
+      `รูปสัญญาก่อนต่อสัญญา ${months} เดือน (เดิมสิ้นสุด ${previousEnd} → ใหม่ ${newEnd})`, req.actor.name,
+      previousStart, previousEnd, newEnd, months, leaseId,
+    ]);
+    await connection.query(SQL.insertImages, [imageRows(leaseId, req.leaseImages, req.actor.name)]);
     await connection.query(SQL.insertRenewPayment, [
       leaseId, amount, amount, months, plan, payment.method, payment.verifyMode,
       payment.method === "counter" ? null : slipFile?.filename ?? null, payment.qrPayload, payment.transRef, payment.payerName,
@@ -485,6 +526,30 @@ router.get("/api-keys/:id/reveal", canOperateMarket, async (req, res) => {
   if (hashApiKey(key) !== row.key_hash) throw fail("ข้อมูล key ไม่ตรงกัน กรุณาออก key ใหม่ให้ผู้เช่า", 409, "CONFLICT");
   res.setHeader("Cache-Control", "no-store");
   res.json({ api_key: key, revoked: Boolean(row.revoked_at) });
+});
+
+router.post("/api-keys/:id/rotate", canOperateMarket, async (req, res) => {
+  const db = getPool();
+  const [[oldKey]] = await db.query(SQL.apiKeyForRotate, [parseId(req.params.id)]);
+  if (!oldKey) throw fail("ไม่พบ API key นี้", 404, "NOT_FOUND");
+  if (oldKey.revoked_at) throw fail("key นี้ถูกยกเลิกไปแล้ว", 409, "CONFLICT");
+  const lease = await loadLease(db, oldKey.lease_id);
+  if (lease.status === "terminated" || lease.status === "expired") throw fail("สัญญานี้สิ้นสุดแล้ว ออก API key ไม่ได้", 409, "CONFLICT");
+  const { key, prefix, hash, cipher } = generateApiKey();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [revoked] = await connection.query(SQL.revokeKey, [req.actor.name, oldKey.id]);
+    if (revoked.affectedRows === 0) throw fail("key นี้ถูกยกเลิกไปแล้ว", 409, "CONFLICT");
+    await connection.query(SQL.insertApiKey, [oldKey.lease_id, oldKey.label, prefix, hash, cipher, req.actor.name]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  res.status(201).json({ message: "ออก key ใหม่แทนเรียบร้อยแล้ว key เดิมถูกยกเลิก", api_key: key, api_keys: await loadApiKeys(db, oldKey.lease_id) });
 });
 
 router.post("/api-keys/:id/revoke", canOperateMarket, async (req, res) => {

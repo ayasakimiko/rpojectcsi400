@@ -1783,6 +1783,18 @@ const OWNER_TABS = [
   { key: 'dorm-info', label: 'ตั้งแค่ากฎและการจ่ายเงิน' },
 ]
 
+const OWNER_TAB_GROUPS = [
+  { key: 'overview', label: 'ห้องพักและสิ่งอำนวยความสะดวก', tabs: ['rooms', 'parking', 'wifi'] },
+  { key: 'money', label: 'การเงินและสัญญา', tabs: ['finance', 'utilities', 'completed-contracts'] },
+  { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
+  { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
+  { key: 'people', label: 'พนักงาน', tabs: ['staff'] },
+  { key: 'security', label: 'ความปลอดภัย', tabs: ['safety', 'cameras'] },
+  { key: 'system', label: 'ระบบและตั้งค่า', tabs: ['audit', 'dorm-info'] },
+]
+const OWNER_TAB_LABEL = Object.fromEntries(OWNER_TABS.map((tab) => [tab.key, tab.label]))
+const OWNER_GROUP_OF = Object.fromEntries(OWNER_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab, group.key])))
+
 const AUDIT_RESOURCES = [
   ['move-out-inspections', 'ผลตรวจห้องย้ายออก'],
   ['move-in-inspections', 'ผลตรวจห้องก่อนเข้าพัก'],
@@ -2293,6 +2305,7 @@ function getNeededDataGroups(tab, roomsSection) {
 function OwnerMain() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('rooms')
+  const [lastOwnerTabByGroup, setLastOwnerTabByGroup] = useState({})
   const [marketSummary, setMarketSummary] = useState(null)
   const [financeSection, setFinanceSection] = useState('overview')
   const [paymentLogDetail, setPaymentLogDetail] = useState(null)
@@ -3718,20 +3731,46 @@ function OwnerMain() {
         )}
 
         <RoleTabMenu
-          tabs={OWNER_TABS}
-          activeKey={activeTab}
+          tabs={OWNER_TAB_GROUPS}
+          activeKey={OWNER_GROUP_OF[activeTab]}
+          activeLabel={OWNER_TAB_LABEL[activeTab]}
           onSelect={(key) => {
+            if (OWNER_GROUP_OF[activeTab] === key) return
             if (viewingExpenses) markExpensesSeen()
-            setActiveTab(key)
+            const group = OWNER_TAB_GROUPS.find((item) => item.key === key)
+            setActiveTab(lastOwnerTabByGroup[key] || group.tabs[0])
           }}
           listClassName="owner-tabs"
           linkClassName="owner-tab-link"
           logoutClassName="owner-logout-btn"
           onLogout={handleLogout}
-          renderBadge={(key) => key === 'finance' && financeBadgeCount > 0 && (
+          renderBadge={(key) => key === 'money' && financeBadgeCount > 0 && (
             <span className="owner-subtab-count" aria-label={`${financeBadgeCount} รายการรอตรวจ`}>{financeBadgeCount}</span>
           )}
         />
+        {OWNER_TAB_GROUPS.filter((group) => group.tabs.length > 1 && group.key === OWNER_GROUP_OF[activeTab]).map((group) => (
+          <div key={group.key} className="owner-group-subtabs">
+            <ul className="nav staff-subtabs owner-subtabs" aria-label={group.label}>
+              {group.tabs.map((key) => (
+                <li className="nav-item" key={key}>
+                  <button
+                    type="button"
+                    className={`nav-link staff-subtab-link${activeTab === key ? ' active' : ''}`}
+                    aria-pressed={activeTab === key}
+                    onClick={() => {
+                      if (viewingExpenses && key !== 'finance') markExpensesSeen()
+                      setActiveTab(key)
+                      setLastOwnerTabByGroup((current) => ({ ...current, [group.key]: key }))
+                    }}
+                  >
+                    {OWNER_TAB_LABEL[key]}
+                    {key === 'finance' && financeBadgeCount > 0 && <span className="owner-subtab-count">{financeBadgeCount}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
 
         {(activeTab === 'rooms' || activeTab === 'finance' || activeTab === 'utilities') && (
           <div className="owner-section-toolbar">
