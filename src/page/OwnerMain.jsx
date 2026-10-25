@@ -290,6 +290,8 @@ function OwnerPaymentSettings({ onPreviewChange }) {
   const changed = draft && Object.keys(EMPTY).some((field) => draft[field] !== saved?.[field])
   const qrMatchesDraft = qrPreviewId && qrPreviewId === draft?.promptpay_id
   const qrIsSaved = qrPreviewId && qrPreviewId === saved?.promptpay_id && !changed
+  const shown = draft?.test_mode ? { ...draft, ...DEMO_PAYMENT_CHANNELS } : draft
+  const previewId = draft?.test_mode ? DEMO_PAYMENT_CHANNELS.promptpay_id : qrMatchesDraft ? qrPreviewId : ''
   useEffect(() => {
     if (draft) onPreviewChange?.({ settings: draft, changed: Boolean(changed) })
   }, [draft, changed, onPreviewChange])
@@ -424,24 +426,28 @@ function OwnerPaymentSettings({ onPreviewChange }) {
               <div className="owner-pp-row">
                 <div className="dorm-settings-field">
                   <label htmlFor={`${id}-promptpay`}>หมายเลข PromptPay</label>
-                  <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={draft.promptpay_id} onChange={change} disabled={draft.test_mode} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก" />
-                  {qrError ? <small className="owner-pp-error">{qrError}</small> : <small className="dorm-settings-hint">ใส่เฉพาะตัวเลข แล้วกดสร้าง QR Code เพื่อตรวจสอบก่อนบันทึก</small>}
+                  <input id={`${id}-promptpay`} name="promptpay_id" type="text" inputMode="numeric" maxLength={13} value={shown.promptpay_id} onChange={change} disabled={draft.test_mode} placeholder="เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก" />
+                  {draft.test_mode
+                    ? <small className="dorm-settings-hint">โหมดทดลองใช้เลขจำลองให้อัตโนมัติ ปิดโหมดทดลองเพื่อกลับไปใช้เลขจริง</small>
+                    : qrError ? <small className="owner-pp-error">{qrError}</small> : <small className="dorm-settings-hint">ใส่เฉพาะตัวเลข แล้วกดสร้าง QR Code เพื่อตรวจสอบก่อนบันทึก</small>}
                 </div>
                 <button type="button" className="dorm-settings-btn is-ghost owner-pp-generate" onClick={generateQr} disabled={!draft.promptpay_id || draft.test_mode}>
                   สร้าง QR Code
                 </button>
               </div>
-              <div className={`owner-pp-preview${qrMatchesDraft ? '' : ' is-empty'}`}>
-                {qrMatchesDraft ? (
+              <div className={`owner-pp-preview${previewId ? '' : ' is-empty'}`}>
+                {previewId ? (
                   <>
-                    <PromptPayQr promptPayId={qrPreviewId} size={168} className="owner-pp-qr" />
+                    <PromptPayQr promptPayId={previewId} size={168} className="owner-pp-qr" />
                     <div className="owner-pp-preview-text">
                       <span className="owner-pp-badge">PromptPay</span>
-                      <strong>{formatPromptPayId(qrPreviewId)}</strong>
+                      <strong>{formatPromptPayId(previewId)}</strong>
                       <small>
-                        {qrIsSaved
-                          ? 'QR นี้กำลังใช้งานในหน้าชำระเงินของผู้เช่า (ใส่ยอดเงินให้อัตโนมัติ)'
-                          : 'ตัวอย่าง QR — กดบันทึกข้อมูลรับโอนเพื่อให้ผู้เช่าใช้ QR นี้'}
+                        {draft.test_mode
+                          ? 'QR ทดลอง ใช้โอนเงินจริงไม่ได้ ผู้เช่าจะเห็น QR นี้ระหว่างเปิดโหมดทดลอง'
+                          : qrIsSaved
+                            ? 'QR นี้กำลังใช้งานในหน้าชำระเงินของผู้เช่า (ใส่ยอดเงินให้อัตโนมัติ)'
+                            : 'ตัวอย่าง QR — กดบันทึกข้อมูลรับโอนเพื่อให้ผู้เช่าใช้ QR นี้'}
                       </small>
                     </div>
                   </>
@@ -462,11 +468,11 @@ function OwnerPaymentSettings({ onPreviewChange }) {
               <div className="dorm-settings-row">
                 <div className="dorm-settings-field">
                   <label htmlFor={`${id}-bank`}>ชื่อธนาคาร</label>
-                  <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={draft.bank_name} onChange={change} disabled={draft.test_mode} placeholder="เช่น กสิกรไทย" />
+                  <input id={`${id}-bank`} name="bank_name" type="text" maxLength={100} value={shown.bank_name} onChange={change} disabled={draft.test_mode} placeholder="เช่น กสิกรไทย" />
                 </div>
                 <div className="dorm-settings-field">
                   <label htmlFor={`${id}-account`}>เลขบัญชี</label>
-                  <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={draft.bank_account_no} onChange={change} disabled={draft.test_mode} placeholder="เช่น 123-4-56789-0" />
+                  <input id={`${id}-account`} name="bank_account_no" type="text" inputMode="numeric" maxLength={50} value={shown.bank_account_no} onChange={change} disabled={draft.test_mode} placeholder="เช่น 123-4-56789-0" />
                 </div>
               </div>
             </div>
