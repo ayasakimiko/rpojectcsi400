@@ -583,7 +583,7 @@ function MiIcon({ type }) {
   )
 }
 
-export default function MoveInInspectionPanel({ Modal, FilterPanel }) {
+export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
   const [inspections, setInspections] = useState([])
   const [candidates, setCandidates] = useState([])
   const [loading, setLoading] = useState(true)
@@ -689,6 +689,7 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel }) {
 
   return (
     <div className="staff-card staff-tab-card move-in-card">
+      {subtabs}
       <div className="staff-card-header">
         <div>
           <h2>

@@ -751,8 +751,8 @@ const CHECKLIST_RESULT_OPTIONS = [
 ]
 const INSPECTION_MAX_PHOTOS = 15
 const INSPECTION_PAGES = [
-  { key: 'move-in', label: 'ตรวจก่อนเข้าอยู่' },
-  { key: 'results', label: 'ผลตรวจห้อง' },
+  { key: 'move-in', label: 'ตรวจก่อนเข้าอยู่', icon: <><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4.5V3h6v1.5" /><path d="m9 13 2 2 4-4" /></> },
+  { key: 'results', label: 'ผลตรวจห้อง', icon: <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /><path d="M10 12h5M10 16h5" /></> },
 ]
 const STAFF_INSPECTION_STATUS_LABEL = {
   pending: 'รอ Admin ตรวจ',
@@ -7585,6 +7585,7 @@ function StaffMain() {
   const [inspectionSubmitting, setInspectionSubmitting] = useState(false)
   const [inspectionAssetsOpen, setInspectionAssetsOpen] = useState(true)
   const [inspectionPage, setInspectionPage] = useState('move-in')
+  const [inspectionTabFrom, setInspectionTabFrom] = useState(0)
   const liveMoveInBaseline = useMoveInBaseline(inspectionModal && !inspectionEditing ? inspectionForm.room_number : null)
   const inspectionBaseline = inspectionEditing
     ? { loading: false, baseline: inspectionEditing.move_in_baseline ?? null, error: '' }
@@ -9833,6 +9834,35 @@ function StaffMain() {
     .map((group) => ({ ...group, tabs: group.tabs.filter((key) => key !== 'cameras' || staffUser?.role === 'Staff') }))
     .filter((group) => group.tabs.length > 0)
   const staffGroupOf = (tab) => staffTabGroups.find((group) => group.tabs.includes(tab))?.key
+  const inspectionTabIndex = Math.max(0, INSPECTION_PAGES.findIndex((page) => page.key === inspectionPage))
+  const inspectionSubtabs = (
+    <ul
+      className="nav staff-subtabs staff-card-subtabs"
+      aria-label="หมวดหมู่ตรวจสภาพห้อง"
+      style={{
+        '--tab-count': INSPECTION_PAGES.length,
+        '--tab-index': inspectionTabIndex,
+        '--tab-from': inspectionTabFrom,
+      }}
+    >
+      {INSPECTION_PAGES.map((page) => (
+        <li className="nav-item" key={page.key}>
+          <button
+            type="button"
+            className={`nav-link staff-subtab-link${inspectionPage === page.key ? ' active' : ''}`}
+            aria-current={inspectionPage === page.key ? 'page' : undefined}
+            onClick={() => {
+              setInspectionTabFrom(inspectionTabIndex)
+              setInspectionPage(page.key)
+            }}
+          >
+            <svg className="staff-card-subtab-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{page.icon}</svg>
+            {page.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
 
   return (
     <div className="staff-page">
@@ -10715,22 +10745,6 @@ function StaffMain() {
               })}
             </ul>
           )}
-          {staffTab === 'move-out-inspections' && (
-            <ul className="nav staff-subtabs" aria-label="หมวดหมู่ตรวจสภาพห้อง">
-              {INSPECTION_PAGES.map((page) => (
-                <li className="nav-item" key={page.key}>
-                  <button
-                    type="button"
-                    className={`nav-link staff-subtab-link${inspectionPage === page.key ? ' active' : ''}`}
-                    aria-current={inspectionPage === page.key ? 'page' : undefined}
-                    onClick={() => setInspectionPage(page.key)}
-                  >
-                    {page.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
           <div className="dorm-menu-bar">
             <DormInfoMenu apiBase="/api/staff/dorm-info" />
           </div>
@@ -11050,11 +11064,12 @@ function StaffMain() {
         )}
 
         {staffTab === 'move-out-inspections' && inspectionPage === 'move-in' && (
-          <MoveInInspectionPanel Modal={Modal} FilterPanel={StaffFilterPanel} />
+          <MoveInInspectionPanel Modal={Modal} FilterPanel={StaffFilterPanel} subtabs={inspectionSubtabs} />
         )}
 
         {staffTab === 'move-out-inspections' && inspectionPage === 'results' && (
           <div className="staff-card staff-tab-card">
+            {inspectionSubtabs}
             <div className="staff-card-header">
               <div>
                 <h2>
