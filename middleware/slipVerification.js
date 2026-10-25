@@ -13,6 +13,16 @@ export const DEMO_PAYMENT_CHANNELS = {
 
 export const TEST_PAYMENT_MARK = "โหมดทดลอง";
 
+export function paymentChannelsConfigured(config) {
+  return Boolean(String(config?.promptpay_id ?? "").trim() || String(config?.bank_account_no ?? "").trim());
+}
+
+export function effectiveVerifyMode(config) {
+  if (config?.slip_verify_mode === "manual") return "manual";
+  if (config?.payment_test_mode) return "auto";
+  return paymentChannelsConfigured(config) ? "auto" : "manual";
+}
+
 export class SlipVerificationError extends Error {
   constructor(status, message) {
     super(message);

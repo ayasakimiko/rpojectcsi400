@@ -1361,6 +1361,20 @@ function OutstandingNotice({ amount, action }) {
   )
 }
 
+function PayOutstandingButton({ underReview, onClick }) {
+  return (
+    <button
+      type="button"
+      className="dashboard-action-btn is-primary"
+      onClick={onClick}
+      disabled={underReview}
+      title={underReview ? 'ส่งสลิปแล้ว รอเจ้าหน้าที่ตรวจสอบ' : undefined}
+    >
+      {underReview ? 'รอตรวจสอบสลิป' : 'ชำระยอดค้าง'}
+    </button>
+  )
+}
+
 function MoveRoomOutcome({ currentRoom, targetRoom, depositRemaining, balance }) {
   if (!currentRoom) return null
   const currentNumber = currentRoom.room_number
@@ -2707,7 +2721,7 @@ function formatVisitRange(start, end) {
   return `${new Date(start).toLocaleString('th-TH', options)} – ${end ? new Date(end).toLocaleString('th-TH', options) : 'ไม่จำกัดเวลา'}`
 }
 
-function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
+function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding, paymentUnderReview = false }) {
   const [view, setView] = useState(null)
   const [items, setItems] = useState([])
   const [busy, setBusy] = useState(false)
@@ -2870,9 +2884,7 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding }) {
         </p>
       </div>
       {outstanding > 0 && onPayOutstanding ? (
-        <button type="button" className="dashboard-action-btn is-primary" onClick={onPayOutstanding}>
-          ชำระยอดค้าง
-        </button>
+        <PayOutstandingButton underReview={paymentUnderReview} onClick={onPayOutstanding} />
       ) : (
         <button
           type="button"
@@ -5086,6 +5098,7 @@ function CustomerDashbord() {
   }
 
   const openPaymentForm = () => {
+    if (paymentUnderReview) return
     setPaymentError('')
     setPaymentSlip(null)
     setPaymentCopied(false)
@@ -8017,6 +8030,7 @@ function CustomerDashbord() {
                                     const channels = paymentChannels || {}
                                     const hasPromptPay = isValidPromptPayId(channels.promptpay_id)
                                     const hasBank = Boolean(channels.bank_name && channels.bank_account_no)
+                                    const noChannels = paymentChannels !== null && !hasPromptPay && !hasBank
                                     return (
                                       <>
                                         <div className="dashboard-pay-amount">
@@ -8044,7 +8058,7 @@ function CustomerDashbord() {
                                               role="radio"
                                               aria-checked={paymentMethod === method.key}
                                               className={`dashboard-pay-method${paymentMethod === method.key ? ' is-active' : ''}`}
-                                              disabled={paymentChannels !== null && !method.available}
+                                              disabled={paymentChannels !== null && !method.available && !noChannels}
                                               onClick={() => {
                                                 setPaymentMethod(method.key)
                                                 setPaymentError('')
@@ -8067,7 +8081,7 @@ function CustomerDashbord() {
                                               </span>
                                               <span className="dashboard-pay-method-text">
                                                 <strong>{method.label}</strong>
-                                                <small>{paymentChannels !== null && !method.available ? 'หอพักยังไม่ได้ตั้งค่า' : method.hint}</small>
+                                                <small>{paymentChannels !== null && !method.available && !noChannels ? 'หอพักยังไม่ได้ตั้งค่า' : method.hint}</small>
                                               </span>
                                             </button>
                                           ))}
@@ -8075,6 +8089,8 @@ function CustomerDashbord() {
 
                                         {paymentChannels === null ? (
                                           <div className="dashboard-pay-panel is-loading">กำลังโหลดช่องทางชำระเงิน...</div>
+                                        ) : noChannels ? (
+                                          <div className="dashboard-pay-panel is-empty">หอพักยังไม่ได้ตั้งค่าช่องทางชำระเงินในระบบ ชำระตามที่เจ้าหน้าที่แจ้ง แล้วแนบสลิปไว้ เจ้าหน้าที่จะตรวจสอบให้</div>
                                         ) : paymentMethod === 'promptpay' ? (
                                           hasPromptPay ? (
                                             <div className="dashboard-pay-panel is-promptpay">
@@ -8216,9 +8232,7 @@ function CustomerDashbord() {
                               {TENANT_REQUEST_STATUS_LABEL[renewRequest.status]}
                             </button>
                           ) : renewOutstanding > 0 ? (
-                            <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                              ชำระยอดค้าง
-                            </button>
+                            <PayOutstandingButton underReview={paymentUnderReview} onClick={openPaymentForm} />
                           ) : (
                             <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('renew')}>
                               ต่อสัญญา
@@ -8257,9 +8271,7 @@ function CustomerDashbord() {
                             {TENANT_REQUEST_STATUS_LABEL[moveoutRequest.status]}
                           </button>
                         ) : room?.is_booked && moveOutOutstanding > 0 ? (
-                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                            ชำระยอดค้าง
-                          </button>
+                          <PayOutstandingButton underReview={paymentUnderReview} onClick={openPaymentForm} />
                         ) : (
                           room?.is_booked && (
                             <button type="button" className="dashboard-action-btn is-danger" onClick={() => openRequestForm('moveout')}>
@@ -8319,9 +8331,7 @@ function CustomerDashbord() {
                             <b>{Math.ceil(msUntil(moveRoomAllowedAt) / 86400000)} วัน</b>
                           </span>
                         ) : room?.is_booked && moveOutOutstanding > 0 ? (
-                          <button type="button" className="dashboard-action-btn is-primary" onClick={openPaymentForm}>
-                            ชำระยอดค้าง
-                          </button>
+                          <PayOutstandingButton underReview={paymentUnderReview} onClick={openPaymentForm} />
                         ) : (
                           room?.is_booked && availableRooms.length > 0 && (
                             <button type="button" className="dashboard-action-btn is-primary" onClick={() => openRequestForm('move_room')}>
@@ -8342,7 +8352,7 @@ function CustomerDashbord() {
                           </button>
                         )}
                       </div>
-                      {room?.is_booked && <ResidentVisitRequestRow outstanding={renewOutstanding} onPayOutstanding={openPaymentForm} />}
+                      {room?.is_booked && <ResidentVisitRequestRow outstanding={renewOutstanding} onPayOutstanding={openPaymentForm} paymentUnderReview={paymentUnderReview} />}
                       <SafetyIncidentReportRow />
                     </div>
 

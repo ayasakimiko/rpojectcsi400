@@ -10,6 +10,7 @@ import { PUBLIC_UPLOAD_DIR, customerUploadFolder, moveUploadedFiles } from "../m
 import {
   DEMO_PAYMENT_CHANNELS,
   TEST_PAYMENT_MARK,
+  effectiveVerifyMode,
   inquireSlip,
   normalizeSlipPayload,
   SlipVerificationError,
@@ -228,7 +229,7 @@ export async function loadParkingSettings(db) {
       bank_name: source.bank_name || "",
       bank_account_no: source.bank_account_no || "",
       test_mode: testMode,
-      verify_mode: config.slip_verify_mode === "manual" ? "manual" : "auto",
+      verify_mode: effectiveVerifyMode(config),
     },
   };
 }
@@ -499,7 +500,7 @@ export function createFinePaymentHandler({ getActingName, scopeCustomerId = () =
       let nextStatus = "paid";
       let transRef = null;
       let message;
-      if (config.slip_verify_mode === "manual") {
+      if (effectiveVerifyMode(config) === "manual") {
         if (!testMode && qrPayload && (await isSlipUsed(pool, { qrPayload }))) throw new SlipVerificationError(409, SLIP_USED_MESSAGE);
         nextStatus = "pending_review";
         message = "ส่งสลิปค่าปรับแล้ว กรุณารอเจ้าหน้าที่ตรวจสอบ";

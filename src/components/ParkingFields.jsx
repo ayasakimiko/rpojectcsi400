@@ -245,6 +245,7 @@ export function ParkingSessionPanel({ item, finePerHour, alwaysShow = false }) {
 export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounterPaid, counterBusy = false }) {
   const hasPromptPay = isValidPromptPayId(channels?.promptpay_id)
   const hasBank = Boolean(channels?.bank_account_no)
+  const noChannels = Boolean(channels) && !hasPromptPay && !hasBank
   const [method, setMethod] = useState(hasPromptPay || !hasBank ? 'promptpay' : 'bank')
   const [slip, setSlip] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -311,7 +312,7 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
                 type="button"
                 role="radio"
                 aria-checked={method === option.key}
-                disabled={!option.available}
+                disabled={!option.available && !noChannels}
                 className={`parking-pay-method${method === option.key ? ' is-active' : ''}`}
                 onClick={() => setMethod(option.key)}
               >
@@ -319,7 +320,9 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
               </button>
             ))}
           </div>
-          {method === 'promptpay' ? (
+          {noChannels ? (
+            <p className="parking-pay-wait">หอพักยังไม่ได้ตั้งค่าช่องทางชำระเงินในระบบ แนบสลิปไว้ เจ้าหน้าที่จะตรวจสอบให้</p>
+          ) : method === 'promptpay' ? (
             hasPromptPay ? (
               <div className="parking-pay-qr">
                 <PromptPayQr promptPayId={channels.promptpay_id} amount={amount} size={168} />
