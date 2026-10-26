@@ -26,6 +26,7 @@ import { addContractMonths } from '../utils/rentalContract.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import { API_ORIGIN } from '../config/api.js'
 import { MARKET_TENANT_API_PREFIX } from '../config/serviceRoutes.js'
+import { focusAndHighlight } from '../utils/focusHighlight.js'
 import './MarketManager.css'
 
 const API_BASE = '/api/market'
@@ -2267,7 +2268,7 @@ function ShopCard({ shop, onOpen }) {
   const expiring = lease?.status === 'active' && daysUntil(lease.end_date) <= 30
   const openNow = isOpenNow(shop)
   return (
-    <button type="button" className={`market-shop-card${lease ? '' : ' is-vacant'}`} onClick={() => onOpen(shop.id)}>
+    <button type="button" data-market-shop={shop.id} className={`market-shop-card${lease ? '' : ' is-vacant'}`} onClick={() => onOpen(shop.id)}>
       <div className="market-shop-main">
         <div className="market-shop-title">
           <span className="market-shop-icon"><Icon name="shop" size={21} /></span>
@@ -2428,7 +2429,7 @@ function LeaseCard({ lease, onOpen, onRenew }) {
   const monthText = lease.status === 'active' ? `เดือนที่ ${progress.currentMonth}/${progress.totalMonths}`
     : lease.status === 'upcoming' ? `ทั้งหมด ${progress.totalMonths} เดือน` : `ระยะสัญญา ${progress.totalMonths} เดือน`
   return (
-    <article className={`market-lease-card is-${lease.status}`}>
+    <article data-market-lease={lease.id} className={`market-lease-card is-${lease.status}`}>
       <div className="market-lease-head">
         <span className="market-lease-shop">
           <small>ร้าน</small>
@@ -2831,8 +2832,10 @@ function ApiGuideSection() {
   )
 }
 
-export default function MarketManager({ onSummary }) {
+export default function MarketManager({ onSummary, focus = null }) {
   const role = currentRole()
+  const [sectionKey, setSectionKey] = useState(0)
+  const [missingNotice, setMissingNotice] = useState('')
   const summaryRef = useRef(onSummary)
   useEffect(() => {
     summaryRef.current = onSummary
@@ -2863,6 +2866,29 @@ export default function MarketManager({ onSummary }) {
   }
 
   const data = state.data
+  const focusNonce = focus?.nonce
+  const focusId = focus?.id
+  const focusTable = focus?.refTable
+  const hasData = Boolean(data)
+
+  useEffect(() => {
+    if (!focusNonce || !hasData || !focusId) return undefined
+    const isLease = focusTable === 'ShopLease'
+    let cancelFocus = () => {}
+    const start = setTimeout(() => {
+      setModal(null)
+      setSection(isLease ? 'leases' : 'shops')
+      setSectionKey(focusNonce)
+      cancelFocus = focusAndHighlight(isLease ? `[data-market-lease="${focusId}"]` : `[data-market-shop="${focusId}"]`, {
+        onFound: () => setTimeout(() => setModal({ type: isLease ? 'lease' : 'shop', id: Number(focusId) }), 900),
+        onMissing: () => setMissingNotice(isLease ? 'ไม่พบสัญญาเช่านี้แล้ว อาจถูกลบออกจากระบบ' : 'ไม่พบร้านค้านี้แล้ว ร้านอาจถูกปิดหรือลบออกจากระบบ'),
+      })
+    }, 0)
+    return () => {
+      clearTimeout(start)
+      cancelFocus()
+    }
+  }, [focusNonce, hasData, focusId, focusTable])
 
   return (
     <div className="market-manager">
@@ -2884,14 +2910,20 @@ export default function MarketManager({ onSummary }) {
       </header>
 
       {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
+      {missingNotice && (
+        <MarketModal title="ไม่พบรายการนี้" icon="search" tone="danger" size="sm" onClose={() => setMissingNotice('')} onSubmit={() => setMissingNotice('')} submitLabel="ตกลง" hideCancel>
+          <p className="market-notice-message">{missingNotice}</p>
+        </MarketModal>
+      )}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
       {state.loading && !data && <p className="market-empty">กำลังโหลด...</p>}
 
       {data && section === 'shops' && (
-        <ShopsSection data={data} onOpenShop={(id) => setModal({ type: 'shop', id })} onCreateShop={() => setModal({ type: 'create-shop' })} />
+        <ShopsSection key={sectionKey} data={data} onOpenShop={(id) => setModal({ type: 'shop', id })} onCreateShop={() => setModal({ type: 'create-shop' })} />
       )}
       {data && section === 'leases' && (
         <LeasesSection
+          key={sectionKey}
           refreshKey={refreshKey}
           canOperate={data.permissions.operate}
           onOpenLease={(id) => setModal({ type: 'lease', id })}

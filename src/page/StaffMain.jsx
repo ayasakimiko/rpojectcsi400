@@ -61,6 +61,7 @@ import {
   ParkingFinePayment,
   ParkingRulesNote,
   ParkingSessionPanel,
+  ParkingSettingsButton,
   ParkingSettingsForm,
   ParkingSpacePicker,
   ParkingStatusPill,
@@ -5680,7 +5681,7 @@ function getStaffVisitTitle(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || '-' : item.guest_name || '-'
 }
 
-export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, focusId, canManageSettings = false }) {
+export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, focusId, canManageSettings = false, canCreate = true }) {
   const pendingFocusRef = useRef(focusId)
   const [items, setItems] = useState([])
   const [parkingSettings, setParkingSettings] = useState(null)
@@ -5941,14 +5942,12 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
               ค่าปรับค้าง <strong>{unpaidFineCount}</strong> รายการ · {formatBaht(unpaidFineAmount)}
             </button>
           )}
-          {canManageSettings && (
-            <button type="button" className="staff-action-btn is-ghost" onClick={() => setSettingsOpen(true)}>
-              ตั้งค่าที่จอด
+          {canManageSettings && <ParkingSettingsButton onClick={() => setSettingsOpen(true)} />}
+          {canCreate && (
+            <button type="button" className="staff-action-btn is-primary" onClick={openCreate}>
+              + เพิ่มรถ
             </button>
           )}
-          <button type="button" className="staff-action-btn is-primary" onClick={openCreate}>
-            + เพิ่มรถ
-          </button>
         </div>
       </div>
 
@@ -6013,7 +6012,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
             {keyword || status !== RESIDENT_VISIT_VIEWS[view].defaultFilter
               ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ'
               : view === 'main'
-                ? 'กด "+ เพิ่มรถ" เพื่อบันทึกรถของผู้เช่าหรือผู้มาขอจอด'
+                ? canCreate ? 'กด "+ เพิ่มรถ" เพื่อบันทึกรถของผู้เช่าหรือผู้มาขอจอด' : 'ยังไม่มีรถที่บันทึกไว้'
                 : 'รายการที่หมดเวลา ไม่อนุมัติ หรือยกเลิกจะแสดงที่นี่'}
           </span>
         </div>
@@ -9109,6 +9108,7 @@ function StaffMain() {
     }
     if (STAFF_PLAIN_TABS[area]) {
       goToStaffTab(STAFF_PLAIN_TABS[area])
+      if (notif.refId) setTabFocus({ tab: STAFF_PLAIN_TABS[area], id: notif.refId, refTable: notif.refTable, nonce: Date.now() })
       return
     }
     if (area === 'move-in') {
@@ -10764,8 +10764,8 @@ function StaffMain() {
         )}
 
         {staffTab === 'wifi' && <WifiManager />}
-        {staffTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
-        {staffTab === 'repair-vendors' && <RepairVendorManager rooms={rooms} onSummary={setRepairSummary} />}
+        {staffTab === 'market' && <MarketManager onSummary={setMarketSummary} focus={tabFocus?.tab === 'market' ? tabFocus : null} />}
+        {staffTab === 'repair-vendors' && <RepairVendorManager rooms={rooms} onSummary={setRepairSummary} focus={tabFocus?.tab === 'repair-vendors' ? tabFocus : null} />}
 
         {staffTab === 'cameras' && staffUser?.role === 'Staff' && <CameraMonitor />}
 

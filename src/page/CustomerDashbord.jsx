@@ -32,6 +32,7 @@ import {
   ParkingStatusPill,
   ResidentContractWindow,
 } from '../components/ParkingFields.jsx'
+import { focusAndHighlight } from '../utils/focusHighlight.js'
 import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_CATEGORY_OPTIONS, MAINTENANCE_TIME_LABEL, MAINTENANCE_TIME_OPTIONS } from '../utils/maintenanceCategories.js'
 import { PARKING_FORM_TOPICS, USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, VISITOR_MAX_HOURS, formatBaht, getVisitorSession, useNow, useParkingOptions } from '../utils/parking.js'
 import InspectionTopicFilter from '../components/InspectionTopicFilter.jsx'
@@ -2438,6 +2439,7 @@ const NOTIF_PAGE_SIZE = 30
 const RENT_DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000
 const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles' }
 const CUSTOMER_TARGET_SCROLL = { due: 'due', renew: 'tenant-renew' }
+const CUSTOMER_TARGET_FOCUS = { contract: '.contract-customer-card .ccc-customer-content', inspection: '.contract-customer-card .ccc-customer-content' }
 
 const CUSTOMER_TABS = [
   { key: 'home', label: 'หน้าแรก' },
@@ -6380,6 +6382,7 @@ function CustomerDashbord() {
                                 const area = notif.target.split(':')[0]
                                 if (CUSTOMER_TARGET_TABS[area]) {
                                   selectCustomerTab(CUSTOMER_TARGET_TABS[area])
+                                  if (CUSTOMER_TARGET_FOCUS[area]) focusAndHighlight(CUSTOMER_TARGET_FOCUS[area])
                                   return
                                 }
                                 selectCustomerTab('home')

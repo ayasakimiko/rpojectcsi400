@@ -36,6 +36,7 @@ import WifiManager from '../components/WifiManager.jsx'
 import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
 import RepairVendorManager from '../components/RepairVendorManager.jsx'
+import NotificationDetailModal from '../components/NotificationDetailModal.jsx'
 import { repairSummaryTiles } from '../utils/repairSummary.js'
 import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL } from '../utils/maintenanceCategories.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
@@ -44,10 +45,8 @@ import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeade
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, TransferContractPendingPanel } from './StaffMain.jsx'
+import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, StaffResidentVisitsTab, TransferContractPendingPanel } from './StaffMain.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
-import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
-import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
 import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
@@ -4803,52 +4802,8 @@ function IncidentShieldIcon({ size = 18 }) {
   )
 }
 
-const VISIT_STATUS_INFO = {
-  pending: { label: 'รออนุมัติ', tone: 'pending' },
-  approved: { label: 'อนุมัติแล้ว', tone: 'reviewed' },
-  rejected: { label: 'ไม่อนุมัติ', tone: 'rejected' },
-  cancelled: { label: 'ยกเลิกแล้ว', tone: 'cancelled' },
-}
-const VISIT_FILTERS = [
-  { key: 'pending', label: 'รออนุมัติ' },
-  { key: 'approved', label: 'อนุมัติแล้ว' },
-  { key: 'rejected', label: 'ไม่อนุมัติ' },
-  { key: 'cancelled', label: 'ยกเลิกแล้ว' },
-  { key: 'fine', label: 'ค่าปรับค้าง' },
-  { key: 'all', label: 'ทั้งหมด' },
-]
-const VISIT_PAGE_SIZE = 12
-
-function matchesVisitFilter(item, key) {
-  if (key === 'all') return true
-  if (key === 'fine') return ['unpaid', 'pending_review'].includes(item.fine_status)
-  return item.status === key
-}
-
-function getVisitTypeText(item) {
-  if (item.request_type !== 'vehicle') return RESIDENT_VISIT_TYPE_LABEL[item.request_type] || item.request_type
-  const category = item.user_category || (item.guest_name || !item.customer_id ? 'visitor' : 'resident')
-  return `${USER_CATEGORY_LABEL[category]} · ${VEHICLE_TYPE_LABEL[item.vehicle_type] || 'รถยนต์'}`
-}
-
-function VisitCarIcon({ size = 18 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8" />
-      <rect x="3" y="10" width="18" height="8" rx="2" />
-      <path d="M7 14h.01M17 14h.01" />
-      <path d="M5 18v2M19 18v2" />
-    </svg>
-  )
-}
-
 function getVisitHeading(item) {
   return item.request_type === 'vehicle' ? item.vehicle_plate || 'ไม่ระบุทะเบียน' : item.guest_name || 'ผู้มาพัก'
-}
-
-function formatVisitPoint(value) {
-  const date = new Date(value)
-  return `${date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} ${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
 }
 
 function buildAdminSafetyNotifs(item) {
@@ -4901,517 +4856,6 @@ function buildAdminInspectionNotifs(inspection) {
       request: inspection,
     },
   ]
-}
-
-function AdminVehicleRequestsTab({ onCountChange, focusId = null }) {
-  const pendingFocusRef = useRef(focusId)
-  const requestFocus = useFocusScroll()
-  const [lightbox, setLightbox] = useState(null)
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('pending')
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [detailId, setDetailId] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [parkingSettings, setParkingSettings] = useState(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-
-  const load = useCallback(
-    () =>
-      axios
-        .get('/api/admin/resident-visit-requests')
-        .then(({ data }) => {
-          const list = data.requests || []
-          setItems(list)
-          setParkingSettings(data.settings || null)
-          onCountChange?.(list.filter((item) => item.status === 'pending').length)
-          if (pendingFocusRef.current != null) {
-            const sorted = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-            const index = sorted.findIndex((item) => item.id === pendingFocusRef.current)
-            pendingFocusRef.current = null
-            if (index >= 0) {
-              setFilter('all')
-              setSearch('')
-              setPage(Math.floor(index / VISIT_PAGE_SIZE) + 1)
-              setDetailId(sorted[index].id)
-              requestFocus(`visit-${sorted[index].id}`)
-            }
-          }
-        })
-        .catch((error) => setMessage(error.response?.data?.message || 'โหลดคำขอไม่สำเร็จ'))
-        .finally(() => setLoading(false)),
-    [onCountChange, requestFocus],
-  )
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const keyword = search.trim().toLowerCase()
-  const searched = keyword
-    ? items.filter((item) =>
-        [
-          item.vehicle_plate,
-          item.vehicle_model,
-          item.guest_name,
-          item.guest_phone,
-          item.note,
-          item.room_number ? `ห้อง ${item.room_number}` : '',
-          `${item.first_name || ''} ${item.last_name || ''}`,
-          item.customer_phone,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword),
-      )
-    : items
-  const countOf = (key) => searched.filter((item) => matchesVisitFilter(item, key)).length
-  const filtered = searched
-    .filter((item) => matchesVisitFilter(item, filter))
-    .slice()
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  const totalPages = Math.max(1, Math.ceil(filtered.length / VISIT_PAGE_SIZE))
-  const currentPage = Math.min(page, totalPages)
-  const pageItems = filtered.slice((currentPage - 1) * VISIT_PAGE_SIZE, currentPage * VISIT_PAGE_SIZE)
-  const detail = items.find((item) => item.id === detailId) || null
-
-  const openDetail = (item) => {
-    setMessage('')
-    setDetailId(item.id)
-  }
-
-  const review = async (decision, requestClose) => {
-    setBusy(true)
-    setMessage('')
-    try {
-      if (decision === 'fine-approve' || decision === 'fine-reject') {
-        await axios.post(
-          `/api/admin/resident-visit-requests/${detail.id}/fine-review`,
-          { decision: decision === 'fine-approve' ? 'approve' : 'reject' }
-        )
-        await load()
-        return
-      }
-      await axios.post(`/api/admin/resident-visit-requests/${detail.id}/${decision}`, {})
-      await load()
-      requestClose()
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'บันทึกผลไม่สำเร็จ')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const openPhotos = (item, index) => setLightbox({ photos: item.vehicle_photos || [], index, title: getVisitHeading(item) })
-
-  return (
-    <div className="admin-card admin-review-page">
-      <div className="admin-card-header">
-        <div>
-          <h2>คำขอรถ / ผู้มาพัก</h2>
-          <p className="admin-review-subtitle">
-            อนุมัติคำขอ ตรวจช่องจอด และติดตามค่าปรับผู้มาติดต่อ (จอดได้ 3 ชม. · ปรับ {formatBaht(parkingSettings?.finePerHour)}/ชม.)
-          </p>
-        </div>
-        <span className="admin-review-count">{countOf('pending')} รายการรออนุมัติ</span>
-        <button type="button" className="admin-action-btn" onClick={() => setSettingsOpen(true)}>
-          ตั้งค่าที่จอด
-        </button>
-      </div>
-
-      <div className="admin-incident-toolbar">
-        <div className="admin-incident-segments" role="tablist" aria-label="สถานะคำขอ">
-          {VISIT_FILTERS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="tab"
-              aria-selected={filter === item.key}
-              className={`admin-incident-segment is-${item.key === 'approved' ? 'reviewed' : item.key}${filter === item.key ? ' active' : ''}`}
-              onClick={() => {
-                setFilter(item.key)
-                setPage(1)
-              }}
-            >
-              {item.label}
-              <span>{countOf(item.key)}</span>
-            </button>
-          ))}
-        </div>
-        <input
-          type="search"
-          className="form-control admin-search-input admin-incident-search"
-          placeholder="ค้นหาทะเบียน ห้อง ชื่อผู้เช่า หรือผู้มาพัก"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value)
-            setPage(1)
-          }}
-        />
-      </div>
-
-      {message && !detail && <p className="admin-safety-message" role="status">{message}</p>}
-
-      {loading && items.length === 0 ? (
-        <p className="admin-safety-empty">กำลังโหลดคำขอ...</p>
-      ) : pageItems.length === 0 ? (
-        <div className="admin-incident-empty">
-          <span aria-hidden="true">
-            <VisitCarIcon size={24} />
-          </span>
-          <strong>{items.length === 0 ? 'ยังไม่มีคำขอ' : 'ไม่พบรายการในหมวดนี้'}</strong>
-          <small>{items.length === 0 ? 'เมื่อผู้เช่าส่งคำขอ รายการจะแสดงที่นี่' : 'ลองเปลี่ยนสถานะหรือคำค้นหา'}</small>
-        </div>
-      ) : (
-        <div className="admin-incident-grid is-visit">
-          {pageItems.map((item) => {
-            const status = VISIT_STATUS_INFO[item.status] || VISIT_STATUS_INFO.pending
-            const photos = item.vehicle_photos || []
-            const isVehicle = item.request_type === 'vehicle'
-            return (
-              <article key={item.id} data-admin-focus={`visit-${item.id}`} className={`admin-incident-card admin-visit-card is-${status.tone}`}>
-                <button type="button" className="admin-incident-main" onClick={() => openDetail(item)}>
-                  <span className="admin-incident-head">
-                    <span className="admin-incident-icon">
-                      <VisitCarIcon />
-                    </span>
-                    <span className="admin-incident-title">
-                      <strong>{getVisitHeading(item)}</strong>
-                      {isVehicle && item.vehicle_model ? (
-                        <em className="admin-vc-model">{item.vehicle_model}</em>
-                      ) : (
-                        <small>ส่งคำขอ {formatIncidentTime(item.created_at)}</small>
-                      )}
-                    </span>
-                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
-                  </span>
-                  <span className="admin-vc-grid">
-                    <span className="admin-vc-cell">
-                      <span className="admin-vc-label">ประเภท</span>
-                      <span className="admin-vc-value">{getVisitTypeText(item)}</span>
-                    </span>
-                    <span className="admin-vc-cell">
-                      <span className="admin-vc-label">ช่องจอด / ห้อง</span>
-                      <span className="admin-vc-value">
-                        {isVehicle ? `${item.parking_space_code ? `ช่อง ${item.parking_space_code}` : 'ไม่ระบุช่อง'} · ` : ''}
-                        {item.room_number ? `ห้อง ${item.room_number}` : 'ภายนอก'}
-                      </span>
-                    </span>
-                    <span className="admin-vc-cell">
-                      <span className="admin-vc-label">
-                        ผู้ขอ
-                        <span className={`admin-incident-role is-${item.customer_id ? 'customer' : 'staff'}`}>
-                          {item.customer_id ? 'ผู้เช่า' : 'เจ้าหน้าที่'}
-                        </span>
-                      </span>
-                      <span className="admin-vc-value" title={item.first_name ? `${item.first_name} ${item.last_name}` : ''}>
-                        {item.first_name ? `${item.first_name} ${item.last_name}` : 'เจ้าหน้าที่บันทึก'}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="admin-vc-range">
-                    <span className="admin-vc-range-icon" aria-hidden="true">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M12 7v5l3 2" />
-                      </svg>
-                    </span>
-                    <span className="admin-vc-range-body">
-                      <span className="admin-vc-label">
-                        {item.parked_at ? 'เข้าจอดจริง' : isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}
-                        <ParkingStatusPill status={item.fine_status} />
-                      </span>
-                      <span className="admin-vc-value">
-                        {formatVisitPoint(item.parked_at || item.start_at)}
-                        <span className="admin-vc-arrow" aria-hidden="true">→</span>
-                        <span className={item.end_at ? undefined : 'admin-vc-open'}>{item.end_at ? formatVisitPoint(item.end_at) : 'ไม่จำกัดเวลา'}</span>
-                      </span>
-                    </span>
-                  </span>
-                </button>
-                <div className="admin-incident-photos">
-                  <span className="admin-incident-label">{photos.length > 0 ? `รูปรถ · ${photos.length} รูป` : 'รูปรถ'}</span>
-                  {photos.length > 0 ? (
-                    <span className="admin-incident-photo-row">
-                      {photos.slice(0, 4).map((photo, index) => (
-                        <button
-                          key={`${photo.url}-${index}`}
-                          type="button"
-                          className="admin-incident-photo"
-                          onClick={() => openPhotos(item, index)}
-                          aria-label={`ดูรูปที่ ${index + 1}`}
-                        >
-                          <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
-                          {index === 3 && photos.length > 4 && <span>+{photos.length - 4}</span>}
-                        </button>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="admin-incident-photo-empty">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="m21 15-5-5L5 21" />
-                      </svg>
-                      ไม่มีรูปรถ
-                    </span>
-                  )}
-                </div>
-                <div className="admin-incident-foot admin-vc-foot">
-                  <span className="admin-incident-result">
-                    {item.status === 'pending' ? (
-                      'ยังไม่มีผู้อนุมัติ'
-                    ) : item.status === 'cancelled' ? (
-                      <>
-                        ยกเลิกโดย <span className="admin-actor-inline">{item.cancelled_by_name || item.updated_by_name || '-'}</span>
-                      </>
-                    ) : (
-                      <>
-                        {item.status === 'approved' ? 'อนุมัติโดย' : 'ปฏิเสธโดย'}{' '}
-                        <span className="admin-actor-inline">{item.reviewed_by_name || item.admin_reviewed_by_name || '-'}</span>
-                      </>
-                    )}
-                  </span>
-                  <button type="button" className={`admin-incident-open${item.status === 'pending' ? ' is-primary' : ''}`} onClick={() => openDetail(item)}>
-                    {item.status === 'pending' ? 'พิจารณา' : 'ดูรายละเอียด'}
-                    <span aria-hidden="true">›</span>
-                  </button>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      )}
-
-      <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
-
-      {detail && (
-        <Modal title="รายละเอียดคำขอ" onClose={() => setDetailId(null)}>
-          {(requestClose) => {
-            const status = VISIT_STATUS_INFO[detail.status] || VISIT_STATUS_INFO.pending
-            const photos = detail.vehicle_photos || []
-            const isVehicle = detail.request_type === 'vehicle'
-            const reviewer = detail.reviewed_by_name || detail.admin_reviewed_by_name
-            const reviewedAt = detail.reviewed_at || detail.admin_reviewed_at
-            const cancelledAt = detail.cancelled_at || detail.updated_at
-            const steps = [
-              { key: 'request', label: 'ส่งคำขอ', by: detail.first_name ? `${detail.first_name} ${detail.last_name}` : null, date: detail.created_at, icon: 'note' },
-              detail.status === 'pending'
-                ? { key: 'review', label: 'รออนุมัติ', date: null, icon: 'check', pendingText: 'กำลังรอพิจารณา' }
-                : detail.status === 'rejected'
-                  ? { key: 'review', label: 'ไม่อนุมัติ', by: reviewer, date: reviewedAt, icon: 'x', tone: 'danger' }
-                  : reviewedAt
-                    ? { key: 'review', label: 'อนุมัติแล้ว', by: reviewer, date: reviewedAt, icon: 'check' }
-                    : null,
-              detail.parked_at ? { key: 'checkin', label: 'เช็คอินเข้าจอด', date: detail.parked_at, icon: 'check' } : null,
-              ...(detail.status === 'cancelled'
-                ? [
-                    detail.checked_out_at
-                      ? { key: 'checkout', label: 'บันทึกรถออก', by: detail.cancelled_by_name, date: detail.checked_out_at, icon: 'check' }
-                      : { key: 'cancel', label: 'ยกเลิกแล้ว', by: detail.cancelled_by_name || detail.updated_by_name, date: cancelledAt, icon: 'x', tone: 'danger' },
-                  ]
-                : []),
-              detail.fine_status === 'paid'
-                ? { key: 'fine', label: `ชำระค่าปรับ ${formatBaht(detail.fine_amount)}`, by: detail.fine_paid_by_name, date: detail.fine_paid_at, icon: 'check' }
-                : null,
-            ].filter(Boolean)
-            const stepsEnd = detail.status === 'cancelled' ? cancelledAt : detail.status === 'pending' ? null : reviewedAt
-            return (
-              <div className="admin-incident-detail">
-                <div className="admin-incident-scroll">
-                  <div className={`admin-incident-hero admin-visit-hero is-${status.tone}`}>
-                    <span className="admin-incident-icon is-large">
-                      <VisitCarIcon size={22} />
-                    </span>
-                    <div>
-                      <strong>{getVisitHeading(detail)}</strong>
-                      <span className="admin-incident-chip">{getVisitTypeText(detail)}</span>
-                    </div>
-                    <span className={`admin-incident-status is-${status.tone}`}>{status.label}</span>
-                  </div>
-
-                  <dl className="admin-incident-fields">
-                    <div>
-                      <dt>ห้อง</dt>
-                      <dd>{detail.room_number ? `ห้อง ${detail.room_number}` : 'ไม่ระบุห้อง'}</dd>
-                    </div>
-                    <div>
-                      <dt>ผู้ขอ</dt>
-                      <dd>
-                        {detail.first_name ? `${detail.first_name} ${detail.last_name}` : 'เจ้าหน้าที่บันทึก'}
-                        {detail.customer_phone ? ` · ${detail.customer_phone}` : ''}
-                      </dd>
-                    </div>
-                    {isVehicle ? (
-                      <>
-                        <div>
-                          <dt>ทะเบียนรถ</dt>
-                          <dd>{detail.vehicle_plate || '-'}</dd>
-                        </div>
-                        <div>
-                          <dt>ยี่ห้อ / รุ่น</dt>
-                          <dd>{detail.vehicle_model || '-'}</dd>
-                        </div>
-                      </>
-                    ) : null}
-                    {(detail.guest_name || !isVehicle) && (
-                      <>
-                        <div>
-                          <dt>ผู้มาพัก</dt>
-                          <dd>{detail.guest_name || '-'}</dd>
-                        </div>
-                        <div>
-                          <dt>เบอร์ติดต่อ</dt>
-                          <dd>{detail.guest_phone || '-'}</dd>
-                        </div>
-                      </>
-                    )}
-                    <div className="is-wide is-range">
-                      <dt>
-                        <RoomDetailIcon type="clock" size={14} />
-                        {isVehicle ? 'ช่วงเวลาจอด' : 'ช่วงเวลาเข้าพัก'}
-                        {detail.end_at && (
-                          <span className="admin-visit-range-total">
-                            รวม {formatRemaining(new Date(detail.end_at) - new Date(detail.start_at))}
-                          </span>
-                        )}
-                      </dt>
-                      <dd className="admin-visit-range-detail">
-                        <span className="admin-visit-range-point">
-                          <small>เริ่ม</small>
-                          <strong>{formatIncidentTime(detail.start_at)}</strong>
-                        </span>
-                        <span className="admin-visit-range-arrow" aria-hidden="true">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M5 12h14M13 6l6 6-6 6" />
-                          </svg>
-                        </span>
-                        <span className={`admin-visit-range-point${detail.end_at ? '' : ' is-open'}`}>
-                          <small>สิ้นสุด</small>
-                          <strong>{detail.end_at ? formatIncidentTime(detail.end_at) : 'ไม่จำกัดเวลา'}</strong>
-                        </span>
-                      </dd>
-                    </div>
-                    {detail.note && (
-                      <div className="is-wide is-note">
-                        <dt>
-                          <RoomDetailIcon type="note" size={14} />
-                          หมายเหตุ
-                        </dt>
-                        <dd>{detail.note}</dd>
-                      </div>
-                    )}
-                  </dl>
-
-                  {isVehicle && <ParkingSessionPanel item={detail} finePerHour={parkingSettings?.finePerHour} />}
-                  {['unpaid', 'pending_review', 'paid'].includes(detail.fine_status) && (
-                    <ParkingFinePayment
-                      item={detail}
-                      channels={parkingSettings?.paymentChannels}
-                      endpoint={`/api/admin/resident-visit-requests/${detail.id}/fine-payment`}
-                      onDone={load}
-                      onCounterPaid={() => review('fine-approve')}
-                      counterBusy={busy}
-                    />
-                  )}
-                  {detail.fine_status === 'pending_review' && (
-                    <div className="admin-incident-actions">
-                      {detail.fine_slip_path && (
-                        <button
-                          type="button"
-                          className="admin-action-btn"
-                          onClick={() => setLightbox({ photos: [{ url: detail.fine_slip_path, name: 'สลิปค่าปรับ' }], index: 0, title: getVisitHeading(detail) })}
-                        >
-                          ดูสลิปค่าปรับ
-                        </button>
-                      )}
-                      <button type="button" className="admin-action-btn is-danger" disabled={busy} onClick={() => review('fine-reject')}>
-                        ปฏิเสธสลิป
-                      </button>
-                      <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => review('fine-approve')}>
-                        ยืนยันว่าชำระแล้ว
-                      </button>
-                    </div>
-                  )}
-
-                  {photos.length > 0 && (
-                    <section className="admin-incident-gallery">
-                      <h4>รูปรถ / ป้ายทะเบียน ({photos.length} รูป)</h4>
-                      <div>
-                        {photos.map((photo, index) => (
-                          <button
-                            key={`${photo.url}-${index}`}
-                            type="button"
-                            className="admin-incident-photo"
-                            onClick={() => openPhotos(detail, index)}
-                            aria-label={`ดูรูปที่ ${index + 1}`}
-                          >
-                            <UploadImage src={photo.url} alt={photo.name || `รูปรถ ${index + 1}`} loading="lazy" />
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-
-                  <ProcessSteps
-                    title="ขั้นตอนการดำเนินการ"
-                    actorClassName="admin-actor-inline"
-                    startDate={detail.created_at}
-                    endDate={stepsEnd}
-                    waitingText="รอพิจารณา"
-                    steps={steps}
-                  />
-
-                  {message && <p className="admin-safety-message" role="status">{message}</p>}
-                </div>
-
-                <div className="admin-incident-actions">
-                  {detail.status === 'pending' && (
-                    <>
-                      <button type="button" className="admin-action-btn is-danger" disabled={busy} onClick={() => review('reject', requestClose)}>
-                        ไม่อนุมัติ
-                      </button>
-                      <button type="button" className="admin-action-btn is-primary" disabled={busy} onClick={() => review('approve', requestClose)}>
-                        {busy ? 'กำลังบันทึก...' : 'อนุมัติ'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          }}
-        </Modal>
-      )}
-
-      {settingsOpen && (
-        <Modal title="ตั้งค่าที่จอดรถและค่าปรับ" onClose={() => setSettingsOpen(false)}>
-          {(requestClose) => (
-            <ParkingSettingsForm
-              endpoint="/api/admin/parking/settings"
-              onCancel={requestClose}
-              onSaved={async () => {
-                requestClose()
-                await load()
-              }}
-            />
-          )}
-        </Modal>
-      )}
-
-      {lightbox && (
-        <PhotoLightbox
-          photos={lightbox.photos.map((photo, index) => ({ name: photo.name || `รูปที่ ${index + 1}`, url: photo.url }))}
-          initialIndex={lightbox.index}
-          title={lightbox.title}
-          label="รูปรถ / ป้ายทะเบียน"
-          onClose={() => setLightbox(null)}
-        />
-      )}
-    </div>
-  )
 }
 
 function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
@@ -5806,6 +5250,7 @@ function AdminBackupPage() {
   const [contractSummary, setContractSummary] = useState(null)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [tabFocus, setTabFocus] = useState(null)
+  const [notifDetail, setNotifDetail] = useState(null)
   const requestRowFocus = useFocusScroll()
   useEffect(() => {
     if (tabFocus && activeTab !== tabFocus.tab) setTabFocus(null)
@@ -7623,8 +7068,11 @@ function AdminBackupPage() {
     if (notif.server) {
       const tab = ADMIN_TARGET_TABS[(notif.target || '').split(':')[0]]
       setAnnouncementFocus(null)
-      if (!tab) return
-      if (['vehicle-requests', 'safety'].includes(tab)) setTabFocus({ tab, id: notif.refId, nonce: Date.now() })
+      if (!tab) {
+        setNotifDetail(notif)
+        return
+      }
+      if (['vehicle-requests', 'safety', 'market', 'repair-vendors'].includes(tab)) setTabFocus({ tab, id: notif.refId, refTable: notif.refTable, nonce: Date.now() })
       setActiveTab(tab)
       return
     }
@@ -7964,8 +7412,10 @@ function AdminBackupPage() {
         )}
 
         {activeTab === 'vehicle-requests' && (
-          <AdminVehicleRequestsTab
+          <StaffResidentVisitsTab
             key={tabFocus?.tab === 'vehicle-requests' ? tabFocus.nonce : 'vehicle-requests'}
+            canManageSettings
+            rooms={rooms}
             onCountChange={setPendingVehicleCount}
             focusId={tabFocus?.tab === 'vehicle-requests' ? tabFocus.id : null}
           />
@@ -7993,8 +7443,9 @@ function AdminBackupPage() {
 
         {activeTab === 'wifi' && <WifiManager />}
 
-        {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
-        {activeTab === 'repair-vendors' && <RepairVendorManager rooms={rooms} onSummary={setRepairSummary} />}
+        {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} focus={tabFocus?.tab === 'market' ? tabFocus : null} />}
+        {activeTab === 'repair-vendors' && <RepairVendorManager rooms={rooms} onSummary={setRepairSummary} focus={tabFocus?.tab === 'repair-vendors' ? tabFocus : null} />}
+        {notifDetail && <NotificationDetailModal notification={notifDetail} onClose={() => setNotifDetail(null)} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

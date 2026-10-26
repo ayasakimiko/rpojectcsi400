@@ -2051,6 +2051,7 @@ router.get("/parking/settings", getParkingSettings);
 router.put("/parking/settings", updateParkingSettings);
 
 router.post("/resident-visit-requests", async (req, res) => {
+  if (req.user?.role === "Owner") return res.status(403).json({ message: "เจ้าของหอเพิ่มรถไม่ได้ กรุณาให้พนักงานหรือแอดมินบันทึก" });
   let savedPhotos = [];
   try {
     const { roomNumber, vehiclePlate, vehicleModel, guestName, guestPhone, note, photos } = req.body ?? {};

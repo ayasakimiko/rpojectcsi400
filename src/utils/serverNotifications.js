@@ -41,6 +41,7 @@ export function toBellItem(row, pending = false) {
     kind: row.kind || kindOf(row.type),
     target: row.target || null,
     refId: row.ref_id ?? null,
+    refTable: row.ref_table || null,
     server: true,
   }
 }

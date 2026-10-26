@@ -369,6 +369,18 @@ export function ParkingFinePayment({ item, channels, endpoint, onDone, onCounter
   )
 }
 
+export function ParkingSettingsButton({ onClick }) {
+  return (
+    <button type="button" className="parking-settings-open-btn" onClick={onClick}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+      ตั้งค่าที่จอดและค่าปรับ
+    </button>
+  )
+}
+
 export function ParkingSettingsForm({ endpoint, onSaved, onCancel }) {
   const [draft, setDraft] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -410,28 +422,78 @@ export function ParkingSettingsForm({ endpoint, onSaved, onCancel }) {
   }
 
   if (!draft) return <p className="parking-space-empty">{error || 'กำลังโหลดการตั้งค่า...'}</p>
+
+  const fine = Number(draft.finePerHour) || 0
+  const step = (field, delta) => {
+    setDraft((current) => ({ ...current, [field]: String(Math.min(200, Math.max(0, (Number(current[field]) || 0) + delta))) }))
+    setError('')
+  }
+  const spaceRange = (prefix, count) => {
+    const total = Number(count) || 0
+    if (!total) return 'ไม่มีช่องจอด'
+    return total === 1 ? `${prefix}01` : `${prefix}01 – ${prefix}${String(total).padStart(2, '0')}`
+  }
+
   return (
-    <form className="parking-settings" onSubmit={submit}>
-      <div className="parking-rule is-visitor">
-        <strong>ผู้มาติดต่อจอดได้ครั้งละ {VISITOR_MAX_HOURS} ชั่วโมง (กำหนดตามนโยบาย)</strong>
-        <span>เกินเวลาคิดค่าปรับรายชั่วโมง เศษของชั่วโมงปัดขึ้นเป็น 1 ชั่วโมง · ค่าปรับที่เปลี่ยนจะใช้กับรถที่ออกจากที่จอดหลังจากนี้</span>
+    <form className="parking-settings is-redesigned" onSubmit={submit}>
+      <div className="parking-settings-policy">
+        <span className="parking-settings-policy-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+        </span>
+        <div>
+          <strong>ผู้มาติดต่อจอดฟรีได้ครั้งละ {VISITOR_MAX_HOURS} ชั่วโมง</strong>
+          <span>เกินเวลาคิดค่าปรับรายชั่วโมง เศษของชั่วโมงปัดขึ้นเป็น 1 ชั่วโมง · ค่าปรับใหม่ใช้กับรถที่ออกจากที่จอดหลังบันทึก</span>
+        </div>
       </div>
-      <div className="parking-settings-grid">
-        <label className="parking-settings-field">
-          ค่าปรับต่อชั่วโมง (บาท)
-          <input type="number" min="0" max="10000" step="0.01" inputMode="decimal" value={draft.finePerHour} onChange={update('finePerHour')} required />
-        </label>
-        <label className="parking-settings-field">
-          ช่องจอดรถยนต์
-          <input type="number" min="0" max="200" step="1" inputMode="numeric" value={draft.carSpaces} onChange={update('carSpaces')} required />
-          <small>รหัสช่อง C01, C02, ...</small>
-        </label>
-        <label className="parking-settings-field">
-          ช่องจอดรถจักรยานยนต์
-          <input type="number" min="0" max="200" step="1" inputMode="numeric" value={draft.motorcycleSpaces} onChange={update('motorcycleSpaces')} required />
-          <small>รหัสช่อง M01, M02, ...</small>
-        </label>
-      </div>
+
+      <section className="parking-settings-section">
+        <header>
+          <h4>ค่าปรับจอดเกินเวลา</h4>
+          <small>คิดกับผู้มาติดต่อเท่านั้น</small>
+        </header>
+        <div className="parking-settings-fine">
+          <label className="parking-settings-money">
+            <span aria-hidden="true">฿</span>
+            <input type="number" min="0" max="10000" step="0.01" inputMode="decimal" aria-label="ค่าปรับต่อชั่วโมง (บาท)" value={draft.finePerHour} onChange={update('finePerHour')} required />
+            <em>/ ชั่วโมง</em>
+          </label>
+          <div className="parking-settings-presets" role="group" aria-label="ค่าปรับที่ใช้บ่อย">
+            {[10, 20, 50, 100].map((value) => (
+              <button key={value} type="button" className={fine === value ? 'is-active' : ''} onClick={() => update('finePerHour')({ target: { value: String(value) } })}>฿{value}</button>
+            ))}
+          </div>
+        </div>
+        <p className="parking-settings-example">
+          ตัวอย่าง: จอด {VISITOR_MAX_HOURS + 2} ชม. 15 นาที → เกิน 3 ชม. (ปัดเศษ) × ฿{fine.toLocaleString('th-TH')} = <strong>฿{(fine * 3).toLocaleString('th-TH')}</strong>
+        </p>
+      </section>
+
+      <section className="parking-settings-section">
+        <header>
+          <h4>จำนวนช่องจอด</h4>
+          <small>ระบบสร้างรหัสช่องให้อัตโนมัติ</small>
+        </header>
+        <div className="parking-settings-spaces">
+          {[
+            { field: 'carSpaces', kind: 'car', label: 'รถยนต์', prefix: 'C' },
+            { field: 'motorcycleSpaces', kind: 'motorcycle', label: 'รถจักรยานยนต์', prefix: 'M' },
+          ].map((item) => (
+            <div key={item.field} className={`parking-settings-space is-${item.kind}`}>
+              <div className="parking-settings-space-head">
+                <span className="parking-settings-space-icon" aria-hidden="true"><ChoiceIcon kind={item.kind} /></span>
+                <strong>{item.label}</strong>
+              </div>
+              <div className="parking-settings-stepper">
+                <button type="button" aria-label={`ลดช่องจอด${item.label}`} onClick={() => step(item.field, -1)}>−</button>
+                <input type="number" min="0" max="200" step="1" inputMode="numeric" aria-label={`จำนวนช่องจอด${item.label}`} value={draft[item.field]} onChange={update(item.field)} required />
+                <button type="button" aria-label={`เพิ่มช่องจอด${item.label}`} onClick={() => step(item.field, 1)}>+</button>
+              </div>
+              <small>รหัสช่อง {spaceRange(item.prefix, draft[item.field])}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {error && <p className="parking-pay-error" role="alert">{error}</p>}
       <div className="parking-pay-actions">
         {onCancel && (

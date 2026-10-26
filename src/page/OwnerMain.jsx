@@ -20,6 +20,7 @@ import WifiManager from '../components/WifiManager.jsx'
 import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
 import RepairVendorManager from '../components/RepairVendorManager.jsx'
+import NotificationDetailModal from '../components/NotificationDetailModal.jsx'
 import { repairSummaryTiles } from '../utils/repairSummary.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
@@ -2480,6 +2481,8 @@ function OwnerMain() {
   const [lastOwnerTabByGroup, setLastOwnerTabByGroup] = useState({})
   const [marketSummary, setMarketSummary] = useState(null)
   const [repairSummary, setRepairSummary] = useState(null)
+  const [ownerFocus, setOwnerFocus] = useState(null)
+  const [ownerNotifDetail, setOwnerNotifDetail] = useState(null)
   const [financeSection, setFinanceSection] = useState('overview')
   const [paymentLogDetail, setPaymentLogDetail] = useState(null)
   const [slipSearch, setSlipSearch] = useState('')
@@ -3763,10 +3766,14 @@ function OwnerMain() {
       const tab = OWNER_TARGET_TABS[area]
       if (tab) {
         setActiveTab(tab)
+        if (['market', 'repair-vendors'].includes(tab) && notification.refId) {
+          setOwnerFocus((current) => ({ tab, id: notification.refId, refTable: notification.refTable, nonce: (current?.nonce || 0) + 1 }))
+        }
         return
       }
       const link = ownerNotificationLink(notification)
       if (link) navigate(link)
+      else setOwnerNotifDetail(notification)
       return
     }
     setActiveTab('announcements')
@@ -4025,12 +4032,13 @@ function OwnerMain() {
         {activeTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={summaryReporters['completed-contracts']} />}
 
         {activeTab === 'parking' && (
-          <StaffResidentVisitsTab canManageSettings onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
+          <StaffResidentVisitsTab canManageSettings canCreate={false} onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />
         )}
 
         {activeTab === 'wifi' && <WifiManager />}
-        {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
-        {activeTab === 'repair-vendors' && <RepairVendorManager readOnly onSummary={setRepairSummary} />}
+        {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} focus={ownerFocus?.tab === 'market' ? ownerFocus : null} />}
+        {activeTab === 'repair-vendors' && <RepairVendorManager readOnly onSummary={setRepairSummary} focus={ownerFocus?.tab === 'repair-vendors' ? ownerFocus : null} />}
+        {ownerNotifDetail && <NotificationDetailModal notification={ownerNotifDetail} onClose={() => setOwnerNotifDetail(null)} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

@@ -16627,7 +16627,6 @@ tr.admin-focus-flash.is-fading > td {
   }
 }
 
-/* ปุ่มการดำเนินการในแถวรายละเอียด (มือถือ) ให้เรียงเต็มความกว้างเท่ากัน */
 .admin-table .admin-detail-item .admin-row-actions {
   flex-direction: column;
   flex-wrap: nowrap;
@@ -19155,3 +19154,29 @@ tr.admin-focus-flash.is-fading > td {
   color: #a3b5ca;
   font-weight: 500;
 }
+
+.admin-notif-item-status {
+  align-items: baseline;
+  gap: 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.admin-notif-item-status::before {
+  align-self: flex-start;
+  margin-top: 0.5em;
+}
+
+.admin-review-page .admin-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+

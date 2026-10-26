@@ -24,6 +24,7 @@ import {
   repairGuideExamples,
 } from '../utils/repairApiGuide.js'
 import { downloadGuidePdf } from '../utils/marketApiGuide.js'
+import { focusAndHighlight } from '../utils/focusHighlight.js'
 import { MAINTENANCE_CATEGORY_HINT, MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL, MAINTENANCE_TIME_OPTIONS } from '../utils/maintenanceCategories.js'
 import './MarketManager.css'
 import './RepairVendorManager.css'
@@ -1706,6 +1707,7 @@ function JobDetailModal({ job, onClose, onChanged }) {
 function JobCard({ job, onOpen, onCancel }) {
   return (
     <article
+      data-repair-job={job.id}
       className={`market-lease-card repair-job-card is-${job.status}`}
       role="button"
       tabIndex={0}
@@ -1758,9 +1760,9 @@ function JobCard({ job, onOpen, onCancel }) {
   )
 }
 
-function JobsSection({ data, onSend, onOpenJob, onCancelJob }) {
+function JobsSection({ data, onSend, onOpenJob, onCancelJob, initialFilter = 'open' }) {
   const canEdit = useCanEdit()
-  const [filter, setFilter] = useState('open')
+  const [filter, setFilter] = useState(initialFilter)
   const [search, setSearch] = useState('')
   const matcher = JOB_FILTERS.find((item) => item.key === filter)?.match || (() => true)
   const term = search.trim().toLowerCase()
@@ -1798,7 +1800,7 @@ function VendorCard({ vendor, onOpen, onSend }) {
   const canEdit = useCanEdit()
   const contract = contractState(vendor)
   return (
-    <article className={`repair-vendor-card${vendor.is_usable ? '' : ' is-inactive'}`}>
+    <article data-repair-vendor={vendor.id} className={`repair-vendor-card${vendor.is_usable ? '' : ' is-inactive'}`}>
       <div className="repair-vendor-head">
         <span className="market-title-icon repair-vendor-icon"><Icon name="wrench" size={20} /></span>
         <div className="repair-job-who">
@@ -2218,7 +2220,9 @@ function ApiGuideSection() {
   )
 }
 
-export default function RepairVendorManager({ rooms = [], onSummary, readOnly = false }) {
+export default function RepairVendorManager({ rooms = [], onSummary, readOnly = false, focus = null }) {
+  const [sectionKey, setSectionKey] = useState(0)
+  const [missingNotice, setMissingNotice] = useState('')
   const summaryRef = useRef(onSummary)
   useEffect(() => {
     summaryRef.current = onSummary
@@ -2253,6 +2257,40 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
 
   const data = state.data
   const liveJob = modal?.type === 'job' ? data?.jobs.find((job) => job.id === modal.job.id) || modal.job : null
+  const focusNonce = focus?.nonce
+  const focusId = focus?.id
+  const focusTable = focus?.refTable
+  const hasData = Boolean(data)
+  const jobsRef = useRef([])
+  useEffect(() => {
+    jobsRef.current = data?.jobs || []
+  })
+
+  useEffect(() => {
+    if (!focusNonce || !hasData || !focusId) return undefined
+    const isVendor = focusTable === 'RepairVendor'
+    let cancelFocus = () => {}
+    const start = setTimeout(() => {
+      setModal(null)
+      setSection(isVendor ? 'vendors' : 'jobs')
+      setSectionKey(focusNonce)
+      cancelFocus = focusAndHighlight(isVendor ? `[data-repair-vendor="${focusId}"]` : `[data-repair-job="${focusId}"]`, {
+        onFound: () => setTimeout(() => {
+          if (isVendor) {
+            setModal({ type: 'vendor', id: Number(focusId) })
+            return
+          }
+          const job = jobsRef.current.find((item) => item.id === Number(focusId))
+          if (job) setModal({ type: 'job', job })
+        }, 900),
+        onMissing: () => setMissingNotice(isVendor ? 'ไม่พบช่างรายนี้แล้ว อาจถูกลบออกจากระบบ' : 'ไม่พบงานซ่อมนี้แล้ว อาจถูกลบออกจากระบบ'),
+      })
+    }, 0)
+    return () => {
+      clearTimeout(start)
+      cancelFocus()
+    }
+  }, [focusNonce, hasData, focusId, focusTable])
 
   return (
     <CanEditContext.Provider value={!readOnly}>
@@ -2281,11 +2319,18 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
       </header>
 
       {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
+      {missingNotice && (
+        <RepairModal title="ไม่พบรายการนี้" icon="search" tone="danger" size="sm" onClose={() => setMissingNotice('')} onSubmit={() => setMissingNotice('')} submitLabel="ตกลง" hideCancel>
+          <p className="market-notice-message">{missingNotice}</p>
+        </RepairModal>
+      )}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
       {state.loading && !data && <p className="market-empty">กำลังโหลด...</p>}
 
       {data && section === 'jobs' && (
         <JobsSection
+          key={sectionKey}
+          initialFilter={sectionKey ? 'all' : 'open'}
           data={data}
           onSend={(vendorId) => setModal({ type: 'send', vendorId })}
           onOpenJob={(job) => setModal({ type: 'job', job })}
@@ -2294,6 +2339,7 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
       )}
       {data && section === 'vendors' && (
         <VendorsSection
+          key={sectionKey}
           data={data}
           onOpen={(id) => setModal({ type: 'vendor', id })}
           onCreate={() => setModal({ type: 'create-vendor' })}
