@@ -45,7 +45,7 @@ import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, Tran
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
 import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
-import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationReads, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
 const WAITING_UI_STATUSES = {
@@ -5906,16 +5906,7 @@ function AdminBackupPage() {
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [seenNotificationKeys, setSeenNotificationKeys] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(getNotificationStorageKey('admin')) || '[]')
-      return Array.isArray(stored) ? stored : []
-    } catch {
-      return []
-    }
-  })
   const [notifPage, setNotifPage] = useState(1)
-  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
   const notifListRef = useRef(null)
   const notifTargetRef = useRef(null)
   const [notifTargetReady, setNotifTargetReady] = useState(0)
@@ -7498,6 +7489,7 @@ function AdminBackupPage() {
     onNewEvents: () => {
       loadNotifSources()
       loadMoveOutInspections()
+      loadAnnouncements()
       setPeerRefresh((count) => count + 1)
     },
   })
@@ -7516,15 +7508,9 @@ function AdminBackupPage() {
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
   }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, serverFeed.events, serverFeed.pending])
 
-  const newNotifications = notifications.filter((notification) => isUnread(notification, seenNotificationKeys))
-
-  const markNotificationsRead = () => {
-    setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
-    const keys = notifications.map((notification) => notification.key)
-    setSeenNotificationKeys(keys)
-    localStorage.setItem(getNotificationStorageKey('admin'), JSON.stringify(keys))
-    serverFeed.markAllRead()
-  }
+  const notificationReads = useNotificationReads(getNotificationStorageKey('admin'), serverFeed)
+  const newNotifications = notifications.filter((notification) => isUnread(notification, notificationReads.seenKeys))
+  const freshNotifKeys = new Set(newNotifications.map((notification) => notification.key))
 
   useEffect(() => {
     const link = takeNotificationDeepLink()
@@ -7589,6 +7575,7 @@ function AdminBackupPage() {
 
   const openNotification = (notif) => {
     closeNotifPanel()
+    notificationReads.markRead(notif, notifications)
     if (notif.server) {
       const tab = ADMIN_TARGET_TABS[(notif.target || '').split(':')[0]]
       setAnnouncementFocus(null)
@@ -7686,7 +7673,6 @@ function AdminBackupPage() {
                   if (notifOpen) {
                     closeNotifPanel()
                   } else {
-                    markNotificationsRead()
                     setNotifOpen(true)
                     setNotifPage(1)
                   }

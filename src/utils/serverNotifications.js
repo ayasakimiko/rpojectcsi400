@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 
-const POLL_MS = 20000
+// Fallback only; changes normally arrive through the /notifications/wait long poll.
+const POLL_MS = 60000
 
 const KIND_BY_TYPE_PREFIX = [
   ['tenant_request', 'tenant'],
@@ -50,10 +51,61 @@ export function isUnread(item, seenKeys) {
   return seenKeys.has ? !seenKeys.has(item.key) : !seenKeys.includes(item.key)
 }
 
+// The page area a notification leads to; reading one item also reads the other unread
+// items about the same subject (same title in the same area), and nothing else.
+export function topicOf(item) {
+  return item.target ? item.target.split(':')[0] : item.kind || ''
+}
+
+const sameSubject = (a, b) => a.key === b.key || (a.title === b.title && topicOf(a) === topicOf(b))
+
+const MAX_SEEN_KEYS = 1000
+const RETRY_MS = 5000
+
+function readSeenKeys(storageKey) {
+  if (!storageKey) return new Set()
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '[]')
+    return new Set(Array.isArray(stored) ? stored : [])
+  } catch {
+    return new Set()
+  }
+}
+
+// Read state for one bell: server events are tracked per account on the server, items the
+// page derives itself are remembered per browser under storageKey.
+export function useNotificationReads(storageKey, serverFeed) {
+  const [seen, setSeen] = useState(() => ({ storageKey, keys: readSeenKeys(storageKey) }))
+  let seenKeys = seen.keys
+  if (seen.storageKey !== storageKey) {
+    seenKeys = readSeenKeys(storageKey)
+    setSeen({ storageKey, keys: seenKeys })
+  }
+  const { markRead: markServerRead } = serverFeed
+
+  const markRead = useCallback((item, notifications) => {
+    const items = notifications.filter((other) => sameSubject(other, item) && isUnread(other, seenKeys))
+    if (!items.some((other) => other.key === item.key) && isUnread(item, seenKeys)) items.push(item)
+    markServerRead(items.filter((other) => other.serverId).map((other) => other.serverId))
+    const keys = items.filter((other) => !other.serverId).map((other) => other.key)
+    if (keys.length === 0) return
+    const next = new Set([...keys, ...seenKeys].slice(0, MAX_SEEN_KEYS))
+    setSeen({ storageKey, keys: next })
+    try {
+      if (storageKey) localStorage.setItem(storageKey, JSON.stringify([...next]))
+    } catch (error) {
+      console.warn('Could not save seen notifications', error)
+    }
+  }, [markServerRead, seenKeys, storageKey])
+
+  return { seenKeys, markRead }
+}
+
 export function useServerNotifications(apiBase, { pendingKinds = [], enabled = true, onNewEvents } = {}) {
   const [events, setEvents] = useState([])
   const [pending, setPending] = useState([])
   const newestId = useRef(0)
+  const readIds = useRef(new Set())
   const onNewEventsRef = useRef(onNewEvents)
   const kinds = pendingKinds.join(',')
 
@@ -61,6 +113,7 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
     onNewEventsRef.current = onNewEvents
   }, [onNewEvents])
 
+  // Resolves true when it already told the page about new events.
   const refresh = useCallback(() => axios
     .get(`${apiBase}/notifications`, {
       params: kinds ? { pending: kinds } : undefined,
@@ -68,12 +121,15 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
     .then(({ data }) => {
       const rows = data.notifications || []
       const newest = rows.reduce((max, row) => Math.max(max, Number(row.id) || 0), 0)
-      if (newestId.current && newest > newestId.current) onNewEventsRef.current?.()
+      const fresh = Boolean(newestId.current && newest > newestId.current)
+      if (fresh) onNewEventsRef.current?.()
       newestId.current = Math.max(newestId.current, newest)
-      setEvents(rows.map((row) => toBellItem(row)))
+      // A read posted a moment ago may not be visible to this response yet.
+      setEvents(rows.map((row) => toBellItem(readIds.current.has(row.id) ? { ...row, is_read: true } : row)))
       setPending((data.pending || []).map((row) => toBellItem(row, true)))
+      return fresh
     })
-    .catch(() => {}), [apiBase, kinds])
+    .catch(() => false), [apiBase, kinds])
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -87,13 +143,49 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
     }
   }, [enabled, refresh])
 
+  // Live updates: /notifications/wait answers as soon as anything this bell shows changes.
+  useEffect(() => {
+    if (!enabled) return undefined
+    const controller = new AbortController()
+    let cursor = null
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    ;(async () => {
+      while (!controller.signal.aborted) {
+        try {
+          const { data } = await axios.get(`${apiBase}/notifications/wait`, {
+            params: cursor ? { cursor } : undefined,
+            signal: controller.signal,
+            timeout: 40000,
+          })
+          cursor = data.cursor
+          if (data.changed && !(await refresh())) onNewEventsRef.current?.()
+        } catch {
+          if (controller.signal.aborted) return
+          await pause(RETRY_MS)
+        }
+      }
+    })()
+    return () => controller.abort()
+  }, [apiBase, enabled, refresh])
+
+  const markRead = useCallback((ids) => {
+    const unread = ids.filter((id) => !readIds.current.has(id))
+    if (unread.length === 0) return
+    unread.forEach((id) => readIds.current.add(id))
+    setEvents((current) => current.map((item) => (unread.includes(item.serverId) ? { ...item, isRead: true } : item)))
+    axios.post(`${apiBase}/notifications/read`, { ids: unread }).catch(() => {
+      unread.forEach((id) => readIds.current.delete(id))
+    })
+  }, [apiBase])
+
   const markAllRead = useCallback(() => {
     if (!events.some((item) => !item.isRead)) return
+    events.forEach((item) => readIds.current.add(item.serverId))
     setEvents((current) => current.map((item) => ({ ...item, isRead: true })))
     axios.post(`${apiBase}/notifications/read`, { all: true }).catch(() => {})
   }, [apiBase, events])
 
-  return { events, pending, markAllRead, refresh }
+  return { events, pending, markRead, markAllRead, refresh }
 }
 
 export function takeNotificationDeepLink() {
