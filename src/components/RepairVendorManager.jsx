@@ -1310,7 +1310,7 @@ function JobFormModal({ data, rooms, initialVendorId, onClose, onSaved }) {
             <div className="market-form-grid">
               <div className="market-field is-wide">
                 <span>ประเภทงานซ่อม</span>
-                <div className="repair-category-tiles" role="radiogroup" aria-label="ประเภทงานซ่อม">
+                <div className="repair-specialty-grid" role="radiogroup" aria-label="ประเภทงานซ่อม">
                   {Object.entries(CATEGORY_LABEL).map(([key, label]) => {
                     const selected = form.category === key
                     const covered = vendor?.specialties.includes(key)
@@ -1322,14 +1322,14 @@ function JobFormModal({ data, rooms, initialVendorId, onClose, onSaved }) {
                         role="radio"
                         aria-checked={selected}
                         title={hint}
-                        className={`repair-category-tile${selected ? ' is-selected' : ''}`}
+                        className={`repair-specialty-option is-pick${selected ? ' is-selected' : ''}`}
                         onClick={() => setForm((current) => ({ ...current, category: key }))}
                       >
-                        <span className="repair-category-tile-icon"><Icon name={SPECIALTY_INFO[key].icon} size={16} /></span>
-                        <span className="repair-category-tile-text">
-                          <strong>{label}</strong>
-                          {vendor && <em className={covered ? 'is-covered' : ''}>{covered ? '✓ ช่างรับงานนี้' : 'ช่างไม่ได้ระบุ'}</em>}
-                        </span>
+                        <span className="repair-specialty-check" aria-hidden="true">{selected ? '✓' : ''}</span>
+                        {vendor && <em className={`repair-specialty-cover${covered ? ' is-covered' : ''}`}>{covered ? 'ช่างรับงานนี้' : 'ไม่ได้ระบุ'}</em>}
+                        <span className="repair-specialty-icon"><Icon name={SPECIALTY_INFO[key].icon} size={20} /></span>
+                        <strong>{label}</strong>
+                        <small>{hint}</small>
                       </button>
                     )
                   })}

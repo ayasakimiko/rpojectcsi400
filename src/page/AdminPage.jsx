@@ -1445,7 +1445,7 @@ const ADMIN_TARGET_TABS = {
   visits: 'vehicle-requests', safety: 'safety', requests: 'requests', 'transfer-contracts': 'requests',
   maintenance: 'maintenance', contracts: 'completed-contracts', 'move-in': 'move-in-inspections',
   inspections: 'move-out-inspections', rooms: 'rooms', 'waiting-list': 'waiting-list', parcels: 'parcels',
-  staff: 'staff', expenses: 'expenses', 'repair-vendors': 'repair-vendors',
+  staff: 'staff', expenses: 'expenses', 'repair-vendors': 'repair-vendors', market: 'market',
 }
 const ADMIN_STAFF_NOTIF_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 

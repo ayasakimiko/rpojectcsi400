@@ -259,6 +259,7 @@ async function grantIsolatedServiceUsers(connection) {
     await connection.query("ALTER USER ?@'%' IDENTIFIED BY ?", [credentials.user, credentials.password]);
     await connection.query("REVOKE ALL PRIVILEGES, GRANT OPTION FROM ?@'%'", [credentials.user]);
     await connection.query("GRANT SELECT, INSERT, UPDATE, DELETE ON ??.* TO ?@'%'", [databaseFor(service), credentials.user]);
+    await connection.query("GRANT INSERT ON ??.Notification TO ?@'%'", [databaseFor("owner"), credentials.user]);
   }
 }
 

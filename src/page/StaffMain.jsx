@@ -1447,7 +1447,7 @@ const STAFF_SERVER_PENDING_KINDS = [
   'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
 ]
 const STAFF_FOCUS_TABS = { slips: 'payment-review', visits: 'resident-visits', safety: 'safety' }
-const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections', 'repair-vendors': 'repair-vendors' }
+const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections', 'repair-vendors': 'repair-vendors', market: 'market' }
 const PAYMENT_HISTORY_INITIAL_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {

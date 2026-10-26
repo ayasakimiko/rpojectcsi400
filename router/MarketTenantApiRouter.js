@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { validateText } from "../src/utils/validators.js";
+import { marketActor, productChanged, shopChanged } from "../middleware/marketNotify.js";
 import {
   createProduct,
   deleteProduct,
@@ -134,6 +135,7 @@ async function updateShopProfile(req, res) {
   ]);
   if (result.affectedRows === 0) throw fail("ไม่พบร้านค้า", 404, "NOT_FOUND");
   const [[shop]] = await db.query(SELECT_SHOP, [req.tenant.shopId]);
+  await shopChanged(shop, marketActor(req), "renamed");
   res.json({ message: "บันทึกข้อมูลร้านเรียบร้อยแล้ว", shop: publicShop(shop) });
 }
 
@@ -161,7 +163,10 @@ router.get("/products/:id", async (req, res) => {
 });
 
 router.post("/products", async (req, res) => {
-  const product = await createProduct(getPool(), req.tenant.shopId, validateProductInput(req.body), actorName(req));
+  const db = getPool();
+  const product = await createProduct(db, req.tenant.shopId, validateProductInput(req.body), actorName(req));
+  const [[shop]] = await db.query(SELECT_SHOP, [req.tenant.shopId]);
+  await productChanged(shop, product, marketActor(req), "created");
   res.status(201).json({ message: "เพิ่มสินค้าเรียบร้อยแล้ว", product: publicProduct(product) });
 });
 
@@ -175,7 +180,12 @@ router.put("/products/:id", patchProduct);
 router.patch("/products/:id", patchProduct);
 
 router.delete("/products/:id", async (req, res) => {
-  await deleteProduct(getPool(), req.tenant.shopId, parseId(req.params.id));
+  const db = getPool();
+  const productId = parseId(req.params.id);
+  const product = await getProduct(db, req.tenant.shopId, productId);
+  await deleteProduct(db, req.tenant.shopId, productId);
+  const [[shop]] = await db.query(SELECT_SHOP, [req.tenant.shopId]);
+  await productChanged(shop, product, marketActor(req), "deleted");
   res.json({ message: "ลบสินค้าเรียบร้อยแล้ว" });
 });
 

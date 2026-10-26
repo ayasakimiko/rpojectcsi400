@@ -2381,7 +2381,7 @@ const OWNER_PENDING_KINDS = [
   'slip', 'visit', 'safety', 'tenant', 'maintenance', 'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract',
   'transfer_charge', 'move_in', 'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
 ]
-const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance', 'repair-vendors': 'repair-vendors' }
+const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance', 'repair-vendors': 'repair-vendors', market: 'market' }
 
 function ownerNotificationLink({ target, refId }) {
   const [area] = (target || '').split(':')

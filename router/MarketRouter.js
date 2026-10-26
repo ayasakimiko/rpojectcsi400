@@ -8,6 +8,7 @@ import {
   createProduct,
   deleteProduct,
   fail,
+  getProduct,
   listProducts,
   parseId,
   serializeLease,
@@ -18,6 +19,16 @@ import {
   validateShopInput,
 } from "./marketShared.js";
 import { validateText } from "../src/utils/validators.js";
+import {
+  leaseCreated,
+  leaseImagesAdded,
+  leaseRenewed,
+  leaseTerminated,
+  marketActor,
+  marketKeyChanged,
+  productChanged,
+  shopChanged,
+} from "../middleware/marketNotify.js";
 
 const router = Router();
 const MAX_KEYS_PER_LEASE = 5;
@@ -232,7 +243,9 @@ router.post("/shops", canManageShops, async (req, res) => {
   const caretaker = await resolveCaretaker(req, input.caretaker_staff_id);
   try {
     const [result] = await db.query(SQL.insertShop, [...shopValues(input, caretaker), req.actor.role, req.actor.name]);
-    res.status(201).json({ message: "สร้างร้านค้าเรียบร้อยแล้ว", shop: await loadShop(db, result.insertId) });
+    const shop = await loadShop(db, result.insertId);
+    await shopChanged(shop, marketActor(req), "created");
+    res.status(201).json({ message: "สร้างร้านค้าเรียบร้อยแล้ว", shop });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") throw fail("รหัสร้านนี้ถูกใช้แล้ว", 409, "CONFLICT");
     throw error;
@@ -251,7 +264,9 @@ router.put("/shops/:id", canManageShops, async (req, res) => {
     if (error.code === "ER_DUP_ENTRY") throw fail("รหัสร้านนี้ถูกใช้แล้ว", 409, "CONFLICT");
     throw error;
   }
-  res.json({ message: "บันทึกข้อมูลร้านค้าเรียบร้อยแล้ว", shop: await loadShop(db, shopId) });
+  const shop = await loadShop(db, shopId);
+  await shopChanged(shop, marketActor(req), "updated");
+  res.json({ message: "บันทึกข้อมูลร้านค้าเรียบร้อยแล้ว", shop });
 });
 
 router.delete("/shops/:id", canManageShops, async (req, res) => {
@@ -260,7 +275,9 @@ router.delete("/shops/:id", canManageShops, async (req, res) => {
   await requireOperableShop(db, shopId);
   const [[lease]] = await db.query(SQL.currentLeaseOfShop, [shopId]);
   if (lease) throw fail("ร้านนี้ยังมีสัญญาเช่าที่ใช้งานอยู่ ต้องยกเลิกสัญญาก่อนปิดร้าน", 409, "CONFLICT");
+  const shop = await loadShop(db, shopId);
   await db.query(SQL.closeShop, [shopId]);
+  await shopChanged(shop, marketActor(req), "closed");
   res.json({ message: "ปิดร้านค้าเรียบร้อยแล้ว" });
 });
 
@@ -269,6 +286,7 @@ router.post("/shops/:id/products", canOperateMarket, async (req, res) => {
   const shopId = parseId(req.params.id);
   await requireOperableShop(db, shopId);
   const product = await createProduct(db, shopId, validateProductInput(req.body), req.actor.name);
+  await productChanged(await loadShop(db, shopId), product, marketActor(req), "created");
   res.status(201).json({ message: "เพิ่มสินค้าเรียบร้อยแล้ว", product });
 });
 
@@ -277,6 +295,7 @@ router.put("/shops/:id/products/:productId", canOperateMarket, async (req, res) 
   const shopId = parseId(req.params.id);
   await requireOperableShop(db, shopId);
   const product = await updateProduct(db, shopId, parseId(req.params.productId), validateProductInput(req.body, { partial: true }), req.actor.name);
+  await productChanged(await loadShop(db, shopId), product, marketActor(req), "updated");
   res.json({ message: "บันทึกสินค้าเรียบร้อยแล้ว", product });
 });
 
@@ -284,7 +303,10 @@ router.delete("/shops/:id/products/:productId", canOperateMarket, async (req, re
   const db = getPool();
   const shopId = parseId(req.params.id);
   await requireOperableShop(db, shopId);
-  await deleteProduct(db, shopId, parseId(req.params.productId));
+  const productId = parseId(req.params.productId);
+  const product = await getProduct(db, shopId, productId);
+  await deleteProduct(db, shopId, productId);
+  await productChanged(await loadShop(db, shopId), product, marketActor(req), "deleted");
   res.json({ message: "ลบสินค้าเรียบร้อยแล้ว" });
 });
 
@@ -353,6 +375,7 @@ router.post("/leases/:id/images", canOperateMarket, parseLeaseImages({ min: 1 })
     const [[{ count }]] = await db.query(SQL.leaseImageCount, [leaseId]);
     if (count + req.leaseImages.length > MAX_IMAGES_PER_LEASE) throw fail(`สัญญาหนึ่งแนบรูปได้สูงสุด ${MAX_IMAGES_PER_LEASE} รูป`, 409, "CONFLICT");
     await db.query(SQL.insertImages, [imageRows(leaseId, req.leaseImages, req.actor.name)]);
+    await leaseImagesAdded(await loadLease(db, leaseId), req.leaseImages.length, marketActor(req));
     res.status(201).json({ message: "แนบรูปสัญญาเรียบร้อยแล้ว", images: await loadLeaseImages(db, leaseId) });
   } catch (error) {
     await removeLeaseFiles(fileNames);
@@ -415,7 +438,9 @@ router.post("/leases", canOperateMarket, parseLeaseImages({ min: LEASE_MIN_IMAGE
   } finally {
     connection.release();
   }
-  res.status(201).json({ message: "ชำระเงินและทำสัญญาเช่าเรียบร้อยแล้ว", lease: await loadLease(getPool(), leaseId) });
+  const lease = await loadLease(getPool(), leaseId);
+  await leaseCreated(lease, input.monthly_rent + input.deposit, marketActor(req));
+  res.status(201).json({ message: "ชำระเงินและทำสัญญาเช่าเรียบร้อยแล้ว", lease });
 });
 
 const RENEW_PLANS = { monthly: "จ่ายรายเดือน", lump_sum: "จ่ายล่วงหน้าทั้งก้อน" };
@@ -482,7 +507,9 @@ router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: LEASE
   } finally {
     connection.release();
   }
-  res.json({ message: `ชำระเงินและต่อสัญญาเพิ่ม ${months} เดือน ถึง ${newEnd} เรียบร้อยแล้ว`, lease: await loadLease(db, leaseId) });
+  const renewed = await loadLease(db, leaseId);
+  await leaseRenewed(renewed, months, amount, marketActor(req));
+  res.json({ message: `ชำระเงินและต่อสัญญาเพิ่ม ${months} เดือน ถึง ${newEnd} เรียบร้อยแล้ว`, lease: renewed });
 });
 
 router.post("/leases/:id/terminate", canOperateMarket, async (req, res) => {
@@ -496,7 +523,9 @@ router.post("/leases/:id/terminate", canOperateMarket, async (req, res) => {
     throw fail("สัญญานี้ถูกยกเลิกไปแล้ว", 409, "CONFLICT");
   }
   await db.query(SQL.revokeLeaseKeys, [req.actor.name, leaseId]);
-  res.json({ message: "ยกเลิกสัญญาเรียบร้อยแล้ว API key ของสัญญานี้ถูกปิดทั้งหมด", lease: await loadLease(db, leaseId) });
+  const terminated = await loadLease(db, leaseId);
+  await leaseTerminated(terminated, req.body.reason.trim(), marketActor(req));
+  res.json({ message: "ยกเลิกสัญญาเรียบร้อยแล้ว API key ของสัญญานี้ถูกปิดทั้งหมด", lease: terminated });
 });
 
 router.post("/leases/:id/api-keys", canOperateMarket, async (req, res) => {
@@ -510,6 +539,7 @@ router.post("/leases/:id/api-keys", canOperateMarket, async (req, res) => {
   if (count >= MAX_KEYS_PER_LEASE) throw fail(`สัญญาหนึ่งมี API key ที่ใช้งานได้สูงสุด ${MAX_KEYS_PER_LEASE} อัน`, 409, "CONFLICT");
   const { key, prefix, hash, cipher } = generateApiKey();
   await db.query(SQL.insertApiKey, [leaseId, req.body.label.trim(), prefix, hash, cipher, req.actor.name]);
+  await marketKeyChanged(lease, marketActor(req), "issued");
   res.status(201).json({ message: "สร้าง API key เรียบร้อยแล้ว", api_key: key, api_keys: await loadApiKeys(db, leaseId) });
 });
 
@@ -549,6 +579,7 @@ router.post("/api-keys/:id/rotate", canOperateMarket, async (req, res) => {
   } finally {
     connection.release();
   }
+  await marketKeyChanged(lease, marketActor(req), "rotated");
   res.status(201).json({ message: "ออก key ใหม่แทนเรียบร้อยแล้ว key เดิมถูกยกเลิก", api_key: key, api_keys: await loadApiKeys(db, oldKey.lease_id) });
 });
 
@@ -557,7 +588,8 @@ router.post("/api-keys/:id/revoke", canOperateMarket, async (req, res) => {
   const keyId = parseId(req.params.id);
   const [[key]] = await db.query(SQL.apiKeyLease, [keyId]);
   if (!key) throw fail("ไม่พบ API key นี้", 404, "NOT_FOUND");
-  await db.query(SQL.revokeKey, [req.actor.name, keyId]);
+  const [revoked] = await db.query(SQL.revokeKey, [req.actor.name, keyId]);
+  if (revoked.affectedRows > 0) await marketKeyChanged(await loadLease(db, key.lease_id), marketActor(req), "revoked");
   res.json({ message: "ยกเลิก API key เรียบร้อยแล้ว", api_keys: await loadApiKeys(db, key.lease_id) });
 });
 
