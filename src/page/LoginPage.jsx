@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import { AuthAlert, AuthLayout } from '../components/AuthLayout.jsx'
-import { startSession } from '../utils/session.js'
+import { homePathForRole, startSession } from '../utils/session.js'
 import { PASSWORD_MAX_LENGTH, digitsOnly, firstError, validateLoginForm } from '../utils/validators.js'
 
 const HOME_ICON = (
@@ -51,15 +51,7 @@ function LoginPage() {
       sessionStorage.setItem('justLoggedIn', '1')
       setLoggedIn(true)
       setNotice({ type: 'success', message: data.message || 'เข้าสู่ระบบสำเร็จ' })
-      const destination =
-        data.user?.role === 'Customer'
-          ? '/dashboard'
-          : data.user?.role === 'Owner'
-            ? '/owner'
-            : data.user?.role === 'Admin'
-              ? '/admin'
-              : '/staff'
-      setTimeout(() => navigate(destination), 600)
+      setTimeout(() => navigate(homePathForRole(data.user?.role), { replace: true }), 600)
     } catch (err) {
       if (err.response?.data?.code === 'LOGIN_ROLE_REQUIRED') {
         setAvailableRoles((err.response.data.roles || []).filter((role) => Object.hasOwn(ROLE_LABELS, role)))

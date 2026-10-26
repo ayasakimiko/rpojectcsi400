@@ -10093,3 +10093,99 @@ textarea.owner-xe-input { resize: vertical; line-height: 1.5; }
 .owner-group-subtabs .owner-nav-segment {
   margin-bottom: 4px;
 }
+
+.owner-settings-segment.owner-nav-segment.is-underline {
+  gap: 2px;
+  border: 0;
+  border-bottom: 1px solid #dce7f5;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 2px;
+}
+
+.owner-nav-segment.is-underline .owner-settings-segment-thumb {
+  border-radius: 3px 3px 0 0;
+  background: #2563eb;
+  box-shadow: 0 -2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.owner-nav-segment.is-underline .owner-settings-segment-option {
+  min-height: 38px;
+  border-radius: 8px 8px 0 0;
+  padding: 8px 14px 10px;
+  color: #6b7f99;
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.owner-nav-segment.is-underline .owner-settings-segment-option:hover:not(.is-active) {
+  background: rgba(37, 99, 235, 0.05);
+  color: #1e3a5f;
+}
+
+.owner-nav-segment.is-underline .owner-settings-segment-option.is-active {
+  color: #1d4ed8;
+}
+
+.owner-panel-nav {
+  margin: -6px 0 16px;
+}
+
+.owner-panel-nav .owner-nav-segment.is-underline {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.owner-oc-panel > .owner-panel-nav {
+  margin: 0;
+  padding: 14px 20px 4px;
+}
+
+.owner-nav-segment .owner-settings-segment-thumb[data-ready='true'] {
+  transition:
+    transform 0.42s cubic-bezier(0.65, 0, 0.35, 1),
+    width 0.42s cubic-bezier(0.65, 0, 0.35, 1),
+    height 0.42s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.owner-nav-segment .owner-settings-segment-option {
+  transition: color 0.3s ease, background 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .owner-nav-segment .owner-settings-segment-thumb[data-ready='true'] {
+    transition: none;
+  }
+}
+
+.owner-group-subtabs.owner-nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 4px;
+}
+
+.owner-nav-row .owner-period-range-group {
+  margin-left: auto;
+}
+
+.owner-group-subtabs.owner-nav-row .owner-nav-segment {
+  margin-bottom: 0;
+}
+
+.owner-section-toolbar {
+  margin: -4px 0 0;
+}
+
+.owner-panel.owner-fc-panel > .owner-panel-nav {
+  margin: 0;
+  padding: 14px 24px 4px;
+}
+
+.owner-panel.owner-fc-panel > .owner-panel-nav + .owner-fc-header {
+  border-top: 0;
+}

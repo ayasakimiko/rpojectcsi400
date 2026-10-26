@@ -14,6 +14,10 @@ export function sessionRole() {
   }
 }
 
+export function homePathForRole(role) {
+  return { Customer: '/dashboard', Owner: '/owner', Admin: '/admin', Staff: '/staff' }[role] || '/login'
+}
+
 export function startSession(user) {
   sessionStorage.setItem('session', `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`)
   sessionStorage.setItem('user', JSON.stringify(user))

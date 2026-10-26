@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useState } from 'react'
 import axios from 'axios'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { homePathForRole, sessionRole } from '../utils/session.js'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/RegisterPage.css'
@@ -346,7 +347,7 @@ function RegisterMain() {
       setSuccess(data.message || 'สมัครสมาชิกสำเร็จ')
       setRegisterForm({ ...initialRegisterForm, rental_start_date: getNow() })
       setContractImages([])
-      setTimeout(() => navigate('/staff'), 1200)
+      setTimeout(() => navigate(homePathForRole(sessionRole())), 1200)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {

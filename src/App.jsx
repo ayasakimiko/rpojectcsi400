@@ -6,7 +6,7 @@ import CustomerDashbord from './page/CustomerDashbord.jsx'
 import StaffMain from './page/StaffMain.jsx'
 import AdminPage from './page/AdminPage.jsx'
 import OwnerMain from './page/OwnerMain.jsx'
-import { clearSession, hasSession } from './utils/session.js'
+import { clearSession, hasSession, homePathForRole } from './utils/session.js'
 
 const STAFF_ROLES = new Set(['Staff', 'Admin', 'Owner'])
 const ADMIN_ROLES = new Set(['Admin', 'Owner'])
@@ -40,6 +40,13 @@ function RequireStaffAuth({ children }) {
   if (!STAFF_ROLES.has(readSessionUser()?.role)) {
     return <Navigate to="/login" replace />
   }
+  return children
+}
+
+function RequireStaffPage({ children }) {
+  const role = readSessionUser()?.role
+  if (role === 'Owner') return <Navigate to={homePathForRole(role)} replace />
+  if (!STAFF_ROLES.has(role)) return <Navigate to="/login" replace />
   return children
 }
 
@@ -82,9 +89,9 @@ function App() {
         <Route
           path="/staff"
           element={
-            <RequireStaffAuth>
+            <RequireStaffPage>
               <StaffMain />
-            </RequireStaffAuth>
+            </RequireStaffPage>
           }
         />
         <Route

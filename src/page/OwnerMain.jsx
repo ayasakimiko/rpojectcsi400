@@ -127,7 +127,10 @@ function SettingsCategoryIcon({ name, size = 16 }) {
   )
 }
 
-function OwnerSegmentNav({ items, value, onSelect, label }) {
+const SEGMENT_POSITIONS = new Map()
+
+function OwnerSegmentNav({ items, value, onSelect, label, variant = 'pill' }) {
+  const underline = variant === 'underline'
   const trackRef = useRef(null)
   const thumbRef = useRef(null)
 
@@ -135,19 +138,37 @@ function OwnerSegmentNav({ items, value, onSelect, label }) {
     const track = trackRef.current
     const thumb = thumbRef.current
     if (!track || !thumb) return undefined
+    const apply = ({ x, y, width, height }) => {
+      thumb.style.width = `${width}px`
+      thumb.style.height = `${height}px`
+      thumb.style.transform = `translate(${x}px, ${y}px)`
+    }
+    let frame = 0
     const place = () => {
       const button = track.querySelector('[aria-checked="true"]')
       if (!button) return
-      thumb.style.width = `${button.offsetWidth}px`
-      thumb.style.height = `${button.offsetHeight}px`
-      thumb.style.transform = `translate(${button.offsetLeft}px, ${button.offsetTop}px)`
+      const height = underline ? 3 : button.offsetHeight
+      const target = { x: button.offsetLeft, y: button.offsetTop + button.offsetHeight - height, width: button.offsetWidth, height }
+      const previous = SEGMENT_POSITIONS.get(label)
+      SEGMENT_POSITIONS.set(label, target)
+      if (thumb.dataset.ready !== 'true' && previous) {
+        apply(previous)
+        thumb.getBoundingClientRect()
+        thumb.dataset.ready = 'true'
+        frame = requestAnimationFrame(() => apply(target))
+        return
+      }
+      apply(target)
       thumb.dataset.ready = 'true'
     }
     place()
     const observer = new ResizeObserver(place)
     observer.observe(track)
-    return () => observer.disconnect()
-  }, [value, items.length])
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [value, items.length, underline, label])
 
   const handleKeyDown = (event, index) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
@@ -159,7 +180,7 @@ function OwnerSegmentNav({ items, value, onSelect, label }) {
   }
 
   return (
-    <div className="owner-settings-segment owner-nav-segment" role="radiogroup" aria-label={label} ref={trackRef}>
+    <div className={`owner-settings-segment owner-nav-segment${underline ? ' is-underline' : ''}`} role="radiogroup" aria-label={label} ref={trackRef}>
       <span className="owner-settings-segment-thumb" ref={thumbRef} aria-hidden="true" />
       {items.map((item, index) => (
         <button
@@ -742,7 +763,7 @@ function ExpenseActionIcon({ name }) {
   )
 }
 
-function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
+function OwnerExpenseLedger({ nav, range, version, onEdit, onDelete }) {
   const [category, setCategory] = useState('')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -780,6 +801,7 @@ function OwnerExpenseLedger({ range, version, onEdit, onDelete }) {
   return (
     <>
       <section className="owner-panel owner-xl-panel">
+        {nav}
         <div className="owner-xl-list-head">
           <div>
             <h3>รายการรายจ่าย</h3>
@@ -2362,13 +2384,12 @@ const OWNER_PENDING_KINDS = [
 const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance', 'repair-vendors': 'repair-vendors' }
 
 function ownerNotificationLink({ target, refId }) {
-  const [area, section] = (target || '').split(':')
+  const [area] = (target || '').split(':')
   const focus = refId != null ? `&focus=${encodeURIComponent(refId)}` : ''
-  if (area === 'slips') return `/staff?tab=payment-review${focus}`
-  if (area === 'requests') return `/staff?tab=home&section=${encodeURIComponent(section || 'renew')}`
-  if (area === 'maintenance') return '/staff?tab=home&section=maintenance'
-  if (area === 'transfer-contracts') return '/staff?tab=home&section=move_room'
-  const adminTab = { visits: 'vehicle-requests', 'move-in': 'move-in-inspections', inspections: 'move-out-inspections', 'waiting-list': 'waiting-list', parcels: 'parcels' }[area]
+  const adminTab = {
+    visits: 'vehicle-requests', 'move-in': 'move-in-inspections', inspections: 'move-out-inspections', 'waiting-list': 'waiting-list',
+    parcels: 'parcels', requests: 'requests', 'transfer-contracts': 'requests', maintenance: 'maintenance',
+  }[area]
   return adminTab ? `/admin?tab=${adminTab}${area === 'visits' ? focus : ''}` : null
 }
 
@@ -3661,12 +3682,85 @@ function OwnerMain() {
     })(),
   }[activeTab]
 
+  const periodRange = (
+    <div className="owner-period-range-group">
+      <small className="owner-period-range-caption">กรองข้อมูลตามช่วงวันที่</small>
+      <div className="owner-period-range" role="group" aria-label="กรองข้อมูลตามช่วงวันที่">
+        <span className="owner-period-range-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M16 3v4M8 3v4M3 10h18" />
+          </svg>
+        </span>
+        <ThaiDatePicker
+          value={paymentFilter.from}
+          onChange={(value) => handlePaymentRangeChange('from', value)}
+          maxDate={parseInputDate(paymentFilter.to)}
+          placeholder="เลือกวันเริ่มต้นย้อนหลัง"
+          aria-label="วันเริ่มต้น เลือกย้อนหลังได้"
+          renderCustomHeader={({ monthDate, changeMonth, changeYear, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => (
+            <div className="thai-dp-header owner-range-calendar-header">
+              <button type="button" className="thai-dp-nav" onClick={decreaseMonth} disabled={prevMonthButtonDisabled} aria-label="เดือนก่อนหน้า">‹</button>
+              <select aria-label="เลือกเดือนเริ่มต้น" value={monthDate.getMonth()} onChange={(event) => changeMonth(Number(event.target.value))}>
+                {Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{new Date(2000, month, 1).toLocaleDateString('th-TH', { month: 'long' })}</option>)}
+              </select>
+              <select aria-label="เลือกปีเริ่มต้นย้อนหลัง" value={monthDate.getFullYear()} onChange={(event) => changeYear(Number(event.target.value))}>
+                {Array.from({ length: 101 }, (_, index) => monthDate.getFullYear() + 1 - index).map((year) => <option key={year} value={year}>{year + 543}</option>)}
+              </select>
+              <button type="button" className="thai-dp-nav" onClick={increaseMonth} disabled={nextMonthButtonDisabled} aria-label="เดือนถัดไป">›</button>
+            </div>
+          )}
+          isClearable
+        />
+        <span className="owner-period-range-sep" aria-hidden="true">–</span>
+        <ThaiDatePicker
+          value={paymentFilter.to}
+          onChange={(value) => handlePaymentRangeChange('to', value)}
+          minDate={parseInputDate(paymentFilter.from)}
+          placeholder="วันที่สิ้นสุด"
+          isClearable
+        />
+      </div>
+    </div>
+  )
+
+  const financeNav = (
+    <div className="owner-panel-nav">
+      <OwnerSegmentNav
+        variant="underline"
+        label="หมวดหมู่รายละเอียดการเงิน"
+        value={financeSection}
+        items={OWNER_FINANCE_SECTIONS.map((section) => ({
+          ...section,
+          badge: section.key === 'slips' ? pendingSlipReviews.length : section.key === 'expenses' ? newExpenseCount : 0,
+          badgeLabel: section.key === 'expenses' ? `${newExpenseCount} รายจ่ายใหม่` : undefined,
+        }))}
+        onSelect={(key) => {
+          if (key === 'expenses' || viewingExpenses) markExpensesSeen()
+          setFinanceSection(key)
+        }}
+      />
+    </div>
+  )
+
+  const roomsNav = (
+    <div className="owner-panel-nav">
+      <OwnerSegmentNav variant="underline" label="หมวดหมู่สรุปห้อง" value={roomsSection} items={OWNER_ROOMS_SECTIONS} onSelect={setRoomsSection} />
+    </div>
+  )
+
   const closeNotifPanel = () => setNotifClosing(true)
 
   const openNotification = (notification) => {
     if (notification.server) {
       closeNotifPanel()
-      const tab = OWNER_TARGET_TABS[(notification.target || '').split(':')[0]]
+      const area = (notification.target || '').split(':')[0]
+      if (area === 'slips') {
+        setActiveTab('finance')
+        setFinanceSection('slips')
+        return
+      }
+      const tab = OWNER_TARGET_TABS[area]
       if (tab) {
         setActiveTab(tab)
         return
@@ -3904,7 +3998,7 @@ function OwnerMain() {
           )}
         />
         {OWNER_TAB_GROUPS.filter((group) => group.tabs.length > 1 && group.key === OWNER_GROUP_OF[activeTab]).map((group) => (
-          <div key={group.key} className="owner-group-subtabs">
+          <div key={group.key} className="owner-group-subtabs owner-nav-row">
             <OwnerSegmentNav
               label={group.label}
               value={activeTab}
@@ -3916,70 +4010,11 @@ function OwnerMain() {
                 setLastOwnerTabByGroup((current) => ({ ...current, [group.key]: key }))
               }}
             />
+            {['rooms', 'finance', 'utilities'].includes(activeTab) && periodRange}
           </div>
         ))}
 
-        {(activeTab === 'rooms' || activeTab === 'finance' || activeTab === 'utilities') && (
-          <div className="owner-section-toolbar">
-            {activeTab === 'rooms' && (
-              <OwnerSegmentNav label="หมวดหมู่สรุปห้อง" value={roomsSection} items={OWNER_ROOMS_SECTIONS} onSelect={setRoomsSection} />
-            )}
-            {activeTab === 'finance' && (
-              <OwnerSegmentNav
-                label="หมวดหมู่รายละเอียดการเงิน"
-                value={financeSection}
-                items={OWNER_FINANCE_SECTIONS.map((section) => ({
-                  ...section,
-                  badge: section.key === 'slips' ? pendingSlipReviews.length : section.key === 'expenses' ? newExpenseCount : 0,
-                  badgeLabel: section.key === 'expenses' ? `${newExpenseCount} รายจ่ายใหม่` : undefined,
-                }))}
-                onSelect={(key) => {
-                  if (key === 'expenses' || viewingExpenses) markExpensesSeen()
-                  setFinanceSection(key)
-                }}
-              />
-            )}
-            <div className="owner-period-range-group">
-              <small className="owner-period-range-caption">กรองข้อมูลตามช่วงวันที่</small>
-            <div className="owner-period-range" role="group" aria-label="กรองข้อมูลตามช่วงวันที่">
-              <span className="owner-period-range-icon" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="5" width="18" height="16" rx="2" />
-                  <path d="M16 3v4M8 3v4M3 10h18" />
-                </svg>
-              </span>
-              <ThaiDatePicker
-                value={paymentFilter.from}
-                onChange={(value) => handlePaymentRangeChange('from', value)}
-                maxDate={parseInputDate(paymentFilter.to)}
-                placeholder="เลือกวันเริ่มต้นย้อนหลัง"
-                aria-label="วันเริ่มต้น เลือกย้อนหลังได้"
-                renderCustomHeader={({ monthDate, changeMonth, changeYear, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => (
-                  <div className="thai-dp-header owner-range-calendar-header">
-                    <button type="button" className="thai-dp-nav" onClick={decreaseMonth} disabled={prevMonthButtonDisabled} aria-label="เดือนก่อนหน้า">‹</button>
-                    <select aria-label="เลือกเดือนเริ่มต้น" value={monthDate.getMonth()} onChange={(event) => changeMonth(Number(event.target.value))}>
-                      {Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{new Date(2000, month, 1).toLocaleDateString('th-TH', { month: 'long' })}</option>)}
-                    </select>
-                    <select aria-label="เลือกปีเริ่มต้นย้อนหลัง" value={monthDate.getFullYear()} onChange={(event) => changeYear(Number(event.target.value))}>
-                      {Array.from({ length: 101 }, (_, index) => monthDate.getFullYear() + 1 - index).map((year) => <option key={year} value={year}>{year + 543}</option>)}
-                    </select>
-                    <button type="button" className="thai-dp-nav" onClick={increaseMonth} disabled={nextMonthButtonDisabled} aria-label="เดือนถัดไป">›</button>
-                  </div>
-                )}
-                isClearable
-              />
-              <span className="owner-period-range-sep" aria-hidden="true">–</span>
-              <ThaiDatePicker
-                value={paymentFilter.to}
-                onChange={(value) => handlePaymentRangeChange('to', value)}
-                minDate={parseInputDate(paymentFilter.from)}
-                placeholder="วันที่สิ้นสุด"
-                isClearable
-              />
-            </div>
-            </div>
-          </div>
-        )}
+
 
         {activeTab === 'dorm-info' && (
           <>
@@ -4008,6 +4043,7 @@ function OwnerMain() {
         {!isLoading && activeTab === 'rooms' && roomsSection === 'overview' && (
           <>
             <section className="owner-panel owner-ov-hero">
+              {roomsNav}
               <div className="owner-panel-header">
                 <div>
                   <h3>ภาพรวมห้องพัก</h3>
@@ -4276,6 +4312,7 @@ function OwnerMain() {
             {occupancyTrendChartData.length ? (
               <>
                 <section className="owner-panel owner-oc-panel is-blue">
+                  {roomsNav}
                   <div className="owner-oc-head">
                     <span className="owner-oc-head-icon" aria-hidden="true">
                       <StatIcon name="rooms" />
@@ -4515,6 +4552,7 @@ function OwnerMain() {
               </>
             ) : (
               <section className="owner-panel owner-oc-panel is-blue">
+                {roomsNav}
                 <div className="owner-ov-list-empty owner-oc-empty">ยังไม่มีข้อมูลแนวโน้มในช่วงวันที่ที่เลือก</div>
               </section>
             )}
@@ -4736,6 +4774,7 @@ function OwnerMain() {
         {!isLoading && activeTab === 'finance' && financeSection === 'overview' && (
           <>
             <section className="owner-panel owner-fc-panel">
+              {financeNav}
               <div className="owner-panel-header owner-fc-header">
                 <span className="owner-fc-heading-icon" aria-hidden="true"><StatIcon name="margin" /></span>
                 <div>
@@ -4904,11 +4943,12 @@ function OwnerMain() {
         )}
 
         {!isLoading && activeTab === 'finance' && financeSection === 'expenses' && (
-          <OwnerExpenseLedger range={paymentFilter} version={expenses} onEdit={openExpenseEdit} onDelete={setExpenseDeleteConfirm} />
+          <OwnerExpenseLedger nav={financeNav} range={paymentFilter} version={expenses} onEdit={openExpenseEdit} onDelete={setExpenseDeleteConfirm} />
         )}
 
         {!isLoading && activeTab === 'finance' && financeSection === 'payments' && (
             <section className="owner-panel owner-pl-panel">
+              {financeNav}
               <div className="owner-pl-head">
                 <div>
                   <h3>บันทึกการชำระเงิน</h3>
@@ -4973,6 +5013,7 @@ function OwnerMain() {
 
         {!isLoading && activeTab === 'finance' && financeSection === 'slips' && (
           <section className="owner-panel owner-pl-panel">
+            {financeNav}
             <div className="owner-pl-head">
               <div>
                 <h3>สลิปรอตรวจสอบ</h3>
@@ -5378,6 +5419,7 @@ function OwnerMain() {
         {!isLoading && activeTab === 'rooms' && roomsSection === 'logs' && (
           <>
             <section className="owner-panel owner-olog-panel">
+              {roomsNav}
               <div className="owner-panel-header">
                 <h3 className="owner-olog-heading"><OwnerListIcon name="calendar" size={20} />บันทึกการเข้าพักและย้ายออก</h3>
               </div>
