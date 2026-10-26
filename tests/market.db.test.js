@@ -4,7 +4,16 @@ import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import mysql from "mysql2/promise";
 import { DB_CONFIG, serviceDatabaseName } from "../Database/connection.js";
-import { removeLeaseFiles } from "../middleware/marketUploads.js";
+import { LEASE_MIN_IMAGES, removeLeaseFiles } from "../middleware/marketUploads.js";
+import { leaseMaxEndKey } from "../router/marketShared.js";
+import { addContractMonths } from "../src/utils/rentalContract.js";
+
+const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const addDaysKey = (key, days) => dateKey(new Date(new Date(`${key}T00:00:00`).getTime() + days * 86400000));
+// Leases may run at most 12 months, so the fixture starts today and uses the full allowed term.
+const LEASE_START = dateKey(new Date());
+const LEASE_END = leaseMaxEndKey(LEASE_START);
+const RENEWED_END = dateKey(addContractMonths(new Date(`${LEASE_END}T00:00:00`), 6));
 
 const API = process.env.MARKET_TEST_API_URL || "http://localhost:4000";
 const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
@@ -42,7 +51,7 @@ async function tokenFor(role) {
   return row ? jwt.sign({ id: row.id, role }, SECRET, { expiresIn: "15m" }) : null;
 }
 
-function leaseForm(fields, imageCount = 3) {
+function leaseForm(fields, imageCount = LEASE_MIN_IMAGES) {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
   for (let index = 0; index < imageCount; index += 1) form.append("contract_images", new Blob([PNG], { type: "image/png" }), `contract-${index}.png`);
@@ -55,8 +64,8 @@ const leaseBody = (shopId, extra = {}) => ({
   tenant_phone: "0899999999",
   tenant_idcard: "1234567890123",
   business_name: `ร้านทดสอบ ${TAG}`,
-  start_date: "2026-01-01",
-  end_date: "2099-12-31",
+  start_date: LEASE_START,
+  end_date: LEASE_END,
   monthly_rent: 5000,
   deposit: 10000,
   ...extra,
@@ -100,7 +109,7 @@ test("market roles, leases and tenant API key permissions", async (t) => {
 
   const paid = (extra = {}) => leaseBody(shop.id, { payment_method: "counter", ...extra });
   await expectStatus(as("Owner")("POST", "/leases", leaseForm(paid())), 403);
-  await expectStatus(as("Staff")("POST", "/leases", leaseForm(paid(), 2)), 400);
+  await expectStatus(as("Staff")("POST", "/leases", leaseForm(paid(), LEASE_MIN_IMAGES - 1)), 400);
   await expectStatus(as("Staff")("POST", "/leases", leaseForm(leaseBody(shop.id))), 400);
   await expectStatus(as("Staff")("POST", "/leases", leaseForm(leaseBody(shop.id, { payment_method: "promptpay" }))), 400);
   const before = await expectStatus(as("Owner")("GET", "/leases"), 200);
@@ -108,34 +117,35 @@ test("market roles, leases and tenant API key permissions", async (t) => {
   const { lease } = await expectStatus(as("Staff")("POST", "/leases", leaseForm(paid())), 201);
   assert.match(lease.contract_no, /^SL-\d{4}-\d{4,}$/);
   assert.equal(lease.status, "active");
-  await expectStatus(as("Admin")("POST", "/leases", leaseForm(paid({ start_date: "2030-01-01", end_date: "2031-01-01" }))), 409);
+  await expectStatus(as("Admin")("POST", "/leases", leaseForm(paid({ end_date: addDaysKey(LEASE_END, 1) }))), 400);
+  await expectStatus(as("Admin")("POST", "/leases", leaseForm(paid())), 409);
   const detail = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
-  assert.equal(detail.images.length, 3);
+  assert.equal(detail.images.length, LEASE_MIN_IMAGES);
   assert.equal(detail.payments.length, 1);
   assert.equal(detail.payments[0].amount, 15000);
   assert.equal(detail.payments[0].method, "counter");
 
-  const renewForm = (fields, imageCount = 3) => leaseForm(fields, imageCount);
+  const renewForm = (fields, imageCount = LEASE_MIN_IMAGES) => leaseForm(fields, imageCount);
   const beforeRenew = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
-  await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "monthly", payment_method: "counter" }, 2)), 400);
+  await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "monthly", payment_method: "counter" }, LEASE_MIN_IMAGES - 1)), 400);
   await expectStatus(as("Owner")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "monthly", payment_method: "counter" })), 403);
   await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 0, renew_plan: "monthly", payment_method: "counter" })), 400);
   await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "monthly" })), 400);
   await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "lump_sum", payment_method: "bank" })), 400);
   const unchanged = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
-  assert.equal(unchanged.lease.end_date, "2099-12-31");
+  assert.equal(unchanged.lease.end_date, LEASE_END);
   const renewed = await expectStatus(as("Staff")("POST", `/leases/${lease.id}/renew`, renewForm({ months: 6, renew_plan: "lump_sum", payment_method: "counter" })), 200);
-  assert.equal(renewed.lease.end_date, "2100-06-30");
+  assert.equal(renewed.lease.end_date, RENEWED_END);
   const afterRenew = await expectStatus(as("Owner")("GET", `/leases/${lease.id}`), 200);
   const renewal = afterRenew.payments.find((item) => item.payment_type === "renewal");
   assert.equal(renewal.amount, 30000);
   assert.equal(renewal.renew_months, 6);
   assert.equal(renewal.renew_plan, "lump_sum");
-  assert.equal(afterRenew.images.length, 3);
+  assert.equal(afterRenew.images.length, LEASE_MIN_IMAGES);
   assert.equal(afterRenew.image_history.length, 1);
-  assert.equal(afterRenew.image_history[0].prev_start, "2026-01-01");
-  assert.equal(afterRenew.image_history[0].prev_end, "2099-12-31");
-  assert.equal(afterRenew.image_history[0].new_end, "2100-06-30");
+  assert.equal(afterRenew.image_history[0].prev_start, LEASE_START);
+  assert.equal(afterRenew.image_history[0].prev_end, LEASE_END);
+  assert.equal(afterRenew.image_history[0].new_end, RENEWED_END);
   assert.equal(afterRenew.image_history[0].months, 6);
   assert.equal(afterRenew.image_history[0].images.length, beforeRenew.images.length);
   assert.ok(afterRenew.images.every((image) => !beforeRenew.images.some((old) => old.id === image.id)));
@@ -145,7 +155,7 @@ test("market roles, leases and tenant API key permissions", async (t) => {
   assert.equal(imageResponse.status, 200);
   assert.equal((await fetch(`${API}${detail.images[0].url}`)).status, 401);
   const added = await expectStatus(as("Staff")("POST", `/leases/${lease.id}/images`, leaseForm({}, 1)), 201);
-  assert.equal(added.images.length, 4);
+  assert.equal(added.images.length, LEASE_MIN_IMAGES + 1);
 
   const overview = await expectStatus(as("Owner")("GET", "/overview"), 200);
   assert.equal(overview.permissions.operate, false);

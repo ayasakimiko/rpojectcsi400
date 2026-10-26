@@ -5,6 +5,7 @@ import { decryptApiKey, generateApiKey, hashApiKey } from "../middleware/marketA
 import { LEASE_MIN_IMAGES, leaseImagePath, parseLeaseImages, removeLeaseFiles } from "../middleware/marketUploads.js";
 import { PAYMENT_METHODS, verifyLeasePayment } from "../middleware/marketPayment.js";
 import {
+  LEASE_MAX_MONTHS,
   createProduct,
   deleteProduct,
   fail,
@@ -461,7 +462,7 @@ router.post("/leases/:id/renew", canOperateMarket, parseLeaseImages({ min: LEASE
     leaseId = parseId(req.params.id);
     months = Number(req.body?.months);
     plan = req.body?.renew_plan;
-    if (!Number.isInteger(months) || months < 1 || months > 36) throw fail("ระยะเวลาต่อสัญญาต้องเป็น 1-36 เดือน");
+    if (!Number.isInteger(months) || months < 1 || months > LEASE_MAX_MONTHS) throw fail(`ระยะเวลาต่อสัญญาต้องเป็น 1-${LEASE_MAX_MONTHS} เดือน`);
     if (!Object.hasOwn(RENEW_PLANS, plan)) throw fail("กรุณาเลือกรูปแบบการชำระเงิน");
     const lease = await loadLease(db, leaseId);
     if (lease.status === "terminated") throw fail("สัญญานี้ถูกยกเลิกแล้ว ต่อสัญญาไม่ได้", 409, "CONFLICT");

@@ -26,7 +26,7 @@ import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
-import { isUnread, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { logout } from '../utils/session.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
@@ -2503,14 +2503,6 @@ function OwnerMain() {
   const notifRef = useRef(null)
   const notifListRef = useRef(null)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [seenNotificationKeys, setSeenNotificationKeys] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(getOwnerNotificationStorageKey()) || '[]')
-    } catch {
-      return []
-    }
-  })
-  const [freshNotificationKeys, setFreshNotificationKeys] = useState(() => new Set())
   const [overview, setOverview] = useState({ rooms: {}, finance: {} })
   const [roomStatus, setRoomStatus] = useState({ totalRooms: 0, vacantCount: 0, occupiedCount: 0, rooms: [] })
   const [incomeSummary, setIncomeSummary] = useState({ totalIncome: 0, byType: [] })
@@ -3533,22 +3525,16 @@ function OwnerMain() {
     ].some((value) => String(value ?? '').toLowerCase().includes(slipKeyword)))
     : pendingSlipReviews
   const paymentPage = Number(paymentLogs.page || 1)
-  const serverFeed = useServerNotifications('/api/owner', { pendingKinds: OWNER_PENDING_KINDS })
+  const serverFeed = useServerNotifications('/api/owner', { pendingKinds: OWNER_PENDING_KINDS, onNewEvents: loadAnnouncements })
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = [...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-  const newNotifications = notifications.filter((item) => isUnread(item, seenNotificationKeys))
+  const notifications = sortNewestFirst([...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending])
+  const notificationReads = useNotificationReads(getOwnerNotificationStorageKey(), serverFeed)
+  const newNotifications = notifications.filter((item) => isUnread(item, notificationReads.seenKeys))
+  const freshNotificationKeys = new Set(newNotifications.map((item) => item.key))
   const notificationPageSize = 30
   const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))
   const notificationPage = Math.min(notifPage, notificationPages)
   const visibleNotifications = notifications.slice((notificationPage - 1) * notificationPageSize, notificationPage * notificationPageSize)
-  const markNotificationsRead = () => {
-    const keys = notifications.map((item) => item.key)
-    setFreshNotificationKeys(new Set(newNotifications.map((item) => item.key)))
-    setSeenNotificationKeys(keys)
-    localStorage.setItem(getOwnerNotificationStorageKey(), JSON.stringify(keys))
-    serverFeed.markAllRead()
-  }
   const ownerSummaryTiles = {
     cameras: cameraSummaryTiles(),
     market: marketSummaryTiles(marketSummary, {
@@ -3755,6 +3741,7 @@ function OwnerMain() {
   const closeNotifPanel = () => setNotifClosing(true)
 
   const openNotification = (notification) => {
+    notificationReads.markRead(notification, notifications)
     if (notification.server) {
       closeNotifPanel()
       const area = (notification.target || '').split(':')[0]
@@ -3810,7 +3797,6 @@ function OwnerMain() {
                 onClick={() => {
                   if (notifOpen) closeNotifPanel()
                   else {
-                    markNotificationsRead()
                     setNotifOpen(true)
                     setNotifPage(1)
                   }

@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
+import { changedFor, currentPulse, formatCursor, onPulse, parseCursor } from "./notificationPulse.js";
 
 const FEED_DAYS = 30;
 const FEED_LIMIT = 100;
 const MAX_READ_IDS = 500;
+// Below the gateway's 60 s socket timeout and common reverse-proxy read timeouts.
+const WAIT_MS = 25000;
 
 // Rows a user may see: a Customer only their own; staff-side roles every broadcast for
 // their role except the ones they caused themselves.
@@ -26,10 +29,47 @@ function parseKinds(value, allowed) {
 /**
  * GET  /            → { notifications, pending }
  *                     ?pending=slip,visit,... picks which state-derived items to include.
+ * GET  /wait        → { cursor, changed } long poll: answers as soon as something this user's
+ *                     bell shows has changed since ?cursor=, or after WAIT_MS with changed=false.
  * POST /read        → { ids: [...] } or { all: true }
  */
 export function createNotificationRoutes({ loadPending = null, pendingKinds = [] } = {}) {
   const router = Router();
+
+  router.get("/wait", async (req, res) => {
+    let cursor = parseCursor(req.query.cursor);
+    let stop = () => {};
+    let timeout = null;
+    const finish = (changed, pulse) => {
+      stop();
+      clearTimeout(timeout);
+      if (!res.headersSent) res.set("Cache-Control", "no-store").json({ cursor: formatCursor(pulse), changed });
+    };
+    try {
+      const pulse = await currentPulse();
+      if (!cursor) return finish(false, pulse);
+      if (await changedFor(req.user, cursor, pulse)) return finish(true, pulse);
+      cursor = pulse;
+      let checking = Promise.resolve();
+      stop = onPulse((next) => {
+        checking = checking.then(async () => {
+          if (res.headersSent) return;
+          if (await changedFor(req.user, cursor, next)) return finish(true, next);
+          cursor = next;
+        }).catch((error) => console.error("Notification wait error:", error));
+      });
+      timeout = setTimeout(() => finish(false, cursor), WAIT_MS);
+      res.on("close", () => {
+        stop();
+        clearTimeout(timeout);
+      });
+    } catch (error) {
+      stop();
+      clearTimeout(timeout);
+      console.error("Notification wait error:", error);
+      if (!res.headersSent) res.status(500).json({ message: "ไม่สามารถติดตามการแจ้งเตือนได้" });
+    }
+  });
 
   router.get("/", async (req, res) => {
     try {

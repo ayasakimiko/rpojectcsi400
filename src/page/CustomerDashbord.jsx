@@ -43,7 +43,7 @@ import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
 function compressImageFile(file) {
@@ -2198,6 +2198,45 @@ function DashboardStepper({ count, currentIndex, children }) {
   )
 }
 
+// Photos of the incident a safety notification points at; the notification row itself only carries text.
+function IncidentNotifPhotos({ incidentId }) {
+  const [photos, setPhotos] = useState([])
+  const [photoIndex, setPhotoIndex] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get(`/api/customer/safety-incidents/${incidentId}`)
+      .then(({ data }) => {
+        if (!cancelled) setPhotos(data.incident?.photos || [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [incidentId])
+
+  if (photos.length === 0) return null
+  return (
+    <>
+      <section className="dashboard-rv-photos dashboard-detail-section" aria-label="รูปประกอบการแจ้งเหตุ">
+        <h4 className="dashboard-detail-section-title">รูปประกอบ · {photos.length} รูป</h4>
+        <div className="dashboard-rv-photo-grid">
+          {photos.map((photo, index) => (
+            <button key={`${photo.url}-${index}`} type="button" className="dashboard-rv-photo" onClick={() => setPhotoIndex(index)} aria-label={`ดูรูปที่ ${index + 1}`}>
+              <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} loading="lazy" />
+            </button>
+          ))}
+        </div>
+      </section>
+      {photoIndex !== null && createPortal(
+        <PhotoLightbox photos={photos} initialIndex={photoIndex} title="รูปประกอบการแจ้งเหตุ" label="รูปประกอบ" onClose={() => setPhotoIndex(null)} />,
+        document.body,
+      )}
+    </>
+  )
+}
+
 function RequestTimeline({ kind, request, compact = false }) {
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
@@ -2437,7 +2476,7 @@ function ParcelProgress({ parcel, compact = false }) {
 
 const NOTIF_PAGE_SIZE = 30
 const RENT_DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000
-const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles' }
+const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles', wifi: 'wifi', announcements: 'announcements' }
 const CUSTOMER_TARGET_SCROLL = { due: 'due', renew: 'tenant-renew' }
 const CUSTOMER_TARGET_FOCUS = { contract: '.contract-customer-card .ccc-customer-content', inspection: '.contract-customer-card .ccc-customer-content' }
 
@@ -4757,18 +4796,7 @@ function CustomerDashbord() {
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [notifSeenVersion, setNotifSeenVersion] = useState(0)
-  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
-  const notifSeenStorageKey = data?.customer?.id ? `notif_seen_keys_${data.customer.id}` : null
-  const seenNotifKeys = useMemo(() => {
-    if (!notifSeenStorageKey || notifSeenVersion < 0) return new Set()
-    try {
-      const stored = JSON.parse(localStorage.getItem(notifSeenStorageKey) || '[]')
-      return new Set(Array.isArray(stored) ? stored : [])
-    } catch {
-      return new Set()
-    }
-  }, [notifSeenStorageKey, notifSeenVersion])
+  const notificationReads = useNotificationReads(data?.customer?.id ? `notif_seen_keys_${data.customer.id}` : null, serverFeed)
   const [notifPage, setNotifPage] = useState(1)
   const scrollFocusRef = useRef(null)
   useEffect(() => {
@@ -5757,7 +5785,7 @@ function CustomerDashbord() {
     target: 'visits',
   }))
 
-  const notifications = [
+  const notifications = sortNewestFirst([
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
@@ -5803,23 +5831,10 @@ function CustomerDashbord() {
       previewLabel: 'รายละเอียดประกาศ',
       kind: 'announcement',
     })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date))
+  ])
 
-  const newNotifications = notifications.filter((notif) => isUnread(notif, seenNotifKeys))
-
-  const markNotificationsSeen = () => {
-    setFreshNotifKeys(new Set(newNotifications.map((notif) => notif.key)))
-    serverFeed.markAllRead()
-    if (newNotifications.length === 0) return
-    try {
-      if (notifSeenStorageKey) {
-        localStorage.setItem(notifSeenStorageKey, JSON.stringify(notifications.map((notif) => notif.key)))
-      }
-    } catch {
-      return
-    }
-    setNotifSeenVersion((version) => version + 1)
-  }
+  const newNotifications = notifications.filter((notif) => isUnread(notif, notificationReads.seenKeys))
+  const freshNotifKeys = new Set(newNotifications.map((notif) => notif.key))
 
   const notifTotalPages = Math.max(1, Math.ceil(notifications.length / NOTIF_PAGE_SIZE))
   const notifCurrentPage = Math.min(notifPage, notifTotalPages)
@@ -6269,7 +6284,6 @@ function CustomerDashbord() {
                     closeNotifPanel()
                   } else {
                     setNotifOpen(true)
-                    markNotificationsSeen()
                     setNotifPage(1)
                   }
                 }}
@@ -6373,6 +6387,7 @@ function CustomerDashbord() {
                             className={`dashboard-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
+                              notificationReads.markRead(notif, notifications)
                               if (notif.kind === 'announcement') {
                                 selectCustomerTab('announcements')
                                 setAnnouncementFocus({ id: notif.announcementId, nonce: Date.now() })
@@ -6532,6 +6547,9 @@ function CustomerDashbord() {
                     </p>
                     {notifDetail.detail && (
                       <div className="dashboard-confirm-message-detail">{notifDetail.detail}</div>
+                    )}
+                    {notifDetail.server && notifDetail.kind === 'safety' && notifDetail.refId && (
+                      <IncidentNotifPhotos incidentId={notifDetail.refId} />
                     )}
                     {notifDetail.request ? (
                       <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />

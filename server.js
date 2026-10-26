@@ -6,6 +6,8 @@ import { isMarketTenantApiPath, isRepairVendorApiPath, serviceForPath } from "./
 const PORT = process.env.PORT || 4000;
 
 const serviceAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 10000, maxSockets: 64, maxFreeSockets: 16, timeout: 60000 });
+const longPollAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 10000, maxFreeSockets: 16, timeout: 60000 });
+const LONG_POLL_PATH = /^\/api\/[a-z]+\/notifications\/wait(?:[?#]|$)/i;
 
 const SERVICE_TARGETS = Object.fromEntries(Object.entries({
   auth: [process.env.AUTH_SERVICE_URL, 4001],
@@ -51,7 +53,7 @@ function proxy(req, res, target) {
     method: req.method,
     path: req.url,
     headers: { ...stripHopByHop(req.headers), host: target.host },
-    agent: serviceAgent,
+    agent: LONG_POLL_PATH.test(req.url) ? longPollAgent : serviceAgent,
   });
 
   proxyReq.on("response", (proxyRes) => {

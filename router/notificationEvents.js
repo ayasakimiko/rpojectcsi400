@@ -183,6 +183,29 @@ export const fineReviewed = (requestId, actor, approved) => safely("fineReviewed
   ], db);
 });
 
+// Tenants living in the room a staff-side report is about; a tenant's own report has no extra audience.
+async function incidentRoomTenants(db, incident) {
+  if (incident.reporter_role === "Customer" || !incident.room_number) return [];
+  const [rows] = await db.query("SELECT id FROM Customer WHERE room_number = ? AND is_suspended = FALSE", [incident.room_number]);
+  return rows.map((row) => row.id);
+}
+
+export const safetyReported = (incidentId, actor) => safely("safetyReported", async (db) => {
+  const [[incident]] = await db.query(
+    "SELECT reporter_role, room_number, incident_type, severity, description FROM SafetyIncident WHERE id = ?",
+    [incidentId],
+  );
+  if (!incident) return;
+  const urgent = incident.severity === "urgent";
+  const tenants = await incidentRoomTenants(db, incident);
+  await notify(tenants.map((customerId) => notifyCustomer(customerId, {
+    type: "safety_reported", tone: urgent ? "danger" : "pending", target: "safety", refTable: "SafetyIncident", refId: incidentId,
+    title: `แจ้งเหตุ ${incident.incident_type} ห้อง ${incident.room_number}`,
+    message: urgent ? `เหตุด่วน: เจ้าหน้าที่แจ้งเหตุถึงห้องของคุณ${byActor(actor)}` : `เจ้าหน้าที่แจ้งเหตุถึงห้องของคุณ${byActor(actor)}`,
+    detail: incident.description, actor,
+  })), db);
+});
+
 export const safetyHandled = (incidentId, actor, outcome, note) => safely("safetyHandled", async (db) => {
   const [[incident]] = await db.query(
     "SELECT reporter_role, reporter_id, room_number, incident_type FROM SafetyIncident WHERE id = ?",
@@ -190,12 +213,18 @@ export const safetyHandled = (incidentId, actor, outcome, note) => safely("safet
   );
   if (!incident) return;
   const reviewed = outcome === "reviewed";
+  const tenants = await incidentRoomTenants(db, incident);
   await notify([
     incident.reporter_role === "Customer" && notifyCustomer(incident.reporter_id, {
       type: `safety_${outcome}`, tone: reviewed ? "success" : "info", target: "safety", refTable: "SafetyIncident", refId: incidentId,
       title: `แจ้งเหตุ ${incident.incident_type}`,
       message: reviewed ? "เจ้าหน้าที่รับเรื่องและตรวจสอบแล้ว" : "รายงานเหตุถูกยกเลิก", detail: note || null, actor,
     }),
+    ...tenants.map((customerId) => notifyCustomer(customerId, {
+      type: `safety_${outcome}`, tone: reviewed ? "success" : "info", target: "safety", refTable: "SafetyIncident", refId: incidentId,
+      title: `แจ้งเหตุ ${incident.incident_type} ห้อง ${incident.room_number}`,
+      message: `${reviewed ? "รับเรื่องแล้ว" : "ยกเลิกรายงานเหตุแล้ว"}${byActor(actor)}`, detail: note || null, actor,
+    })),
     notifyStaffSide({
       type: `safety_${outcome}`, tone: reviewed ? "success" : "info", target: "safety", refTable: "SafetyIncident", refId: incidentId,
       title: `แจ้งเหตุ ${incident.incident_type}${incident.room_number ? ` ห้อง ${incident.room_number}` : ""}`,
@@ -328,6 +357,42 @@ export const expenseRecorded = (expense, user) => safely("expenseRecorded", asyn
   }, ["Owner"]), db);
 });
 
+
+// Staff-side changes to a room reach every active tenant living in it.
+async function notifyRoomTenants(db, roomNumbers, build) {
+  const rooms = [...new Set(roomNumbers.map(Number).filter((room) => Number.isSafeInteger(room) && room > 0))];
+  if (rooms.length === 0) return;
+  const [tenants] = await db.query(
+    "SELECT id, room_number FROM Customer WHERE room_number IN (?) AND is_suspended = FALSE",
+    [rooms],
+  );
+  await notify(tenants.map((tenant) => notifyCustomer(tenant.id, build(tenant.room_number))), db);
+}
+
+export const wifiChanged = (roomNumber, user, message, detail = null) => safely("wifiChanged", async (db) => {
+  const actor = actorOf(user, await accountName(db, user?.role, user?.id));
+  await notifyRoomTenants(db, [roomNumber], (room) => ({
+    type: "wifi_changed", tone: "info", target: "wifi", refTable: "Room", refId: room,
+    title: `Wi-Fi ห้อง ${room}`, message: `${message}${byActor(actor)}`, detail, actor,
+  }));
+});
+
+export const roomDetailsChanged = (roomNumbers, user, message, detail = null) => safely("roomDetailsChanged", async (db) => {
+  const actor = actorOf(user, await accountName(db, user?.role, user?.id));
+  await notifyRoomTenants(db, roomNumbers, (room) => ({
+    type: "room_updated", tone: "info", target: "room", refTable: "Room", refId: room,
+    title: `ข้อมูลห้อง ${room} มีการแก้ไข`, message: `${message}${byActor(actor)}`, detail, actor,
+  }));
+});
+
+export const announcementEdited = (announcementId, title, user) => safely("announcementEdited", async (db) => {
+  const actor = actorOf(user, await accountName(db, user?.role, user?.id));
+  const [customers] = await db.query("SELECT id FROM Customer WHERE room_number IS NOT NULL AND is_suspended = FALSE");
+  await notify(customers.map((customer) => notifyCustomer(customer.id, {
+    type: "announcement_edited", tone: "info", target: "announcements", refTable: "Announcement", refId: announcementId,
+    title: `ประกาศมีการแก้ไข: ${title}`, message: `แก้ไขประกาศ${byActor(actor)}`, actor,
+  })), db);
+});
 
 // Customers acknowledge the rules once; when the rules text changes they must read it again.
 export const dormRulesChanged = (user) => safely("dormRulesChanged", async (db) => {

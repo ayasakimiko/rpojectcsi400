@@ -5,6 +5,16 @@ import {
   isValidPhone,
   validateText,
 } from "../src/utils/validators.js";
+import { addContractMonths } from "../src/utils/rentalContract.js";
+
+export const LEASE_MAX_MONTHS = 12;
+
+// Last allowed end date (inclusive) for a lease starting on startKey, e.g. 2026-01-15 → 2027-01-14.
+export function leaseMaxEndKey(startKey) {
+  const end = addContractMonths(new Date(`${startKey}T00:00:00`), LEASE_MAX_MONTHS);
+  end.setDate(end.getDate() - 1);
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+}
 
 export const PRODUCT_FIELDS = ["sku", "name", "category", "price", "stock", "unit", "description", "is_available"];
 
@@ -140,6 +150,7 @@ export function validateLeaseInput(body = {}) {
   if (lease.tenant_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lease.tenant_email)) throw fail("รูปแบบอีเมลไม่ถูกต้อง");
   if (!isValidDateString(lease.start_date) || !isValidDateString(lease.end_date)) throw fail("รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)");
   if (lease.end_date <= lease.start_date) throw fail("วันสิ้นสุดสัญญาต้องอยู่หลังวันเริ่มสัญญา");
+  if (lease.end_date > leaseMaxEndKey(lease.start_date)) throw fail(`สัญญาเช่าร้านค้ายาวได้ไม่เกิน ${LEASE_MAX_MONTHS} เดือน`);
   return lease;
 }
 

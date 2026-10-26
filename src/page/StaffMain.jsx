@@ -81,7 +81,7 @@ import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, takeNotificationDeepLink, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
 const WAITING_UI_STATUSES = {
@@ -1674,7 +1674,7 @@ function buildStaffSlipNotif(payment) {
     title: `สลิปโอนเงิน ห้อง ${payment.room_number}`,
     label: 'สลิปรอตรวจสอบ',
     tone: 'info',
-    date: payment.payment_date,
+    date: payment.created_at || payment.payment_date,
     preview: `${payment.first_name} ${payment.last_name} · ฿${Number(payment.amount || 0).toLocaleString('th-TH')}`,
     previewLabel: 'ผู้โอน · ยอดเงิน',
     kind: 'slip',
@@ -7585,16 +7585,7 @@ function StaffMain() {
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
-  const [seenNotificationKeys, setSeenNotificationKeys] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(getNotificationStorageKey('staff')) || '[]')
-      return Array.isArray(stored) ? stored : []
-    } catch {
-      return []
-    }
-  })
   const [notifPage, setNotifPage] = useState(1)
-  const [freshNotifKeys, setFreshNotifKeys] = useState(() => new Set())
   const notifListRef = useRef(null)
   const [notifDetail, setNotifDetail] = useState(null)
   const notifRef = useRef(null)
@@ -9046,12 +9037,13 @@ function StaffMain() {
     onNewEvents: () => {
       loadRequests()
       loadPendingSlipCount()
+      loadAnnouncements()
       setPeerRefresh((count) => count + 1)
     },
   })
 
   const notifications = useMemo(() => {
-    return [
+    return sortNewestFirst([
       ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
       ...pendingVisitRequests.map(buildStaffVisitNotif),
       ...pendingSlips.map(buildStaffSlipNotif),
@@ -9060,10 +9052,12 @@ function StaffMain() {
       ...announcements.map(buildAnnouncementNotif),
       ...serverFeed.events,
       ...serverFeed.pending,
-    ].sort((a, b) => new Date(b.date) - new Date(a.date))
+    ])
   }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements, serverFeed.events, serverFeed.pending])
 
-  const newNotifications = notifications.filter((notification) => isUnread(notification, seenNotificationKeys))
+  const notificationReads = useNotificationReads(getNotificationStorageKey('staff'), serverFeed)
+  const newNotifications = notifications.filter((notification) => isUnread(notification, notificationReads.seenKeys))
+  const freshNotifKeys = new Set(newNotifications.map((notification) => notification.key))
 
   const tabItemKeys = {
     'payment-review': pendingSlips.map(buildStaffSlipNotif).map((item) => item.key),
@@ -9088,14 +9082,6 @@ function StaffMain() {
     }
     setTabFocus(null)
     setStaffTab(tab)
-  }
-
-  const markNotificationsRead = () => {
-    setFreshNotifKeys(new Set(newNotifications.map((notification) => notification.key)))
-    const keys = notifications.map((notification) => notification.key)
-    setSeenNotificationKeys(keys)
-    localStorage.setItem(getNotificationStorageKey('staff'), JSON.stringify(keys))
-    serverFeed.markAllRead()
   }
 
   const openServerNotification = (notif) => {
@@ -9876,7 +9862,6 @@ function StaffMain() {
                   if (notifOpen) {
                     closeNotifPanel()
                   } else {
-                    markNotificationsRead()
                     setNotifOpen(true)
                     setNotifPage(1)
                   }
@@ -9961,6 +9946,7 @@ function StaffMain() {
                             className={`staff-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
+                              notificationReads.markRead(notif, notifications)
                               if (notif.server) {
                                 openServerNotification(notif)
                                 return

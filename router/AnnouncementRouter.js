@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { isPositiveId, parseAnnouncementInput } from "../middleware/validation.js";
 import { deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
+import { announcementEdited } from "./notificationEvents.js";
 
 // ตั้งค่า Router และฟังก์ชันกลางสำหรับผู้ประกาศ เวลาแสดงผล และรูปประกอบ
 const router = Router();
@@ -167,6 +168,7 @@ router.patch("/:id", async (req, res) => {
 
     const keptUrls = new Set(photoUrls(value.keptPhotos));
     await deletePublicImages(photoUrls(existingPhotos).filter((url) => !keptUrls.has(url)));
+    await announcementEdited(announcementId, value.title, req.user);
     return res.json({ message: "แก้ไขประกาศสำเร็จ" });
   } catch (error) {
     console.error("Update announcement error:", error);

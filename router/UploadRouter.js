@@ -76,10 +76,14 @@ export function createUploadRouter(getPool, { uploadsDir = PUBLIC_UPLOAD_DIR } =
         );
         if (photos.length === 0) return res.status(404).json({ message: NOT_FOUND });
       }
+      // A tenant sees photos of their own reports and of staff-side reports about their room.
       if (folder === "incidents" && !STAFF_ROLES.has(role)) {
         const [incidents] = await pool.query(
-          "SELECT id FROM SafetyIncident WHERE reporter_role = ? AND reporter_id = ? AND photos LIKE ? LIMIT 1",
-          [role, id, `%"${storedUrl}"%`],
+          `SELECT id FROM SafetyIncident
+           WHERE photos LIKE ? AND ((reporter_role = ? AND reporter_id = ?)
+             OR (reporter_role <> 'Customer' AND room_number IS NOT NULL AND room_number = ?))
+           LIMIT 1`,
+          [`%"${storedUrl}"%`, role, id, user.room_number ?? null],
         );
         if (incidents.length === 0) return res.status(404).json({ message: NOT_FOUND });
       }

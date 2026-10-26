@@ -508,9 +508,10 @@ function ProductFormModal({ shop, product, categories, onClose, onSaved }) {
   )
 }
 
-const LEASE_DURATIONS = [3, 6, 12, 24]
+const LEASE_MAX_MONTHS = 12
+const LEASE_DURATIONS = [3, 6, 12]
 const DEPOSIT_OPTIONS = [0, 1, 2, 3]
-const LEASE_MIN_IMAGES = 3
+const LEASE_MIN_IMAGES = 5
 const DEFAULT_TERMS = 'ชำระค่าเช่าภายในวันที่กำหนดของทุกเดือน ผู้เช่าดูแลความสะอาดพื้นที่ร้าน และปฏิบัติตามกฎของหอพัก'
 
 const toDateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -569,6 +570,7 @@ function LeaseFormModal({ shops, initialShopId, onClose, onSaved }) {
   const sortedShops = [...shops].sort((a, b) => Boolean(a.current_lease) - Boolean(b.current_lease) || a.code.localeCompare(b.code))
   const shop = shops.find((item) => item.id === form.shop_id)
   const endDate = form.duration === 'custom' ? form.custom_end : form.start_date ? addMonthsKey(form.start_date, form.duration) : ''
+  const maxEndDate = form.start_date ? addMonthsKey(form.start_date, LEASE_MAX_MONTHS) : ''
   const rent = Number(form.monthly_rent) || 0
   const deposit = rent * form.deposit_months
   const months = endDate && form.start_date ? Math.max(1, Math.round((new Date(`${endDate}T00:00:00`) - new Date(`${form.start_date}T00:00:00`) + DAY_MS) / DAY_MS / AVG_MONTH_DAYS)) : 0
@@ -578,6 +580,7 @@ function LeaseFormModal({ shops, initialShopId, onClose, onSaved }) {
     !/^0\d{8,9}$/.test(form.tenant_phone) && { key: 'tenant_phone', label: 'เบอร์โทร' },
     !/^\d{13}$/.test(form.tenant_idcard) && { key: 'tenant_idcard', label: 'เลขบัตรประชาชน' },
     (!form.start_date || !endDate || endDate <= form.start_date) && { key: form.start_date ? 'end_date' : 'start_date', label: 'ช่วงวันที่สัญญา' },
+    endDate && maxEndDate && endDate > maxEndDate && { key: 'end_date', label: `สัญญาไม่เกิน ${LEASE_MAX_MONTHS} เดือน` },
     !(rent > 0) && { key: 'monthly_rent', label: 'ค่าเช่า' },
     images.length < LEASE_MIN_IMAGES && { key: 'images', label: `รูปสัญญาอีก ${LEASE_MIN_IMAGES - images.length} รูป` },
   ].filter(Boolean)
@@ -607,6 +610,7 @@ function LeaseFormModal({ shops, initialShopId, onClose, onSaved }) {
     shop_code: shop?.code || 'SH-??',
     shop_name: shop?.name || 'ยังไม่ได้เลือกร้าน',
     tenant_name: form.tenant_name.trim() || 'ชื่อผู้เช่า',
+    business_name: form.business_name.trim(),
     tenant_phone: form.tenant_phone || '-',
     start_date: form.start_date || todayKey(),
     end_date: endDate && endDate > form.start_date ? endDate : form.start_date || todayKey(),
@@ -740,13 +744,14 @@ function LeaseFormModal({ shops, initialShopId, onClose, onSaved }) {
                   onChange={(value) => setForm((current) => ({ ...current, start_date: value }))}
                 />
               </Field>
-              <Field {...fieldState('end_date')} label="วันสิ้นสุดสัญญา *" hint={form.duration === 'custom' ? 'เลือกวันสิ้นสุดเอง' : `คำนวณจาก ${form.duration} เดือน`}>
+              <Field {...fieldState('end_date')} label="วันสิ้นสุดสัญญา *" hint={form.duration === 'custom' ? `เลือกวันสิ้นสุดเอง ไม่เกิน ${LEASE_MAX_MONTHS} เดือน` : `คำนวณจาก ${form.duration} เดือน`}>
                 {form.duration === 'custom' ? (
                   <ThaiDatePicker
                     className="form-control market-date-input"
                     value={form.custom_end}
                     placeholder="เลือกวันสิ้นสุดสัญญา"
                     minDate={dateFromKey(form.start_date)}
+                    maxDate={dateFromKey(maxEndDate)}
                     portalId={DATE_PORTAL}
                     onChange={(value) => setForm((current) => ({ ...current, custom_end: value }))}
                   />
@@ -835,7 +840,7 @@ function ConfirmModal({ title, message, tone = 'danger', icon = 'trash', submitL
   )
 }
 
-const RENEW_OPTIONS = [3, 6, 12, 24]
+const RENEW_OPTIONS = [3, 6, 12]
 const TERMINATE_REASONS = ['ผู้เช่าขอยกเลิกสัญญา', 'ผู้เช่าค้างชำระค่าเช่า', 'ผิดเงื่อนไขสัญญา', 'ปิดกิจการ / ย้ายร้าน']
 
 function renewEndKey(endKey, months) {
@@ -2437,7 +2442,7 @@ function LeaseCard({ lease, onOpen, onRenew }) {
         </span>
         <div className="market-lease-who">
           <strong title={lease.tenant_name}>{lease.tenant_name}</strong>
-          <small>{lease.tenant_phone}</small>
+          <small title={lease.business_name || undefined}>{lease.business_name ? `${lease.business_name} · ${lease.tenant_phone}` : lease.tenant_phone}</small>
         </div>
         <StatusPill status={lease.status} />
       </div>

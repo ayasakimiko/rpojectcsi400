@@ -11,6 +11,7 @@ COPY src/config/serviceRoutes.js ./src/config/serviceRoutes.js
 COPY src/utils/roomAmenities.js ./src/utils/roomAmenities.js
 COPY src/utils/validators.js ./src/utils/validators.js
 COPY src/utils/maintenanceCategories.js ./src/utils/maintenanceCategories.js
+COPY src/utils/rentalContract.js ./src/utils/rentalContract.js
 COPY services ./services
 COPY router ./router
 COPY Database ./Database

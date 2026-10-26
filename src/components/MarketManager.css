@@ -637,8 +637,11 @@
 }
 
 .market-lease-who small {
+  overflow: hidden;
   color: #6b859e;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .market-lease-head .market-pill {
