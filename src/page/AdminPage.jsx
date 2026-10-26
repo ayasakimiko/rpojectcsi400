@@ -35,6 +35,9 @@ import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
+import RepairVendorManager from '../components/RepairVendorManager.jsx'
+import { repairSummaryTiles } from '../utils/repairSummary.js'
+import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL } from '../utils/maintenanceCategories.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
@@ -1256,6 +1259,7 @@ const TABS = [
   { key: 'rooms', label: 'ห้องพัก' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
+  { key: 'repair-vendors', label: 'ติดต่อช่าง' },
   { key: 'cameras', label: 'กล้องวงจรปิด' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
@@ -1277,6 +1281,7 @@ const TAB_GROUPS = [
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาและตรวจห้อง', tabs: ['completed-contracts', 'move-in-inspections', 'move-out-inspections'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
+  { key: 'repair', label: 'ติดต่อช่าง', tabs: ['repair-vendors'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
@@ -1287,6 +1292,7 @@ const SUMMARY_GROUP_OF = {
   'completed-contracts': 'contracts', 'move-in-inspections': 'inspections', 'move-out-inspections': 'inspections',
   requests: 'services', maintenance: 'services', 'vehicle-requests': 'services', safety: 'services',
   parcels: 'parcels', announcements: 'announcements', market: 'market', cameras: 'cameras', staff: 'staff', expenses: 'finance',
+  'repair-vendors': 'repair',
 }
 const formatRoomSize = (value) => `${Number(value).toLocaleString('th-TH', { maximumFractionDigits: 2 })} ตร.ม.`
 
@@ -1335,13 +1341,6 @@ const MAINTENANCE_STATUS_LABEL = {
   done: 'เสร็จสิ้น',
   cancelled: 'ยกเลิกแล้ว',
 }
-const MAINTENANCE_CATEGORY_LABEL = {
-  electrical: 'ไฟฟ้า',
-  plumbing: 'ประปา',
-  aircon: 'เครื่องปรับอากาศ',
-  furniture: 'เฟอร์นิเจอร์',
-  other: 'อื่นๆ',
-}
 const PAYMENT_STATUS_LABEL = { paid: 'ชำระแล้ว', pending: 'รอชำระ', overdue: 'ค้างชำระ' }
 const PAYMENT_TYPE_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟฟ้า', room_transfer: 'ส่วนต่างย้ายห้อง' }
 const PAYMENT_BADGE_CLASS = { paid: 'approved', pending: 'pending', overdue: 'rejected' }
@@ -1354,6 +1353,36 @@ const MAINTENANCE_CATEGORY_ICON = {
     <g>
       <path d="M4 13a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3Z" />
       <path d="M5 17v2M19 17v2" />
+    </g>
+  ),
+  appliance: (
+    <g>
+      <rect x="6" y="2.5" width="12" height="19" rx="2" />
+      <path d="M6 9h12M9 5.5v1M9 12v3" />
+    </g>
+  ),
+  door: (
+    <g>
+      <path d="M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17" />
+      <path d="M3 21h18M14.5 12h.01" />
+    </g>
+  ),
+  building: (
+    <g>
+      <path d="M3 21h18M5 21V8l7-5 7 5v13" />
+      <path d="M9 21v-6h6v6" />
+    </g>
+  ),
+  internet: (
+    <g>
+      <path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" />
+      <path d="M12 19.5h.01" />
+    </g>
+  ),
+  pest: (
+    <g>
+      <ellipse cx="12" cy="13" rx="4" ry="6" />
+      <path d="M12 7V4M8 11H4M8 15H4.5M16 11h4M16 15h3.5" />
     </g>
   ),
   other: (
@@ -1416,7 +1445,7 @@ const ADMIN_TARGET_TABS = {
   visits: 'vehicle-requests', safety: 'safety', requests: 'requests', 'transfer-contracts': 'requests',
   maintenance: 'maintenance', contracts: 'completed-contracts', 'move-in': 'move-in-inspections',
   inspections: 'move-out-inspections', rooms: 'rooms', 'waiting-list': 'waiting-list', parcels: 'parcels',
-  staff: 'staff', expenses: 'expenses',
+  staff: 'staff', expenses: 'expenses', 'repair-vendors': 'repair-vendors',
 }
 const ADMIN_STAFF_NOTIF_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -2552,12 +2581,6 @@ function RoomPaymentHistory({ history, loading, error, onRetry, onSlip, onSelect
   )
 }
 
-const MAINTENANCE_TIME_LABEL = {
-  anytime: 'เวลาไหนก็ได้',
-  morning: 'ช่วงเช้า (08:00-12:00)',
-  afternoon: 'ช่วงบ่าย (12:00-16:00)',
-  evening: 'ช่วงเย็น (16:00-19:00)',
-}
 
 const MAINTENANCE_FILTERS = [
   { key: 'all', label: 'ทั้งหมด', tone: 'all' },
@@ -6839,6 +6862,7 @@ function AdminBackupPage() {
 
   const [staffList, setStaffList] = useState([])
   const [marketSummary, setMarketSummary] = useState(null)
+  const [repairSummary, setRepairSummary] = useState(null)
   const [staffLoading, setStaffLoading] = useState(true)
   const [staffError, setStaffError] = useState('')
   const [staffSearch, setStaffSearch] = useState('')
@@ -7412,6 +7436,13 @@ function AdminBackupPage() {
       income: { icon: 'due', tone: 'violet' },
       expiring: { icon: 'clock', tone: 'amber' },
     }),
+    repair: repairSummaryTiles(repairSummary, {
+      vendors: { icon: 'queue', tone: 'blue' },
+      sent: { icon: 'clock', tone: 'amber' },
+      progress: { icon: 'maintenance', tone: 'indigo' },
+      done: { icon: 'vacant', tone: 'green' },
+      rejected: { icon: 'x', tone: 'red' },
+    }),
     staff: [
       { key: 'all', icon: 'queue', tone: 'blue', label: 'พนักงานทั้งหมด', value: staffList.length, onClick: () => goToTab('staff') },
       { key: 'active', icon: 'vacant', tone: 'indigo', label: 'ใช้งานอยู่', value: summary.activeStaff, onClick: () => goToTab('staff') },
@@ -7963,6 +7994,7 @@ function AdminBackupPage() {
         {activeTab === 'wifi' && <WifiManager />}
 
         {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
+        {activeTab === 'repair-vendors' && <RepairVendorManager rooms={rooms} onSummary={setRepairSummary} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

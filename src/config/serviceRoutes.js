@@ -10,6 +10,8 @@ const ROUTES = [
   ['/api/customer/parcels', 'parcels'],
   ['/api/customer/maintenance', 'maintenance'],
   ['/api/staff/maintenance', 'maintenance'],
+  ['/api/staff/repair-vendors', 'maintenance'],
+  ['/api/repair', 'maintenance'],
   ['/api/admin/logs/maintenance', 'maintenance'],
   ['/api/customer/payment-channels', 'payment'],
   ['/api/customer/payments', 'payment'],
@@ -27,14 +29,23 @@ const ROUTES = [
 ]
 
 export const MARKET_TENANT_API_PREFIX = '/api/market/v1'
+export const REPAIR_VENDOR_API_PREFIX = '/api/repair/v1'
 
 function pathnameOf(url = '') {
   return url.split(/[?#]/, 1)[0].toLowerCase()
 }
 
-export function isMarketTenantApiPath(url = '') {
+function underPrefix(url, prefix) {
   const pathname = pathnameOf(url)
-  return pathname === MARKET_TENANT_API_PREFIX || pathname.startsWith(`${MARKET_TENANT_API_PREFIX}/`)
+  return pathname === prefix || pathname.startsWith(`${prefix}/`)
+}
+
+export function isMarketTenantApiPath(url = '') {
+  return underPrefix(url, MARKET_TENANT_API_PREFIX)
+}
+
+export function isRepairVendorApiPath(url = '') {
+  return underPrefix(url, REPAIR_VENDOR_API_PREFIX)
 }
 
 export function serviceForPath(url = '') {

@@ -1,7 +1,7 @@
 import http from "node:http";
 import "dotenv/config";
 import { createCorsMiddleware } from "./middleware/cors.js";
-import { isMarketTenantApiPath, serviceForPath } from "./src/config/serviceRoutes.js";
+import { isMarketTenantApiPath, isRepairVendorApiPath, serviceForPath } from "./src/config/serviceRoutes.js";
 
 const PORT = process.env.PORT || 4000;
 
@@ -75,6 +75,7 @@ function proxy(req, res, target) {
 
 const server = http.createServer((req, res) => {
   if (isMarketTenantApiPath(req.url)) return proxy(req, res, SERVICE_TARGETS.market);
+  if (isRepairVendorApiPath(req.url)) return proxy(req, res, SERVICE_TARGETS.maintenance);
 
   cors(req, res, (corsError) => {
     if (corsError) return sendJson(res, 500, { message: corsError.message });

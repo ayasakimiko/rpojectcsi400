@@ -10075,3 +10075,21 @@ textarea.owner-xe-input { resize: vertical; line-height: 1.5; }
   }
 }
 
+
+.owner-nav-segment {
+  flex: 0 1 auto;
+  align-self: flex-start;
+}
+
+.owner-nav-segment .owner-settings-segment-option {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.owner-nav-segment .owner-subtab-count {
+  margin-left: 2px;
+}
+
+.owner-group-subtabs .owner-nav-segment {
+  margin-bottom: 4px;
+}

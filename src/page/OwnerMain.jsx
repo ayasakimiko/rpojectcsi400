@@ -19,6 +19,8 @@ import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
+import RepairVendorManager from '../components/RepairVendorManager.jsx'
+import { repairSummaryTiles } from '../utils/repairSummary.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
@@ -122,6 +124,60 @@ function SettingsCategoryIcon({ name, size = 16 }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {paths[name]}
     </svg>
+  )
+}
+
+function OwnerSegmentNav({ items, value, onSelect, label }) {
+  const trackRef = useRef(null)
+  const thumbRef = useRef(null)
+
+  useLayoutEffect(() => {
+    const track = trackRef.current
+    const thumb = thumbRef.current
+    if (!track || !thumb) return undefined
+    const place = () => {
+      const button = track.querySelector('[aria-checked="true"]')
+      if (!button) return
+      thumb.style.width = `${button.offsetWidth}px`
+      thumb.style.height = `${button.offsetHeight}px`
+      thumb.style.transform = `translate(${button.offsetLeft}px, ${button.offsetTop}px)`
+      thumb.dataset.ready = 'true'
+    }
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(track)
+    return () => observer.disconnect()
+  }, [value, items.length])
+
+  const handleKeyDown = (event, index) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    if (!step) return
+    event.preventDefault()
+    const next = items[(index + step + items.length) % items.length]
+    onSelect(next.key)
+    trackRef.current?.querySelector(`[data-key="${next.key}"]`)?.focus()
+  }
+
+  return (
+    <div className="owner-settings-segment owner-nav-segment" role="radiogroup" aria-label={label} ref={trackRef}>
+      <span className="owner-settings-segment-thumb" ref={thumbRef} aria-hidden="true" />
+      {items.map((item, index) => (
+        <button
+          key={item.key}
+          type="button"
+          role="radio"
+          data-key={item.key}
+          aria-checked={value === item.key}
+          tabIndex={value === item.key ? 0 : -1}
+          className={`owner-settings-segment-option${value === item.key ? ' is-active' : ''}`}
+          onClick={() => onSelect(item.key)}
+          onKeyDown={(event) => handleKeyDown(event, index)}
+        >
+          <span>{item.label}</span>
+          {item.badge > 0 && <span className="owner-subtab-count" aria-label={item.badgeLabel}>{item.badge}</span>}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -1877,6 +1933,7 @@ const OWNER_TABS = [
   { key: 'parking', label: 'ที่จอดรถ' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
+  { key: 'repair-vendors', label: 'ติดต่อช่างซ่อม' },
   { key: 'cameras', label: 'กล้องวงจรปิด' },
     { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'safety', label: 'แจ้งเหตุฉุกเฉิน' },
@@ -1888,6 +1945,7 @@ const OWNER_TAB_GROUPS = [
   { key: 'overview', label: 'ห้องพักและสิ่งอำนวยความสะดวก', tabs: ['rooms', 'parking', 'wifi'] },
   { key: 'money', label: 'การเงินและสัญญา', tabs: ['finance', 'utilities', 'completed-contracts'] },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
+  { key: 'repair', label: 'ติดต่อช่างซ่อม', tabs: ['repair-vendors'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'people', label: 'พนักงาน', tabs: ['staff'] },
   { key: 'security', label: 'ความปลอดภัย', tabs: ['safety', 'cameras'] },
@@ -2301,7 +2359,7 @@ const OWNER_PENDING_KINDS = [
   'slip', 'visit', 'safety', 'tenant', 'maintenance', 'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract',
   'transfer_charge', 'move_in', 'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
 ]
-const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance' }
+const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance', 'repair-vendors': 'repair-vendors' }
 
 function ownerNotificationLink({ target, refId }) {
   const [area, section] = (target || '').split(':')
@@ -2400,6 +2458,7 @@ function OwnerMain() {
   const [activeTab, setActiveTab] = useState('rooms')
   const [lastOwnerTabByGroup, setLastOwnerTabByGroup] = useState({})
   const [marketSummary, setMarketSummary] = useState(null)
+  const [repairSummary, setRepairSummary] = useState(null)
   const [financeSection, setFinanceSection] = useState('overview')
   const [paymentLogDetail, setPaymentLogDetail] = useState(null)
   const [slipSearch, setSlipSearch] = useState('')
@@ -3475,6 +3534,13 @@ function OwnerMain() {
       income: { icon: 'income', tone: 'purple' },
       expiring: { icon: 'clock', tone: 'amber' },
     }),
+    'repair-vendors': repairSummaryTiles(repairSummary, {
+      vendors: { icon: 'staff', tone: 'blue' },
+      sent: { icon: 'clock', tone: 'amber' },
+      progress: { icon: 'maintenance', tone: 'indigo' },
+      done: { icon: 'shield', tone: 'green' },
+      rejected: { icon: 'overdue', tone: 'red' },
+    }),
     utilities: [
       { key: 'water', tone: 'blue', icon: 'water', label: 'รายรับค่าน้ำ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.water)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
       { key: 'electricity', tone: 'orange', icon: 'electricity', label: 'รายรับค่าไฟ', value: utilityReceipts.loading || utilityReceipts.error ? '—' : `฿${currency(utilityTotals.electricity)}`, hint: 'ยอดรับชำระตามช่วงที่เลือก' },
@@ -3839,54 +3905,39 @@ function OwnerMain() {
         />
         {OWNER_TAB_GROUPS.filter((group) => group.tabs.length > 1 && group.key === OWNER_GROUP_OF[activeTab]).map((group) => (
           <div key={group.key} className="owner-group-subtabs">
-            <ul className="nav staff-subtabs owner-subtabs" aria-label={group.label}>
-              {group.tabs.map((key) => (
-                <li className="nav-item" key={key}>
-                  <button
-                    type="button"
-                    className={`nav-link staff-subtab-link${activeTab === key ? ' active' : ''}`}
-                    aria-pressed={activeTab === key}
-                    onClick={() => {
-                      if (viewingExpenses && key !== 'finance') markExpensesSeen()
-                      setActiveTab(key)
-                      setLastOwnerTabByGroup((current) => ({ ...current, [group.key]: key }))
-                    }}
-                  >
-                    {OWNER_TAB_LABEL[key]}
-                    {key === 'finance' && financeBadgeCount > 0 && <span className="owner-subtab-count">{financeBadgeCount}</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <OwnerSegmentNav
+              label={group.label}
+              value={activeTab}
+              items={group.tabs.map((key) => ({ key, label: OWNER_TAB_LABEL[key], badge: key === 'finance' ? financeBadgeCount : 0 }))}
+              onSelect={(key) => {
+                if (key === activeTab) return
+                if (viewingExpenses && key !== 'finance') markExpensesSeen()
+                setActiveTab(key)
+                setLastOwnerTabByGroup((current) => ({ ...current, [group.key]: key }))
+              }}
+            />
           </div>
         ))}
 
         {(activeTab === 'rooms' || activeTab === 'finance' || activeTab === 'utilities') && (
           <div className="owner-section-toolbar">
             {activeTab === 'rooms' && (
-              <ul className="nav staff-subtabs owner-subtabs" aria-label="หมวดหมู่สรุปห้อง">
-                {OWNER_ROOMS_SECTIONS.map((section) => (
-                  <li className="nav-item" key={section.key}>
-                    <button
-                      type="button"
-                      className={`nav-link staff-subtab-link${roomsSection === section.key ? ' active' : ''}`}
-                      aria-pressed={roomsSection === section.key}
-                      onClick={() => setRoomsSection(section.key)}
-                    >
-                      {section.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <OwnerSegmentNav label="หมวดหมู่สรุปห้อง" value={roomsSection} items={OWNER_ROOMS_SECTIONS} onSelect={setRoomsSection} />
             )}
             {activeTab === 'finance' && (
-              <ul className="nav staff-subtabs owner-subtabs" aria-label="หมวดหมู่รายละเอียดการเงิน">
-                {OWNER_FINANCE_SECTIONS.map((section) => (
-                  <li className="nav-item" key={section.key}>
-                    <button type="button" className={`nav-link staff-subtab-link${financeSection === section.key ? ' active' : ''}`} aria-pressed={financeSection === section.key} onClick={() => { if (section.key === 'expenses' || viewingExpenses) markExpensesSeen(); setFinanceSection(section.key) }}>{section.label}{section.key === 'slips' && pendingSlipReviews.length > 0 && <span className="owner-subtab-count">{pendingSlipReviews.length}</span>}{section.key === 'expenses' && newExpenseCount > 0 && <span className="owner-subtab-count" aria-label={`${newExpenseCount} รายจ่ายใหม่`}>{newExpenseCount}</span>}</button>
-                  </li>
-                ))}
-              </ul>
+              <OwnerSegmentNav
+                label="หมวดหมู่รายละเอียดการเงิน"
+                value={financeSection}
+                items={OWNER_FINANCE_SECTIONS.map((section) => ({
+                  ...section,
+                  badge: section.key === 'slips' ? pendingSlipReviews.length : section.key === 'expenses' ? newExpenseCount : 0,
+                  badgeLabel: section.key === 'expenses' ? `${newExpenseCount} รายจ่ายใหม่` : undefined,
+                }))}
+                onSelect={(key) => {
+                  if (key === 'expenses' || viewingExpenses) markExpensesSeen()
+                  setFinanceSection(key)
+                }}
+              />
             )}
             <div className="owner-period-range-group">
               <small className="owner-period-range-caption">กรองข้อมูลตามช่วงวันที่</small>
@@ -3944,6 +3995,7 @@ function OwnerMain() {
 
         {activeTab === 'wifi' && <WifiManager />}
         {activeTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
+        {activeTab === 'repair-vendors' && <RepairVendorManager readOnly onSummary={setRepairSummary} />}
 
         {activeTab === 'cameras' && <CameraMonitor />}
 

@@ -32,6 +32,7 @@ import {
   ParkingStatusPill,
   ResidentContractWindow,
 } from '../components/ParkingFields.jsx'
+import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_CATEGORY_OPTIONS, MAINTENANCE_TIME_LABEL, MAINTENANCE_TIME_OPTIONS } from '../utils/maintenanceCategories.js'
 import { PARKING_FORM_TOPICS, USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, VISITOR_MAX_HOURS, formatBaht, getVisitorSession, useNow, useParkingOptions } from '../utils/parking.js'
 import InspectionTopicFilter from '../components/InspectionTopicFilter.jsx'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
@@ -2490,6 +2491,36 @@ const MAINTENANCE_CATEGORY_ICON_PATHS = {
       <path d="M2 13a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v5H2zM5 18v2M19 18v2" />
     </>
   ),
+  appliance: (
+    <>
+      <rect x="6" y="2.5" width="12" height="19" rx="2" />
+      <path d="M6 9h12M9 5.5v1M9 12v3" />
+    </>
+  ),
+  door: (
+    <>
+      <path d="M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17" />
+      <path d="M3 21h18M14.5 12h.01" />
+    </>
+  ),
+  building: (
+    <>
+      <path d="M3 21h18M5 21V8l7-5 7 5v13" />
+      <path d="M9 21v-6h6v6M9 11h.01M15 11h.01" />
+    </>
+  ),
+  internet: (
+    <>
+      <path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" />
+      <path d="M12 19.5h.01" />
+    </>
+  ),
+  pest: (
+    <>
+      <ellipse cx="12" cy="13" rx="4" ry="6" />
+      <path d="M12 7V4M9 4.5 10.5 7M15 4.5 13.5 7M8 11H4M8 15H4.5M16 11h4M16 15h3.5M12 9v10" />
+    </>
+  ),
   other: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" />,
 }
 
@@ -2501,27 +2532,6 @@ function MaintenanceCategoryIcon({ category, size = 22 }) {
   )
 }
 
-const MAINTENANCE_CATEGORY_OPTIONS = [
-  { value: 'electrical', label: 'ไฟฟ้า' },
-  { value: 'plumbing', label: 'ประปา' },
-  { value: 'aircon', label: 'เครื่องปรับอากาศ' },
-  { value: 'furniture', label: 'เฟอร์นิเจอร์ / สิ่งอำนวยความสะดวก' },
-  { value: 'other', label: 'อื่นๆ' },
-]
-
-const MAINTENANCE_TIME_OPTIONS = [
-  { value: 'anytime', label: 'เวลาไหนก็ได้' },
-  { value: 'morning', label: 'ช่วงเช้า (08:00-12:00)' },
-  { value: 'afternoon', label: 'ช่วงบ่าย (12:00-16:00)' },
-  { value: 'evening', label: 'ช่วงเย็น (16:00-19:00)' },
-]
-
-const MAINTENANCE_CATEGORY_LABEL = Object.fromEntries(
-  MAINTENANCE_CATEGORY_OPTIONS.map((option) => [option.value, option.label]),
-)
-const MAINTENANCE_TIME_LABEL = Object.fromEntries(
-  MAINTENANCE_TIME_OPTIONS.map((option) => [option.value, option.label]),
-)
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -8642,42 +8652,86 @@ function CustomerDashbord() {
                   {showMaintenanceForm && (
                     <Modal title="แจ้งซ่อม" onClose={() => setShowMaintenanceForm(false)}>
                       {(requestClose) => (
-                        <form className="dashboard-inline-form" onSubmit={handleMaintenanceSubmit}>
-                          <label>หมวดหมู่ปัญหา</label>
-                          <select value={maintenanceCategory} onChange={(event) => setMaintenanceCategory(event.target.value)}>
-                            {MAINTENANCE_CATEGORY_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                        <form className="dashboard-inline-form maintenance-form" onSubmit={handleMaintenanceSubmit}>
+                          <div className="maintenance-form-step">
+                            <span className="maintenance-form-step-no">1</span>
+                            <div>
+                              <strong>ปัญหาเกี่ยวกับอะไร</strong>
+                              <small>เลือกหมวดที่ใกล้เคียงที่สุด ช่วยให้ส่งช่างได้ตรงงาน</small>
+                            </div>
+                          </div>
+                          <div className="maintenance-category-grid" role="radiogroup" aria-label="หมวดหมู่ปัญหา">
+                            {MAINTENANCE_CATEGORY_OPTIONS.map((option) => {
+                              const selected = maintenanceCategory === option.value
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  title={option.hint}
+                                  className={`maintenance-category-option cat-${option.value}${selected ? ' is-selected' : ''}`}
+                                  onClick={() => setMaintenanceCategory(option.value)}
+                                >
+                                  <span className="maintenance-category-icon"><MaintenanceCategoryIcon category={option.value} size={16} /></span>
+                                  <strong>{option.label}</strong>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <small className="maintenance-category-hint">
+                            ตัวอย่าง: {MAINTENANCE_CATEGORY_OPTIONS.find((option) => option.value === maintenanceCategory)?.hint}
+                          </small>
 
-                          <label>
-                            รายละเอียดปัญหา <span className="dashboard-required">*</span>
-                          </label>
-                          <textarea
-                            rows={3}
-                            maxLength={500}
-                            required
-                            value={maintenanceText}
-                            onChange={(event) => {
-                              setMaintenanceText(event.target.value)
-                              if (maintenanceError) setMaintenanceError('')
-                            }}
-                            placeholder="อธิบายปัญหาที่ต้องการแจ้งซ่อม เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว..."
-                          />
+                          <div className="maintenance-form-step">
+                            <span className="maintenance-form-step-no">2</span>
+                            <div>
+                              <strong>
+                                รายละเอียดปัญหา <span className="dashboard-required">*</span>
+                              </strong>
+                              <small>บอกอาการ ตำแหน่ง และเริ่มเป็นตั้งแต่เมื่อไหร่</small>
+                            </div>
+                          </div>
+                          <div className="maintenance-description">
+                            <textarea
+                              rows={3}
+                              maxLength={500}
+                              required
+                              value={maintenanceText}
+                              onChange={(event) => {
+                                setMaintenanceText(event.target.value)
+                                if (maintenanceError) setMaintenanceError('')
+                              }}
+                              placeholder={`เช่น ${MAINTENANCE_CATEGORY_OPTIONS.find((option) => option.value === maintenanceCategory)?.hint || 'แอร์ไม่เย็น ก๊อกน้ำรั่ว'}...`}
+                            />
+                            <small>{maintenanceText.length}/500</small>
+                          </div>
 
-                          <label>ช่วงเวลาที่สะดวกให้เข้าซ่อม</label>
-                          <select
-                            value={maintenancePreferredTime}
-                            onChange={(event) => setMaintenancePreferredTime(event.target.value)}
-                          >
-                            {MAINTENANCE_TIME_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="maintenance-form-step">
+                            <span className="maintenance-form-step-no">3</span>
+                            <div>
+                              <strong>ช่วงเวลาที่สะดวกให้เข้าซ่อม</strong>
+                              <small>ช่างจะพยายามนัดเข้าในช่วงที่เลือก</small>
+                            </div>
+                          </div>
+                          <div className="maintenance-time-grid" role="radiogroup" aria-label="ช่วงเวลาที่สะดวก">
+                            {MAINTENANCE_TIME_OPTIONS.map((option) => {
+                              const selected = maintenancePreferredTime === option.value
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  className={`maintenance-time-option${selected ? ' is-selected' : ''}`}
+                                  onClick={() => setMaintenancePreferredTime(option.value)}
+                                >
+                                  <strong>{option.label}</strong>
+                                  <small>{option.hint}</small>
+                                </button>
+                              )
+                            })}
+                          </div>
 
                           <label>เบอร์โทรติดต่อ (ถ้ามี)</label>
                           <input

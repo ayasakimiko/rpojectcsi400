@@ -52,7 +52,10 @@ import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
 import MarketManager from '../components/MarketManager.jsx'
+import RepairVendorManager from '../components/RepairVendorManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
+import { repairSummaryTiles } from '../utils/repairSummary.js'
+import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL } from '../utils/maintenanceCategories.js'
 import {
   ParkingChoiceGroup,
   ParkingFinePayment,
@@ -1279,21 +1282,6 @@ const RENEW_PAYMENT_TYPE_LABEL = {
   lump_sum: 'จ่ายล่วงหน้าทั้งก้อน',
 }
 
-const MAINTENANCE_CATEGORY_LABEL = {
-  electrical: 'ไฟฟ้า',
-  plumbing: 'ประปา',
-  aircon: 'เครื่องปรับอากาศ',
-  furniture: 'เฟอร์นิเจอร์ / สิ่งอำนวยความสะดวก',
-  other: 'อื่นๆ',
-}
-
-const MAINTENANCE_TIME_LABEL = {
-  anytime: 'เวลาไหนก็ได้',
-  morning: 'ช่วงเช้า (08:00-12:00)',
-  afternoon: 'ช่วงบ่าย (12:00-16:00)',
-  evening: 'ช่วงเย็น (16:00-19:00)',
-}
-
 const MAINTENANCE_STATUS_LABEL = {
   pending: 'รอดำเนินการ',
   in_progress: 'กำลังดำเนินการ',
@@ -1308,6 +1296,7 @@ const STAFF_TABS = [
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
+  { key: 'repair-vendors', label: 'ติดต่อช่าง' },
   { key: 'announcements', label: 'ประกาศจากหอพัก' },
   { key: 'waiting-list', label: 'รายชื่อคนรอห้องว่าง' },
   { key: 'move-out-inspections', label: 'ตรวจสภาพห้อง' },
@@ -1321,6 +1310,7 @@ const STAFF_TAB_GROUPS = [
   { key: 'finance', label: 'การเงินและสัญญา', tabs: ['payment-review', 'completed-contracts'] },
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['move-out-inspections', 'waiting-list', 'wifi'] },
   { key: 'services', label: 'บริการผู้เช่า', tabs: ['parcels', 'resident-visits'] },
+  { key: 'repair', label: 'ติดต่อช่าง', tabs: ['repair-vendors'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
   { key: 'security', label: 'ความปลอดภัย', tabs: ['safety', 'cameras'] },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
@@ -1457,7 +1447,7 @@ const STAFF_SERVER_PENDING_KINDS = [
   'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
 ]
 const STAFF_FOCUS_TABS = { slips: 'payment-review', visits: 'resident-visits', safety: 'safety' }
-const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections' }
+const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections', 'repair-vendors': 'repair-vendors' }
 const PAYMENT_HISTORY_INITIAL_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
@@ -7549,6 +7539,7 @@ function StaffMain() {
   const [moveOutInspections, setMoveOutInspections] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [marketSummary, setMarketSummary] = useState(null)
+  const [repairSummary, setRepairSummary] = useState(null)
   const [inspectionModal, setInspectionModal] = useState(false)
   const [inspectionSection, setInspectionSection] = useState('all')
   const [inspectionForm, setInspectionForm] = useState({
@@ -9787,6 +9778,16 @@ function StaffMain() {
         expiring: { icon: 'clock', tone: 'amber' },
       }),
     },
+    'repair-vendors': {
+      title: 'ติดต่อช่างซ่อม',
+      tiles: repairSummaryTiles(repairSummary, {
+        vendors: { icon: 'queue', tone: 'blue' },
+        sent: { icon: 'clock', tone: 'amber' },
+        progress: { icon: 'maintenance', tone: 'indigo' },
+        done: { icon: 'vacant', tone: 'green' },
+        rejected: { icon: 'request', tone: 'red' },
+      }),
+    },
     safety: {
       title: 'แจ้งเหตุฉุกเฉิน',
       tiles: [
@@ -10764,6 +10765,7 @@ function StaffMain() {
 
         {staffTab === 'wifi' && <WifiManager />}
         {staffTab === 'market' && <MarketManager onSummary={setMarketSummary} />}
+        {staffTab === 'repair-vendors' && <RepairVendorManager rooms={rooms} onSummary={setRepairSummary} />}
 
         {staffTab === 'cameras' && staffUser?.role === 'Staff' && <CameraMonitor />}
 

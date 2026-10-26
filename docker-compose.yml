@@ -236,6 +236,7 @@ services:
       - "127.0.0.1:${MAINTENANCE_PORT:-4008}:4008"
     volumes:
       - ./public/uploads:/app/public/uploads
+      - ./storage/repair-contracts:/app/storage/repair-contracts
 
   payment-service:
     <<: *service-defaults

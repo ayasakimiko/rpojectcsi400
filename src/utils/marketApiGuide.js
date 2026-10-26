@@ -232,7 +232,7 @@ export function guideAiPrompt(base) {
   ].join('\n')
 }
 
-function saveBlob(blob, fileName) {
+export function saveBlob(blob, fileName) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -243,7 +243,7 @@ function saveBlob(blob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-const fileStamp = () => {
+export const fileStamp = () => {
   const now = new Date()
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
 }
@@ -341,7 +341,7 @@ function safeBreakPoints(node, scale) {
   return [...points].filter((point) => point > 0).sort((a, b) => a - b)
 }
 
-export async function downloadGuidePdf(node) {
+export async function downloadGuidePdf(node, filePrefix = 'market-api-guide') {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
   const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff' })
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
@@ -375,5 +375,5 @@ export async function downloadGuidePdf(node) {
     pdf.text(`${page}`, pageWidth - PDF_MARGIN_PT, pageHeight - 14, { align: 'right' })
     rendered = end
   }
-  pdf.save(`market-api-guide-${fileStamp()}.pdf`)
+  pdf.save(`${filePrefix}-${fileStamp()}.pdf`)
 }

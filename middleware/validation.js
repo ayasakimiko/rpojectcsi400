@@ -1,4 +1,5 @@
 import { ROOM_AMENITY_ICON_KEYS } from "../src/utils/roomAmenities.js";
+import { MAINTENANCE_CATEGORY_KEYS, MAINTENANCE_TIME_KEYS } from "../src/utils/maintenanceCategories.js";
 import {
   MAX_MONEY,
   MAX_NAME_LENGTH,
@@ -250,8 +251,8 @@ export function validateExpenseInput(body, { partial }) {
   return null;
 }
 
-const MAINTENANCE_CATEGORIES = new Set(["electrical", "plumbing", "aircon", "furniture", "other"]);
-const MAINTENANCE_TIME_SLOTS = new Set(["anytime", "morning", "afternoon", "evening"]);
+const MAINTENANCE_CATEGORIES = new Set(MAINTENANCE_CATEGORY_KEYS);
+const MAINTENANCE_TIME_SLOTS = new Set(MAINTENANCE_TIME_KEYS);
 
 export function parseMaintenanceInput(body = {}) {
   const description = typeof body.description === "string" ? body.description.trim() : "";
@@ -543,7 +544,6 @@ function parseMoveOutChecklistAndNote(body) {
   const noteError = validateText(body.damage_note, "รายละเอียดความเสียหาย", { maxLength: 1000, required: false });
   if (noteError) return { error: noteError };
   const damageNote = typeof body.damage_note === "string" ? body.damage_note.trim() : "";
-  // Assets and item costs are optional so admin edits that never send them keep the stored values.
   const assets = body.assets === undefined ? { value: null } : parseAssetList(body.assets, { withResult: true, withMoveInResult: true });
   if (assets.error) return assets;
   const itemCosts = parseItemCosts(body.item_costs, checklist);
@@ -553,7 +553,6 @@ function parseMoveOutChecklistAndNote(body) {
   if (hasIssue && !damageNote) {
     return { error: "กรุณาระบุรายการและตำแหน่งที่ชำรุดหรือสูญหาย" };
   }
-  // Without an explicit amount the damage is the sum of the item and asset costs.
   const computedCents = itemCosts.value || assets.value
     ? Object.values(itemCosts.value || {}).reduce((sum, cost) => sum + Math.round(cost * 100), 0)
       + (assets.value || []).reduce((sum, asset) => sum + Math.round((asset.cost || 0) * 100), 0)
@@ -664,7 +663,6 @@ function parseAssetList(assets, { withResult = false, withMoveInResult = false }
       const moveInResult = asset.move_in_result ?? null;
       if (moveInResult !== null && !MOVE_OUT_RESULTS.has(moveInResult)) return { error: `ผลตรวจก่อนเข้าอยู่ของ "${name}" ไม่ถูกต้อง` };
       item.move_in_result = moveInResult;
-      // Move-out damage charged for this asset; only meaningful for wear/damaged/missing.
       if (COSTED_RESULTS.has(item.result) && asset.cost !== undefined && asset.cost !== null && asset.cost !== "") {
         const cost = parseDamageCost(asset.cost);
         if (cost.error) return { error: `ค่าเสียหายของ "${name}": ${cost.error}` };
