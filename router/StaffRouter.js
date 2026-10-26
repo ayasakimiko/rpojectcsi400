@@ -339,7 +339,7 @@ router.get("/payment-verifications", async (_req, res) => {
     const pool = getPool();
     const [payments] = await pool.query(
       `SELECT MIN(p.id) AS id, p.booking_id, p.slip_path, SUM(p.amount) AS amount,
-              MAX(p.payment_date) AS payment_date, c.first_name, c.last_name, c.phone,
+              MAX(p.payment_date) AS payment_date, MAX(p.created_at) AS created_at, c.first_name, c.last_name, c.phone,
               r.room_number, GROUP_CONCAT(DISTINCT p.type ORDER BY p.type SEPARATOR ',') AS payment_types,
               JSON_ARRAYAGG(JSON_OBJECT('type', p.type, 'amount', p.amount, 'note', p.note)) AS payment_items
        FROM Payment p

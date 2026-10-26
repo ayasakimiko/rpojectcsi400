@@ -77,7 +77,7 @@ import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, takeNotificationDeepLink, useNotificationReads, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
 const WAITING_UI_STATUSES = {
@@ -1683,7 +1683,7 @@ function buildStaffSlipNotif(payment) {
     title: `สลิปโอนเงิน ห้อง ${payment.room_number}`,
     label: 'สลิปรอตรวจสอบ',
     tone: 'info',
-    date: payment.payment_date,
+    date: payment.created_at || payment.payment_date,
     preview: `${payment.first_name} ${payment.last_name} · ฿${Number(payment.amount || 0).toLocaleString('th-TH')}`,
     previewLabel: 'ผู้โอน · ยอดเงิน',
     kind: 'slip',
@@ -9053,7 +9053,7 @@ function StaffMain() {
   })
 
   const notifications = useMemo(() => {
-    return [
+    return sortNewestFirst([
       ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
       ...pendingVisitRequests.map(buildStaffVisitNotif),
       ...pendingSlips.map(buildStaffSlipNotif),
@@ -9062,7 +9062,7 @@ function StaffMain() {
       ...announcements.map(buildAnnouncementNotif),
       ...serverFeed.events,
       ...serverFeed.pending,
-    ].sort((a, b) => new Date(b.date) - new Date(a.date))
+    ])
   }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements, serverFeed.events, serverFeed.pending])
 
   const notificationReads = useNotificationReads(getNotificationStorageKey('staff'), serverFeed)

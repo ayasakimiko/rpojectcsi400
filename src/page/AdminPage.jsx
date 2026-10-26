@@ -45,7 +45,7 @@ import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, Tran
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { ParkingFinePayment, ParkingSessionPanel, ParkingSettingsForm, ParkingStatusPill } from '../components/ParkingFields.jsx'
 import { USER_CATEGORY_LABEL, VEHICLE_TYPE_LABEL, formatBaht } from '../utils/parking.js'
-import { isUnread, takeNotificationDeepLink, useNotificationReads, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
 const WAITING_UI_STATUSES = {
@@ -7495,7 +7495,7 @@ function AdminBackupPage() {
   })
 
   const notifications = useMemo(() => {
-    return [
+    return sortNewestFirst([
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
       ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
       ...notifSafetyItems.flatMap(buildAdminSafetyNotifs),
@@ -7505,7 +7505,7 @@ function AdminBackupPage() {
       ...announcements.map(buildAnnouncementNotif),
       ...serverFeed.events,
       ...serverFeed.pending,
-    ].sort((a, b) => new Date(b.date) - new Date(a.date))
+    ])
   }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, serverFeed.events, serverFeed.pending])
 
   const notificationReads = useNotificationReads(getNotificationStorageKey('admin'), serverFeed)

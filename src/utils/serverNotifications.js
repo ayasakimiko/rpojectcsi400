@@ -46,6 +46,21 @@ export function toBellItem(row, pending = false) {
   }
 }
 
+function timeOf(item) {
+  const value = typeof item.date === 'string' ? item.date.replace(/^(\d{4}-\d{2}-\d{2}) (?=\d)/, '$1T') : item.date
+  const time = value ? new Date(value).getTime() : Number.NaN
+  return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY
+}
+
+// Newest first. Reminders dated in the future (due bills, contracts about to end) count as
+// "now" so they do not stay pinned above newer events; items without a valid date go last.
+export function sortNewestFirst(items, now = Date.now()) {
+  return items
+    .map((item) => ({ item, time: Math.min(timeOf(item), now) }))
+    .sort((a, b) => (b.time > a.time) - (b.time < a.time))
+    .map(({ item }) => item)
+}
+
 export function isUnread(item, seenKeys) {
   if (item.serverId) return !item.isRead
   return seenKeys.has ? !seenKeys.has(item.key) : !seenKeys.includes(item.key)

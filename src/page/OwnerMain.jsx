@@ -23,7 +23,7 @@ import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
-import { isUnread, useNotificationReads, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { logout } from '../utils/session.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
@@ -3444,8 +3444,7 @@ function OwnerMain() {
   const paymentPage = Number(paymentLogs.page || 1)
   const serverFeed = useServerNotifications('/api/owner', { pendingKinds: OWNER_PENDING_KINDS, onNewEvents: loadAnnouncements })
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = [...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  const notifications = sortNewestFirst([...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending])
   const notificationReads = useNotificationReads(getOwnerNotificationStorageKey(), serverFeed)
   const newNotifications = notifications.filter((item) => isUnread(item, notificationReads.seenKeys))
   const freshNotificationKeys = new Set(newNotifications.map((item) => item.key))
