@@ -55,6 +55,21 @@
   box-shadow: 0 6px 18px rgba(15, 43, 82, 0.06);
 }
 
+.mi-item.is-pending {
+  border-color: #fde9b8;
+  background: linear-gradient(180deg, #fffcf3 0%, #fff 42%);
+}
+
+.mi-item.is-pending:hover {
+  border-color: #fcd98a;
+  box-shadow: 0 8px 22px rgba(180, 83, 9, 0.08);
+}
+
+.mi-item.is-pending .mi-facts,
+.mi-item.is-pending .mi-facts > div + div {
+  border-color: #f8edd2;
+}
+
 .mi-item-head {
   display: flex;
   min-width: 0;
@@ -111,9 +126,13 @@
 }
 
 .mi-badge {
+  display: inline-flex;
   flex: 0 0 auto;
   align-self: flex-start;
+  align-items: center;
+  gap: 6px;
   padding: 4px 12px;
+  border: 1px solid transparent;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
@@ -121,18 +140,30 @@
 }
 
 .mi-badge.is-good {
+  border-color: #c6f1d6;
   background: #ecfdf3;
   color: #027a48;
 }
 
 .mi-badge.is-issue {
+  border-color: #fdd5d1;
   background: #fef3f2;
   color: #b42318;
 }
 
 .mi-badge.is-pending {
+  border-color: #fcd98a;
   background: #fffaeb;
   color: #b45309;
+}
+
+.mi-badge.is-pending::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+  content: '';
 }
 
 .mi-facts {
@@ -201,6 +232,34 @@
 .mi-inspector svg {
   flex: 0 0 auto;
   color: #8aa0b6;
+}
+
+.mi-item-foot.is-pending {
+  gap: 12px;
+}
+
+.mi-item-foot.is-pending .mi-hint {
+  gap: 10px;
+  color: #92400e;
+  font-size: 13.5px;
+}
+
+.mi-item-foot.is-pending .mi-hint svg {
+  box-sizing: content-box;
+  flex: 0 0 auto;
+  padding: 8px;
+  border: 1px solid #fde9b8;
+  border-radius: 50%;
+  background: #fffaeb;
+  color: #d97706;
+}
+
+.mi-item-foot.is-pending .mi-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 20px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
 }
 
 .mi-item-foot.is-actions {

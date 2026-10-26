@@ -571,6 +571,8 @@ const MI_ICONS = {
   user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
 }
 
 function MiIcon({ type }) {
@@ -766,8 +768,11 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
                     <dd>{candidate.room_type_name || '-'}</dd>
                   </div>
                 </dl>
-                <div className="mi-item-foot">
-                  <span className="mi-hint">ยังไม่ได้ตรวจก่อนเข้าอยู่</span>
+                <div className="mi-item-foot is-pending">
+                  <span className="mi-hint">
+                    <MiIcon type="clock" />
+                    ยังไม่ได้ตรวจก่อนเข้าอยู่
+                  </span>
                   <button
                     type="button"
                     className="mi-btn is-primary"
@@ -776,6 +781,7 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
                       setModal({ inspection: null, candidates: [candidate] })
                     }}
                   >
+                    <MiIcon type="check" />
                     ตรวจเลย
                   </button>
                 </div>
