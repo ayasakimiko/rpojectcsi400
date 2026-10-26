@@ -1,7 +1,8 @@
 const HIGHLIGHT_CLASS = 'is-focus-highlight'
 const HIGHLIGHT_MS = 2600
-const POLL_MS = 120
-const MAX_ATTEMPTS = 30
+const FIRST_TRY_MS = 16
+const POLL_MS = 60
+const MAX_ATTEMPTS = 60
 
 export function focusAndHighlight(selector, { onFound, onMissing } = {}) {
   let attempts = 0
@@ -29,7 +30,7 @@ export function focusAndHighlight(selector, { onFound, onMissing } = {}) {
     onFound?.(node)
   }
 
-  timer = setTimeout(tick, POLL_MS)
+  timer = setTimeout(tick, FIRST_TRY_MS)
   return () => {
     cancelled = true
     clearTimeout(timer)

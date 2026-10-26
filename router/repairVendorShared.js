@@ -96,10 +96,10 @@ export function validateVendorInput(body) {
   const contractStart = parseDateKey(body.contract_start, "วันเริ่มสัญญา");
   const contractEnd = parseDateKey(body.contract_end, "วันสิ้นสุดสัญญา");
   if (contractEnd < contractStart) throw fail("วันสิ้นสุดสัญญาต้องไม่ก่อนวันเริ่มสัญญา");
-  let fee = null;
-  if (body.contract_fee !== undefined && body.contract_fee !== null && body.contract_fee !== "") {
-    fee = Number(body.contract_fee);
-    if (!Number.isFinite(fee) || fee < 0 || fee > MAX_FEE || Math.round(fee * 100) !== fee * 100) throw fail("ค่าสัญญาไม่ถูกต้อง");
+  if (body.contract_fee === undefined || body.contract_fee === null || body.contract_fee === "") throw fail("กรุณาระบุค่าสัญญา");
+  const fee = Number(body.contract_fee);
+  if (!Number.isFinite(fee) || fee <= 0 || fee > MAX_FEE || Math.round(fee * 100) !== fee * 100) {
+    throw fail("ค่าสัญญาต้องมากกว่า 0 และมีทศนิยมไม่เกิน 2 ตำแหน่ง");
   }
   return {
     name: requiredText(body.name, "ชื่อร้าน/บริษัทช่าง", 150),

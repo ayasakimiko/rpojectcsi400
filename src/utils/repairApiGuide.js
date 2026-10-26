@@ -13,7 +13,7 @@ export const REPAIR_GUIDE_RULES = [
 ]
 
 export const REPAIR_GUIDE_ENDPOINTS = [
-  { method: 'GET', path: '/vendor', access: 'อ่าน', detail: 'ข้อมูลช่าง สัญญาซ่อม และจำนวนงานแยกตามสถานะ' },
+  { method: 'GET', path: '/vendor', access: 'อ่าน', detail: 'ข้อมูลช่าง สัญญาซ่อม ค่าสัญญาที่เรียกเก็บจากหอพัก และจำนวนงานแยกตามสถานะ' },
   { method: 'GET', path: '/jobs?status=', access: 'อ่าน', detail: 'รายการงานซ่อมที่ได้รับ กรองตามสถานะได้ (ล่าสุด 200 งาน)' },
   { method: 'GET', path: '/jobs/:id', access: 'อ่าน', detail: 'รายละเอียดงานซ่อม 1 งาน' },
   { method: 'PATCH', path: '/jobs/:id/status', access: 'แก้ไข', detail: 'เปลี่ยนสถานะงาน (ใช้ PUT ได้)' },
@@ -64,6 +64,19 @@ export const REPAIR_WEBHOOK_SAMPLE = json({ event: 'job.created', sent_at: '2026
 
 export function repairGuideExamples(base) {
   return [
+    {
+      id: 'vendor', method: 'GET', path: '/vendor', title: 'ดูสัญญาและค่าสัญญา', status: 200,
+      description: 'ข้อมูลสัญญาซ่อม และค่าสัญญาที่เรียกเก็บจากหอพัก (contract_fee ต่อ contract_fee_period)',
+      code: curl(base, 'GET', '/vendor'),
+      response: json({
+        vendor: {
+          name: 'ช่างแอร์บ้านสบาย', contact_name: 'คุณสมศักดิ์', phone: '0812345678', email: null,
+          specialties: ['aircon', 'electrical'], specialty_other: null, contract_type: 'monthly',
+          contract_start: '2026-10-01', contract_end: '2026-10-31', contract_fee: 3000, contract_fee_period: 'month',
+        },
+        job_summary: { sent: 1, accepted: 0, in_progress: 0, done: 4, rejected: 0, cancelled: 0 },
+      }),
+    },
     {
       id: 'jobs', method: 'GET', path: '/jobs?status=sent', title: 'ดึงงานใหม่ที่รอตอบรับ', status: 200,
       description: 'เรียกเป็นระยะ (เช่น ทุก 1-5 นาที) เพื่อดูงานที่หอพักส่งมา',
@@ -192,7 +205,7 @@ export function repairAiPrompt(base) {
     '- ห้ามแสดง API key ให้ผู้ใช้เห็น และห้ามเรียก URL อื่นนอกจาก Base URL นี้',
     '',
     '## Endpoints ที่ใช้ได้',
-    '- GET /vendor — ข้อมูลช่าง สัญญาซ่อม และจำนวนงานแยกตามสถานะ',
+    '- GET /vendor — ข้อมูลช่าง สัญญาซ่อม ค่าสัญญา (contract_fee ต่อ contract_fee_period: month หรือ year) และจำนวนงานแยกตามสถานะ',
     '- GET /jobs?status=<status> — รายการงาน (sent, accepted, in_progress, done, rejected, cancelled)',
     '- GET /jobs/{id} — รายละเอียดงาน 1 งาน',
     '- PATCH /jobs/{id}/status — เปลี่ยนสถานะ ส่งได้เฉพาะ status, note, technician_name, scheduled_at',

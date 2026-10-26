@@ -371,6 +371,7 @@ function VendorFormModal({ vendor, onClose, onSaved }) {
     form.specialties.length === 0 && { key: 'specialties', label: 'ประเภทงานที่รับซ่อม' },
     form.specialties.includes('other') && !form.specialty_other.trim() && { key: 'specialty_other', label: 'ระบุงานประเภทอื่นๆ' },
     (!form.contract_start || !form.contract_end || form.contract_end < form.contract_start) && { key: form.contract_start ? 'contract_end' : 'contract_start', label: 'ช่วงวันที่สัญญา' },
+    !(Number(form.contract_fee) > 0) && { key: 'contract_fee', label: `ค่าสัญญา${form.contract_type === 'yearly' ? 'ต่อปี' : 'ต่อเดือน'}` },
     !vendor && images.length < VENDOR_MIN_IMAGES && { key: 'images', label: `รูปสัญญาอีก ${VENDOR_MIN_IMAGES - images.length} รูป` },
   ].filter(Boolean)
   const missingKeys = new Set(missing.map((item) => item.key))
@@ -517,8 +518,8 @@ function VendorFormModal({ vendor, onClose, onSaved }) {
                   onChange={(value) => setForm((current) => ({ ...current, contract_end: value }))}
                 />
               </Field>
-              <Field label={`ค่าสัญญา${form.contract_type === 'yearly' ? 'ต่อปี' : 'ต่อเดือน'} (บาท)`} hint="ไม่บังคับ">
-                <input className="market-input" type="number" min="0" step="0.01" value={form.contract_fee} placeholder="0" onChange={set('contract_fee')} />
+              <Field {...fieldState('contract_fee')} label={`ค่าสัญญา${form.contract_type === 'yearly' ? 'ต่อปี' : 'ต่อเดือน'} (บาท) *`} hint="ช่างจะเห็นยอดนี้ผ่าน API เพื่อใช้วางบิลเก็บเงินจากหอพัก">
+                <input className="market-input" type="number" min="0.01" step="0.01" inputMode="decimal" value={form.contract_fee} placeholder="เช่น 3000" onChange={set('contract_fee')} />
               </Field>
               {vendor && (
                 <Field label="สถานะ">
@@ -557,6 +558,7 @@ function VendorFormModal({ vendor, onClose, onSaved }) {
             <span>ระยะสัญญา{CONTRACT_LABEL[form.contract_type]}</span>
             <strong>{days ? `${days.toLocaleString('th-TH')} วัน` : '-'}</strong>
             <small>{form.contract_start && form.contract_end ? `${thaiDate(form.contract_start)} - ${thaiDate(form.contract_end)}` : 'เลือกช่วงวันที่สัญญา'}</small>
+            <small>ค่าสัญญา {Number(form.contract_fee) > 0 ? `฿${money(form.contract_fee)}` : '-'} / {form.contract_type === 'yearly' ? 'ปี' : 'เดือน'}</small>
           </div>
           <div className={`market-lease-summary-check${missing.length ? '' : ' is-ready'}`}>
             {missing.length ? (
@@ -2275,14 +2277,14 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
       setSection(isVendor ? 'vendors' : 'jobs')
       setSectionKey(focusNonce)
       cancelFocus = focusAndHighlight(isVendor ? `[data-repair-vendor="${focusId}"]` : `[data-repair-job="${focusId}"]`, {
-        onFound: () => setTimeout(() => {
+        onFound: () => {
           if (isVendor) {
             setModal({ type: 'vendor', id: Number(focusId) })
             return
           }
           const job = jobsRef.current.find((item) => item.id === Number(focusId))
           if (job) setModal({ type: 'job', job })
-        }, 900),
+        },
         onMissing: () => setMissingNotice(isVendor ? 'ไม่พบช่างรายนี้แล้ว อาจถูกลบออกจากระบบ' : 'ไม่พบงานซ่อมนี้แล้ว อาจถูกลบออกจากระบบ'),
       })
     }, 0)

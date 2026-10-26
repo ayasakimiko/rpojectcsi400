@@ -2885,7 +2885,7 @@ export default function MarketManager({ onSummary, focus = null }) {
       setSection(isLease ? 'leases' : 'shops')
       setSectionKey(focusNonce)
       cancelFocus = focusAndHighlight(isLease ? `[data-market-lease="${focusId}"]` : `[data-market-shop="${focusId}"]`, {
-        onFound: () => setTimeout(() => setModal({ type: isLease ? 'lease' : 'shop', id: Number(focusId) }), 900),
+        onFound: () => setModal({ type: isLease ? 'lease' : 'shop', id: Number(focusId) }),
         onMissing: () => setMissingNotice(isLease ? 'ไม่พบสัญญาเช่านี้แล้ว อาจถูกลบออกจากระบบ' : 'ไม่พบร้านค้านี้แล้ว ร้านอาจถูกปิดหรือลบออกจากระบบ'),
       })
     }, 0)

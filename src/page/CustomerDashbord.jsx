@@ -2474,7 +2474,7 @@ function ParcelProgress({ parcel, compact = false }) {
   )
 }
 
-const NOTIF_PAGE_SIZE = 30
+const NOTIF_PAGE_SIZE = 100
 const RENT_DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000
 const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles', wifi: 'wifi', announcements: 'announcements' }
 const CUSTOMER_TARGET_SCROLL = { due: 'due', renew: 'tenant-renew' }
@@ -6398,6 +6398,7 @@ function CustomerDashbord() {
                                 if (CUSTOMER_TARGET_TABS[area]) {
                                   selectCustomerTab(CUSTOMER_TARGET_TABS[area])
                                   if (CUSTOMER_TARGET_FOCUS[area]) focusAndHighlight(CUSTOMER_TARGET_FOCUS[area])
+                                  setNotifDetail(notif)
                                   return
                                 }
                                 selectCustomerTab('home')

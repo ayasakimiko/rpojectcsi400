@@ -241,3 +241,36 @@
     justify-content: flex-end;
   }
 }
+
+.app-header-date {
+  gap: 9px;
+  padding: 4px 14px 4px 5px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.app-header-date-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.app-header-date-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-header-date > i {
+  width: 4px;
+  height: 4px;
+}
+
+.app-header-clock {
+  font-size: 15px;
+}
+
+.app-header.app-header {
+  row-gap: 6px;
+  margin-bottom: -8px;
+  padding-top: 0;
+  padding-bottom: 0;
+}

@@ -33,6 +33,8 @@ function publicVendor(row) {
     contract_type: vendor.contract_type,
     contract_start: vendor.contract_start,
     contract_end: vendor.contract_end,
+    contract_fee: vendor.contract_fee,
+    contract_fee_period: vendor.contract_type === "yearly" ? "year" : "month",
   };
 }
 

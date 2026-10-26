@@ -1442,7 +1442,7 @@ const EXPENSE_PAYMENT_METHOD_LABEL = {
 
 const EXPENSE_MAX_PHOTOS = 6
 const MODAL_ITEMS_PER_PAGE = 10
-const NOTIF_PAGE_SIZE = 30
+const NOTIF_PAGE_SIZE = 100
 const STAFF_SERVER_PENDING_KINDS = [
   'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'transfer_charge', 'move_in',
   'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',

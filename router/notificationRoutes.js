@@ -3,13 +3,10 @@ import { getPool } from "../Database/connection.js";
 import { changedFor, currentPulse, formatCursor, onPulse, parseCursor } from "./notificationPulse.js";
 
 const FEED_DAYS = 30;
-const FEED_LIMIT = 100;
+const FEED_LIMIT = 300;
 const MAX_READ_IDS = 500;
-// Below the gateway's 60 s socket timeout and common reverse-proxy read timeouts.
 const WAIT_MS = 25000;
 
-// Rows a user may see: a Customer only their own; staff-side roles every broadcast for
-// their role except the ones they caused themselves.
 function visibility(user) {
   if (user.role === "Customer") {
     return { sql: "FIND_IN_SET('Customer', n.audience) AND n.recipient_id = ?", params: [user.id] };

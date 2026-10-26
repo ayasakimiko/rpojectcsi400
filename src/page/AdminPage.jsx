@@ -1435,7 +1435,7 @@ function calcStayDays(start, end) {
   return Math.floor(ms / (1000 * 60 * 60 * 24))
 }
 
-const NOTIF_PAGE_SIZE = 30
+const NOTIF_PAGE_SIZE = 100
 const ADMIN_SERVER_PENDING_KINDS = [
   'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'move_in', 'contract_expiry', 'rent_overdue',
   'waiting_list', 'parcel_stale',

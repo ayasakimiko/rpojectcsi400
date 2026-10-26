@@ -3531,7 +3531,7 @@ function OwnerMain() {
   const notificationReads = useNotificationReads(getOwnerNotificationStorageKey(), serverFeed)
   const newNotifications = notifications.filter((item) => isUnread(item, notificationReads.seenKeys))
   const freshNotificationKeys = new Set(newNotifications.map((item) => item.key))
-  const notificationPageSize = 30
+  const notificationPageSize = 100
   const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))
   const notificationPage = Math.min(notifPage, notificationPages)
   const visibleNotifications = notifications.slice((notificationPage - 1) * notificationPageSize, notificationPage * notificationPageSize)

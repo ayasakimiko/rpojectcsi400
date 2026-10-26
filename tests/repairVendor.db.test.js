@@ -168,6 +168,8 @@ test("vendor sees its own profile and the staff overview lists it", async () => 
   const data = await expectStatus(api("GET", "/vendor", fx.a.key), 200);
   assert.equal(data.vendor.name, `ช่างแอร์ A ${TAG}`);
   assert.equal(data.vendor.contract_type, "yearly");
+  assert.equal(data.vendor.contract_fee, 12000);
+  assert.equal(data.vendor.contract_fee_period, "year");
   assert.equal("webhook_url" in data.vendor, false);
   await expectStatus(api("PATCH", "/vendor", fx.a.key, { name: "x" }), 403);
   const overview = await expectStatus(staff("GET", "/overview"), 200);
@@ -176,6 +178,8 @@ test("vendor sees its own profile and the staff overview lists it", async () => 
 
 test("staff validation blocks bad vendor and job input", async () => {
   await expectStatus(staff("POST", "/vendors", vendorForm(vendorBody("x", { phone: "123" }))), 400);
+  await expectStatus(staff("POST", "/vendors", vendorForm(vendorBody("x", { contract_fee: "" }))), 400);
+  await expectStatus(staff("POST", "/vendors", vendorForm(vendorBody("x", { contract_fee: 0 }))), 400);
   await expectStatus(staff("POST", "/vendors", vendorForm(vendorBody("x", { specialties: [] }))), 400);
   await expectStatus(staff("POST", "/vendors", vendorForm(vendorBody("x", { contract_end: dateKey(-10) }))), 400);
   await expectStatus(staff("POST", "/vendors", vendorForm(vendorBody("x", { webhook_url: "ftp://example.com" }))), 400);
