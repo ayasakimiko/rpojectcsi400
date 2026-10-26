@@ -3,6 +3,7 @@ import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireCustomerRole, requireStaffRole } from "../middleware/authMiddleware.js";
 import { isPositiveId } from "../middleware/validation.js";
+import { wifiChanged } from "./notificationEvents.js";
 
 // Simulated Wi-Fi for testing: nothing here talks to a real router. Staff, admins
 // and owners manage each room's network and add or disconnect devices by hand.
@@ -235,6 +236,7 @@ router.patch("/:room_number", async (req, res) => {
         return res.status(409).json({ message: `ห้องนี้เชื่อมต่ออยู่ ${count} เครื่อง กรุณาตัดการเชื่อมต่อก่อนลดจำนวนเครื่อง` });
       }
     }
+    const [[before]] = await pool.query("SELECT ssid, max_devices, is_enabled FROM RoomWifi WHERE room_number = ?", [roomNumber]);
     const [result] = await pool.query(
       `UPDATE RoomWifi SET ${updates.join(", ")}, updated_at = NOW() WHERE room_number = ?`,
       [...values, roomNumber],
@@ -242,6 +244,13 @@ router.patch("/:room_number", async (req, res) => {
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
     // Turning Wi-Fi off drops every device, like a real access point would.
     if (is_enabled === false) await pool.query("DELETE FROM RoomWifiDevice WHERE room_number = ?", [roomNumber]);
+    const changes = [
+      ssid !== undefined && ssid.trim() !== before?.ssid && `เปลี่ยนชื่อ Wi-Fi เป็น "${ssid.trim()}"`,
+      max_devices !== undefined && Number(max_devices) !== Number(before?.max_devices) && `จำนวนเครื่องสูงสุดเป็น ${Number(max_devices)} เครื่อง`,
+      is_enabled !== undefined && is_enabled !== Boolean(before?.is_enabled)
+        && (is_enabled ? "เปิดใช้งาน Wi-Fi" : "ปิดใช้งาน Wi-Fi อุปกรณ์ทั้งหมดถูกตัดการเชื่อมต่อ"),
+    ].filter(Boolean);
+    if (changes.length > 0) await wifiChanged(roomNumber, req.user, changes.join(" · "));
     return sendRoom(res, pool, roomNumber, "บันทึกการตั้งค่า Wi-Fi แล้ว");
   } catch (error) {
     console.error("Update Wi-Fi error:", error);
@@ -262,6 +271,7 @@ router.post("/:room_number/reset-password", async (req, res) => {
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
     // A new password signs every device out.
     await pool.query("DELETE FROM RoomWifiDevice WHERE room_number = ?", [roomNumber]);
+    await wifiChanged(roomNumber, req.user, "เปลี่ยนรหัส Wi-Fi แล้ว อุปกรณ์เดิมถูกตัดการเชื่อมต่อทั้งหมด", "ดูรหัสใหม่ได้ที่เมนู Wi-Fi");
     return sendRoom(res, pool, roomNumber, "เปลี่ยนรหัส Wi-Fi แล้ว อุปกรณ์เดิมถูกตัดการเชื่อมต่อทั้งหมด");
   } catch (error) {
     console.error("Reset Wi-Fi password error:", error);
@@ -276,6 +286,7 @@ router.post("/:room_number/devices", async (req, res) => {
     const pool = getPool();
     const failure = await addDevice(pool, roomNumber, req.body);
     if (failure) return res.status(failure.status).json({ message: failure.message });
+    await wifiChanged(roomNumber, req.user, `เพิ่มอุปกรณ์ "${req.body.device_name.trim()}"`);
     return await sendRoom(res, pool, roomNumber, "เพิ่มอุปกรณ์แล้ว", 201);
   } catch (error) {
     console.error("Add Wi-Fi device error:", error);
@@ -291,11 +302,15 @@ router.patch("/:room_number/devices/:id", async (req, res) => {
   if (typeof req.body?.is_online !== "boolean") return res.status(400).json({ message: "สถานะอุปกรณ์ไม่ถูกต้อง" });
   try {
     const pool = getPool();
+    const [[device]] = await pool.query("SELECT device_name, is_online FROM RoomWifiDevice WHERE id = ? AND room_number = ?", [id, roomNumber]);
     const [result] = await pool.query(
       "UPDATE RoomWifiDevice SET is_online = ? WHERE id = ? AND room_number = ?",
       [req.body.is_online, id, roomNumber],
     );
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบอุปกรณ์นี้" });
+    if (Boolean(device?.is_online) !== req.body.is_online) {
+      await wifiChanged(roomNumber, req.user, `อุปกรณ์ "${device.device_name}" ${req.body.is_online ? "ออนไลน์" : "ออฟไลน์"}แล้ว`);
+    }
     return sendRoom(res, pool, roomNumber, req.body.is_online ? "อุปกรณ์ออนไลน์แล้ว" : "อุปกรณ์ออฟไลน์แล้ว");
   } catch (error) {
     console.error("Update Wi-Fi device error:", error);
@@ -310,8 +325,10 @@ router.delete("/:room_number/devices/:id", async (req, res) => {
   if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสอุปกรณ์ไม่ถูกต้อง" });
   try {
     const pool = getPool();
+    const [[device]] = await pool.query("SELECT device_name FROM RoomWifiDevice WHERE id = ? AND room_number = ?", [id, roomNumber]);
     const [result] = await pool.query("DELETE FROM RoomWifiDevice WHERE id = ? AND room_number = ?", [id, roomNumber]);
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบอุปกรณ์นี้" });
+    await wifiChanged(roomNumber, req.user, `ตัดการเชื่อมต่ออุปกรณ์ "${device?.device_name || "-"}"`);
     return sendRoom(res, pool, roomNumber, "ตัดการเชื่อมต่ออุปกรณ์แล้ว");
   } catch (error) {
     console.error("Disconnect Wi-Fi device error:", error);
@@ -324,7 +341,8 @@ router.delete("/:room_number/devices", async (req, res) => {
   if (roomNumber == null) return;
   try {
     const pool = getPool();
-    await pool.query("DELETE FROM RoomWifiDevice WHERE room_number = ?", [roomNumber]);
+    const [result] = await pool.query("DELETE FROM RoomWifiDevice WHERE room_number = ?", [roomNumber]);
+    if (result.affectedRows > 0) await wifiChanged(roomNumber, req.user, `ตัดการเชื่อมต่อทุกอุปกรณ์ (${result.affectedRows} เครื่อง)`);
     return sendRoom(res, pool, roomNumber, "ตัดการเชื่อมต่อทุกอุปกรณ์แล้ว");
   } catch (error) {
     console.error("Disconnect all Wi-Fi devices error:", error);

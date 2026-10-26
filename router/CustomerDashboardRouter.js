@@ -19,7 +19,7 @@ import {
 } from "../middleware/publicUploads.js";
 import { listAnnouncements } from "./AnnouncementRouter.js";
 import { createNotificationRoutes } from "./notificationRoutes.js";
-import { maintenanceCancelledByCustomer } from "./notificationEvents.js";
+import { maintenanceCancelledByCustomer, safetyReported } from "./notificationEvents.js";
 import { actorOf } from "../middleware/notifications.js";
 import {
   isPositiveId,
@@ -185,7 +185,7 @@ export async function createSafetyIncident(req, res) {
     const safeRoom = isCustomer ? user.room_number : Number.isInteger(requestedRoom) && requestedRoom > 0 ? requestedRoom : null;
     const severity = classifySafetySeverity(String(incidentType).trim(), description);
     savedPhotos = await savePublicImages(isCustomer ? customerUploadFolder("incidents", req.user.id) : "incidents", parsedPhotos.value);
-    await pool.query(
+    const [created] = await pool.query(
       `INSERT INTO SafetyIncident (reporter_role, reporter_id, reporter_name, room_number, incident_type, severity, description, photos)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -199,6 +199,7 @@ export async function createSafetyIncident(req, res) {
         savedPhotos.length ? JSON.stringify(savedPhotos) : null,
       ],
     );
+    await safetyReported(created.insertId, actorOf(req.user, name));
     return res.status(201).json({ message: "ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว", severity });
   } catch (error) {
     if (savedPhotos.length) await deletePublicImages(savedPhotos.map((photo) => photo.url)).catch(() => {});
@@ -1661,6 +1662,25 @@ router.get("/safety-incidents", async (req, res) => {
   }
 });
 
+// One incident for the bell: the tenant's own report, or a staff-side report about their room.
+router.get("/safety-incidents/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "รหัสรายงานไม่ถูกต้อง" });
+  try {
+    const [[incident]] = await getPool().query(
+      `SELECT si.id, si.room_number, si.incident_type, si.severity, si.description, si.photos, si.status, si.created_at
+       FROM SafetyIncident si JOIN Customer c ON c.id = ?
+       WHERE si.id = ? AND ((si.reporter_role = 'Customer' AND si.reporter_id = c.id)
+         OR (si.reporter_role <> 'Customer' AND si.room_number = c.room_number))`,
+      [req.user.id, id],
+    );
+    if (!incident) return res.status(404).json({ message: "ไม่พบรายงานเหตุ" });
+    return res.json({ incident: withIncidentPhotos([incident])[0] });
+  } catch (error) {
+    console.error("Fetch safety incident error:", error);
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายงานเหตุได้" });
+  }
+});
 router.post("/safety-incidents", createSafetyIncident);
 
 export default router;

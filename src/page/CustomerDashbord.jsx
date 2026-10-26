@@ -41,7 +41,7 @@ import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, useNotificationReads, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 
 function compressImageFile(file) {
@@ -2196,6 +2196,45 @@ function DashboardStepper({ count, currentIndex, children }) {
   )
 }
 
+// Photos of the incident a safety notification points at; the notification row itself only carries text.
+function IncidentNotifPhotos({ incidentId }) {
+  const [photos, setPhotos] = useState([])
+  const [photoIndex, setPhotoIndex] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get(`/api/customer/safety-incidents/${incidentId}`)
+      .then(({ data }) => {
+        if (!cancelled) setPhotos(data.incident?.photos || [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [incidentId])
+
+  if (photos.length === 0) return null
+  return (
+    <>
+      <section className="dashboard-rv-photos dashboard-detail-section" aria-label="รูปประกอบการแจ้งเหตุ">
+        <h4 className="dashboard-detail-section-title">รูปประกอบ · {photos.length} รูป</h4>
+        <div className="dashboard-rv-photo-grid">
+          {photos.map((photo, index) => (
+            <button key={`${photo.url}-${index}`} type="button" className="dashboard-rv-photo" onClick={() => setPhotoIndex(index)} aria-label={`ดูรูปที่ ${index + 1}`}>
+              <UploadImage src={photo.url} alt={photo.name || `รูปที่ ${index + 1}`} loading="lazy" />
+            </button>
+          ))}
+        </div>
+      </section>
+      {photoIndex !== null && createPortal(
+        <PhotoLightbox photos={photos} initialIndex={photoIndex} title="รูปประกอบการแจ้งเหตุ" label="รูปประกอบ" onClose={() => setPhotoIndex(null)} />,
+        document.body,
+      )}
+    </>
+  )
+}
+
 function RequestTimeline({ kind, request, compact = false }) {
   const timeline = getRequestTimeline(kind, request)
   if (timeline.length === 0) return null
@@ -2435,7 +2474,7 @@ function ParcelProgress({ parcel, compact = false }) {
 
 const NOTIF_PAGE_SIZE = 30
 const RENT_DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000
-const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles' }
+const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles', wifi: 'wifi', announcements: 'announcements' }
 const CUSTOMER_TARGET_SCROLL = { due: 'due', renew: 'tenant-renew' }
 
 const CUSTOMER_TABS = [
@@ -5734,7 +5773,7 @@ function CustomerDashbord() {
     target: 'visits',
   }))
 
-  const notifications = [
+  const notifications = sortNewestFirst([
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
@@ -5780,7 +5819,7 @@ function CustomerDashbord() {
       previewLabel: 'รายละเอียดประกาศ',
       kind: 'announcement',
     })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date))
+  ])
 
   const newNotifications = notifications.filter((notif) => isUnread(notif, notificationReads.seenKeys))
   const freshNotifKeys = new Set(newNotifications.map((notif) => notif.key))
@@ -6495,6 +6534,9 @@ function CustomerDashbord() {
                     </p>
                     {notifDetail.detail && (
                       <div className="dashboard-confirm-message-detail">{notifDetail.detail}</div>
+                    )}
+                    {notifDetail.server && notifDetail.kind === 'safety' && notifDetail.refId && (
+                      <IncidentNotifPhotos incidentId={notifDetail.refId} />
                     )}
                     {notifDetail.request ? (
                       <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />

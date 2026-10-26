@@ -4,7 +4,7 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireAdminRole } from "../middleware/authMiddleware.js";
 import { getActingAdminName } from "../middleware/accounts.js";
 import { actorOf } from "../middleware/notifications.js";
-import { moveOutInspectionSaved, safetyHandled, staffAccountChanged } from "./notificationEvents.js";
+import { moveOutInspectionSaved, roomDetailsChanged, safetyHandled, staffAccountChanged } from "./notificationEvents.js";
 import { createResidentVisitReview, listResidentVisitRequests } from "./residentVisitReview.js";
 import {
   cancelCustomerVisitRequests,
@@ -564,6 +564,8 @@ async function saveRoomType(pool, roomTypeId, value) {
   try {
     await connection.beginTransaction();
     let id = roomTypeId;
+    // Rooms leaving the type lose its assets and rooms joining gain them, so both hear about it.
+    const [previousRooms] = id ? await connection.query("SELECT room_number FROM Room WHERE room_type_id = ?", [id]) : [[]];
     if (id) {
       const [result] = await connection.query(
         "UPDATE RoomType SET name = ?, description = ?, assets = ?, updated_at = NOW() WHERE id = ?",
@@ -585,7 +587,7 @@ async function saveRoomType(pool, roomTypeId, value) {
       await connection.query("UPDATE Room SET room_type_id = ? WHERE room_number IN (?)", [id, value.roomNumbers]);
     }
     await connection.commit();
-    return { id };
+    return { id, affectedRooms: [...previousRooms.map((room) => room.room_number), ...value.roomNumbers] };
   } catch (error) {
     await connection.rollback();
     if (error.code === "ER_DUP_ENTRY") return { status: 409, message: "มีชื่อประเภทห้องนี้แล้ว" };
@@ -601,6 +603,7 @@ router.post("/room-types", async (req, res) => {
     if (error) return res.status(400).json({ message: error });
     const result = await saveRoomType(getPool(), null, value);
     if (result.status) return res.status(result.status).json({ message: result.message });
+    await roomDetailsChanged(result.affectedRooms, req.user, `ปรับประเภทห้องเป็น "${value.name}" อุปกรณ์ในห้องอาจเปลี่ยนไป`);
     return res.status(201).json({ message: "เพิ่มประเภทห้องสำเร็จ", roomTypeId: result.id });
   } catch (error) {
     console.error("Create room type error:", error);
@@ -616,6 +619,7 @@ router.put("/room-types/:id", async (req, res) => {
     if (error) return res.status(400).json({ message: error });
     const result = await saveRoomType(getPool(), roomTypeId, value);
     if (result.status) return res.status(result.status).json({ message: result.message });
+    await roomDetailsChanged(result.affectedRooms, req.user, `แก้ไขประเภทห้อง "${value.name}" อุปกรณ์ในห้องอาจเปลี่ยนไป`);
     return res.json({ message: "แก้ไขประเภทห้องสำเร็จ" });
   } catch (error) {
     console.error("Update room type error:", error);
@@ -629,6 +633,7 @@ router.delete("/room-types/:id", async (req, res) => {
   const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
+    const [affectedRooms] = await connection.query("SELECT room_number FROM Room WHERE room_type_id = ?", [roomTypeId]);
     await connection.query("UPDATE Room SET room_type_id = NULL WHERE room_type_id = ?", [roomTypeId]);
     const [result] = await connection.query("DELETE FROM RoomType WHERE id = ?", [roomTypeId]);
     if (result.affectedRows === 0) {
@@ -636,6 +641,7 @@ router.delete("/room-types/:id", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบประเภทห้อง" });
     }
     await connection.commit();
+    await roomDetailsChanged(affectedRooms.map((room) => room.room_number), req.user, "ยกเลิกประเภทห้องเดิม อุปกรณ์ในห้องอาจเปลี่ยนไป");
     return res.json({ message: "ลบประเภทห้องสำเร็จ" });
   } catch (error) {
     await connection.rollback();
@@ -708,6 +714,7 @@ router.put("/rooms/:room_number/assets", async (req, res) => {
       [...values, value.roomTypeId, JSON.stringify(value.assets), roomNumberValue],
     );
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    await roomDetailsChanged([roomNumberValue], req.user, "ปรับปรุงอุปกรณ์และทรัพย์สินในห้อง");
     return res.json({ message: "บันทึกอุปกรณ์และทรัพย์สินในห้องสำเร็จ" });
   } catch (error) {
     console.error("Admin update room assets error:", error);
