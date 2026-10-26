@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import multer from "multer";
 
-export const LEASE_MIN_IMAGES = 3;
+export const LEASE_MIN_IMAGES = 5;
 export const LEASE_MAX_IMAGES = 10;
 export const MARKET_UPLOAD_DIR = path.resolve(process.env.MARKET_UPLOAD_DIR || path.join(process.cwd(), "storage", "market-contracts"));
 

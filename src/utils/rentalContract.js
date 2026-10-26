@@ -4,7 +4,7 @@ export const CONTRACT_DURATION_OPTIONS = [
   { value: 12, label: '12 เดือน (1 ปี)' },
 ]
 
-export const CONTRACT_MIN_IMAGES = 3
+export const CONTRACT_MIN_IMAGES = 5
 export const CONTRACT_MAX_IMAGES = 10
 export const ROOM_TRANSFER_MIN_CONTRACT_IMAGES = 5
 
