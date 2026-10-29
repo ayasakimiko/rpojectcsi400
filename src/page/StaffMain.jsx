@@ -76,7 +76,7 @@ import {
   ContractTransferHistory,
   StaffCompletedContracts,
 } from '../components/RentalContract.jsx'
-import { addContractMonths, completedContractSummaryTiles, CONTRACT_MAX_IMAGES, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
+import { addContractMonths, completedContractSummaryTiles, CONTRACT_MAX_IMAGES, readViewedContractIds, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
 import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
@@ -7682,6 +7682,20 @@ function StaffMain() {
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
   const [contractSummary, setContractSummary] = useState(null)
+  useEffect(() => {
+    if (staffTab !== 'payment-review') return undefined
+    const controller = new AbortController()
+    axios.get('/api/staff/contracts/completed', { signal: controller.signal })
+      .then(({ data }) => {
+        const viewed = readViewedContractIds()
+        const unviewed = (data.contracts || []).filter((contract) => !viewed.has(String(contract.booking_id))).length
+        setContractSummary((current) => ({ ...current, unviewed }))
+      })
+      .catch((error) => {
+        if (error.code !== 'ERR_CANCELED') console.warn('Could not load unviewed contract count', error)
+      })
+    return () => controller.abort()
+  }, [staffTab, peerRefresh])
   const [pendingVisitCount, setPendingVisitCount] = useState(0)
   const [parkedVehicleCount, setParkedVehicleCount] = useState(0)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
@@ -10633,7 +10647,7 @@ function StaffMain() {
           {staffTabGroups.filter((group) => group.tabs.length > 1 && group.key === staffGroupOf(staffTab)).map((group) => (
             <ul key={group.key} className="nav staff-subtabs staff-group-subtabs" aria-label={group.label}>
               {group.tabs.map((key) => {
-                const count = newTabItemCount(key)
+                const count = key === 'completed-contracts' ? contractSummary?.unviewed || 0 : newTabItemCount(key)
                 return (
                   <li className="nav-item" key={key}>
                     <button
@@ -10646,7 +10660,7 @@ function StaffMain() {
                       }}
                     >
                       {STAFF_TAB_LABEL[key]}
-                      {count > 0 && <span className="staff-subtab-badge" aria-label={`${count} รายการใหม่`}>{count}</span>}
+                      {count > 0 && <span className="staff-subtab-badge" aria-label={key === 'completed-contracts' ? `${count} สัญญาที่ยังไม่เปิดดู` : `${count} รายการใหม่`}>{count}</span>}
                     </button>
                   </li>
                 )

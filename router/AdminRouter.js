@@ -16,6 +16,7 @@ import {
   updateParkingSettings,
 } from "./parking.js";
 import {
+  dateSearchSql,
   hasField,
   isPositiveId,
   MOVE_OUT_INSPECTION_STATUSES,
@@ -33,7 +34,6 @@ import {
   validateRoomFields,
 } from "../middleware/validation.js";
 import { customerUploadFolder, deletePublicImages, savePublicImages, withIncidentPhotos } from "../middleware/publicUploads.js";
-import { dateSearchSql } from './searchDates.js';
 import announcementRouter from "./AnnouncementRouter.js";
 import { createNotificationRoutes } from "./notificationRoutes.js";
 import { loadPendingNotifications, PENDING_KINDS } from "./pendingNotifications.js";

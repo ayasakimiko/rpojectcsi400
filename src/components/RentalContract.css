@@ -2434,6 +2434,8 @@
 }
 
 .staff-modal-body:has(> .ccc-modal) {
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -2525,18 +2527,29 @@
   font-size: 20px;
 }
 
-.staff-modal-body:has(> .ccc-modal > .contract-refund-note, > .ccc-modal > .deposit-settle-card) {
-  overflow-y: auto;
-  scrollbar-color: #c9dcfb transparent;
-  scrollbar-width: thin;
-}
-
 .ccc-modal:has(> .contract-refund-note, > .deposit-settle-card) {
-  height: auto;
+  height: 100%;
+  min-height: 0;
 }
 
 .ccc-modal:has(> .contract-refund-note, > .deposit-settle-card) .ccc-grid {
-  height: 640px;
+  height: auto;
+  min-height: 300px;
+  flex: 1 1 0;
+}
+
+.ccc-modal > .contract-refund-note,
+.ccc-modal > .deposit-settle-card {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}
+
+.ccc-modal .ccc-pane > .contract-refund-note {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
   flex: 0 0 auto;
 }
 
@@ -3519,6 +3532,7 @@
 .contract-refund-note strong {
   font-size: 15px;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .contract-refund-note small {
@@ -3526,6 +3540,7 @@
   font-size: 13.5px;
   font-weight: 600;
   opacity: 0.85;
+  overflow-wrap: anywhere;
 }
 
 .contract-refund-note.is-detailed {
@@ -4319,6 +4334,10 @@
     height: auto;
   }
 
+  .ccc-modal:has(> .contract-refund-note, > .deposit-settle-card) {
+    height: auto;
+  }
+
   .staff-modal-body:has(> .ccc-modal) {
     overflow-y: auto;
   }
@@ -4326,6 +4345,12 @@
   .ccc-modal .ccc-grid {
     flex: 0 0 auto;
     grid-template-columns: 1fr;
+  }
+
+  .ccc-modal:has(> .contract-refund-note, > .deposit-settle-card) .ccc-grid {
+    height: auto;
+    min-height: 0;
+    flex: 0 0 auto;
   }
 
   .ccc-pane {

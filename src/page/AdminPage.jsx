@@ -7348,7 +7348,11 @@ function AdminBackupPage() {
                     }}
                   >
                     {TAB_LABEL[tabKey]}
-                    {tabBadgeCount(tabKey) > 0 && <span className="admin-subtab-badge" aria-label={`${tabBadgeCount(tabKey)} รายการรอตรวจ`}>{tabBadgeCount(tabKey)}</span>}
+                    {(tabKey === 'completed-contracts' ? contractSummary?.unviewed || 0 : tabBadgeCount(tabKey)) > 0 && (
+                      <span className="admin-subtab-badge" aria-label={tabKey === 'completed-contracts' ? `${contractSummary.unviewed} สัญญาที่ยังไม่เปิดดู` : `${tabBadgeCount(tabKey)} รายการรอตรวจ`}>
+                        {tabKey === 'completed-contracts' ? contractSummary.unviewed : tabBadgeCount(tabKey)}
+                      </span>
+                    )}
                   </button>
                 </li>
               ))}

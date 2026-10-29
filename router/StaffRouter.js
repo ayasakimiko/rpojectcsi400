@@ -3,6 +3,7 @@ import { getPool } from "../Database/connection.js";
 import { authenticate, requireStaffRole } from "../middleware/authMiddleware.js";
 import { getActingStaffName, requireActiveStaff } from "../middleware/accounts.js";
 import {
+  dateSearchSql,
   isPositiveId,
   lookup,
   parseDamageCost,
@@ -18,7 +19,6 @@ import {
   parseWaitingListInput,
 } from "../middleware/validation.js";
 import { customerUploadFolder, deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
-import { dateSearchSql } from './searchDates.js';
 import { recordAuditFields } from "../middleware/auditDetails.js";
 import { roomEquipmentAssets } from "./roomAssets.js";
 import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";

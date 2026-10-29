@@ -8,6 +8,24 @@ export const CONTRACT_MIN_IMAGES = 5
 export const CONTRACT_MAX_IMAGES = 10
 export const ROOM_TRANSFER_MIN_CONTRACT_IMAGES = 5
 
+export function completedContractsViewedKey() {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+    return `completed-contracts-viewed-${user.role || 'current'}-${user.id ?? user.username ?? 'current'}`
+  } catch {
+    return 'completed-contracts-viewed-current'
+  }
+}
+
+export function readViewedContractIds() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(completedContractsViewedKey()) || '[]')
+    return new Set(Array.isArray(saved) ? saved.map(String) : [])
+  } catch {
+    return new Set()
+  }
+}
+
 export function formatContractMoney(value) {
   const number = Number(value)
   if (!Number.isFinite(number)) return '-'

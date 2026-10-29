@@ -17,6 +17,8 @@ import {
   formatDepositMonths,
   formatDepositSummary,
   DEPOSIT_STATUS_LABEL,
+  completedContractsViewedKey,
+  readViewedContractIds,
 } from '../utils/rentalContract.js'
 
 const CONTRACT_STATUS = {
@@ -671,7 +673,7 @@ function ContractTransferSummary({ contract }) {
   )
 }
 
-function StaffContractCard({ contract, onOpen }) {
+function StaffContractCard({ contract, onOpen, unviewed }) {
   const [openIndex, setOpenIndex] = useState(null)
   const [now] = useState(() => Date.now())
   const images = contract.images || []
@@ -692,6 +694,7 @@ function StaffContractCard({ contract, onOpen }) {
             <small>{contract.phone || '-'}</small>
           </span>
           <span className="csc-badges">
+            {unviewed && <span className="csc-status is-info">ยังไม่เปิดดู</span>}
             <span className={`csc-status ${status.tone}`}>{status.label}</span>
             {underlying && <span className={`csc-status ${underlying.tone}`}>{underlying.label}</span>}
             {contract.can_settle_deposit && (
@@ -808,6 +811,15 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
   const [detailSection, setDetailSection] = useState('all')
   const [logOpen, setLogOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [viewedContractIds, setViewedContractIds] = useState(readViewedContractIds)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(completedContractsViewedKey(), JSON.stringify([...viewedContractIds]))
+    } catch {
+      // The counts still work for the current session when storage is unavailable.
+    }
+  }, [viewedContractIds])
 
   useEffect(() => {
     let cancelled = false
@@ -837,6 +849,16 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       }, {}),
     [contracts],
   )
+  const unviewedCount = useMemo(
+    () => contracts.filter((contract) => !viewedContractIds.has(String(contract.booking_id))).length,
+    [contracts, viewedContractIds],
+  )
+  const openContract = (contract) => {
+    setDetailSection('all')
+    setDetail(contract)
+    const id = String(contract.booking_id)
+    setViewedContractIds((current) => current.has(id) ? current : new Set([...current, id]))
+  }
   const keyword = search.trim().toLowerCase()
   const filtered = useMemo(
     () =>
@@ -886,8 +908,9 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       archived: archivedCount,
       transferred: statusCounts.transferred || 0,
       endedEarly: statusCounts.ended_early || 0,
+      unviewed: unviewedCount,
     })
-  }, [onSummaryChange, loading, contracts.length, statusCounts, pendingDepositCount, archivedCount])
+  }, [onSummaryChange, loading, contracts.length, statusCounts, pendingDepositCount, archivedCount, unviewedCount])
   const filtersActive = Boolean(keyword || dates.from || dates.to || status !== 'all' || scope !== 'all' || sort !== 'newest')
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -923,10 +946,10 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       )}
       <FilterPanel
         segments={[
-          { key: 'all', label: 'ทั้งหมด', count: contracts.length },
+          { key: 'all', label: 'ทั้งหมด' },
           ...Object.entries(STAFF_CARD_STATUS)
             .filter(([key]) => statusCounts[key])
-            .map(([key, info]) => ({ key, label: info.label, count: statusCounts[key] })),
+            .map(([key, info]) => ({ key, label: info.label })),
         ]}
         active={status}
         onSegment={resetPage(setStatus)}
@@ -974,7 +997,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       ) : (
         <ul className="csc-grid">
           {pageItems.map((contract) => (
-            <StaffContractCard key={contract.booking_id} contract={contract} onOpen={() => { setDetailSection('all'); setDetail(contract) }} />
+            <StaffContractCard key={contract.booking_id} contract={contract} unviewed={!viewedContractIds.has(String(contract.booking_id))} onOpen={() => openContract(contract)} />
           ))}
         </ul>
       )}
