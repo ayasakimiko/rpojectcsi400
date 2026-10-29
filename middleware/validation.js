@@ -49,6 +49,21 @@ export function parseSearch(value) {
   return typeof value === "string" ? value.trim().slice(0, MAX_SEARCH_LENGTH) : "";
 }
 
+export function parseSearchDate(value) {
+  if (typeof value !== "string") return null;
+  const text = value.trim().replace(/[๐-๙]/g, (digit) => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(digit)));
+  const yearFirst = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(text);
+  const dayFirst = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(text);
+  if (!yearFirst && !dayFirst) return null;
+  let year = Number(yearFirst ? yearFirst[1] : dayFirst[3]);
+  const month = Number(yearFirst ? yearFirst[2] : dayFirst[2]);
+  const day = Number(yearFirst ? yearFirst[3] : dayFirst[1]);
+  if (year > 2400) year -= 543;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) return null;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 export function validateDateQuery(query, keys) {
   for (const key of keys) {
     const value = query[key];

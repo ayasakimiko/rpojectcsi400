@@ -5,6 +5,7 @@ import { UploadImage } from './UploadMedia.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
 import RoomTransferFinance from './RoomTransferFinance.jsx'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
+import { matchesSearch } from '../utils/search.js'
 import './RentalContract.css'
 import {
   addContractMonths,
@@ -856,19 +857,19 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
         })
         .filter(
           (contract) =>
-            !keyword ||
-            [
+            matchesSearch([
               contract.first_name,
               contract.last_name,
               `${contract.first_name} ${contract.last_name}`,
               contract.phone,
               contract.room_number,
               ...contractTransfers(contract).map((transfer) => transfer.from_room_number),
-            ]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase()
-              .includes(keyword),
+            ], keyword, contract, [
+              contract.rental_start_date,
+              contract.rental_end_date,
+              contract.moved_out_at,
+              contract.contract_completed_at,
+            ]),
         )
         .sort(COMPLETED_CONTRACT_SORTERS[sort]),
     [contracts, status, scope, dates, keyword, sort],
@@ -932,7 +933,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
         segmentsBelow
         search={search}
         onSearch={resetPage(setSearch)}
-        searchPlaceholder="ค้นหาชื่อผู้เช่า เบอร์โทร หรือเลขห้อง"
+        searchPlaceholder="ค้นหาชื่อผู้เช่า เบอร์โทร เลขห้อง หรือวันที่"
         resultText={`พบ ${filtered.length} จาก ${contracts.length} สัญญา`}
         dateRange={{ label: 'วันที่ทำสัญญา', from: dates.from, to: dates.to, onChange: resetPage(setDates) }}
         canClear={filtersActive}
@@ -1411,16 +1412,12 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
     ? []
     : pending.filter((item) =>
         !search.trim() ||
-        [item.room_number, item.first_name, item.last_name, item.phone]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(search.trim().toLowerCase()),
+        matchesSearch([item.room_number, item.first_name, item.last_name, item.phone], search, item),
       )
   const keyword = search.trim().toLowerCase()
   const visible = (logs ?? []).filter((log) =>
     !keyword ||
-    [
+    matchesSearch([
       DEPOSIT_LOG_ACTION[log.action]?.label,
       log.note,
       log.settled_by_name,
@@ -1431,11 +1428,7 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
       formatContractMoney(log.deposit_amount),
       formatContractMoney(log.refunded_amount),
       formatContractMoney(log.forfeited_amount),
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-      .includes(keyword),
+    ], keyword, log),
   )
 
   const bookingId = contract?.booking_id ?? null
@@ -1815,17 +1808,14 @@ function ContractTransferTimeline({ contract, viewer }) {
       if ((dates.from && key < dates.from) || (dates.to && key > dates.to)) return false
     }
     if (!keyword) return true
-    return [
+    return matchesSearch([
       `ครั้งที่ ${order}`,
       transfer.from_room_number,
       transfer.to_room_number,
       formatContractDate(transfer.transferred_at, true),
       formatContractMoney(transfer.from_price),
       formatContractMoney(transfer.to_price),
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(keyword)
+    ], keyword, transfer)
   })
   const lastDeposit = transfers.at(-1).deposit_after ?? Math.max(0, Number(transfers.at(-1).deposit_before) - Number(transfers.at(-1).deposit_deducted))
   return (
@@ -2660,7 +2650,7 @@ function ContractTransfersModal({ contract, viewer, onClose, focusId = null }) {
     .filter(({ transfer, order }) =>
       single ||
       !keyword ||
-      [
+      matchesSearch([
         `ครั้งที่ ${order}`,
         transfer.from_room_number,
         transfer.to_room_number,
@@ -2668,11 +2658,7 @@ function ContractTransfersModal({ contract, viewer, onClose, focusId = null }) {
         formatContractDate(transfer.transferred_at, true),
         formatContractMoney(transfer.from_price),
         formatContractMoney(transfer.to_price),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(keyword),
+      ], keyword, transfer),
     )
 
   useEffect(() => {

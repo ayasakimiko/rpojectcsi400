@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import axios from 'axios'
+import { matchesSearch } from '../utils/search.js'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
 import PromptPayQr from './PromptPayQr.jsx'
@@ -1558,7 +1559,7 @@ function AllHistoryModal({ lease, history, onOpen, onClose }) {
   const [search, setSearch] = useState('')
   const term = search.trim().toLowerCase()
   const items = history.map((group, index) => ({ group, version: history.length - index }))
-  const visible = items.filter(({ group, version }) => !term || `ฉบับที่ ${version} ${historySearchText(group)}`.toLowerCase().includes(term))
+  const visible = items.filter(({ group, version }) => matchesSearch([`ฉบับที่ ${version}`, historySearchText(group)], term, group))
   return (
     <MarketModal title="ประวัติรูปสัญญาเดิมทั้งหมด" subtitle={`${lease.contract_no} · ${history.length} ฉบับ`} icon="clock" size="xl" onClose={onClose}>
       <div className="market-all-products">
@@ -1784,8 +1785,7 @@ function AllPaymentsModal({ lease, items, onOpen, onClose }) {
   const [type, setType] = useState('all')
   const term = search.trim().toLowerCase()
   const visible = items.filter(({ payment, number }) => (type === 'all' || payment.payment_type === type)
-    && (!term || [`#${number}`, paymentTitle(payment), paymentBreakdown(payment), payment.method_label, payment.received_by_name, payment.payer_name, payment.trans_ref, thaiDateTime(payment.paid_at), money(payment.amount), String(payment.amount)]
-      .filter(Boolean).join(' ').toLowerCase().includes(term)))
+    && matchesSearch([`#${number}`, paymentTitle(payment), paymentBreakdown(payment), payment.method_label, payment.received_by_name, payment.payer_name, payment.trans_ref, thaiDateTime(payment.paid_at), money(payment.amount), String(payment.amount)], term, payment))
   const total = visible.reduce((sum, { payment }) => sum + payment.amount, 0)
   return (
     <MarketModal title="การชำระเงินทั้งหมด" subtitle={`${lease.contract_no} · ${items.length} รายการ`} icon="coin" size="xl" onClose={onClose}>
@@ -2017,7 +2017,7 @@ function AllProductsModal({ shop, products, canOperate, onEdit, onDelete, onClos
   const term = search.trim().toLowerCase()
   const statusMatch = PRODUCT_STATUS_FILTERS.find((item) => item.key === status)?.match || (() => true)
   const visible = products.filter((product) => (category === 'all' || product.category === category) && statusMatch(product)
-    && (!term || [product.name, product.sku, product.category, product.description].some((value) => value?.toLowerCase().includes(term))))
+    && matchesSearch([product.name, product.sku, product.category, product.description], term, product))
 
   return (
     <MarketModal
@@ -2336,8 +2336,7 @@ function ShopsSection({ data, onOpenShop, onCreateShop }) {
   const [search, setSearch] = useState('')
   const matcher = SHOP_FILTERS.find((item) => item.key === filter)?.match || (() => true)
   const term = search.trim().toLowerCase()
-  const shops = data.shops.filter((shop) => matcher(shop) && (!term || [shop.code, shop.name, shop.shop_type, shop.location, shop.current_lease?.tenant_name, shop.current_lease?.business_name, ...shop.categories]
-    .some((value) => value?.toLowerCase().includes(term))))
+  const shops = data.shops.filter((shop) => matcher(shop) && matchesSearch([shop.code, shop.name, shop.shop_type, shop.location, shop.current_lease?.tenant_name, shop.current_lease?.business_name, ...shop.categories], term, shop))
 
   return (
     <>
@@ -2501,7 +2500,7 @@ function LeasesSection({ refreshKey, canOperate, onOpenLease, onCreateLease, onR
 
   const term = search.trim().toLowerCase()
   const leases = state.leases.filter((lease) => (filter === 'all' || lease.status === filter)
-    && (!term || [lease.contract_no, lease.shop_code, lease.shop_name, lease.tenant_name, lease.business_name, lease.tenant_phone].some((value) => value?.toLowerCase().includes(term))))
+    && matchesSearch([lease.contract_no, lease.shop_code, lease.shop_name, lease.tenant_name, lease.business_name, lease.tenant_phone], term, lease))
 
   return (
     <>

@@ -5,6 +5,7 @@ import InspectionTopicFilter from './InspectionTopicFilter.jsx'
 import MoveOutAssetCheck from './MoveOutAssetCheck.jsx'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile from '../utils/compressImageFile.js'
+import { matchesSearch } from '../utils/search.js'
 import FurnitureAssetsRow from './FurnitureAssetsRow.jsx'
 import { assetPriceValue, CHECKLIST_ITEMS, ISSUE_RESULTS, isValidAssetPrice, RESULT_OPTIONS, withFurnitureResult } from '../utils/inspectionChecklist.js'
 import './InspectionCells.css'
@@ -620,7 +621,6 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
 
   const pending = candidates.filter((item) => !item.inspection_id)
   const keyword = query.trim().toLowerCase()
-  const matchesQuery = (...fields) => !keyword || fields.some((field) => String(field ?? '').toLowerCase().includes(keyword))
   const latestByTenant = new Map()
   for (const inspection of inspections) {
     const key = `${inspection.customer_id}:${inspection.room_number}`
@@ -634,13 +634,13 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
     return { inspection, saveCount, summary, issueCount: checklistIssues + summary.issueCount }
   })
   const shownPending = ['all', 'pending'].includes(filter)
-    ? pending.filter((item) => matchesQuery(item.room_number, `${item.first_name} ${item.last_name}`, item.phone))
+    ? pending.filter((item) => matchesSearch([item.room_number, `${item.first_name} ${item.last_name}`, item.phone], keyword, item))
     : []
   const shownRows = filter === 'pending'
     ? []
     : rows.filter(({ inspection, issueCount }) =>
         (filter === 'all' || (filter === 'issue' ? issueCount > 0 : issueCount === 0))
-        && matchesQuery(inspection.room_number, inspection.tenant_name, inspection.tenant_phone))
+        && matchesSearch([inspection.room_number, inspection.tenant_name, inspection.tenant_phone], keyword, inspection))
 
   const openEdit = async (inspection, { startNew = false } = {}) => {
     try {

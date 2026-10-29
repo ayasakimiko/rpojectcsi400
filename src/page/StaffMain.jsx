@@ -83,6 +83,7 @@ import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
 import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
+import { matchesSearch } from '../utils/search.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -810,10 +811,7 @@ function InspectionRoomPicker({ id, rooms, value, onChange, invalid }) {
   const keyword = query.trim().toLowerCase()
   const options = keyword
     ? rooms.filter((room) =>
-        [room.room_number, room.tenant.first_name, room.tenant.last_name, room.tenant.phone]
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword),
+        matchesSearch([room.room_number, room.tenant.first_name, room.tenant.last_name, room.tenant.phone], keyword, room),
       )
     : rooms
 
@@ -4866,14 +4864,14 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const searchText = slipSearch.trim().toLowerCase()
   const visibleSlips = searchText
     ? baseSlips.filter((slip) =>
-        [
+        matchesSearch([
           slip.room_number,
           `${slip.first_name || ''} ${slip.last_name || ''}`,
           slip.phone,
           slip.sender_name,
           slip.trans_ref,
           slip.reason,
-        ].some((value) => String(value ?? '').toLowerCase().includes(searchText)),
+        ], searchText, slip),
       )
     : baseSlips
   const passedTotal = slipHistory.reduce((total, slip) => (slip.is_test ? total : total + (Number(slip.amount) || 0)), 0)
@@ -5747,7 +5745,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
   const keyword = search.trim().toLowerCase()
   const searched = keyword
     ? items.filter((item) =>
-        [
+        matchesSearch([
           item.vehicle_plate,
           item.vehicle_model,
           item.guest_name,
@@ -5757,11 +5755,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
           getStaffVisitPerson(item),
           item.customer_phone,
           getStaffVisitOwner(item),
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword),
+        ], keyword, item),
       )
     : items
   const hasOpenFine = (item) => ['unpaid', 'pending_review'].includes(item.fine_status)
@@ -6856,7 +6850,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
   const keyword = search.trim().toLowerCase()
   const searched = keyword
     ? incidents.filter((item) =>
-        [
+        matchesSearch([
           SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type,
           item.description,
           item.review_note,
@@ -6864,11 +6858,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
           item.reporter_name,
           SAFETY_REPORTER_ROLE_LABEL[item.reporter_role],
           SAFETY_SEVERITY_LABEL[item.severity],
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword),
+        ], keyword, item),
       )
     : incidents
   const filtered = status === 'all' ? searched : searched.filter((item) => item.status === status)
@@ -7495,7 +7485,7 @@ function StaffMain() {
   const filteredParcels = parcels.filter((parcel) => {
     if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
     const keyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
-    return !keyword || [
+    return matchesSearch([
       parcel.room_number,
       parcel.first_name,
       parcel.last_name,
@@ -7503,7 +7493,7 @@ function StaffMain() {
       parcel.tracking_number,
       parcel.sender_name,
       parcel.description,
-    ].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
+    ], keyword, parcel)
   })
   const currentParcelPage = Math.min(parcelPage, Math.max(1, Math.ceil(filteredParcels.length / STAFF_LIST_PAGE_SIZE)))
   const pagedParcels = filteredParcels.slice((currentParcelPage - 1) * STAFF_LIST_PAGE_SIZE, currentParcelPage * STAFF_LIST_PAGE_SIZE)
@@ -7645,12 +7635,12 @@ function StaffMain() {
       )
       if (extraMismatch) return false
       if (!keyword) return true
-      return (
-        String(request.room_number).includes(keyword) ||
-        String(request.target_room_number || '').includes(keyword) ||
-        `${request.first_name} ${request.last_name}`.toLowerCase().includes(keyword) ||
-        Boolean(request.phone?.includes(keyword))
-      )
+      return matchesSearch([
+        request.room_number,
+        request.target_room_number,
+        `${request.first_name} ${request.last_name}`,
+        request.phone,
+      ], keyword, request)
     })
     return { filters, list: filters.sort === 'newest' ? list.reverse() : list }
   }
@@ -9153,11 +9143,7 @@ function StaffMain() {
       if (waitingListStatus !== 'all' && status !== waitingListStatus) return false
       if (!inDayRange(item.created_at, waitingListDates.from, waitingListDates.to)) return false
       if (!waitingKeyword) return true
-      return [item.full_name, item.phone, item.room_preference, item.note, item.submitted_by_name]
-        .filter(Boolean)
-        .join(' ')
-        .toLocaleLowerCase('th-TH')
-        .includes(waitingKeyword)
+      return matchesSearch([item.full_name, item.phone, item.room_preference, item.note, item.submitted_by_name], waitingKeyword, item)
     })
     .sort((a, b) => {
       const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -9193,18 +9179,14 @@ function StaffMain() {
     .filter((inspection) => {
       if (inspectionResultFilter !== 'all' && summarizeInspection(inspection.checklist).tone !== inspectionResultFilter) return false
       if (!inspectionKeyword) return true
-      return [
+      return matchesSearch([
         inspection.room_number,
         inspection.target_room_number,
         inspection.tenant_name,
         inspection.tenant_phone,
         inspection.inspected_by_name,
         inspection.damage_note,
-      ]
-        .filter((value) => value !== null && value !== undefined)
-        .join(' ')
-        .toLocaleLowerCase('th-TH')
-        .includes(inspectionKeyword)
+      ], inspectionKeyword, inspection)
     })
     .sort((a, b) => {
       const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -9287,10 +9269,7 @@ function StaffMain() {
         if (search.trim()) {
           const keyword = search.trim().toLowerCase()
           const tenantName = room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}`.toLowerCase() : ''
-          const matchesRoom = String(room.room_number).includes(keyword)
-          const matchesTenant = tenantName.includes(keyword)
-          const matchesPhone = room.tenant?.phone?.includes(keyword)
-          if (!matchesRoom && !matchesTenant && !matchesPhone) return false
+          if (!matchesSearch([room.room_number, tenantName, room.tenant?.phone], keyword, room)) return false
         }
         return true
       })
@@ -9364,12 +9343,7 @@ function StaffMain() {
       if (tenantFilterSearch.trim()) {
         const keyword = tenantFilterSearch.trim().toLowerCase()
         const tenantName = `${request.first_name} ${request.last_name}`.toLowerCase()
-        const matchesRoom =
-          String(request.room_number).includes(keyword)
-          || String(request.target_room_number || '').includes(keyword)
-        const matchesTenant = tenantName.includes(keyword)
-        const matchesPhone = request.phone?.includes(keyword)
-        if (!matchesRoom && !matchesTenant && !matchesPhone) return false
+        if (!matchesSearch([request.room_number, request.target_room_number, tenantName, request.phone], keyword, request)) return false
       }
       return true
     })
@@ -9449,10 +9423,7 @@ function StaffMain() {
       if (maintenanceFilterSearch.trim()) {
         const keyword = maintenanceFilterSearch.trim().toLowerCase()
         const tenantName = `${request.first_name} ${request.last_name}`.toLowerCase()
-        const matchesRoom = String(request.room_number).includes(keyword)
-        const matchesTenant = tenantName.includes(keyword)
-        const matchesPhone = request.contact_phone?.includes(keyword)
-        if (!matchesRoom && !matchesTenant && !matchesPhone) return false
+        if (!matchesSearch([request.room_number, tenantName, request.contact_phone], keyword, request)) return false
       }
       return true
     })
@@ -9534,7 +9505,7 @@ function StaffMain() {
 
       if (historySearch.trim()) {
         const keyword = historySearch.trim().toLowerCase()
-        const haystack = [
+        const values = [
           payment.tenantName,
           formatDateTime(payment.created_at),
           PAYMENT_TYPE_LABEL[payment.type] || 'ค่าเช่าห้อง',
@@ -9542,10 +9513,7 @@ function StaffMain() {
           PAYMENT_STATUS_LABEL[payment.status] || payment.status,
           payment.note,
         ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        if (!haystack.includes(keyword)) return false
+        if (!matchesSearch(values, keyword, payment)) return false
       }
       return true
     })

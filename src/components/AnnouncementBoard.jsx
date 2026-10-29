@@ -4,6 +4,7 @@ import axios from 'axios'
 import PhotoLightbox from './PhotoLightbox.jsx'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
+import { matchesSearch } from '../utils/search.js'
 import './AnnouncementBoard.css'
 
 const ANNOUNCEMENTS_PER_PAGE = 10
@@ -299,7 +300,7 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
         if (dateFrom && dayKey < dateFrom) return false
         if (dateTo && dayKey > dateTo) return false
         if (!keyword) return true
-        return [item.title, item.message, item.author].some((value) => String(value ?? '').toLocaleLowerCase('th-TH').includes(keyword))
+        return matchesSearch([item.title, item.message, item.author], keyword, item)
       })
     : announcements
   const updateFilters = (next) => {

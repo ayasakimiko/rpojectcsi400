@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import axios from 'axios'
+import { matchesSearch } from '../utils/search.js'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
 import { ContractImagePicker } from './RentalContract.jsx'
@@ -873,8 +874,7 @@ function VendorJobsModal({ vendor, jobs, onClose, onOpenJob }) {
   const [search, setSearch] = useState('')
   const matcher = JOB_FILTERS.find((item) => item.key === filter)?.match || (() => true)
   const term = search.trim().toLowerCase()
-  const visible = jobs.filter((job) => matcher(job) && (!term || [String(job.room_number), job.description, job.technician_name, job.vendor_note, CATEGORY_LABEL[job.category], JOB_STATUS[job.status]?.label]
-    .some((value) => value?.toLowerCase().includes(term))))
+  const visible = jobs.filter((job) => matcher(job) && matchesSearch([job.room_number, job.description, job.technician_name, job.vendor_note, CATEGORY_LABEL[job.category], JOB_STATUS[job.status]?.label], term, job))
   return (
     <RepairModal title={`งานทั้งหมดของ ${vendor.name}`} subtitle={`ส่งงานให้ช่างรายนี้ทั้งหมด ${jobs.length} งาน`} icon="clock" size="lg" onClose={onClose}>
       <div className="repair-all-jobs">
@@ -1049,8 +1049,7 @@ function JobFormModal({ data, rooms, initialVendorId, onClose, onSaved }) {
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
   const roomOptions = useMemo(() => [...rooms].sort((a, b) => Number(a.room_number) - Number(b.room_number)), [rooms])
   const roomTerm = roomSearch.trim().toLowerCase()
-  const visibleRooms = roomOptions.filter((room) => !roomTerm || [String(room.room_number), room.tenant?.first_name, room.tenant?.last_name]
-    .some((value) => value?.toLowerCase().includes(roomTerm)))
+  const visibleRooms = roomOptions.filter((room) => matchesSearch([room.room_number, room.tenant?.first_name, room.tenant?.last_name], roomTerm, room))
   const vendor = usableVendors.find((item) => String(item.id) === String(form.vendor_id))
   const selectedRoom = rooms.find((item) => String(item.room_number) === String(form.room_number))
   const roomRequests = data.open_requests.filter((request) => String(request.room_number) === String(form.room_number))
@@ -1768,8 +1767,7 @@ function JobsSection({ data, onSend, onOpenJob, onCancelJob, initialFilter = 'op
   const [search, setSearch] = useState('')
   const matcher = JOB_FILTERS.find((item) => item.key === filter)?.match || (() => true)
   const term = search.trim().toLowerCase()
-  const jobs = data.jobs.filter((job) => matcher(job) && (!term || [String(job.room_number), job.vendor_name, job.description, job.technician_name, CATEGORY_LABEL[job.category]]
-    .some((value) => value?.toLowerCase().includes(term))))
+  const jobs = data.jobs.filter((job) => matcher(job) && matchesSearch([job.room_number, job.vendor_name, job.description, job.technician_name, CATEGORY_LABEL[job.category]], term, job))
 
   return (
     <>
@@ -1834,8 +1832,7 @@ function VendorsSection({ data, onOpen, onCreate, onSend }) {
   const canEdit = useCanEdit()
   const [search, setSearch] = useState('')
   const term = search.trim().toLowerCase()
-  const vendors = data.vendors.filter((vendor) => !term || [vendor.name, vendor.contact_name, vendor.phone, ...vendor.specialties.map((key) => specialtyLabel(vendor, key))]
-    .some((value) => value?.toLowerCase().includes(term)))
+  const vendors = data.vendors.filter((vendor) => matchesSearch([vendor.name, vendor.contact_name, vendor.phone, ...vendor.specialties.map((key) => specialtyLabel(vendor, key))], term, vendor))
   return (
     <>
       <div className="market-toolbar">

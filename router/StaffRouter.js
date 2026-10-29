@@ -18,6 +18,7 @@ import {
   parseWaitingListInput,
 } from "../middleware/validation.js";
 import { customerUploadFolder, deletePublicImages, savePublicImages } from "../middleware/publicUploads.js";
+import { dateSearchSql } from './searchDates.js';
 import { recordAuditFields } from "../middleware/auditDetails.js";
 import { roomEquipmentAssets } from "./roomAssets.js";
 import { TEST_PAYMENT_MARK } from "../middleware/slipVerification.js";
@@ -1513,8 +1514,14 @@ router.get("/requests/history", async (req, res) => {
 
     const search = parseSearch(req.query.search);
     if (search) {
-      conditions.push(`(CAST(tr.room_number AS CHAR) LIKE ? OR CAST(tr.target_room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ?)`);
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      const dateFilter = dateSearchSql(search, ['tr.created_at', 'tr.accepted_at', 'tr.completed_at', 'tr.preferred_move_date']);
+      if (dateFilter) {
+        conditions.push(dateFilter.sql);
+        params.push(...dateFilter.params);
+      } else {
+        conditions.push(`(CAST(tr.room_number AS CHAR) LIKE ? OR CAST(tr.target_room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ?)`);
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      }
     }
 
     const whereClause = conditions.join(" AND ");
@@ -1570,10 +1577,14 @@ router.get("/maintenance/history", async (req, res) => {
 
     const search = parseSearch(req.query.search);
     if (search) {
-      conditions.push(
-        `(CAST(mr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ? OR mr.description LIKE ?)`,
-      );
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      const dateFilter = dateSearchSql(search, ['mr.created_at', 'mr.accepted_at', 'mr.completed_at']);
+      if (dateFilter) {
+        conditions.push(dateFilter.sql);
+        params.push(...dateFilter.params);
+      } else {
+        conditions.push(`(CAST(mr.room_number AS CHAR) LIKE ? OR CONCAT(c.first_name, ' ', c.last_name) LIKE ? OR c.phone LIKE ? OR mr.description LIKE ?)`);
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      }
     }
 
     const whereClause = conditions.join(" AND ");

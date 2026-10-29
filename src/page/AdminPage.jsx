@@ -49,6 +49,7 @@ import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, Staf
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
+import { matchesSearch } from '../utils/search.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -132,7 +133,7 @@ function WaitingListPanel({ items, now, vacantCount, onAdd, onDetail, onEdit, on
     if (status !== 'all' && status !== key) return false
     const created = waitingDayKey(item.created_at)
     if ((dates.from && created < dates.from) || (dates.to && created > dates.to)) return false
-    return !keyword || [item.full_name, item.phone, item.room_preference, item.note, item.submitted_by_name].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
+    return matchesSearch([item.full_name, item.phone, item.room_preference, item.note, item.submitted_by_name], keyword, item)
   }).sort((a, b) => {
     const difference = new Date(a.created_at) - new Date(b.created_at)
     return sort === 'oldest' ? difference : -difference
@@ -2320,18 +2321,14 @@ function RoomPaymentHistory({ history, loading, error, onRetry, onSlip, onSelect
     return payments.filter((payment) => {
       if (status !== 'all' && payment.status !== status) return false
       if (!keyword) return true
-      return [
+      return matchesSearch([
         payment.tenantName,
         formatDateTime(payment.created_at),
         PAYMENT_TYPE_LABEL[payment.type] || payment.type,
         formatCurrency(payment.amount),
         PAYMENT_STATUS_LABEL[payment.status] || payment.status,
         payment.note,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(keyword)
+      ], keyword, payment)
     }).sort(comparePayments(sort))
   }, [payments, status, search, sort])
 
@@ -2627,17 +2624,13 @@ function RoomMaintenanceHistory({ requests, loading, error, onRetry, onSelect, o
       .filter((request) => status === 'all' || request.status === status)
       .filter((request) => {
         if (!keyword) return true
-        return [
+        return matchesSearch([
           request.description,
           MAINTENANCE_CATEGORY_LABEL[request.category],
           `${request.first_name} ${request.last_name}`,
           request.accepted_by_name,
           request.completed_by_name,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword)
+        ], keyword, request)
       })
       .sort((a, b) => {
         const diff = new Date(a.created_at) - new Date(b.created_at) || a.id - b.id
@@ -3392,15 +3385,12 @@ function CustomerRentalHistory({ history, onSlip, onSelectPayment }) {
     const keyword = contractSearch.trim().toLowerCase()
     if (!keyword) return bookings
     return bookings.filter((booking) =>
-      [
+      matchesSearch([
         booking.room_number ? `ห้อง ${booking.room_number}` : '',
         formatDateTime(booking.created_at),
         formatDate(booking.rental_start_date),
         formatDate(booking.rental_end_date),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(keyword),
+      ], keyword, booking),
     )
   }, [bookings, contractSearch])
 
@@ -3422,17 +3412,13 @@ function CustomerRentalHistory({ history, onSlip, onSelectPayment }) {
       .filter((payment) => status === 'all' || payment.status === status)
       .filter((payment) => {
         if (!keyword) return true
-        return [
+        return matchesSearch([
           formatDate(payment.payment_date),
           PAYMENT_TYPE_LABEL[payment.type] || payment.type,
           formatCurrency(payment.amount),
           PAYMENT_STATUS_LABEL[payment.status] || payment.status,
           payment.note,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword)
+        ], keyword, payment)
       })
       .sort(comparePayments(sort))
   }, [allPayments, status, search, sort])
@@ -3746,7 +3732,7 @@ function RoomTenantHistory({ tenants, roomNumber, loading, error, onRetry, onOpe
     const keyword = search.trim().toLowerCase()
     return list
       .filter((tenant) => (filter === 'current' ? tenant.is_current : filter === 'past' ? !tenant.is_current : true))
-      .filter((tenant) => !keyword || [tenant.first_name, tenant.last_name, tenant.phone].filter(Boolean).join(' ').toLowerCase().includes(keyword))
+      .filter((tenant) => matchesSearch([tenant.first_name, tenant.last_name, tenant.phone], keyword, tenant))
       .sort((a, b) => Number(b.is_current) - Number(a.is_current))
   }, [list, filter, search])
 
@@ -4906,18 +4892,14 @@ function AdminSafetyIncidentsTab({ onCountChange, focusId = null }) {
   const keyword = search.trim().toLowerCase()
   const searched = keyword
     ? incidents.filter((item) =>
-        [
+        matchesSearch([
           SAFETY_INCIDENT_TYPE_LABEL[item.incident_type] || item.incident_type,
           item.description,
           item.reporter_name,
           item.room_number ? `ห้อง ${item.room_number}` : '',
           item.review_note,
           item.cancel_reason,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword),
+        ], keyword, item),
       )
     : incidents
   const countOf = (key) => (key === 'all' ? searched.length : searched.filter((item) => item.status === key).length)
@@ -6279,7 +6261,7 @@ function AdminBackupPage() {
       ? rooms
       : rooms.filter((room) => {
           const tenantName = room.customer_id ? `${room.first_name} ${room.last_name}`.toLowerCase() : ''
-          return String(room.room_number).includes(keyword) || tenantName.includes(keyword) || (room.phone || '').includes(keyword)
+          return matchesSearch([room.room_number, tenantName, room.phone], keyword, room)
         })
     return [...matched].sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
   }, [rooms, roomSearch])
@@ -6433,7 +6415,7 @@ function AdminBackupPage() {
     if (!keyword) return staffList
     return staffList.filter((member) => {
       const name = `${member.first_name} ${member.last_name}`.toLowerCase()
-      return name.includes(keyword) || member.phone.includes(keyword) || member.idcard.includes(keyword)
+      return matchesSearch([name, member.phone, member.idcard], keyword, member)
     })
   }, [staffList, staffSearch])
 
@@ -6599,9 +6581,7 @@ function AdminBackupPage() {
       .filter((customer) => {
         if (!segment.match(customer)) return false
         if (!keyword) return true
-        return [customer.room_number, `${customer.first_name || ''} ${customer.last_name || ''}`, customer.phone, customer.idcard]
-          .filter((value) => value != null)
-          .some((value) => String(value).toLowerCase().includes(keyword))
+        return matchesSearch([customer.room_number, `${customer.first_name || ''} ${customer.last_name || ''}`, customer.phone, customer.idcard], keyword, customer)
       })
       .sort(CUSTOMER_SORTERS[customerSort] || CUSTOMER_SORTERS.room)
   }, [customers, customerStatusFilter, customerSearch, customerSort])
@@ -6930,7 +6910,7 @@ function AdminBackupPage() {
       return false
     }
     if (!inspectionKeyword) return true
-    return [
+    return matchesSearch([
       inspection.room_number,
       inspection.target_room_number,
       inspection.tenant_name,
@@ -6939,14 +6919,13 @@ function AdminBackupPage() {
       inspection.damage_note,
       getInspectionPurposeLabel(inspection),
       getInspectionSourceLabel(inspection),
-    ]
-      .some((value) => String(value ?? '').toLocaleLowerCase('th-TH').includes(inspectionKeyword))
+    ], inspectionKeyword, inspection)
   })
 
   const filteredParcels = parcels.filter((parcel) => {
     if (parcelStatusFilter !== 'all' && parcel.status !== parcelStatusFilter) return false
     const keyword = parcelSearch.trim().toLocaleLowerCase('th-TH')
-    return !keyword || [
+    return matchesSearch([
       parcel.room_number,
       parcel.first_name,
       parcel.last_name,
@@ -6954,7 +6933,7 @@ function AdminBackupPage() {
       parcel.tracking_number,
       parcel.sender_name,
       parcel.description,
-    ].filter(Boolean).join(' ').toLocaleLowerCase('th-TH').includes(keyword)
+    ], keyword, parcel)
   })
   const parcelTotalPages = Math.max(1, Math.ceil(filteredParcels.length / ROWS_PER_PAGE))
   const currentParcelPage = Math.min(parcelPage, parcelTotalPages)
@@ -7002,8 +6981,7 @@ function AdminBackupPage() {
     notifCurrentPage * NOTIF_PAGE_SIZE,
   )
 
-  const matchesLogKeyword = (keyword, values) =>
-    !keyword || values.filter((value) => value != null).some((value) => String(value).toLowerCase().includes(keyword))
+  const matchesLogKeyword = (keyword, values, record) => matchesSearch(values, keyword, record)
   const requestKeyword = requestSearch.trim().toLowerCase()
   const filteredRequestLogs = requestLogs.items.filter(
     (request) =>
@@ -7014,7 +6992,7 @@ function AdminBackupPage() {
         `${request.first_name || ''} ${request.last_name || ''}`,
         request.accepted_by_name,
         request.completed_by_name,
-      ]),
+      ], request),
   )
   const requestLogsTotalPages = Math.max(1, Math.ceil(filteredRequestLogs.length / requestLogs.pageSize))
   const currentRequestLogsPage = Math.min(requestLogs.page, requestLogsTotalPages)
@@ -7029,7 +7007,7 @@ function AdminBackupPage() {
         `${request.first_name || ''} ${request.last_name || ''}`,
         request.accepted_by_name,
         request.completed_by_name,
-      ]),
+      ], request),
   )
   const maintenanceLogsTotalPages = Math.max(1, Math.ceil(filteredMaintenanceLogs.length / maintenanceLogs.pageSize))
   const currentMaintenanceLogsPage = Math.min(maintenanceLogs.page, maintenanceLogsTotalPages)
@@ -7040,9 +7018,7 @@ function AdminBackupPage() {
   const moveoutKeyword = moveoutSearch.trim().toLowerCase()
   const filteredMoveouts = moveoutKeyword
     ? moveoutLogs.items.filter((moveout) =>
-        [moveout.room_number, `${moveout.first_name || ''} ${moveout.last_name || ''}`, moveout.idcard, moveout.phone]
-          .filter((value) => value != null)
-          .some((value) => String(value).toLowerCase().includes(moveoutKeyword)),
+        matchesSearch([moveout.room_number, `${moveout.first_name || ''} ${moveout.last_name || ''}`, moveout.idcard, moveout.phone], moveoutKeyword, moveout),
       )
     : moveoutLogs.items
   const moveoutLogsTotalPages = Math.max(1, Math.ceil(filteredMoveouts.length / moveoutLogs.pageSize))

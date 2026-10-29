@@ -10,6 +10,7 @@ import {
   validateExpenseInput,
 } from "../middleware/validation.js";
 import { deletePublicImages, parseStoredPhotos, savePublicImages } from "../middleware/publicUploads.js";
+import { dateSearchSql } from './searchDates.js';
 
 // ตั้งค่า Router และฟังก์ชันกลางสำหรับผู้บันทึก ข้อมูลรายจ่าย และรูปหลักฐาน
 const router = Router();
@@ -100,10 +101,14 @@ router.get("/", async (req, res) => {
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
     if (search) {
       const like = `%${search}%`;
-      conditions.push(
-        `(category LIKE ? OR description LIKE ? OR vendor LIKE ? OR receipt_number LIKE ? OR recorded_by_name LIKE ? OR CAST(room_number AS CHAR) LIKE ?)`,
-      );
-      params.push(like, like, like, like, like, like);
+      const dateFilter = dateSearchSql(search, ['expense_date', 'created_at']);
+      if (dateFilter) {
+        conditions.push(dateFilter.sql);
+        params.push(...dateFilter.params);
+      } else {
+        conditions.push(`(category LIKE ? OR description LIKE ? OR vendor LIKE ? OR receipt_number LIKE ? OR recorded_by_name LIKE ? OR CAST(room_number AS CHAR) LIKE ?)`);
+        params.push(like, like, like, like, like, like);
+      }
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
