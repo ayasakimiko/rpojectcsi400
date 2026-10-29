@@ -3340,10 +3340,12 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-amenity-modal-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 14px;
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 22px 24px 26px;
 }
@@ -3361,6 +3363,7 @@ tr.admin-focus-flash.is-fading > td {
 .admin-amenity-modal-actions .admin-action-btn {
   min-width: 140px;
   min-height: 44px;
+  white-space: nowrap;
 }
 
 .admin-amenity-preview {
@@ -3401,12 +3404,16 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-amenity-preview-text strong {
+  display: -webkit-box;
   overflow: hidden;
   color: #0f2b52;
   font-size: 17px;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .admin-amenity-preview.is-empty .admin-amenity-preview-text strong {
@@ -3451,7 +3458,9 @@ tr.admin-focus-flash.is-fading > td {
 
 .admin-amenity-section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+  min-width: 0;
   padding: 14px 16px 16px;
   border: 1px solid #e3ecf8;
   border-radius: 14px;
@@ -3533,6 +3542,7 @@ tr.admin-focus-flash.is-fading > td {
 }
 
 .admin-amenity-name-input input {
+  width: 100%;
   min-width: 0;
   flex: 1;
   padding: 10px 0;
@@ -3611,6 +3621,430 @@ tr.admin-focus-flash.is-fading > td {
 .admin-amenity-suggest-grid button.is-selected > span {
   background: #2563eb;
   color: #fff;
+}
+
+.admin-amenity-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #dce6f3;
+  border-radius: 12px;
+  background: #f1f5fb;
+}
+
+.admin-amenity-mode button {
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #4b6a88;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-amenity-mode button:hover {
+  color: #1d4ed8;
+}
+
+.admin-amenity-mode button.is-active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgba(15, 43, 82, 0.12), 0 0 0 1px #bfdbfe inset;
+}
+
+.admin-amenity-custom-row > header .admin-amenity-pick-remove {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+}
+
+.admin-amenity-custom-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 150px);
+  min-width: 0;
+  align-items: start;
+  gap: 10px;
+}
+
+.admin-amenity-custom-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-amenity-custom-field > label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: #33506f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-amenity-custom-field > label .admin-amenity-counter {
+  margin-left: auto;
+  color: #8aa0b6;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-amenity-existing {
+  background: #fbfdff;
+}
+
+.admin-amenity-existing-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-amenity-existing-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 10px 5px 5px;
+  border: 1px solid #dce6f3;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13.5px;
+}
+
+.admin-amenity-existing-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #eef4fc;
+  color: #2563eb;
+}
+
+.admin-amenity-existing-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f2b52;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-amenity-existing-price {
+  flex: 0 0 auto;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.admin-amenity-existing-list li:has(.admin-amenity-existing-remove) {
+  padding-right: 4px;
+}
+
+.admin-amenity-existing-remove {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #8aa0b6;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-amenity-existing-remove:hover {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.admin-amenity-existing-list li.is-removed {
+  border-style: dashed;
+  border-color: #fecaca;
+  background: #fef6f6;
+}
+
+.admin-amenity-existing-list li.is-removed .admin-amenity-existing-name,
+.admin-amenity-existing-list li.is-removed .admin-amenity-existing-price {
+  color: #b42318;
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+.admin-amenity-existing-list li.is-removed .admin-amenity-existing-icon {
+  background: #fee2e2;
+  color: #b42318;
+}
+
+.admin-amenity-existing-remove.is-undo {
+  color: #2563eb;
+}
+
+.admin-amenity-existing-remove.is-undo:hover {
+  background: #eef4fc;
+  color: #1d4ed8;
+}
+
+.admin-amenity-add-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1.5px dashed #93c5fd;
+  border-radius: 12px;
+  background: #f5f9ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 14.5px;
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-amenity-add-row:hover {
+  border-color: #2563eb;
+  background: #eaf2ff;
+}
+
+.admin-amenity-hint {
+  margin: -4px 0 0;
+  color: #8aa0b6;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .admin-amenity-custom-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Warnings take their own full-width row above the buttons. */
+.admin-amenity-modal-actions:has(.admin-amenity-remaining.is-full, .admin-amenity-remaining.is-over) {
+  flex-wrap: wrap;
+}
+
+.admin-amenity-remaining.is-full,
+.admin-amenity-remaining.is-over {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.admin-amenity-modal-actions:has(.admin-amenity-remaining.is-full, .admin-amenity-remaining.is-over) .admin-action-btn {
+  flex: 1 1 0;
+}
+
+.admin-amenity-remaining.is-full {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.admin-amenity-remaining.is-over {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.admin-amenity-modal-actions .admin-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.admin-amenity-suggest-grid button:disabled,
+.admin-amenity-add-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.admin-amenity-suggest-grid button:disabled:hover {
+  border-color: #dce6f3;
+  background: #fbfdff;
+}
+
+.admin-amenity-add-row:disabled:hover {
+  border-color: #93c5fd;
+  background: #f5f9ff;
+}
+
+.admin-amenity-quota-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 0;
+}
+
+.admin-amenity-quota-breakdown > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #dce6f3;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12.5px;
+}
+
+.admin-amenity-quota-breakdown dt {
+  color: #6b859e;
+  font-weight: 600;
+}
+
+.admin-amenity-quota-breakdown dd {
+  margin: 0;
+  color: #0f2b52;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-amenity-quota-breakdown .is-suggest dd,
+.admin-amenity-quota-breakdown .is-custom dd {
+  color: #1d4ed8;
+}
+
+.admin-amenity-quota-breakdown .is-removed {
+  border-color: #fecaca;
+  background: #fef6f6;
+}
+
+.admin-amenity-quota-breakdown .is-removed dd {
+  color: #b42318;
+}
+
+.admin-amenity-mode button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.admin-amenity-mode-count {
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-amenity-mode button.has-error {
+  color: #b42318;
+}
+
+.admin-amenity-mode button.has-error .admin-amenity-mode-count {
+  background: #d92d20;
+}
+
+.admin-amenity-empty-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.admin-amenity-pick-list {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px dashed #dce6f3;
+  list-style: none;
+}
+
+.admin-amenity-pick-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-amenity-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-amenity-pick-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+}
+
+.admin-amenity-pick-row > label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #0f2b52;
+  font-size: 14.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-amenity-name-input.is-compact {
+  width: 140px;
+  min-height: 38px;
+  flex: 0 0 auto;
+}
+
+.admin-amenity-name-input.is-compact input {
+  padding: 7px 0;
+  font-size: 14.5px;
+}
+
+.admin-amenity-pick-remove {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8aa0b6;
+  cursor: pointer;
+}
+
+.admin-amenity-pick-remove:hover {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.admin-amenity-pick-list .admin-amenity-modal-error {
+  padding-left: 40px;
 }
 
 .admin-amenity-empty {
@@ -3721,11 +4155,18 @@ tr.admin-focus-flash.is-fading > td {
   }
 }
 
+/* Pinned to the bottom of the modal's scroll area; the negative margins cancel .admin-modal-body's 26px padding. */
 .admin-room-form-actions {
+  position: sticky;
+  bottom: -26px;
+  z-index: 3;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 4px;
+  margin: 4px -26px -26px;
+  padding: 14px 26px;
+  border-top: 1px solid #dbe7f8;
+  background: #f8fbff;
 }
 
 .admin-room-form-actions .admin-action-btn {

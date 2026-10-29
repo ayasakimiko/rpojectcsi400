@@ -1,4 +1,4 @@
-export const ROOM_AMENITY_ICON_KEYS = ['sparkle', 'desk', 'wardrobe', 'shower', 'tv', 'balcony', 'sofa'];
+export const ROOM_AMENITY_ICON_KEYS = ['sparkle', 'desk', 'wardrobe', 'shower', 'tv', 'balcony', 'sofa', 'bed', 'mattress', 'chair', 'shelf', 'dresser'];
 
 export function normalizeRoomAmenity(item) {
   if (typeof item === 'string') return { name: item.trim(), icon: 'sparkle' };

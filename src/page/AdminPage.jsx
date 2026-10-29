@@ -2146,13 +2146,20 @@ const BUILTIN_EQUIPMENT = [
 
 const ROOM_AMENITY_SUGGESTIONS = [
   ...BUILTIN_EQUIPMENT.map((item) => ({ name: item.name, icon: item.icon })),
-  { name: 'โต๊ะทำงาน', icon: 'desk' },
+  { name: 'เตียง', icon: 'bed' },
+  { name: 'ที่นอน', icon: 'mattress' },
   { name: 'ตู้เสื้อผ้า', icon: 'wardrobe' },
-  { name: 'เครื่องทำน้ำอุ่น', icon: 'shower' },
-  { name: 'โทรทัศน์', icon: 'tv' },
-  { name: 'ระเบียง', icon: 'balcony' },
+  { name: 'โต๊ะทำงาน', icon: 'desk' },
+  { name: 'เก้าอี้', icon: 'chair' },
+  { name: 'โต๊ะเครื่องแป้ง', icon: 'dresser' },
+  { name: 'ชั้นวางของ', icon: 'shelf' },
   { name: 'โซฟา', icon: 'sofa' },
 ]
+
+const ROOM_ASSET_DISPLAY_LIMIT = 12
+
+let customAssetRowSeq = 0
+const newCustomAssetRow = () => ({ id: ++customAssetRowSeq, name: '', price: '' })
 
 function availableAssetSuggestions(form) {
   const used = new Set(
@@ -5394,12 +5401,20 @@ function AdminBackupPage() {
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
   const equipmentItems = roomEquipmentItems(roomForm)
-  const [amenityDraft, setAmenityDraft] = useState('')
-  const [amenityIcon, setAmenityIcon] = useState('sparkle')
-  const [amenityPrice, setAmenityPrice] = useState('')
+  const [amenityCustomRows, setAmenityCustomRows] = useState(() => [newCustomAssetRow()])
   const roomTypes = useRoomTypes()
   const [addingAmenity, setAddingAmenity] = useState(false)
-  const [amenityModalError, setAmenityModalError] = useState('')
+  const [amenityPicks, setAmenityPicks] = useState([])
+  const [amenityErrors, setAmenityErrors] = useState({})
+  const [amenityMode, setAmenityMode] = useState('suggest')
+  const [amenityRemovals, setAmenityRemovals] = useState([])
+  const resetAmenityModal = () => {
+    setAmenityRemovals([])
+    setAmenityMode('suggest')
+    setAmenityCustomRows([newCustomAssetRow()])
+    setAmenityPicks([])
+    setAmenityErrors({})
+  }
   const [roomSubmitting, setRoomSubmitting] = useState(false)
   const [roomFormError, setRoomFormError] = useState('')
   const [roomDeleteConfirm, setRoomDeleteConfirm] = useState(null)
@@ -5966,20 +5981,16 @@ function AdminBackupPage() {
 
   const openCreateRoom = () => {
     setRoomForm({ ...emptyRoomForm, custom_amenities: [] })
-    setAmenityDraft('')
-    setAmenityIcon('sparkle')
+    resetAmenityModal()
     setAddingAmenity(false)
-    setAmenityModalError('')
     setRoomFormError('')
     setRoomModal({ mode: 'create' })
   }
 
   const openEditRoom = (room, mode = 'edit') => {
     if (room.is_booked && mode === 'edit') return
-    setAmenityDraft('')
-    setAmenityIcon('sparkle')
+    resetAmenityModal()
     setAddingAmenity(false)
-    setAmenityModalError('')
     setRoomForm({
       room_number: String(room.room_number),
       price: String(room.price),
@@ -6087,33 +6098,96 @@ function AdminBackupPage() {
   }
 
   const addRoomAmenity = (requestClose) => {
-    const name = amenityDraft.trim()
-    if (!name) {
-      setAmenityModalError('กรุณากรอกชื่อทรัพย์สิน')
+    const priceError = 'กรุณาระบุราคาเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง'
+    const errors = {}
+    const pickErrors = {}
+    const customErrors = {}
+    // Both tabs are submitted together; blank custom rows are ignored.
+    const filledRows = amenityCustomRows.filter((row) => row.name.trim() || row.price.trim())
+    // Removals queued in this modal are applied on submit, so a submit with only removals is valid.
+    const removals = new Set(amenityRemovals)
+    const isKept = (name) => !removals.has(name.trim())
+    const pendingCount = amenityPicks.length + filledRows.filter((row) => row.name.trim()).length
+    if (pendingCount > 0 && equipmentItems.length - removals.size + pendingCount > ROOM_ASSET_DISPLAY_LIMIT) return
+    if (filledRows.length === 0 && amenityPicks.length === 0 && removals.size === 0) {
+      if (amenityMode === 'custom') customErrors[amenityCustomRows[0].id] = { name: 'กรุณากรอกชื่อทรัพย์สิน หรือเลือกจากรายการแนะนำ' }
+      else errors.picks = { '': 'กรุณาเลือกทรัพย์สินอย่างน้อย 1 รายการ หรือพิมพ์ชื่อเอง' }
+    }
+    const pickNames = new Set(amenityPicks.map((pick) => pick.name.toLocaleLowerCase()))
+    const seen = new Set()
+    for (const row of filledRows) {
+      const name = row.name.trim()
+      const lower = name.toLocaleLowerCase()
+      const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
+      const duplicate = (builtin && roomForm[builtin.field] && isKept(builtin.name))
+        || roomForm.custom_amenities.some((item) => isKept(item.name) && item.name.toLocaleLowerCase() === lower)
+        || roomForm.assetRows.some((asset) => isKept(asset.name) && asset.name.trim().toLocaleLowerCase() === lower)
+      const rowErrors = {}
+      if (!name) rowErrors.name = 'กรุณากรอกชื่อทรัพย์สิน'
+      else if (name.length > 60) rowErrors.name = 'ชื่อทรัพย์สินยาวเกิน 60 ตัวอักษร'
+      else if (duplicate) rowErrors.name = 'มีทรัพย์สินชื่อนี้ในห้องแล้ว'
+      else if (pickNames.has(lower)) rowErrors.name = 'ชื่อนี้เลือกไว้ในรายการแนะนำแล้ว'
+      else if (seen.has(lower)) rowErrors.name = 'ชื่อซ้ำกับรายการด้านบน'
+      if (!isValidAssetPrice(row.price)) rowErrors.price = priceError
+      seen.add(lower)
+      if (rowErrors.name || rowErrors.price) customErrors[row.id] = rowErrors
+    }
+    if (Object.keys(customErrors).length) errors.custom = customErrors
+    for (const pick of amenityPicks) {
+      if (!isValidAssetPrice(pick.price)) pickErrors[pick.name] = priceError
+    }
+    if (Object.keys(pickErrors).length) errors.picks = pickErrors
+    if (Object.keys(errors).length) {
+      setAmenityErrors(errors)
+      // Show the tab holding the first error (the open tab wins), then focus that field.
+      const errorTab = errors[amenityMode === 'custom' ? 'custom' : 'picks'] ? amenityMode : errors.custom ? 'custom' : 'suggest'
+      const [firstPick] = Object.keys(pickErrors)
+      const firstCustom = amenityCustomRows.find((row) => customErrors[row.id])
+      const focusId = errorTab === 'custom' && firstCustom
+        ? `admin-new-amenity-${customErrors[firstCustom.id].name ? 'name' : 'price'}-${firstCustom.id}`
+        : `admin-amenity-pick-${amenityPicks.findIndex((pick) => pick.name === firstPick)}`
+      setAmenityMode(errorTab)
+      requestAnimationFrame(() => document.getElementById(focusId)?.focus())
       return
     }
-    const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
-    const duplicate = (builtin && roomForm[builtin.field])
-      || roomForm.custom_amenities.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())
-      || roomForm.assetRows.some((row) => row.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
-    if (name.length > 60 || duplicate) {
-      setAmenityModalError('รายการซ้ำหรือยาวเกิน 60 ตัวอักษร')
-      return
-    }
-    if (!isValidAssetPrice(amenityPrice)) {
-      setAmenityModalError('กรุณาระบุราคาเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง')
-      return
-    }
-    setRoomForm((prev) => ({
-      ...prev,
-      ...(builtin
-        ? { [builtin.field]: true }
-        : {
-            custom_amenities: prev.custom_amenities.length < 12 ? [...prev.custom_amenities, { name, icon: amenityIcon }] : prev.custom_amenities,
-          }),
-      assetRows: [...prev.assetRows, ...toAssetRows([{ name, price: amenityPrice.replace(/,/g, '').trim() }])],
-    }))
+
+    const items = [
+      ...amenityPicks,
+      ...filledRows.map((row) => ({ name: row.name.trim(), icon: 'sparkle', price: row.price })),
+    ]
+    setRoomForm((prev) => {
+      const next = {
+        ...prev,
+        custom_amenities: prev.custom_amenities.filter((item) => isKept(item.name)),
+        assetRows: prev.assetRows.filter((row) => isKept(row.name)),
+      }
+      for (const equipment of BUILTIN_EQUIPMENT) {
+        if (removals.has(equipment.name)) next[equipment.field] = false
+      }
+      for (const item of items) {
+        const builtin = BUILTIN_EQUIPMENT.find((equipment) => equipment.name === item.name)
+        if (builtin) next[builtin.field] = true
+        else if (next.custom_amenities.length < ROOM_ASSET_DISPLAY_LIMIT) next.custom_amenities.push({ name: item.name, icon: item.icon })
+      }
+      next.assetRows = [
+        ...next.assetRows,
+        ...toAssetRows(items.map((item) => ({ name: item.name, price: item.price.replace(/,/g, '').trim() }))),
+      ]
+      return next
+    })
     requestClose()
+  }
+
+  const toggleAmenityPick = (suggestion) => {
+    setAmenityPicks((prev) => (
+      prev.some((pick) => pick.name === suggestion.name)
+        ? prev.filter((pick) => pick.name !== suggestion.name)
+        : [...prev, { ...suggestion, price: '' }]
+    ))
+    setAmenityErrors((prev) => {
+      if (!prev.picks?.[suggestion.name] && !prev.picks?.['']) return prev
+      return { ...prev, picks: { ...prev.picks, [suggestion.name]: '', '': '' } }
+    })
   }
 
   const removeRoomAsset = (name) => {
@@ -6127,11 +6201,8 @@ function AdminBackupPage() {
   }
 
   const openAddRoomAsset = () => {
-    const [first] = availableAssetSuggestions(roomForm)
-    setAmenityDraft(first?.name || '')
-    setAmenityIcon(first?.icon || 'sparkle')
-    setAmenityPrice('')
-    setAmenityModalError('')
+    resetAmenityModal()
+    if (availableAssetSuggestions(roomForm).length === 0) setAmenityMode('custom')
     setAddingAmenity(true)
   }
 
@@ -10137,105 +10208,203 @@ function AdminBackupPage() {
       )}
 
       {roomModal && addingAmenity && (
-        <Modal title="เพิ่มทรัพย์สินในห้อง" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityPrice(''); setAmenityModalError('') }}>
+        <Modal title="เพิ่มทรัพย์สินในห้อง" variant="amenity" onClose={() => { setAddingAmenity(false); resetAmenityModal() }}>
           {(requestClose) => {
-            const usedCount = roomForm.custom_amenities.length
-            const remaining = Math.max(0, 12 - usedCount)
-            const draftName = amenityDraft.trim()
+            const isCustom = amenityMode === 'custom'
+            const namedRows = amenityCustomRows.filter((row) => row.name.trim())
+            const pendingCount = namedRows.length + amenityPicks.length
+            const removalCount = amenityRemovals.length
+            const usedCount = equipmentItems.length - removalCount + pendingCount
+            const remaining = Math.max(0, ROOM_ASSET_DISPLAY_LIMIT - usedCount)
+            const atCap = usedCount >= ROOM_ASSET_DISPLAY_LIMIT
+            const overBy = Math.max(0, usedCount - ROOM_ASSET_DISPLAY_LIMIT)
+            const canSubmit = pendingCount === 0 || overBy === 0
             const availableSuggestions = availableAssetSuggestions(roomForm)
+            const pendingNames = [...amenityPicks.map((pick) => pick.name), ...namedRows.map((row) => row.name.trim())]
+            const previewIcon = amenityPicks[0]?.icon || 'sparkle'
+            const previewTitle = pendingNames.length ? pendingNames.join(', ') : 'ยังไม่ได้เลือกหรือพิมพ์รายการ'
+            const singlePrice = pendingCount === 1 ? (amenityPicks[0] || namedRows[0]).price : ''
+            const switchMode = (mode) => setAmenityMode(mode)
+            const tabCounts = { suggest: amenityPicks.length, custom: namedRows.length }
+            const tabHasError = {
+              suggest: Object.values(amenityErrors.picks || {}).some(Boolean),
+              custom: Object.values(amenityErrors.custom || {}).some((row) => row.name || row.price),
+            }
+            const updateCustomRow = (id, field, value) => {
+              setAmenityCustomRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
+              setAmenityErrors((prev) => (prev.custom?.[id]?.[field]
+                ? { ...prev, custom: { ...prev.custom, [id]: { ...prev.custom[id], [field]: '' } } }
+                : prev))
+            }
+            const addCustomRow = () => {
+              const row = newCustomAssetRow()
+              setAmenityCustomRows((prev) => [...prev, row])
+              requestAnimationFrame(() => document.getElementById(`admin-new-amenity-name-${row.id}`)?.focus())
+            }
+            const removeCustomRow = (id) => setAmenityCustomRows((prev) => prev.filter((row) => row.id !== id))
+            const typedItems = equipmentItems.filter((item) => !ROOM_AMENITY_SUGGESTIONS.some((suggestion) => suggestion.name === item.name))
+            const fieldError = (message) => message && (
+              <p className="admin-amenity-modal-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+                {message}
+              </p>
+            )
             return (
-              <form className="admin-amenity-modal-form" onSubmit={(event) => { event.preventDefault(); addRoomAmenity(requestClose) }}>
+              <form className="admin-amenity-modal-form" noValidate onSubmit={(event) => { event.preventDefault(); addRoomAmenity(requestClose) }}>
                 <div className="admin-amenity-modal-content">
-                  <div className={`admin-amenity-preview${draftName ? '' : ' is-empty'}`} aria-live="polite">
-                    <span className="admin-amenity-preview-icon"><CustomAmenityIcon name={amenityIcon} size={26} /></span>
+                  <div className={`admin-amenity-preview${pendingCount ? '' : ' is-empty'}`} aria-live="polite">
+                    <span className="admin-amenity-preview-icon"><CustomAmenityIcon name={previewIcon} size={26} /></span>
                     <div className="admin-amenity-preview-text">
-                      <small>ตัวอย่างที่จะแสดงในห้อง</small>
-                      <strong>{draftName || 'ชื่อทรัพย์สิน'}</strong>
-                      {isValidAssetPrice(amenityPrice) && <small>ราคา ฿{assetPriceValue(amenityPrice).toLocaleString('th-TH')}</small>}
+                      <small>{pendingCount > 1 ? `จะเพิ่ม ${pendingCount} รายการ` : 'ตัวอย่างที่จะแสดงในห้อง'}</small>
+                      <strong>{previewTitle}</strong>
+                      {isValidAssetPrice(singlePrice) && <small>ราคา ฿{assetPriceValue(singlePrice).toLocaleString('th-TH')}</small>}
                     </div>
-                    <span className={`admin-amenity-quota${remaining <= 2 ? ' is-low' : ''}`}>
-                      <b>{usedCount}</b>/12
+                    <span className={`admin-amenity-quota${remaining <= 2 ? ' is-low' : ''}`} title={`มีในห้องแล้ว ${equipmentItems.length - removalCount} รายการ กำลังเพิ่ม ${pendingCount} รายการ`}>
+                      <b>{usedCount}</b>/{ROOM_ASSET_DISPLAY_LIMIT}
                       <small>รายการ</small>
                     </span>
                   </div>
 
-                  <section className="admin-amenity-section">
-                    <header>
-                      <span className="admin-amenity-step">1</span>
-                      <label htmlFor="admin-new-amenity">ชื่อทรัพย์สิน <span className="text-danger">*</span></label>
-                      <small className={`admin-amenity-counter${amenityDraft.length >= 55 ? ' is-near' : ''}`}>{amenityDraft.length}/60</small>
-                    </header>
-                    <div className={`admin-amenity-name-input${amenityModalError ? ' is-invalid' : ''}`}>
-                      <i><CustomAmenityIcon name={amenityIcon} size={18} /></i>
-                      <input
-                        id="admin-new-amenity"
-                        type="text"
-                        maxLength={60}
-                        value={amenityDraft}
-                        onChange={(event) => {
-                          const value = event.target.value
-                          const match = ROOM_AMENITY_SUGGESTIONS.find((suggestion) => suggestion.name === value.trim())
-                          setAmenityDraft(value)
-                          setAmenityIcon(match ? match.icon : 'sparkle')
-                          setAmenityModalError('')
-                        }}
-                        placeholder="เช่น โต๊ะทำงาน, ไมโครเวฟ"
-                        autoFocus
-                        autoComplete="off"
-                      />
-                      {amenityDraft && (
-                        <button type="button" onClick={() => { setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityModalError('') }} aria-label="ล้างชื่อ">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                        </button>
+                  <dl className="admin-amenity-quota-breakdown" aria-label="สรุปจำนวนทรัพย์สิน">
+                    <div><dt>มีในห้อง</dt><dd>{equipmentItems.length - removalCount}</dd></div>
+                    <div className="is-suggest"><dt>เลือกจากแนะนำ</dt><dd>+{amenityPicks.length}</dd></div>
+                    <div className="is-custom"><dt>พิมพ์ชื่อเอง</dt><dd>+{namedRows.length}</dd></div>
+                    {removalCount > 0 && <div className="is-removed"><dt>จะลบ</dt><dd>−{removalCount}</dd></div>}
+                  </dl>
+
+                  <div className="admin-amenity-mode" role="tablist" aria-label="วิธีเพิ่มทรัพย์สิน">
+                    {[
+                      { key: 'suggest', label: 'เลือกจากรายการแนะนำ' },
+                      { key: 'custom', label: 'พิมพ์ชื่อเอง' },
+                    ].map((tab) => (
+                      <button
+                        type="button"
+                        role="tab"
+                        key={tab.key}
+                        className={`${amenityMode === tab.key ? 'is-active' : ''}${tabHasError[tab.key] ? ' has-error' : ''}`}
+                        aria-selected={amenityMode === tab.key}
+                        onClick={() => switchMode(tab.key)}
+                      >
+                        {tab.label}
+                        {tabCounts[tab.key] > 0 && <span className="admin-amenity-mode-count">{tabCounts[tab.key]}</span>}
+                      </button>
+                    ))}
+                  </div>
+
+                  {isCustom && (
+                    <section className="admin-amenity-section admin-amenity-existing">
+                      <header>
+                        <span className="admin-amenity-section-title">ที่เคยพิมพ์เพิ่มไว้แล้ว</span>
+                        <small>{removalCount > 0 ? `จะลบ ${removalCount} จาก ${typedItems.length} รายการ` : `${typedItems.length} รายการ`}</small>
+                      </header>
+                      {typedItems.length > 0 ? (
+                        <ul className="admin-amenity-existing-list">
+                          {typedItems.map((item) => (
+                            <li key={item.name} className={amenityRemovals.includes(item.name) ? 'is-removed' : ''}>
+                              <span className="admin-amenity-existing-icon"><CustomAmenityIcon name={item.icon} size={15} /></span>
+                              <span className="admin-amenity-existing-name">{item.name}</span>
+                              <span className="admin-amenity-existing-price">
+                                {item.asset ? `฿${assetPriceValue(item.asset.price).toLocaleString('th-TH')}` : 'ยังไม่ระบุราคา'}
+                              </span>
+                              {amenityRemovals.includes(item.name) ? (
+                                <button type="button" className="admin-amenity-existing-remove is-undo" onClick={() => setAmenityRemovals((prev) => prev.filter((name) => name !== item.name))} aria-label={`ยกเลิกการลบ ${item.name}`} title="ยกเลิกการลบ">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15-6.7L3 13" /></svg>
+                                </button>
+                              ) : (
+                                <button type="button" className="admin-amenity-existing-remove" onClick={() => setAmenityRemovals((prev) => [...prev, item.name])} aria-label={`ลบ ${item.name}`} title="ลบออกจากห้อง">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="admin-amenity-empty">ยังไม่มีรายการที่พิมพ์เพิ่มเองในห้องนี้</p>
                       )}
-                    </div>
-                    {amenityModalError && (
-                      <p className="admin-amenity-modal-error" role="alert">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
-                        {amenityModalError}
-                      </p>
-                    )}
-                  </section>
+                    </section>
+                  )}
+                  {isCustom && amenityCustomRows.map((row, index) => {
+                    const rowErrors = amenityErrors.custom?.[row.id] || {}
+                    const nameId = `admin-new-amenity-name-${row.id}`
+                    const priceId = `admin-new-amenity-price-${row.id}`
+                    return (
+                      <section className="admin-amenity-section admin-amenity-custom-row" key={row.id}>
+                        <header>
+                          <span className="admin-amenity-step">{index + 1}</span>
+                          <span className="admin-amenity-section-title">รายการที่ {index + 1}</span>
+                          {amenityCustomRows.length > 1 && (
+                            <button type="button" className="admin-amenity-pick-remove" onClick={() => removeCustomRow(row.id)} aria-label={`ลบรายการที่ ${index + 1}`}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                            </button>
+                          )}
+                        </header>
+                        <div className="admin-amenity-custom-fields">
+                          <div className="admin-amenity-custom-field">
+                            <label htmlFor={nameId}>
+                              ชื่อทรัพย์สิน <span className="text-danger">*</span>
+                              <small className={`admin-amenity-counter${row.name.length >= 55 ? ' is-near' : ''}`}>{row.name.length}/60</small>
+                            </label>
+                            <div className={`admin-amenity-name-input${rowErrors.name ? ' is-invalid' : ''}`}>
+                              <input
+                                id={nameId}
+                                type="text"
+                                maxLength={60}
+                                value={row.name}
+                                onChange={(event) => updateCustomRow(row.id, 'name', event.target.value)}
+                                placeholder="เช่น ไมโครเวฟ, พัดลม"
+                                aria-invalid={Boolean(rowErrors.name)}
+                                autoFocus={index === 0}
+                                autoComplete="off"
+                              />
+                            </div>
+                            {fieldError(rowErrors.name)}
+                          </div>
+                          <div className="admin-amenity-custom-field is-price">
+                            <label htmlFor={priceId}>ราคา (บาท) <span className="text-danger">*</span></label>
+                            <div className={`admin-amenity-name-input${rowErrors.price ? ' is-invalid' : ''}`}>
+                              <i>฿</i>
+                              <input
+                                id={priceId}
+                                type="text"
+                                inputMode="decimal"
+                                value={row.price}
+                                onChange={(event) => updateCustomRow(row.id, 'price', event.target.value)}
+                                placeholder="เช่น 3500"
+                                aria-invalid={Boolean(rowErrors.price)}
+                                autoComplete="off"
+                              />
+                            </div>
+                            {fieldError(rowErrors.price)}
+                          </div>
+                        </div>
+                      </section>
+                    )
+                  })}
+                  {isCustom && (
+                    <button type="button" className="admin-amenity-add-row" onClick={addCustomRow} disabled={atCap}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                      เพิ่มอีกรายการ
+                    </button>
+                  )}
+                  {isCustom && <p className="admin-amenity-hint">ราคาใช้คิดค่าเสียหายเมื่อชำรุดหรือสูญหาย</p>}
 
+                  {!isCustom && (
                   <section className="admin-amenity-section">
                     <header>
-                      <span className="admin-amenity-step">2</span>
-                      <label htmlFor="admin-new-amenity-price">ราคาทรัพย์สิน (บาท) <span className="text-danger">*</span></label>
-                      <small>ใช้คิดค่าเสียหายเมื่อชำรุดหรือสูญหาย</small>
-                    </header>
-                    <div className="admin-amenity-name-input">
-                      <i>฿</i>
-                      <input
-                        id="admin-new-amenity-price"
-                        type="text"
-                        inputMode="decimal"
-                        value={amenityPrice}
-                        onChange={(event) => {
-                          setAmenityPrice(event.target.value)
-                          setAmenityModalError('')
-                        }}
-                        placeholder="เช่น 3500"
-                        autoComplete="off"
-                      />
-                    </div>
-                  </section>
-
-                  <section className="admin-amenity-section">
-                    <header>
-                      <span className="admin-amenity-step">3</span>
                       <span className="admin-amenity-section-title">รายการแนะนำ</span>
-                      <small>กดเพื่อใช้ชื่อและไอคอนนี้</small>
+                      <small>เลือกได้หลายรายการ แล้วใส่ราคาแต่ละชิ้น</small>
                     </header>
                     {availableSuggestions.length > 0 ? (
                       <div className="admin-amenity-suggest-grid">
                         {availableSuggestions.map((suggestion) => {
-                          const selected = draftName === suggestion.name
+                          const selected = amenityPicks.some((pick) => pick.name === suggestion.name)
                           return (
                             <button
                               type="button"
                               key={suggestion.name}
                               className={selected ? 'is-selected' : ''}
-                              onClick={() => { setAmenityDraft(suggestion.name); setAmenityIcon(suggestion.icon); setAmenityModalError('') }}
+                              onClick={() => toggleAmenityPick(suggestion)}
+                              disabled={atCap && !selected}
                               aria-pressed={selected}
                             >
                               <span><CustomAmenityIcon name={suggestion.icon} size={17} /></span>
@@ -10245,16 +10414,61 @@ function AdminBackupPage() {
                         })}
                       </div>
                     ) : (
-                      <p className="admin-amenity-empty">เพิ่มรายการแนะนำครบทุกอย่างแล้ว พิมพ์ชื่อเองได้ที่ช่องด้านบน</p>
+                      <p className="admin-amenity-empty">
+                        เพิ่มรายการแนะนำครบทุกอย่างแล้ว{' '}
+                        <button type="button" className="admin-amenity-empty-link" onClick={() => switchMode('custom')}>พิมพ์ชื่อเอง</button>
+                      </p>
+                    )}
+                    {fieldError(amenityErrors.picks?.[''])}
+                    {amenityPicks.length > 0 && (
+                      <ul className="admin-amenity-pick-list">
+                        {amenityPicks.map((pick, index) => {
+                          const error = amenityErrors.picks?.[pick.name]
+                          return (
+                            <li key={pick.name}>
+                              <div className="admin-amenity-pick-row">
+                                <span className="admin-amenity-pick-icon"><CustomAmenityIcon name={pick.icon} size={16} /></span>
+                                <label htmlFor={`admin-amenity-pick-${index}`}>{pick.name}</label>
+                                <div className={`admin-amenity-name-input is-compact${error ? ' is-invalid' : ''}`}>
+                                  <i>฿</i>
+                                  <input
+                                    id={`admin-amenity-pick-${index}`}
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={pick.price}
+                                    onChange={(event) => {
+                                      const price = event.target.value
+                                      setAmenityPicks((prev) => prev.map((item) => (item.name === pick.name ? { ...item, price } : item)))
+                                      if (error) setAmenityErrors((prev) => ({ ...prev, picks: { ...prev.picks, [pick.name]: '' } }))
+                                    }}
+                                    placeholder="ราคา"
+                                    aria-invalid={Boolean(error)}
+                                    autoComplete="off"
+                                  />
+                                </div>
+                                <button type="button" className="admin-amenity-pick-remove" onClick={() => toggleAmenityPick(pick)} aria-label={`เอา ${pick.name} ออก`}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                              {fieldError(error)}
+                            </li>
+                          )
+                        })}
+                      </ul>
                     )}
                   </section>
+                  )}
                 </div>
                 <div className="admin-amenity-modal-actions">
-                  <span className="admin-amenity-remaining">
-                    {remaining > 0 ? `แสดงในหน้าห้องได้อีก ${remaining} รายการ` : 'ครบ 12 รายการที่แสดงแล้ว (ยังบันทึกเป็นทรัพย์สินได้)'}
+                  <span className={`admin-amenity-remaining${overBy ? ' is-over' : atCap ? ' is-full' : ''}`} role={atCap ? 'alert' : undefined}>
+                    {overBy > 0
+                      ? `เกิน ${ROOM_ASSET_DISPLAY_LIMIT} รายการ เอาออกอีก ${overBy} รายการ`
+                      : atCap ? `ครบ ${ROOM_ASSET_DISPLAY_LIMIT} รายการแล้ว เพิ่มอีกไม่ได้` : `เพิ่มได้อีก ${remaining} รายการ`}
                   </span>
                   <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ยกเลิก</button>
-                  <button type="submit" className="admin-action-btn is-primary">เพิ่มทรัพย์สิน</button>
+                  <button type="submit" className="admin-action-btn is-primary" disabled={!canSubmit}>
+                    {pendingCount === 0 && removalCount > 0 ? `ลบ (${removalCount})` : pendingCount > 1 ? `เพิ่ม (${pendingCount})` : 'เพิ่ม'}
+                  </button>
                 </div>
               </form>
             )
