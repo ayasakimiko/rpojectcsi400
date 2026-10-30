@@ -1,0 +1,716 @@
+/* Shared confirm / result popup body. See ActionDialog.jsx. */
+
+/* Page modal shells: drop their own header and padding when they host an action dialog. */
+.staff-modal.staff-modal-confirm:has(> .staff-modal-body > .action-dialog),
+.dashboard-modal.dashboard-modal-confirm:has(> .dashboard-modal-body > .action-dialog),
+.admin-modal.admin-modal-confirm:has(> .admin-modal-body > .action-dialog),
+.owner-modal:has(> .action-dialog),
+.market-modal:has(> .action-dialog),
+.dorm-dialog-overlay .dorm-dialog:has(> .action-dialog),
+.wifi-modal-overlay .wifi-modal:has(> .action-dialog),
+.announcement-overlay .announcement-dialog:has(> .action-dialog) {
+  display: block;
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  height: auto;
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e3ebf6;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(15, 43, 82, 0.22), 0 4px 14px rgba(15, 43, 82, 0.08);
+}
+
+.staff-modal.staff-modal-confirm:has(> .staff-modal-body > .action-dialog) > .staff-modal-header,
+.dashboard-modal.dashboard-modal-confirm:has(> .dashboard-modal-body > .action-dialog) > .dashboard-modal-header,
+.dashboard-modal.dashboard-modal-confirm:has(> .dashboard-modal-body > .action-dialog) .dashboard-modal-alert-title,
+.admin-modal.admin-modal-confirm:has(> .admin-modal-body > .action-dialog) > .admin-modal-header {
+  display: none;
+}
+
+.staff-modal.staff-modal-confirm:has(> .staff-modal-body > .action-dialog) > .staff-modal-body,
+.dashboard-modal.dashboard-modal-confirm:has(> .dashboard-modal-body > .action-dialog) > .dashboard-modal-body,
+.admin-modal.admin-modal-confirm:has(> .admin-modal-body > .action-dialog) > .admin-modal-body {
+  display: block;
+  max-height: calc(100vh - 34px);
+  padding: 0;
+  overflow-y: auto;
+}
+
+/* Shells with no body wrapper: the dialog scrolls itself. */
+.owner-modal > .action-dialog,
+.market-modal > .action-dialog,
+.dorm-dialog > .action-dialog,
+.wifi-modal > .action-dialog,
+.announcement-overlay .announcement-dialog > .action-dialog {
+  max-height: calc(100vh - 34px);
+  overflow-y: auto;
+}
+
+.action-dialog {
+  --ad-tone: #2563eb;
+  --ad-tone-strong: #1d4ed8;
+  --ad-tone-soft: #eff6ff;
+  --ad-tone-line: #cfe0fb;
+  --ad-ink: #0f2b52;
+  --ad-text: #33506f;
+  --ad-muted: #6b859e;
+  --ad-line: #e6eef8;
+  display: flex;
+  flex-direction: column;
+  color: var(--ad-text);
+  text-align: left;
+}
+
+.action-dialog.is-success {
+  --ad-tone: #16a34a;
+  --ad-tone-strong: #067647;
+  --ad-tone-soft: #ecfdf3;
+  --ad-tone-line: #c6f0d6;
+}
+
+.action-dialog.is-danger {
+  --ad-tone: #dc2626;
+  --ad-tone-strong: #b42318;
+  --ad-tone-soft: #fef3f2;
+  --ad-tone-line: #fdd5d1;
+}
+
+.action-dialog.is-pending {
+  --ad-tone: #d97706;
+  --ad-tone-strong: #b45309;
+  --ad-tone-soft: #fffaeb;
+  --ad-tone-line: #fde7b0;
+}
+
+.action-dialog-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid var(--ad-line);
+  background: linear-gradient(180deg, var(--ad-tone-soft) 0%, #fff 100%);
+}
+
+/* Result popup (ResultDialog): matches the Staff/Admin pages — soft tone circle,
+   navy headline, pill timestamp and the system blue primary button. */
+.staff-modal.staff-modal-confirm:has(> .staff-modal-body > .action-dialog.is-result),
+.dashboard-modal.dashboard-modal-confirm:has(> .dashboard-modal-body > .action-dialog.is-result),
+.admin-modal.admin-modal-confirm:has(> .admin-modal-body > .action-dialog.is-result),
+.owner-modal:has(> .action-dialog.is-result),
+.dorm-dialog-overlay .dorm-dialog:has(> .action-dialog.is-result) {
+  width: 380px;
+  border-color: #dce9fb;
+  border-radius: 22px;
+}
+
+.action-result-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 28px 6px;
+  text-align: center;
+}
+
+.action-result-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: var(--ad-tone-soft);
+  color: var(--ad-tone);
+  box-shadow: inset 0 0 0 1px var(--ad-tone-line);
+  animation: action-dialog-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.action-result-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.action-result-hero h3 {
+  margin: 0;
+  color: #0f2b52;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.action-result-sub {
+  margin: 6px 0 0;
+  color: #4a6585;
+  font-size: 14.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.action-result-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 5px 12px;
+  border: 1px solid #dce9fb;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #4a6585;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.action-dialog.is-result .action-dialog-content {
+  padding: 18px 26px 0;
+}
+
+.action-dialog.is-result .action-dialog-outcome {
+  border-color: #e6eef8;
+  background: #f8fbff;
+}
+
+.action-dialog.is-result .action-dialog-outcome h4 {
+  color: #33506f;
+}
+
+.action-dialog.is-result .action-dialog-actions {
+  padding: 24px 26px 26px;
+}
+
+.action-dialog.is-result .action-dialog-btn.is-solid {
+  min-height: 46px;
+  background: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
+}
+
+.action-dialog.is-result .action-dialog-btn.is-solid:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.action-dialog.is-result .action-dialog-btn:focus-visible {
+  outline-color: rgba(37, 99, 235, 0.35);
+}
+
+/* Same soft tone circle as the result popup's mark, sized for the left-aligned header. */
+/* Nothing between the header and the buttons: no divider line. */
+.action-dialog-hero:has(+ .action-dialog-actions) {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.action-dialog-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--ad-tone-soft);
+  color: var(--ad-tone);
+  box-shadow: inset 0 0 0 1px var(--ad-tone-line);
+  animation: action-dialog-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.action-dialog-badge svg {
+  width: 22px;
+  height: 22px;
+}
+
+.action-dialog-heading {
+  min-width: 0;
+}
+
+.action-dialog-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ad-tone-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.action-dialog-heading h3 {
+  margin: 0;
+  color: var(--ad-ink);
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.action-dialog-heading p {
+  margin: 4px 0 0;
+  color: var(--ad-muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.action-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 4px;
+}
+
+.action-dialog-payer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--ad-line);
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.action-dialog-thumb {
+  flex: none;
+  width: 52px;
+  height: 68px;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 9px;
+  background: #eef3fa;
+}
+
+.action-dialog-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.action-dialog-payer-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.action-dialog-room {
+  align-self: flex-start;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.action-dialog-payer-text strong {
+  overflow: hidden;
+  color: var(--ad-ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-dialog-payer-text small {
+  color: var(--ad-muted);
+  font-size: 12.5px;
+}
+
+.action-dialog-total {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: auto;
+  text-align: right;
+}
+
+.action-dialog-total span {
+  color: var(--ad-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.action-dialog-total strong {
+  color: var(--ad-ink);
+  font-size: 21px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.action-dialog-amount {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--ad-tone-line);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--ad-tone-soft) 0%, #fff 85%);
+}
+
+.action-dialog-amount div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.action-dialog-amount span {
+  color: var(--ad-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.action-dialog-amount strong {
+  color: var(--ad-ink);
+  font-size: 30px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.action-dialog-amount small {
+  margin-top: 4px;
+  color: var(--ad-text);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.action-dialog-amount em {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--ad-tone-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ad-tone-strong);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.action-dialog-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-dialog-items li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--ad-line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12.5px;
+}
+
+.action-dialog-items b {
+  color: var(--ad-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.action-dialog-facts {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 14px;
+}
+
+.action-dialog-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 14px;
+  font-size: 13.5px;
+}
+
+.action-dialog-facts div + div {
+  border-top: 1px solid var(--ad-line);
+}
+
+.action-dialog-facts dt {
+  flex: none;
+  color: var(--ad-muted);
+  font-weight: 600;
+}
+
+.action-dialog-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ad-ink);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.action-dialog-note {
+  padding: 12px 14px;
+  border: 1px solid var(--ad-tone-line);
+  border-left: 4px solid var(--ad-tone);
+  border-radius: 12px;
+  background: var(--ad-tone-soft);
+}
+
+.action-dialog-note span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ad-tone-strong);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.action-dialog-note p {
+  margin: 0;
+  color: var(--ad-ink);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.action-dialog-outcome {
+  padding: 12px 14px;
+  border: 1px solid var(--ad-tone-line);
+  border-radius: 14px;
+  background: var(--ad-tone-soft);
+}
+
+.action-dialog-outcome h4 {
+  margin: 0 0 6px;
+  color: var(--ad-tone-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.action-dialog-outcome ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-dialog-outcome li {
+  position: relative;
+  padding-left: 16px;
+  color: var(--ad-text);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.action-dialog-outcome li::before {
+  position: absolute;
+  top: 0.62em;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ad-tone);
+  content: "";
+}
+
+.action-dialog-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fdd5d1;
+  border-radius: 12px;
+  background: #fef3f2;
+  color: #b42318;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  animation: action-dialog-shake 0.32s ease;
+}
+
+.action-dialog-error svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.action-dialog-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
+  padding: 18px 22px 22px;
+}
+
+.action-dialog-actions.is-single {
+  grid-template-columns: 1fr;
+}
+
+.action-dialog-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 16px;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.action-dialog-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action-dialog-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.action-dialog-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ad-tone) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.action-dialog-btn.is-ghost {
+  border-color: #dce6f3;
+  background: #fff;
+  color: var(--ad-text);
+}
+
+.action-dialog-btn.is-ghost:hover:not(:disabled) {
+  background: #f4f7fb;
+}
+
+.action-dialog-btn.is-solid {
+  background: var(--ad-tone);
+  color: #fff;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--ad-tone) 28%, transparent);
+}
+
+.action-dialog-btn.is-solid:hover:not(:disabled) {
+  background: var(--ad-tone-strong);
+}
+
+.action-dialog-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: action-dialog-spin 0.7s linear infinite;
+}
+
+@keyframes action-dialog-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes action-dialog-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes action-dialog-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Larger multi-section popups (room transfer, reject with reason, tenant status, Market / Wi-Fi forms)
+   keep their own layout; only their header icon is restyled to match the soft tone circle above. */
+.staff-transfer-body .staff-transfer-hero .staff-confirm-icon {
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hero-ink) 9%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hero-ink) 22%, #fff);
+}
+
+.dashboard-status-body .dashboard-status-hero .dashboard-confirm-icon,
+.dashboard-status-body .dashboard-status-hero[class*='is-'] .dashboard-confirm-icon {
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hero-icon-to, #2563eb) 10%, #fff);
+  color: var(--hero-icon-to, #2563eb);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hero-icon-to, #2563eb) 24%, #fff);
+}
+
+.market-modal-head .market-modal-icon,
+.wifi-modal-head .wifi-modal-icon {
+  --icon-tone: #2563eb;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--icon-tone) 10%, #fff);
+  color: var(--icon-tone);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon-tone) 24%, #fff);
+}
+
+.market-modal.is-danger .market-modal-head .market-modal-icon,
+.wifi-modal.is-danger .wifi-modal-head .wifi-modal-icon {
+  --icon-tone: #dc2626;
+  background: color-mix(in srgb, var(--icon-tone) 10%, #fff);
+}
+
+.market-modal.is-success .market-modal-head .market-modal-icon {
+  --icon-tone: #16a34a;
+  background: color-mix(in srgb, var(--icon-tone) 10%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon-tone) 24%, #fff);
+}
+
+@media (max-width: 480px) {
+  .action-dialog-hero,
+  .action-dialog-content,
+  .action-dialog-actions {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .action-dialog-payer {
+    flex-wrap: wrap;
+  }
+
+  .action-dialog-total {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
+    margin-left: 0;
+    padding-top: 8px;
+    border-top: 1px dashed var(--ad-line);
+  }
+
+  .action-dialog-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .action-dialog-actions .action-dialog-btn.is-solid {
+    order: -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-dialog-badge,
+  .action-dialog-error,
+  .action-dialog-spinner {
+    animation: none;
+  }
+}

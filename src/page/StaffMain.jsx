@@ -1,4 +1,17 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
+import {
+  ActionDialog,
+  ActionDialogButton,
+  ActionDialogError,
+  ActionDialogFacts,
+  ActionDialogItems,
+  ActionDialogNote,
+  ActionDialogOutcome,
+  ActionDialogPayer,
+  ConfirmDialog,
+  NotificationDialog,
+  ResultDialog,
+} from '../components/ActionDialog.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
@@ -1175,16 +1188,25 @@ function buildAnnouncementNotif(item) {
 
 const openModalStack = []
 
-export function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef }) {
+export function Modal({ title, onClose, children, variant, stickyFilters = false, bodyRef, locked = false }) {
   const [isClosing, setIsClosing] = useState(false)
+  const lockedRef = useRef(locked)
 
-  const requestClose = () => setIsClosing(true)
+  useEffect(() => {
+    lockedRef.current = locked
+  })
+
+  // While locked (a request is in flight) only an explicit requestClose(true) may close it.
+  const requestClose = (force) => {
+    if (locked && force !== true) return
+    setIsClosing(true)
+  }
 
   useEffect(() => {
     const token = {}
     openModalStack.push(token)
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && openModalStack[openModalStack.length - 1] === token) requestClose()
+      if (event.key === 'Escape' && openModalStack[openModalStack.length - 1] === token && !lockedRef.current) setIsClosing(true)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => {
@@ -1209,7 +1231,7 @@ export function Modal({ title, onClose, children, variant, stickyFilters = false
       >
         <div className="staff-modal-header">
           <h3>{title}</h3>
-          <button type="button" className="staff-modal-close" onClick={requestClose} aria-label="ปิด">
+          <button type="button" className="staff-modal-close" onClick={requestClose} disabled={locked} aria-label="ปิด">
             <svg
               width="18"
               height="18"
@@ -4477,6 +4499,141 @@ function SlipPaymentItems({ payment }) {
   )
 }
 
+const SLIP_CONFIRM_COPY = {
+  approved: {
+    tone: 'success',
+    icon: 'check',
+    title: 'อนุมัติสลิปนี้?',
+    lead: 'ตรวจยอดเงินและชื่อบัญชีผู้รับในสลิปให้ตรงก่อนอนุมัติ',
+    outcomeTitle: 'เมื่อกดอนุมัติ',
+    outcomes: (labels) => [
+      `${labels} เปลี่ยนเป็น “ชำระแล้ว” ทันที`,
+      'ผู้เช่าได้รับแจ้งเตือนว่าสลิปผ่านการตรวจ',
+      'ยกเลิกผลการอนุมัติภายหลังไม่ได้',
+    ],
+    action: 'อนุมัติสลิป',
+    busy: 'กำลังอนุมัติ...',
+  },
+  rejected: {
+    tone: 'danger',
+    icon: 'x',
+    title: 'ปฏิเสธสลิปนี้?',
+    lead: 'ใช้เมื่อยอดเงิน บัญชีผู้รับ หรือรูปสลิปไม่ถูกต้อง',
+    outcomeTitle: 'เมื่อกดปฏิเสธ',
+    outcomes: (labels) => [
+      `${labels} กลับเป็น “รอชำระ” ผู้เช่าต้องส่งสลิปใหม่`,
+      'ผู้เช่าได้รับแจ้งเตือนว่า “เจ้าหน้าที่ตรวจแล้วไม่อนุมัติสลิป”',
+      'สลิปนี้ยังเก็บไว้ในประวัติ “ไม่ผ่าน”',
+    ],
+    action: 'ปฏิเสธสลิป',
+    busy: 'กำลังปฏิเสธ...',
+  },
+}
+
+const formatSlipMoney = (value) =>
+  `฿${Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+function slipReviewSummary(payment) {
+  const items = slipPaymentItems(payment)
+  const labels = items.length
+    ? items.map((item) => PAYMENT_REVIEW_LABEL[item.type] || item.type)
+    : String(payment.payment_types || '').split(',').filter(Boolean).map((type) => PAYMENT_REVIEW_LABEL[type] || type)
+  const tenantName = `${payment.first_name || ''} ${payment.last_name || ''}`.trim() || '-'
+  const sentAt = payment.payment_date
+    ? new Date(payment.payment_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
+    : null
+  return {
+    labelText: labels.length ? labels.join(', ') : 'รายการนี้',
+    items: items.map((item) => ({ label: PAYMENT_REVIEW_LABEL[item.type] || item.type, amount: formatSlipMoney(item.amount) })),
+    payer: {
+      thumb: payment.slip_path,
+      thumbAlt: `สลิปห้อง ${payment.room_number}`,
+      room: payment.room_number || '-',
+      name: tenantName,
+      meta: [payment.phone, sentAt && `ส่งเมื่อ ${sentAt}`].filter(Boolean).join(' · ') || '-',
+      amountLabel: 'ยอดในสลิป',
+      amount: formatSlipMoney(payment.amount),
+    },
+  }
+}
+
+function SlipReviewConfirm({ payment, decision, busy, error, onConfirm, onClose }) {
+  const copy = SLIP_CONFIRM_COPY[decision] || SLIP_CONFIRM_COPY.rejected
+  const isApprove = decision === 'approved'
+  const { labelText, items, payer } = slipReviewSummary(payment)
+
+  return (
+    <Modal title={isApprove ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป'} onClose={onClose} variant="confirm" locked={busy}>
+      {(requestClose) => (
+        <ActionDialog
+          tone={copy.tone}
+          icon={copy.icon}
+          kicker="ตรวจสลิปโอนเงิน"
+          title={copy.title}
+          lead={copy.lead}
+          busy={busy}
+          actions={[
+            <ActionDialogButton key="cancel" variant="ghost" disabled={busy} onClick={requestClose} autoFocus={!isApprove}>
+              ยกเลิก
+            </ActionDialogButton>,
+            <ActionDialogButton
+              key="confirm"
+              icon={copy.icon}
+              busy={busy}
+              busyLabel={copy.busy}
+              disabled={busy}
+              onClick={() => onConfirm(requestClose)}
+              autoFocus={isApprove}
+            >
+              {error ? 'ลองอีกครั้ง' : copy.action}
+            </ActionDialogButton>,
+          ]}
+        >
+          <ActionDialogPayer {...payer} />
+          <ActionDialogItems items={items} />
+          <ActionDialogOutcome title={copy.outcomeTitle} lines={copy.outcomes(labelText)} />
+          <ActionDialogError message={error} />
+        </ActionDialog>
+      )}
+    </Modal>
+  )
+}
+
+function SlipReviewResult({ result, onClose }) {
+  const { payment, decision, reviewedAt, autoTransferMessage } = result
+  const isApprove = decision === 'approved'
+  const { labelText, items, payer } = slipReviewSummary(payment)
+
+  return (
+    <Modal title={isApprove ? 'อนุมัติสลิปแล้ว' : 'ปฏิเสธสลิปแล้ว'} onClose={onClose} variant="confirm">
+      {(requestClose) => (
+        <ActionDialog
+          tone={isApprove ? 'success' : 'danger'}
+          icon={isApprove ? 'check' : 'x'}
+          kicker="บันทึกผลการตรวจสลิปแล้ว"
+          title={isApprove ? 'อนุมัติสลิปเรียบร้อย' : 'ปฏิเสธสลิปเรียบร้อย'}
+          lead={isApprove ? 'ยอดนี้บันทึกเป็น “ชำระแล้ว” และแจ้งผู้เช่าแล้ว' : 'แจ้งผู้เช่าให้ส่งสลิปใหม่แล้ว'}
+          actions={[
+            <ActionDialogButton key="done" onClick={requestClose} autoFocus>
+              เสร็จสิ้น
+            </ActionDialogButton>,
+          ]}
+        >
+          <ActionDialogPayer {...payer} amountLabel={isApprove ? 'รับชำระแล้ว' : 'ยอดในสลิป'} />
+          <ActionDialogItems items={items} />
+          <ActionDialogFacts
+            rows={[
+              ['สถานะใหม่', isApprove ? `${labelText} · ชำระแล้ว` : `${labelText} · รอผู้เช่าส่งสลิปใหม่`],
+              ['บันทึกเมื่อ', reviewedAt ? `${formatSlipTime(reviewedAt)} น.` : null],
+            ]}
+          />
+          {autoTransferMessage && <ActionDialogNote label="ย้ายห้องอัตโนมัติ">{autoTransferMessage}</ActionDialogNote>}
+        </ActionDialog>
+      )}
+    </Modal>
+  )
+}
+
 function StaffPagination({ page, total, onChange, pageSize = STAFF_LIST_PAGE_SIZE }) {
   if (total <= pageSize) return null
   const totalPages = Math.ceil(total / pageSize)
@@ -4771,6 +4928,8 @@ function StaffPaymentReview({ onCountChange, focusId }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(null)
   const [confirmReview, setConfirmReview] = useState(null)
+  const [reviewError, setReviewError] = useState('')
+  const [reviewResult, setReviewResult] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [preview, setPreview] = useState(null)
   const [slipViewerOpen, setSlipViewerOpen] = useState(false)
@@ -4902,23 +5061,33 @@ function StaffPaymentReview({ onCountChange, focusId }) {
 
   const closeSlip = () => setPreviewClosing(true)
 
-  const requestReview = (payment, decision) => setConfirmReview({ payment, decision })
+  const requestReview = (payment, decision) => {
+    setReviewError('')
+    setConfirmReview({ payment, decision })
+  }
 
   const submitReview = async (requestClose) => {
     const { payment, decision } = confirmReview
     setBusyId(payment.id)
+    setReviewError('')
     try {
       const { data } = await axios.patch(
         `/api/staff/payment-verifications/${payment.id}`,
         { decision }
       )
-      setNotice({ type: 'success', message: data.message || 'บันทึกผลการตรวจสลิปแล้ว' })
+      setReviewResult({
+        payment,
+        decision,
+        reviewedAt: new Date(),
+        autoTransferMessage: data.autoTransfers?.length ? 'ระบบย้ายห้องให้อัตโนมัติแล้ว กรุณาแนบรูปสัญญาใหม่ภายหลัง' : '',
+      })
       if (preview?.payment.id === payment.id) setPreviewClosing(true)
-      requestClose()
+      requestClose(true)
       await loadPayments()
     } catch (err) {
-      setNotice({ type: 'error', message: err.response?.data?.message || 'ตรวจสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' })
-      requestClose()
+      setReviewError(err.response?.data?.message || 'ตรวจสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      // Already reviewed by someone else: refresh so the list stops offering it.
+      if ([404, 409].includes(err.response?.status)) loadPayments()
     } finally {
       setBusyId(null)
     }
@@ -5158,154 +5327,21 @@ function StaffPaymentReview({ onCountChange, focusId }) {
       )}
       <StaffPagination page={currentPage} total={visibleSlips.length} onChange={setPage} pageSize={STAFF_CARD_PAGE_SIZE} />
       {confirmReview && (
-        <Modal
-          title={confirmReview.decision === 'approved' ? 'ยืนยันการอนุมัติสลิป' : 'ยืนยันการปฏิเสธสลิป'}
+        <SlipReviewConfirm
+          payment={confirmReview.payment}
+          decision={confirmReview.decision}
+          busy={busyId === confirmReview.payment.id}
+          error={reviewError}
+          onConfirm={submitReview}
           onClose={() => setConfirmReview(null)}
-          variant="confirm"
-        >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className={`staff-confirm-icon ${confirmReview.decision === 'approved' ? 'is-success' : 'is-warning'}`}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  {confirmReview.decision === 'approved' ? (
-                    <polyline points="20 6 9 17 4 12" />
-                  ) : (
-                    <>
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </>
-                  )}
-                </svg>
-              </div>
-              <p className="staff-confirm-message">
-                {confirmReview.decision === 'approved' ? 'ยืนยันอนุมัติสลิปโอนเงินนี้?' : 'ยืนยันปฏิเสธสลิปโอนเงินนี้?'}
-              </p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{confirmReview.payment.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {confirmReview.payment.first_name} {confirmReview.payment.last_name}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>รายการ</span>
-                  <strong>
-                    {String(confirmReview.payment.payment_types || '')
-                      .split(',')
-                      .map((type) => PAYMENT_REVIEW_LABEL[type] || type)
-                      .join(', ')}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ยอดรวม</span>
-                  <strong>
-                    ฿
-                    {Number(confirmReview.payment.amount).toLocaleString('th-TH', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </strong>
-                </div>
-              </div>
-              {confirmReview.decision === 'approved' ? (
-                <p className="staff-confirm-note">
-                  เมื่ออนุมัติ ระบบจะเปลี่ยนสถานะรายการชำระเป็น “ชำระแล้ว”
-                </p>
-              ) : (
-                <div className="staff-confirm-warning">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 9v4M12 17h.01" />
-                    <circle cx="12" cy="12" r="9" />
-                  </svg>
-                  <p>สลิปนี้จะไม่ผ่านการตรวจสอบ ผู้เช่าจะต้องส่งสลิปใหม่อีกครั้ง</p>
-                </div>
-              )}
-              <div className="staff-form-actions">
-                <button
-                  type="button"
-                  className="staff-action-btn is-ghost"
-                  disabled={busyId === confirmReview.payment.id}
-                  onClick={requestClose}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className={`staff-action-btn ${confirmReview.decision === 'approved' ? 'is-primary' : 'is-danger'}`}
-                  disabled={busyId === confirmReview.payment.id}
-                  onClick={() => submitReview(requestClose)}
-                >
-                  {busyId === confirmReview.payment.id
-                    ? 'กำลังดำเนินการ...'
-                    : confirmReview.decision === 'approved'
-                      ? 'ยืนยันอนุมัติ'
-                      : 'ยืนยันปฏิเสธ'}
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        />
       )}
 
+      {reviewResult && <SlipReviewResult result={reviewResult} onClose={() => setReviewResult(null)} />}
+
       {notice && (
-        <Modal
-          title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'}
-          onClose={() => setNotice(null)}
-          variant="confirm"
-        >
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  {notice.type === 'success' ? (
-                    <polyline points="20 6 9 17 4 12" />
-                  ) : (
-                    <>
-                      <path d="M12 9v4M12 17h.01" />
-                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                    </>
-                  )}
-                </svg>
-              </div>
-              <StaffNoticeMessage message={notice.message} type={notice.type} />
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
+        <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
+          {(requestClose) => <ResultDialog type={notice.type} message={notice.message} onClose={requestClose} />}
         </Modal>
       )}
 
@@ -5547,26 +5583,6 @@ function StaffCarIcon() {
       <path d="M7 14h.01M17 14h.01" />
       <path d="M5 18v2M19 18v2" />
     </svg>
-  )
-}
-
-function StaffNoticeMessage({ message, type = 'success' }) {
-  const [main, ...points] = String(message || '')
-    .split(/\s+·\s+|\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-  return (
-    <div className={`staff-confirm-message-card is-${type}`}>
-      <span className="staff-confirm-message-label">{type === 'success' ? 'ผลการดำเนินการ' : 'สาเหตุ'}</span>
-      <p className="staff-confirm-message">{main || (type === 'success' ? 'ดำเนินการสำเร็จ' : 'เกิดข้อผิดพลาด')}</p>
-      {points.length > 0 && (
-        <ul className="staff-confirm-message-points">
-          {points.map((point) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
-      )}
-    </div>
   )
 }
 
@@ -5841,12 +5857,12 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
             : confirm.decision === 'fine-approve' || confirm.decision === 'fine-reject'
               ? await axios.post(`${base}/fine-review`, { decision: confirm.decision === 'fine-approve' ? 'approve' : 'reject' })
               : await axios.post(`${base}/${confirm.decision}`, {})
-      requestClose()
+      requestClose(true)
       setDetail(null)
       setNotice({ type: 'success', message: data.message || 'บันทึกผลแล้ว' })
       await load()
     } catch (error) {
-      requestClose()
+      requestClose(true)
       setNotice({ type: 'error', message: error.response?.data?.message || 'บันทึกผลไม่สำเร็จ' })
     } finally {
       setBusy(false)
@@ -6424,47 +6440,25 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
       {confirm && (() => {
         const copy = getVisitConfirmCopy(confirm, finePerHour, now)
         return (
-          <Modal title={copy.title} onClose={() => setConfirm(null)} variant="confirm">
+          <Modal title={copy.title} onClose={() => setConfirm(null)} variant="confirm" locked={busy}>
             {(requestClose) => (
-              <div className="staff-confirm-body">
-                <div className={`staff-confirm-icon ${copy.positive ? 'is-success' : 'is-warning'}`}>
-                  <StaffCarIcon />
-                </div>
-                <p className="staff-confirm-message">{copy.message}</p>
-                {copy.note && <p className="staff-confirm-note">{copy.note}</p>}
-                <div className="staff-confirm-details">
-                  <div className="staff-confirm-detail-row">
-                    <span>ทะเบียนรถ</span>
-                    <strong>{getStaffVisitTitle(confirm.item)}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>ช่องจอด / ห้อง</span>
-                    <strong>
-                      {confirm.item.parking_space_code ? `ช่อง ${confirm.item.parking_space_code}` : 'ไม่ระบุช่อง'} ·{' '}
-                      {confirm.item.room_number ? `ห้อง ${confirm.item.room_number}` : 'บุคคลภายนอก'}
-                    </strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>{confirm.item.parked_at ? 'เข้าจอดจริง' : 'ช่วงเวลา'}</span>
-                    <strong>
-                      <StaffRange start={confirm.item.parked_at || confirm.item.start_at} end={confirm.item.end_at} openEnded />
-                    </strong>
-                  </div>
-                </div>
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-ghost" disabled={busy} onClick={requestClose}>
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="button"
-                    className={`staff-action-btn ${copy.positive ? 'is-primary' : 'is-danger'}`}
-                    disabled={busy}
-                    onClick={() => review(requestClose)}
-                  >
-                    {busy ? 'กำลังดำเนินการ...' : copy.action}
-                  </button>
-                </div>
-              </div>
+              <ConfirmDialog
+                tone={copy.positive ? 'success' : 'danger'}
+                icon="car"
+                kicker={`ที่จอดรถ · ${copy.title}`}
+                title={copy.message}
+                lead={copy.note}
+                facts={[
+                  ['ทะเบียนรถ', getStaffVisitTitle(confirm.item)],
+                  ['ช่องจอด / ห้อง', `${confirm.item.parking_space_code ? `ช่อง ${confirm.item.parking_space_code}` : 'ไม่ระบุช่อง'} · ${confirm.item.room_number ? `ห้อง ${confirm.item.room_number}` : 'บุคคลภายนอก'}`],
+                  [confirm.item.parked_at ? 'เข้าจอดจริง' : 'ช่วงเวลา', <StaffRange key="range" start={confirm.item.parked_at || confirm.item.start_at} end={confirm.item.end_at} openEnded />],
+                ]}
+                busy={busy}
+                confirmLabel={copy.action}
+                // eslint-disable-next-line react-hooks/refs -- ConfirmDialog only calls onConfirm from a button click
+                onConfirm={() => review(requestClose)}
+                onCancel={requestClose}
+              />
             )}
           </Modal>
         )
@@ -6765,21 +6759,7 @@ export function StaffResidentVisitsTab({ rooms, onCountChange, onSummaryChange, 
 
       {notice && (
         <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
-                </svg>
-              </div>
-              <StaffNoticeMessage message={notice.message} type={notice.type} />
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
+          {(requestClose) => <ResultDialog type={notice.type} message={notice.message} onClose={requestClose} />}
         </Modal>
       )}
     </section>
@@ -7429,21 +7409,7 @@ export function StaffSafetyTab({ rooms, onCountChange, onSummaryChange, focusId 
 
       {notice && (
         <Modal title={notice.type === 'success' ? 'สำเร็จ' : 'เกิดข้อผิดพลาด'} onClose={() => setNotice(null)} variant="confirm">
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className={`staff-confirm-icon ${notice.type === 'success' ? 'is-success' : 'is-warning'}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  {notice.type === 'success' ? <polyline points="20 6 9 17 4 12" /> : <path d="M12 9v4M12 17h.01" />}
-                </svg>
-              </div>
-              <StaffNoticeMessage message={notice.message} type={notice.type} />
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
+          {(requestClose) => <ResultDialog type={notice.type} message={notice.message} onClose={requestClose} />}
         </Modal>
       )}
     </section>
@@ -7860,7 +7826,7 @@ function StaffMain() {
       Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
       parcelPhotos.forEach((photo) => payload.append('photos', photo))
       const { data } = await axios.post('/api/staff/parcels', payload)
-      requestClose()
+      requestClose(true)
       setParcelFormOpen(false)
       setActionSuccess(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
       setParcelForm({ room_number: '', sender_name: '', tracking_number: '', description: '' })
@@ -7868,7 +7834,7 @@ function StaffMain() {
       setParcelPhotoError('')
       await loadParcels()
     } catch (err) {
-      requestClose()
+      requestClose(true)
       setParcelFormError(err.response?.data?.message || 'บันทึกพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setParcelSubmitting(false)
@@ -7920,7 +7886,7 @@ function StaffMain() {
     try {
       const { data } = await axios.delete(`/api/staff/waiting-list/${waitingListDelete.id}`)
       setActionSuccess(data.message || 'ลบรายชื่อผู้สนใจสำเร็จ')
-      requestClose()
+      requestClose(true)
       await loadWaitingList()
     } catch (err) {
       setWaitingListDeleteError(err.response?.data?.message || 'ลบรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -8387,7 +8353,7 @@ function StaffMain() {
     try {
       const { data } = await axios.delete(`/api/staff/expenses/${expenseDelete.id}`)
       setActionSuccess(data.message || 'ลบรายจ่ายสำเร็จ')
-      requestClose()
+      requestClose(true)
       loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
     } catch (err) {
       setExpenseDeleteError(err.response?.data?.message || 'ลบรายจ่ายไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -10036,82 +10002,23 @@ function StaffMain() {
         {notifDetail && (
           <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
             {(requestClose) => (
-              <div className="staff-confirm-body">
-                <div className={`staff-confirm-icon is-${notifDetail.tone}`}>
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    {notifDetail.tone === 'info' ? (
-                      <>
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="16" x2="12" y2="12" />
-                        <line x1="12" y1="8" x2="12.01" y2="8" />
-                      </>
-                    ) : (
-                      <>
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </>
-                    )}
-                  </svg>
-                </div>
-                <p className="staff-confirm-message">
-                  <span className={`staff-confirm-message-status is-${notifDetail.tone}`}>{notifDetail.label}</span>
-                </p>
-                {notifDetail.details && notifDetail.details.length > 0 && (
-                  <div className="staff-confirm-details">
-                    {notifDetail.details.map((item) => (
-                      <div className="staff-confirm-detail-row" key={item.label}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <StaffRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
+              <NotificationDialog
+                notification={notifDetail}
+                actions={[
+                  <ActionDialogButton key="close" onClick={requestClose} autoFocus>
                     ปิด
-                  </button>
-                </div>
-              </div>
+                  </ActionDialogButton>,
+                ]}
+              >
+                <StaffRequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
+              </NotificationDialog>
             )}
           </Modal>
         )}
 
         {actionSuccess && (
           <Modal title="สำเร็จ" onClose={() => setActionSuccess('')} variant="confirm">
-            {(requestClose) => (
-              <div className="staff-confirm-body">
-                <div className="staff-confirm-icon is-success">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <StaffNoticeMessage message={actionSuccess} />
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
-              </div>
-            )}
+            {(requestClose) => <ResultDialog message={actionSuccess} onClose={requestClose} />}
           </Modal>
         )}
 
@@ -10136,64 +10043,27 @@ function StaffMain() {
         })()}
 
         {waitingListDelete && (
-          <Modal title="ยืนยันการลบรายชื่อ" onClose={() => setWaitingListDelete(null)} variant="confirm">
+          <Modal title="ยืนยันการลบรายชื่อ" onClose={() => setWaitingListDelete(null)} variant="confirm" locked={waitingListDeleting}>
             {(requestClose) => (
-              <div className="staff-confirm-body">
-                <div className="staff-confirm-icon is-warning">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 9v4M12 17h.01" />
-                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                  </svg>
-                </div>
-                <p className="staff-confirm-message">ลบรายชื่อผู้สนใจนี้ออกจากระบบ?</p>
-                <div className="staff-confirm-details">
-                  <div className="staff-confirm-detail-row">
-                    <span>ชื่อ</span>
-                    <strong>{waitingListDelete.full_name}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{waitingListDelete.phone}</strong>
-                  </div>
-                  {waitingListDelete.room_preference && (
-                    <div className="staff-confirm-detail-row">
-                      <span>ประเภทห้อง</span>
-                      <strong>{waitingListDelete.room_preference}</strong>
-                    </div>
-                  )}
-                </div>
-                {waitingListDeleteError && (
-                  <p className="staff-form-error" role="alert">
-                    {waitingListDeleteError}
-                  </p>
-                )}
-                <div className="staff-form-actions">
-                  <button
-                    type="button"
-                    className="staff-action-btn is-ghost"
-                    disabled={waitingListDeleting}
-                    onClick={requestClose}
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="button"
-                    className="staff-action-btn is-danger"
-                    disabled={waitingListDeleting}
-                    onClick={() => confirmDeleteWaitingListEntry(requestClose)}
-                  >
-                    {waitingListDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                  </button>
-                </div>
-              </div>
+              <ConfirmDialog
+                tone="danger"
+                icon="trash"
+                kicker="รายชื่อรอเข้าพัก"
+                title="ลบรายชื่อผู้สนใจนี้?"
+                lead="ลบแล้วกู้คืนไม่ได้ ต้องเพิ่มรายชื่อใหม่หากต้องการติดต่ออีก"
+                facts={[
+                  ['ชื่อ', waitingListDelete.full_name],
+                  ['เบอร์โทร', waitingListDelete.phone],
+                  ['ประเภทห้อง', waitingListDelete.room_preference],
+                ]}
+                error={waitingListDeleteError}
+                busy={waitingListDeleting}
+                busyLabel="กำลังลบ..."
+                confirmLabel="ลบรายชื่อ"
+                confirmIcon="trash"
+                onConfirm={() => confirmDeleteWaitingListEntry(requestClose)}
+                onCancel={requestClose}
+              />
             )}
           </Modal>
         )}
@@ -11856,62 +11726,27 @@ function StaffMain() {
       </div>
 
       {expenseDelete && (
-        <Modal title="ยืนยันการลบรายจ่าย" onClose={() => setExpenseDelete(null)} variant="confirm">
+        <Modal title="ยืนยันการลบรายจ่าย" onClose={() => setExpenseDelete(null)} variant="confirm" locked={expenseDeleting}>
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-warning">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 9v4M12 17h.01" />
-                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ลบรายจ่ายนี้ออกจากระบบ?</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่</span>
-                  <strong>{formatDate(expenseDelete.expense_date)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>หมวดหมู่</span>
-                  <strong>{expenseDelete.category}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>จำนวนเงิน</span>
-                  <strong>฿{formatCurrency(expenseDelete.amount)}</strong>
-                </div>
-              </div>
-              {expenseDeleteError && (
-                <p className="staff-form-error" role="alert">
-                  {expenseDeleteError}
-                </p>
-              )}
-              <div className="staff-form-actions">
-                <button
-                  type="button"
-                  className="staff-action-btn is-ghost"
-                  disabled={expenseDeleting}
-                  onClick={requestClose}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-danger"
-                  disabled={expenseDeleting}
-                  onClick={() => confirmDeleteExpense(requestClose)}
-                >
-                  {expenseDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="danger"
+              icon="trash"
+              kicker="รายจ่าย"
+              title="ลบรายจ่ายนี้?"
+              lead="ยอดสรุปรายจ่ายจะเปลี่ยนตามทันที"
+              facts={[
+                ['วันที่', formatDate(expenseDelete.expense_date)],
+                ['หมวดหมู่', expenseDelete.category],
+                ['จำนวนเงิน', `฿${formatCurrency(expenseDelete.amount)}`],
+              ]}
+              error={expenseDeleteError}
+              busy={expenseDeleting}
+              busyLabel="กำลังลบ..."
+              confirmLabel="ลบรายจ่าย"
+              confirmIcon="trash"
+              onConfirm={() => confirmDeleteExpense(requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
@@ -13358,203 +13193,90 @@ function StaffMain() {
       )}
 
       {maintenanceAcceptConfirm && (
-        <Modal title="ยืนยันรับเรื่องแจ้งซ่อม" onClose={() => setMaintenanceAcceptConfirm(null)} variant="confirm">
+        <Modal title="ยืนยันรับเรื่องแจ้งซ่อม" onClose={() => { setMaintenanceAcceptConfirm(null); setRequestsError('') }} variant="confirm" locked={processingRequestKey === `maintenance-${maintenanceAcceptConfirm.id}`}>
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-info">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันรับเรื่องคำขอแจ้งซ่อม</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{maintenanceAcceptConfirm.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {maintenanceAcceptConfirm.first_name} {maintenanceAcceptConfirm.last_name}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ประเภท</span>
-                  <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceAcceptConfirm.category] || 'อื่นๆ'}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ช่วงเวลาที่สะดวก</span>
-                  <strong>{MAINTENANCE_TIME_LABEL[maintenanceAcceptConfirm.preferred_time] || 'เวลาไหนก็ได้'}</strong>
-                </div>
-                {maintenanceAcceptConfirm.contact_phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{maintenanceAcceptConfirm.contact_phone}</strong>
-                  </div>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่แจ้งซ่อม</span>
-                  <strong>{formatDateTime(maintenanceAcceptConfirm.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>รายละเอียดปัญหา</span>
-                  <strong>{maintenanceAcceptConfirm.description || '-'}</strong>
-                </div>
-              </div>
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `maintenance-${maintenanceAcceptConfirm.id}`}
-                  onClick={handleConfirmMaintenanceAccept}
-                >
-                  {processingRequestKey === `maintenance-${maintenanceAcceptConfirm.id}`
-                    ? 'กำลังดำเนินการ...'
-                    : 'ยืนยันรับเรื่อง'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="info"
+              icon="tool"
+              kicker="แจ้งซ่อม"
+              title="รับเรื่องคำขอแจ้งซ่อมนี้?"
+              lead="ผู้เช่าจะเห็นสถานะ “กำลังดำเนินการ” ทันที"
+              note={maintenanceAcceptConfirm.description || '-'}
+              noteLabel="รายละเอียดปัญหา"
+              facts={[
+                ['ห้อง', maintenanceAcceptConfirm.room_number],
+                ['ผู้เช่า', `${maintenanceAcceptConfirm.first_name || ''} ${maintenanceAcceptConfirm.last_name || ''}`.trim() || '-'],
+                ['ประเภท', MAINTENANCE_CATEGORY_LABEL[maintenanceAcceptConfirm.category] || 'อื่นๆ'],
+                ['ช่วงเวลาที่สะดวก', MAINTENANCE_TIME_LABEL[maintenanceAcceptConfirm.preferred_time] || 'เวลาไหนก็ได้'],
+                ['เบอร์โทร', maintenanceAcceptConfirm.contact_phone],
+                ['วันที่แจ้ง', formatDateTime(maintenanceAcceptConfirm.created_at)],
+              ]}
+              error={requestsError}
+              busy={processingRequestKey === `maintenance-${maintenanceAcceptConfirm.id}`}
+              busyLabel="กำลังรับเรื่อง..."
+              confirmLabel="รับเรื่อง"
+              confirmIcon="check"
+              onConfirm={handleConfirmMaintenanceAccept}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
 
       {maintenanceRejectConfirm && (
-        <Modal title="ยืนยันการปฏิเสธแจ้งซ่อม" onClose={() => setMaintenanceRejectConfirm(null)} variant="confirm">
+        <Modal title="ยืนยันการปฏิเสธแจ้งซ่อม" onClose={() => { setMaintenanceRejectConfirm(null); setRequestsError('') }} variant="confirm" locked={processingRequestKey === `maintenance-${maintenanceRejectConfirm.id}`}>
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-warning">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 9v4M12 17h.01" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันปฏิเสธคำขอแจ้งซ่อม</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{maintenanceRejectConfirm.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {maintenanceRejectConfirm.first_name} {maintenanceRejectConfirm.last_name}
-                  </strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ประเภท</span>
-                  <strong>{MAINTENANCE_CATEGORY_LABEL[maintenanceRejectConfirm.category] || 'อื่นๆ'}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ช่วงเวลาที่สะดวก</span>
-                  <strong>{MAINTENANCE_TIME_LABEL[maintenanceRejectConfirm.preferred_time] || 'เวลาไหนก็ได้'}</strong>
-                </div>
-                {maintenanceRejectConfirm.contact_phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{maintenanceRejectConfirm.contact_phone}</strong>
-                  </div>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>สถานะ</span>
-                  <strong>{MAINTENANCE_STATUS_LABEL[maintenanceRejectConfirm.status] || maintenanceRejectConfirm.status}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่แจ้งซ่อม</span>
-                  <strong>{formatDateTime(maintenanceRejectConfirm.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>รายละเอียดปัญหา</span>
-                  <strong>{maintenanceRejectConfirm.description || '-'}</strong>
-                </div>
-              </div>
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `maintenance-${maintenanceRejectConfirm.id}`}
-                  onClick={handleConfirmMaintenanceReject}
-                >
-                  {processingRequestKey === `maintenance-${maintenanceRejectConfirm.id}`
-                    ? 'กำลังดำเนินการ...'
-                    : 'ยืนยันปฏิเสธ'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="danger"
+              icon="x"
+              kicker="แจ้งซ่อม"
+              title="ปฏิเสธคำขอแจ้งซ่อมนี้?"
+              lead="คำขอจะถูกปิดและผู้เช่าจะเห็นสถานะ “ถูกยกเลิก”"
+              note={maintenanceRejectConfirm.description || '-'}
+              noteLabel="รายละเอียดปัญหา"
+              facts={[
+                ['ห้อง', maintenanceRejectConfirm.room_number],
+                ['ผู้เช่า', `${maintenanceRejectConfirm.first_name || ''} ${maintenanceRejectConfirm.last_name || ''}`.trim() || '-'],
+                ['ประเภท', MAINTENANCE_CATEGORY_LABEL[maintenanceRejectConfirm.category] || 'อื่นๆ'],
+                ['สถานะ', MAINTENANCE_STATUS_LABEL[maintenanceRejectConfirm.status] || maintenanceRejectConfirm.status],
+                ['ช่วงเวลาที่สะดวก', MAINTENANCE_TIME_LABEL[maintenanceRejectConfirm.preferred_time] || 'เวลาไหนก็ได้'],
+                ['เบอร์โทร', maintenanceRejectConfirm.contact_phone],
+                ['วันที่แจ้ง', formatDateTime(maintenanceRejectConfirm.created_at)],
+              ]}
+              error={requestsError}
+              busy={processingRequestKey === `maintenance-${maintenanceRejectConfirm.id}`}
+              busyLabel="กำลังปฏิเสธ..."
+              confirmLabel="ปฏิเสธแจ้งซ่อม"
+              confirmIcon="x"
+              onConfirm={handleConfirmMaintenanceReject}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
 
       {maintenanceCompleteConfirm && (
-        <Modal title="ยืนยันงานเสร็จสิ้น" onClose={() => setMaintenanceCompleteConfirm(null)} variant="confirm">
+        <Modal title="ยืนยันงานเสร็จสิ้น" onClose={() => { setMaintenanceCompleteConfirm(null); setRequestsError('') }} variant="confirm" locked={processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}`}>
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-success">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันว่างานซ่อมเสร็จสิ้นแล้ว</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{maintenanceCompleteConfirm.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {maintenanceCompleteConfirm.first_name} {maintenanceCompleteConfirm.last_name}
-                  </strong>
-                </div>
-              </div>
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}`}
-                  onClick={handleConfirmMaintenanceComplete}
-                >
-                  {processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}`
-                    ? 'กำลังดำเนินการ...'
-                    : 'ยืนยันเสร็จสิ้น'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="success"
+              icon="check"
+              kicker="แจ้งซ่อม"
+              title="งานซ่อมนี้เสร็จสิ้นแล้ว?"
+              lead="ผู้เช่าจะเห็นสถานะ “ซ่อมเสร็จสิ้นแล้ว” และได้รับแจ้งเตือน"
+              facts={[
+                ['ห้อง', maintenanceCompleteConfirm.room_number],
+                ['ผู้เช่า', `${maintenanceCompleteConfirm.first_name || ''} ${maintenanceCompleteConfirm.last_name || ''}`.trim() || '-'],
+                ['ประเภท', MAINTENANCE_CATEGORY_LABEL[maintenanceCompleteConfirm.category] || 'อื่นๆ'],
+              ]}
+              error={requestsError}
+              busy={processingRequestKey === `maintenance-${maintenanceCompleteConfirm.id}`}
+              busyLabel="กำลังบันทึก..."
+              confirmLabel="ยืนยันเสร็จสิ้น"
+              confirmIcon="check"
+              onConfirm={handleConfirmMaintenanceComplete}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
@@ -13855,46 +13577,29 @@ function StaffMain() {
       )}
 
       {parcelSaveConfirm && (
-        <Modal title="ยืนยันการบันทึกพัสดุ" onClose={() => setParcelSaveConfirm(false)} variant="confirm">
+        <Modal title="ยืนยันการบันทึกพัสดุ" onClose={() => setParcelSaveConfirm(false)} variant="confirm" locked={parcelSubmitting}>
           {(requestClose) => {
             const room = rooms.find((item) => String(item.room_number) === String(parcelForm.room_number))
             return (
-              <div className="staff-confirm-body">
-                <div className="staff-confirm-icon is-money">
-                  <PackageIcon size={28} strokeWidth={2.2} />
-                </div>
-                <p className="staff-confirm-message">บันทึกพัสดุนี้และแจ้งผู้เช่าใช่หรือไม่?</p>
-                <div className="staff-confirm-details">
-                  <div className="staff-confirm-detail-row">
-                    <span>ห้อง</span>
-                    <strong>{parcelForm.room_number}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>ผู้เช่า</span>
-                    <strong>{room?.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>ผู้ส่ง</span>
-                    <strong>{parcelForm.sender_name.trim() || 'พัสดุทั่วไป'}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>เลขพัสดุ</span>
-                    <strong>{parcelForm.tracking_number.trim() || '-'}</strong>
-                  </div>
-                  <div className="staff-confirm-detail-row">
-                    <span>รูปที่แนบ</span>
-                    <strong>{parcelPhotos.length} รูป</strong>
-                  </div>
-                </div>
-                <div className="staff-form-actions">
-                  <button type="button" className="staff-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>
-                    ยกเลิก
-                  </button>
-                  <button type="button" className="staff-action-btn is-primary" onClick={() => handleCreateParcel(requestClose)} disabled={parcelSubmitting}>
-                    {parcelSubmitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
-                  </button>
-                </div>
-              </div>
+              <ConfirmDialog
+                tone="info"
+                icon="box"
+                kicker="พัสดุ"
+                title="บันทึกพัสดุและแจ้งผู้เช่า?"
+                lead="ผู้เช่าห้องนี้จะได้รับแจ้งเตือนให้มารับพัสดุทันที"
+                facts={[
+                  ['ห้อง', parcelForm.room_number],
+                  ['ผู้เช่า', room?.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}` : '-'],
+                  ['ผู้ส่ง', parcelForm.sender_name.trim() || 'พัสดุทั่วไป'],
+                  ['เลขพัสดุ', parcelForm.tracking_number.trim() || '-'],
+                  ['รูปที่แนบ', `${parcelPhotos.length} รูป`],
+                ]}
+                busy={parcelSubmitting}
+                busyLabel="กำลังบันทึก..."
+                confirmLabel="บันทึกและแจ้งผู้เช่า"
+                onConfirm={() => handleCreateParcel(requestClose)}
+                onCancel={requestClose}
+              />
             )
           }}
         </Modal>
@@ -13923,123 +13628,55 @@ function StaffMain() {
       )}
 
       {moveoutConfirmRequest && (
-        <Modal title="ยืนยันการย้ายออก" onClose={() => setMoveoutConfirmRequest(null)} variant="confirm">
-          {(requestClose) => (
-            <div className="staff-confirm-body is-moveout-confirm">
-              <div className="staff-confirm-icon is-warning">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 9v4M12 17h.01" />
-                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">
-                อนุมัติย้ายออกห้อง {moveoutConfirmRequest.room_number}
-                <small className="staff-moveout-confirm-sub">
-                  {moveoutConfirmRequest.first_name} {moveoutConfirmRequest.last_name}
-                  {moveoutConfirmRequest.phone ? ` · ${moveoutConfirmRequest.phone}` : ''}
-                </small>
-              </p>
-              {(() => {
-                const request = moveoutConfirmRequest
-                const balanceItems = request.outstanding?.items ?? []
-                const outstanding = Number(request.outstanding?.amount) || 0
-                const deposit = Number(request.deposit_amount) || 0
-                const depositPaid = request.deposit_paid == null ? deposit : Math.min(deposit, Number(request.deposit_paid) || 0)
-                const contractEnd = request.source_rental_end_date
-                const endDay = contractEnd ? new Date(contractEnd) : null
-                if (endDay) endDay.setHours(0, 0, 0, 0)
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                const daysEarly = endDay ? Math.ceil((endDay - today) / 86400000) : null
-                const leavesEarly = daysEarly !== null && daysEarly > 0
-                return (
-                  <>
-                    <div className="staff-confirm-details">
-                      <div className="staff-confirm-detail-row">
-                        <span>ต้องการย้ายออก</span>
-                        <strong>{request.preferred_move_date ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ'}</strong>
-                      </div>
-                      <div className="staff-confirm-detail-row">
-                        <span>สิ้นสุดสัญญา</span>
-                        <strong>
-                          {formatDate(contractEnd)}
-                          {leavesEarly && <em className="staff-moveout-confirm-tag is-danger">ก่อนครบ {daysEarly} วัน</em>}
-                        </strong>
-                      </div>
-                      <div className="staff-confirm-detail-row">
-                        <span>ตรวจสภาพห้อง</span>
-                        <strong className={request.inspection_id ? 'is-success' : 'is-danger'}>
-                          {request.inspection_id ? '✓ ตรวจแล้ว' : '✕ ยังไม่ได้ตรวจ'}
-                        </strong>
-                      </div>
-                      <div className="staff-confirm-detail-row">
-                        <span>ยอดค้างชำระ</span>
-                        <strong className={balanceItems.length ? 'is-danger' : 'is-success'}>
-                          {outstanding > 0 ? `฿${formatCurrency(outstanding)}` : balanceItems.length ? 'มีสลิปรอตรวจ' : '✓ ไม่มี'}
-                        </strong>
-                      </div>
-                      <div className="staff-confirm-detail-row">
-                        <span>เงินมัดจำ</span>
-                        <strong className={depositPaid > 0 ? (leavesEarly ? 'is-danger' : 'is-success') : ''}>
-                          {depositPaid > 0
-                            ? `฿${formatCurrency(depositPaid)} · ${leavesEarly ? 'ริบ' : 'คืนให้ผู้เช่า'}`
-                            : deposit > 0 ? 'ยังไม่ได้ชำระ · ไม่มียอดต้องคืน' : 'ไม่มี'}
-                        </strong>
-                      </div>
-                    </div>
-                    <div className="staff-moveout-confirm-effects">
-                      <strong>เมื่อกดยืนยันจะเกิดขึ้นทันที</strong>
-                      <ul>
-                        <li>ห้อง {request.room_number} กลับเป็นห้องว่าง พร้อมให้เช่าต่อ</li>
-                        <li>สัญญาของผู้เช่าเปลี่ยนเป็น "สัญญาเก่า"</li>
-                        <li>บัญชีผู้เช่าถูกระงับ เข้าสู่ระบบไม่ได้จนกว่าจะลงทะเบียนเช่าใหม่</li>
-                        <li>คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ค้างอยู่จะถูกยกเลิก</li>
-                      </ul>
-                      {depositPaid > 0 && (
-                        <p>ขั้นต่อไป: บันทึก{leavesEarly ? 'การริบ' : 'การคืน'}เงินมัดจำที่เมนู "สัญญาที่เสร็จสมบูรณ์"</p>
-                      )}
-                    </div>
-                    {balanceItems.length > 0 && (
-                      <div className="staff-confirm-warning">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M12 9v4M12 17h.01" />
-                          <circle cx="12" cy="12" r="9" />
-                        </svg>
-                        <p>ยังอนุมัติไม่ได้ ต้องเก็บเงิน {balanceItems.map((item) => item.label).join(', ')} ให้ครบก่อน</p>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-primary"
-                  disabled={
-                    processingRequestKey === `tenant-${moveoutConfirmRequest.id}`
-                    || (moveoutConfirmRequest.outstanding?.items?.length ?? 0) > 0
-                  }
-                  onClick={handleConfirmMoveoutApproval}
-                >
-                  {processingRequestKey === `tenant-${moveoutConfirmRequest.id}`
-                    ? 'กำลังดำเนินการ...'
-                    : 'ยืนยันอนุมัติ'}
-                </button>
-              </div>
-            </div>
-          )}
+        <Modal title="ยืนยันการย้ายออก" onClose={() => { setMoveoutConfirmRequest(null); setRequestsError('') }} variant="confirm" locked={processingRequestKey === `tenant-${moveoutConfirmRequest.id}`}>
+          {(requestClose) => {
+            const request = moveoutConfirmRequest
+            const balanceItems = request.outstanding?.items ?? []
+            const outstanding = Number(request.outstanding?.amount) || 0
+            const deposit = Number(request.deposit_amount) || 0
+            const depositPaid = request.deposit_paid == null ? deposit : Math.min(deposit, Number(request.deposit_paid) || 0)
+            const contractEnd = request.source_rental_end_date
+            const endDay = contractEnd ? new Date(contractEnd) : null
+            if (endDay) endDay.setHours(0, 0, 0, 0)
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const daysEarly = endDay ? Math.ceil((endDay - today) / 86400000) : null
+            const leavesEarly = daysEarly !== null && daysEarly > 0
+            return (
+              <ConfirmDialog
+                tone="pending"
+                icon="door"
+                kicker="แจ้งย้ายออก"
+                title={`อนุมัติย้ายออกห้อง ${request.room_number}?`}
+                lead={[`${request.first_name || ''} ${request.last_name || ''}`.trim(), request.phone].filter(Boolean).join(' · ')}
+                facts={[
+                  ['ต้องการย้ายออก', request.preferred_move_date ? formatDateOnly(request.preferred_move_date) : 'ไม่ระบุ'],
+                  ['สิ้นสุดสัญญา', `${formatDate(contractEnd)}${leavesEarly ? ` (ก่อนครบ ${daysEarly} วัน)` : ''}`],
+                  ['ตรวจสภาพห้อง', request.inspection_id ? '✓ ตรวจแล้ว' : '✕ ยังไม่ได้ตรวจ'],
+                  ['ยอดค้างชำระ', outstanding > 0 ? `฿${formatCurrency(outstanding)}` : balanceItems.length ? 'มีสลิปรอตรวจ' : '✓ ไม่มี'],
+                  ['เงินมัดจำ', depositPaid > 0
+                    ? `฿${formatCurrency(depositPaid)} · ${leavesEarly ? 'ริบ' : 'คืนให้ผู้เช่า'}`
+                    : deposit > 0 ? 'ยังไม่ได้ชำระ · ไม่มียอดต้องคืน' : 'ไม่มี'],
+                ]}
+                outcomeTitle="เมื่อกดยืนยันจะเกิดขึ้นทันที"
+                outcomes={[
+                  `ห้อง ${request.room_number} กลับเป็นห้องว่าง พร้อมให้เช่าต่อ`,
+                  'สัญญาของผู้เช่าเปลี่ยนเป็น “สัญญาเก่า”',
+                  'บัญชีผู้เช่าถูกระงับ เข้าสู่ระบบไม่ได้จนกว่าจะลงทะเบียนเช่าใหม่',
+                  'คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ค้างอยู่จะถูกยกเลิก',
+                  depositPaid > 0 && `ขั้นต่อไป: บันทึก${leavesEarly ? 'การริบ' : 'การคืน'}เงินมัดจำที่เมนู “สัญญาที่เสร็จสมบูรณ์”`,
+                ]}
+                note={balanceItems.length > 0 ? `ต้องเก็บเงิน ${balanceItems.map((item) => item.label).join(', ')} ให้ครบก่อน` : null}
+                noteLabel="ยังอนุมัติไม่ได้"
+                error={requestsError}
+                busy={processingRequestKey === `tenant-${request.id}`}
+                confirmDisabled={balanceItems.length > 0}
+                confirmLabel="อนุมัติย้ายออก"
+                onConfirm={handleConfirmMoveoutApproval}
+                onCancel={requestClose}
+              />
+            )
+          }}
         </Modal>
       )}
 
@@ -14057,112 +13694,51 @@ function StaffMain() {
       {renewApproveConfirm && renewApproveConfirm.type !== 'move_room' && (
         <Modal
           title="ยืนยันการอนุมัติต่อสัญญา"
-          onClose={() => setRenewApproveConfirm(null)}
+          onClose={() => { setRenewApproveConfirm(null); setRequestsError('') }}
           variant="confirm"
+          locked={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
         >
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-success">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="staff-confirm-message">ยืนยันอนุมัติคำขอต่อสัญญา</p>
-              <div className="staff-confirm-details">
-                <div className="staff-confirm-detail-row">
-                  <span>ห้อง</span>
-                  <strong>{renewApproveConfirm.room_number}</strong>
-                </div>
-                <div className="staff-confirm-detail-row">
-                  <span>ผู้เช่า</span>
-                  <strong>
-                    {renewApproveConfirm.first_name} {renewApproveConfirm.last_name}
-                  </strong>
-                </div>
-                {renewApproveConfirm.type === 'renew' && (
-                  <>
-                    <div className="staff-confirm-detail-row">
-                      <span>ระยะเวลา</span>
-                      <strong>
-                        {RENEW_DURATION_LABEL[renewApproveConfirm.renew_duration_months] ||
-                          `${renewApproveConfirm.renew_duration_months} เดือน`}
-                      </strong>
-                    </div>
-                    <div className="staff-confirm-detail-row">
-                      <span>รูปแบบการชำระ</span>
-                      <strong>
-                        {RENEW_PAYMENT_TYPE_LABEL[renewApproveConfirm.renew_payment_type] ||
-                          renewApproveConfirm.renew_payment_type}
-                      </strong>
-                    </div>
-                  </>
-                )}
-                {renewApproveConfirm.phone && (
-                  <div className="staff-confirm-detail-row">
-                    <span>เบอร์โทร</span>
-                    <strong>{renewApproveConfirm.phone}</strong>
-                  </div>
-                )}
-                <div className="staff-confirm-detail-row">
-                  <span>วันที่ส่งคำขอ</span>
-                  <strong>{formatDateTime(renewApproveConfirm.created_at)}</strong>
-                </div>
-                <div className="staff-confirm-detail-row is-note">
-                  <span>หมายเหตุ</span>
-                  <strong>{renewApproveConfirm.note || '-'}</strong>
-                </div>
-              </div>
+            <ConfirmDialog
+              tone="success"
+              icon="check"
+              kicker="คำขอต่อสัญญา"
+              title="อนุมัติคำขอต่อสัญญานี้?"
+              lead={renewOutstandingAmount > 0 ? 'ต้องเก็บยอดค้างชำระให้ครบก่อน จึงจะอนุมัติได้' : 'สัญญาจะขยายตามระยะเวลาที่ผู้เช่าขอทันที'}
+              facts={[
+                ['ห้อง', renewApproveConfirm.room_number],
+                ['ผู้เช่า', `${renewApproveConfirm.first_name || ''} ${renewApproveConfirm.last_name || ''}`.trim() || '-'],
+                renewApproveConfirm.type === 'renew' && ['ระยะเวลา', RENEW_DURATION_LABEL[renewApproveConfirm.renew_duration_months] || `${renewApproveConfirm.renew_duration_months} เดือน`],
+                renewApproveConfirm.type === 'renew' && ['รูปแบบการชำระ', RENEW_PAYMENT_TYPE_LABEL[renewApproveConfirm.renew_payment_type] || renewApproveConfirm.renew_payment_type],
+                ['เบอร์โทร', renewApproveConfirm.phone],
+                ['วันที่ส่งคำขอ', formatDateTime(renewApproveConfirm.created_at)],
+                ['หมายเหตุ', renewApproveConfirm.note || '-'],
+              ]}
+              note={renewOutstandingAmount > 0 ? `ยอดค้างชำระ ฿${formatCurrency(renewOutstandingAmount)} · ให้ผู้เช่าชำระผ่านระบบ หรือกดเก็บเงินสดด้านล่าง แล้วกลับมาอนุมัติอีกครั้ง` : null}
+              noteLabel="ต้องชำระก่อนอนุมัติต่อสัญญา"
+              error={requestsError}
+              busy={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
+              confirmDisabled={renewOutstandingAmount > 0 && !renewOutstandingRoom}
+              confirmLabel={renewOutstandingAmount > 0 ? 'เก็บเงินสดยอดค้าง' : 'อนุมัติต่อสัญญา'}
+              confirmIcon={renewOutstandingAmount > 0 ? undefined : 'check'}
+              onConfirm={renewOutstandingAmount > 0
+                ? () => {
+                    setRenewApproveConfirm(null)
+                    openCollect(renewOutstandingRoom)
+                  }
+                : handleConfirmRenewApproval}
+              onCancel={requestClose}
+            >
               {renewOutstandingAmount > 0 && (
-                <div className="staff-renew-outstanding" role="alert">
-                  <strong>มียอดค้างชำระ ฿{formatCurrency(renewOutstandingAmount)} · ต้องชำระก่อนอนุมัติต่อสัญญา</strong>
-                  <ul>
-                    {renewApproveConfirm.outstanding.items.map((item, index) => (
-                      <li key={`${item.type}-${index}`}>
-                        <span>{item.label}{item.status === 'overdue' ? ' (เกินกำหนด)' : ''}</span>
-                        <b>฿{formatCurrency(item.amount)}</b>
-                      </li>
-                    ))}
-                  </ul>
-                  <small>ให้ผู้เช่าชำระผ่านระบบ หรือกดเก็บเงินสดด้านล่าง แล้วกลับมาอนุมัติอีกครั้ง</small>
-                </div>
+                <ActionDialogItems
+                  label="รายการค้างชำระ"
+                  items={renewApproveConfirm.outstanding.items.map((item) => ({
+                    label: `${item.label}${item.status === 'overdue' ? ' (เกินกำหนด)' : ''}`,
+                    amount: `฿${formatCurrency(item.amount)}`,
+                  }))}
+                />
               )}
-              {requestsError && <p className="staff-form-error">{requestsError}</p>}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                {renewOutstandingAmount > 0 ? (
-                  <button
-                    type="button"
-                    className="staff-action-btn is-primary"
-                    disabled={!renewOutstandingRoom}
-                    onClick={() => {
-                      setRenewApproveConfirm(null)
-                      openCollect(renewOutstandingRoom)
-                    }}
-                  >
-                    เก็บเงินสดยอดค้าง
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="staff-action-btn is-primary"
-                    disabled={processingRequestKey === `tenant-${renewApproveConfirm.id}`}
-                    onClick={handleConfirmRenewApproval}
-                  >
-                    {processingRequestKey === `tenant-${renewApproveConfirm.id}` ? 'กำลังดำเนินการ...' : 'ยืนยันอนุมัติ'}
-                  </button>
-                )}
-              </div>
-            </div>
+            </ConfirmDialog>
           )}
         </Modal>
       )}

@@ -5,6 +5,7 @@ import PhotoLightbox from './PhotoLightbox.jsx'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
 import { matchesSearch } from '../utils/search.js'
+import { ConfirmDialog, ResultDialog } from './ActionDialog.jsx'
 import './AnnouncementBoard.css'
 
 const ANNOUNCEMENTS_PER_PAGE = 10
@@ -1247,90 +1248,33 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
             className="announcement-dialog announcement-confirm"
             role="alertdialog"
             aria-modal="true"
-            aria-labelledby="announcement-confirm-title"
+            aria-label={CONFIRM_TEXT[confirm.kind].title}
           >
-            <div className={`announcement-confirm-icon is-${confirm.kind}`}>
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                {confirm.kind === 'delete' ? (
-                  <>
-                    <path d="M12 9v4M12 17h.01" />
-                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                  </>
-                ) : confirm.kind === 'edit' ? (
-                  <>
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </>
-                ) : (
-                  <>
-                    <path d="M4 11v2a1 1 0 0 0 1 1h2l5 4V6L7 10H5a1 1 0 0 0-1 1Z" />
-                    <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
-                  </>
-                )}
-              </svg>
-            </div>
-            <h3 id="announcement-confirm-title">
-              {CONFIRM_TEXT[confirm.kind].title}
-            </h3>
-            <p className="announcement-confirm-message">
-              {CONFIRM_TEXT[confirm.kind].message}
-            </p>
-            <div className="announcement-confirm-detail">
-              <span>หัวข้อ</span>
-              <strong>{confirm.title}</strong>
-            </div>
-            {confirm.kind !== 'delete' && photoCount > 0 && (
-              <div className="announcement-confirm-detail">
-                <span>รูปภาพ</span>
-                <strong>{photoCount} รูป</strong>
-              </div>
-            )}
-            {confirm.kind !== 'delete' && (
-              <div className="announcement-confirm-detail">
-                <span>ลบอัตโนมัติ</span>
-                <strong>{describeExpiry(confirm.expiry)}</strong>
-              </div>
-            )}
-            {confirm.kind !== 'delete' && form.tone === 'warning' && confirm.popup && (
-              <div className="announcement-confirm-detail">
-                <span>แสดง popup</span>
-                <strong>
-                  {confirm.popup.kind === 'duration'
+            <ConfirmDialog
+              tone={confirm.kind === 'delete' ? 'danger' : 'info'}
+              icon={confirm.kind === 'delete' ? 'trash' : 'bell'}
+              kicker="ประกาศจากหอพัก"
+              title={CONFIRM_TEXT[confirm.kind].title}
+              lead={CONFIRM_TEXT[confirm.kind].message}
+              facts={[
+                ['หัวข้อ', confirm.title],
+                confirm.kind !== 'delete' && photoCount > 0 && ['รูปภาพ', `${photoCount} รูป`],
+                confirm.kind !== 'delete' && ['ลบอัตโนมัติ', describeExpiry(confirm.expiry)],
+                confirm.kind !== 'delete' && form.tone === 'warning' && confirm.popup && [
+                  'แสดง popup',
+                  confirm.popup.kind === 'duration'
                     ? `${formatDuration(confirm.popup.minutes)} นับจากตอนกดยืนยัน`
                     : confirm.popup.kind === 'keep'
                       ? `จนถึง ${formatExpiryDate(form.popupUntil)}`
-                      : 'จนกว่าจะกดรับทราบ'}
-                </strong>
-              </div>
-            )}
-            <div className="announcement-form-actions">
-              <button
-                type="button"
-                className="announcement-board-cancel"
-                onClick={closeConfirm}
-                disabled={submitting}
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                className={`announcement-board-submit${confirm.kind === 'delete' ? ' is-danger' : ''}`}
-                onClick={confirm.kind === 'delete' ? deleteAnnouncement : publishAnnouncement}
-                disabled={submitting}
-              >
-                {submitting ? 'กำลังดำเนินการ...' : CONFIRM_TEXT[confirm.kind].button}
-              </button>
-            </div>
+                      : 'จนกว่าจะกดรับทราบ',
+                ],
+              ]}
+              busy={submitting}
+              confirmLabel={CONFIRM_TEXT[confirm.kind].button}
+              confirmIcon={confirm.kind === 'delete' ? 'trash' : undefined}
+              onConfirm={confirm.kind === 'delete' ? deleteAnnouncement : publishAnnouncement}
+              onCancel={closeConfirm}
+            />
           </section>
         </div>
       )}
@@ -1342,38 +1286,8 @@ function AnnouncementBoard({ announcements = [], canManage = false, apiBase, onC
             if (event.target === event.currentTarget) closeResult()
           }}
         >
-          <section
-            className="announcement-dialog announcement-confirm"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="announcement-result-title"
-          >
-            <div className="announcement-confirm-icon is-success">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </div>
-            <h3 id="announcement-result-title">สำเร็จ</h3>
-            <p className="announcement-confirm-message">{result.message}</p>
-            <div className="announcement-confirm-detail">
-              <span>หัวข้อ</span>
-              <strong>{result.title}</strong>
-            </div>
-            <div className="announcement-form-actions">
-              <button type="button" className="announcement-board-submit" onClick={closeResult} autoFocus>
-                ปิด
-              </button>
-            </div>
+          <section className="announcement-dialog announcement-confirm" role="alertdialog" aria-modal="true" aria-label="สำเร็จ">
+            <ResultDialog message={`${result.message} · หัวข้อ: ${result.title}`} onClose={closeResult} />
           </section>
         </div>
       )}

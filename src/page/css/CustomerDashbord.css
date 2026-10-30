@@ -21,6 +21,12 @@
   margin-bottom: 24px;
 }
 
+/* AppHeader.css pulls every header up with margin-bottom: -8px; on this page the reminders
+   panel sits right below the header and would cover its subtitle and date pill. */
+.dashboard-header.app-header.app-header {
+  margin-bottom: 16px;
+}
+
 .dashboard-header .auth-icon {
   width: 48px;
   height: 48px;

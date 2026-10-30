@@ -25,6 +25,7 @@ import {
 import { ContractImagePicker } from './RentalContract.jsx'
 import { addContractMonths } from '../utils/rentalContract.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+import { ConfirmDialog } from './ActionDialog.jsx'
 import { API_ORIGIN } from '../config/api.js'
 import { MARKET_TENANT_API_PREFIX } from '../config/serviceRoutes.js'
 import { focusAndHighlight } from '../utils/focusHighlight.js'
@@ -166,7 +167,7 @@ function StatusPill({ status }) {
 const openModals = []
 const MODAL_EXIT_MS = 180
 
-function MarketModal({ title, subtitle, icon = 'shop', tone = 'primary', size = 'md', busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', hideCancel = false, footer, children }) {
+function MarketModal({ bare = false, title, subtitle, icon = 'shop', tone = 'primary', size = 'md', busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', hideCancel = false, footer, children }) {
   const titleId = useId()
   const closeRef = useRef(onClose)
   const busyRef = useRef(busy)
@@ -207,37 +208,43 @@ function MarketModal({ title, subtitle, icon = 'shop', tone = 'primary', size = 
         className={`market-modal is-${tone} is-${size}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-labelledby={bare ? undefined : titleId}
+        aria-label={bare ? title : undefined}
         onClick={(event) => event.stopPropagation()}
         onSubmit={onSubmit ? (event) => {
           event.preventDefault()
           if (!busy && !submitDisabled) onSubmit()
         } : undefined}
       >
-        <header className="market-modal-head">
-          <span className="market-modal-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
-          <div>
-            <h3 id={titleId}>{title}</h3>
-            {subtitle && <p>{subtitle}</p>}
-          </div>
-          <button type="button" className="market-modal-close" aria-label="ปิด" disabled={busy} onClick={requestClose}>×</button>
-        </header>
-        <div className="market-modal-body">
-          {children}
-          {error && <p className="market-error" role="alert">{error}</p>}
-        </div>
-        {(onSubmit || footer) && (
-          <footer className="market-modal-actions">
-            {footer}
-            {onSubmit && (
-              <>
-                {!hideCancel && <button type="button" className="market-btn" disabled={busy} onClick={requestClose}>{cancelLabel}</button>}
-                <button type="submit" className={`market-btn ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} disabled={busy || submitDisabled}>
-                  {busy ? 'กำลังดำเนินการ...' : submitLabel}
-                </button>
-              </>
+        {/* eslint-disable-next-line react-hooks/refs -- requestClose reads refs only when it runs (click / Esc), never during render */}
+        {bare ? children(requestClose) : (
+          <>
+            <header className="market-modal-head">
+              <span className="market-modal-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
+              <div>
+                <h3 id={titleId}>{title}</h3>
+                {subtitle && <p>{subtitle}</p>}
+              </div>
+              <button type="button" className="market-modal-close" aria-label="ปิด" disabled={busy} onClick={requestClose}>×</button>
+            </header>
+            <div className="market-modal-body">
+              {children}
+              {error && <p className="market-error" role="alert">{error}</p>}
+            </div>
+            {(onSubmit || footer) && (
+              <footer className="market-modal-actions">
+                {footer}
+                {onSubmit && (
+                  <>
+                    {!hideCancel && <button type="button" className="market-btn" disabled={busy} onClick={requestClose}>{cancelLabel}</button>}
+                    <button type="submit" className={`market-btn ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} disabled={busy || submitDisabled}>
+                      {busy ? 'กำลังดำเนินการ...' : submitLabel}
+                    </button>
+                  </>
+                )}
+              </footer>
             )}
-          </footer>
+          </>
         )}
       </Tag>
     </div>,
@@ -816,30 +823,37 @@ function LeaseFormModal({ shops, initialShopId, onClose, onSaved }) {
   )
 }
 
+const CONFIRM_TONE = { danger: 'danger', primary: 'info', success: 'success', warning: 'pending' }
+
 function ConfirmModal({ title, message, tone = 'danger', icon = 'trash', submitLabel, reasonLabel, onClose, onConfirm }) {
   const [reason, setReason] = useState('')
   const { busy, error, run } = useSubmit((data) => onClose(data.message))
   return (
-    <MarketModal
-      title={title}
-      icon={icon}
-      tone={tone}
-      busy={busy}
-      error={error}
-      onClose={() => onClose()}
-      onSubmit={() => run(() => onConfirm(reason.trim()), 'ทำรายการไม่สำเร็จ')}
-      submitLabel={submitLabel}
-      submitDisabled={reasonLabel ? !reason.trim() : false}
-    >
-      <p className="market-modal-message">{message}</p>
-      {reasonLabel && (
-        <Field label={reasonLabel}>
-          <textarea className="market-input" rows={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} autoFocus />
-        </Field>
+    <MarketModal bare title={title} tone={tone} size="sm" busy={busy} onClose={() => onClose()}>
+      {(requestClose) => (
+        <ConfirmDialog
+          tone={CONFIRM_TONE[tone] || 'info'}
+          icon={icon}
+          title={title}
+          lead={message}
+          error={error}
+          busy={busy}
+          confirmLabel={submitLabel}
+          confirmDisabled={Boolean(reasonLabel) && !reason.trim()}
+          onConfirm={() => run(() => onConfirm(reason.trim()), 'ทำรายการไม่สำเร็จ')}
+          onCancel={requestClose}
+        >
+          {reasonLabel && (
+            <Field label={reasonLabel} wide>
+              <textarea className="market-input" rows={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} autoFocus />
+            </Field>
+          )}
+        </ConfirmDialog>
       )}
     </MarketModal>
   )
 }
+
 
 const RENEW_OPTIONS = [3, 6, 12]
 const TERMINATE_REASONS = ['ผู้เช่าขอยกเลิกสัญญา', 'ผู้เช่าค้างชำระค่าเช่า', 'ผิดเงื่อนไขสัญญา', 'ปิดกิจการ / ย้ายร้าน']

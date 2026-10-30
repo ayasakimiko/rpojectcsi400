@@ -37,6 +37,7 @@ import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
 import RepairVendorManager from '../components/RepairVendorManager.jsx'
 import NotificationDetailModal from '../components/NotificationDetailModal.jsx'
+import { ConfirmDialog, ResultDialog } from '../components/ActionDialog.jsx'
 import { repairSummaryTiles } from '../utils/repairSummary.js'
 import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL } from '../utils/maintenanceCategories.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
@@ -198,21 +199,6 @@ function WaitingListPanel({ items, now, vacantCount, onAdd, onDetail, onEdit, on
         </div>
       </nav>
     </section>
-  )
-}
-
-function WaitingListDelete({ item, busy, error, onClose, onConfirm }) {
-  return (
-    <div className="waiting-delete">
-      <span className="waiting-delete-icon"><NoteIcon size={25} /></span>
-      <strong>ลบรายชื่อผู้สนใจนี้ออกจากระบบ?</strong>
-      <dl><div><dt>ชื่อผู้สนใจ</dt><dd>{item.full_name}</dd></div><div><dt>เบอร์โทรศัพท์</dt><dd>{item.phone}</dd></div></dl>
-      {error && <p className="waiting-ui-form-error" role="alert">{error}</p>}
-      <div className="waiting-ui-form-actions">
-        <button type="button" className="waiting-ui-action-btn is-ghost" disabled={busy} onClick={onClose}>ยกเลิก</button>
-        <button type="button" className="waiting-ui-action-btn is-danger" disabled={busy} onClick={onConfirm}>{busy ? 'กำลังลบ...' : 'ยืนยันลบ'}</button>
-      </div>
-    </div>
   )
 }
 
@@ -1062,15 +1048,25 @@ function unlockBodyScroll() {
   }
 }
 
-function Modal({ title, onClose, children, variant, headerExtra = null }) {
+function Modal({ title, onClose, children, variant, headerExtra = null, locked = false }) {
   const [isClosing, setIsClosing] = useState(false)
-  const requestClose = () => setIsClosing(true)
+  const lockedRef = useRef(locked)
+
+  useEffect(() => {
+    lockedRef.current = locked
+  })
+
+  // While locked (a request is in flight) only an explicit requestClose(true) may close it.
+  const requestClose = (force) => {
+    if (locked && force !== true) return
+    setIsClosing(true)
+  }
 
   useEffect(() => {
     const token = Symbol('modal')
     modalStack.push(token)
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && modalStack[modalStack.length - 1] === token) requestClose()
+      if (event.key === 'Escape' && modalStack[modalStack.length - 1] === token && !lockedRef.current) setIsClosing(true)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => {
@@ -1099,7 +1095,7 @@ function Modal({ title, onClose, children, variant, headerExtra = null }) {
         <div className="admin-modal-header">
           <h3>{title}</h3>
           {headerExtra && <div className="admin-modal-header-extra">{headerExtra}</div>}
-          <button type="button" className="admin-modal-close" onClick={requestClose} aria-label="ปิด">
+          <button type="button" className="admin-modal-close" onClick={requestClose} disabled={locked} aria-label="ปิด">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -5305,6 +5301,8 @@ function AdminBackupPage() {
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pageError, setPageError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [confirmBusy, setConfirmBusy] = useState(false)
+  const [confirmError, setConfirmError] = useState('')
   const [waitingList, setWaitingList] = useState([])
   const [parcels, setParcels] = useState([])
   const [parcelsLoading, setParcelsLoading] = useState(true)
@@ -5656,7 +5654,7 @@ function AdminBackupPage() {
       Object.entries(parcelForm).forEach(([key, value]) => payload.append(key, value))
       parcelPhotos.forEach((photo) => payload.append('photos', photo))
       const { data } = await axios.post('/api/admin/parcels', payload)
-      requestClose()
+      requestClose(true)
       setParcelFormOpen(false)
       setSuccessMessage(data.message || 'บันทึกพัสดุเข้าห้องสำเร็จ')
       setParcelForm({ room_number: '', sender_name: '', tracking_number: '', description: '' })
@@ -5665,7 +5663,7 @@ function AdminBackupPage() {
       await loadParcels()
     } catch (err) {
       if (handleUnauthorized(err)) return
-      requestClose()
+      requestClose(true)
       setParcelFormError(err.response?.data?.message || 'บันทึกพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setParcelSubmitting(false)
@@ -5762,7 +5760,7 @@ function AdminBackupPage() {
     try {
       const { data } = await axios.delete('/api/admin/waiting-list/' + waitingListDelete.id)
       setSuccessMessage(data.message)
-      requestClose()
+      requestClose(true)
       if (waitingListDetail?.id === waitingListDelete.id) setWaitingListDetail(null)
       await loadWaitingList()
     } catch (err) {
@@ -5856,7 +5854,7 @@ function AdminBackupPage() {
     try {
       const { data } = await axios.delete(`/api/admin/expenses/${expenseDelete.id}`)
       setSuccessMessage(data.message || 'ลบรายจ่ายสำเร็จ')
-      requestClose()
+      requestClose(true)
       loadExpenses(expenses.length === 1 && expensesPage > 1 ? expensesPage - 1 : expensesPage)
     } catch (err) {
       if (handleUnauthorized(err)) return
@@ -6242,18 +6240,26 @@ function AdminBackupPage() {
     }
   }
 
-  const confirmDeleteRoom = async (requestClose) => {
-    if (!roomDeleteConfirm) return
+  // Runs a confirm-popup request: errors stay inside the popup, the popup closes only on success.
+  const runAdminConfirm = async (requestClose, request, successFallback, errorFallback, reload) => {
+    setConfirmBusy(true)
+    setConfirmError('')
     try {
-      const { data } = await axios.delete(`/api/admin/rooms/${roomDeleteConfirm.room_number}`)
-      setSuccessMessage(data.message || 'ลบห้องพักสำเร็จ')
-      requestClose()
-      await loadRooms()
+      const { data } = await request()
+      setSuccessMessage(data.message || successFallback)
+      requestClose(true)
+      await reload()
     } catch (err) {
-      setPageError(err.response?.data?.message || 'ลบห้องพักไม่สำเร็จ')
-      requestClose()
+      if (handleUnauthorized(err)) return
+      setConfirmError(err.response?.data?.message || errorFallback)
+    } finally {
+      setConfirmBusy(false)
     }
   }
+
+  const confirmDeleteRoom = (requestClose) =>
+    runAdminConfirm(requestClose, () => axios.delete(`/api/admin/rooms/${roomDeleteConfirm.room_number}`), 'ลบห้องพักสำเร็จ', 'ลบห้องพักไม่สำเร็จ', loadRooms)
+
 
   const filteredRooms = useMemo(() => {
     const keyword = roomSearch.trim().toLowerCase()
@@ -6382,33 +6388,19 @@ function AdminBackupPage() {
     }
   }
 
-  const toggleStaffSuspend = async (member, requestClose) => {
-    try {
-      const { data } = await axios.patch(
-        `/api/admin/staff/${member.id}/suspend`,
-        { is_suspended: !member.is_suspended }
-      )
-      setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
-      requestClose()
-      await loadStaff()
-    } catch (err) {
-      setPageError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ')
-      requestClose()
-    }
-  }
+  const toggleStaffSuspend = (member, requestClose) =>
+    runAdminConfirm(
+      requestClose,
+      () => axios.patch(`/api/admin/staff/${member.id}/suspend`, { is_suspended: !member.is_suspended }),
+      'ดำเนินการสำเร็จ',
+      'ดำเนินการไม่สำเร็จ',
+      loadStaff,
+    )
 
-  const confirmDeleteStaff = async (requestClose) => {
-    if (!staffDeleteConfirm) return
-    try {
-      const { data } = await axios.delete(`/api/admin/staff/${staffDeleteConfirm.id}`)
-      setSuccessMessage(data.message || 'ลบพนักงานสำเร็จ')
-      requestClose()
-      await loadStaff()
-    } catch (err) {
-      setPageError(err.response?.data?.message || 'ลบพนักงานไม่สำเร็จ')
-      requestClose()
-    }
-  }
+
+  const confirmDeleteStaff = (requestClose) =>
+    runAdminConfirm(requestClose, () => axios.delete(`/api/admin/staff/${staffDeleteConfirm.id}`), 'ลบพนักงานสำเร็จ', 'ลบพนักงานไม่สำเร็จ', loadStaff)
+
 
   const filteredStaff = useMemo(() => {
     const keyword = staffSearch.trim().toLowerCase()
@@ -6525,20 +6517,15 @@ function AdminBackupPage() {
     }
   }
 
-  const toggleCustomerSuspend = async (customer, requestClose) => {
-    try {
-      const { data } = await axios.patch(
-        `/api/admin/customers/${customer.id}/suspend`,
-        { is_suspended: !customer.is_suspended }
-      )
-      setSuccessMessage(data.message || 'ดำเนินการสำเร็จ')
-      requestClose()
-      await Promise.all([loadCustomers(), loadRooms()])
-    } catch (err) {
-      setPageError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ')
-      requestClose()
-    }
-  }
+  const toggleCustomerSuspend = (customer, requestClose) =>
+    runAdminConfirm(
+      requestClose,
+      () => axios.patch(`/api/admin/customers/${customer.id}/suspend`, { is_suspended: !customer.is_suspended }),
+      'ดำเนินการสำเร็จ',
+      'ดำเนินการไม่สำเร็จ',
+      () => Promise.all([loadCustomers(), loadRooms()]),
+    )
+
 
   const openCustomerProfile = async (customer) => {
     setCustomerProfile({ id: customer.id, customer, detail: null, loading: true, error: '' })
@@ -7272,21 +7259,7 @@ function AdminBackupPage() {
 
         {successMessage && (
           <Modal title="สำเร็จ" onClose={() => setSuccessMessage('')} variant="confirm">
-            {(requestClose) => (
-              <div className="admin-confirm-body">
-                <div className="admin-confirm-icon is-success">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <p className="admin-confirm-message">{successMessage}</p>
-                <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-primary" onClick={requestClose}>
-                    ปิด
-                  </button>
-                </div>
-              </div>
-            )}
+            {(requestClose) => <ResultDialog message={successMessage} onClose={requestClose} />}
           </Modal>
         )}
 
@@ -8887,90 +8860,51 @@ function AdminBackupPage() {
                 ? 'ยืนยันการบันทึกผลตรวจ'
                 : 'ยืนยันการยกเลิก'
           }
-          onClose={() => {
-            if (!inspectionConfirmBusy) setInspectionConfirm(null)
-          }}
+          onClose={() => setInspectionConfirm(null)}
           variant="confirm"
+          locked={inspectionConfirmBusy}
         >
-          {(requestClose) => (
-            <div className="admin-confirm-body">
-              <div
-                className={`admin-confirm-icon ${
-                  inspectionConfirm.kind === 'save' || (inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'reviewed')
-                    ? 'is-success'
-                    : 'is-danger'
-                }`}
-              >
-                {inspectionConfirm.kind === 'save' || (inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'reviewed') ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m5 12 5 5 9-10" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7.5v5.5M12 16.5h.01" />
-                  </svg>
-                )}
-              </div>
-              <p className="admin-confirm-message">
-                {inspectionConfirm.kind === 'status'
-                  ? inspectionConfirm.next === 'reviewed'
-                    ? `ยืนยันว่าตรวจผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เรียบร้อยแล้วใช่หรือไม่?`
-                    : inspectionConfirm.next === 'follow_up'
-                      ? `ต้องการตั้งผลตรวจห้อง ${inspectionConfirm.inspection.room_number} เป็น "ต้องติดตาม" ใช่หรือไม่?`
-                      : `ต้องการยกเลิกสถานะและย้อนผลตรวจห้อง ${inspectionConfirm.inspection.room_number} กลับเป็น "รอ Admin ตรวจ" ใช่หรือไม่?`
-                  : inspectionConfirm.kind === 'save'
-                    ? inspectionEditor?.mode === 'create'
-                      ? 'ต้องการบันทึกผลตรวจห้องนี้ใช่หรือไม่?'
-                      : 'ต้องการบันทึกการแก้ไขผลตรวจห้องนี้ใช่หรือไม่?'
-                    : 'ต้องการยกเลิกใช่หรือไม่? ข้อมูลที่กรอกไว้จะไม่ถูกบันทึก'}
-              </p>
-              <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" disabled={inspectionConfirmBusy} onClick={requestClose}>
-                  {inspectionConfirm.kind === 'cancel' ? 'กลับไปแก้ไขต่อ' : 'ยกเลิก'}
-                </button>
-                <button
-                  type="button"
-                  className={`admin-action-btn ${
-                    inspectionConfirm.kind === 'save' || (inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'reviewed')
-                      ? 'is-primary'
-                      : inspectionConfirm.kind === 'status' && inspectionConfirm.next === 'follow_up'
-                        ? 'is-warning'
-                        : 'is-danger'
-                  }`}
-                  disabled={inspectionConfirmBusy}
-                  onClick={async () => {
-                    const current = inspectionConfirm
-                    if (current.kind === 'cancel') {
-                      requestClose()
-                      current.close?.()
-                      return
-                    }
-                    setInspectionConfirmBusy(true)
-                    try {
-                      if (current.kind === 'save') await submitInspectionEditor(current.payload, current.close)
-                      else if (current.kind === 'status') await setMoveOutInspectionStatus(current.inspection, current.next)
-                    } finally {
-                      setInspectionConfirmBusy(false)
-                      requestClose()
-                    }
-                  }}
-                >
-                  {inspectionConfirmBusy
-                    ? 'กำลังดำเนินการ...'
-                    : inspectionConfirm.kind === 'status'
-                      ? inspectionConfirm.next === 'reviewed'
-                        ? 'ยืนยันตรวจแล้ว'
-                        : inspectionConfirm.next === 'follow_up'
-                          ? 'ตั้งเป็นต้องติดตาม'
-                          : 'ยืนยันยกเลิกสถานะ'
-                      : inspectionConfirm.kind === 'save'
-                        ? 'ยืนยันบันทึก'
-                        : 'ยืนยันยกเลิก'}
-                </button>
-              </div>
-            </div>
-          )}
+          {(requestClose) => {
+            const current = inspectionConfirm
+            const room = current.inspection?.room_number
+            const copy = current.kind === 'save'
+              ? { tone: 'success', icon: 'check', title: inspectionEditor?.mode === 'create' ? 'บันทึกผลตรวจห้องนี้?' : 'บันทึกการแก้ไขผลตรวจห้องนี้?', action: 'บันทึกผลตรวจ' }
+              : current.kind === 'cancel'
+                ? { tone: 'danger', icon: 'alert', title: 'ยกเลิกการแก้ไข?', lead: 'ข้อมูลที่กรอกไว้จะไม่ถูกบันทึก', action: 'ยกเลิกการแก้ไข', cancel: 'กลับไปแก้ไขต่อ' }
+                : current.next === 'reviewed'
+                  ? { tone: 'success', icon: 'check', title: `ตรวจผลตรวจห้อง ${room} เรียบร้อยแล้ว?`, action: 'ยืนยันตรวจแล้ว' }
+                  : current.next === 'follow_up'
+                    ? { tone: 'pending', icon: 'clock', title: `ตั้งผลตรวจห้อง ${room} เป็น “ต้องติดตาม”?`, action: 'ตั้งเป็นต้องติดตาม' }
+                    : { tone: 'danger', icon: 'alert', title: `ย้อนผลตรวจห้อง ${room} กลับเป็น “รอ Admin ตรวจ”?`, lead: 'สถานะที่ตั้งไว้จะถูกยกเลิก', action: 'ยืนยันยกเลิกสถานะ' }
+            return (
+              <ConfirmDialog
+                tone={copy.tone}
+                icon={copy.icon}
+                kicker="ผลตรวจห้องย้ายออก"
+                title={copy.title}
+                lead={copy.lead}
+                busy={inspectionConfirmBusy}
+                confirmLabel={copy.action}
+                cancelLabel={copy.cancel || 'ยกเลิก'}
+                onConfirm={async () => {
+                  if (current.kind === 'cancel') {
+                    requestClose(true)
+                    current.close?.()
+                    return
+                  }
+                  setInspectionConfirmBusy(true)
+                  try {
+                    if (current.kind === 'save') await submitInspectionEditor(current.payload, current.close)
+                    else if (current.kind === 'status') await setMoveOutInspectionStatus(current.inspection, current.next)
+                  } finally {
+                    setInspectionConfirmBusy(false)
+                    requestClose(true)
+                  }
+                }}
+                onCancel={requestClose}
+              />
+            )
+          }}
         </Modal>
       )}
 
@@ -9384,47 +9318,49 @@ function AdminBackupPage() {
       )}
 
       {waitingListDelete && (
-        <Modal title="ยืนยันการลบรายชื่อ" onClose={() => setWaitingListDelete(null)} variant="confirm">
-          {(requestClose) => <WaitingListDelete item={waitingListDelete} busy={waitingListDeleting} error={waitingListDeleteError} onClose={requestClose} onConfirm={() => removeWaitingListEntry(requestClose)} />}
+        <Modal title="ยืนยันการลบรายชื่อ" onClose={() => setWaitingListDelete(null)} variant="confirm" locked={waitingListDeleting}>
+          {(requestClose) => (
+            <ConfirmDialog
+              tone="danger"
+              icon="trash"
+              kicker="รายชื่อรอเข้าพัก"
+              title="ลบรายชื่อผู้สนใจนี้?"
+              lead="ลบแล้วกู้คืนไม่ได้ ต้องเพิ่มรายชื่อใหม่หากต้องการติดต่ออีก"
+              facts={[['ชื่อผู้สนใจ', waitingListDelete.full_name], ['เบอร์โทรศัพท์', waitingListDelete.phone]]}
+              error={waitingListDeleteError}
+              busy={waitingListDeleting}
+              busyLabel="กำลังลบ..."
+              confirmLabel="ลบรายชื่อ"
+              confirmIcon="trash"
+              onConfirm={() => removeWaitingListEntry(requestClose)}
+              onCancel={requestClose}
+            />
+          )}
         </Modal>
       )}
 
       {expenseDelete && (
-        <Modal title="ยืนยันการลบรายจ่าย" onClose={() => setExpenseDelete(null)} variant="confirm">
+        <Modal title="ยืนยันการลบรายจ่าย" onClose={() => setExpenseDelete(null)} variant="confirm" locked={expenseDeleting}>
           {(requestClose) => (
-            <div className="exp-ui-confirm">
-              <span className="exp-ui-confirm-icon">
-                <RoomDetailIcon type="alert" size={26} />
-              </span>
-              <p className="exp-ui-confirm-message">ลบรายจ่ายนี้ออกจากระบบ?</p>
-              <dl className="exp-ui-confirm-details">
-                <div>
-                  <dt>วันที่</dt>
-                  <dd>{formatDate(expenseDelete.expense_date)}</dd>
-                </div>
-                <div>
-                  <dt>หมวดหมู่</dt>
-                  <dd>{expenseDelete.category}</dd>
-                </div>
-                <div>
-                  <dt>จำนวนเงิน</dt>
-                  <dd>฿{formatCurrency(expenseDelete.amount)}</dd>
-                </div>
-              </dl>
-              {expenseDeleteError && (
-                <p className="exp-ui-error" role="alert">
-                  {expenseDeleteError}
-                </p>
-              )}
-              <div className="exp-ui-modal-actions">
-                <button type="button" className="admin-action-btn is-ghost" disabled={expenseDeleting} onClick={requestClose}>
-                  ยกเลิก
-                </button>
-                <button type="button" className="admin-action-btn is-danger" disabled={expenseDeleting} onClick={() => confirmDeleteExpense(requestClose)}>
-                  {expenseDeleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="danger"
+              icon="trash"
+              kicker="รายจ่าย"
+              title="ลบรายจ่ายนี้?"
+              lead="ยอดสรุปรายจ่ายจะเปลี่ยนตามทันที"
+              facts={[
+                ['วันที่', formatDate(expenseDelete.expense_date)],
+                ['หมวดหมู่', expenseDelete.category],
+                ['จำนวนเงิน', `฿${formatCurrency(expenseDelete.amount)}`],
+              ]}
+              error={expenseDeleteError}
+              busy={expenseDeleting}
+              busyLabel="กำลังลบ..."
+              confirmLabel="ลบรายจ่าย"
+              confirmIcon="trash"
+              onConfirm={() => confirmDeleteExpense(requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
@@ -10263,26 +10199,22 @@ function AdminBackupPage() {
       )}
 
       {roomDeleteConfirm && (
-        <Modal title="ยืนยันการลบห้องพัก" onClose={() => setRoomDeleteConfirm(null)} variant="confirm">
+        <Modal title="ยืนยันการลบห้องพัก" onClose={() => { setRoomDeleteConfirm(null); setConfirmError('') }} variant="confirm" locked={confirmBusy}>
           {(requestClose) => (
-            <div className="admin-confirm-body">
-              <div className="admin-confirm-icon is-danger">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-              </div>
-              <p className="admin-confirm-message">ต้องการลบห้อง {roomDeleteConfirm.room_number} ใช่หรือไม่?</p>
-              <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
-                <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteRoom(requestClose)}>
-                  ลบห้องพัก
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="danger"
+              icon="trash"
+              kicker="ห้องพัก"
+              title={`ลบห้อง ${roomDeleteConfirm.room_number}?`}
+              lead="ห้องนี้จะหายจากรายการห้องพักทั้งหมด"
+              error={confirmError}
+              busy={confirmBusy}
+              busyLabel="กำลังลบ..."
+              confirmLabel="ลบห้องพัก"
+              confirmIcon="trash"
+              onConfirm={() => confirmDeleteRoom(requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
@@ -10413,44 +10345,29 @@ function AdminBackupPage() {
       )}
 
       {parcelSaveConfirm && (
-        <Modal title="ยืนยันการบันทึกพัสดุ" onClose={() => setParcelSaveConfirm(false)} variant="confirm">
+        <Modal title="ยืนยันการบันทึกพัสดุ" onClose={() => setParcelSaveConfirm(false)} variant="confirm" locked={parcelSubmitting}>
           {(requestClose) => {
             const room = rooms.find((item) => String(item.room_number) === String(parcelForm.room_number))
             return (
-              <div className="admin-confirm-body">
-                <div className="admin-confirm-icon is-info">
-                  <PackageIcon size={28} strokeWidth={2.2} />
-                </div>
-                <p className="admin-confirm-message">บันทึกพัสดุนี้และแจ้งผู้เช่าใช่หรือไม่?</p>
-                <div className="admin-confirm-details">
-                  <div className="admin-confirm-detail-row">
-                    <span>ห้อง</span>
-                    <strong>{parcelForm.room_number}</strong>
-                  </div>
-                  <div className="admin-confirm-detail-row">
-                    <span>ผู้เช่า</span>
-                    <strong>{room ? `${room.first_name} ${room.last_name}` : '-'}</strong>
-                  </div>
-                  <div className="admin-confirm-detail-row">
-                    <span>ผู้ส่ง</span>
-                    <strong>{parcelForm.sender_name.trim() || 'พัสดุทั่วไป'}</strong>
-                  </div>
-                  <div className="admin-confirm-detail-row">
-                    <span>เลขพัสดุ</span>
-                    <strong>{parcelForm.tracking_number.trim() || '-'}</strong>
-                  </div>
-                  <div className="admin-confirm-detail-row">
-                    <span>รูปที่แนบ</span>
-                    <strong>{parcelPhotos.length} รูป</strong>
-                  </div>
-                </div>
-                <div className="admin-form-actions">
-                  <button type="button" className="admin-action-btn is-ghost" onClick={requestClose} disabled={parcelSubmitting}>ปิด</button>
-                  <button type="button" className="admin-action-btn is-primary" onClick={() => handleCreateParcel(requestClose)} disabled={parcelSubmitting}>
-                    {parcelSubmitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
-                  </button>
-                </div>
-              </div>
+              <ConfirmDialog
+                tone="info"
+                icon="box"
+                kicker="พัสดุ"
+                title="บันทึกพัสดุและแจ้งผู้เช่า?"
+                lead="ผู้เช่าห้องนี้จะได้รับแจ้งเตือนให้มารับพัสดุทันที"
+                facts={[
+                  ['ห้อง', parcelForm.room_number],
+                  ['ผู้เช่า', room ? `${room.first_name} ${room.last_name}` : '-'],
+                  ['ผู้ส่ง', parcelForm.sender_name.trim() || 'พัสดุทั่วไป'],
+                  ['เลขพัสดุ', parcelForm.tracking_number.trim() || '-'],
+                  ['รูปที่แนบ', `${parcelPhotos.length} รูป`],
+                ]}
+                busy={parcelSubmitting}
+                busyLabel="กำลังบันทึก..."
+                confirmLabel="บันทึกและแจ้งผู้เช่า"
+                onConfirm={() => handleCreateParcel(requestClose)}
+                onCancel={requestClose}
+              />
             )
           }}
         </Modal>
@@ -10569,28 +10486,23 @@ function AdminBackupPage() {
       )}
 
       {staffDeleteConfirm && (
-        <Modal title="ยืนยันการลบพนักงาน" onClose={() => setStaffDeleteConfirm(null)} variant="confirm">
+        <Modal title="ยืนยันการลบพนักงาน" onClose={() => { setStaffDeleteConfirm(null); setConfirmError('') }} variant="confirm" locked={confirmBusy}>
           {(requestClose) => (
-            <div className="admin-confirm-body">
-              <div className="admin-confirm-icon is-danger">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-              </div>
-              <p className="admin-confirm-message">
-                ต้องการลบพนักงาน {staffDeleteConfirm.first_name} {staffDeleteConfirm.last_name} ใช่หรือไม่?
-              </p>
-              <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
-                <button type="button" className="admin-action-btn is-danger" onClick={() => confirmDeleteStaff(requestClose)}>
-                  ลบพนักงาน
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="danger"
+              icon="trash"
+              kicker="พนักงาน"
+              title={`ลบพนักงาน ${staffDeleteConfirm.first_name} ${staffDeleteConfirm.last_name}?`}
+              lead="บัญชีนี้จะเข้าสู่ระบบไม่ได้อีก"
+              facts={[['เบอร์โทร', staffDeleteConfirm.phone]]}
+              error={confirmError}
+              busy={confirmBusy}
+              busyLabel="กำลังลบ..."
+              confirmLabel="ลบพนักงาน"
+              confirmIcon="trash"
+              onConfirm={() => confirmDeleteStaff(requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
@@ -10598,32 +10510,23 @@ function AdminBackupPage() {
       {staffSuspendConfirm && (
         <Modal
           title={staffSuspendConfirm.is_suspended ? 'ยืนยันการเปิดใช้งานพนักงาน' : 'ยืนยันการระงับพนักงาน'}
-          onClose={() => setStaffSuspendConfirm(null)}
+          onClose={() => { setStaffSuspendConfirm(null); setConfirmError('') }}
           variant="confirm"
+          locked={confirmBusy}
         >
           {(requestClose) => (
-            <div className="admin-confirm-body">
-              <div className={`admin-confirm-icon ${staffSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 2v6" />
-                  <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
-                </svg>
-              </div>
-              <p className="admin-confirm-message">
-                ต้องการ{staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}พนักงาน {staffSuspendConfirm.first_name}{' '}
-                {staffSuspendConfirm.last_name} ใช่หรือไม่?
-              </p>
-              <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
-                <button
-                  type="button"
-                  className={`admin-action-btn ${staffSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
-                  onClick={() => toggleStaffSuspend(staffSuspendConfirm, requestClose)}
-                >
-                  {staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone={staffSuspendConfirm.is_suspended ? 'success' : 'danger'}
+              icon="user"
+              kicker="บัญชีพนักงาน"
+              title={`${staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}พนักงาน ${staffSuspendConfirm.first_name} ${staffSuspendConfirm.last_name}?`}
+              lead={staffSuspendConfirm.is_suspended ? 'พนักงานคนนี้จะกลับมาเข้าสู่ระบบได้ตามปกติ' : 'พนักงานคนนี้จะเข้าสู่ระบบไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง ข้อมูลเดิมยังอยู่ครบ'}
+              error={confirmError}
+              busy={confirmBusy}
+              confirmLabel={staffSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
+              onConfirm={() => toggleStaffSuspend(staffSuspendConfirm, requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
@@ -10769,38 +10672,28 @@ function AdminBackupPage() {
       {customerSuspendConfirm && (
         <Modal
           title={customerSuspendConfirm.is_suspended ? 'ยืนยันการเปิดใช้งานลูกค้า' : 'ยืนยันการระงับลูกค้า'}
-          onClose={() => setCustomerSuspendConfirm(null)}
+          onClose={() => { setCustomerSuspendConfirm(null); setConfirmError('') }}
           variant="confirm"
+          locked={confirmBusy}
         >
           {(requestClose) => (
-            <div className="admin-confirm-body">
-              <div className={`admin-confirm-icon ${customerSuspendConfirm.is_suspended ? 'is-success' : 'is-danger'}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 2v6" />
-                  <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
-                </svg>
-              </div>
-              <p className="admin-confirm-message">
-                ต้องการ{customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}ลูกค้า {customerSuspendConfirm.first_name}{' '}
-                {customerSuspendConfirm.last_name} ใช่หรือไม่?
-                {!customerSuspendConfirm.is_suspended && customerSuspendConfirm.room_number && (
-                  <><br />ลูกค้าจะถูกนำออกจากห้อง {customerSuspendConfirm.room_number} หากไม่มีผู้เช่าคนอื่น ห้องจะถูกปล่อยเป็นห้องว่าง และการเปิดใช้งานบัญชีอีกครั้งจะไม่คืนห้องให้อัตโนมัติ</>
-                )}
-                {Boolean(customerSuspendConfirm.is_suspended) && (
-                  <><br />บัญชีจะกลับมาใช้งานได้โดยไม่มีห้องพัก ห้องเดิมจะยังว่างอยู่หากไม่มีผู้เช่าคนอื่น</>
-                )}
-              </p>
-              <div className="admin-form-actions">
-                <button type="button" className="admin-action-btn is-ghost" onClick={requestClose}>ปิด</button>
-                <button
-                  type="button"
-                  className={`admin-action-btn ${customerSuspendConfirm.is_suspended ? 'is-primary' : 'is-danger'}`}
-                  onClick={() => toggleCustomerSuspend(customerSuspendConfirm, requestClose)}
-                >
-                  {customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone={customerSuspendConfirm.is_suspended ? 'success' : 'danger'}
+              icon="user"
+              kicker="บัญชีลูกค้า"
+              title={`${customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}ลูกค้า ${customerSuspendConfirm.first_name} ${customerSuspendConfirm.last_name}?`}
+              note={customerSuspendConfirm.is_suspended
+                ? 'บัญชีจะกลับมาใช้งานได้โดยไม่มีห้องพัก ห้องเดิมจะยังว่างอยู่หากไม่มีผู้เช่าคนอื่น'
+                : customerSuspendConfirm.room_number
+                  ? `ลูกค้าจะถูกนำออกจากห้อง ${customerSuspendConfirm.room_number} หากไม่มีผู้เช่าคนอื่น ห้องจะถูกปล่อยเป็นห้องว่าง และการเปิดใช้งานบัญชีอีกครั้งจะไม่คืนห้องให้อัตโนมัติ`
+                  : null}
+              noteLabel="ข้อควรทราบ"
+              error={confirmError}
+              busy={confirmBusy}
+              confirmLabel={customerSuspendConfirm.is_suspended ? 'เปิดใช้งาน' : 'ระงับการใช้งาน'}
+              onConfirm={() => toggleCustomerSuspend(customerSuspendConfirm, requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}

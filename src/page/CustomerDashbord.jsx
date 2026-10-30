@@ -45,6 +45,19 @@ import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeade
 import useMinimumLoading from '../utils/useMinimumLoading.js'
 import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
+import {
+  ActionDialog,
+  ActionDialogAmount,
+  ActionDialogButton,
+  ActionDialogFacts,
+  ActionDialogItems,
+  ActionDialogNote,
+  ActionDialogOutcome,
+  ActionDialogPayer,
+  ConfirmDialog,
+  NotificationDialog,
+  ResultDialog,
+} from '../components/ActionDialog.jsx'
 
 function compressImageFile(file) {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('เลือกได้เฉพาะไฟล์รูปภาพ'))
@@ -604,16 +617,25 @@ function flashHighlight(element, className) {
 
 const openModalStack = []
 
-function Modal({ title, onClose, children, variant, onBack, headerAction }) {
+function Modal({ title, onClose, children, variant, onBack, headerAction, locked = false }) {
   const [isClosing, setIsClosing] = useState(false)
+  const lockedRef = useRef(locked)
 
-  const requestClose = () => setIsClosing(true)
+  useEffect(() => {
+    lockedRef.current = locked
+  })
+
+  // While locked (a request is in flight) only an explicit requestClose(true) may close it.
+  const requestClose = (force) => {
+    if (locked && force !== true) return
+    setIsClosing(true)
+  }
 
   useEffect(() => {
     const token = {}
     openModalStack.push(token)
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && openModalStack[openModalStack.length - 1] === token) requestClose()
+      if (event.key === 'Escape' && openModalStack[openModalStack.length - 1] === token && !lockedRef.current) setIsClosing(true)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => {
@@ -646,7 +668,7 @@ function Modal({ title, onClose, children, variant, onBack, headerAction }) {
             <h3>{title}</h3>
           </div>
           {headerAction && <div className="dashboard-modal-header-actions">{headerAction}</div>}
-          <button type="button" className="dashboard-modal-close" onClick={requestClose} aria-label="ปิด">
+          <button type="button" className="dashboard-modal-close" onClick={requestClose} disabled={locked} aria-label="ปิด">
             <svg
               width="16"
               height="16"
@@ -676,23 +698,7 @@ function ErrorPopup({ message, onClose }) {
   if (!message) return null
   return createPortal(
     <Modal title="ทำรายการไม่สำเร็จ" onClose={onClose} variant="error">
-      {(requestClose) => (
-        <div className="dashboard-confirm-body" role="alert">
-          <div className="dashboard-confirm-icon is-error">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-          </div>
-          <p className="dashboard-confirm-message dashboard-error-message">{message}</p>
-          <div className="dashboard-form-actions">
-            <button type="button" className="dashboard-action-btn is-danger" onClick={requestClose} autoFocus>
-              รับทราบ
-            </button>
-          </div>
-        </div>
-      )}
+      {(requestClose) => <ResultDialog type="error" message={message} onClose={requestClose} buttonLabel="รับทราบ" />}
     </Modal>,
     document.body,
   )
@@ -3133,13 +3139,21 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding, paymentUnd
       {view === 'success' && submitted && (
         <Modal title="ส่งคำขอแล้ว" onClose={() => setView(null)} variant="success">
           {(requestClose) => (
-            <div className="dashboard-confirm-body">
-              <div className="dashboard-confirm-icon is-success">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="dashboard-confirm-message">ส่งคำขอให้เจ้าหน้าที่แล้ว รอการอนุมัติ</p>
+            <ActionDialog
+              tone="success"
+              icon="check"
+              kicker="ส่งคำขอแล้ว"
+              title="ส่งคำขอให้เจ้าหน้าที่แล้ว"
+              lead="รอเจ้าหน้าที่อนุมัติ ดูสถานะได้ที่ “คำขอของฉัน”"
+              actions={[
+                <ActionDialogButton key="close" variant="ghost" onClick={requestClose}>
+                  ปิด
+                </ActionDialogButton>,
+                <ActionDialogButton key="history" onClick={openHistory} autoFocus>
+                  ดูคำขอของฉัน
+                </ActionDialogButton>,
+              ]}
+            >
               <div className="dashboard-rv-submitted">
                 <span className={`dashboard-rv-history-icon is-${submitted.type}`}>
                   {submitted.type === 'vehicle' ? <CarIcon /> : <GuestIcon />}
@@ -3152,15 +3166,7 @@ function ResidentVisitRequestRow({ outstanding = 0, onPayOutstanding, paymentUnd
                   </span>
                 </div>
               </div>
-              <div className="dashboard-form-actions">
-                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                  ปิด
-                </button>
-                <button type="button" className="dashboard-action-btn is-primary" onClick={openHistory}>
-                  ดูคำขอของฉัน
-                </button>
-              </div>
-            </div>
+            </ActionDialog>
           )}
         </Modal>
       )}
@@ -3856,13 +3862,21 @@ function SafetyIncidentReportRow() {
       {view === 'success' && (
         <Modal title="ส่งรายงานแล้ว" onClose={() => setView(null)} variant="success">
           {(requestClose) => (
-            <div className="dashboard-confirm-body">
-              <div className="dashboard-confirm-icon is-success">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="dashboard-confirm-message">ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว</p>
+            <ActionDialog
+              tone="success"
+              icon="check"
+              kicker="แจ้งเหตุ"
+              title="ส่งรายงานเหตุให้เจ้าหน้าที่แล้ว"
+              lead="เจ้าหน้าที่จะตรวจสอบและดำเนินการต่อ"
+              actions={[
+                <ActionDialogButton key="close" variant="ghost" onClick={requestClose}>
+                  ปิด
+                </ActionDialogButton>,
+                <ActionDialogButton key="history" onClick={openHistory} autoFocus>
+                  ดูประวัติการแจ้งเหตุ
+                </ActionDialogButton>,
+              ]}
+            >
               {SAFETY_SEVERITY_RESULT[sentSeverity] && (
                 <div className={`dashboard-safety-result is-${sentSeverity}`}>
                   <div className="dashboard-safety-result-icon" aria-hidden="true">
@@ -3889,15 +3903,7 @@ function SafetyIncidentReportRow() {
                   </div>
                 </div>
               )}
-              <div className="dashboard-form-actions">
-                <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                  ปิด
-                </button>
-                <button type="button" className="dashboard-action-btn is-primary" onClick={openHistory}>
-                  ดูประวัติการแจ้งเหตุ
-                </button>
-              </div>
-            </div>
+            </ActionDialog>
           )}
         </Modal>
       )}
@@ -4710,6 +4716,140 @@ function AnnouncementAlertPopup({ announcement, remaining, onAcknowledge }) {
   )
 }
 
+const SLIP_RESULT_NOTIF_TYPES = new Set(['slip_approved', 'slip_rejected'])
+
+function SlipSubmitResult({ result, onClose }) {
+  const isPaid = result.status === 'paid'
+  return (
+    <ActionDialog
+      tone={isPaid ? 'success' : 'pending'}
+      icon={isPaid ? 'check' : 'clock'}
+      kicker={isPaid ? 'ชำระเงินแล้ว' : 'ส่งสลิปแล้ว'}
+      title={isPaid ? 'ชำระเงินเรียบร้อย' : 'รอเจ้าหน้าที่ตรวจสอบ'}
+      lead={result.message}
+      actions={[
+        <ActionDialogButton key="done" onClick={onClose} autoFocus>
+          รับทราบ
+        </ActionDialogButton>,
+      ]}
+    >
+      <ActionDialogPayer
+        room={result.roomNumber}
+        name={result.tenantName}
+        meta={`ส่งเมื่อ ${formatDateTime(result.sentAt)} น.`}
+        amountLabel={isPaid ? 'ชำระแล้ว' : 'ยอดที่ส่ง'}
+        amount={result.amount != null ? `฿${formatCurrency(result.amount)}` : null}
+      />
+      <ActionDialogItems items={result.items} />
+      <ActionDialogOutcome
+        title="ขั้นตอนต่อไป"
+        lines={
+          isPaid
+            ? ['ยอดนี้เปลี่ยนเป็น “ชำระแล้ว” ทันที', 'ดาวน์โหลดใบเสร็จได้ที่เมนู “ประวัติการเช่า”']
+            : ['เจ้าหน้าที่จะตรวจยอดเงินและบัญชีผู้รับในสลิป', 'เมื่อตรวจเสร็จ คุณจะได้รับแจ้งเตือนที่กระดิ่งทั้งกรณีผ่านและไม่ผ่าน']
+        }
+      />
+    </ActionDialog>
+  )
+}
+
+function UtilityBillNotification({ notif, onClose, onPay }) {
+  const { payment } = notif
+  const underReview = Boolean(payment.slip_path)
+  const typeLabel = PAYMENT_TYPE_LABEL[payment.type] || notif.title
+  const description = formatCustomerNote(payment.note)
+  return (
+    <ActionDialog
+      tone={underReview ? 'pending' : 'info'}
+      icon={payment.type === 'electricity' ? 'bolt' : 'drop'}
+      kicker="แจ้งเตือน · ค่าใช้จ่าย"
+      title={`บิล${typeLabel}`}
+      lead={notif.label}
+      actions={
+        onPay && !underReview
+          ? [
+              <ActionDialogButton key="close" variant="ghost" onClick={onClose}>
+                ปิด
+              </ActionDialogButton>,
+              <ActionDialogButton key="pay" onClick={onPay} autoFocus>
+                แนบสลิปโอนเงิน
+              </ActionDialogButton>,
+            ]
+          : [
+              <ActionDialogButton key="close" onClick={onClose} autoFocus>
+                รับทราบ
+              </ActionDialogButton>,
+            ]
+      }
+    >
+      <ActionDialogAmount
+        label={underReview ? 'ยอดที่ส่งสลิปแล้ว' : 'ยอดที่ต้องชำระ'}
+        amount={`฿${formatCurrency(payment.amount)}`}
+        sub={description !== '-' ? description.replace(/\s+x\s+/g, ' × ') : null}
+        status={underReview ? 'รอตรวจสลิป' : 'ยังไม่ชำระ'}
+      />
+      <ActionDialogFacts
+        rows={[
+          ['แจ้งโดย', 'เจ้าหน้าที่หอพัก'],
+          ['แจ้งเมื่อ', notif.date ? `${formatDateTime(notif.date)} น.` : null],
+        ]}
+      />
+      {!underReview && (
+        <ActionDialogOutcome
+          title="วิธีชำระ"
+          lines={['ยอดนี้รวมอยู่ใน “ยอดชำระเดือนนี้” ที่หน้าแรกแล้ว', 'โอนตามยอดรวม แล้วแนบสลิปให้เจ้าหน้าที่ตรวจสอบ']}
+        />
+      )}
+    </ActionDialog>
+  )
+}
+
+function SlipResultNotification({ notif, onClose, onResubmit }) {
+  const approved = notif.type === 'slip_approved'
+  const reason = !approved && notif.detail ? notif.detail.replace(/^เหตุผล:\s*/, '') : ''
+  const reviewer = notif.actorName || (approved && notif.detail ? notif.detail.replace(/^ตรวจโดย\s*/, '') : '')
+  return (
+    <ActionDialog
+      tone={approved ? 'success' : 'danger'}
+      icon={approved ? 'check' : 'x'}
+      kicker="แจ้งเตือนการชำระเงิน"
+      title={notif.title}
+      lead={notif.label}
+      actions={
+        onResubmit
+          ? [
+              <ActionDialogButton key="close" variant="ghost" onClick={onClose}>
+                ปิด
+              </ActionDialogButton>,
+              <ActionDialogButton key="resubmit" onClick={onResubmit} autoFocus>
+                แนบสลิปใหม่
+              </ActionDialogButton>,
+            ]
+          : [
+              <ActionDialogButton key="done" onClick={onClose} autoFocus>
+                รับทราบ
+              </ActionDialogButton>,
+            ]
+      }
+    >
+      {reason && <ActionDialogNote label="เหตุผลจากเจ้าหน้าที่">{reason}</ActionDialogNote>}
+      <ActionDialogFacts
+        rows={[
+          ['ผลการตรวจ', approved ? 'ผ่าน · ชำระแล้ว' : 'ไม่ผ่าน · ต้องส่งสลิปใหม่'],
+          ['ตรวจโดย', reviewer || 'เจ้าหน้าที่'],
+          ['เวลา', notif.date ? `${formatDateTime(notif.date)} น.` : null],
+        ]}
+      />
+      {!approved && (
+        <ActionDialogOutcome
+          title="สิ่งที่ต้องทำต่อ"
+          lines={['ตรวจยอดที่ต้องชำระอีกครั้งในหน้าแรก', 'โอนตามยอดแล้วแนบสลิปใหม่']}
+        />
+      )}
+    </ActionDialog>
+  )
+}
+
 function CustomerDashbord() {
   const navigate = useNavigate()
   const dashboardLoadRef = useRef(null)
@@ -4842,6 +4982,7 @@ function CustomerDashbord() {
   }, [notifOpen])
 
   const [successPopup, setSuccessPopup] = useState(null)
+  const [slipSubmitResult, setSlipSubmitResult] = useState(null)
   const [blockedRequestPopup, setBlockedRequestPopup] = useState(null)
   const [profileForm, setProfileForm] = useState({ phone: '', current_password: '', new_password: '', confirm_password: '' })
   const [profileSubmitting, setProfileSubmitting] = useState(false)
@@ -5095,9 +5236,11 @@ function CustomerDashbord() {
             }
           : current,
       )
+      return true
     } catch (err) {
       setParcelReceiveError(err.response?.data?.message || 'ยืนยันรับพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
       setParcelReceiveErrorId(parcel.id)
+      return false
     } finally {
       setParcelReceiveId(null)
     }
@@ -5215,6 +5358,7 @@ function CustomerDashbord() {
     }
     setPaymentSubmitting(true)
     setPaymentError('')
+    const dueSnapshot = data?.currentDue
     try {
       const qrPayload = paymentChannels?.test_mode ? '' : await readSlipQrPayload(paymentSlip)
       const formData = new FormData()
@@ -5228,7 +5372,17 @@ function CustomerDashbord() {
       )
       setShowPaymentForm(false)
       setPaymentSlip(null)
-      setSuccessPopup(result.message || 'ชำระเงินสำเร็จ')
+      const message = result.message || 'ชำระเงินสำเร็จ'
+      setSlipSubmitResult({
+        // The API only says which outcome happened in its message: slips that need a staff check say "รอ…ตรวจสอบ".
+        status: /รอ.*ตรวจสอบ/.test(message) ? 'pending' : 'paid',
+        message,
+        roomNumber: data?.room?.room_number ?? data?.customer?.room_number,
+        tenantName: `${data?.customer?.first_name || ''} ${data?.customer?.last_name || ''}`.trim(),
+        sentAt: new Date(),
+        amount: dueSnapshot?.amount ?? null,
+        items: (dueSnapshot?.items || []).map((item) => ({ label: item.label, amount: `฿${formatCurrency(item.amount)}` })),
+      })
       await loadDashboard()
     } catch (err) {
       setPaymentError(err.response?.data?.message || 'ชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
@@ -5744,6 +5898,7 @@ function CustomerDashbord() {
         ),
         kind: 'utility',
         paymentType: payment.type,
+        payment,
       },
     ]
   }
@@ -6510,67 +6665,46 @@ function CustomerDashbord() {
 
             {notifDetail && (
               <Modal title={notifDetail.title} onClose={() => setNotifDetail(null)} variant="confirm">
-                {(requestClose) => (
-                  <div className="dashboard-confirm-body">
-                    <div className={`dashboard-confirm-icon is-${notifDetail.tone}`}>
-                      <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        {notifDetail.tone === 'success' ? (
-                          <polyline points="20 6 9 17 4 12" />
-                        ) : notifDetail.tone === 'danger' ? (
-                          <>
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="12" y1="8" x2="12" y2="12" />
-                            <line x1="12" y1="16" x2="12.01" y2="16" />
-                          </>
-                        ) : (
-                          <>
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="12" y1="16" x2="12" y2="12" />
-                            <line x1="12" y1="8" x2="12.01" y2="8" />
-                          </>
-                        )}
-                      </svg>
-                    </div>
-                    <p className="dashboard-confirm-message">
-                      <span className={`dashboard-confirm-message-status is-${notifDetail.tone}`}>
-                        {notifDetail.label}
-                      </span>
-                    </p>
-                    {notifDetail.detail && (
-                      <div className="dashboard-confirm-message-detail">{notifDetail.detail}</div>
-                    )}
+                {(requestClose) => notifDetail.server && SLIP_RESULT_NOTIF_TYPES.has(notifDetail.type) ? (
+                  <SlipResultNotification
+                    notif={notifDetail}
+                    onClose={requestClose}
+                    onResubmit={
+                      notifDetail.type === 'slip_rejected' && currentDue && !paymentUnderReview
+                        ? () => {
+                            requestClose()
+                            openPaymentForm()
+                          }
+                        : null
+                    }
+                  />
+                ) : notifDetail.kind === 'utility' && notifDetail.payment ? (
+                  <UtilityBillNotification
+                    notif={notifDetail}
+                    onClose={requestClose}
+                    onPay={
+                      currentDue && !paymentUnderReview
+                        ? () => {
+                            requestClose()
+                            openPaymentForm()
+                          }
+                        : null
+                    }
+                  />
+                ) : (
+                  <NotificationDialog
+                    notification={notifDetail}
+                    actions={[
+                      <ActionDialogButton key="close" onClick={requestClose} autoFocus>
+                        ปิด
+                      </ActionDialogButton>,
+                    ]}
+                  >
                     {notifDetail.server && notifDetail.kind === 'safety' && notifDetail.refId && (
                       <IncidentNotifPhotos incidentId={notifDetail.refId} />
                     )}
-                    {notifDetail.request ? (
-                      <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />
-                    ) : (
-                      <p className="dashboard-notif-item-date">
-                        {notifDetail.bylineName && (
-                          <>
-                            ประกาศโดย <span className="dashboard-actor">{notifDetail.bylineName}</span>
-                            {' · '}
-                          </>
-                        )}
-                        {formatDateTime(notifDetail.date)}
-                      </p>
-                    )}
-                    <div className="dashboard-form-actions">
-                      <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                        ปิด
-                      </button>
-                    </div>
-                  </div>
+                    {notifDetail.request && <RequestTimeline kind={notifDetail.kind} request={notifDetail.request} />}
+                  </NotificationDialog>
                 )}
               </Modal>
             )}
@@ -6679,17 +6813,18 @@ function CustomerDashbord() {
         {expiredVehicles.length > 0 && (
           <Modal title="หมดเวลาจอดแล้ว" variant="confirm" onClose={closeExpiredVehicles}>
             {(requestClose) => (
-              <div className="dashboard-park-expired">
-                <span className="dashboard-park-expired-icon" aria-hidden="true">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9" />
-                    <polyline points="12 7 12 12 15 14" />
-                  </svg>
-                </span>
-                <p className="dashboard-park-expired-text">
-                  ระบบยกเลิกสิทธิ์จอดรถให้อัตโนมัติ เนื่องจากถึงเวลาสิ้นสุดที่ขอไว้แล้ว
-                  หากต้องการจอดต่อ กรุณาลงทะเบียนรถใหม่อีกครั้ง
-                </p>
+              <ActionDialog
+                tone="pending"
+                icon="car"
+                kicker="ที่จอดรถ"
+                title="หมดเวลาจอดแล้ว"
+                lead="ระบบยกเลิกสิทธิ์จอดรถให้อัตโนมัติ เนื่องจากถึงเวลาสิ้นสุดที่ขอไว้แล้ว หากต้องการจอดต่อ กรุณาลงทะเบียนรถใหม่อีกครั้ง"
+                actions={[
+                  <ActionDialogButton key="ok" onClick={requestClose} autoFocus>
+                    รับทราบ
+                  </ActionDialogButton>,
+                ]}
+              >
                 <ul className="dashboard-park-expired-list">
                   {expiredVehicles.map((vehicle) => (
                     <li key={vehicle.id}>
@@ -6709,12 +6844,7 @@ function CustomerDashbord() {
                     </li>
                   ))}
                 </ul>
-                <div className="dashboard-form-actions">
-                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                    รับทราบ
-                  </button>
-                </div>
-              </div>
+              </ActionDialog>
             )}
           </Modal>
         )}
@@ -7152,40 +7282,29 @@ function CustomerDashbord() {
         })()}
 
         {parcelReceiveConfirm && (
-          <Modal title="ยืนยันรับพัสดุ" onClose={() => setParcelReceiveConfirm(null)} variant="confirm">
+          <Modal title="ยืนยันรับพัสดุ" onClose={() => setParcelReceiveConfirm(null)} variant="confirm" locked={parcelReceiveId !== null}>
             {(requestClose) => (
-              <div className="dashboard-confirm-body">
-                <div className="dashboard-confirm-icon is-info">
-                  <PackageIcon size={24} strokeWidth={2.2} />
-                </div>
-                <p className="dashboard-confirm-message">ยืนยันว่าคุณได้รับพัสดุชิ้นนี้แล้วใช่หรือไม่?</p>
-                <p className="dashboard-confirm-message-detail">
-                  ผู้ส่ง: {parcelReceiveConfirm.sender_name || 'พัสดุทั่วไป'}
-                  {parcelReceiveConfirm.tracking_number && <><br />เลขพัสดุ: {parcelReceiveConfirm.tracking_number}</>}
-                  {parcelReceiveConfirm.description && <><br />รายละเอียด: {parcelReceiveConfirm.description}</>}
-                </p>
-                <div className="dashboard-form-actions">
-                  <button
-                    type="button"
-                    className="dashboard-action-btn is-ghost"
-                    disabled={parcelReceiveId !== null}
-                    onClick={requestClose}
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="button"
-                    className="dashboard-action-btn is-primary"
-                    disabled={parcelReceiveId !== null}
-                    onClick={async () => {
-                      await handleReceiveParcel(parcelReceiveConfirm)
-                      requestClose()
-                    }}
-                  >
-                    {parcelReceiveId === parcelReceiveConfirm.id ? 'กำลังยืนยัน...' : 'ยืนยันรับพัสดุ'}
-                  </button>
-                </div>
-              </div>
+              <ConfirmDialog
+                tone="info"
+                icon="box"
+                kicker="พัสดุ"
+                title="ได้รับพัสดุชิ้นนี้แล้ว?"
+                lead="ยืนยันเมื่อรับพัสดุจากเจ้าหน้าที่เรียบร้อยแล้ว"
+                facts={[
+                  ['ผู้ส่ง', parcelReceiveConfirm.sender_name || 'พัสดุทั่วไป'],
+                  ['เลขพัสดุ', parcelReceiveConfirm.tracking_number],
+                  ['รายละเอียด', parcelReceiveConfirm.description],
+                ]}
+                error={parcelReceiveErrorId === parcelReceiveConfirm.id ? parcelReceiveError : ''}
+                busy={parcelReceiveId !== null}
+                busyLabel="กำลังยืนยัน..."
+                confirmLabel="ยืนยันรับพัสดุ"
+                confirmIcon="check"
+                onConfirm={async () => {
+                  if (await handleReceiveParcel(parcelReceiveConfirm)) requestClose(true)
+                }}
+                onCancel={requestClose}
+              />
             )}
           </Modal>
         )}
@@ -7193,16 +7312,27 @@ function CustomerDashbord() {
         {moveRoomReminder && (
           <Modal title="ติดต่อเจ้าหน้าที่เรื่องย้ายห้อง" onClose={() => setMoveRoomReminder(null)} variant="confirm">
             {(requestClose) => (
-              <div className="dashboard-confirm-body dashboard-contact-reminder">
-                <div className="dashboard-confirm-icon is-info">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 21h18" />
-                    <path d="M5 21V10h14v11" />
-                    <path d="M9 21v-5h6v5" />
-                    <circle cx="12" cy="5" r="2.5" />
-                  </svg>
-                </div>
-                <p className="dashboard-confirm-message">เจ้าหน้าที่รับเรื่องคำขอย้ายห้องของคุณแล้ว</p>
+              <ActionDialog
+                tone="info"
+                icon="door"
+                kicker="คำขอย้ายห้อง"
+                title="เจ้าหน้าที่รับเรื่องคำขอย้ายห้องของคุณแล้ว"
+                actions={[
+                  <ActionDialogButton
+                    key="detail"
+                    variant="ghost"
+                    onClick={() => {
+                      setStatusPopup({ kind: 'move_room', status: moveRoomReminder.status, request: moveRoomReminder })
+                      requestClose()
+                    }}
+                  >
+                    ดูรายละเอียด
+                  </ActionDialogButton>,
+                  <ActionDialogButton key="ok" onClick={requestClose} autoFocus>
+                    รับทราบ
+                  </ActionDialogButton>,
+                ]}
+              >
                 <div className="dashboard-contact-reminder-route">
                   <span>ห้อง {moveRoomReminder.room_number}</span>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -7210,30 +7340,15 @@ function CustomerDashbord() {
                   </svg>
                   <strong>ห้อง {moveRoomReminder.target_room_number}</strong>
                 </div>
-                <div className="dashboard-contact-reminder-box">
-                  <p>กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อ</p>
-                  <ul>
-                    {!moveRoomReminder.room_inspected && <li>นัดตรวจสภาพห้องปัจจุบัน</li>}
-                    <li>พูดคุยรายละเอียดค่าเช่าและเงินประกันของห้องใหม่</li>
-                    <li>ลงนามบันทึกการย้ายห้อง</li>
-                  </ul>
-                </div>
-                <div className="dashboard-form-actions">
-                  <button
-                    type="button"
-                    className="dashboard-action-btn is-ghost"
-                    onClick={() => {
-                      setStatusPopup({ kind: 'move_room', status: moveRoomReminder.status, request: moveRoomReminder })
-                      requestClose()
-                    }}
-                  >
-                    ดูรายละเอียด
-                  </button>
-                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                    รับทราบ
-                  </button>
-                </div>
-              </div>
+                <ActionDialogOutcome
+                  title="กรุณาติดต่อเจ้าหน้าที่ที่เคาน์เตอร์เพื่อ"
+                  lines={[
+                    !moveRoomReminder.room_inspected && 'นัดตรวจสภาพห้องปัจจุบัน',
+                    'พูดคุยรายละเอียดค่าเช่าและเงินประกันของห้องใหม่',
+                    'ลงนามบันทึกการย้ายห้อง',
+                  ]}
+                />
+              </ActionDialog>
             )}
           </Modal>
         )}
@@ -7245,14 +7360,18 @@ function CustomerDashbord() {
               const sameTypeRequests = openRequests.filter((request) => request.type === blockedRequestPopup.type)
               const activeRequests = sameTypeRequests.length > 0 ? sameTypeRequests : openRequests
               return (
-                <div className="dashboard-confirm-body">
-                  <div className="dashboard-confirm-icon is-pending">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9" />
-                      <polyline points="12 7 12 12 15 14" />
-                    </svg>
-                  </div>
-                  <p className="dashboard-confirm-message">{blockedRequestPopup.message}</p>
+                <ActionDialog
+                  tone="pending"
+                  icon="clock"
+                  kicker="ยังส่งคำขอใหม่ไม่ได้"
+                  title="ยังมีคำขอที่รอดำเนินการ"
+                  lead={blockedRequestPopup.message}
+                  actions={[
+                    <ActionDialogButton key="ok" onClick={requestClose} autoFocus>
+                      เข้าใจแล้ว
+                    </ActionDialogButton>,
+                  ]}
+                >
                   <div className="dashboard-blocked-list">
                     <span className="dashboard-blocked-label">
                       {sameTypeRequests.length > 0 ? `คำขอ${TENANT_REQUEST_TYPE_LABEL[blockedRequestPopup.type] || ''}ที่กำลังดำเนินการอยู่` : 'คำขอที่กำลังดำเนินการอยู่'}
@@ -7285,44 +7404,21 @@ function CustomerDashbord() {
                       ))
                     )}
                   </div>
-                  <div className="dashboard-form-actions">
-                    <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                      เข้าใจแล้ว
-                    </button>
-                  </div>
-                </div>
+                </ActionDialog>
               )
             }}
           </Modal>
         )}
 
+        {slipSubmitResult && (
+          <Modal title={slipSubmitResult.status === 'paid' ? 'ชำระเงินเรียบร้อย' : 'ส่งสลิปแล้ว'} onClose={() => setSlipSubmitResult(null)} variant="confirm">
+            {(requestClose) => <SlipSubmitResult result={slipSubmitResult} onClose={requestClose} />}
+          </Modal>
+        )}
+
         {successPopup && (
           <Modal title="สำเร็จ" onClose={() => setSuccessPopup(null)} variant="success">
-            {(requestClose) => (
-              <div className="dashboard-confirm-body">
-                <div className="dashboard-confirm-icon is-success">
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <p className="dashboard-confirm-message">{successPopup}</p>
-                <div className="dashboard-form-actions">
-                  <button type="button" className="dashboard-action-btn is-primary" onClick={requestClose}>
-                    รับทราบ
-                  </button>
-                </div>
-              </div>
-            )}
+            {(requestClose) => <ResultDialog message={successPopup} onClose={requestClose} buttonLabel="รับทราบ" />}
           </Modal>
         )}
 
@@ -8919,33 +9015,24 @@ function CustomerDashbord() {
                   </div>
 
                   {confirmCancelId !== null && (
-                    <Modal title="ยืนยันการยกเลิก" onClose={() => setConfirmCancelId(null)} variant="confirm">
+                    <Modal title="ยืนยันการยกเลิก" onClose={() => { setConfirmCancelId(null); setMaintenanceError('') }} variant="confirm" locked={cancelingMaintenanceId === confirmCancelId}>
                       {(requestClose) => (
-                        <div className="dashboard-confirm-body">
-                          <div className="dashboard-confirm-icon">!</div>
-                          <p className="dashboard-confirm-message">
-                            ต้องการยกเลิกรายการแจ้งซ่อมนี้ใช่หรือไม่?
-                            <br />
-                            เมื่อยกเลิกแล้วจะไม่สามารถกู้คืนได้
-                          </p>
-                          <ErrorPopup message={maintenanceError} onClose={() => setMaintenanceError('')} />
-                          <div className="dashboard-form-actions">
-                            <button type="button" className="dashboard-action-btn is-ghost" onClick={requestClose}>
-                              ไม่ยกเลิก
-                            </button>
-                            <button
-                              type="button"
-                              className="dashboard-action-btn is-danger"
-                              disabled={cancelingMaintenanceId === confirmCancelId}
-                              onClick={async () => {
-                                const ok = await handleCancelMaintenance(confirmCancelId)
-                                if (ok) requestClose()
-                              }}
-                            >
-                              {cancelingMaintenanceId === confirmCancelId ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
-                            </button>
-                          </div>
-                        </div>
+                        <ConfirmDialog
+                          tone="danger"
+                          icon="tool"
+                          kicker="แจ้งซ่อม"
+                          title="ยกเลิกรายการแจ้งซ่อมนี้?"
+                          lead="เมื่อยกเลิกแล้วจะไม่สามารถกู้คืนได้"
+                          error={maintenanceError}
+                          busy={cancelingMaintenanceId === confirmCancelId}
+                          busyLabel="กำลังยกเลิก..."
+                          cancelLabel="ไม่ยกเลิก"
+                          confirmLabel="ยกเลิกแจ้งซ่อม"
+                          onConfirm={async () => {
+                            if (await handleCancelMaintenance(confirmCancelId)) requestClose(true)
+                          }}
+                          onCancel={requestClose}
+                        />
                       )}
                     </Modal>
                   )}

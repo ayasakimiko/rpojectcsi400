@@ -21,6 +21,7 @@ import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
 import RepairVendorManager from '../components/RepairVendorManager.jsx'
 import NotificationDetailModal from '../components/NotificationDetailModal.jsx'
+import { ConfirmDialog, ResultDialog } from '../components/ActionDialog.jsx'
 import { repairSummaryTiles } from '../utils/repairSummary.js'
 import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
@@ -2583,6 +2584,8 @@ function OwnerMain() {
   const [expenseEditFormError, setExpenseEditFormError] = useState('')
   const [isExpenseEditSubmitting, setIsExpenseEditSubmitting] = useState(false)
   const [expenseDeleteConfirm, setExpenseDeleteConfirm] = useState(null)
+  const [expenseDeleting, setExpenseDeleting] = useState(false)
+  const [expenseDeleteError, setExpenseDeleteError] = useState('')
 
   const loadAnnouncements = useCallback(() => axios
     .get('/api/owner/announcements')
@@ -2632,6 +2635,20 @@ function OwnerMain() {
     confirmResolverRef.current = null
     setConfirmDialog(null)
   }
+
+  // Esc cancels the confirm before any dialog underneath sees the key.
+  useEffect(() => {
+    if (!confirmDialog) return undefined
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return
+      event.stopImmediatePropagation()
+      confirmResolverRef.current?.(false)
+      confirmResolverRef.current = null
+      setConfirmDialog(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirmDialog])
   const [displayStaffModalOpen, isStaffModalClosing] = useClosingValue(isStaffModalOpen)
   const [displayViewingStaff, isViewingStaffClosing] = useClosingValue(viewingStaff)
   const [displayExpenseEditModal, isExpenseEditClosing] = useClosingValue(expenseEditModal)
@@ -3072,15 +3089,20 @@ function OwnerMain() {
   }
 
   const confirmDeleteExpenseRecord = async (requestClose) => {
+    setExpenseDeleting(true)
+    setExpenseDeleteError('')
     try {
       await axios.delete(`/api/owner/expenses/${expenseDeleteConfirm.id}`)
       setMessage('success', 'ลบรายจ่ายสำเร็จ')
       requestClose()
       await loadExpenses(financeExpensePage)
     } catch (error) {
-      setMessage('danger', error.response?.data?.message || 'ไม่สามารถลบรายจ่ายได้')
+      setExpenseDeleteError(error.response?.data?.message || 'ไม่สามารถลบรายจ่ายได้')
+    } finally {
+      setExpenseDeleting(false)
     }
   }
+
 
   const loadTrends = async (overrides = {}) => {
     const nextFilters = { ...paymentFilter, ...overrides }
@@ -3945,21 +3967,8 @@ function OwnerMain() {
 
         {displayNotice && (
           <div className={`owner-modal-backdrop owner-confirm-backdrop owner-notice-backdrop${isNoticeClosing ? ' is-closing' : ''}`} role="presentation" onClick={closeNotice} onKeyDown={(event) => { if (event.key === 'Escape') closeNotice() }}>
-            <section className={`owner-modal owner-confirm-modal is-${displayNotice.type === 'danger' ? 'danger' : 'success'}${isNoticeClosing ? ' is-closing' : ''}`} role="alertdialog" aria-modal="true" aria-labelledby="owner-notice-title" aria-describedby="owner-notice-message" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-confirm-body">
-                <span className="owner-confirm-icon" aria-hidden="true">
-                  {displayNotice.type === 'danger' ? (
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
-                  ) : (
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 10" /></svg>
-                  )}
-                </span>
-                <h3 id="owner-notice-title">{displayNotice.type === 'danger' ? 'ดำเนินการไม่สำเร็จ' : 'ดำเนินการสำเร็จ'}</h3>
-                <p id="owner-notice-message">{displayNotice.message}</p>
-              </div>
-              <div className="owner-confirm-actions owner-notice-actions">
-                <button type="button" className="owner-confirm-ok" onClick={closeNotice} autoFocus>ตกลง</button>
-              </div>
+            <section className={`owner-modal owner-confirm-modal is-${displayNotice.type === 'danger' ? 'danger' : 'success'}${isNoticeClosing ? ' is-closing' : ''}`} role="alertdialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+              <ResultDialog type={displayNotice.type === 'danger' ? 'error' : 'success'} message={displayNotice.message} onClose={closeNotice} />
             </section>
           </div>
         )}
@@ -5353,50 +5362,26 @@ function OwnerMain() {
         )}
 
         {displayExpenseDeleteConfirm && (
-          <div className={`owner-modal-backdrop${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => setExpenseDeleteConfirm(null)}>
-            <section className={`owner-modal owner-xd-dialog${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="expense-delete-title" onClick={(event) => event.stopPropagation()}>
-              <div className="owner-modal-header">
-                <div>
-                  <h3 id="expense-delete-title">ยืนยันการลบรายจ่าย</h3>
-                </div>
-                <button type="button" className="owner-modal-close" onClick={() => setExpenseDeleteConfirm(null)} aria-label="ปิด">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div className="owner-modal-body">
-                <div className="owner-confirm-body">
-                  <div className="owner-confirm-icon is-danger">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M3 6h18" />
-                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      <line x1="10" y1="11" x2="10" y2="17" />
-                      <line x1="14" y1="11" x2="14" y2="17" />
-                    </svg>
-                  </div>
-                  <p className="owner-confirm-message">
-                    ต้องการลบรายจ่าย <strong>"{displayExpenseDeleteConfirm.category}"</strong>
-                    <br />
-                    จำนวน <strong>฿{formatCurrency(displayExpenseDeleteConfirm.amount)}</strong> ใช่หรือไม่?
-                  </p>
-                  <p className="owner-confirm-note">รายการจะถูกซ่อนจากรายจ่ายและยอดสรุป แต่ยังเก็บประวัติไว้ในระบบพร้อมชื่อผู้ลบ</p>
-                  <div className="owner-form-actions">
-                    <button type="button" className="owner-secondary-btn" onClick={() => setExpenseDeleteConfirm(null)}>
-                      ยกเลิก
-                    </button>
-                    <button
-                      type="button"
-                      className="owner-danger-btn"
-                      onClick={() => confirmDeleteExpenseRecord(() => setExpenseDeleteConfirm(null))}
-                    >
-                      ลบรายจ่าย
-                    </button>
-                  </div>
-                </div>
-              </div>
+          <div className={`owner-modal-backdrop${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="presentation" onClick={() => { if (!expenseDeleting) { setExpenseDeleteConfirm(null); setExpenseDeleteError('') } }}>
+            <section className={`owner-modal owner-confirm-modal${isExpenseDeleteClosing ? ' is-closing' : ''}`} role="alertdialog" aria-modal="true" aria-label="ยืนยันการลบรายจ่าย" onClick={(event) => event.stopPropagation()}>
+              <ConfirmDialog
+                tone="danger"
+                icon="trash"
+                kicker="รายจ่าย"
+                title="ลบรายจ่ายนี้?"
+                lead="รายการจะถูกซ่อนจากรายจ่ายและยอดสรุป แต่ยังเก็บประวัติไว้ในระบบพร้อมชื่อผู้ลบ"
+                facts={[
+                  ['หมวดหมู่', displayExpenseDeleteConfirm.category],
+                  ['จำนวนเงิน', `฿${formatCurrency(displayExpenseDeleteConfirm.amount)}`],
+                ]}
+                error={expenseDeleteError}
+                busy={expenseDeleting}
+                busyLabel="กำลังลบ..."
+                confirmLabel="ลบรายจ่าย"
+                confirmIcon="trash"
+                onConfirm={() => confirmDeleteExpenseRecord(() => setExpenseDeleteConfirm(null))}
+                onCancel={() => { setExpenseDeleteConfirm(null); setExpenseDeleteError('') }}
+              />
             </section>
           </div>
         )}
@@ -6153,50 +6138,21 @@ function OwnerMain() {
               className={`owner-modal owner-confirm-modal is-${displayConfirmDialog.tone || 'primary'}${isConfirmDialogClosing ? ' is-closing' : ''}`}
               role="alertdialog"
               aria-modal="true"
-              aria-labelledby="owner-confirm-title"
-              aria-describedby="owner-confirm-message"
+              aria-label={displayConfirmDialog.title}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="owner-confirm-body">
-                <span className="owner-confirm-icon" aria-hidden="true">
-                  {displayConfirmDialog.tone === 'danger' ? (
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 8v5M12 16h.01" />
-                    </svg>
-                  ) : displayConfirmDialog.tone === 'success' ? (
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="m8 12.5 2.8 2.8L16 10" />
-                    </svg>
-                  ) : (
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 11v5M12 8h.01" />
-                    </svg>
-                  )}
-                </span>
-                <h3 id="owner-confirm-title">{displayConfirmDialog.title}</h3>
-                <p id="owner-confirm-message">{displayConfirmDialog.message}</p>
-                {displayConfirmDialog.details?.length > 0 && (
-                  <dl className="owner-confirm-details">
-                    {displayConfirmDialog.details.map(([label, value]) => (
-                      <div key={label}>
-                        <dt>{label}</dt>
-                        <dd>{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </div>
-              <div className="owner-confirm-actions">
-                <button type="button" className="owner-confirm-cancel" onClick={() => resolveConfirm(false)}>
-                  {displayConfirmDialog.cancelLabel || 'ยกเลิก'}
-                </button>
-                <button type="button" className="owner-confirm-ok" onClick={() => resolveConfirm(true)} autoFocus>
-                  {displayConfirmDialog.confirmLabel || 'ยืนยัน'}
-                </button>
-              </div>
+              <ConfirmDialog
+                tone={{ success: 'success', danger: 'danger' }[displayConfirmDialog.tone] || 'info'}
+                icon={displayConfirmDialog.icon}
+                kicker={displayConfirmDialog.kicker}
+                title={displayConfirmDialog.title}
+                lead={displayConfirmDialog.message}
+                facts={displayConfirmDialog.details}
+                confirmLabel={displayConfirmDialog.confirmLabel || 'ยืนยัน'}
+                cancelLabel={displayConfirmDialog.cancelLabel || 'ยกเลิก'}
+                onConfirm={() => resolveConfirm(true)}
+                onCancel={() => resolveConfirm(false)}
+              />
             </section>
           </div>
         )}

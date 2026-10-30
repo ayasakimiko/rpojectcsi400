@@ -7,6 +7,7 @@ import ThaiDatePicker from './ThaiDatePicker.jsx'
 import compressImageFile from '../utils/compressImageFile.js'
 import { matchesSearch } from '../utils/search.js'
 import FurnitureAssetsRow from './FurnitureAssetsRow.jsx'
+import { ConfirmDialog, ResultDialog } from './ActionDialog.jsx'
 import { assetPriceValue, CHECKLIST_ITEMS, ISSUE_RESULTS, isValidAssetPrice, RESULT_OPTIONS, withFurnitureResult } from '../utils/inspectionChecklist.js'
 import './InspectionCells.css'
 import './InspectionStaffForm.css'
@@ -657,7 +658,7 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
     setDeleteError('')
     try {
       const { data } = await axios.delete(`/api/staff/move-in-inspections/${id}`)
-      requestClose()
+      requestClose(true)
       load()
       if (modal?.inspection?.id !== id) await openEdit({ id: modal.inspection.id })
       else if (data.next_id) await openEdit({ id: data.next_id })
@@ -860,68 +861,35 @@ export default function MoveInInspectionPanel({ Modal, FilterPanel, subtabs }) {
       )}
 
       {confirmDelete && (
-        <Modal title="ยืนยันลบบันทึกผลตรวจ" onClose={() => !deleting && setConfirmDelete(null)} variant="confirm">
+        <Modal title="ยืนยันลบบันทึกผลตรวจ" onClose={() => setConfirmDelete(null)} variant="confirm" locked={deleting}>
           {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-warning">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
-                </svg>
-              </div>
-              <div className="staff-confirm-message-card is-error">
-                <span className="staff-confirm-message-label">ต้องการลบบันทึกนี้ใช่ไหม</span>
-                <p className="staff-confirm-message">
-                  บันทึกครั้งที่ {confirmDelete.order} · วันที่ {formatDate(confirmDelete.inspection_date)}
-                </p>
-                <ul className="staff-confirm-message-points">
-                  <li>ผลตรวจ: {confirmDelete.issue_count > 0 ? `พบปัญหา ${confirmDelete.issue_count} รายการ` : 'ปกติ'}</li>
-                  <li>รูปประกอบ {confirmDelete.photo_count} รูปจะถูกลบไปด้วย</li>
-                  <li>ลบแล้วกู้คืนไม่ได้</li>
-                </ul>
-              </div>
-              {deleteError && (
-                <p className="staff-form-error" role="alert">
-                  {deleteError}
-                </p>
-              )}
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-ghost" onClick={requestClose} disabled={deleting}>
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="staff-action-btn is-danger"
-                  onClick={() => deleteSave(confirmDelete.id, requestClose)}
-                  disabled={deleting}
-                >
-                  {deleting ? 'กำลังลบ...' : 'ลบบันทึก'}
-                </button>
-              </div>
-            </div>
+            <ConfirmDialog
+              tone="danger"
+              icon="trash"
+              kicker="ผลตรวจห้องก่อนเข้าพัก"
+              title="ลบบันทึกผลตรวจนี้?"
+              lead={`บันทึกครั้งที่ ${confirmDelete.order} · วันที่ ${formatDate(confirmDelete.inspection_date)}`}
+              facts={[
+                ['ผลตรวจ', confirmDelete.issue_count > 0 ? `พบปัญหา ${confirmDelete.issue_count} รายการ` : 'ปกติ'],
+                ['รูปประกอบ', `${confirmDelete.photo_count} รูป (ลบไปด้วย)`],
+              ]}
+              note="ลบแล้วกู้คืนไม่ได้"
+              noteLabel="ข้อควรทราบ"
+              error={deleteError}
+              busy={deleting}
+              busyLabel="กำลังลบ..."
+              confirmLabel="ลบบันทึก"
+              confirmIcon="trash"
+              onConfirm={() => deleteSave(confirmDelete.id, requestClose)}
+              onCancel={requestClose}
+            />
           )}
         </Modal>
       )}
 
       {notice && (
         <Modal title="สำเร็จ" onClose={() => setNotice('')} variant="confirm">
-          {(requestClose) => (
-            <div className="staff-confirm-body">
-              <div className="staff-confirm-icon is-success">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <div className="staff-confirm-message-card is-success">
-                <span className="staff-confirm-message-label">ผลการดำเนินการ</span>
-                <p className="staff-confirm-message">{notice}</p>
-              </div>
-              <div className="staff-form-actions">
-                <button type="button" className="staff-action-btn is-primary" onClick={requestClose}>
-                  ปิด
-                </button>
-              </div>
-            </div>
-          )}
+          {(requestClose) => <ResultDialog message={notice} onClose={requestClose} />}
         </Modal>
       )}
     </div>

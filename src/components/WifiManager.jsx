@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+import { ConfirmDialog } from './ActionDialog.jsx'
 import './WifiManager.css'
 
 const API_BASE = '/api/rooms/wifi'
@@ -78,18 +79,20 @@ function DeviceIcon({ type, size = 18 }) {
   )
 }
 
-function WifiModal({ title, subtitle, tone = 'primary', icon, busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', children }) {
+function WifiModal({ bare = false, title, subtitle, tone = 'primary', icon, busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', children }) {
   const titleId = useId()
   const closeRef = useRef(onClose)
+  const busyRef = useRef(busy)
 
   useEffect(() => {
     closeRef.current = onClose
+    busyRef.current = busy
   })
 
   useEffect(() => {
     const unlock = lockBodyScroll()
     const handleKey = (event) => {
-      if (event.key === 'Escape') closeRef.current()
+      if (event.key === 'Escape' && !busyRef.current) closeRef.current()
     }
     document.addEventListener('keydown', handleKey)
     return () => {
@@ -97,6 +100,17 @@ function WifiModal({ title, subtitle, tone = 'primary', icon, busy, error, onClo
       unlock()
     }
   }, [])
+
+  if (bare) {
+    return createPortal(
+      <div className="wifi-modal-overlay" role="presentation" onClick={() => !busy && onClose()}>
+        <section className={`wifi-modal is-${tone}`} role="alertdialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+          {children}
+        </section>
+      </div>,
+      document.body,
+    )
+  }
 
   return createPortal(
     <div className="wifi-modal-overlay" role="presentation" onClick={() => !busy && onClose()}>
@@ -210,29 +224,31 @@ function AddDeviceModal({ room, busy, error, onClose, onSubmit }) {
 
 function RemoveDevicesModal({ room, device, busy, error, onClose, onSubmit }) {
   const devices = device ? [device] : room.devices
+  const title = device ? 'ตัดการเชื่อมต่ออุปกรณ์' : 'ตัดการเชื่อมต่อทุกอุปกรณ์'
   return (
-    <WifiModal
-      tone="danger"
-      title={device ? 'ตัดการเชื่อมต่ออุปกรณ์' : 'ตัดการเชื่อมต่อทุกอุปกรณ์'}
-      subtitle={`ห้อง ${room.room_number} · เชื่อมต่ออยู่ ${room.devices.length} / ${room.max_devices} เครื่อง`}
-      icon={<DeviceIcon type={device?.device_type || 'other'} size={22} />}
-      busy={busy}
-      error={error}
-      onClose={onClose}
-      onSubmit={onSubmit}
-      submitLabel={device ? 'ตัดการเชื่อมต่อ' : `ตัดการเชื่อมต่อ ${devices.length} เครื่อง`}
-    >
-      <p className="wifi-modal-message">
-        {device
+    <WifiModal bare tone="danger" title={title} busy={busy} onClose={onClose}>
+      <ConfirmDialog
+        tone="danger"
+        icon="wifi"
+        kicker={`Wi-Fi ห้อง ${room.room_number} · เชื่อมต่ออยู่ ${room.devices.length} / ${room.max_devices} เครื่อง`}
+        title={`${title}?`}
+        lead={device
           ? 'อุปกรณ์นี้จะถูกนำออกจากรายการ และต้องเชื่อมต่อใหม่หากต้องการใช้งาน'
           : 'อุปกรณ์ทั้งหมดด้านล่างจะถูกนำออกจากรายการของห้องนี้'}
-      </p>
-      <div className="wifi-device-summary-list">
-        {devices.map((item) => <DeviceSummary key={item.id} device={item} />)}
-      </div>
+        error={error}
+        busy={busy}
+        confirmLabel={device ? 'ตัดการเชื่อมต่อ' : `ตัดการเชื่อมต่อ ${devices.length} เครื่อง`}
+        onConfirm={onSubmit}
+        onCancel={onClose}
+      >
+        <div className="wifi-device-summary-list">
+          {devices.map((item) => <DeviceSummary key={item.id} device={item} />)}
+        </div>
+      </ConfirmDialog>
     </WifiModal>
   )
 }
+
 
 const LIMIT_PRESETS = [1, 2, 3, 4, 5, 6, 8, 10]
 

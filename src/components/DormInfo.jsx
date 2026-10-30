@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import axios from 'axios'
 import './DormInfo.css'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+import { ConfirmDialog, ResultDialog } from './ActionDialog.jsx'
 
 const PUBLISHED_FIELDS = ['dorm_name', 'dorm_rules', 'contract_rules', 'gate_close_time', 'caretaker_phone']
 
@@ -571,6 +572,9 @@ function ContactRow({ icon, label, phone }) {
   )
 }
 
+const SETTINGS_DIALOG_TONE = { primary: 'info', success: 'success', danger: 'danger', warning: 'pending' }
+const SETTINGS_DIALOG_ICON = { rules: 'file', bank: 'bank', check: 'check' }
+
 export function SettingsDialog({
   open,
   tone = 'primary',
@@ -609,33 +613,24 @@ export function SettingsDialog({
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="dorm-dialog-body">
-          <span className="dorm-dialog-icon" aria-hidden="true">
-            <Icon name={icon} size={26} strokeWidth={2.2} />
-          </span>
-          <h3 id={titleId}>{title}</h3>
-          {message && <p>{message}</p>}
-          {details.length > 0 && (
-            <dl className="dorm-dialog-details">
-              {details.map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
-        <div className={`dorm-dialog-actions${hideCancel ? ' is-single' : ''}`}>
-          {!hideCancel && (
-            <button type="button" className="dorm-settings-btn is-ghost" onClick={onCancel} disabled={busy}>
-              {cancelLabel}
-            </button>
-          )}
-          <button type="button" className="dorm-settings-btn is-primary" onClick={onConfirm} disabled={busy} autoFocus>
-            {confirmLabel}
-          </button>
-        </div>
+        <span id={titleId} hidden>{title}</span>
+        {hideCancel ? (
+          <ResultDialog type={tone === 'danger' ? 'error' : 'success'} message={message || title} onClose={onConfirm} buttonLabel={confirmLabel} />
+        ) : (
+          <ConfirmDialog
+            tone={SETTINGS_DIALOG_TONE[tone] || 'info'}
+            icon={SETTINGS_DIALOG_ICON[icon] || 'file'}
+            title={title}
+            lead={message}
+            facts={details.length > 0 ? details : null}
+            busy={busy}
+            busyLabel={confirmLabel}
+            confirmLabel={confirmLabel}
+            cancelLabel={cancelLabel}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+          />
+        )}
       </section>
     </div>,
     document.body,

@@ -26,6 +26,8 @@ export function toBellItem(row, pending = false) {
   return {
     key: pending ? `pending-${row.key}` : `server-${row.id}`,
     serverId: pending ? null : row.id,
+    type: row.type || null,
+    actorName: row.actor_name || null,
     isRead: pending ? null : Boolean(row.is_read),
     title: row.title,
     label: row.message,

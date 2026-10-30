@@ -7,6 +7,7 @@ import PhotoLightbox from './PhotoLightbox.jsx'
 import { ContractImagePicker } from './RentalContract.jsx'
 import { copyText } from '../utils/copyText.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
+import { ConfirmDialog } from './ActionDialog.jsx'
 import { API_ORIGIN } from '../config/api.js'
 import { REPAIR_VENDOR_API_PREFIX } from '../config/serviceRoutes.js'
 import {
@@ -162,7 +163,7 @@ function JobStatusPill({ status }) {
 const openModals = []
 const MODAL_EXIT_MS = 180
 
-function RepairModal({ title, subtitle, icon = 'wrench', tone = 'primary', size = 'md', busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', hideCancel = false, footer, children }) {
+function RepairModal({ bare = false, title, subtitle, icon = 'wrench', tone = 'primary', size = 'md', busy, error, onClose, onSubmit, submitLabel, submitDisabled, cancelLabel = 'ยกเลิก', hideCancel = false, footer, children }) {
   const titleId = useId()
   const closeRef = useRef(onClose)
   const busyRef = useRef(busy)
@@ -203,37 +204,43 @@ function RepairModal({ title, subtitle, icon = 'wrench', tone = 'primary', size 
         className={`market-modal repair-modal is-${tone} is-${size}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-labelledby={bare ? undefined : titleId}
+        aria-label={bare ? title : undefined}
         onClick={(event) => event.stopPropagation()}
         onSubmit={onSubmit ? (event) => {
           event.preventDefault()
           if (!busy && !submitDisabled) onSubmit()
         } : undefined}
       >
-        <header className="market-modal-head">
-          <span className="market-modal-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
-          <div>
-            <h3 id={titleId}>{title}</h3>
-            {subtitle && <p>{subtitle}</p>}
-          </div>
-          <button type="button" className="market-modal-close" aria-label="ปิด" disabled={busy} onClick={requestClose}>×</button>
-        </header>
-        <div className="market-modal-body">
-          {children}
-          {error && <p className="market-error" role="alert">{error}</p>}
-        </div>
-        {(onSubmit || footer) && (
-          <footer className="market-modal-actions">
-            {footer}
-            {onSubmit && (
-              <>
-                {!hideCancel && <button type="button" className="market-btn" disabled={busy} onClick={requestClose}>{cancelLabel}</button>}
-                <button type="submit" className={`market-btn ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} disabled={busy || submitDisabled}>
-                  {busy ? 'กำลังดำเนินการ...' : submitLabel}
-                </button>
-              </>
+        {/* eslint-disable-next-line react-hooks/refs -- requestClose reads refs only when it runs (click / Esc), never during render */}
+        {bare ? children(requestClose) : (
+          <>
+            <header className="market-modal-head">
+              <span className="market-modal-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
+              <div>
+                <h3 id={titleId}>{title}</h3>
+                {subtitle && <p>{subtitle}</p>}
+              </div>
+              <button type="button" className="market-modal-close" aria-label="ปิด" disabled={busy} onClick={requestClose}>×</button>
+            </header>
+            <div className="market-modal-body">
+              {children}
+              {error && <p className="market-error" role="alert">{error}</p>}
+            </div>
+            {(onSubmit || footer) && (
+              <footer className="market-modal-actions">
+                {footer}
+                {onSubmit && (
+                  <>
+                    {!hideCancel && <button type="button" className="market-btn" disabled={busy} onClick={requestClose}>{cancelLabel}</button>}
+                    <button type="submit" className={`market-btn ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} disabled={busy || submitDisabled}>
+                      {busy ? 'กำลังดำเนินการ...' : submitLabel}
+                    </button>
+                  </>
+                )}
+              </footer>
             )}
-          </footer>
+          </>
         )}
       </Tag>
     </div>,
@@ -277,31 +284,37 @@ function NoticeModal({ message, onClose }) {
   )
 }
 
+const CONFIRM_TONE = { danger: 'danger', primary: 'info', success: 'success', warning: 'pending' }
+
 function ConfirmModal({ title, message, tone = 'danger', icon = 'trash', submitLabel, reasonLabel, onClose, onConfirm }) {
   const [reason, setReason] = useState('')
   const { busy, error, run } = useSubmit(onClose)
   return (
-    <RepairModal
-      title={title}
-      icon={icon}
-      tone={tone}
-      size="sm"
-      busy={busy}
-      error={error}
-      onClose={onClose}
-      submitLabel={submitLabel}
-      submitDisabled={Boolean(reasonLabel) && !reason.trim()}
-      onSubmit={() => run(() => onConfirm(reason.trim()), 'ดำเนินการไม่สำเร็จ')}
-    >
-      <p className="market-notice-message">{message}</p>
-      {reasonLabel && (
-        <Field label={reasonLabel} wide>
-          <textarea className="market-input" rows={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-        </Field>
+    <RepairModal bare title={title} tone={tone} size="sm" busy={busy} onClose={() => onClose()}>
+      {(requestClose) => (
+        <ConfirmDialog
+          tone={CONFIRM_TONE[tone] || 'info'}
+          icon={icon}
+          title={title}
+          lead={message}
+          error={error}
+          busy={busy}
+          confirmLabel={submitLabel}
+          confirmDisabled={Boolean(reasonLabel) && !reason.trim()}
+          onConfirm={() => run(() => onConfirm(reason.trim()), 'ดำเนินการไม่สำเร็จ')}
+          onCancel={requestClose}
+        >
+          {reasonLabel && (
+            <Field label={reasonLabel} wide>
+              <textarea className="market-input" rows={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} autoFocus />
+            </Field>
+          )}
+        </ConfirmDialog>
       )}
     </RepairModal>
   )
 }
+
 
 function InfoGrid({ items }) {
   return (
