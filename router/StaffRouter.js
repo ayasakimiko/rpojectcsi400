@@ -91,6 +91,7 @@ import {
   validateInspectionDamage,
 } from "./rentalContracts.js";
 import { depositBalanceAfterTransfers, transferDepositDeductedCents } from "./roomTransferFinance.js";
+import { ContractRenewError, renewContractByStaff } from "./contractExpiry.js";
 import { loadMoveInBaseline, loadMoveOutBaseline, parseMoveInInspectionRow } from "./moveInBaseline.js";
 import { loadRoomsWithDue } from "./roomDue.js";
 import { actorOf } from "../middleware/notifications.js";
@@ -1304,6 +1305,32 @@ router.post("/rooms/:room_number/collect-payment", async (req, res) => {
       return res.status(409).json({ message: "มีรายการอื่นกำลังปรับปรุงข้อมูลห้องนี้ กรุณารีเฟรชและลองใหม่อีกครั้ง" });
     }
     console.error("Staff collect payment error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection?.release();
+  }
+});
+
+router.post("/rooms/:room_number/renew", async (req, res) => {
+  let connection;
+  try {
+    const roomNumberValue = Number(req.params.room_number);
+    if (!isPositiveId(roomNumberValue)) {
+      return res.status(400).json({ message: "เลขห้องไม่ถูกต้อง" });
+    }
+    const staffName = await getActingStaffName(getPool(), req.user);
+    connection = await getPool().getConnection();
+    await connection.beginTransaction();
+    const renewed = await renewContractByStaff(connection, roomNumberValue, Number(req.body?.months), staffName);
+    await connection.commit();
+    await tenantRequestDecided(renewed.requestId, actorOf(req.user, staffName), "approved");
+    return res.json({ message: `ต่อสัญญาห้อง ${roomNumberValue} สำเร็จ`, rental_end_date: renewed.rentalEndDate });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    if (error instanceof ContractRenewError) {
+      return res.status(error.status).json({ message: error.message, ...error.extra });
+    }
+    console.error("Staff renew contract error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   } finally {
     connection?.release();

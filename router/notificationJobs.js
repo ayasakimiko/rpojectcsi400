@@ -1,8 +1,6 @@
 import { getPool } from "../Database/connection.js";
 import { baht, notify, notifyCustomer, notifyStaffSide } from "../middleware/notifications.js";
-
-// Time-based notifications. Every row carries a dedupe_key, so the job can run as often as
-// we like (and from several processes) without notifying anyone twice.
+import { CONTRACT_GRACE_DAYS, expiredContractSuspensionNotice, suspendExpiredContracts } from "./contractExpiry.js";
 
 const EXPIRY_THRESHOLDS = [1, 7, 30];
 const RETENTION_DAYS = 90;
@@ -56,11 +54,11 @@ async function contractEnds(db) {
     if (daysLeft < 0) {
       return notifyCustomer(row.customer_id, {
         type: "contract_expired", tone: "danger", target: "renew", refTable: "Room", refId: row.room_number,
-        title: "สัญญาเช่าหมดแล้ว", message: `สัญญาห้อง ${row.room_number} หมดเมื่อ ${thaiDate(row.rental_end_date)} กรุณาต่อสัญญาหรือแจ้งย้ายออก`,
+        title: "สัญญาเช่าหมดแล้ว", message: `สัญญาห้อง ${row.room_number} หมดเมื่อ ${thaiDate(row.rental_end_date)} กรุณาติดต่อเจ้าหน้าที่เพื่อต่อสัญญา`,
+        detail: `หากไม่ต่อสัญญาภายใน ${CONTRACT_GRACE_DAYS} วัน บัญชีจะถูกระงับและนำออกจากหอพักอัตโนมัติ`,
         dedupeKey: `contract-expired-${base}`,
       });
     }
-    // Only the nearest threshold, so a short contract does not get the 30- and 7-day notice at once.
     const threshold = EXPIRY_THRESHOLDS.find((days) => daysLeft <= days);
     return notifyCustomer(row.customer_id, {
       type: "contract_expiring", tone: "pending", target: "renew", refTable: "Room", refId: row.room_number,
@@ -70,6 +68,10 @@ async function contractEnds(db) {
       dedupeKey: `contract-expiring-${base}-${threshold}`,
     });
   });
+}
+
+async function expiredContractSuspensions(db) {
+  return (await suspendExpiredContracts(db)).map(expiredContractSuspensionNotice);
 }
 
 async function transferChargeDeadlines(db) {
@@ -91,7 +93,7 @@ async function transferChargeDeadlines(db) {
 }
 
 export async function runNotificationJobs(db = getPool()) {
-  for (const job of [contractStarts, contractEnds, transferChargeDeadlines]) {
+  for (const job of [expiredContractSuspensions, contractStarts, contractEnds, transferChargeDeadlines]) {
     try {
       await notify(await job(db), db);
     } catch (error) {

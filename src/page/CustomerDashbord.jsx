@@ -625,7 +625,6 @@ function Modal({ title, onClose, children, variant, onBack, headerAction, locked
     lockedRef.current = locked
   })
 
-  // While locked (a request is in flight) only an explicit requestClose(true) may close it.
   const requestClose = (force) => {
     if (locked && force !== true) return
     setIsClosing(true)
@@ -699,6 +698,47 @@ function ErrorPopup({ message, onClose }) {
   return createPortal(
     <Modal title="ทำรายการไม่สำเร็จ" onClose={onClose} variant="error">
       {(requestClose) => <ResultDialog type="error" message={message} onClose={requestClose} buttonLabel="รับทราบ" />}
+    </Modal>,
+    document.body,
+  )
+}
+
+function ContractExpiredLock({ expiry, roomNumber, onLogout }) {
+  if (!expiry?.expired) return null
+  return createPortal(
+    <Modal title="สัญญาเช่าหมดอายุ" onClose={() => {}} variant="confirm" locked>
+      {() => (
+        <ActionDialog
+          tone="danger"
+          icon="file"
+          kicker={roomNumber ? `ห้อง ${roomNumber} · สัญญาเช่าหมดอายุ` : 'สัญญาเช่าหมดอายุ'}
+          title="กรุณาติดต่อเจ้าหน้าที่เพื่อต่อสัญญา"
+          lead="สัญญาเช่าของคุณหมดอายุแล้ว ระบบปิดการใช้งานหน้าผู้เช่าไว้ชั่วคราวจนกว่าจะต่อสัญญา"
+          role="alertdialog"
+          actions={[
+            <ActionDialogButton key="logout" onClick={onLogout} autoFocus>
+              ออกจากระบบ
+            </ActionDialogButton>,
+          ]}
+        >
+          <ActionDialogFacts
+            rows={[
+              ['สัญญาหมดเมื่อ', formatDate(expiry.rentalEndDate)],
+              ['หมดมาแล้ว', `${expiry.daysExpired} วัน`],
+              ['เหลือเวลาต่อสัญญา', expiry.graceDaysLeft > 0 ? `อีก ${expiry.graceDaysLeft} วัน` : 'วันนี้เป็นวันสุดท้าย'],
+              ['ระงับบัญชีอัตโนมัติวันที่', formatDate(expiry.suspendOn)],
+            ]}
+          />
+          <ActionDialogOutcome
+            title="สิ่งที่จะเกิดขึ้น"
+            lines={[
+              'ระหว่างนี้จะทำรายการใด ๆ ในหน้าผู้เช่าไม่ได้ เช่น ชำระเงิน แจ้งซ่อม หรือส่งคำขอ',
+              'เมื่อเจ้าหน้าที่ต่อสัญญาให้แล้ว จะกลับมาใช้งานได้ตามปกติทันที',
+              `หากไม่ต่อสัญญาภายใน ${expiry.graceDays} วันหลังสัญญาหมด บัญชีจะถูกระงับและนำออกจากหอพักอัตโนมัติ`,
+            ]}
+          />
+        </ActionDialog>
+      )}
     </Modal>,
     document.body,
   )
@@ -2204,7 +2244,6 @@ function DashboardStepper({ count, currentIndex, children }) {
   )
 }
 
-// Photos of the incident a safety notification points at; the notification row itself only carries text.
 function IncidentNotifPhotos({ incidentId }) {
   const [photos, setPhotos] = useState([])
   const [photoIndex, setPhotoIndex] = useState(null)
@@ -5140,6 +5179,7 @@ function CustomerDashbord() {
   }
 
   const maybeShowStatusPopups = (dashboardData) => {
+    if (dashboardData?.contractExpiry?.expired) return
     const tryShowStatusPopup = (kind, status, id, request, open = () => setStatusPopup({ kind, status, request })) => {
       if (!STATUS_POPUP_CONTENT_BY_KIND[kind]?.[status]) return false
 
@@ -5374,7 +5414,6 @@ function CustomerDashbord() {
       setPaymentSlip(null)
       const message = result.message || 'ชำระเงินสำเร็จ'
       setSlipSubmitResult({
-        // The API only says which outcome happened in its message: slips that need a staff check say "รอ…ตรวจสอบ".
         status: /รอ.*ตรวจสอบ/.test(message) ? 'pending' : 'paid',
         message,
         roomNumber: data?.room?.room_number ?? data?.customer?.room_number,
@@ -5696,7 +5735,8 @@ function CustomerDashbord() {
     announcements = [],
     parcels = [],
   } = data
-  const needsDormInfoAck = customer?.dorm_info_acknowledged === false && !dormInfoAcknowledged
+  const contractLocked = Boolean(data.contractExpiry?.expired)
+  const needsDormInfoAck = customer?.dorm_info_acknowledged === false && !dormInfoAcknowledged && !contractLocked
   const pendingAlerts = announcements.filter(
     (item) =>
       item.tone === 'warning' &&
@@ -9043,7 +9083,7 @@ function CustomerDashbord() {
         )}
       </div>
 
-      {!needsDormInfoAck && pendingAlerts.length > 0 && (
+      {!needsDormInfoAck && !contractLocked && pendingAlerts.length > 0 && (
         <AnnouncementAlertPopup
           key={pendingAlerts[0].id}
           announcement={pendingAlerts[0]}
@@ -9068,6 +9108,7 @@ function CustomerDashbord() {
           onClose={() => setSlipPreview(null)}
         />
       )}
+      <ContractExpiredLock expiry={data.contractExpiry} roomNumber={customer?.room_number} onLogout={handleLogout} />
     </div>
   )
 }

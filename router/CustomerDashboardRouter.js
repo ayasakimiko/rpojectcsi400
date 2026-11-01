@@ -737,6 +737,7 @@ router.get("/me", async (req, res) => {
       depositPaid: depositBalanceAfterTransfers(paidDepositCents(depositPaymentsByCustomer.get(customer.id)), customerTransfers) / 100,
       depositTransferDeducted: transferDepositDeductedCents(customerTransfers) / 100,
       parcels: parcelsWithPhotos,
+      contractExpiry: req.contractExpiry ?? null,
     });
   } catch (error) {
     console.error("Customer dashboard error:", error);
@@ -1662,7 +1663,6 @@ router.get("/safety-incidents", async (req, res) => {
   }
 });
 
-// One incident for the bell: the tenant's own report, or a staff-side report about their room.
 router.get("/safety-incidents/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "รหัสรายงานไม่ถูกต้อง" });

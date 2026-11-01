@@ -1196,7 +1196,6 @@ export function Modal({ title, onClose, children, variant, stickyFilters = false
     lockedRef.current = locked
   })
 
-  // While locked (a request is in flight) only an explicit requestClose(true) may close it.
   const requestClose = (force) => {
     if (locked && force !== true) return
     setIsClosing(true)
@@ -1581,6 +1580,17 @@ function formatRemaining(ms) {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const ROOM_EXPIRY_WARNING_WINDOW_MS = 10 * MS_PER_DAY
+const RENEW_MONTH_OPTIONS = [1, 3, 6, 12]
+const CONTRACT_GRACE_DAYS = 15
+
+function addMonthsToDate(value, months) {
+  const date = new Date(value)
+  const day = date.getDate()
+  date.setDate(1)
+  date.setMonth(date.getMonth() + months)
+  date.setDate(Math.min(day, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()))
+  return date
+}
 
 function getRoomMsLeft(room) {
   if (!room.is_booked || !room.rental_start_date || !room.rental_end_date) return null
@@ -5086,7 +5096,6 @@ function StaffPaymentReview({ onCountChange, focusId }) {
       await loadPayments()
     } catch (err) {
       setReviewError(err.response?.data?.message || 'ตรวจสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
-      // Already reviewed by someone else: refresh so the list stops offering it.
       if ([404, 409].includes(err.response?.status)) loadPayments()
     } finally {
       setBusyId(null)
@@ -7582,6 +7591,10 @@ function StaffMain() {
   const [collectError, setCollectError] = useState('')
 
   const [actionSuccess, setActionSuccess] = useState('')
+  const [renewRoom, setRenewRoom] = useState(null)
+  const [renewMonths, setRenewMonths] = useState(RENEW_MONTH_OPTIONS[0])
+  const [renewSubmitting, setRenewSubmitting] = useState(false)
+  const [renewError, setRenewError] = useState('')
   const [staffTab, setStaffTab] = useState('home')
   const [lastStaffTabByGroup, setLastStaffTabByGroup] = useState({})
   const [homeSection, setHomeSection] = useState('rooms')
@@ -8962,6 +8975,28 @@ function StaffMain() {
       setCollectError(err.response?.data?.message || 'บันทึกการเก็บเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setCollectSubmitting(false)
+    }
+  }
+
+  const openRenew = (room) => {
+    setRenewRoom(room)
+    setRenewMonths(RENEW_MONTH_OPTIONS[0])
+    setRenewError('')
+  }
+
+  const handleRenewContract = async (requestClose) => {
+    if (!renewRoom) return
+    setRenewSubmitting(true)
+    setRenewError('')
+    try {
+      const { data } = await axios.post(`/api/staff/rooms/${renewRoom.room_number}/renew`, { months: renewMonths })
+      requestClose(true)
+      setActionSuccess(data.message || 'ต่อสัญญาสำเร็จ')
+      await Promise.all([loadRooms(), loadRequests()])
+    } catch (err) {
+      setRenewError(err.response?.data?.message || 'ต่อสัญญาไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setRenewSubmitting(false)
     }
   }
 
@@ -11233,6 +11268,15 @@ function StaffMain() {
                                       ส่งค่าน้ำ-ค่าไฟ
                                     </button>
                                   )}
+                                  {Boolean(room.is_booked) && room.tenant && room.rental_end_date && (
+                                    <button
+                                      type="button"
+                                      className={`staff-action-btn ${expiryStatus?.level === 'expired' ? 'is-primary' : 'is-ghost'}`}
+                                      onClick={() => openRenew(room)}
+                                    >
+                                      ต่อสัญญา
+                                    </button>
+                                  )}
                                   {hasDue && (
                                     <button
                                       type="button"
@@ -11322,6 +11366,15 @@ function StaffMain() {
                                           >
                                             ส่งค่าน้ำ-ค่าไฟ
                                           </button>
+                                          {room.rental_end_date && (
+                                            <button
+                                              type="button"
+                                              className={`staff-action-btn ${expiryStatus?.level === 'expired' ? 'is-primary' : 'is-ghost'}`}
+                                              onClick={() => openRenew(room)}
+                                            >
+                                              ต่อสัญญา
+                                            </button>
+                                          )}
                                         </div>
                                       )}
                                     </div>
@@ -12950,6 +13003,58 @@ function StaffMain() {
                   </button>
                 </div>
               </div>
+            )
+          }}
+        </Modal>
+      )}
+
+      {renewRoom && (
+        <Modal title={`ต่อสัญญา · ห้อง ${renewRoom.room_number}`} onClose={() => setRenewRoom(null)} variant="confirm" locked={renewSubmitting}>
+          {(requestClose) => {
+            const expiry = getRoomExpiryStatus(renewRoom)
+            const expired = expiry?.level === 'expired'
+            const tenantName = renewRoom.tenant ? `${renewRoom.tenant.first_name} ${renewRoom.tenant.last_name}` : '-'
+            return (
+              <ConfirmDialog
+                tone={expired ? 'pending' : 'info'}
+                icon="file"
+                kicker={`ห้อง ${renewRoom.room_number} · ${tenantName}`}
+                title="ต่อสัญญาเช่าให้ผู้เช่า"
+                lead={
+                  expired
+                    ? `สัญญาหมดอายุแล้ว ผู้เช่าใช้งานระบบไม่ได้จนกว่าจะต่อสัญญา หากไม่ต่อภายใน ${CONTRACT_GRACE_DAYS} วันหลังสัญญาหมด ระบบจะระงับบัญชีอัตโนมัติ`
+                    : 'เลือกระยะเวลาที่ต้องการต่อ ระบบจะนับต่อจากวันสิ้นสุดสัญญาเดิม'
+                }
+                facts={[
+                  ['สิ้นสุดสัญญาเดิม', formatDate(renewRoom.rental_end_date)],
+                  ['สถานะ', expiry?.label],
+                  ['สิ้นสุดสัญญาใหม่', formatDate(addMonthsToDate(renewRoom.rental_end_date, renewMonths))],
+                ]}
+                outcomeTitle="หลังต่อสัญญา"
+                outcomes={['ผู้เช่าจะได้รับแจ้งเตือนว่าต่อสัญญาสำเร็จ', 'ถ้ามียอดค้างชำระ ต้องเก็บเงินให้ครบก่อนจึงจะต่อสัญญาได้']}
+                error={renewError}
+                busy={renewSubmitting}
+                busyLabel="กำลังต่อสัญญา..."
+                confirmLabel={`ต่อสัญญา ${renewMonths} เดือน`}
+                onConfirm={() => handleRenewContract(requestClose)}
+                onCancel={requestClose}
+              >
+                <div className="staff-row-actions" role="radiogroup" aria-label="ระยะเวลาต่อสัญญา">
+                  {RENEW_MONTH_OPTIONS.map((months) => (
+                    <button
+                      key={months}
+                      type="button"
+                      role="radio"
+                      aria-checked={renewMonths === months}
+                      className={`staff-action-btn ${renewMonths === months ? 'is-primary' : 'is-ghost'}`}
+                      disabled={renewSubmitting}
+                      onClick={() => setRenewMonths(months)}
+                    >
+                      {months} เดือน
+                    </button>
+                  ))}
+                </div>
+              </ConfirmDialog>
             )
           }}
         </Modal>

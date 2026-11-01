@@ -2,11 +2,10 @@ import { randomBytes, randomInt } from "node:crypto";
 import { Router } from "express";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireCustomerRole, requireStaffRole } from "../middleware/authMiddleware.js";
+import { requireActiveCustomer } from "../middleware/accounts.js";
 import { isPositiveId } from "../middleware/validation.js";
 import { wifiChanged } from "./notificationEvents.js";
 
-// Simulated Wi-Fi for testing: nothing here talks to a real router. Staff, admins
-// and owners manage each room's network and add or disconnect devices by hand.
 const router = Router();
 const requireActiveAccount = createRequireActiveAccount(getPool);
 
@@ -21,12 +20,10 @@ function generatePassword(length = 10) {
 
 function generateMacAddress() {
   const bytes = randomBytes(6);
-  bytes[0] = (bytes[0] | 0x02) & 0xfe; // locally administered, unicast
+  bytes[0] = (bytes[0] | 0x02) & 0xfe;
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join(":").toUpperCase();
 }
 
-// Every room that exists gets Wi-Fi settings on first use, enabled when the room
-// was created with the Wi-Fi amenity.
 async function ensureRoomWifi(pool) {
   await pool.query(
     `INSERT IGNORE INTO RoomWifi (room_number, ssid, password, is_enabled)
@@ -86,8 +83,6 @@ async function sendRoom(res, pool, roomNumber, message, status = 200) {
   return res.status(status).json({ message, room });
 }
 
-// Shared by staff and the customer test button. Returns { status, message } when
-// the device cannot be added, or null once it is saved.
 async function addDevice(pool, roomNumber, body) {
   const name = typeof body?.device_name === "string" ? body.device_name.trim() : "";
   const type = body?.device_type ?? "other";
@@ -138,7 +133,7 @@ function parseRoomNumber(req, res) {
   return roomNumber;
 }
 
-router.get("/me", authenticate, requireCustomerRole, requireActiveAccount, async (req, res) => {
+router.get("/me", authenticate, requireCustomerRole, requireActiveCustomer, async (req, res) => {
   try {
     const pool = getPool();
     const [[customer]] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
@@ -151,8 +146,7 @@ router.get("/me", authenticate, requireCustomerRole, requireActiveAccount, async
   }
 });
 
-// Test helper: lets a customer simulate connecting a device to their own room.
-router.post("/me/devices", authenticate, requireCustomerRole, requireActiveAccount, async (req, res) => {
+router.post("/me/devices", authenticate, requireCustomerRole, requireActiveCustomer, async (req, res) => {
   try {
     const pool = getPool();
     const [[customer]] = await pool.query("SELECT room_number FROM Customer WHERE id = ?", [req.user.id]);
@@ -167,8 +161,7 @@ router.post("/me/devices", authenticate, requireCustomerRole, requireActiveAccou
   }
 });
 
-// Customers may disconnect devices on their own room's Wi-Fi only.
-router.delete("/me/devices/:id", authenticate, requireCustomerRole, requireActiveAccount, async (req, res) => {
+router.delete("/me/devices/:id", authenticate, requireCustomerRole, requireActiveCustomer, async (req, res) => {
   const id = Number(req.params.id);
   if (!isPositiveId(id)) return res.status(400).json({ message: "รหัสอุปกรณ์ไม่ถูกต้อง" });
   try {
@@ -242,7 +235,6 @@ router.patch("/:room_number", async (req, res) => {
       [...values, roomNumber],
     );
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
-    // Turning Wi-Fi off drops every device, like a real access point would.
     if (is_enabled === false) await pool.query("DELETE FROM RoomWifiDevice WHERE room_number = ?", [roomNumber]);
     const changes = [
       ssid !== undefined && ssid.trim() !== before?.ssid && `เปลี่ยนชื่อ Wi-Fi เป็น "${ssid.trim()}"`,
@@ -269,7 +261,6 @@ router.post("/:room_number/reset-password", async (req, res) => {
       [generatePassword(), roomNumber],
     );
     if (result.affectedRows === 0) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
-    // A new password signs every device out.
     await pool.query("DELETE FROM RoomWifiDevice WHERE room_number = ?", [roomNumber]);
     await wifiChanged(roomNumber, req.user, "เปลี่ยนรหัส Wi-Fi แล้ว อุปกรณ์เดิมถูกตัดการเชื่อมต่อทั้งหมด", "ดูรหัสใหม่ได้ที่เมนู Wi-Fi");
     return sendRoom(res, pool, roomNumber, "เปลี่ยนรหัส Wi-Fi แล้ว อุปกรณ์เดิมถูกตัดการเชื่อมต่อทั้งหมด");

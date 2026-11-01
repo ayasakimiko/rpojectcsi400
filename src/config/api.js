@@ -202,7 +202,12 @@ export function configureApiClient({
     if (error.response?.status === 401 && !/^\/api\/auth\/login(?:[/?#]|$)/.test(config.url || '')) {
       if (session) {
         for (const key of ['session', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
-        storage.setItem('apiBackendNotice', 'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่')
+        storage.setItem(
+          'apiBackendNotice',
+          error.response.data?.code === 'CONTRACT_EXPIRED_SUSPENDED' && error.response.data.message
+            ? error.response.data.message
+            : 'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+        )
         redirectToLogin()
       }
     }

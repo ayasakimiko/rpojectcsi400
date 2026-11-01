@@ -22,11 +22,22 @@ export function getActingAdminName(pool, user) {
 
 export const requireActiveStaff = createRequireActiveAccount(getPool);
 
+const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 export async function requireActiveCustomer(req, res, next) {
   try {
-    const [rows] = await getPool().query("SELECT is_suspended, room_number FROM Customer WHERE id = ?", [req.user.id]);
-    if (!rows[0] || rows[0].is_suspended || rows[0].room_number == null) {
+    const expiry = await import("../router/contractExpiry.js");
+    const access = await expiry.loadCustomerAccess(getPool(), req.user.id);
+    if (!access || access.isSuspended || access.roomNumber == null) {
       return res.status(401).json({ message: "ไม่พบบัญชีผู้ใช้นี้" });
+    }
+    if (access.contract.overdue) {
+      await expiry.suspendExpiredCustomerNow(req.user.id);
+      return res.status(401).json({ code: expiry.CONTRACT_SUSPENDED_CODE, message: expiry.CONTRACT_SUSPENDED_MESSAGE });
+    }
+    req.contractExpiry = access.contract;
+    if (access.contract.expired && !READ_ONLY_METHODS.has(req.method)) {
+      return res.status(403).json({ code: expiry.CONTRACT_EXPIRED_CODE, message: expiry.CONTRACT_EXPIRED_MESSAGE, contract: access.contract });
     }
     return next();
   } catch (error) {
