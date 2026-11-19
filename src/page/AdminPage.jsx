@@ -5398,6 +5398,7 @@ function AdminBackupPage() {
   const roomTypes = useRoomTypes()
   const [addingAmenity, setAddingAmenity] = useState(false)
   const [amenityModalError, setAmenityModalError] = useState('')
+  const [amenityPriceError, setAmenityPriceError] = useState('')
   const [roomSubmitting, setRoomSubmitting] = useState(false)
   const [roomFormError, setRoomFormError] = useState('')
   const [roomDeleteConfirm, setRoomDeleteConfirm] = useState(null)
@@ -5968,6 +5969,7 @@ function AdminBackupPage() {
     setAmenityIcon('sparkle')
     setAddingAmenity(false)
     setAmenityModalError('')
+    setAmenityPriceError('')
     setRoomFormError('')
     setRoomModal({ mode: 'create' })
   }
@@ -5978,6 +5980,7 @@ function AdminBackupPage() {
     setAmenityIcon('sparkle')
     setAddingAmenity(false)
     setAmenityModalError('')
+    setAmenityPriceError('')
     setRoomForm({
       room_number: String(room.room_number),
       price: String(room.price),
@@ -6086,6 +6089,8 @@ function AdminBackupPage() {
 
   const addRoomAmenity = (requestClose) => {
     const name = amenityDraft.trim()
+    const priceValid = isValidAssetPrice(amenityPrice)
+    setAmenityPriceError(priceValid ? '' : 'กรุณาระบุราคาเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง')
     if (!name) {
       setAmenityModalError('กรุณากรอกชื่อทรัพย์สิน')
       return
@@ -6098,10 +6103,7 @@ function AdminBackupPage() {
       setAmenityModalError('รายการซ้ำหรือยาวเกิน 60 ตัวอักษร')
       return
     }
-    if (!isValidAssetPrice(amenityPrice)) {
-      setAmenityModalError('กรุณาระบุราคาเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง')
-      return
-    }
+    if (!priceValid) return
     setRoomForm((prev) => ({
       ...prev,
       ...(builtin
@@ -6130,6 +6132,7 @@ function AdminBackupPage() {
     setAmenityIcon(first?.icon || 'sparkle')
     setAmenityPrice('')
     setAmenityModalError('')
+    setAmenityPriceError('')
     setAddingAmenity(true)
   }
 
@@ -10073,7 +10076,7 @@ function AdminBackupPage() {
       )}
 
       {roomModal && addingAmenity && (
-        <Modal title="เพิ่มทรัพย์สินในห้อง" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityPrice(''); setAmenityModalError('') }}>
+        <Modal title="เพิ่มทรัพย์สินในห้อง" variant="amenity" onClose={() => { setAddingAmenity(false); setAmenityDraft(''); setAmenityIcon('sparkle'); setAmenityPrice(''); setAmenityModalError(''); setAmenityPriceError('') }}>
           {(requestClose) => {
             const usedCount = roomForm.custom_amenities.length
             const remaining = Math.max(0, 12 - usedCount)
@@ -10139,7 +10142,7 @@ function AdminBackupPage() {
                       <label htmlFor="admin-new-amenity-price">ราคาทรัพย์สิน (บาท) <span className="text-danger">*</span></label>
                       <small>ใช้คิดค่าเสียหายเมื่อชำรุดหรือสูญหาย</small>
                     </header>
-                    <div className="admin-amenity-name-input">
+                    <div className={`admin-amenity-name-input${amenityPriceError ? ' is-invalid' : ''}`}>
                       <i>฿</i>
                       <input
                         id="admin-new-amenity-price"
@@ -10148,12 +10151,19 @@ function AdminBackupPage() {
                         value={amenityPrice}
                         onChange={(event) => {
                           setAmenityPrice(event.target.value)
-                          setAmenityModalError('')
+                          setAmenityPriceError('')
                         }}
                         placeholder="เช่น 3500"
                         autoComplete="off"
+                        aria-invalid={Boolean(amenityPriceError)}
                       />
                     </div>
+                    {amenityPriceError && (
+                      <p className="admin-amenity-modal-error" role="alert">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+                        {amenityPriceError}
+                      </p>
+                    )}
                   </section>
 
                   <section className="admin-amenity-section">
