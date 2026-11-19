@@ -72,7 +72,7 @@ const leaseBody = (shopId, extra = {}) => ({
 });
 
 before(async () => {
-  root = await mysql.createConnection(DB_CONFIG);
+  root = await mysql.createConnection({ ...DB_CONFIG, database: MARKET_DB });
   for (const role of ["Staff", "Admin", "Owner"]) fx[role] = await tokenFor(role);
 });
 

@@ -1,40 +1,69 @@
+import { Link } from 'react-router-dom'
 import '../page/css/Login.css'
+import buildingImg from '../assets/landing/building.jpg'
 
-const FEATURES = ['ดูบิลค่าเช่าและชำระเงินออนไลน์', 'แจ้งซ่อมและติดตามสถานะได้ทันที', 'รับแจ้งเตือนพัสดุและประกาศจากหอพัก']
+const DORM_NAME = 'หอพักใจ'
+
+function Svg({ size = 18, stroke = 2.2, children }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  )
+}
 
 export function AuthLayout({ icon, title, subtitle, children }) {
   return (
-    <div className="auth-page">
-      <div className="auth-card auth-card-split">
-        <aside className="auth-aside">
-          <div className="auth-aside-content">
-            <span className="auth-aside-badge">Dormitory System</span>
-            <h2>ระบบจัดการหอพัก</h2>
-            <p>จัดการทุกเรื่องในหอพักได้ในที่เดียว สะดวก รวดเร็ว และปลอดภัย</p>
-            <ul className="auth-aside-list">
-              {FEATURES.map((feature) => (
-                <li key={feature}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                  {feature}
-                </li>
-              ))}
-            </ul>
+    <div className="auth-page auth-page-photo">
+      <div className="auth-card auth-shell">
+        <Link to="/" className="auth-home-btn">
+          <Svg size={16}><path d="M19 12H5M11 6l-6 6 6 6" /></Svg>
+          กลับหน้าแรก
+        </Link>
+
+        <aside className="auth-hero">
+          <img className="auth-hero-img" src={buildingImg} alt={`อาคาร${DORM_NAME}`} />
+          <div className="auth-hero-shade" />
+
+          <span className="auth-hero-location">
+            <Svg size={15}>
+              <path d="M12 21s7-6.1 7-11.5a7 7 0 1 0-14 0C5 14.9 12 21 12 21Z" />
+              <circle cx="12" cy="9.5" r="2.5" />
+            </Svg>
+            ใกล้ ม.ศรีปทุม บางเขน
+          </span>
+
+          <div className="auth-hero-bottom">
+            <span className="auth-hero-welcome">ยินดีต้อนรับสู่</span>
+            <div className="auth-hero-dorm">
+              <span className="auth-hero-dorm-mark">
+                <Svg size={24}>
+                  <path d="M3 11.5 12 4l9 7.5" />
+                  <path d="M5.5 10v10h13V10" />
+                </Svg>
+              </span>
+              <strong>{DORM_NAME}</strong>
+            </div>
+            <p className="auth-hero-tagline">หอพักนักศึกษาที่อยู่สบาย ปลอดภัย และจัดการทุกเรื่องได้จากมือถือ</p>
           </div>
         </aside>
-        <main className="auth-main">
-          <div className="auth-brand">
-            <div className="auth-icon">{icon}</div>
-            <h1>{title}</h1>
-            <p>{subtitle}</p>
+
+        <main className="auth-panel">
+          <div className="auth-panel-inner">
+            <div className="auth-brand">
+              <div className="auth-icon">{icon}</div>
+              <h1>{title}</h1>
+              <p>{subtitle}</p>
+            </div>
+            {children}
           </div>
-          {children}
+          <p className="auth-panel-foot">© {new Date().getFullYear()} {DORM_NAME}</p>
         </main>
       </div>
     </div>
   )
 }
+
 
 const NOTICE_ICONS = {
   success: (
