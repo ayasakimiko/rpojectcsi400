@@ -320,7 +320,7 @@ test("10. C25 แก้กฎหอพัก → ผู้เช่าต้อ�
 test("11. T08 ทุกแจ้งเตือนของ Owner มีปลายทางที่หน้าเว็บพาไปได้", async () => {
   const known = new Set([
     "slips", "requests", "maintenance", "transfer-contracts", "visits", "move-in", "inspections", "waiting-list", "parcels",
-    "safety", "contracts", "rooms", "staff", "expenses",
+    "safety", "contracts", "deposits", "rooms", "staff", "expenses",
   ]);
   const data = await feed(fx.owner.token, "owner", "slip,visit,safety,tenant,maintenance,fine_review,fine_unpaid,deposit,transfer_contract,transfer_charge,move_in,contract_expiry,rent_overdue,waiting_list,parcel_stale");
   const targets = [...ours(data), ...data.pending].map((item) => (item.target || "").split(":")[0]);

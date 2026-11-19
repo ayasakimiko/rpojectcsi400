@@ -116,7 +116,7 @@ const SOURCES = {
     return contracts
       .filter((contract) => contract.is_archived && !contract.deposit_settlement && contract.deposit_remaining > 0)
       .map((contract) => ({
-        key: `deposit-${contract.booking_id}`, kind: "money", tone: "pending", target: "contracts", ref_id: contract.booking_id,
+        key: `deposit-${contract.booking_id}`, kind: "money", tone: "pending", target: "deposits", ref_id: contract.booking_id,
         title: `คืนเงินมัดจำ${roomLabel(contract.room_number)}`,
         message: `รอบันทึกการคืนเงินมัดจำ ${baht(contract.deposit_remaining)}`,
         detail: fullName(contract), created_at: contract.moved_out_at || contract.ended_at || contract.rental_end_date,

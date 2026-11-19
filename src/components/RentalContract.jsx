@@ -800,12 +800,23 @@ const COMPLETED_CONTRACT_SORTERS = {
   room: (a, b) => String(a.room_number || '').localeCompare(String(b.room_number || ''), 'th', { numeric: true }),
 }
 
-export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSize = 12, onSummaryChange }) {
-  const [contracts, setContracts] = useState([])
+const DEPOSIT_VIEWS = {
+  pending: { label: 'รอคืนมัดจำ', match: (contract) => contract.can_settle_deposit },
+  owe: { label: 'ผู้เช่าต้องจ่ายเพิ่ม', match: (contract) => Number(contract.deposit_extra_charge) > 0 },
+  settled: { label: 'คืนแล้ว', match: (contract) => Boolean(contract.deposit_settlement) },
+  all: { label: 'ทั้งหมด', match: () => true },
+}
+
+const isDepositContract = (contract) => contract.can_settle_deposit || Boolean(contract.deposit_settlement)
+
+export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSize = 12, onSummaryChange, mode = 'all' }) {
+  const depositMode = mode === 'deposit'
+  const [allContracts, setContracts] = useState([])
+  const contracts = useMemo(() => (depositMode ? allContracts.filter(isDepositContract) : allContracts), [allContracts, depositMode])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
+  const [status, setStatus] = useState(depositMode ? 'pending' : 'all')
   const [sort, setSort] = useState('newest')
   const [scope, setScope] = useState('all')
   const [dates, setDates] = useState({ from: '', to: '' })
@@ -820,7 +831,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
     try {
       localStorage.setItem(completedContractsViewedKey(), JSON.stringify([...viewedContractIds]))
     } catch {
-      // The counts still work for the current session when storage is unavailable.
+      return
     }
   }, [viewedContractIds])
 
@@ -866,7 +877,11 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
   const filtered = useMemo(
     () =>
       contracts
-        .filter((contract) => status === 'all' || contractCardStatus(contract) === status)
+        .filter((contract) =>
+          depositMode
+            ? (DEPOSIT_VIEWS[status] || DEPOSIT_VIEWS.all).match(contract)
+            : status === 'all' || contractCardStatus(contract) === status,
+        )
         .filter((contract) =>
           scope === 'all'
             ? true
@@ -897,12 +912,36 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
             ]),
         )
         .sort(COMPLETED_CONTRACT_SORTERS[sort]),
-    [contracts, status, scope, dates, keyword, sort],
+    [contracts, status, scope, dates, keyword, sort, depositMode],
   )
   const archivedCount = contracts.filter((contract) => contract.is_archived).length
-  const pendingDepositCount = contracts.filter((contract) => contract.can_settle_deposit).length
+  const pendingDeposits = useMemo(() => contracts.filter((contract) => contract.can_settle_deposit), [contracts])
+  const pendingDepositCount = pendingDeposits.length
+  const depositViewCounts = useMemo(
+    () => Object.fromEntries(Object.entries(DEPOSIT_VIEWS).map(([key, view]) => [key, contracts.filter(view.match).length])),
+    [contracts],
+  )
+  const depositSummary = useMemo(() => {
+    const sum = (list, read) => list.reduce((total, contract) => total + (Number(read(contract)) || 0), 0)
+    const settled = contracts.filter(DEPOSIT_VIEWS.settled.match)
+    const owing = contracts.filter(DEPOSIT_VIEWS.owe.match)
+    return {
+      pending: pendingDepositCount,
+      pendingAmount: sum(pendingDeposits, (contract) => contract.deposit_remaining ?? contract.deposit_paid),
+      settled: settled.length,
+      refundedAmount: sum(settled, (contract) => contract.deposit_refunded_amount),
+      deducted: settled.filter((contract) => Number(contract.deposit_deduction) > 0).length,
+      deductedAmount: sum(settled, (contract) => contract.deposit_deduction),
+      owe: owing.length,
+      oweAmount: sum(owing, (contract) => contract.deposit_extra_charge),
+    }
+  }, [contracts, pendingDeposits, pendingDepositCount])
   useEffect(() => {
     if (!onSummaryChange || loading) return
+    if (depositMode) {
+      onSummaryChange(depositSummary)
+      return
+    }
     onSummaryChange({
       total: contracts.length,
       active: (statusCounts.active || 0) + (statusCounts.transferred || 0),
@@ -913,8 +952,9 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       endedEarly: statusCounts.ended_early || 0,
       unviewed: unviewedCount,
     })
-  }, [onSummaryChange, loading, contracts.length, statusCounts, pendingDepositCount, archivedCount, unviewedCount])
-  const filtersActive = Boolean(keyword || dates.from || dates.to || status !== 'all' || scope !== 'all' || sort !== 'newest')
+  }, [onSummaryChange, loading, contracts.length, statusCounts, pendingDepositCount, archivedCount, unviewedCount, depositMode, depositSummary])
+  const defaultStatus = depositMode ? 'pending' : 'all'
+  const filtersActive = Boolean(keyword || dates.from || dates.to || status !== defaultStatus || scope !== 'all' || sort !== 'newest')
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
@@ -928,9 +968,14 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       <div className="staff-card-header">
         <div>
           <h2>
-            สัญญาทั้งหมด <span className="staff-count-pill">{contracts.length}</span>
+            {depositMode ? 'จัดการเงินมัดจำ' : 'สัญญาทั้งหมด'}{' '}
+            <span className="staff-count-pill">{depositMode ? pendingDepositCount : contracts.length}</span>
           </h2>
-          <p className="waiting-list-storage-note">สัญญาเช่าที่ลงทะเบียนผู้เช่าและแนบรูปสัญญาครบแล้ว</p>
+          <p className="waiting-list-storage-note">
+            {depositMode
+              ? 'สัญญาที่สิ้นสุดแล้วและต้องคืนเงินมัดจำ · คืนได้ทุกกรณี หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน'
+              : 'สัญญาเช่าที่ลงทะเบียนผู้เช่าและแนบรูปสัญญาครบแล้ว'}
+          </p>
         </div>
         <button type="button" className="deposit-log-open" onClick={() => setLogOpen(true)}>
           <ContractIcon type="wallet" size={15} />
@@ -948,12 +993,16 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
         />
       )}
       <FilterPanel
-        segments={[
-          { key: 'all', label: 'ทั้งหมด' },
-          ...Object.entries(STAFF_CARD_STATUS)
-            .filter(([key]) => statusCounts[key])
-            .map(([key, info]) => ({ key, label: info.label })),
-        ]}
+        segments={
+          depositMode
+            ? Object.entries(DEPOSIT_VIEWS).map(([key, view]) => ({ key, label: `${view.label} (${depositViewCounts[key] || 0})` }))
+            : [
+                { key: 'all', label: 'ทั้งหมด' },
+                ...Object.entries(STAFF_CARD_STATUS)
+                  .filter(([key]) => statusCounts[key])
+                  .map(([key, info]) => ({ key, label: info.label })),
+              ]
+        }
         active={status}
         onSegment={resetPage(setStatus)}
         segmentsBelow
@@ -965,19 +1014,21 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
         canClear={filtersActive}
         onClear={() => {
           setSearch('')
-          setStatus('all')
+          setStatus(defaultStatus)
           setScope('all')
           setSort('newest')
           setDates({ from: '', to: '' })
           setPage(1)
         }}
       >
-        <select className="staff-filter-select" value={scope} onChange={(event) => resetPage(setScope)(event.target.value)} aria-label="ประเภทสัญญา">
-          <option value="all">ทุกสัญญา</option>
-          <option value="current">สัญญาปัจจุบัน ({contracts.length - archivedCount})</option>
-          <option value="archived">สัญญาเก่า ({archivedCount})</option>
-          <option value="deposit">รอคืนมัดจำ ({pendingDepositCount})</option>
-        </select>
+        {!depositMode && (
+          <select className="staff-filter-select" value={scope} onChange={(event) => resetPage(setScope)(event.target.value)} aria-label="ประเภทสัญญา">
+            <option value="all">ทุกสัญญา</option>
+            <option value="current">สัญญาปัจจุบัน ({contracts.length - archivedCount})</option>
+            <option value="archived">สัญญาเก่า ({archivedCount})</option>
+            <option value="deposit">รอคืนมัดจำ ({pendingDepositCount})</option>
+          </select>
+        )}
         <select className="staff-filter-select" value={sort} onChange={(event) => resetPage(setSort)(event.target.value)} aria-label="เรียงลำดับ">
           {COMPLETED_CONTRACT_SORTS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -996,11 +1047,20 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
           </button>
         </p>
       ) : filtered.length === 0 ? (
-        <p className="staff-empty">{contracts.length ? 'ไม่พบสัญญาตามเงื่อนไขที่เลือก' : 'ยังไม่มีสัญญาในระบบ'}</p>
+        <p className="staff-empty">
+          {depositMode
+            ? status === 'pending' ? 'ไม่มีเงินมัดจำที่รอคืน' : 'ไม่พบรายการเงินมัดจำตามเงื่อนไขที่เลือก'
+            : contracts.length ? 'ไม่พบสัญญาตามเงื่อนไขที่เลือก' : 'ยังไม่มีสัญญาในระบบ'}
+        </p>
       ) : (
         <ul className="csc-grid">
           {pageItems.map((contract) => (
-            <StaffContractCard key={contract.booking_id} contract={contract} unviewed={!viewedContractIds.has(String(contract.booking_id))} onOpen={() => openContract(contract)} />
+            <StaffContractCard
+              key={contract.booking_id}
+              contract={contract}
+              unviewed={!depositMode && !viewedContractIds.has(String(contract.booking_id))}
+              onOpen={() => openContract(contract)}
+            />
           ))}
         </ul>
       )}

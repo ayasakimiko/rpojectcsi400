@@ -89,7 +89,7 @@ import {
   ContractTransferHistory,
   StaffCompletedContracts,
 } from '../components/RentalContract.jsx'
-import { addContractMonths, completedContractSummaryTiles, CONTRACT_MAX_IMAGES, readViewedContractIds, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
+import { addContractMonths, completedContractSummaryTiles, CONTRACT_MAX_IMAGES, depositSummaryTiles, readViewedContractIds, ROOM_TRANSFER_MIN_CONTRACT_IMAGES } from '../utils/rentalContract.js'
 import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
@@ -1313,6 +1313,7 @@ const STAFF_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'payment-review', label: 'ประวัติสลิป' },
   { key: 'completed-contracts', label: 'สัญญาทั้งหมด' },
+  { key: 'deposit-settlement', label: 'จัดการเงินมัดจำ' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
@@ -1327,7 +1328,7 @@ const STAFF_TABS = [
 
 const STAFF_TAB_GROUPS = [
   { key: 'home', label: 'หน้าแรก', tabs: ['home'] },
-  { key: 'finance', label: 'การเงินและสัญญา', tabs: ['payment-review', 'completed-contracts'] },
+  { key: 'finance', label: 'การเงินและสัญญา', tabs: ['payment-review', 'completed-contracts', 'deposit-settlement'] },
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['move-out-inspections', 'waiting-list', 'wifi'] },
   { key: 'services', label: 'บริการผู้เช่า', tabs: ['parcels', 'resident-visits'] },
   { key: 'repair', label: 'ติดต่อช่าง', tabs: ['repair-vendors'] },
@@ -1467,7 +1468,7 @@ const STAFF_SERVER_PENDING_KINDS = [
   'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
 ]
 const STAFF_FOCUS_TABS = { slips: 'payment-review', visits: 'resident-visits', safety: 'safety' }
-const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections', 'repair-vendors': 'repair-vendors', market: 'market' }
+const STAFF_PLAIN_TABS = { contracts: 'completed-contracts', deposits: 'deposit-settlement', 'waiting-list': 'waiting-list', parcels: 'parcels', inspections: 'move-out-inspections', 'repair-vendors': 'repair-vendors', market: 'market' }
 const PAYMENT_HISTORY_INITIAL_PAGE_SIZE = 5
 
 const STAFF_TENANT_NOTIF_INFO = {
@@ -4698,6 +4699,10 @@ export function StaffCompletedContractsTab({ onSummaryChange }) {
   return <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} FilterPanel={StaffFilterPanel} onSummaryChange={onSummaryChange} />
 }
 
+export function StaffDepositSettlementTab({ onSummaryChange }) {
+  return <StaffCompletedContracts Modal={Modal} Pagination={StaffPagination} FilterPanel={StaffFilterPanel} onSummaryChange={onSummaryChange} mode="deposit" />
+}
+
 function flashHighlight(element, className) {
   element.classList.remove(className, 'is-fading')
   void element.offsetWidth
@@ -7676,6 +7681,7 @@ function StaffMain() {
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [pendingSlipCount, setPendingSlipCount] = useState(0)
   const [contractSummary, setContractSummary] = useState(null)
+  const [depositSummary, setDepositSummary] = useState(null)
   useEffect(() => {
     if (staffTab !== 'payment-review') return undefined
     const controller = new AbortController()
@@ -9714,6 +9720,10 @@ function StaffMain() {
       title: 'สัญญาทั้งหมด',
       tiles: completedContractSummaryTiles(contractSummary),
     },
+    'deposit-settlement': {
+      title: 'จัดการเงินมัดจำ',
+      tiles: depositSummaryTiles(depositSummary),
+    },
     'waiting-list': {
       title: 'รายชื่อรอห้องว่าง',
       tiles: [
@@ -10567,7 +10577,11 @@ function StaffMain() {
           {staffTabGroups.filter((group) => group.tabs.length > 1 && group.key === staffGroupOf(staffTab)).map((group) => (
             <ul key={group.key} className="nav staff-subtabs staff-group-subtabs" aria-label={group.label}>
               {group.tabs.map((key) => {
-                const count = key === 'completed-contracts' ? contractSummary?.unviewed || 0 : newTabItemCount(key)
+                const count = key === 'completed-contracts'
+                  ? contractSummary?.unviewed || 0
+                  : key === 'deposit-settlement'
+                    ? depositSummary?.pending ?? contractSummary?.pendingDeposit ?? 0
+                    : newTabItemCount(key)
                 return (
                   <li className="nav-item" key={key}>
                     <button
@@ -10580,7 +10594,14 @@ function StaffMain() {
                       }}
                     >
                       {STAFF_TAB_LABEL[key]}
-                      {count > 0 && <span className="staff-subtab-badge" aria-label={key === 'completed-contracts' ? `${count} สัญญาที่ยังไม่เปิดดู` : `${count} รายการใหม่`}>{count}</span>}
+                      {count > 0 && (
+                        <span
+                          className="staff-subtab-badge"
+                          aria-label={key === 'completed-contracts' ? `${count} สัญญาที่ยังไม่เปิดดู` : key === 'deposit-settlement' ? `${count} รายการรอคืนมัดจำ` : `${count} รายการใหม่`}
+                        >
+                          {count}
+                        </span>
+                      )}
                     </button>
                   </li>
                 )
@@ -10620,6 +10641,8 @@ function StaffMain() {
         )}
 
         {staffTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={setContractSummary} />}
+
+        {staffTab === 'deposit-settlement' && <StaffDepositSettlementTab onSummaryChange={setDepositSummary} />}
 
         {staffTab === 'resident-visits' && (
           <StaffResidentVisitsTab

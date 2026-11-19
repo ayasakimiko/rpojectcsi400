@@ -7,7 +7,7 @@ import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts'
 import './css/OwnerPage.css'
 import './css/StaffPage.css'
-import { StaffCompletedContractsTab, StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
+import { StaffCompletedContractsTab, StaffDepositSettlementTab, StaffResidentVisitsTab, StaffSafetyTab } from './StaffMain.jsx'
 import { UploadImage } from '../components/UploadMedia.jsx'
 import PromptPayQr from '../components/PromptPayQr.jsx'
 import { DEMO_PAYMENT_CHANNELS, formatPromptPayId, isValidPromptPayId, normalizePromptPayId } from '../utils/promptpay.js'
@@ -1953,6 +1953,7 @@ const OWNER_TABS = [
   { key: 'finance', label: 'รายละเอียดการเงิน' },
     { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
   { key: 'completed-contracts', label: 'สัญญาทั้งหมด' },
+  { key: 'deposit-settlement', label: 'จัดการเงินมัดจำ' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
   { key: 'wifi', label: 'Wi-Fi' },
@@ -1967,7 +1968,7 @@ const OWNER_TABS = [
 
 const OWNER_TAB_GROUPS = [
   { key: 'overview', label: 'ห้องพักและสิ่งอำนวยความสะดวก', tabs: ['rooms', 'parking', 'wifi'] },
-  { key: 'money', label: 'การเงินและสัญญา', tabs: ['finance', 'utilities', 'completed-contracts'] },
+  { key: 'money', label: 'การเงินและสัญญา', tabs: ['finance', 'utilities', 'completed-contracts', 'deposit-settlement'] },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ', tabs: ['market'] },
   { key: 'repair', label: 'ติดต่อช่างซ่อม', tabs: ['repair-vendors'] },
   { key: 'announcements', label: 'ประกาศจากหอพัก', tabs: ['announcements'] },
@@ -2383,7 +2384,7 @@ const OWNER_PENDING_KINDS = [
   'slip', 'visit', 'safety', 'tenant', 'maintenance', 'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract',
   'transfer_charge', 'move_in', 'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
 ]
-const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', rooms: 'rooms', staff: 'staff', expenses: 'finance', 'repair-vendors': 'repair-vendors', market: 'market' }
+const OWNER_TARGET_TABS = { safety: 'safety', contracts: 'completed-contracts', deposits: 'deposit-settlement', rooms: 'rooms', staff: 'staff', expenses: 'finance', 'repair-vendors': 'repair-vendors', market: 'market' }
 
 function ownerNotificationLink({ target, refId }) {
   const [area] = (target || '').split(':')
@@ -2495,7 +2496,7 @@ function OwnerMain() {
   const [announcementsLoadedAt, setAnnouncementsLoadedAt] = useState(0)
   const [announcementFocus, setAnnouncementFocus] = useState(null)
   const [tabSummaries, setTabSummaries] = useState({})
-  const summaryReporters = useMemo(() => Object.fromEntries(['parking', 'safety', 'audit', 'completed-contracts'].map((tab) => [
+  const summaryReporters = useMemo(() => Object.fromEntries(['parking', 'safety', 'audit', 'completed-contracts', 'deposit-settlement'].map((tab) => [
     tab,
     (summary) => setTabSummaries((current) => ({ ...current, [tab]: summary })),
   ])), [])
@@ -3681,6 +3682,17 @@ function OwnerMain() {
         { key: 'contract-early', tone: summary?.endedEarly > 0 ? 'orange' : 'slate', icon: 'expense', label: 'ออกก่อนสัญญา', value: show(summary?.endedEarly), hint: 'ย้ายออกก่อนครบสัญญา' },
       ]
     })(),
+    'deposit-settlement': (() => {
+      const summary = tabSummaries['deposit-settlement']
+      const show = (value) => (summary ? `${value || 0} รายการ` : '—')
+      const money = (value) => `฿${formatCurrency(value || 0)}`
+      return [
+        { key: 'deposit-pending', tone: summary?.pending > 0 ? 'red' : 'slate', icon: 'overdue', label: 'รอคืนมัดจำ', value: show(summary?.pending), hint: summary ? `รวม ${money(summary.pendingAmount)}` : 'สัญญาจบแล้วที่ยังไม่บันทึกการคืน' },
+        { key: 'deposit-owe', tone: summary?.owe > 0 ? 'orange' : 'slate', icon: 'income', label: 'ผู้เช่าต้องจ่ายเพิ่ม', value: show(summary?.owe), hint: summary?.owe ? `รวม ${money(summary.oweAmount)}` : 'ค่าเสียหายเกินมัดจำ' },
+        { key: 'deposit-settled', tone: 'green', icon: 'profit', label: 'คืนมัดจำแล้ว', value: show(summary?.settled), hint: summary?.settled ? `คืนรวม ${money(summary.refundedAmount)}` : 'บันทึกการคืนแล้ว' },
+        { key: 'deposit-deducted', tone: 'orange', icon: 'expense', label: 'หักค่าเสียหายรวม', value: summary ? money(summary.deductedAmount) : '—', hint: summary?.deducted ? `${summary.deducted} สัญญา` : 'ยังไม่มีการหัก' },
+      ]
+    })(),
     audit: (() => {
       const summary = tabSummaries.audit
       const show = (value) => (summary ? `${Number(value).toLocaleString('th-TH')} รายการ` : '—')
@@ -4025,6 +4037,7 @@ function OwnerMain() {
         )}
 
         {activeTab === 'completed-contracts' && <StaffCompletedContractsTab onSummaryChange={summaryReporters['completed-contracts']} />}
+        {activeTab === 'deposit-settlement' && <StaffDepositSettlementTab onSummaryChange={summaryReporters['deposit-settlement']} />}
 
         {activeTab === 'parking' && (
           <StaffResidentVisitsTab canManageSettings canCreate={false} onSummaryChange={summaryReporters.parking} rooms={(roomStatus.rooms || []).map((room) => ({ ...room, tenant: room.customer_id ? { id: room.customer_id, first_name: room.first_name, last_name: room.last_name } : null }))} />

@@ -13,7 +13,7 @@ import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import { ArchivedContractBadge, ContractCell, ContractDetail, ContractFirstPaymentNote, ContractFullModal, ContractStatusBadge, DepositRefundNote } from '../components/RentalContract.jsx'
-import { completedContractSummaryTiles, DEPOSIT_STATUS_LABEL, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
+import { completedContractSummaryTiles, DEPOSIT_STATUS_LABEL, depositSummaryTiles, formatDepositMonths, formatDepositSummary } from '../utils/rentalContract.js'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import compressImageFile from '../utils/compressImageFile.js'
@@ -46,7 +46,7 @@ import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeade
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
-import { Modal as StaffModal, StaffCompletedContractsTab, StaffFilterPanel, StaffResidentVisitsTab, TransferContractPendingPanel } from './StaffMain.jsx'
+import { Modal as StaffModal, StaffCompletedContractsTab, StaffDepositSettlementTab, StaffFilterPanel, StaffResidentVisitsTab, TransferContractPendingPanel } from './StaffMain.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
@@ -1260,6 +1260,7 @@ const TABS = [
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
   { key: 'completed-contracts', label: 'สัญญาทั้งหมด' },
+  { key: 'deposit-settlement', label: 'จัดการเงินมัดจำ' },
   { key: 'moveouts', label: 'ผู้ย้ายออก' },
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
@@ -1275,7 +1276,7 @@ const TABS = [
 
 const TAB_GROUPS = [
   { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
-  { key: 'contracts', label: 'สัญญาและตรวจห้อง', tabs: ['completed-contracts', 'move-in-inspections', 'move-out-inspections'] },
+  { key: 'contracts', label: 'สัญญาและตรวจห้อง', tabs: ['completed-contracts', 'deposit-settlement', 'move-in-inspections', 'move-out-inspections'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
   { key: 'repair', label: 'ติดต่อช่าง', tabs: ['repair-vendors'] },
   { key: 'parcels', label: 'พัสดุ', tabs: ['parcels'] },
@@ -1285,7 +1286,7 @@ const TAB_GROUPS = [
 ]
 const SUMMARY_GROUP_OF = {
   rooms: 'residents', wifi: 'residents', customers: 'residents', moveouts: 'residents', 'waiting-list': 'residents',
-  'completed-contracts': 'contracts', 'move-in-inspections': 'inspections', 'move-out-inspections': 'inspections',
+  'completed-contracts': 'contracts', 'deposit-settlement': 'deposits', 'move-in-inspections': 'inspections', 'move-out-inspections': 'inspections',
   requests: 'services', maintenance: 'services', 'vehicle-requests': 'services', safety: 'services',
   parcels: 'parcels', announcements: 'announcements', market: 'market', cameras: 'cameras', staff: 'staff', expenses: 'finance',
   'repair-vendors': 'repair',
@@ -1439,7 +1440,7 @@ const ADMIN_SERVER_PENDING_KINDS = [
 ]
 const ADMIN_TARGET_TABS = {
   visits: 'vehicle-requests', safety: 'safety', requests: 'requests', 'transfer-contracts': 'requests',
-  maintenance: 'maintenance', contracts: 'completed-contracts', 'move-in': 'move-in-inspections',
+  maintenance: 'maintenance', contracts: 'completed-contracts', deposits: 'deposit-settlement', 'move-in': 'move-in-inspections',
   inspections: 'move-out-inspections', rooms: 'rooms', 'waiting-list': 'waiting-list', parcels: 'parcels',
   staff: 'staff', expenses: 'expenses', 'repair-vendors': 'repair-vendors', market: 'market',
 }
@@ -5226,6 +5227,7 @@ function AdminBackupPage() {
   const [lastTabByGroup, setLastTabByGroup] = useState({})
   const [pendingVehicleCount, setPendingVehicleCount] = useState(0)
   const [contractSummary, setContractSummary] = useState(null)
+  const [depositSummary, setDepositSummary] = useState(null)
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0)
   const [tabFocus, setTabFocus] = useState(null)
   const [notifDetail, setNotifDetail] = useState(null)
@@ -6834,6 +6836,7 @@ function AdminBackupPage() {
       },
     ],
     contracts: completedContractSummaryTiles(contractSummary),
+    deposits: depositSummaryTiles(depositSummary),
     cameras: cameraSummaryTiles().map((tile) => ({ ...tile, onClick: () => goToTab('cameras') })),
     market: marketSummaryTiles(marketSummary, {
       shops: { icon: 'total', tone: 'blue' },
@@ -7324,11 +7327,18 @@ function AdminBackupPage() {
                     }}
                   >
                     {TAB_LABEL[tabKey]}
-                    {(tabKey === 'completed-contracts' ? contractSummary?.unviewed || 0 : tabBadgeCount(tabKey)) > 0 && (
-                      <span className="admin-subtab-badge" aria-label={tabKey === 'completed-contracts' ? `${contractSummary.unviewed} สัญญาที่ยังไม่เปิดดู` : `${tabBadgeCount(tabKey)} รายการรอตรวจ`}>
-                        {tabKey === 'completed-contracts' ? contractSummary.unviewed : tabBadgeCount(tabKey)}
-                      </span>
-                    )}
+                    {(() => {
+                      const count = tabKey === 'completed-contracts'
+                        ? contractSummary?.unviewed || 0
+                        : tabKey === 'deposit-settlement'
+                          ? depositSummary?.pending ?? contractSummary?.pendingDeposit ?? 0
+                          : tabBadgeCount(tabKey)
+                      if (count <= 0) return null
+                      const label = tabKey === 'completed-contracts'
+                        ? `${count} สัญญาที่ยังไม่เปิดดู`
+                        : tabKey === 'deposit-settlement' ? `${count} รายการรอคืนมัดจำ` : `${count} รายการรอตรวจ`
+                      return <span className="admin-subtab-badge" aria-label={label}>{count}</span>
+                    })()}
                   </button>
                 </li>
               ))}
@@ -7350,6 +7360,12 @@ function AdminBackupPage() {
         {activeTab === 'completed-contracts' && (
           <div className="admin-contracts">
             <StaffCompletedContractsTab onSummaryChange={setContractSummary} />
+          </div>
+        )}
+
+        {activeTab === 'deposit-settlement' && (
+          <div className="admin-contracts">
+            <StaffDepositSettlementTab onSummaryChange={setDepositSummary} />
           </div>
         )}
 

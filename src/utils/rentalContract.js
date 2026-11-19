@@ -100,3 +100,14 @@ export function completedContractSummaryTiles(summary) {
     { key: 'ended-early', icon: 'request', tone: 'orange', label: 'ออกก่อนสัญญา', value: value('endedEarly') },
   ]
 }
+
+export function depositSummaryTiles(summary) {
+  const value = (key) => (summary ? summary[key] : '-')
+  const money = (key) => (summary ? formatContractMoney(summary[key]) : null)
+  return [
+    { key: 'pending', icon: 'due', tone: 'red', label: 'รอคืนมัดจำ', value: value('pending'), hint: money('pendingAmount'), alert: summary?.pending > 0 },
+    { key: 'owe', icon: 'slip', tone: 'amber', label: 'ผู้เช่าต้องจ่ายเพิ่ม', value: value('owe'), hint: summary?.owe ? money('oweAmount') : null },
+    { key: 'settled', icon: 'vacant', tone: 'green', label: 'คืนมัดจำแล้ว', value: value('settled'), hint: summary?.settled ? `คืนรวม ${money('refundedAmount')}` : null },
+    { key: 'deducted', icon: 'request', tone: 'orange', label: 'หักค่าเสียหายรวม', value: summary ? formatContractMoney(summary.deductedAmount) : '-', hint: summary?.deducted ? `${summary.deducted} สัญญา` : null },
+  ]
+}
