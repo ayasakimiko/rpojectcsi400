@@ -284,3 +284,14 @@ CREATE TABLE IF NOT EXISTS NotificationRead (
     PRIMARY KEY (user_role, user_id, notification_id),
     INDEX idx_notification_read_notification (notification_id)
 );
+
+-- Soft delete: a user removing a notification from their bell only hides it for that
+-- account; the Notification row stays for everyone else and for the record.
+CREATE TABLE IF NOT EXISTS NotificationHidden (
+    notification_id BIGINT UNSIGNED NOT NULL,
+    user_role VARCHAR(20) NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    hidden_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_role, user_id, notification_id),
+    INDEX idx_notification_hidden_notification (notification_id)
+);

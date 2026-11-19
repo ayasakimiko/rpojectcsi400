@@ -48,7 +48,8 @@ import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { Modal as StaffModal, StaffCompletedContractsTab, StaffDepositSettlementTab, StaffFilterPanel, StaffResidentVisitsTab, TransferContractPendingPanel } from './StaffMain.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
-import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationHides, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import NotificationRow from '../components/NotificationRow.jsx'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import { matchesSearch } from '../utils/search.js'
 
@@ -6941,7 +6942,7 @@ function AdminBackupPage() {
     },
   })
 
-  const notifications = useMemo(() => {
+  const allNotifications = useMemo(() => {
     return sortNewestFirst([
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
       ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
@@ -6955,6 +6956,9 @@ function AdminBackupPage() {
     ])
   }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, serverFeed.events, serverFeed.pending])
 
+  const notificationHides = useNotificationHides(getNotificationStorageKey('admin'), serverFeed)
+  const { visible: visibleNotifications } = notificationHides
+  const notifications = useMemo(() => visibleNotifications(allNotifications), [visibleNotifications, allNotifications])
   const notificationReads = useNotificationReads(getNotificationStorageKey('admin'), serverFeed)
   const newNotifications = notifications.filter((notification) => isUnread(notification, notificationReads.seenKeys))
   const freshNotifKeys = new Set(newNotifications.map((notification) => notification.key))
@@ -7173,9 +7177,9 @@ function AdminBackupPage() {
                     <>
                       <div className="admin-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
+                          <NotificationRow key={notif.key} onDelete={() => notificationHides.hide(notif)}>
                           <button
                             type="button"
-                            key={notif.key}
                             className={`admin-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => openNotification(notif)}
                           >
@@ -7199,6 +7203,7 @@ function AdminBackupPage() {
                               )}
                             </span>
                           </button>
+                          </NotificationRow>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (

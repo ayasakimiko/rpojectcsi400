@@ -124,6 +124,7 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
   const [pending, setPending] = useState([])
   const newestId = useRef(0)
   const readIds = useRef(new Set())
+  const hiddenIds = useRef(new Set())
   const onNewEventsRef = useRef(onNewEvents)
   const kinds = pendingKinds.join(',')
 
@@ -143,7 +144,9 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
       if (fresh) onNewEventsRef.current?.()
       newestId.current = Math.max(newestId.current, newest)
       // A read posted a moment ago may not be visible to this response yet.
-      setEvents(rows.map((row) => toBellItem(readIds.current.has(row.id) ? { ...row, is_read: true } : row)))
+      setEvents(rows
+        .filter((row) => !hiddenIds.current.has(row.id))
+        .map((row) => toBellItem(readIds.current.has(row.id) ? { ...row, is_read: true } : row)))
       setPending((data.pending || []).map((row) => toBellItem(row, true)))
       return fresh
     })
@@ -196,6 +199,18 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
     })
   }, [apiBase])
 
+  // Soft delete: the server only hides these for this account, the rows stay in the database.
+  const hide = useCallback((ids) => {
+    const fresh = ids.filter((id) => id && !hiddenIds.current.has(id))
+    if (fresh.length === 0) return
+    fresh.forEach((id) => hiddenIds.current.add(id))
+    setEvents((current) => current.filter((item) => !fresh.includes(item.serverId)))
+    axios.post(`${apiBase}/notifications/hide`, { ids: fresh }).catch(() => {
+      fresh.forEach((id) => hiddenIds.current.delete(id))
+      refresh()
+    })
+  }, [apiBase, refresh])
+
   const markAllRead = useCallback(() => {
     if (!events.some((item) => !item.isRead)) return
     events.forEach((item) => readIds.current.add(item.serverId))
@@ -203,7 +218,44 @@ export function useServerNotifications(apiBase, { pendingKinds = [], enabled = t
     axios.post(`${apiBase}/notifications/read`, { all: true }).catch(() => {})
   }, [apiBase, events])
 
-  return { events, pending, markRead, markAllRead, refresh }
+  return { events, pending, markRead, markAllRead, hide, refresh }
+}
+
+const MAX_HIDDEN_KEYS = 1000
+
+// Removing a notification from one bell. Server events are hidden per account on the server;
+// items the page derives itself (pending work, announcements) are hidden per browser under
+// `${storageKey}_hidden`. Nothing is deleted from the database either way.
+export function useNotificationHides(storageKey, serverFeed) {
+  const hiddenKey = storageKey ? `${storageKey}_hidden` : null
+  const [hidden, setHidden] = useState(() => ({ hiddenKey, keys: readSeenKeys(hiddenKey) }))
+  let hiddenKeys = hidden.keys
+  if (hidden.hiddenKey !== hiddenKey) {
+    hiddenKeys = readSeenKeys(hiddenKey)
+    setHidden({ hiddenKey, keys: hiddenKeys })
+  }
+  const { hide: hideServer } = serverFeed
+
+  const visible = useCallback(
+    (items) => (hiddenKeys.size ? items.filter((item) => item.serverId || !hiddenKeys.has(item.key)) : items),
+    [hiddenKeys],
+  )
+
+  const hide = useCallback((item) => {
+    if (item.serverId) {
+      hideServer([item.serverId])
+      return
+    }
+    const next = new Set([item.key, ...hiddenKeys].slice(0, MAX_HIDDEN_KEYS))
+    setHidden({ hiddenKey, keys: next })
+    try {
+      if (hiddenKey) localStorage.setItem(hiddenKey, JSON.stringify([...next]))
+    } catch (error) {
+      console.warn('Could not save hidden notifications', error)
+    }
+  }, [hideServer, hiddenKey, hiddenKeys])
+
+  return { visible, hide }
 }
 
 export function takeNotificationDeepLink() {

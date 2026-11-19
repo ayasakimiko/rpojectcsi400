@@ -29,6 +29,8 @@ function parseKinds(value, allowed) {
  * GET  /wait        → { cursor, changed } long poll: answers as soon as something this user's
  *                     bell shows has changed since ?cursor=, or after WAIT_MS with changed=false.
  * POST /read        → { ids: [...] } or { all: true }
+ * POST /hide        → { ids: [...] } soft delete: hides the items from this account's bell
+ *                     only; the Notification rows are kept.
  */
 export function createNotificationRoutes({ loadPending = null, pendingKinds = [] } = {}) {
   const router = Router();
@@ -78,8 +80,10 @@ export function createNotificationRoutes({ loadPending = null, pendingKinds = []
          FROM Notification n
          LEFT JOIN NotificationRead nr ON nr.notification_id = n.id AND nr.user_role = ? AND nr.user_id = ?
          WHERE ${sql} AND n.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+           AND NOT EXISTS (SELECT 1 FROM NotificationHidden nh
+                           WHERE nh.notification_id = n.id AND nh.user_role = ? AND nh.user_id = ?)
          ORDER BY n.id DESC LIMIT ?`,
-        [req.user.role, req.user.id, ...params, FEED_DAYS, FEED_LIMIT],
+        [req.user.role, req.user.id, ...params, FEED_DAYS, req.user.role, req.user.id, FEED_LIMIT],
       );
       const kinds = loadPending ? parseKinds(req.query.pending, pendingKinds) : [];
       const pending = kinds.length ? await loadPending(pool, kinds) : [];
@@ -119,6 +123,26 @@ export function createNotificationRoutes({ loadPending = null, pendingKinds = []
     } catch (error) {
       console.error("Mark notifications read error:", error);
       return res.status(500).json({ message: "ไม่สามารถบันทึกสถานะการอ่านได้" });
+    }
+  });
+
+  router.post("/hide", async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids)
+        ? [...new Set(req.body.ids.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, MAX_READ_IDS)
+        : [];
+      if (ids.length === 0) return res.status(400).json({ message: "ไม่พบรายการแจ้งเตือน" });
+      const pool = getPool();
+      const { sql, params } = visibility(req.user);
+      await pool.query(
+        `INSERT IGNORE INTO NotificationHidden (notification_id, user_role, user_id)
+         SELECT n.id, ?, ? FROM Notification n WHERE n.id IN (?) AND ${sql}`,
+        [req.user.role, req.user.id, ids, ...params],
+      );
+      return res.json({ message: "ลบการแจ้งเตือนแล้ว" });
+    } catch (error) {
+      console.error("Hide notifications error:", error);
+      return res.status(500).json({ message: "ไม่สามารถลบการแจ้งเตือนได้" });
     }
   });
 

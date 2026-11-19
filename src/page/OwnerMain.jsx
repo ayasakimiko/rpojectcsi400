@@ -27,7 +27,8 @@ import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
-import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationHides, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import NotificationRow from '../components/NotificationRow.jsx'
 import { logout } from '../utils/session.js'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
@@ -3550,7 +3551,8 @@ function OwnerMain() {
   const paymentPage = Number(paymentLogs.page || 1)
   const serverFeed = useServerNotifications('/api/owner', { pendingKinds: OWNER_PENDING_KINDS, onNewEvents: loadAnnouncements })
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = sortNewestFirst([...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending])
+  const notificationHides = useNotificationHides(getOwnerNotificationStorageKey(), serverFeed)
+  const notifications = notificationHides.visible(sortNewestFirst([...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending]))
   const notificationReads = useNotificationReads(getOwnerNotificationStorageKey(), serverFeed)
   const newNotifications = notifications.filter((item) => isUnread(item, notificationReads.seenKeys))
   const freshNotificationKeys = new Set(newNotifications.map((item) => item.key))
@@ -3882,9 +3884,9 @@ function OwnerMain() {
                     <>
                       <div className="staff-notif-list" ref={notifListRef}>
                         {visibleNotifications.map((notification) => (
+                          <NotificationRow key={notification.key} onDelete={() => notificationHides.hide(notification)}>
                           <button
                             type="button"
-                            key={notification.key}
                             className={`staff-notif-item is-${notification.tone}${freshNotificationKeys.has(notification.key) ? ' is-new' : ''}`}
                             onClick={() => openNotification(notification)}
                           >
@@ -3921,6 +3923,7 @@ function OwnerMain() {
                               )}
                             </span>
                           </button>
+                          </NotificationRow>
                         ))}
                       </div>
                       {notificationPages > 1 && (

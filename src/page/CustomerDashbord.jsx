@@ -43,7 +43,8 @@ import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationHides, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import NotificationRow from '../components/NotificationRow.jsx'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import {
   ActionDialog,
@@ -4975,6 +4976,7 @@ function CustomerDashbord() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifClosing, setNotifClosing] = useState(false)
   const notificationReads = useNotificationReads(data?.customer?.id ? `notif_seen_keys_${data.customer.id}` : null, serverFeed)
+  const notificationHides = useNotificationHides(data?.customer?.id ? `notif_seen_keys_${data.customer.id}` : null, serverFeed)
   const [notifPage, setNotifPage] = useState(1)
   const scrollFocusRef = useRef(null)
   useEffect(() => {
@@ -5979,7 +5981,7 @@ function CustomerDashbord() {
     target: 'visits',
   }))
 
-  const notifications = sortNewestFirst([
+  const notifications = notificationHides.visible(sortNewestFirst([
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
@@ -6025,7 +6027,7 @@ function CustomerDashbord() {
       previewLabel: 'รายละเอียดประกาศ',
       kind: 'announcement',
     })),
-  ])
+  ]))
 
   const newNotifications = notifications.filter((notif) => isUnread(notif, notificationReads.seenKeys))
   const freshNotifKeys = new Set(newNotifications.map((notif) => notif.key))
@@ -6575,9 +6577,9 @@ function CustomerDashbord() {
                     <>
                       <div className="dashboard-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
+                          <NotificationRow key={notif.key} onDelete={() => notificationHides.hide(notif)}>
                           <button
                             type="button"
-                            key={notif.key}
                             className={`dashboard-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
@@ -6653,6 +6655,7 @@ function CustomerDashbord() {
                               )}
                             </span>
                           </button>
+                          </NotificationRow>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (

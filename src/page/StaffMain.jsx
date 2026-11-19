@@ -94,7 +94,8 @@ import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationHides, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import NotificationRow from '../components/NotificationRow.jsx'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import { matchesSearch } from '../utils/search.js'
 
@@ -9068,7 +9069,7 @@ function StaffMain() {
     },
   })
 
-  const notifications = useMemo(() => {
+  const allNotifications = useMemo(() => {
     return sortNewestFirst([
       ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
       ...pendingVisitRequests.map(buildStaffVisitNotif),
@@ -9081,6 +9082,9 @@ function StaffMain() {
     ])
   }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements, serverFeed.events, serverFeed.pending])
 
+  const notificationHides = useNotificationHides(getNotificationStorageKey('staff'), serverFeed)
+  const { visible: visibleNotifications } = notificationHides
+  const notifications = useMemo(() => visibleNotifications(allNotifications), [visibleNotifications, allNotifications])
   const notificationReads = useNotificationReads(getNotificationStorageKey('staff'), serverFeed)
   const newNotifications = notifications.filter((notification) => isUnread(notification, notificationReads.seenKeys))
   const freshNotifKeys = new Set(newNotifications.map((notification) => notification.key))
@@ -9948,9 +9952,9 @@ function StaffMain() {
                     <>
                       <div className="staff-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
+                          <NotificationRow key={notif.key} onDelete={() => notificationHides.hide(notif)}>
                           <button
                             type="button"
-                            key={notif.key}
                             className={`staff-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
@@ -10000,6 +10004,7 @@ function StaffMain() {
                               )}
                             </span>
                           </button>
+                          </NotificationRow>
                         ))}
                       </div>
                       {notifTotalPages > 1 && (

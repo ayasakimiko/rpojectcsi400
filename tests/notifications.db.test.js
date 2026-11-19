@@ -102,6 +102,7 @@ after(async () => {
   const db = getPool();
   try {
     await db.query("DELETE FROM NotificationRead WHERE notification_id > ?", [fx.startId]);
+    await db.query("DELETE FROM NotificationHidden WHERE notification_id > ?", [fx.startId]);
     await db.query("DELETE FROM Notification WHERE id > ?", [fx.startId]);
     if (cleanup.dormConfig?.existed) {
       await db.query("UPDATE DormConfig SET contract_rules = ? WHERE id = 1", [cleanup.dormConfig.contract_rules]);
@@ -280,6 +281,25 @@ test("8. T07 อ่านในเครื่องหนึ่ง → เข�
   assert.ok(ours(await feed(deviceTwo, "customer")).every((row) => row.is_read), "อีกเครื่องต้องเห็นว่าอ่านแล้ว");
   assert.ok(ours(await feed(fx.custB.token, "customer")).some((row) => !row.is_read), "ผู้เช่าคนอื่นต้องไม่ถูกทำเครื่องหมายอ่านไปด้วย");
   assert.equal((await call("POST", "/api/customer/notifications/read", deviceOne, { ids: [] })).status, 400);
+});
+
+test("8b. ลบการแจ้งเตือน (soft delete) → หายจากกระดิ่งของคนที่ลบเท่านั้น แถวใน DB ยังอยู่", async () => {
+  const db = getPool();
+  const row = ours(await feed(fx.staffA.token, "staff")).find((item) => item.type === "maintenance_cancelled");
+  assert.ok(row, "ต้องมีรายการให้ลบก่อน");
+  assert.ok(ours(await feed(fx.staffB.token, "staff")).some((item) => item.id === row.id), "พนักงานอีกคนต้องเห็นรายการเดียวกัน");
+
+  assert.equal((await call("POST", "/api/staff/notifications/hide", fx.staffA.token, { ids: [row.id] })).status, 200);
+  assert.ok(!ours(await feed(fx.staffA.token, "staff")).some((item) => item.id === row.id), "คนที่ลบต้องไม่เห็นอีก");
+  assert.ok(ours(await feed(fx.staffB.token, "staff")).some((item) => item.id === row.id), "พนักงานอีกคนต้องยังเห็นอยู่");
+  const [[kept]] = await db.query("SELECT COUNT(*) AS n FROM Notification WHERE id = ?", [row.id]);
+  assert.equal(Number(kept.n), 1, "แถว Notification ต้องยังอยู่ในฐานข้อมูล");
+
+  // Another account's id is ignored: a customer cannot hide staff items.
+  assert.equal((await call("POST", "/api/customer/notifications/hide", fx.custA.token, { ids: [row.id] })).status, 200);
+  const [[foreign]] = await db.query("SELECT COUNT(*) AS n FROM NotificationHidden WHERE notification_id = ? AND user_role = 'Customer'", [row.id]);
+  assert.equal(Number(foreign.n), 0);
+  assert.equal((await call("POST", "/api/staff/notifications/hide", fx.staffA.token, { ids: [] })).status, 400);
 });
 
 test("9. บัญชีพนักงาน / รายจ่าย: Owner แก้พนักงาน → Admin เห็น (A32) / Staff บันทึกรายจ่าย → Owner เห็น (O16)", async () => {

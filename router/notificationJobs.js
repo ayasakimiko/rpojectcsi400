@@ -120,6 +120,7 @@ export async function runNotificationJobs(db = getPool()) {
   }
   try {
     await db.query("DELETE FROM NotificationRead WHERE read_at < DATE_SUB(NOW(), INTERVAL ? DAY)", [RETENTION_DAYS]);
+    await db.query("DELETE FROM NotificationHidden WHERE hidden_at < DATE_SUB(NOW(), INTERVAL ? DAY)", [RETENTION_DAYS]);
     await db.query("DELETE FROM Notification WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)", [RETENTION_DAYS]);
   } catch (error) {
     console.error("Notification cleanup error:", error);
