@@ -34,6 +34,14 @@ const formatShort = (date) => date.toLocaleDateString('th-TH', { day: 'numeric',
 const formatFull = (date) => date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
 const formatTime = (date) => `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
 const formatMonth = (date) => date.toLocaleDateString('th-TH', { month: 'long' })
+const MONTH_NAMES = Array.from({ length: 12 }, (_, index) => formatMonth(new Date(2000, index, 1)))
+
+function yearOptions(minDate, maxDate) {
+  const now = new Date().getFullYear()
+  const from = maxDate ? maxDate.getFullYear() : now + 10
+  const to = minDate ? minDate.getFullYear() : now - 120
+  return Array.from({ length: Math.max(0, from - to) + 1 }, (_, index) => from - index)
+}
 
 function getRangeHint(minDate, maxDate, selected) {
   if (minDate && maxDate) return `เลือกได้ ${formatShort(minDate)} – ${formatShort(maxDate)}`
@@ -60,6 +68,7 @@ function ThaiDatePicker({
   timeOnly = false,
   minDate,
   maxDate,
+  pickMonthYear = false,
   ...rest
 }) {
   const pickerRef = useRef(null)
@@ -110,14 +119,29 @@ function ThaiDatePicker({
       minDate={minDate}
       maxDate={maxDate}
       formatWeekDay={(dayName) => WEEKDAY_SHORT[dayName] || dayName}
-      renderCustomHeader={({ monthDate, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => (
+      renderCustomHeader={({ monthDate, decreaseMonth, increaseMonth, changeMonth, changeYear, prevMonthButtonDisabled, nextMonthButtonDisabled }) => (
         <div className="thai-dp-header">
           <button type="button" className="thai-dp-nav" onClick={decreaseMonth} disabled={prevMonthButtonDisabled} aria-label="เดือนก่อนหน้า">
             <ChevronIcon direction="left" />
           </button>
-          <div className="thai-dp-title">
-            {formatMonth(monthDate)} <span className="thai-dp-year">{monthDate.getFullYear() + 543}</span>
-          </div>
+          {pickMonthYear ? (
+            <div className="thai-dp-title is-pickers">
+              <select className="thai-dp-select" value={monthDate.getMonth()} aria-label="เลือกเดือน" onChange={(event) => changeMonth(Number(event.target.value))}>
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index}>{name}</option>
+                ))}
+              </select>
+              <select className="thai-dp-select is-year" value={monthDate.getFullYear()} aria-label="เลือกปี พ.ศ." onChange={(event) => changeYear(Number(event.target.value))}>
+                {yearOptions(minDate, maxDate).map((year) => (
+                  <option key={year} value={year}>{year + 543}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="thai-dp-title">
+              {formatMonth(monthDate)} <span className="thai-dp-year">{monthDate.getFullYear() + 543}</span>
+            </div>
+          )}
           <button type="button" className="thai-dp-nav" onClick={increaseMonth} disabled={nextMonthButtonDisabled} aria-label="เดือนถัดไป">
             <ChevronIcon direction="right" />
           </button>

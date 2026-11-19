@@ -2354,6 +2354,20 @@
   border-color: #fecaca;
 }
 
+.dashboard-due-deposit-note.is-first-deadline {
+  display: block;
+  color: #b42318;
+  background: #fef2f2;
+  border-color: #fca5a5;
+  border-left-width: 4px;
+  line-height: 1.5;
+}
+
+.dashboard-due-deposit-note.is-first-deadline strong {
+  color: #991b1b;
+  font-weight: 800;
+}
+
 .dashboard-due-pay-actions {
   display: flex;
   justify-content: flex-start;
@@ -5744,6 +5758,20 @@
   font-weight: 700;
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.dashboard-profile-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dashboard-profile-range > i {
+  color: #60a5fa;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .dashboard-profile-idcard {

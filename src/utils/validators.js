@@ -14,6 +14,7 @@ export const MESSAGES = {
   password: `รหัสผ่านต้องมีความยาว ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} ตัวอักษร`,
   passwordMismatch: 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
   age: `อายุต้องเป็นตัวเลข ${AGE_MIN}-${AGE_MAX} ปี`,
+  birthDate: `วันเกิดไม่ถูกต้อง (ต้องไม่เกินวันนี้ และอายุ ${AGE_MIN}-${AGE_MAX} ปี)`,
   money: 'จำนวนเงินไม่ถูกต้อง',
   otp: 'กรุณากรอกรหัส OTP 6 หลัก',
   loginUsername: 'กรุณากรอกเลขบัตรประชาชน 13 หลัก หรือเลขห้อง',
@@ -38,6 +39,29 @@ export function isValidAge(value) {
   if (isBlank(value) || typeof value === 'boolean') return false
   const age = Number(value)
   return Number.isInteger(age) && age >= AGE_MIN && age <= AGE_MAX
+}
+
+export function parseBirthDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? '').trim())
+  if (!match) return null
+  const [year, month, day] = match.slice(1).map(Number)
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+  return date
+}
+
+export function ageFromBirthDate(value, today = new Date()) {
+  const birth = parseBirthDate(value)
+  if (!birth) return null
+  let age = today.getFullYear() - birth.getFullYear()
+  if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age -= 1
+  return age
+}
+
+export function isValidBirthDate(value, today = new Date()) {
+  const birth = parseBirthDate(value)
+  if (!birth || birth > today) return false
+  return isValidAge(ageFromBirthDate(value, today))
 }
 
 export function isValidPassword(value) {
@@ -129,8 +153,8 @@ export function validatePersonForm(values = {}, { requirePassword = true, requir
   if (lastName) errors.last_name = lastName
   if (isBlank(values.phone)) errors.phone = MESSAGES.required('เบอร์โทรศัพท์')
   else if (!isValidPhone(values.phone)) errors.phone = MESSAGES.phone
-  if (isBlank(values.age)) errors.age = MESSAGES.required('อายุ')
-  else if (!isValidAge(values.age)) errors.age = MESSAGES.age
+  if (isBlank(values.birth_date)) errors.birth_date = MESSAGES.required('วันเกิด')
+  else if (!isValidBirthDate(values.birth_date)) errors.birth_date = MESSAGES.birthDate
   if (requirePassword || values.password) {
     Object.assign(errors, validatePasswordPair(values.password, values.confirmPassword ?? values.password, { required: requirePassword }))
   }

@@ -22,6 +22,8 @@ import { createNotificationRoutes } from "./notificationRoutes.js";
 import { maintenanceCancelledByCustomer, safetyReported } from "./notificationEvents.js";
 import { actorOf } from "../middleware/notifications.js";
 import {
+  ageSql,
+  birthDateSql,
   isPositiveId,
   isValidPassword,
   parseMaintenanceInput,
@@ -606,7 +608,7 @@ router.get("/me", async (req, res) => {
     await expireRoomTransferCharges(pool);
 
     const [customerRows] = await pool.query(
-      `SELECT id, idcard, first_name, last_name, phone, age, room_number, deposit_amount, created_at AS registered_at,
+      `SELECT id, idcard, first_name, last_name, phone, ${ageSql("Customer")} AS age, ${birthDateSql("Customer")} AS birth_date, room_number, deposit_amount, created_at AS registered_at,
               dorm_info_acknowledged_at IS NOT NULL AS dorm_info_acknowledged
        FROM Customer WHERE id = ?`,
       [req.user.id],
@@ -744,6 +746,16 @@ router.get("/me", async (req, res) => {
       depositTransferDeducted: transferDepositDeductedCents(customerTransfers) / 100,
       parcels: parcelsWithPhotos,
       contractExpiry: req.contractExpiry ?? null,
+      firstPayment: req.firstPaymentGate
+        ? {
+            status: req.firstPaymentGate.status,
+            due_date: req.firstPaymentGate.due_date,
+            days_to_due: req.firstPaymentGate.days_to_due,
+            days_to_start: req.firstPaymentGate.days_to_start,
+            amount: req.firstPaymentGate.amount,
+            rental_start_date: req.firstPaymentGate.rental_start_date,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Customer dashboard error:", error);

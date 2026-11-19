@@ -105,6 +105,38 @@
   color: #2563eb;
 }
 
+.thai-dp-title.is-pickers {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  justify-content: center;
+  gap: 6px;
+}
+
+.thai-dp-select {
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #dbe5f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f2b52;
+  color-scheme: light;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.thai-dp-select.is-year {
+  color: #2563eb;
+}
+
+.thai-dp-select:focus {
+  border-color: #93c5fd;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 .thai-dp-nav {
   display: inline-flex;
   align-items: center;

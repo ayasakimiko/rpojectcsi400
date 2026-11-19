@@ -20,7 +20,7 @@ import {
   validateRegisterInput,
   validateRoomFields,
 } from '../middleware/validation.js'
-import { MESSAGES } from '../src/utils/validators.js'
+import { MESSAGES, ageFromBirthDate } from '../src/utils/validators.js'
 
 const person = {
   idcard: '1100200000001',
@@ -28,7 +28,7 @@ const person = {
   phone: '0812345678',
   first_name: 'สมชาย',
   last_name: 'ใจดี',
-  age: 25,
+  birth_date: '2000-05-15',
 }
 
 const localDate = (offsetDays) => {
@@ -79,11 +79,11 @@ test('validatePersonInput accepts a complete person and rejects each bad field',
   assert.equal(validatePersonInput({ ...person, idcard: '123' }), MESSAGES.idcard)
   assert.equal(validatePersonInput({ ...person, password: '123' }), MESSAGES.password)
   assert.equal(validatePersonInput({ ...person, phone: '1234' }), MESSAGES.phone)
-  assert.equal(validatePersonInput({ ...person, age: 0 }), MESSAGES.age)
+  assert.equal(validatePersonInput({ ...person, birth_date: '2999-01-01' }), MESSAGES.birthDate)
   assert.equal(validatePersonInput({ ...person, first_name: 'x'.repeat(101) }), MESSAGES.tooLong('ชื่อ', 100))
   assert.equal(validatePersonInput({ ...person, phone: 812345678 }), 'รูปแบบข้อมูลไม่ถูกต้อง')
   assert.equal(validatePersonInput({ ...person, first_name: '  ' }), 'กรุณากรอกข้อมูลให้ครบทุกช่อง')
-  assert.equal(validatePersonInput({ ...person, age: '' }), 'กรุณากรอกข้อมูลให้ครบทุกช่อง')
+  assert.equal(validatePersonInput({ ...person, birth_date: '' }), 'กรุณากรอกข้อมูลให้ครบทุกช่อง')
 })
 
 test('validatePersonUpdateInput only validates fields that are present', () => {
@@ -91,6 +91,8 @@ test('validatePersonUpdateInput only validates fields that are present', () => {
   assert.equal(validatePersonUpdateInput({ phone: '0812345678' }), null)
   assert.equal(validatePersonUpdateInput({ phone: 'bad' }), MESSAGES.phone)
   assert.equal(validatePersonUpdateInput({ age: 500 }), MESSAGES.age)
+  assert.equal(validatePersonUpdateInput({ birth_date: '2000-13-01' }), MESSAGES.birthDate)
+  assert.equal(validatePersonUpdateInput({ birth_date: '2000-05-15' }), null)
   assert.equal(validatePersonUpdateInput({ password: '' }), null)
   assert.equal(validatePersonUpdateInput({ password: '12' }), MESSAGES.password)
   assert.equal(validatePersonUpdateInput({ last_name: '' }), MESSAGES.required('นามสกุล'))
@@ -98,6 +100,7 @@ test('validatePersonUpdateInput only validates fields that are present', () => {
 
 test('normalizePersonUpdate trims text and converts age', () => {
   assert.deepEqual(normalizePersonUpdate({ first_name: ' A ', phone: ' 0812345678 ', age: '30' }), { first_name: 'A', phone: '0812345678', age: 30 })
+  assert.deepEqual(normalizePersonUpdate({ birth_date: ' 2000-05-15 ' }), { birth_date: '2000-05-15', age: ageFromBirthDate('2000-05-15') })
 })
 
 test('validateRoomFields checks each provided room field', () => {

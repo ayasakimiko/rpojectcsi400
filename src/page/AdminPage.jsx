@@ -9,6 +9,7 @@ import './css/ParcelManagement.css'
 import './css/WaitingDetail.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import BirthDateInput from '../components/BirthDateInput.jsx'
 import ParcelPhotoPicker from '../components/ParcelPhotoPicker.jsx'
 import { CheckIcon, DoorIcon, HashIcon, NoteIcon, PackageIcon, PersonIcon, PlusIcon, TruckIcon } from '../components/ParcelIcons.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
@@ -1249,6 +1250,7 @@ function Pagination({ page, totalPages, onChange }) {
 }
 
 const ROWS_PER_PAGE = 15
+const ROOMS_PER_PAGE = 6
 
 const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
@@ -2149,6 +2151,21 @@ const ROOM_AMENITY_SUGGESTIONS = [
   { name: 'โทรทัศน์', icon: 'tv' },
   { name: 'โซฟา', icon: 'sofa' },
 ]
+
+const assetRowsTotal = (rows = []) => rows.reduce((sum, row) => sum + assetPriceValue(row.price), 0)
+
+function suggestRoomPrice(rooms, assetRows) {
+  const target = assetRowsTotal(assetRows)
+  if (!(target > 0)) return null
+  const samples = rooms
+    .map((room) => ({ price: Number(room.price), value: assetRowsTotal(room.assets || []) }))
+    .filter((sample) => sample.price > 0 && sample.value > 0)
+    .sort((a, b) => Math.abs(a.value - target) - Math.abs(b.value - target))
+    .slice(0, 3)
+  if (samples.length === 0) return null
+  const average = samples.reduce((sum, sample) => sum + sample.price, 0) / samples.length
+  return { price: Math.max(100, Math.round(average / 100) * 100), count: samples.length }
+}
 
 function availableAssetSuggestions(form) {
   const used = new Set(
@@ -4216,8 +4233,10 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
   const pendingPayments = payments.filter((payment) => payment.status !== 'paid').length
   const hasPeriod = Boolean(data.rental_start_date || data.rental_end_date)
   const customAmenities = parseRoomAmenities(data.custom_amenities)
-  const availableAmenities = ROOM_AMENITIES.filter((amenity) => Boolean(data[amenity.key]))
   const missingAmenities = ROOM_AMENITIES.filter((amenity) => !data[amenity.key])
+  const roomAssets = Array.isArray(data.assets) ? data.assets : []
+  const amenityItems = roomEquipmentItems({ ...data, custom_amenities: customAmenities, assetRows: roomAssets })
+  const amenityTotal = assetRowsTotal(roomAssets)
   const depositAmount = Number(roomContract?.deposit_amount) > 0
     ? roomContract.deposit_transfer_adjusted || Number(roomContract.deposit_transfer_deducted) > 0 ? roomContract.deposit_remaining : roomContract.deposit_amount
     : null
@@ -4520,23 +4539,28 @@ function RoomDetails({ room, detail, loading, error, onEdit, onRetry, onOpenHist
             <RoomDetailCard
               icon="sparkle"
               title="สิ่งอำนวยความสะดวก"
-              count={availableAmenities.length + customAmenities.length}
+              count={amenityItems.length}
             >
-              {availableAmenities.length + customAmenities.length > 0 ? (
-                <div className="ard-amenities">
-                  {availableAmenities.map((amenity) => (
-                    <span key={amenity.key} className="is-on">
-                      <RoomDetailIcon type="check" size={13} />
-                      {amenity.label}
-                    </span>
-                  ))}
-                  {customAmenities.map((amenity) => (
-                    <span key={amenity.name} className="is-on is-custom">
-                      <CustomAmenityIcon name={amenity.icon} size={14} />
-                      {amenity.name}
-                    </span>
-                  ))}
-                </div>
+              {amenityItems.length > 0 ? (
+                <>
+                  <ul className="ard-amenity-list">
+                    {amenityItems.map((item) => (
+                      <li key={item.name}>
+                        <span className="ard-amenity-icon"><CustomAmenityIcon name={item.icon} size={16} /></span>
+                        <span className="ard-amenity-name">{item.name}</span>
+                        {item.asset ? (
+                          <strong className="ard-amenity-price">฿{formatCurrency(assetPriceValue(item.asset.price))}</strong>
+                        ) : (
+                          <span className="ard-amenity-unpriced">ยังไม่ระบุราคา</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="ard-amenity-total">
+                    <span>มูลค่าทรัพย์สินรวม <small>ระบุราคาแล้ว {roomAssets.length} รายการ</small></span>
+                    <strong>฿{formatCurrency(amenityTotal)}</strong>
+                  </div>
+                </>
               ) : (
                 <RoomDetailEmpty icon="sparkle" title="ยังไม่ได้ระบุสิ่งอำนวยความสะดวก" text="เพิ่มได้จากปุ่มแก้ไขข้อมูลห้อง" />
               )}
@@ -4721,9 +4745,9 @@ const emptyRoomForm = {
   assetRows: [],
 }
 
-const emptyStaffForm = { idcard: '', password: '', confirm_password: '', phone: '', first_name: '', last_name: '', age: '' }
+const emptyStaffForm = { idcard: '', password: '', confirm_password: '', phone: '', first_name: '', last_name: '', birth_date: '' }
 
-const emptyCustomerForm = { first_name: '', last_name: '', phone: '', age: '', deposit_amount: '', password: '', confirm_password: '' }
+const emptyCustomerForm = { first_name: '', last_name: '', phone: '', birth_date: '', deposit_amount: '', password: '', confirm_password: '' }
 
 const emptyExpenseForm = {
   category: '',
@@ -5392,6 +5416,9 @@ function AdminBackupPage() {
   const [roomsPage, setRoomsPage] = useState(1)
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
+  const updateRoomAssets = (update) => {
+    setRoomForm((prev) => update(prev))
+  }
   const equipmentItems = roomEquipmentItems(roomForm)
   const [amenityDraft, setAmenityDraft] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('sparkle')
@@ -5400,6 +5427,7 @@ function AdminBackupPage() {
   const [addingAmenity, setAddingAmenity] = useState(false)
   const [amenityModalError, setAmenityModalError] = useState('')
   const [amenityPriceError, setAmenityPriceError] = useState('')
+  const [editingAsset, setEditingAsset] = useState(null)
   const [roomSubmitting, setRoomSubmitting] = useState(false)
   const [roomFormError, setRoomFormError] = useState('')
   const [roomDeleteConfirm, setRoomDeleteConfirm] = useState(null)
@@ -5971,6 +5999,7 @@ function AdminBackupPage() {
     setAddingAmenity(false)
     setAmenityModalError('')
     setAmenityPriceError('')
+    setEditingAsset(null)
     setRoomFormError('')
     setRoomModal({ mode: 'create' })
   }
@@ -5982,6 +6011,7 @@ function AdminBackupPage() {
     setAddingAmenity(false)
     setAmenityModalError('')
     setAmenityPriceError('')
+    setEditingAsset(null)
     setRoomForm({
       room_number: String(room.room_number),
       price: String(room.price),
@@ -6105,7 +6135,7 @@ function AdminBackupPage() {
       return
     }
     if (!priceValid) return
-    setRoomForm((prev) => ({
+    updateRoomAssets((prev) => ({
       ...prev,
       ...(builtin
         ? { [builtin.field]: true }
@@ -6119,7 +6149,7 @@ function AdminBackupPage() {
 
   const removeRoomAsset = (name) => {
     const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
-    setRoomForm((prev) => ({
+    updateRoomAssets((prev) => ({
       ...prev,
       ...(builtin ? { [builtin.field]: false } : {}),
       custom_amenities: prev.custom_amenities.filter((item) => item.name !== name),
@@ -6127,10 +6157,37 @@ function AdminBackupPage() {
     }))
   }
 
+  const startEditAssetPrice = (item) => {
+    setEditingAsset({ name: item.name, price: item.asset ? String(assetPriceValue(item.asset.price)) : '', invalid: false })
+  }
+
+  const changeEditingAssetPrice = (value) => {
+    const [whole, ...rest] = value.replace(/[^\d.]/g, '').split('.')
+    setEditingAsset((prev) => (prev ? { ...prev, price: rest.length ? `${whole}.${rest.join('').slice(0, 2)}` : whole, invalid: false } : prev))
+  }
+
+  const commitAssetPrice = () => {
+    if (!editingAsset) return
+    const { name, price } = editingAsset
+    if (!isValidAssetPrice(price)) {
+      setEditingAsset((prev) => (prev ? { ...prev, invalid: true } : prev))
+      return
+    }
+    updateRoomAssets((prev) => {
+      const exists = prev.assetRows.some((row) => row.name.trim() === name)
+      return {
+        ...prev,
+        assetRows: exists
+          ? prev.assetRows.map((row) => (row.name.trim() === name ? { ...row, price } : row))
+          : [...prev.assetRows, ...toAssetRows([{ name, price }])],
+      }
+    })
+    setEditingAsset(null)
+  }
+
   const openAddRoomAsset = () => {
-    const [first] = availableAssetSuggestions(roomForm)
-    setAmenityDraft(first?.name || '')
-    setAmenityIcon(first?.icon || 'sparkle')
+    setAmenityDraft('')
+    setAmenityIcon('sparkle')
     setAmenityPrice('')
     setAmenityModalError('')
     setAmenityPriceError('')
@@ -6139,7 +6196,7 @@ function AdminBackupPage() {
 
   const applyRoomType = (roomTypeId) => {
     const type = roomTypes.find((item) => item.id === roomTypeId)
-    setRoomForm((prev) => {
+    updateRoomAssets((prev) => {
       const known = new Set(prev.assetRows.map((row) => row.name.trim()))
       const added = (type?.assets || []).filter((asset) => !known.has(asset.name))
       return { ...prev, room_type_id: roomTypeId, assetRows: [...prev.assetRows, ...toAssetRows(added)] }
@@ -6276,11 +6333,11 @@ function AdminBackupPage() {
     return [...matched].sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
   }, [rooms, roomSearch])
 
-  const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROWS_PER_PAGE))
+  const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROOMS_PER_PAGE))
   const currentRoomsPage = Math.min(roomsPage, roomsTotalPages)
   const paginatedRooms = useMemo(() => {
-    const start = (currentRoomsPage - 1) * ROWS_PER_PAGE
-    return filteredRooms.slice(start, start + ROWS_PER_PAGE)
+    const start = (currentRoomsPage - 1) * ROOMS_PER_PAGE
+    return filteredRooms.slice(start, start + ROOMS_PER_PAGE)
   }, [filteredRooms, currentRoomsPage])
 
   const [expandedRoomRows, toggleRoomRow, resetRoomRows] = useExpandedRows()
@@ -6341,7 +6398,7 @@ function AdminBackupPage() {
       phone: member.phone,
       first_name: member.first_name,
       last_name: member.last_name,
-      age: String(member.age),
+      birth_date: member.birth_date || '',
     })
     setStaffFormError('')
     setStaffModal({ mode: 'edit', staff: member })
@@ -6368,7 +6425,7 @@ function AdminBackupPage() {
           phone: staffForm.phone,
           first_name: staffForm.first_name,
           last_name: staffForm.last_name,
-          age: staffForm.age,
+          birth_date: staffForm.birth_date,
         }
         const { data } = await axios.post('/api/admin/staff', createPayload)
         setSuccessMessage(data.message || 'เพิ่มพนักงานสำเร็จ')
@@ -6377,7 +6434,7 @@ function AdminBackupPage() {
           first_name: staffForm.first_name,
           last_name: staffForm.last_name,
           phone: staffForm.phone,
-          age: Number(staffForm.age),
+          ...(staffForm.birth_date ? { birth_date: staffForm.birth_date } : {}),
         }
         if (staffForm.password) payload.password = staffForm.password
         const { data } = await axios.put(`/api/admin/staff/${staffModal.staff.id}`, payload)
@@ -6475,7 +6532,7 @@ function AdminBackupPage() {
       first_name: customer.first_name,
       last_name: customer.last_name,
       phone: customer.phone,
-      age: String(customer.age),
+      birth_date: customer.birth_date || '',
       deposit_amount: customer.deposit_amount != null ? String(customer.deposit_amount) : '',
       password: '',
       confirm_password: '',
@@ -6507,7 +6564,7 @@ function AdminBackupPage() {
         first_name: customerForm.first_name,
         last_name: customerForm.last_name,
         phone: customerForm.phone,
-        age: Number(customerForm.age),
+        ...(customerForm.birth_date ? { birth_date: customerForm.birth_date } : {}),
         ...(password ? { password } : {}),
       }
       const { data } = await axios.put(`/api/admin/customers/${customerModal.id}`, payload)
@@ -9962,7 +10019,7 @@ function AdminBackupPage() {
                   <small>ราคาค่าเช่าและอัตราค่าน้ำ-ค่าไฟของห้องนี้</small>
                 </div>
               </header>
-              <div className="admin-room-form-grid is-4">
+              <div className="admin-room-form-grid is-2 admin-room-cost-grid">
                 <label className="admin-room-field">
                   <span>ค่าเช่า</span>
                   <div className="admin-room-input has-prefix">
@@ -10014,6 +10071,28 @@ function AdminBackupPage() {
                   </div>
                 </label>
               </div>
+              {roomModal.mode === 'create' && (() => {
+                const suggestion = suggestRoomPrice(rooms, roomForm.assetRows)
+                if (!suggestion) return null
+                const applied = Number(roomForm.price) === suggestion.price
+                return (
+                  <div className="admin-room-price-hint">
+                    <span className="admin-room-price-hint-icon"><RoomDetailIcon type="sparkle" size={18} /></span>
+                    <div className="admin-room-price-hint-body">
+                      <span className="admin-room-price-hint-label">ราคาแนะนำ</span>
+                      <strong className="admin-room-price-hint-value">฿{suggestion.price.toLocaleString('th-TH')}<small>/เดือน</small></strong>
+                      <span className="admin-room-price-hint-meta">อ้างอิงจาก {suggestion.count} ห้องที่มีมูลค่าทรัพย์สินใกล้เคียง</span>
+                    </div>
+                    {applied ? (
+                      <span className="admin-room-price-hint-applied"><RoomDetailIcon type="check" size={14} />ใช้ราคานี้แล้ว</span>
+                    ) : (
+                      <button type="button" className="admin-room-price-hint-btn" onClick={() => setRoomForm((prev) => ({ ...prev, price: String(suggestion.price) }))}>
+                        ใช้ราคานี้
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
             </section>
             </>
             )}
@@ -10052,9 +10131,48 @@ function AdminBackupPage() {
                       <span className="admin-equipment-icon" aria-hidden="true"><CustomAmenityIcon name={item.icon} size={20} /></span>
                       <div className="admin-equipment-info">
                         <strong>{item.name}</strong>
-                        <span className={item.asset ? 'admin-equipment-price' : 'admin-equipment-unpriced'}>
-                          {item.asset ? '฿' + assetPriceValue(item.asset.price).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'ยังไม่ระบุราคา'}
-                        </span>
+                        {editingAsset?.name === item.name ? (
+                          <div className={`admin-equipment-price-edit${editingAsset.invalid ? ' is-invalid' : ''}`}>
+                            <b>฿</b>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={editingAsset.price}
+                              onChange={(event) => changeEditingAssetPrice(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  commitAssetPrice()
+                                }
+                                if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  setEditingAsset(null)
+                                }
+                              }}
+                              onBlur={() => (isValidAssetPrice(editingAsset.price) ? commitAssetPrice() : setEditingAsset(null))}
+                              placeholder="0.00"
+                              aria-label={'ราคา ' + item.name}
+                              autoFocus
+                            />
+                            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={commitAssetPrice} aria-label="บันทึกราคา" title="บันทึกราคา">
+                              <RoomDetailIcon type="check" size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`admin-equipment-price-btn${item.asset ? '' : ' is-unpriced'}`}
+                            onClick={() => startEditAssetPrice(item)}
+                            title="แก้ไขราคา"
+                          >
+                            {item.asset ? '฿' + assetPriceValue(item.asset.price).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'ยังไม่ระบุราคา'}
+                            <RoomDetailIcon type="edit" size={12} />
+                          </button>
+                        )}
+                        {editingAsset?.name === item.name && editingAsset.invalid && (
+                          <small className="admin-equipment-price-error">ตัวเลขเท่านั้น ทศนิยมไม่เกิน 2 ตำแหน่ง</small>
+                        )}
                       </div>
                       <button type="button" className="admin-equipment-remove" onClick={() => removeRoomAsset(item.name)} aria-label={'ลบ ' + item.name} title={'ลบ ' + item.name}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
@@ -10165,7 +10283,8 @@ function AdminBackupPage() {
                         inputMode="decimal"
                         value={amenityPrice}
                         onChange={(event) => {
-                          setAmenityPrice(event.target.value)
+                          const [whole, ...rest] = event.target.value.replace(/[^\d.]/g, '').split('.')
+                          setAmenityPrice(rest.length ? `${whole}.${rest.join('').slice(0, 2)}` : whole)
                           setAmenityPriceError('')
                         }}
                         placeholder="เช่น 3500"
@@ -10489,11 +10608,8 @@ function AdminBackupPage() {
                   </div>
                 </label>
                 <label className="admin-room-field">
-                  <span>อายุ</span>
-                  <div className="admin-room-input">
-                    <input type="number" name="age" className="form-control" value={staffForm.age} onChange={handleStaffFormChange} required />
-                    <em>ปี</em>
-                  </div>
+                  <span>วันเดือนปีเกิด{staffModal?.mode === 'edit' && !staffModal.staff?.birth_date ? ' (ยังไม่เคยระบุ)' : ''}</span>
+                  <BirthDateInput value={staffForm.birth_date} onChange={(value) => setStaffForm((current) => ({ ...current, birth_date: value }))} />
                 </label>
               </div>
             </section>
@@ -10612,11 +10728,8 @@ function AdminBackupPage() {
                   </div>
                 </label>
                 <label className="admin-room-field">
-                  <span>อายุ</span>
-                  <div className="admin-room-input">
-                    <input type="number" name="age" className="form-control" value={customerForm.age} onChange={handleCustomerFormChange} required />
-                    <em>ปี</em>
-                  </div>
+                  <span>วันเดือนปีเกิด</span>
+                  <BirthDateInput value={customerForm.birth_date} onChange={(value) => setCustomerForm((current) => ({ ...current, birth_date: value }))} />
                 </label>
               </div>
             </section>

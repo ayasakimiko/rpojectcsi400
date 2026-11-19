@@ -16,6 +16,9 @@ import {
   updateParkingSettings,
 } from "./parking.js";
 import {
+  ageFromBirthDate,
+  ageSql,
+  birthDateSql,
   dateSearchSql,
   hasField,
   isPositiveId,
@@ -753,7 +756,7 @@ router.get("/rooms/:room_number/detail", async (req, res) => {
     }
 
     const [tenantRows] = await pool.query(
-      `SELECT id, first_name, last_name, phone, age, deposit_amount, created_at
+      `SELECT id, first_name, last_name, phone, ${ageSql("Customer")} AS age, ${birthDateSql("Customer")} AS birth_date, deposit_amount, created_at
        FROM Customer
        WHERE room_number = ? AND is_suspended = FALSE
        ORDER BY id DESC LIMIT 1`,
@@ -869,7 +872,7 @@ router.get("/rooms/:room_number/tenants", async (req, res) => {
 
     const [bookings] = await pool.query(
       `SELECT b.id AS booking_id, b.created_at, b.rental_start_date, b.rental_end_date,
-         c.id AS customer_id, c.first_name, c.last_name, c.phone, c.age, c.deposit_amount,
+         c.id AS customer_id, c.first_name, c.last_name, c.phone, ${ageSql("c")} AS age, ${birthDateSql("c")} AS birth_date, c.deposit_amount,
          c.is_suspended, c.room_number AS current_room_number, c.created_at AS registered_at
        FROM Booking b
        JOIN Customer c ON c.id = b.customer_id
@@ -1176,7 +1179,7 @@ router.get("/staff", async (req, res) => {
   try {
     const pool = getPool();
     const [staff] = await pool.query(
-      `SELECT id, role, idcard, first_name, last_name, phone, age, is_suspended, created_at
+      `SELECT id, role, idcard, first_name, last_name, phone, ${ageSql("Staff")} AS age, ${birthDateSql("Staff")} AS birth_date, is_suspended, created_at
        FROM Staff ORDER BY is_suspended ASC, id ASC`,
     );
     return res.json({ staff });
@@ -1188,9 +1191,9 @@ router.get("/staff", async (req, res) => {
 
 router.post("/staff", async (req, res) => {
   try {
-    const { idcard, password, phone, first_name, last_name, age } = req.body ?? {};
+    const { idcard, password, phone, first_name, last_name, birth_date } = req.body ?? {};
 
-    const validationError = validatePersonInput({ idcard, password, phone, first_name, last_name, age });
+    const validationError = validatePersonInput({ idcard, password, phone, first_name, last_name, birth_date });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -1198,8 +1201,8 @@ router.post("/staff", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const pool = getPool();
     const [result] = await pool.query(
-      `INSERT INTO Staff (idcard, password, phone, first_name, last_name, age) VALUES (?, ?, ?, ?, ?, ?)`,
-      [idcard.trim(), hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age)],
+      `INSERT INTO Staff (idcard, password, phone, first_name, last_name, age, birth_date) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [idcard.trim(), hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), ageFromBirthDate(birth_date.trim()), birth_date.trim()],
     );
 
     await staffAccountChanged({ role: "Staff", id: result.insertId }, "created", req.user);
@@ -1218,7 +1221,7 @@ router.post("/staff", async (req, res) => {
   }
 });
 
-const STAFF_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age"];
+const STAFF_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age", "birth_date"];
 
 router.put("/staff/:id", async (req, res) => {
   try {
@@ -1327,7 +1330,7 @@ router.get("/customers", async (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const [customers] = await pool.query(
-      `SELECT c.id, c.idcard, c.first_name, c.last_name, c.phone, c.age, c.is_suspended,
+      `SELECT c.id, c.idcard, c.first_name, c.last_name, c.phone, ${ageSql("c")} AS age, ${birthDateSql("c")} AS birth_date, c.is_suspended,
               c.room_number, c.deposit_amount, c.created_at AS registered_at,
               r.rental_start_date, r.rental_end_date, r.price
        FROM Customer c
@@ -1360,7 +1363,7 @@ router.get("/customers/:id", async (req, res) => {
 
     const pool = getPool();
     const [customerRows] = await pool.query(
-      `SELECT id, idcard, first_name, last_name, phone, age, is_suspended, room_number, deposit_amount, created_at AS registered_at
+      `SELECT id, idcard, first_name, last_name, phone, ${ageSql("Customer")} AS age, ${birthDateSql("Customer")} AS birth_date, is_suspended, room_number, deposit_amount, created_at AS registered_at
        FROM Customer WHERE id = ?`,
       [customerId],
     );
@@ -1402,7 +1405,7 @@ router.get("/customers/:id", async (req, res) => {
   }
 });
 
-const CUSTOMER_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age"];
+const CUSTOMER_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age", "birth_date"];
 
 router.put("/customers/:id", async (req, res) => {
   try {
@@ -1733,7 +1736,7 @@ router.get("/moveouts/:id", async (req, res) => {
       `SELECT tr.id, tr.note, tr.status, tr.created_at, tr.accepted_at, tr.accepted_by_name,
               tr.completed_at, tr.completed_by_name, tr.move_in_date, tr.preferred_move_date, tr.move_reason,
               tr.room_number, tr.customer_id,
-              c.idcard, c.first_name, c.last_name, c.phone, c.age, c.deposit_amount, c.created_at AS registered_at,
+              c.idcard, c.first_name, c.last_name, c.phone, ${ageSql("c")} AS age, ${birthDateSql("c")} AS birth_date, c.deposit_amount, c.created_at AS registered_at,
               r.price AS room_price
        FROM TenantRequest tr
        JOIN Customer c ON c.id = tr.customer_id

@@ -2134,11 +2134,14 @@ function CustomerProfileSummary({ customer, room }) {
       key: 'contract',
       icon: 'calendar',
       label: 'สัญญาเช่า',
-      value: room?.rental_start_date || room?.rental_end_date
-        ? `${room.rental_start_date ? formatDate(room.rental_start_date) : '-'} ถึง ${room.rental_end_date ? formatDate(room.rental_end_date) : '-'}`
-        : '-',
+      value: room?.rental_start_date || room?.rental_end_date ? (
+        <span className="dashboard-profile-range" title={`${room.rental_start_date ? formatDate(room.rental_start_date) : '-'} ถึง ${room.rental_end_date ? formatDate(room.rental_end_date) : '-'}`}>
+          <span>{room.rental_start_date ? formatShortThaiDate(room.rental_start_date) : '-'}</span>
+          <i aria-hidden="true">→</i>
+          <span>{room.rental_end_date ? formatShortThaiDate(room.rental_end_date) : '-'}</span>
+        </span>
+      ) : '-',
     },
-    { key: 'since', icon: 'clock', label: 'เข้าพักเมื่อ', value: customer.registered_at ? formatDate(customer.registered_at) : '-' },
   ]
 
   return (
@@ -2644,6 +2647,11 @@ function formatDate(value) {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function formatShortThaiDate(value) {
+  if (!value) return '-'
+  return new Date(value).toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: 'numeric' })
 }
 
 function formatDateTime(value) {
@@ -5734,6 +5742,8 @@ function CustomerDashbord() {
     announcements = [],
     parcels = [],
   } = data
+  const firstPayment = data.firstPayment?.status === 'due' || data.firstPayment?.status === 'pending' ? data.firstPayment : null
+  const firstPaymentDueDate = firstPayment?.due_date ? new Date(`${firstPayment.due_date}T00:00:00`) : null
   const contractLocked = Boolean(data.contractExpiry?.expired)
   const needsDormInfoAck = customer?.dorm_info_acknowledged === false && !dormInfoAcknowledged && !contractLocked
   const pendingAlerts = announcements.filter(
@@ -6416,7 +6426,25 @@ function CustomerDashbord() {
       })
     }
   }
-  if (currentDue) {
+  if (firstPayment?.status === 'due' && firstPaymentDueDate) {
+    const daysLeft = Number(firstPayment.days_to_due)
+    reminders.push({
+      type: 'danger',
+      kind: 'payment',
+      title: 'ชำระงวดแรกก่อนสัญญาถูกยกเลิก',
+      text: 'สัญญาเช่ายังไม่มีผลจนกว่าจะชำระงวดแรก กรุณาชำระภายในวันที่ ',
+      highlight: formatDate(firstPaymentDueDate),
+      suffix: `${daysLeft > 0 ? ` (เหลืออีก ${daysLeft} วัน)` : ' (วันนี้วันสุดท้าย)'} ไม่เช่นนั้นสัญญาจะถูกยกเลิก`,
+    })
+  } else if (firstPayment?.status === 'pending') {
+    reminders.push({
+      type: 'warning',
+      kind: 'payment',
+      title: 'ส่งสลิปงวดแรกแล้ว รอเจ้าหน้าที่ตรวจสอบ',
+      text: 'สัญญาเช่าจะมีผลเมื่อเจ้าหน้าที่อนุมัติสลิปงวดแรก',
+    })
+  }
+  if (currentDue && !firstPayment) {
     if (currentDue.status === 'overdue') {
       reminders.push({
         type: 'danger',
@@ -8215,7 +8243,13 @@ function CustomerDashbord() {
                               รวมค่าเช่าล่วงหน้า {currentDue.lumpSumMonths} เดือน
                             </p>
                           )}
-                          {currentDue.dueDate && (
+                          {firstPayment?.status === 'due' && firstPaymentDueDate ? (
+                            <p className="dashboard-due-deposit-note is-first-deadline">
+                              <strong>ชำระงวดแรกภายในวันที่ {formatDate(firstPaymentDueDate)}</strong>
+                              {Number(firstPayment.days_to_due) > 0 ? ` · เหลืออีก ${firstPayment.days_to_due} วัน` : ' · วันนี้วันสุดท้าย'}
+                              {' '}ไม่เช่นนั้นสัญญาจะถูกยกเลิก
+                            </p>
+                          ) : currentDue.dueDate && (
                             <p className="dashboard-due-date">กำหนดชำระภายในวันที่ {formatDate(currentDue.dueDate)}</p>
                           )}
 

@@ -6,6 +6,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './css/Login.css'
 import './css/RegisterPage.css'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import BirthDateInput from '../components/BirthDateInput.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
 import { digitsOnly, firstError, validatePersonForm } from '../utils/validators.js'
 import { ContractImagePicker, DepositSettlementForm } from '../components/RentalContract.jsx'
@@ -91,7 +92,7 @@ const initialRegisterForm = {
   first_name: '',
   last_name: '',
   phone: '',
-  age: '',
+  birth_date: '',
   room_number: '',
   rental_start_date: getNow(),
   contract_duration_months: '',
@@ -224,13 +225,13 @@ function RegisterMain() {
           setIdcardLookup({ found: false })
           return
         }
-        const { first_name, last_name, phone, age, room_number } = data.customer
+        const { first_name, last_name, phone, birth_date, room_number } = data.customer
         setRegisterForm((prev) => ({
           ...prev,
           first_name: first_name || prev.first_name,
           last_name: last_name || prev.last_name,
           phone: phone || prev.phone,
-          age: age !== '' && age != null ? String(age) : prev.age,
+          birth_date: birth_date || prev.birth_date,
         }))
         setIdcardLookup({
           found: true,
@@ -250,9 +251,9 @@ function RegisterMain() {
     setRegisterForm((prev) => ({ ...prev, phone: digitsOnly(e.target.value, 10) }))
   }
 
-  const handleAgeChange = (e) => {
-    clearFieldError('age')
-    setRegisterForm((prev) => ({ ...prev, age: digitsOnly(e.target.value, 2) }))
+  const handleBirthDateChange = (value) => {
+    clearFieldError('birth_date')
+    setRegisterForm((prev) => ({ ...prev, birth_date: value }))
   }
 
   const handleRoomChange = (e) => {
@@ -273,7 +274,7 @@ function RegisterMain() {
       first_name,
       last_name,
       phone,
-      age,
+      birth_date,
       room_number,
       rental_start_date,
       contract_duration_months,
@@ -282,7 +283,7 @@ function RegisterMain() {
       confirmPassword,
     } = registerForm
 
-    const personErrors = validatePersonForm({ idcard, first_name, last_name, phone, age, password, confirmPassword })
+    const personErrors = validatePersonForm({ idcard, first_name, last_name, phone, birth_date, password, confirmPassword })
     setFieldErrors(personErrors)
     if (firstError(personErrors)) {
       setError(firstError(personErrors))
@@ -294,7 +295,7 @@ function RegisterMain() {
       !first_name ||
       !last_name ||
       !phone ||
-      !age ||
+      !birth_date ||
       !room_number ||
       !rental_start_date ||
       !contract_duration_months ||
@@ -330,7 +331,7 @@ function RegisterMain() {
         first_name,
         last_name,
         phone,
-        age,
+        birth_date,
         room_number,
         rental_start_date: formatDateTimeLocal(rental_start_date),
         contract_duration_months,
@@ -480,14 +481,14 @@ function RegisterMain() {
                           <b>ผู้เช่าเดิม</b> ·{' '}
                           {idcardLookup.room_number != null
                             ? `มีสัญญาเช่าห้อง ${idcardLookup.room_number} อยู่แล้ว`
-                            : 'ดึงชื่อ นามสกุล เบอร์โทร และอายุให้แล้ว'}
+                            : 'ดึงชื่อ นามสกุล เบอร์โทร และวันเกิดให้แล้ว'}
                         </span>
                       </p>
                     ) : (
                       <div className="form-text">ใช้เป็นชื่อผู้ใช้สำหรับเข้าสู่ระบบ</div>
                     )}
                   </div>
-                  <div className="col-7 col-md-3">
+                  <div className="col-12 col-md-6">
                     <label className="form-label" htmlFor="register-phone">
                       เบอร์โทรศัพท์ <Required />
                     </label>
@@ -507,25 +508,17 @@ function RegisterMain() {
                     />
                     {fieldFeedback('phone')}
                   </div>
-                  <div className="col-5 col-md-3">
-                    <label className="form-label" htmlFor="register-age">
-                      อายุ <Required />
+                  <div className="col-12 col-md-6">
+                    <label className="form-label" htmlFor="register-birth_date">
+                      วันเดือนปีเกิด <Required />
                     </label>
-                    <input
-                      id="register-age"
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      max={99}
-                      name="age"
-                      className={fieldClass('age')}
-                      aria-invalid={Boolean(fieldErrors.age)}
-                      aria-describedby={fieldErrors.age ? 'register-age-error' : undefined}
-                      placeholder="ปี"
-                      value={registerForm.age}
-                      onChange={handleAgeChange}
+                    <BirthDateInput
+                      id="register-birth_date"
+                      value={registerForm.birth_date}
+                      invalid={Boolean(fieldErrors.birth_date)}
+                      onChange={handleBirthDateChange}
                     />
-                    {fieldFeedback('age')}
+                    {fieldFeedback('birth_date')}
                   </div>
                   {idcardLookup?.depositContract && (
                     <div className="col-12 register-deposit-settle">

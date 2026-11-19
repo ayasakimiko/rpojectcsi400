@@ -4,8 +4,10 @@ import {
   MAX_MONEY,
   MAX_NAME_LENGTH,
   MESSAGES,
+  ageFromBirthDate,
   isPositiveId,
   isValidAge,
+  isValidBirthDate,
   isValidDateString,
   isValidDateTimeString,
   isValidIdcard,
@@ -18,8 +20,10 @@ import {
 export {
   MAX_MONEY,
   MAX_NAME_LENGTH,
+  ageFromBirthDate,
   isPositiveId,
   isValidAge,
+  isValidBirthDate,
   isValidDateString,
   isValidDateTimeString,
   isValidIdcard,
@@ -113,19 +117,22 @@ export function isValidMoney(value, { allowZero = true } = {}) {
   return (allowZero ? num >= 0 : num > 0) && num <= MAX_MONEY;
 }
 
-export function validatePersonInput({ idcard, password, phone, first_name, last_name, age }) {
-  const textFields = [idcard, password, phone, first_name, last_name];
+export function validatePersonInput({ idcard, password, phone, first_name, last_name, birth_date }) {
+  const textFields = [idcard, password, phone, first_name, last_name, birth_date];
   if (textFields.some((value) => value !== undefined && value !== null && typeof value !== "string")) {
     return "รูปแบบข้อมูลไม่ถูกต้อง";
   }
-  if (textFields.some((value) => !value || !value.trim()) || age === undefined || age === null || age === "") {
+  if (textFields.some((value) => !value || !value.trim())) {
     return "กรุณากรอกข้อมูลให้ครบทุกช่อง";
   }
   if (!isValidIdcard(idcard)) return MESSAGES.idcard;
   if (!isValidPassword(password)) return MESSAGES.password;
   if (!isValidPhone(phone)) return MESSAGES.phone;
-  return validateName(first_name, "ชื่อ") || validateName(last_name, "นามสกุล") || (isValidAge(age) ? null : MESSAGES.age);
+  return validateName(first_name, "ชื่อ") || validateName(last_name, "นามสกุล") || (isValidBirthDate(birth_date.trim()) ? null : MESSAGES.birthDate);
 }
+
+export const ageSql = (alias) => `COALESCE(TIMESTAMPDIFF(YEAR, ${alias}.birth_date, CURDATE()), ${alias}.age)`;
+export const birthDateSql = (alias) => `DATE_FORMAT(${alias}.birth_date, '%Y-%m-%d')`;
 
 export function validatePersonUpdateInput(body) {
   if (hasField(body, "first_name")) {
@@ -139,7 +146,10 @@ export function validatePersonUpdateInput(body) {
   if (hasField(body, "phone") && !isValidPhone(body.phone)) {
     return MESSAGES.phone;
   }
-  if (hasField(body, "age") && !isValidAge(body.age)) {
+  if (hasField(body, "birth_date") && (typeof body.birth_date !== "string" || !isValidBirthDate(body.birth_date.trim()))) {
+    return MESSAGES.birthDate;
+  }
+  if (hasField(body, "age") && !hasField(body, "birth_date") && !isValidAge(body.age)) {
     return MESSAGES.age;
   }
   if (hasField(body, "password") && body.password !== "" && body.password !== null && !isValidPassword(body.password)) {
@@ -153,7 +163,12 @@ export function normalizePersonUpdate(body) {
   for (const field of ["first_name", "last_name", "phone"]) {
     if (typeof normalized[field] === "string") normalized[field] = normalized[field].trim();
   }
-  if (hasField(normalized, "age")) normalized.age = Number(normalized.age);
+  if (hasField(normalized, "birth_date")) {
+    normalized.birth_date = String(normalized.birth_date).trim();
+    normalized.age = ageFromBirthDate(normalized.birth_date);
+  } else if (hasField(normalized, "age")) {
+    normalized.age = Number(normalized.age);
+  }
   return normalized;
 }
 

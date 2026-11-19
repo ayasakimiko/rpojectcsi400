@@ -14,6 +14,8 @@ import { DEMO_PAYMENT_CHANNELS, formatPromptPayId, isValidPromptPayId, normalize
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
 import ProcessSteps from '../components/ProcessSteps.jsx'
 import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
+import BirthDateInput from '../components/BirthDateInput.jsx'
+import { isValidBirthDate } from '../utils/validators.js'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
 import WifiManager from '../components/WifiManager.jsx'
@@ -1793,7 +1795,7 @@ const EMPTY_STAFF = {
   phone: '',
   first_name: '',
   last_name: '',
-  age: '',
+  birth_date: '',
 }
 
 function formatCurrency(value) {
@@ -3418,7 +3420,7 @@ function OwnerMain() {
     if (!isEdit || staffForm.password) {
       if ((staffForm.password || '').length < 6) errors.password = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'
     }
-    if (!staffForm.age || Number(staffForm.age) < 1 || Number(staffForm.age) > 120) errors.age = 'กรุณาระบุอายุ 1-120 ปี'
+    if ((!isEdit || staffForm.birth_date) && !isValidBirthDate(staffForm.birth_date)) errors.birth_date = 'กรุณาระบุวันเดือนปีเกิดให้ถูกต้อง'
     setStaffErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -3434,7 +3436,7 @@ function OwnerMain() {
           first_name: staffForm.first_name,
           last_name: staffForm.last_name,
           phone: staffForm.phone,
-          age: staffForm.age,
+          ...(staffForm.birth_date ? { birth_date: staffForm.birth_date } : {}),
         }
         if (staffForm.password) payload.password = staffForm.password
         await axios.put(`/api/owner/staff/${editingStaff.role}/${editingStaff.id}`, payload)
@@ -3473,7 +3475,7 @@ function OwnerMain() {
       phone: staffMember.phone || '',
       first_name: staffMember.first_name || '',
       last_name: staffMember.last_name || '',
-      age: staffMember.age || '',
+      birth_date: staffMember.birth_date || '',
     })
     setStaffErrors({})
     setShowPassword(false)
@@ -4716,11 +4718,11 @@ function OwnerMain() {
                         <input className="owner-xe-input" type="tel" inputMode="numeric" maxLength={10} value={staffForm.phone} onChange={(event) => setStaffForm((prev) => ({ ...prev, phone: event.target.value.replace(/\D/g, '') }))} placeholder="0812345678" />
                         {staffErrors.phone && <small className="owner-sf-error">{staffErrors.phone}</small>}
                       </label>
-                      <label className={`owner-xe-field${staffErrors.age ? ' has-error' : ''}`}>
-                        <span>อายุ <em>จำเป็น</em></span>
-                        <input className="owner-xe-input" type="number" min="1" max="120" value={staffForm.age} onChange={(event) => setStaffForm((prev) => ({ ...prev, age: event.target.value }))} placeholder="25" />
-                        {staffErrors.age && <small className="owner-sf-error">{staffErrors.age}</small>}
-                      </label>
+                      <div className={`owner-xe-field${staffErrors.birth_date ? ' has-error' : ''}`}>
+                        <span>วันเดือนปีเกิด {editingStaff ? <em>{staffForm.birth_date ? 'แก้ไขได้' : 'ยังไม่เคยระบุ'}</em> : <em>จำเป็น</em>}</span>
+                        <BirthDateInput value={staffForm.birth_date} selectClassName="owner-xe-input" invalid={Boolean(staffErrors.birth_date)} onChange={(value) => setStaffForm((prev) => ({ ...prev, birth_date: value }))} />
+                        {staffErrors.birth_date && <small className="owner-sf-error">{staffErrors.birth_date}</small>}
+                      </div>
                     </div>
                   </section>
                   <section className="owner-xe-section">

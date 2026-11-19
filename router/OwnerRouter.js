@@ -3,6 +3,9 @@ import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireOwnerRole } from "../middleware/authMiddleware.js";
 import {
+  ageFromBirthDate,
+  ageSql,
+  birthDateSql,
   isPositiveId,
   lookup,
   normalizePersonUpdate,
@@ -1102,10 +1105,10 @@ router.get("/staff", async (req, res) => {
   try {
     const pool = getPool();
     const [staffRows] = await pool.query(
-      `SELECT id, role, idcard, first_name, last_name, phone, age, is_suspended, created_at FROM Staff`,
+      `SELECT id, role, idcard, first_name, last_name, phone, ${ageSql("Staff")} AS age, ${birthDateSql("Staff")} AS birth_date, is_suspended, created_at FROM Staff`,
     );
     const [adminRows] = await pool.query(
-      `SELECT id, role, idcard, first_name, last_name, phone, age, is_suspended, created_at FROM Admin`,
+      `SELECT id, role, idcard, first_name, last_name, phone, ${ageSql("Admin")} AS age, ${birthDateSql("Admin")} AS birth_date, is_suspended, created_at FROM Admin`,
     );
 
     const staff = [...staffRows, ...adminRows].sort(
@@ -1121,13 +1124,13 @@ router.get("/staff", async (req, res) => {
 
 router.post("/staff", async (req, res) => {
   try {
-    const { role, idcard, password, phone, first_name, last_name, age } = req.body ?? {};
+    const { role, idcard, password, phone, first_name, last_name, birth_date } = req.body ?? {};
     const table = lookup(STAFF_MANAGEABLE_TABLES, role);
     if (!table) {
       return res.status(400).json({ message: "ตำแหน่งไม่ถูกต้อง (ต้องเป็น Staff หรือ Admin)" });
     }
 
-    const validationError = validatePersonInput({ idcard, password, phone, first_name, last_name, age });
+    const validationError = validatePersonInput({ idcard, password, phone, first_name, last_name, birth_date });
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -1135,8 +1138,8 @@ router.post("/staff", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const pool = getPool();
     const [result] = await pool.query(
-      `INSERT INTO ${table} (role, idcard, password, phone, first_name, last_name, age) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [role, idcard.trim(), hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age)],
+      `INSERT INTO ${table} (role, idcard, password, phone, first_name, last_name, age, birth_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [role, idcard.trim(), hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), ageFromBirthDate(birth_date.trim()), birth_date.trim()],
     );
 
     await staffAccountChanged({ role: table, id: result.insertId }, "created", req.user);
@@ -1158,7 +1161,7 @@ router.post("/staff", async (req, res) => {
   }
 });
 
-const STAFF_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age"];
+const STAFF_EDITABLE_COLUMNS = ["first_name", "last_name", "phone", "age", "birth_date"];
 
 router.put("/staff/:role/:id", async (req, res) => {
   try {

@@ -2,7 +2,15 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { getPool } from "../Database/connection.js";
 import { authenticate, createRequireActiveAccount, requireStaffRole } from "../middleware/authMiddleware.js";
-import { CONTRACT_DURATION_MONTHS, DEPOSIT_MONTHS, isValidDateTimeString, validateRegisterInput } from "../middleware/validation.js";
+import {
+  ageFromBirthDate,
+  ageSql,
+  birthDateSql,
+  CONTRACT_DURATION_MONTHS,
+  DEPOSIT_MONTHS,
+  isValidDateTimeString,
+  validateRegisterInput,
+} from "../middleware/validation.js";
 import {
   contractImageName,
   contractImageUrl,
@@ -18,7 +26,8 @@ import {
   UNSETTLED_DEPOSIT_MESSAGE,
 } from "./rentalContracts.js";
 import { tenantRegistered } from "./notificationEvents.js";
-import { firstPaymentDueDateSql } from "./firstPayment.js";
+import { firstPaymentDueDateSql, firstPaymentReminderNotices, loadFirstPaymentGate } from "./firstPayment.js";
+import { notify } from "../middleware/notifications.js";
 
 const router = Router();
 
@@ -66,7 +75,8 @@ router.get("/register/lookup/:idcard", authenticate, requireStaffRole, createReq
   try {
     const pool = getPool();
     const [rows] = await pool.query(
-      `SELECT id, first_name, last_name, phone, age, room_number FROM Customer WHERE idcard = ? LIMIT 1`,
+      `SELECT id, first_name, last_name, phone, ${ageSql("c")} AS age, ${birthDateSql("c")} AS birth_date, room_number
+       FROM Customer c WHERE idcard = ? LIMIT 1`,
       [idcard],
     );
     const customer = rows[0];
@@ -79,6 +89,7 @@ router.get("/register/lookup/:idcard", authenticate, requireStaffRole, createReq
         last_name: customer.last_name ?? "",
         phone: customer.phone ?? "",
         age: customer.age ?? "",
+        birth_date: customer.birth_date ?? "",
         room_number: customer.room_number,
       },
       unsettled_deposit_contract: unsettledDeposit?.contract ?? null,
@@ -101,7 +112,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       phone,
       first_name,
       last_name,
-      age,
+      birth_date,
       room_number,
       rental_start_date,
       contract_duration_months,
@@ -127,7 +138,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       phone,
       first_name,
       last_name,
-      age,
+      birth_date,
       room_number,
       rental_start_date,
       rental_end_date,
@@ -138,6 +149,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     }
 
     const normalizedIdcard = idcard.trim();
+    const birthDate = birth_date.trim();
     const normalizedRoomNumber = Number(room_number);
 
     await expireRoomTransferCharges(getPool());
@@ -191,21 +203,23 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
       customerId = returningCustomer.id;
       await resetCustomerHistory(connection, customerId);
       await connection.query(
-        `UPDATE Customer SET password = ?, phone = ?, first_name = ?, last_name = ?, age = ?, room_number = ?,
+        `UPDATE Customer SET password = ?, phone = ?, first_name = ?, last_name = ?, age = ?, birth_date = ?, room_number = ?,
                              deposit_amount = ?, is_suspended = FALSE, dorm_info_acknowledged_at = NULL
          WHERE id = ?`,
-        [hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), Number(age), normalizedRoomNumber, normalizedDepositAmount, customerId],
+        [hashedPassword, phone.trim(), first_name.trim(), last_name.trim(), ageFromBirthDate(birthDate), birthDate, normalizedRoomNumber, normalizedDepositAmount, customerId],
       );
     } else {
       const [customerResult] = await connection.query(
-        `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age, room_number, deposit_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO Customer (idcard, password, phone, first_name, last_name, age, birth_date, room_number, deposit_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           normalizedIdcard,
           hashedPassword,
           phone.trim(),
           first_name.trim(),
           last_name.trim(),
-          Number(age),
+          ageFromBirthDate(birthDate),
+          birthDate,
           normalizedRoomNumber,
           normalizedDepositAmount,
         ],
@@ -251,6 +265,12 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     await connection.commit();
     committed = true;
     await tenantRegistered(customerId, normalizedRoomNumber, req.user);
+    try {
+      const gate = await loadFirstPaymentGate(getPool(), customerId);
+      if (gate) await notify(firstPaymentReminderNotices(gate));
+    } catch (notifyError) {
+      console.error("First payment notice error:", notifyError);
+    }
 
     return res.status(201).json({
       message: `${returningCustomer ? "ทำสัญญาใหม่ให้ผู้เช่าเดิมสำเร็จ ประวัติสัญญาเก่ายังเก็บไว้" : "สมัครสมาชิกสำเร็จ"}${

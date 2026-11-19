@@ -5,10 +5,12 @@ import { dateSearchSql, parseSearchDate } from '../middleware/validation.js'
 import {
   MAX_MONEY,
   MESSAGES,
+  ageFromBirthDate,
   digitsOnly,
   firstError,
   isPositiveId,
   isValidAge,
+  isValidBirthDate,
   isValidDateString,
   isValidDateTimeString,
   isValidIdcard,
@@ -29,7 +31,7 @@ const validPerson = {
   first_name: 'สมชาย',
   last_name: 'ใจดี',
   phone: '0812345678',
-  age: '25',
+  birth_date: '2000-05-15',
   password: 'secret1',
   confirmPassword: 'secret1',
 }
@@ -155,12 +157,12 @@ test('validatePersonForm returns no errors for a valid person', () => {
 })
 
 test('validatePersonForm reports every invalid field at once', () => {
-  const errors = validatePersonForm({ idcard: '123', first_name: '', last_name: 'x'.repeat(101), phone: '12', age: '200', password: '1', confirmPassword: '2' })
+  const errors = validatePersonForm({ idcard: '123', first_name: '', last_name: 'x'.repeat(101), phone: '12', birth_date: '2999-01-01', password: '1', confirmPassword: '2' })
   assert.equal(errors.idcard, MESSAGES.idcard)
   assert.equal(errors.first_name, MESSAGES.required('ชื่อ'))
   assert.equal(errors.last_name, MESSAGES.tooLong('นามสกุล', 100))
   assert.equal(errors.phone, MESSAGES.phone)
-  assert.equal(errors.age, MESSAGES.age)
+  assert.equal(errors.birth_date, MESSAGES.birthDate)
   assert.equal(errors.password, MESSAGES.password)
   assert.equal(errors.confirmPassword, MESSAGES.passwordMismatch)
 })
@@ -169,6 +171,24 @@ test('validatePersonForm can skip idcard and optional password for edits', () =>
   const { idcard: _idcard, password: _password, confirmPassword: _confirm, ...rest } = validPerson
   assert.deepEqual(validatePersonForm(rest, { requireIdcard: false, requirePassword: false }), {})
   assert.equal(validatePersonForm({ ...rest, password: '12' }, { requireIdcard: false, requirePassword: false }).password, MESSAGES.password)
+})
+
+test('ageFromBirthDate counts completed years and goes up on the birthday', () => {
+  assert.equal(ageFromBirthDate('2000-05-15', new Date(2026, 4, 14)), 25)
+  assert.equal(ageFromBirthDate('2000-05-15', new Date(2026, 4, 15)), 26)
+  assert.equal(ageFromBirthDate('2000-02-29', new Date(2026, 1, 28)), 25)
+  assert.equal(ageFromBirthDate('2000-02-29', new Date(2026, 2, 1)), 26)
+  assert.equal(ageFromBirthDate('2000-02-30'), null)
+  assert.equal(ageFromBirthDate('15/05/2000'), null)
+})
+
+test('isValidBirthDate rejects future dates and ages outside the allowed range', () => {
+  const today = new Date(2026, 10, 19)
+  assert.equal(isValidBirthDate('2000-05-15', today), true)
+  assert.equal(isValidBirthDate('2026-11-20', today), false)
+  assert.equal(isValidBirthDate('2026-06-01', today), false)
+  assert.equal(isValidBirthDate('1890-01-01', today), false)
+  assert.equal(isValidBirthDate('', today), false)
 })
 
 test('firstError returns the first message or null', () => {
