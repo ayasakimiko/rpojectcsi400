@@ -1312,7 +1312,7 @@ const MAINTENANCE_STATUS_LABEL = {
 const STAFF_TABS = [
   { key: 'home', label: 'หน้าแรก' },
   { key: 'payment-review', label: 'ประวัติสลิป' },
-  { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
+  { key: 'completed-contracts', label: 'สัญญาทั้งหมด' },
   { key: 'parcels', label: 'พัสดุ' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
@@ -1430,7 +1430,7 @@ function localDayKey(value) {
 const WAITING_PHONE_PATTERN = /^[0-9+\-\s]{9,20}$/
 
 const TENANT_GRID_COUNT = 9
-const ROOMS_PER_PAGE = 12
+const ROOMS_PER_PAGE = 6
 const STAFF_LIST_PAGE_SIZE = 10
 const STAFF_CARD_PAGE_SIZE = 12
 const EXPENSES_PAGE_SIZE = 12
@@ -1509,6 +1509,21 @@ const PAYMENT_TYPE_LABEL = {
   water: 'ค่าน้ำ',
   electricity: 'ค่าไฟฟ้า',
   room_transfer: 'ยอดชำระย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม)',
+  damage: 'ค่าเสียหายส่วนเกินเงินมัดจำ',
+}
+
+function dueStatusBadge(due) {
+  if (!due) return null
+  const unpaid = (due.items || []).filter((item) => item.status !== 'pending')
+  const has = (type) => unpaid.some((item) => item.type === type)
+  if (due.status === 'paid') return { label: DUE_STATUS_LABEL.paid, tone: 'paid' }
+  if (unpaid.length === 0) return { label: DUE_STATUS_LABEL.pending, tone: 'pending' }
+  if (due.status === 'overdue') return { label: DUE_STATUS_LABEL.overdue, tone: 'overdue' }
+  if (has('damage')) return { label: 'ค่าเสียหายเกินมัดจำ', tone: 'damage' }
+  if (has('deposit')) return { label: 'ค้างมัดจำ', tone: 'deposit' }
+  if (has('room_transfer')) return { label: 'ยอดย้ายห้อง', tone: 'transfer' }
+  if (!has('rent') && (has('water') || has('electricity'))) return { label: 'ค้างค่าน้ำ/ไฟ', tone: 'utility' }
+  return { label: DUE_STATUS_LABEL[due.status] || due.status, tone: dueBadgeClass(due.status) }
 }
 
 function dueBadgeClass(status) {
@@ -2444,7 +2459,7 @@ function TenantRejectModal({ request, error, processing, onConfirm, onClose }) {
     'คำขอนี้จะถูกปิดและเปลี่ยนสถานะเป็น "ปฏิเสธแล้ว"',
     REJECT_OUTCOME[request.type],
     request.type === 'moveout' && contractEnd && `สัญญาเช่ายังมีผลต่อถึง ${formatDate(contractEnd)} ผู้เช่าต้องจ่ายค่าเช่ารายเดือนตามปกติ`,
-    request.type === 'moveout' && deposit > 0 && `เงินมัดจำ ฿${formatCurrency(deposit)} ยังอยู่ครบ ไม่มีการคืนหรือริบ`,
+    request.type === 'moveout' && deposit > 0 && `เงินมัดจำ ฿${formatCurrency(deposit)} ยังอยู่ครบ ยังไม่ต้องคืน`,
     ['moveout', 'move_room'].includes(request.type) && request.inspection_id && 'ผลตรวจห้องที่บันทึกไว้ยังเก็บเป็นประวัติ',
     'ผู้เช่าจะเห็นผลในหน้าของตัวเอง และส่งคำขอใหม่ได้',
   ].filter(Boolean)
@@ -2824,7 +2839,7 @@ function RenewRequestOverview({ request, contractEnd, contractMsLeft, isOpen }) 
 
       {deposit > 0 && isOpen && (
         <p className="staff-renew-deposit-note">
-          เงินมัดจำ ฿{formatCurrency(deposit)} ยังอยู่ ไม่เก็บเพิ่ม · คืนเมื่อผู้เช่าพักครบถึง {newEnd ? formatDate(newEnd) : 'วันสิ้นสุดใหม่'} · ริบหากออกก่อน
+          เงินมัดจำ ฿{formatCurrency(deposit)} ยังอยู่ ไม่เก็บเพิ่ม · คืนเมื่อผู้เช่าย้ายออก หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน
         </p>
       )}
     </div>
@@ -2889,10 +2904,10 @@ function MoveOutRequestOverview({ request, contractEnd, contractMsLeft, isOpen }
           </div>
           <div className="staff-moveout-impact-row">
             <span>เงินมัดจำหลังย้ายออก</span>
-            <strong className={depositPaid > 0 && moveDay ? (leavesEarly ? 'is-danger' : 'is-success') : ''}>
+            <strong className={depositPaid > 0 && moveDay ? 'is-success' : ''}>
               {depositPaid <= 0
                 ? deposit > 0 ? 'ยังไม่ได้ชำระ · ไม่มียอดต้องคืน' : 'ไม่มีเงินมัดจำ'
-                : !moveDay ? '-' : leavesEarly ? 'ริบ (ออกก่อนสัญญา)' : 'คืนหลังตรวจห้อง'}
+                : !moveDay ? '-' : 'คืนหลังตรวจห้อง'}
             </strong>
           </div>
         </div>
@@ -4445,7 +4460,7 @@ function SummaryIcon({ type }) {
   )
 }
 
-const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟ', room_transfer: 'ยอดย้ายห้อง' }
+const PAYMENT_REVIEW_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟ', room_transfer: 'ยอดย้ายห้อง', damage: 'ค่าเสียหายส่วนเกินมัดจำ' }
 const PAYMENT_ITEM_ORDER = ['deposit', 'rent', 'room_transfer', 'water', 'electricity']
 
 function slipPaymentItems(payment) {
@@ -9696,7 +9711,7 @@ function StaffMain() {
       ],
     },
     'completed-contracts': {
-      title: 'สัญญาที่เสร็จสมบูรณ์',
+      title: 'สัญญาทั้งหมด',
       tiles: completedContractSummaryTiles(contractSummary),
     },
     'waiting-list': {
@@ -11227,8 +11242,8 @@ function StaffMain() {
                               <td className="staff-room-payment-cell">
                                 <span className="staff-room-mobile-label">การชำระเงิน</span>
                                 {room.currentDue ? (
-                                  <span className={`staff-badge status-${dueBadgeClass(room.currentDue.status)}`}>
-                                    {DUE_STATUS_LABEL[room.currentDue.status] || room.currentDue.status}
+                                  <span className={`staff-badge status-${dueStatusBadge(room.currentDue).tone}`}>
+                                    {dueStatusBadge(room.currentDue).label}
                                   </span>
                                 ) : (
                                   <span className="staff-badge status-none">-</span>
@@ -11239,8 +11254,9 @@ function StaffMain() {
                                 {hasDue ? (
                                   <button
                                     type="button"
-                                    className={`staff-due-amount staff-due-amount-btn is-${dueBadgeClass(room.currentDue.status)}`}
+                                    className={`staff-due-amount staff-due-amount-btn is-${dueStatusBadge(room.currentDue).tone}`}
                                     onClick={() => openDueDetail(room)}
+                                    title="ดูรายละเอียดยอดค้าง"
                                   >
                                     ฿{formatCurrency(room.currentDue.amount)}
                                   </button>
@@ -13760,7 +13776,7 @@ function StaffMain() {
                   ['ตรวจสภาพห้อง', request.inspection_id ? '✓ ตรวจแล้ว' : '✕ ยังไม่ได้ตรวจ'],
                   ['ยอดค้างชำระ', outstanding > 0 ? `฿${formatCurrency(outstanding)}` : balanceItems.length ? 'มีสลิปรอตรวจ' : '✓ ไม่มี'],
                   ['เงินมัดจำ', depositPaid > 0
-                    ? `฿${formatCurrency(depositPaid)} · ${leavesEarly ? 'ริบ' : 'คืนให้ผู้เช่า'}`
+                    ? `฿${formatCurrency(depositPaid)} · คืนให้ผู้เช่า`
                     : deposit > 0 ? 'ยังไม่ได้ชำระ · ไม่มียอดต้องคืน' : 'ไม่มี'],
                 ]}
                 outcomeTitle="เมื่อกดยืนยันจะเกิดขึ้นทันที"
@@ -13769,7 +13785,7 @@ function StaffMain() {
                   'สัญญาของผู้เช่าเปลี่ยนเป็น “สัญญาเก่า”',
                   'บัญชีผู้เช่าถูกระงับ เข้าสู่ระบบไม่ได้จนกว่าจะลงทะเบียนเช่าใหม่',
                   'คำขอ แจ้งซ่อม คำขอรถ และพัสดุที่ค้างอยู่จะถูกยกเลิก',
-                  depositPaid > 0 && `ขั้นต่อไป: บันทึก${leavesEarly ? 'การริบ' : 'การคืน'}เงินมัดจำที่เมนู “สัญญาที่เสร็จสมบูรณ์”`,
+                  depositPaid > 0 && 'ขั้นต่อไป: บันทึกการคืนเงินมัดจำที่เมนู “สัญญาทั้งหมด”',
                 ]}
                 note={balanceItems.length > 0 ? `ต้องเก็บเงิน ${balanceItems.map((item) => item.label).join(', ')} ให้ครบก่อน` : null}
                 noteLabel="ยังอนุมัติไม่ได้"

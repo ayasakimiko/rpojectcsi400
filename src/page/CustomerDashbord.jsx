@@ -1762,12 +1762,12 @@ function TenantRequestDetailCard({ request, roomNumber, section = 'all' }) {
             {deposit > 0 && (
               <div className="dashboard-maintenance-detail-row">
                 <span>เงินมัดจำ</span>
-                <strong className={voided ? 'is-success' : waiting && daysEarly !== null ? (leavesEarly ? 'is-danger' : 'is-success') : ''}>
+                <strong className={voided || (waiting && daysEarly !== null) ? 'is-success' : ''}>
                   ฿{formatCurrency(deposit)}
                   {voided
                     ? ' · ยังอยู่ครบ'
                     : waiting && daysEarly !== null
-                      ? leavesEarly ? ' · จะถูกริบ' : ' · คืนหลังตรวจห้อง'
+                      ? ' · คืนหลังตรวจห้อง'
                       : request.status === 'approved' ? ' · ดูผลในเมนูสัญญาเช่าของฉัน' : ''}
                 </strong>
               </div>
@@ -1780,12 +1780,11 @@ function TenantRequestDetailCard({ request, roomNumber, section = 'all' }) {
             ) : waiting ? (
               <div className="dashboard-moveout-summary">
                 {deposit > 0 && (
-                  <div className={`dashboard-moveout-summary-item ${leavesEarly ? 'is-danger' : 'is-ok'}`}>
-                    <strong>{leavesEarly ? 'ไม่ได้รับเงินมัดจำคืน' : 'ได้รับเงินมัดจำคืน'}</strong>
+                  <div className="dashboard-moveout-summary-item is-ok">
+                    <strong>ได้รับเงินมัดจำคืน</strong>
                     <span>
-                      {leavesEarly
-                        ? `ย้ายออกก่อนสิ้นสุดสัญญา ${daysEarly} วัน เงินมัดจำ ฿${formatCurrency(deposit)} จะถูกริบ`
-                        : `พักครบสัญญา ได้รับเงินมัดจำ ฿${formatCurrency(deposit)} คืน (อาจหักค่าเสียหายจากผลตรวจห้อง)`}
+                      {leavesEarly ? `ย้ายออกก่อนสิ้นสุดสัญญา ${daysEarly} วัน · ` : ''}
+                      ได้รับเงินมัดจำ ฿{formatCurrency(deposit)} คืน หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน
                     </span>
                   </div>
                 )}

@@ -130,6 +130,16 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DepositSettlementLog' AND COLUMN_NAME = 'extra_charge'),
+    'SELECT 1',
+    'ALTER TABLE `DepositSettlementLog` ADD COLUMN `extra_charge` DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER forfeited_amount'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 UPDATE DepositSettlementLog l
   JOIN Booking b ON b.id = l.booking_id
   JOIN Customer c ON c.id = b.customer_id

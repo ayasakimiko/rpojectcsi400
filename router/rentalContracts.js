@@ -10,7 +10,9 @@ import { actorOf } from "../middleware/notifications.js";
 import { transferChargeSent, transferContractAttached } from "./notificationEvents.js";
 import { moveResidentVehicles } from "./parking.js";
 import {
+  CHARGE_PAYMENT_TYPES,
   computeRentCoverage,
+  DAMAGE_PAYMENT_TYPE,
   loadDepositPayments,
   loadMoveOutBalance,
   loadTransferDepositLedger,
@@ -146,9 +148,7 @@ function depositRefund(status, depositPaidCents, settlement) {
   if (settlement === "refunded") return "refund";
   if (settlement === "forfeited") return "forfeit";
   if (depositPaidCents <= 0) return null;
-  if (status === "ended_early") return "forfeit";
-  if (status === "ended" || status === "expired") return "refund";
-  return null;
+  return ["ended", "ended_early", "expired", "voided"].includes(status) ? "refund" : null;
 }
 
 function isArchivedContract(contract) {
@@ -156,6 +156,7 @@ function isArchivedContract(contract) {
 }
 
 function contractStatus(contract, now, firstPayment) {
+  if (contract.first_payment_voided_at) return "voided";
   if (isArchivedContract(contract)) return movedOutEarly(contract, now) ? "ended_early" : "ended";
   const start = contract.rental_start_date ? new Date(contract.rental_start_date) : null;
   const end = effectiveEndDate(contract);
@@ -319,6 +320,7 @@ function withDepositBreakdown(sourceRow, now, rentPaidCents, deposit = { paidCen
     deposit_refund: depositRefund(status, depositRemainingCents, contract.deposit_settlement),
     deposit_deduction: contract.deposit_deduction == null ? null : Number(contract.deposit_deduction),
     deposit_refunded_amount: contract.deposit_refunded_amount == null ? null : Number(contract.deposit_refunded_amount),
+    deposit_extra_charge: Number(contract.deposit_extra_charge) || 0,
     can_settle_deposit: archived && depositRemainingCents > 0 && !contract.deposit_settlement,
     deposit_status: depositState,
     first_payment_status: firstPayment,
@@ -346,11 +348,11 @@ async function attachContractImages(pool, contracts, now) {
       [bookingIds],
     ),
     pool.query(
-      `SELECT pb.customer_id, p.booking_id, p.amount, p.status, p.type = 'deposit' AS is_deposit FROM Payment p
+      `SELECT pb.customer_id, p.booking_id, p.amount, p.status, p.type, p.type = 'deposit' AS is_deposit FROM Payment p
        JOIN Booking pb ON pb.id = p.booking_id
        WHERE pb.customer_id IN (?) AND p.status IN ('paid', 'pending')
-         AND (p.type IS NULL OR p.type NOT IN ('water', 'electricity', 'room_transfer'))`,
-      [customerIds],
+         AND (p.type IS NULL OR p.type NOT IN (?) OR p.type = ?)`,
+      [customerIds, CHARGE_PAYMENT_TYPES, DAMAGE_PAYMENT_TYPE],
     ),
     pool.query(
       `SELECT rt.*, cp.status AS charge_status, rp.status AS rent_charge_status FROM RoomTransfer rt
@@ -385,10 +387,15 @@ async function attachContractImages(pool, contracts, now) {
     const deposit = { paidCents: 0, pending: false };
     let rentPaidCents = 0;
     let rentPending = false;
-    for (const { booking_id, amount, status, is_deposit } of paymentsByCustomer.get(row.customer_id) ?? []) {
+    const damageCharge = { cents: 0, paidCents: 0 };
+    for (const { booking_id, amount, status, type, is_deposit } of paymentsByCustomer.get(row.customer_id) ?? []) {
       if (!inContractBookings(row, booking_id)) continue;
       const cents = Math.round(Number(amount) * 100);
-      if (is_deposit) {
+      if (type === DAMAGE_PAYMENT_TYPE) {
+        if (!Number.isSafeInteger(cents)) continue;
+        damageCharge.cents += cents;
+        if (status === "paid") damageCharge.paidCents += cents;
+      } else if (is_deposit) {
         if (status === "paid" && Number.isSafeInteger(cents)) deposit.paidCents += cents;
         if (status === "pending" && cents > 0) deposit.pending = true;
       } else if (status === "pending") {
@@ -400,7 +407,17 @@ async function attachContractImages(pool, contracts, now) {
     const transfers = (transfersByCustomer.get(row.customer_id) ?? []).filter((transfer) => inContractBookings(row, transfer.from_booking_id));
     const contract = withDepositBreakdown(row, now, rentPaidCents, deposit, rentPending, transfers);
     const contractImages = imagesByBooking.get(row.booking_id) ?? [];
-    return { ...contract, duration_selected: Boolean(row.duration_selected), images: contractImages, image_count: contractImages.length };
+    const damageExcessCents = Math.max(0, toCents(row.moveout_damage_cost) - toCents(contract.deposit_remaining));
+    return {
+      ...contract,
+      duration_selected: Boolean(row.duration_selected),
+      images: contractImages,
+      image_count: contractImages.length,
+      damage_excess: damageExcessCents / 100,
+      damage_charge: damageCharge.cents > 0
+        ? { amount: damageCharge.cents / 100, paid: damageCharge.paidCents / 100, status: damageCharge.paidCents >= damageCharge.cents ? "paid" : "pending" }
+        : null,
+    };
   });
 }
 
@@ -417,6 +434,8 @@ export async function loadCustomerContracts(pool, customerIds, { currentOnly = f
               COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
               b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
               b.deposit_settled_at, b.deposit_settled_by_name,
+              DATE_FORMAT(b.first_payment_due_date, '%Y-%m-%d') AS first_payment_due_date, b.first_payment_voided_at,
+              b.deposit_extra_charge,
               (SELECT moi.damage_note FROM MoveOutInspection moi
                 JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
                 WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
@@ -469,9 +488,7 @@ export async function loadUnsettledDeposit(db, customerId) {
 }
 
 export const UNSETTLED_DEPOSIT_MESSAGE = (deposit) =>
-  `ผู้เช่าคนนี้ยังมีเงินมัดจำ ฿${deposit.amount.toLocaleString("th-TH")} จากสัญญาห้อง ${deposit.room_number} ที่ยังไม่ได้บันทึก${
-    deposit.action === "forfeit" ? "การริบ" : "การคืน"
-  } กรุณาจัดการเงินมัดจำในเมนูสัญญาที่เสร็จสมบูรณ์ก่อนทำสัญญาใหม่`;
+  `ผู้เช่าคนนี้ยังมีเงินมัดจำ ฿${deposit.amount.toLocaleString("th-TH")} จากสัญญาห้อง ${deposit.room_number} ที่ยังไม่ได้บันทึกการคืน กรุณาจัดการเงินมัดจำในเมนูสัญญาทั้งหมดก่อนทำสัญญาใหม่`;
 
 export async function loadContractByBooking(pool, bookingId) {
   const [rows] = await pool.query(
@@ -483,6 +500,8 @@ export async function loadContractByBooking(pool, bookingId) {
             COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
             b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
             b.deposit_settled_at, b.deposit_settled_by_name,
+              DATE_FORMAT(b.first_payment_due_date, '%Y-%m-%d') AS first_payment_due_date, b.first_payment_voided_at,
+              b.deposit_extra_charge,
             (SELECT moi.damage_note FROM MoveOutInspection moi
               JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
               WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
@@ -528,6 +547,8 @@ export async function loadCompletedContracts(pool) {
             COALESCE(b.deposit_amount, c.deposit_amount) AS deposit_amount, b.contract_completed_at, b.created_at, b.ended_at,
             b.deposit_settlement, b.deposit_deduction, b.deposit_refunded_amount, b.deposit_settlement_note,
             b.deposit_settled_at, b.deposit_settled_by_name,
+              DATE_FORMAT(b.first_payment_due_date, '%Y-%m-%d') AS first_payment_due_date, b.first_payment_voided_at,
+              b.deposit_extra_charge,
             (SELECT moi.damage_note FROM MoveOutInspection moi
               JOIN TenantRequest itr ON itr.id = moi.tenant_request_id
               WHERE itr.customer_id = b.customer_id AND itr.type = 'moveout' AND itr.status = 'approved'
@@ -948,12 +969,12 @@ export async function expireRoomTransferCharges(db) {
   }
   const [orphanRows] = await db.query(
     `SELECT p.id FROM TenantRequest tr
-     JOIN Payment p ON p.id = tr.transfer_charge_payment_id
-     WHERE tr.type = 'move_room' AND tr.status IN ('rejected', 'cancelled') AND p.status = 'pending' AND p.slip_path IS NULL`,
+     JOIN Payment p ON p.id = tr.transfer_charge_payment_id OR p.id = tr.damage_charge_payment_id
+     WHERE tr.type IN ('move_room', 'moveout') AND tr.status IN ('rejected', 'cancelled') AND p.status = 'pending' AND p.slip_path IS NULL`,
   );
   if (orphanRows.length > 0) {
     await db.query(
-      `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: คำขอย้ายห้องถูกยกเลิก)'), 255)
+      `UPDATE Payment SET status = 'cancelled', note = LEFT(CONCAT(COALESCE(note, ''), ' (ยกเลิก: คำขอถูกยกเลิก)'), 255)
        WHERE id IN (?) AND status = 'pending' AND slip_path IS NULL`,
       [orphanRows.map((row) => row.id)],
     );

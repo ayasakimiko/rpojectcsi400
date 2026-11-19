@@ -204,7 +204,7 @@ export function configureApiClient({
         for (const key of ['session', 'user', 'justLoggedIn', 'apiBackend']) storage.removeItem(key)
         storage.setItem(
           'apiBackendNotice',
-          error.response.data?.code === 'CONTRACT_EXPIRED_SUSPENDED' && error.response.data.message
+          ['CONTRACT_EXPIRED_SUSPENDED', 'FIRST_PAYMENT_VOIDED'].includes(error.response.data?.code) && error.response.data.message
             ? error.response.data.message
             : 'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่',
         )

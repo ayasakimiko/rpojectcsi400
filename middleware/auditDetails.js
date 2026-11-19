@@ -32,6 +32,7 @@ function collectUploadUrls(value, found, depth = 0) {
   }
 }
 
+
 function toFieldValue(value) {
   if (typeof value === "string") {
     const text = value.trim();

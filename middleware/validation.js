@@ -812,29 +812,34 @@ export function parseMoveInInspectionUpdate(body = {}, existingPhotos = []) {
   return { value: { ...core.value, keptPhotos, newPhotos: newPhotos.value } };
 }
 
-const DEPOSIT_SETTLEMENT_ACTIONS = new Set(["refund", "forfeit"]);
+export const DEPOSIT_DEDUCTION_MAX_CENTS = 1_000_000_000;
 
-export function parseDepositSettlementInput(body = {}, depositPaid = 0) {
+export function parseDepositSettlementInput(body = {}, depositPaid = 0, alreadyCollected = 0) {
   const action = body.action;
-  if (!DEPOSIT_SETTLEMENT_ACTIONS.has(action)) {
-    return { error: "กรุณาเลือกว่าจะคืนหรือริบเงินมัดจำ" };
+  if (action !== "refund") {
+    return { error: "เงินมัดจำต้องคืนให้ผู้เช่า หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน ไม่สามารถริบทั้งหมดได้" };
   }
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
   const paidCents = Math.max(0, Math.round(Number(depositPaid) * 100) || 0);
-  if (action === "forfeit") {
-    if (!note) return { error: "กรุณาระบุเหตุผลที่ริบเงินมัดจำ" };
-    return { value: { action, deductionCents: paidCents, refundCents: 0, note } };
-  }
   const rawDeduction = body.deduction === undefined || body.deduction === null || body.deduction === "" ? 0 : Number(body.deduction);
   const deductionCents = Math.round(rawDeduction * 100);
   if (!Number.isFinite(rawDeduction) || !Number.isSafeInteger(deductionCents) || deductionCents < 0) {
     return { error: "จำนวนเงินที่หักต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" };
   }
-  if (deductionCents > paidCents) {
-    return { error: "จำนวนเงินที่หักต้องไม่เกินเงินมัดจำที่ชำระไว้" };
+  if (deductionCents > DEPOSIT_DEDUCTION_MAX_CENTS) {
+    return { error: "จำนวนเงินที่หักสูงเกินไป กรุณาตรวจสอบอีกครั้ง" };
   }
   if (deductionCents > 0 && !note) {
-    return { error: "กรุณาระบุรายการค่าเสียหายที่หักจากเงินมัดจำ" };
+    return { error: "กรุณาระบุรายการค่าเสียหายหรือยอดค้างที่หักจากเงินมัดจำ" };
   }
-  return { value: { action, deductionCents, refundCents: paidCents - deductionCents, note } };
+  const collectedCents = Math.max(0, Math.round(Number(alreadyCollected) * 100) || 0);
+  return {
+    value: {
+      action,
+      deductionCents,
+      refundCents: Math.max(0, paidCents - deductionCents),
+      extraCents: Math.max(0, deductionCents - paidCents - collectedCents),
+      note,
+    },
+  };
 }

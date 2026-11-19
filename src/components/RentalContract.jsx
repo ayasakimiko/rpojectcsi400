@@ -29,6 +29,7 @@ const CONTRACT_STATUS = {
   expired: { label: 'หมดอายุสัญญา', tone: 'warning' },
   ended: { label: 'สิ้นสุดการเช่า', tone: 'muted' },
   ended_early: { label: 'ออกก่อนสัญญา', tone: 'unpaid' },
+  voided: { label: 'ยกเลิก (ไม่ชำระงวดแรก)', tone: 'muted' },
 }
 
 function ContractIcon({ type, size = 16 }) {
@@ -44,6 +45,8 @@ function ContractIcon({ type, size = 16 }) {
     user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
     phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.7L8.7 10.5a16 16 0 0 0 4.8 4.8l1.3-1.3a2 2 0 0 1 1.7-.6l2.8.5a2 2 0 0 1 1.7 2Z" />,
     check: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="m9 14 2 2 4-4" /></>,
+    alert: <><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>,
+    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -135,6 +138,9 @@ export function ContractFirstPaymentNote({ contract, viewer = 'staff' }) {
   const detail = Number(contract.deposit_amount) > 0
     ? `ค่าห้อง ${formatContractMoney(contract.first_month_amount)} + มัดจำ ${formatContractMoney(contract.deposit_amount)}`
     : `ค่าห้อง ${formatContractMoney(contract.first_month_amount)}`
+  const deadline = !review && contract.first_payment_due_date
+    ? ` · ต้องชำระภายใน ${formatContractDate(`${contract.first_payment_due_date}T00:00:00`)} ไม่เช่นนั้นสัญญาจะถูกยกเลิก`
+    : ''
   return (
     <div className={`contract-first-payment-note${review ? ' is-review' : ''}`} role="status">
       <ContractIcon type="wallet" size={18} />
@@ -143,8 +149,8 @@ export function ContractFirstPaymentNote({ contract, viewer = 'staff' }) {
         {review
           ? `สัญญาจะมีผลเมื่ออนุมัติสลิปงวดแรก ${amount} (${detail})`
           : viewer === 'customer'
-            ? `กรุณาชำระงวดแรก ${amount} (${detail}) ผ่านระบบหรือที่เจ้าหน้าที่ สัญญาจะมีผลหลังชำระครบ`
-            : `สัญญาจะมีผลเมื่อผู้เช่าชำระงวดแรก ${amount} (${detail}) หรือเจ้าหน้าที่เก็บเงินแล้ว`}
+            ? `กรุณาชำระงวดแรก ${amount} (${detail}) ผ่านระบบหรือที่เจ้าหน้าที่ สัญญาจะมีผลหลังชำระครบ${deadline}`
+            : `สัญญาจะมีผลเมื่อผู้เช่าชำระงวดแรก ${amount} (${detail}) หรือเจ้าหน้าที่เก็บเงินแล้ว${deadline}`}
       </span>
     </div>
   )
@@ -155,9 +161,9 @@ export function ContractGallery({ images = [], title = 'รูปสัญญา
   if (images.length === 0) {
     return (
       <div className="contract-gallery-empty">
-        <ContractIcon type="image" size={22} />
-        <strong>ไม่มีรูปสัญญาเช่า</strong>
-        <span>สัญญาที่ลงทะเบียนก่อนเปิดใช้ระบบแนบรูปจะไม่มีรูปสัญญาในระบบ</span>
+        <span className="contract-gallery-empty-icon" aria-hidden="true"><ContractIcon type="image" size={22} /></span>
+        <strong>ยังไม่มีรูปสัญญาเช่า</strong>
+        <span>สัญญาที่ลงทะเบียนก่อนเปิดใช้ระบบแนบรูป จะไม่มีรูปสัญญาเก็บไว้ในระบบ</span>
       </div>
     )
   }
@@ -309,8 +315,6 @@ export function ContractCell({ contract }) {
     ? contract.deposit_settlement === 'refunded'
       ? { label: 'คืนแล้ว', tone: 'paid' }
       : { label: 'ริบแล้ว', tone: 'muted' }
-    : contract.deposit_refund === 'forfeit'
-    ? { label: 'ริบ', tone: 'due' }
     : contract.deposit_refund === 'refund'
       ? { label: 'ต้องคืน', tone: 'pending' }
       : DEPOSIT_STATUS_LABEL[contract.deposit_status]
@@ -463,21 +467,21 @@ const STAFF_CARD_STATUS = {
   expired: { label: 'หมดอายุ', tone: 'is-warning' },
   ended: { label: 'สิ้นสุดการเช่า', tone: 'is-muted' },
   ended_early: { label: 'ออกก่อนสัญญา', tone: 'is-unpaid' },
+  voided: { label: 'ยกเลิกสัญญา', tone: 'is-muted' },
 }
 const STAFF_CARD_PHOTOS = 4
 
 export function DepositEarlyLeaveWarning({ contract }) {
   if (!contract || !(Number(contract.deposit_amount) > 0)) return null
-  if (['ended', 'ended_early', 'expired'].includes(contract.status)) return null
-  const endValue = contract.current_end_date || contract.rental_end_date
+  if (['ended', 'ended_early', 'expired', 'voided'].includes(contract.status)) return null
   return (
-    <div className="contract-refund-note is-warning" role="note">
+    <div className="contract-refund-note is-refund" role="note">
       <ContractIcon type="wallet" size={18} />
       <span>
-        <strong>ย้ายออกก่อนสัญญาหมด จะไม่ได้รับเงินมัดจำคืน</strong>
+        <strong>เงินมัดจำคืนหลังย้ายออกและตรวจห้อง</strong>
         <small>
-          เงินมัดจำ {formatContractMoney(contract.deposit_amount)} ({formatDepositMonths(contract)}) จะคืนให้เมื่อพักอยู่ครบสัญญาถึง {formatContractDate(endValue)}
-          {' '}หากย้ายออกก่อนวันดังกล่าว ทางหอพักจะไม่คืนเงินมัดจำ
+          เงินมัดจำ {formatContractMoney(contract.deposit_amount)} ({formatDepositMonths(contract)}) หักได้เฉพาะค่าเสียหายหรือยอดค้างชำระที่มีหลักฐาน
+          {' '}หากต้องการย้ายออกก่อนครบสัญญา กรุณาแจ้งเจ้าหน้าที่ล่วงหน้า
         </small>
       </span>
     </div>
@@ -487,6 +491,7 @@ export function DepositEarlyLeaveWarning({ contract }) {
 function SettledDepositNote({ contract, viewer, compact }) {
   const refunded = contract.deposit_settlement === 'refunded'
   const deduction = Number(contract.deposit_deduction) || 0
+  const extraCharge = Number(contract.deposit_extra_charge) || 0
   const title = refunded
     ? viewer === 'customer'
       ? `ได้รับเงินมัดจำคืนแล้ว ${formatContractMoney(contract.deposit_refunded_amount)}`
@@ -503,6 +508,7 @@ function SettledDepositNote({ contract, viewer, compact }) {
           </div>
           <div className="settled-deposit-meta">
             {refunded && deduction > 0 && <span>หักค่าเสียหาย {formatContractMoney(deduction)}</span>}
+            {extraCharge > 0 && <span className="is-owe">ผู้เช่าต้องจ่ายเพิ่ม {formatContractMoney(extraCharge)}</span>}
             {contract.deposit_settlement_note && (
               <span className="is-reason">
                 {refunded ? 'หมายเหตุ' : 'เหตุผล'}: {contract.deposit_settlement_note}
@@ -523,6 +529,7 @@ function SettledDepositNote({ contract, viewer, compact }) {
   }
   const parts = [
     refunded && deduction > 0 ? `หักค่าเสียหาย ${formatContractMoney(deduction)}` : null,
+    extraCharge > 0 ? `ผู้เช่าต้องจ่ายเพิ่ม ${formatContractMoney(extraCharge)}` : null,
     `${contract.deposit_settled_by_name || '-'} · ${formatContractDate(contract.deposit_settled_at)}`,
   ].filter(Boolean)
   return (
@@ -540,20 +547,16 @@ export function DepositRefundNote({ contract, viewer = 'staff', compact = false 
   if (contract?.deposit_settlement) return <SettledDepositNote contract={contract} viewer={viewer} compact={compact} />
   if (!contract?.deposit_refund) return null
   const amount = formatContractMoney(contract.deposit_remaining ?? contract.deposit_paid)
-  const refund = contract.deposit_refund === 'refund'
   const pendingTask = viewer !== 'customer' && contract.can_settle_deposit
-  const title = refund
-    ? viewer === 'customer' ? `รอรับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
-    : pendingTask ? `ต้องบันทึกริบเงินมัดจำ ${amount}` : 'ไม่ต้องคืนเงินมัดจำ'
-  const detail = refund
-    ? contract.status === 'expired'
-      ? compact ? 'ครบสัญญา พักอยู่ตามกำหนด' : 'สัญญาครบกำหนดแล้วและผู้เช่าพักอยู่ตามกำหนด'
-      : compact ? 'พักอยู่ครบตามสัญญา' : 'ผู้เช่าพักอยู่ครบตามสัญญา'
-    : pendingTask
-      ? compact ? 'ออกก่อนสัญญา · ยังไม่ได้บันทึก' : 'ผู้เช่าออกก่อนสัญญาสิ้นสุด · ยังไม่ได้บันทึกการริบเงินมัดจำ'
-      : compact ? `ออกก่อนสัญญา · ริบมัดจำ ${amount}` : `ผู้เช่าออกก่อนสัญญาสิ้นสุด · ริบเงินมัดจำ ${amount}`
+  const title = viewer === 'customer' ? `รอรับเงินมัดจำคืน ${amount}` : `ต้องคืนเงินมัดจำ ${amount}`
+  const reason = {
+    expired: compact ? 'ครบสัญญา พักอยู่ตามกำหนด' : 'สัญญาครบกำหนดแล้วและผู้เช่าพักอยู่ตามกำหนด',
+    ended_early: compact ? 'ออกก่อนสัญญา' : 'ผู้เช่าออกก่อนสัญญาสิ้นสุด',
+    voided: compact ? 'สัญญาถูกยกเลิก' : 'สัญญาถูกยกเลิกเพราะไม่ชำระงวดแรก',
+  }[contract.status] || (compact ? 'พักอยู่ครบตามสัญญา' : 'ผู้เช่าพักอยู่ครบตามสัญญา')
+  const detail = compact ? reason : `${reason} · หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน`
   return (
-    <span className={`contract-refund-note ${refund ? 'is-refund' : 'is-forfeit'}${pendingTask ? ' is-pending-task' : ''}${compact ? ' is-compact' : ''}`} role="note">
+    <span className={`contract-refund-note is-refund${pendingTask ? ' is-pending-task' : ''}${compact ? ' is-compact' : ''}`} role="note">
       <ContractIcon type="wallet" size={compact ? 14 : 18} />
       <span>
         <strong>{title}</strong>
@@ -699,7 +702,7 @@ function StaffContractCard({ contract, onOpen, unviewed }) {
             {underlying && <span className={`csc-status ${underlying.tone}`}>{underlying.label}</span>}
             {contract.can_settle_deposit && (
               <span className="csc-status is-deposit-alert">
-                {contract.deposit_refund === 'forfeit' ? 'รอบันทึกริบมัดจำ' : 'รอคืนมัดจำ'}
+                รอคืนมัดจำ
               </span>
             )}
           </span>
@@ -925,7 +928,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
       <div className="staff-card-header">
         <div>
           <h2>
-            สัญญาที่เสร็จสมบูรณ์ <span className="staff-count-pill">{contracts.length}</span>
+            สัญญาทั้งหมด <span className="staff-count-pill">{contracts.length}</span>
           </h2>
           <p className="waiting-list-storage-note">สัญญาเช่าที่ลงทะเบียนผู้เช่าและแนบรูปสัญญาครบแล้ว</p>
         </div>
@@ -973,7 +976,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
           <option value="all">ทุกสัญญา</option>
           <option value="current">สัญญาปัจจุบัน ({contracts.length - archivedCount})</option>
           <option value="archived">สัญญาเก่า ({archivedCount})</option>
-          <option value="deposit">รอคืน/ริบมัดจำ ({pendingDepositCount})</option>
+          <option value="deposit">รอคืนมัดจำ ({pendingDepositCount})</option>
         </select>
         <select className="staff-filter-select" value={sort} onChange={(event) => resetPage(setSort)(event.target.value)} aria-label="เรียงลำดับ">
           {COMPLETED_CONTRACT_SORTS.map((option) => (
@@ -993,7 +996,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
           </button>
         </p>
       ) : filtered.length === 0 ? (
-        <p className="staff-empty">{contracts.length ? 'ไม่พบสัญญาตามเงื่อนไขที่เลือก' : 'ยังไม่มีสัญญาที่เสร็จสมบูรณ์'}</p>
+        <p className="staff-empty">{contracts.length ? 'ไม่พบสัญญาตามเงื่อนไขที่เลือก' : 'ยังไม่มีสัญญาในระบบ'}</p>
       ) : (
         <ul className="csc-grid">
           {pageItems.map((contract) => (
@@ -1027,12 +1030,21 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
             </div>
             <ContractSectionFilter value={detailSection} onChange={setDetailSection} contract={detail} />
             {detail.is_archived && (
-              <div className="contract-refund-note is-archived" role="note">
+              <div className={`contract-refund-note is-archived${detail.has_newer_contract ? ' is-superseded' : ''}`} role="note">
                 <ContractIcon type="file" size={18} />
                 <span>
-                  <strong>{detail.has_newer_contract ? 'นี่คือสัญญาเก่า ผู้เช่าคนนี้มีสัญญาใหม่แล้ว' : 'นี่คือสัญญาเก่าที่สิ้นสุดแล้ว'}</strong>
-                  <small>
-                    {detail.moved_out_at ? `สิ้นสุดเมื่อ ${formatContractDate(detail.moved_out_at)} · ` : ''}เก็บไว้เป็นประวัติ ข้อมูลยอดชำระนับเฉพาะของสัญญานี้
+                  <strong>{detail.has_newer_contract ? 'สัญญาเก่า · ผู้เช่าทำสัญญาใหม่แล้ว' : 'สัญญาเก่า · สิ้นสุดแล้ว'}</strong>
+                  <small className="contract-archived-meta">
+                    {(detail.moved_out_at || detail.next_contract_at) && (
+                      <span>
+                        <ContractIcon type="calendar" size={13} />
+                        สิ้นสุดเมื่อ <b>{formatContractDate(detail.moved_out_at || detail.next_contract_at)}</b>
+                      </span>
+                    )}
+                    <span>
+                      <ContractIcon type="wallet" size={13} />
+                      ยอดเงินในหน้านี้เป็นของสัญญานี้เท่านั้น
+                    </span>
                   </small>
                 </span>
               </div>
@@ -1055,7 +1067,6 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
 }
 
 function DepositContractTerms({ contract, title = 'เงื่อนไขสัญญา' }) {
-  const action = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
   const endDate = contract.effective_end_date || contract.rental_end_date
   const leftAt = contract.moved_out_at || contract.next_contract_at || null
   const leftLabel = contract.moved_out_at ? 'ย้ายออกเมื่อ' : contract.next_contract_at ? 'ทำสัญญาใหม่เมื่อ' : 'ย้ายออกเมื่อ'
@@ -1067,18 +1078,21 @@ function DepositContractTerms({ contract, title = 'เงื่อนไขส�
         {title}
       </h4>
       <dl>
-        <div>
+        <div className="is-wide">
           <dt>ระยะสัญญา</dt>
           <dd>
             {formatContractDate(contract.rental_start_date)} ถึง {formatContractDate(endDate)}
-            {contract.contract_duration_months ? ` (${contract.contract_duration_months} เดือน)` : ''}
+            {contract.contract_duration_months ? <span className="is-muted">{contract.contract_duration_months} เดือน</span> : null}
           </dd>
         </div>
         <div>
           <dt>เงินมัดจำ</dt>
-          <dd>{formatDepositMonths(contract)} · {formatContractMoney(contract.deposit_amount)}</dd>
+          <dd>
+            {formatContractMoney(contract.deposit_amount)}
+            <span className="is-muted">{formatDepositMonths(contract)}</span>
+          </dd>
         </div>
-        <div>
+        <div className="is-wide">
           <dt>{leftLabel}</dt>
           <dd>
             {leftAt ? (
@@ -1099,29 +1113,34 @@ function DepositContractTerms({ contract, title = 'เงื่อนไขส�
           </dd>
         </div>
         {contract.moveout_damage_note && (
-          <div>
+          <div className="is-wide">
             <dt>ผลตรวจห้อง</dt>
-            <dd>{contract.moveout_damage_note}</dd>
+            <dd>
+              {contract.moveout_damage_note}
+              {Number(contract.moveout_damage_cost) > 0 && (
+                <span className="is-muted">ค่าเสียหาย {formatContractMoney(contract.moveout_damage_cost)}</span>
+              )}
+            </dd>
           </div>
         )}
       </dl>
-      <ul>
-        <li className={action === 'refund' ? 'is-active is-refund' : ''}>
-          <b>พักครบสัญญา</b> คืนเงินมัดจำ หักค่าเสียหายตามจริงได้
-        </li>
-        <li className={action === 'forfeit' ? 'is-active is-forfeit' : ''}>
-          <b>ย้ายออกก่อนครบสัญญา</b> ริบเงินมัดจำทั้งหมด
-          {action === 'forfeit' && <em>ผิดเงื่อนไขข้อนี้</em>}
-        </li>
-      </ul>
+      <div className="deposit-settle-rule" role="note">
+        <span className="deposit-settle-rule-icon" aria-hidden="true">
+          <ContractIcon type="check" size={16} />
+        </span>
+        <span>
+          <strong>คืนเงินมัดจำทุกกรณี</strong>
+          <small>ทั้งพักครบและย้ายออกก่อนครบสัญญา · หักได้เฉพาะค่าเสียหายหรือยอดค้างชำระที่มีหลักฐาน</small>
+        </span>
+      </div>
     </section>
   )
 }
 
 function DepositSettlementModal({ contract, onClose, onSaved }) {
-  const action = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
   const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
-  const inspectionDamage = action === 'refund' ? Math.min(Number(contract.moveout_damage_cost) || 0, paid) : 0
+  const inspectionDamage = Number(contract.moveout_damage_cost) || 0
+  const collected = Number(contract.damage_charge?.paid) || 0
   const [deduction, setDeduction] = useState(inspectionDamage > 0 ? String(inspectionDamage) : '')
   const [note, setNote] = useState(inspectionDamage > 0 ? (contract.moveout_damage_note || '').slice(0, 500) : '')
   const [saving, setSaving] = useState(false)
@@ -1131,7 +1150,11 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
   const noteRef = useRef(null)
   const deductionValue = Number(deduction) || 0
   const refundAmount = Math.max(0, paid - deductionValue)
-  const noteRequired = action === 'forfeit' || deductionValue > 0
+  const fromDeposit = Math.min(deductionValue, paid)
+  const overDeposit = Math.max(0, deductionValue - paid)
+  const fromCollected = Math.min(overDeposit, collected)
+  const extraAmount = overDeposit - fromCollected
+  const noteRequired = deductionValue > 0
 
   const failField = (field, ref, message) => {
     setError(message)
@@ -1142,12 +1165,12 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
 
   const submit = async (event) => {
     event.preventDefault()
-    if (action === 'refund' && (deductionValue < 0 || deductionValue > paid)) {
-      failField('deduction', deductionRef, 'จำนวนเงินที่หักต้องอยู่ระหว่าง 0 ถึงเงินมัดจำที่ชำระไว้')
+    if (!Number.isFinite(Number(deduction || 0)) || deductionValue < 0) {
+      failField('deduction', deductionRef, 'จำนวนเงินที่หักต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป')
       return
     }
     if (noteRequired && !note.trim()) {
-      failField('note', noteRef, action === 'forfeit' ? 'กรุณาระบุเหตุผลที่ริบเงินมัดจำ' : 'กรุณาระบุรายการค่าเสียหายที่หัก')
+      failField('note', noteRef, 'กรุณาระบุรายการค่าเสียหายหรือยอดค้างที่หัก')
       return
     }
     setInvalidField(null)
@@ -1156,7 +1179,7 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
     try {
       const { data } = await axios.post(
         `/api/staff/contracts/${contract.booking_id}/deposit-settlement`,
-        { action, deduction: action === 'refund' ? deductionValue : undefined, note: note.trim() || undefined }
+        { action: 'refund', deduction: deductionValue, note: note.trim() || undefined }
       )
       onSaved(data.contract)
     } catch (requestError) {
@@ -1167,9 +1190,30 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
   }
 
   const name = `${contract.first_name || ''} ${contract.last_name || ''}`.trim()
-  const option = action === 'forfeit'
-    ? { label: 'ริบเงินมัดจำ', reason: 'ผู้เช่าย้ายออกก่อนครบสัญญา ตามเงื่อนไขหอพักจะไม่คืนเงินมัดจำ' }
-    : { label: 'คืนเงินมัดจำ', reason: 'ผู้เช่าพักอยู่ครบสัญญา คืนเงินมัดจำได้ หากมีความเสียหายให้หักออกตามจริง' }
+  const statusTone = ['ended_early', 'voided'].includes(contract.status) ? 'is-warn' : 'is-ok'
+  const changeDeduction = (value) => {
+    setDeduction(value)
+    setError('')
+    setInvalidField(null)
+  }
+  const damageCost = Number(contract.moveout_damage_cost) || 0
+  const excess = Number(contract.damage_excess) || 0
+  const presets = [
+    { key: 'none', label: 'ไม่หัก', value: '' },
+    inspectionDamage > 0 && {
+      key: 'inspection',
+      label: `ตามผลตรวจห้อง ${formatContractMoney(inspectionDamage)}`,
+      value: String(inspectionDamage),
+    },
+    inspectionDamage !== paid && paid > 0 && { key: 'deposit', label: `เท่ามัดจำ ${formatContractMoney(paid)}`, value: String(paid) },
+  ].filter(Boolean)
+  const charge = contract.damage_charge
+  const excessState = charge?.status === 'paid' ? 'is-paid' : charge ? 'is-pending' : 'is-missing'
+  const excessText = charge?.status === 'paid'
+    ? `ผู้เช่าชำระส่วนเกิน ${formatContractMoney(charge.amount)} แล้ว`
+    : charge
+      ? `บิลส่วนเกิน ${formatContractMoney(charge.amount)} ยังไม่ได้ชำระ`
+      : 'ยังไม่มีบิลส่วนเกิน · ใส่ยอดหักตามผลตรวจห้อง ระบบจะบันทึกส่วนเกินเป็นยอดที่ผู้เช่าต้องจ่ายเพิ่ม'
 
   return (
     <ContractDialog
@@ -1179,10 +1223,13 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
       locked={saving}
       header={(close) => (
         <header className="rent-bill-head">
-          <span className="rent-bill-icon deposit-settle-icon"><ContractIcon type="wallet" size={18} /></span>
+          <span className="rent-bill-icon deposit-settle-icon"><ContractIcon type="wallet" size={20} /></span>
           <div>
             <strong>จัดการเงินมัดจำ</strong>
-            <small>ห้อง {contract.room_number || '-'}{name ? ` · ${name}` : ''}</small>
+            <small className="dsm-meta">
+              <span><ContractIcon type="home" size={13} />ห้อง {contract.room_number || '-'}</span>
+              {name && <span><ContractIcon type="user" size={13} />{name}</span>}
+            </small>
           </div>
           <DialogCloseButton onClick={close} />
         </header>
@@ -1190,99 +1237,133 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
     >
       <form className="deposit-settle" onSubmit={submit}>
         <div className="deposit-settle-body">
-          <div className="deposit-settle-stats">
-            <span>
-              <i>เงินมัดจำคงเหลือ</i>
-              <b>{formatContractMoney(paid)}</b>
-            </span>
-            <span>
-              <i>สถานะสัญญา</i>
-              <b>{CONTRACT_STATUS[contract.status]?.label || '-'}</b>
-            </span>
-            <span className={`is-${action}`}>
-              <i>ผลตามเงื่อนไข</i>
-              <b>{option.label}</b>
-            </span>
-          </div>
-          <DepositContractTerms contract={contract} />
-          <div className={`deposit-settle-auto is-${action}`} role="note">
-            <span className="deposit-settle-auto-icon" aria-hidden="true">
-              <ContractIcon type="check" size={18} />
-            </span>
-            <span>
-              <strong>
-                {option.label}
-                <em>ระบบเลือกให้อัตโนมัติ</em>
-              </strong>
-              <small>{option.reason}</small>
-            </span>
-          </div>
-          {action === 'refund' && (
-            <label className={`deposit-settle-field${invalidField === 'deduction' ? ' is-invalid' : ''}`}>
-              <span>หักค่าเสียหาย (บาท)</span>
-              <input
-                ref={deductionRef}
-                type="number"
-                min="0"
-                max={paid}
-                step="0.01"
-                inputMode="decimal"
-                placeholder="0"
-                value={deduction}
+          <section className="dsm-hero" aria-live="polite">
+            <div className="dsm-hero-main">
+              <span className="dsm-eyebrow">ยอดที่คืนให้ผู้เช่า</span>
+              <strong className="dsm-amount">{formatContractMoney(refundAmount)}</strong>
+              <span className="dsm-calc">
+                <span className="dsm-calc-chip">มัดจำคงเหลือ <b>{formatContractMoney(paid)}</b></span>
+                {fromDeposit > 0 && (
+                  <span className="dsm-calc-chip is-minus">− หักจากมัดจำ <b>{formatContractMoney(fromDeposit)}</b></span>
+                )}
+                {fromCollected > 0 && (
+                  <span className="dsm-calc-chip is-paid">ใช้ส่วนเกินที่เก็บแล้ว <b>{formatContractMoney(fromCollected)}</b></span>
+                )}
+                {extraAmount > 0 && (
+                  <span className="dsm-calc-chip is-owe">ผู้เช่าต้องจ่ายเพิ่ม <b>{formatContractMoney(extraAmount)}</b></span>
+                )}
+              </span>
+            </div>
+            <span className={`dsm-pill ${statusTone}`}>{CONTRACT_STATUS[contract.status]?.label || '-'}</span>
+          </section>
+          {excess > 0 && (
+            <div className={`dsm-excess ${excessState}`} role="note">
+              <span className="dsm-excess-icon" aria-hidden="true"><ContractIcon type="alert" size={16} /></span>
+              <span className="dsm-excess-body">
+                <strong>ค่าเสียหายเกินเงินมัดจำ</strong>
+                <dl className="dsm-excess-rows">
+                  <div>
+                    <dt>ผลตรวจห้อง</dt>
+                    <dd>{formatContractMoney(damageCost)}</dd>
+                  </div>
+                  <div>
+                    <dt>มัดจำคงเหลือ</dt>
+                    <dd>− {formatContractMoney(paid)}</dd>
+                  </div>
+                  <div className="is-total">
+                    <dt>ส่วนที่เกินมัดจำ</dt>
+                    <dd>{formatContractMoney(excess)}</dd>
+                  </div>
+                </dl>
+                <em>{excessText}</em>
+              </span>
+            </div>
+          )}
+          <DepositContractTerms contract={contract} title="ข้อมูลสัญญา" />
+          <section className="dsm-form">
+            <h4 className="dsm-section-title">
+              บันทึกการคืนเงิน
+              <span>ตรวจยอดหักให้ตรงกับผลตรวจห้องก่อนยืนยัน</span>
+            </h4>
+            <div className={`dsm-field${invalidField === 'deduction' ? ' is-invalid' : ''}`}>
+              <label htmlFor="dsm-deduction">หักค่าเสียหาย / ยอดค้าง</label>
+              <div className="dsm-money">
+                <span aria-hidden="true">฿</span>
+                <input
+                  id="dsm-deduction"
+                  ref={deductionRef}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={deduction}
+                  onChange={(event) => changeDeduction(event.target.value)}
+                />
+                <small>มัดจำ {formatContractMoney(paid)}</small>
+              </div>
+              {overDeposit > 0 && (
+                <p className="dsm-over-note" role="status">
+                  <ContractIcon type="alert" size={14} />
+                  <span>
+                    <b>ยอดหักเกินมัดจำ {formatContractMoney(overDeposit)}</b>
+                    {fromCollected > 0 && ` · ใช้ส่วนเกินที่เก็บแล้ว ${formatContractMoney(fromCollected)}`}
+                    {extraAmount > 0
+                      ? ` · บันทึกเป็นยอดที่ผู้เช่าต้องจ่ายเพิ่ม ${formatContractMoney(extraAmount)}`
+                      : ' · ไม่ต้องเก็บเพิ่ม'}
+                  </span>
+                </p>
+              )}
+              <div className="dsm-presets">
+                {presets.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className={(deduction || '') === preset.value ? 'is-active' : ''}
+                    onClick={() => changeDeduction(preset.value)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`dsm-field${invalidField === 'note' ? ' is-invalid' : ''}`}>
+              <label htmlFor="dsm-note">
+                รายการที่หัก / หมายเหตุ
+                {noteRequired ? <em>จำเป็น</em> : <span>ไม่บังคับ</span>}
+              </label>
+              <textarea
+                id="dsm-note"
+                ref={noteRef}
+                rows={3}
+                maxLength={500}
+                value={note}
+                placeholder="เช่น ผนังเป็นรู 1 จุด ค่าซ่อม 500 บาท"
                 onChange={(event) => {
-                  setDeduction(event.target.value)
+                  setNote(event.target.value)
                   setError('')
                   setInvalidField(null)
                 }}
               />
-              {inspectionDamage > 0 && (
-                <small className="deposit-settle-hint">
-                  ดึงจากผลตรวจย้ายออก {formatContractMoney(inspectionDamage)} (คำนวณจากราคาทรัพย์สินที่ชำรุด/สูญหาย) แก้ไขได้
-                </small>
-              )}
-            </label>
-          )}
-          <label className={`deposit-settle-field${action === 'forfeit' ? ' is-forfeit-note' : ''}${invalidField === 'note' ? ' is-invalid' : ''}`}>
-            <span>
-              {action === 'forfeit' ? 'เหตุผลที่ริบ' : 'รายการค่าเสียหาย / หมายเหตุ'}
-              {noteRequired && <em> *</em>}
-            </span>
-            <textarea
-              ref={noteRef}
-              rows={3}
-              maxLength={500}
-              value={note}
-              placeholder={action === 'forfeit' ? 'เช่น ย้ายออกก่อนครบสัญญา' : 'เช่น ผนังเป็นรู 1 จุด ค่าซ่อม 500 บาท'}
-              onChange={(event) => {
-                setNote(event.target.value)
-                setError('')
-                setInvalidField(null)
-              }}
-            />
-          </label>
-          <dl className={`deposit-settle-summary is-${action}`}>
-            <div>
-              <dt>เงินมัดจำคงเหลือ</dt>
-              <dd>{formatContractMoney(paid)}</dd>
+              <small className="dsm-help">
+                {noteRequired ? 'ระบุรายการและจำนวนเงินที่หักให้ตรวจสอบได้' : 'ถ้าไม่หักเงิน เว้นว่างได้'}
+                <b>{note.length}/500</b>
+              </small>
             </div>
-            {action === 'refund' && deductionValue > 0 && (
-              <div>
-                <dt>หักค่าเสียหาย</dt>
-                <dd>− {formatContractMoney(deductionValue)}</dd>
-              </div>
-            )}
-            <div className="is-total">
-              <dt>{action === 'refund' ? 'ยอดที่คืนให้ผู้เช่า' : 'ยอดที่ริบ'}</dt>
-              <dd>{formatContractMoney(action === 'refund' ? refundAmount : paid)}</dd>
-            </div>
-          </dl>
+          </section>
         </div>
         {error && <p className="deposit-settle-error" role="alert">{error}</p>}
         <footer className="deposit-settle-foot">
           <small>บันทึกแล้วแก้ไขไม่ได้ ระบบจะเก็บไว้ในบันทึกการจัดการเงินมัดจำ</small>
           <button type="button" className="deposit-settle-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
-          <button type="submit" className={`deposit-settle-submit is-${action}`} disabled={saving}>
-            {saving ? 'กำลังบันทึก...' : action === 'refund' ? 'บันทึกการคืนเงินมัดจำ' : 'บันทึกการริบเงินมัดจำ'}
+          <button type="submit" className="deposit-settle-submit is-refund" disabled={saving}>
+            {saving
+              ? 'กำลังบันทึก...'
+              : refundAmount > 0
+                ? `ยืนยันคืน ${formatContractMoney(refundAmount)}`
+                : extraAmount > 0
+                  ? `ยืนยัน · เก็บเพิ่ม ${formatContractMoney(extraAmount)}`
+                  : 'ยืนยันหักเต็มมัดจำ'}
           </button>
         </footer>
       </form>
@@ -1292,15 +1373,14 @@ function DepositSettlementModal({ contract, onClose, onSaved }) {
 
 export function DepositSettlementForm({ contract, onSaved }) {
   const [open, setOpen] = useState(false)
-  const suggested = contract.deposit_refund === 'forfeit' ? 'forfeit' : 'refund'
   const paid = Number(contract.deposit_remaining ?? contract.deposit_paid) || 0
   return (
-    <div className={`deposit-settle-card is-${suggested}`}>
+    <div className="deposit-settle-card is-refund">
       <span className="deposit-settle-card-icon"><ContractIcon type="wallet" size={20} /></span>
       <div>
         <strong>ยังไม่ได้จัดการเงินมัดจำ {formatContractMoney(paid)}</strong>
         <small>
-          ตามเงื่อนไข: {suggested === 'forfeit' ? 'ริบเงินมัดจำ (ผู้เช่าออกก่อนครบสัญญา)' : 'คืนเงินมัดจำ (ผู้เช่าพักครบสัญญา)'}
+          ตามเงื่อนไข: คืนเงินมัดจำ หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน
         </small>
       </div>
       <button type="button" onClick={() => setOpen(true)}>จัดการเงินมัดจำ</button>
@@ -1381,6 +1461,7 @@ const DEPOSIT_LEFT_REASON = {
   moveout: 'ผู้เช่าแจ้งย้ายออก',
   suspended: 'บัญชีผู้เช่าถูกระงับ',
   new_contract: 'ผู้เช่าทำสัญญาใหม่แทนสัญญานี้',
+  voided: 'สัญญาถูกยกเลิกเพราะไม่ชำระงวดแรก',
 }
 
 function DepositLogViolation({ log }) {
@@ -1559,12 +1640,11 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
             </h4>
             <ul>
               {(tab === 'pending' ? pendingVisible : pendingVisible.slice(0, PENDING_PREVIEW)).map((item) => {
-                const forfeit = item.deposit_refund === 'forfeit'
                 const amount = Number(item.deposit_remaining ?? item.deposit_paid) || 0
                 return (
                   <li
                     key={item.booking_id}
-                    className={`${forfeit ? 'is-forfeit' : 'is-refund'}${expanded === item.booking_id ? ' is-open' : ''}`}
+                    className={`is-refund${expanded === item.booking_id ? ' is-open' : ''}`}
                   >
                     <div className="deposit-pending-row">
                       <button
@@ -1577,7 +1657,7 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
                         <span className="deposit-pending-info">
                           <b>{`${item.first_name || ''} ${item.last_name || ''}`.trim() || '-'}</b>
                           <small>
-                            {CONTRACT_STATUS[item.status]?.label || '-'} · {forfeit ? 'ต้องริบเงินมัดจำ' : 'ต้องคืนเงินมัดจำ'}
+                            {CONTRACT_STATUS[item.status]?.label || '-'} · ต้องคืนเงินมัดจำ
                           </small>
                         </span>
                         <strong>{formatContractMoney(amount)}</strong>
@@ -1586,7 +1666,7 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
                         </span>
                       </button>
                       <button type="button" className="deposit-pending-action" onClick={() => setSettling(item)}>
-                        {forfeit ? 'บันทึกริบ' : 'บันทึกคืน'}
+                        บันทึกคืน
                       </button>
                     </div>
                     <div className="deposit-collapse" aria-hidden={expanded !== item.booking_id}>
@@ -1617,6 +1697,9 @@ function DepositLogModal({ contract, pending = [], onSettled, onClose }) {
               { label: 'เงินมัดจำคงเหลือ', value: formatContractMoney(log.deposit_amount), icon: 'wallet', tone: 'is-money' },
               refunded
                 ? { label: 'หักค่าเสียหาย', value: formatContractMoney(log.deduction), icon: 'wallet', tone: 'is-deduct' }
+                : null,
+              Number(log.extra_charge) > 0
+                ? { label: 'ผู้เช่าต้องจ่ายเพิ่ม', value: formatContractMoney(log.extra_charge), icon: 'alert', tone: 'is-deduct' }
                 : null,
               log.contract_status
                 ? {
@@ -2452,7 +2535,7 @@ function ThisMonthRent({ thisMonth, contract, viewer }) {
 }
 
 const TRANSFER_CHARGE_STATUS = { paid: 'ชำระแล้ว', pending: 'รอชำระ', rejected: 'รอชำระ' }
-const TRANSFER_PREVIEW_COUNT = 2
+const TRANSFER_PREVIEW_COUNT = 1
 
 function ContractTransferEntry({ transfer, order, viewer, detailed = false, depositAmount = null, focused = false }) {
   const imagesOpen = detailed
@@ -2800,7 +2883,7 @@ export function ContractTransferHistory({ contract, viewer = 'staff' }) {
         {viewer === 'customer'
           ? 'สัญญาฉบับที่เซ็นไว้ยังใช้ต่อ ระบบบันทึกการย้ายห้องและการเปลี่ยนค่าเช่าไว้เป็นเอกสารแนบ'
           : 'รูปสัญญาฉบับเดิมไม่ถูกแก้ไข การเปลี่ยนห้องและค่าเช่าบันทึกเป็นประวัติแนบท้ายสัญญา'}
-        {hidden > 0 ? ` · แสดงล่าสุด ${recent.length} ครั้ง` : ''}
+        {hidden > 0 ? ' · แสดงเฉพาะครั้งล่าสุด' : ''}
       </p>
       <ol>
         {recent.map(({ transfer, order }) => (
@@ -2849,7 +2932,7 @@ function ContractSummaryCards({ contract, daysLeft, payments = false }) {
         ? null
         : deducted > 0
           ? `จ่ายไว้ ${formatContractMoney(depositPaid)} · หักไป ${formatContractMoney(deducted)}`
-          : `${formatDepositMonths(contract)} · ${DEPOSIT_STATUS_LABEL[contract.deposit_status] || 'คืนได้เมื่ออยู่ครบสัญญา'}`,
+          : `${formatDepositMonths(contract)} · ${DEPOSIT_STATUS_LABEL[contract.deposit_status] || 'คืนเมื่อย้ายออก'}`,
     },
     {
       key: 'rent',

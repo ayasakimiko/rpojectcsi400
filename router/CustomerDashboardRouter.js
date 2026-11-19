@@ -344,7 +344,8 @@ export function computeDepositDue(paymentsForBooking, depositAmount) {
 export const ROOM_TRANSFER_PAYMENT_TYPE = "room_transfer";
 const MOVE_ROOM_COOLDOWN_ENABLED = false;
 const MOVE_ROOM_COOLDOWN_DAYS = 15;
-export const CHARGE_PAYMENT_TYPES = ["water", "electricity", ROOM_TRANSFER_PAYMENT_TYPE];
+export const DAMAGE_PAYMENT_TYPE = "damage";
+export const CHARGE_PAYMENT_TYPES = ["water", "electricity", ROOM_TRANSFER_PAYMENT_TYPE, DAMAGE_PAYMENT_TYPE];
 const NON_RENT_PAYMENT_TYPES = ["deposit", ...CHARGE_PAYMENT_TYPES];
 
 export const isRentPayment = (payment) => !NON_RENT_PAYMENT_TYPES.includes(payment.type);
@@ -470,7 +471,12 @@ function computeRentDue(room, paymentsForBooking) {
   };
 }
 
-const CHARGE_LABEL = { water: "ค่าน้ำ", electricity: "ค่าไฟฟ้า", [ROOM_TRANSFER_PAYMENT_TYPE]: "ยอดชำระย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม)" };
+const CHARGE_LABEL = {
+  water: "ค่าน้ำ",
+  electricity: "ค่าไฟฟ้า",
+  [ROOM_TRANSFER_PAYMENT_TYPE]: "ยอดชำระย้ายห้อง (ค่าเช่า/มัดจำเพิ่ม)",
+  [DAMAGE_PAYMENT_TYPE]: "ค่าเสียหายส่วนเกินเงินมัดจำ",
+};
 
 export function computeCurrentDue(room, paymentsForBooking, depositAmount, depositPayments = paymentsForBooking) {
   const rentDue = computeRentDue(room, paymentsForBooking);

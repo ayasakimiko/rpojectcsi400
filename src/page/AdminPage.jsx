@@ -1259,7 +1259,7 @@ const TABS = [
   { key: 'cameras', label: 'กล้องวงจรปิด' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'customers', label: 'ลูกค้า' },
-  { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
+  { key: 'completed-contracts', label: 'สัญญาทั้งหมด' },
   { key: 'moveouts', label: 'ผู้ย้ายออก' },
   { key: 'requests', label: 'ประวัติคำขอผู้เช่า' },
   { key: 'maintenance', label: 'ประวัติแจ้งซ่อม' },
@@ -1338,7 +1338,7 @@ const MAINTENANCE_STATUS_LABEL = {
   cancelled: 'ยกเลิกแล้ว',
 }
 const PAYMENT_STATUS_LABEL = { paid: 'ชำระแล้ว', pending: 'รอชำระ', overdue: 'ค้างชำระ' }
-const PAYMENT_TYPE_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟฟ้า', room_transfer: 'ส่วนต่างย้ายห้อง' }
+const PAYMENT_TYPE_LABEL = { rent: 'ค่าเช่า', deposit: 'เงินมัดจำ', water: 'ค่าน้ำ', electricity: 'ค่าไฟฟ้า', room_transfer: 'ส่วนต่างย้ายห้อง', damage: 'ค่าเสียหายส่วนเกินมัดจำ' }
 const PAYMENT_BADGE_CLASS = { paid: 'approved', pending: 'pending', overdue: 'rejected' }
 
 const MAINTENANCE_CATEGORY_ICON = {
@@ -8004,8 +8004,8 @@ function AdminBackupPage() {
                               {customer.is_suspended ? 'ระงับการใช้งาน' : 'ใช้งานปกติ'}
                             </span>
                             {customer.contract?.can_settle_deposit && (
-                              <p className={`admin-status-hint is-deposit${customer.contract.deposit_refund === 'forfeit' ? ' is-forfeit' : ' is-refund'}`}>
-                                {customer.contract.deposit_refund === 'forfeit' ? 'รอบันทึกริบมัดจำ' : 'รอคืนมัดจำ'}{' '}
+                              <p className="admin-status-hint is-deposit is-refund">
+                                รอคืนมัดจำ{' '}
                                 ฿{formatCurrency(customer.contract.deposit_remaining ?? customer.contract.deposit_paid)}
                               </p>
                             )}
@@ -10620,7 +10620,7 @@ function AdminBackupPage() {
                     ? `฿${formatCurrency(customerForm.deposit_amount)}`
                     : 'ไม่มีมัดจำ'}
                 </strong>
-                <small>เปลี่ยนได้เฉพาะตอนทำสัญญาใหม่ ส่วนการหัก คืน หรือริบมัดจำ ระบบคำนวณตามสัญญาให้</small>
+                <small>เปลี่ยนได้เฉพาะตอนทำสัญญาใหม่ มัดจำคืนเมื่อย้ายออก หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน</small>
               </div>
             </section>
             <section className="admin-room-form-section">

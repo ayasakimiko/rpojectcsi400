@@ -82,6 +82,16 @@ DEALLOCATE PREPARE schema_upgrade;
 
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'TenantRequest' AND COLUMN_NAME = 'damage_charge_payment_id'),
+    'SELECT 1',
+    'ALTER TABLE `TenantRequest` ADD COLUMN `damage_charge_payment_id` INT UNSIGNED NULL AFTER transfer_charge_due_at'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'TenantRequest' AND COLUMN_NAME = 'transfer_charge_periods'),
     'SELECT 1',
     'ALTER TABLE `TenantRequest` ADD COLUMN `transfer_charge_periods` INT UNSIGNED NULL AFTER transfer_charge_due_at'

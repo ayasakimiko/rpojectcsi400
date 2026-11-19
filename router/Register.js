@@ -18,6 +18,7 @@ import {
   UNSETTLED_DEPOSIT_MESSAGE,
 } from "./rentalContracts.js";
 import { tenantRegistered } from "./notificationEvents.js";
+import { firstPaymentDueDateSql } from "./firstPayment.js";
 
 const router = Router();
 
@@ -216,9 +217,14 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     const mysqlEndDateTime = toMysqlDateTime(rental_end_date);
 
     const [bookingResult] = await connection.query(
-      `INSERT INTO Booking (customer_id, room_id, rental_start_date, rental_end_date, contract_duration_months, contract_completed_at, deposit_amount)
-       VALUES (?, ?, ?, ?, ?, NOW(), ?)`,
-      [customerId, room.id, mysqlStartDateTime, mysqlEndDateTime, durationMonths, normalizedDepositAmount],
+      `INSERT INTO Booking (customer_id, room_id, rental_start_date, rental_end_date, contract_duration_months, contract_completed_at,
+                           deposit_amount, first_payment_due_date)
+       VALUES (?, ?, ?, ?, ?, NOW(), ?, ${firstPaymentDueDateSql("?")})`,
+      [customerId, room.id, mysqlStartDateTime, mysqlEndDateTime, durationMonths, normalizedDepositAmount, mysqlStartDateTime],
+    );
+    const [[{ first_payment_due_date: firstPaymentDueDate }]] = await connection.query(
+      "SELECT DATE_FORMAT(first_payment_due_date, '%Y-%m-%d') AS first_payment_due_date FROM Booking WHERE id = ?",
+      [bookingResult.insertId],
     );
 
     await moveContractFiles(files, customerId);
@@ -249,7 +255,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
     return res.status(201).json({
       message: `${returningCustomer ? "ทำสัญญาใหม่ให้ผู้เช่าเดิมสำเร็จ ประวัติสัญญาเก่ายังเก็บไว้" : "สมัครสมาชิกสำเร็จ"}${
         cancelledTransfers > 0 ? ` · ยกเลิกคำขอย้ายเข้าห้อง ${normalizedRoomNumber} ของผู้เช่าเดิม ${cancelledTransfers} รายการแล้ว` : ""
-      }`,
+      } · ผู้เช่าต้องชำระงวดแรกภายใน ${new Date(`${firstPaymentDueDate}T00:00:00`).toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" })} ไม่เช่นนั้นสัญญาจะถูกยกเลิก`,
       returning_customer: Boolean(returningCustomer),
       cancelled_transfers: cancelledTransfers,
       contract: {
@@ -257,6 +263,7 @@ router.post("/register", authenticate, requireStaffRole, createRequireActiveAcco
         contract_duration_months: durationMonths,
         rental_start_date: mysqlStartDateTime,
         rental_end_date: mysqlEndDateTime,
+        first_payment_due_date: firstPaymentDueDate,
         image_count: files.length,
       },
     });

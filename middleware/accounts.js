@@ -23,6 +23,7 @@ export function getActingAdminName(pool, user) {
 export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const UNPAID_ALLOWED_WRITES = /\/(payments\/confirm|profile|dorm-info\/acknowledge|announcements\/\d+\/acknowledge)$/;
 
 export async function requireActiveCustomer(req, res, next) {
   try {
@@ -36,6 +37,21 @@ export async function requireActiveCustomer(req, res, next) {
       return res.status(401).json({ code: expiry.CONTRACT_SUSPENDED_CODE, message: expiry.CONTRACT_SUSPENDED_MESSAGE });
     }
     req.contractExpiry = access.contract;
+    const firstPayment = await import("../router/firstPayment.js");
+    const gate = await firstPayment.loadFirstPaymentGate(getPool(), req.user.id);
+    if (gate?.expired && (await firstPayment.voidUnpaidContractNow(req.user.id))) {
+      return res.status(401).json({ code: firstPayment.FIRST_PAYMENT_VOIDED_CODE, message: firstPayment.FIRST_PAYMENT_VOIDED_MESSAGE });
+    }
+    req.firstPaymentGate = gate;
+    const path = String(req.originalUrl || req.url || "").split("?")[0];
+    if (gate && !READ_ONLY_METHODS.has(req.method) && !UNPAID_ALLOWED_WRITES.test(path)) {
+      return res.status(403).json({
+        code: firstPayment.FIRST_PAYMENT_UNPAID_CODE,
+        message: gate.status === "pending"
+          ? "สลิปงวดแรกกำลังรอเจ้าหน้าที่ตรวจสอบ สัญญาจะมีผลและใช้งานเมนูนี้ได้หลังอนุมัติ"
+          : "สัญญาเช่ายังไม่มีผลจนกว่าจะชำระงวดแรก กรุณาชำระงวดแรกก่อนใช้งานเมนูนี้",
+      });
+    }
     if (access.contract.expired && !READ_ONLY_METHODS.has(req.method)) {
       return res.status(403).json({ code: expiry.CONTRACT_EXPIRED_CODE, message: expiry.CONTRACT_EXPIRED_MESSAGE, contract: access.contract });
     }

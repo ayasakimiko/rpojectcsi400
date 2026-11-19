@@ -117,8 +117,8 @@ const SOURCES = {
       .filter((contract) => contract.is_archived && !contract.deposit_settlement && contract.deposit_remaining > 0)
       .map((contract) => ({
         key: `deposit-${contract.booking_id}`, kind: "money", tone: "pending", target: "contracts", ref_id: contract.booking_id,
-        title: `${contract.deposit_refund === "forfeit" ? "ริบ" : "คืน"}เงินมัดจำ${roomLabel(contract.room_number)}`,
-        message: `รอบันทึกการ${contract.deposit_refund === "forfeit" ? "ริบ" : "คืน"}เงินมัดจำ ${baht(contract.deposit_remaining)}`,
+        title: `คืนเงินมัดจำ${roomLabel(contract.room_number)}`,
+        message: `รอบันทึกการคืนเงินมัดจำ ${baht(contract.deposit_remaining)}`,
         detail: fullName(contract), created_at: contract.moved_out_at || contract.ended_at || contract.rental_end_date,
       }));
   },

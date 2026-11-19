@@ -121,19 +121,22 @@ test("move-out inspection rejects damage without a note or photos", () => {
   assert.match(parseMoveOutInspectionInput({ room_number: 901, checklist: goodChecklist, damage_cost: "12.345" }).error, /ทศนิยม/);
 });
 
-test("deposit settlement input: refund minus damage, deduction capped at the deposit, forfeit keeps everything", () => {
+test("deposit settlement input: refund minus damage, extra above the deposit is owed, forfeit is rejected", () => {
   assert.deepEqual(parseDepositSettlementInput({ action: "refund", deduction: 1500, note: "ผนังเป็นรู" }, 6000).value, {
-    action: "refund", deductionCents: 150000, refundCents: 450000, note: "ผนังเป็นรู",
+    action: "refund", deductionCents: 150000, refundCents: 450000, extraCents: 0, note: "ผนังเป็นรู",
   });
   assert.equal(parseDepositSettlementInput({ action: "refund" }, 6000).value.refundCents, 600000);
   assert.equal(parseDepositSettlementInput({ action: "refund", deduction: 6000, note: "เสียหายทั้งห้อง" }, 6000).value.refundCents, 0);
-  assert.match(parseDepositSettlementInput({ action: "refund", deduction: 6000.01, note: "x" }, 6000).error, /ไม่เกินเงินมัดจำ/);
+  assert.deepEqual(parseDepositSettlementInput({ action: "refund", deduction: 8000, note: "เสียหายมาก" }, 6000).value, {
+    action: "refund", deductionCents: 800000, refundCents: 0, extraCents: 200000, note: "เสียหายมาก",
+  });
+  assert.equal(parseDepositSettlementInput({ action: "refund", deduction: 8000, note: "x" }, 6000, 1500).value.extraCents, 50000);
+  assert.equal(parseDepositSettlementInput({ action: "refund", deduction: 8000, note: "x" }, 6000, 3000).value.extraCents, 0);
+  assert.match(parseDepositSettlementInput({ action: "refund", deduction: 10000001, note: "x" }, 6000).error, /สูงเกินไป/);
   assert.match(parseDepositSettlementInput({ action: "refund", deduction: -1, note: "x" }, 6000).error, /ตั้งแต่ 0/);
   assert.match(parseDepositSettlementInput({ action: "refund", deduction: 100 }, 6000).error, /รายการค่าเสียหาย/);
-  assert.match(parseDepositSettlementInput({ action: "forfeit" }, 6000).error, /เหตุผล/);
-  assert.deepEqual(parseDepositSettlementInput({ action: "forfeit", note: "ออกก่อนครบสัญญา" }, 6000).value, {
-    action: "forfeit", deductionCents: 600000, refundCents: 0, note: "ออกก่อนครบสัญญา",
-  });
+  assert.match(parseDepositSettlementInput({ action: "forfeit", note: "ออกก่อนครบสัญญา" }, 6000).error, /ไม่สามารถริบ/);
+  assert.match(parseDepositSettlementInput({}, 6000).error, /ไม่สามารถริบ/);
 });
 
 test("tenant who stayed the full contract gets a refund with the inspection damage ready to deduct", () =>
@@ -148,12 +151,12 @@ test("tenant who stayed the full contract gets a refund with the inspection dama
     assert.equal(contract.moveout_damage_note, "ผนังเป็นรู 1 จุด");
   }));
 
-test("tenant who moved out before the contract end forfeits the deposit", () =>
+test("tenant who moved out before the contract end still gets the deposit refunded", () =>
   withRollback(async (connection) => {
     const tenant = await setupMovedOutTenant(connection, { endOffsetDays: 30, damage: 1500 });
     const contract = (await loadCustomerContracts(connection, [tenant.customerId])).get(tenant.customerId);
     assert.equal(contract.status, "ended_early");
-    assert.equal(contract.deposit_refund, "forfeit");
+    assert.equal(contract.deposit_refund, "refund");
     assert.equal(contract.can_settle_deposit, true);
   }));
 
@@ -163,10 +166,10 @@ test("staff API refunds the deposit minus damage once and logs it", async () => 
   try {
     const token = await staffToken();
 
-    const tooMuch = await settle(token, tenant.bookingId, { action: "refund", deduction: 6500, note: "เกิน" });
+    const tooMuch = await settle(token, tenant.bookingId, { action: "refund", deduction: 10000001, note: "เกิน" });
     assert.equal(tooMuch.status, 400);
     const wrongAction = await settle(token, tenant.bookingId, { action: "forfeit", note: "ลองริบ" });
-    assert.equal(wrongAction.status, 409);
+    assert.equal(wrongAction.status, 400);
 
     const ok = await settle(token, tenant.bookingId, { action: "refund", deduction: 1500, note: "ผนังเป็นรู 1 จุด" });
     assert.equal(ok.status, 200, JSON.stringify(ok.data));
@@ -192,18 +195,38 @@ test("staff API refunds the deposit minus damage once and logs it", async () => 
   }
 });
 
-test("staff API forfeits the whole deposit when the tenant left early", async () => {
+test("staff API refunds the deposit minus damage when the tenant left early and cannot forfeit it", async () => {
   const pool = getPool();
   const tenant = await setupMovedOutTenant(pool, { endOffsetDays: 30, damage: 1500 });
   try {
     const token = await staffToken();
-    const refund = await settle(token, tenant.bookingId, { action: "refund", deduction: 1500, note: "ผนังเป็นรู" });
-    assert.equal(refund.status, 409);
-    const ok = await settle(token, tenant.bookingId, { action: "forfeit", note: "ย้ายออกก่อนครบสัญญา" });
+    const forfeit = await settle(token, tenant.bookingId, { action: "forfeit", note: "ย้ายออกก่อนครบสัญญา" });
+    assert.equal(forfeit.status, 400);
+    const ok = await settle(token, tenant.bookingId, { action: "refund", deduction: 1500, note: "ผนังเป็นรู" });
     assert.equal(ok.status, 200, JSON.stringify(ok.data));
     const [[log]] = await pool.query(`SELECT * FROM DepositSettlementLog WHERE booking_id = ?`, [tenant.bookingId]);
-    assert.equal(log.action, "forfeited");
-    assert.equal(Number(log.forfeited_amount), 6000);
+    assert.equal(log.action, "refunded");
+    assert.equal(log.contract_status, "ended_early");
+    assert.equal(Number(log.forfeited_amount), 0);
+    assert.equal(Number(log.refunded_amount), 4500);
+  } finally {
+    await removeTenant(pool, tenant);
+  }
+});
+
+test("staff API accepts a deduction above the deposit and records what the tenant still owes", async () => {
+  const pool = getPool();
+  const tenant = await setupMovedOutTenant(pool, { endOffsetDays: -1, damage: 8500 });
+  try {
+    const token = await staffToken();
+    const ok = await settle(token, tenant.bookingId, { action: "refund", deduction: 8500, note: "ผนังพัง ประตูแตก" });
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
+    assert.match(ok.data.message, /ต้องจ่ายเพิ่ม/);
+    assert.equal(ok.data.contract.deposit_refunded_amount, 0);
+    assert.equal(ok.data.contract.deposit_deduction, 8500);
+    assert.equal(ok.data.contract.deposit_extra_charge, 2500);
+    const [[log]] = await pool.query(`SELECT * FROM DepositSettlementLog WHERE booking_id = ?`, [tenant.bookingId]);
+    assert.equal(Number(log.extra_charge), 2500);
     assert.equal(Number(log.refunded_amount), 0);
   } finally {
     await removeTenant(pool, tenant);

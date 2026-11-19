@@ -1,6 +1,13 @@
 import { getPool } from "../Database/connection.js";
 import { baht, notify, notifyCustomer, notifyStaffSide } from "../middleware/notifications.js";
 import { CONTRACT_GRACE_DAYS, expiredContractSuspensionNotice, suspendExpiredContracts } from "./contractExpiry.js";
+import {
+  FIRST_PAYMENT_GRACE_DAYS,
+  firstPaymentReminderNotices,
+  loadFirstPaymentGates,
+  voidedContractNotices,
+  voidUnpaidContracts,
+} from "./firstPayment.js";
 
 const EXPIRY_THRESHOLDS = [1, 7, 30];
 const RETENTION_DAYS = 90;
@@ -18,7 +25,10 @@ async function contractStarts(db) {
     `SELECT r.room_number, r.rental_start_date, r.rental_end_date, c.id AS customer_id, c.first_name, c.last_name
      FROM Room r JOIN Customer c ON c.room_number = r.room_number AND c.is_suspended = FALSE
      WHERE r.is_booked = TRUE AND r.rental_start_date IS NOT NULL
-       AND DATE(r.rental_start_date) BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE()`,
+       AND DATE(r.rental_start_date) BETWEEN DATE_SUB(CURDATE(), INTERVAL ? DAY) AND CURDATE()
+       AND NOT EXISTS (SELECT 1 FROM Booking b
+         WHERE b.customer_id = c.id AND b.first_payment_due_date IS NOT NULL AND b.first_payment_voided_at IS NULL)`,
+    [FIRST_PAYMENT_GRACE_DAYS + 1],
   );
   return rows.flatMap((row) => {
     const key = `${row.customer_id}-${row.room_number}-${dateKey(row.rental_start_date)}`;
@@ -74,6 +84,14 @@ async function expiredContractSuspensions(db) {
   return (await suspendExpiredContracts(db)).map(expiredContractSuspensionNotice);
 }
 
+async function unpaidContractVoids(db) {
+  return (await voidUnpaidContracts(db)).flatMap(voidedContractNotices);
+}
+
+async function firstPaymentReminders(db) {
+  return (await loadFirstPaymentGates(db)).flatMap(firstPaymentReminderNotices);
+}
+
 async function transferChargeDeadlines(db) {
   const [rows] = await db.query(
     `SELECT tr.id, tr.customer_id, tr.room_number, tr.target_room_number, tr.transfer_charge_due_at, p.amount
@@ -93,7 +111,7 @@ async function transferChargeDeadlines(db) {
 }
 
 export async function runNotificationJobs(db = getPool()) {
-  for (const job of [expiredContractSuspensions, contractStarts, contractEnds, transferChargeDeadlines]) {
+  for (const job of [expiredContractSuspensions, unpaidContractVoids, firstPaymentReminders, contractStarts, contractEnds, transferChargeDeadlines]) {
     try {
       await notify(await job(db), db);
     } catch (error) {

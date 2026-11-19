@@ -1952,7 +1952,7 @@ const OWNER_TABS = [
   { key: 'rooms', label: 'สรุปห้อง' },
   { key: 'finance', label: 'รายละเอียดการเงิน' },
     { key: 'utilities', label: 'ค่าน้ำ-ค่าไฟ' },
-  { key: 'completed-contracts', label: 'สัญญาที่เสร็จสมบูรณ์' },
+  { key: 'completed-contracts', label: 'สัญญาทั้งหมด' },
   { key: 'staff', label: 'พนักงาน' },
   { key: 'parking', label: 'ที่จอดรถ' },
   { key: 'wifi', label: 'Wi-Fi' },
@@ -3676,9 +3676,9 @@ function OwnerMain() {
         { key: 'contract-total', tone: 'blue', icon: 'history', label: 'สัญญาทั้งหมด', value: show(summary?.total), hint: summary?.archived ? `สัญญาเก่า ${summary.archived} ฉบับ` : 'รวมทุกสถานะ' },
         { key: 'contract-active', tone: 'green', icon: 'rooms', label: 'สัญญามีผล', value: show(summary?.active), hint: 'รวมสัญญาที่ย้ายห้องแล้ว' },
         { key: 'contract-awaiting', tone: summary?.awaitingPayment > 0 ? 'orange' : 'slate', icon: 'income', label: 'รอชำระงวดแรก', value: show(summary?.awaitingPayment), hint: 'รวมสลิปที่รอตรวจ' },
-        { key: 'contract-deposit', tone: summary?.pendingDeposit > 0 ? 'red' : 'slate', icon: 'overdue', label: 'รอคืน/ริบมัดจำ', value: show(summary?.pendingDeposit), hint: 'สัญญาจบแล้วที่ยังไม่บันทึกมัดจำ' },
+        { key: 'contract-deposit', tone: summary?.pendingDeposit > 0 ? 'red' : 'slate', icon: 'overdue', label: 'รอคืนมัดจำ', value: show(summary?.pendingDeposit), hint: 'สัญญาจบแล้วที่ยังไม่บันทึกมัดจำ' },
         { key: 'contract-transferred', tone: 'purple', icon: 'staff', label: 'ย้ายห้องแล้ว', value: show(summary?.transferred), hint: 'สัญญาที่มีประวัติย้ายห้อง' },
-        { key: 'contract-early', tone: summary?.endedEarly > 0 ? 'orange' : 'slate', icon: 'expense', label: 'ออกก่อนสัญญา', value: show(summary?.endedEarly), hint: 'ริบเงินมัดจำตามเงื่อนไข' },
+        { key: 'contract-early', tone: summary?.endedEarly > 0 ? 'orange' : 'slate', icon: 'expense', label: 'ออกก่อนสัญญา', value: show(summary?.endedEarly), hint: 'ย้ายออกก่อนครบสัญญา' },
       ]
     })(),
     audit: (() => {

@@ -145,6 +145,29 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'first_payment_due_date'),
+    'SELECT 1',
+    'ALTER TABLE `Booking`
+       ADD COLUMN `first_payment_due_date` DATE NULL AFTER deposit_settled_by_name,
+       ADD COLUMN `first_payment_voided_at` DATETIME NULL AFTER first_payment_due_date,
+       ADD INDEX idx_booking_first_payment_due (first_payment_due_date)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND COLUMN_NAME = 'deposit_extra_charge'),
+    'SELECT 1',
+    'ALTER TABLE `Booking` ADD COLUMN `deposit_extra_charge` DECIMAL(10,2) NULL AFTER deposit_refunded_amount'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 CREATE TABLE IF NOT EXISTS ContractImage (
     id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
     booking_id INT NOT NULL,

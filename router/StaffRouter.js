@@ -92,6 +92,7 @@ import {
 } from "./rentalContracts.js";
 import { depositBalanceAfterTransfers, transferDepositDeductedCents } from "./roomTransferFinance.js";
 import { ContractRenewError, renewContractByStaff } from "./contractExpiry.js";
+import { damageChargeMessage, syncMoveOutDamageCharge, validateMoveOutDamage } from "./moveOutDamage.js";
 import { loadMoveInBaseline, loadMoveOutBaseline, parseMoveInInspectionRow } from "./moveInBaseline.js";
 import { loadRoomsWithDue } from "./roomDue.js";
 import { actorOf } from "../middleware/notifications.js";
@@ -180,7 +181,7 @@ router.get("/contracts/completed", async (_req, res) => {
     return res.json({ contracts: await withThisMonthRent(pool, await loadCompletedContracts(pool)) });
   } catch (error) {
     console.error("Fetch completed contracts error:", error);
-    return res.status(500).json({ message: "ไม่สามารถโหลดรายการสัญญาที่เสร็จสมบูรณ์ได้" });
+    return res.status(500).json({ message: "ไม่สามารถโหลดรายการสัญญาได้" });
   }
 });
 
@@ -188,7 +189,7 @@ async function sendDepositSettlementLogs(res, bookingId = null) {
   try {
     const [rows] = await getPool().query(
       `SELECT id, booking_id, room_number, tenant_name, action, deposit_amount, deduction, refunded_amount,
-              forfeited_amount, note, contract_status, left_at, contract_end_date, left_reason, settled_by_name, created_at
+              forfeited_amount, extra_charge, note, contract_status, left_at, contract_end_date, left_reason, settled_by_name, created_at
          FROM DepositSettlementLog ${bookingId ? "WHERE booking_id = ?" : ""} ORDER BY id DESC LIMIT 500`,
       bookingId ? [bookingId] : [],
     );
@@ -199,6 +200,7 @@ async function sendDepositSettlementLogs(res, bookingId = null) {
         deduction: Number(row.deduction),
         refunded_amount: Number(row.refunded_amount),
         forfeited_amount: Number(row.forfeited_amount),
+        extra_charge: Number(row.extra_charge) || 0,
       })),
     });
   } catch (error) {
@@ -223,55 +225,49 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
     const contract = await loadContractByBooking(pool, bookingId);
     if (!contract) return res.status(404).json({ message: "ไม่พบสัญญานี้" });
     if (!contract.is_archived) return res.status(409).json({ message: "สัญญานี้ยังไม่สิ้นสุด จึงยังจัดการเงินมัดจำไม่ได้" });
-    if (contract.deposit_settlement) return res.status(409).json({ message: "บันทึกการคืน/ริบเงินมัดจำของสัญญานี้ไปแล้ว" });
+    if (contract.deposit_settlement) return res.status(409).json({ message: "บันทึกการคืนเงินมัดจำของสัญญานี้ไปแล้ว" });
     if (!(contract.deposit_remaining > 0)) return res.status(409).json({ message: "สัญญานี้ไม่มีเงินมัดจำคงเหลือ" });
 
-    const { error, value } = parseDepositSettlementInput(req.body ?? {}, contract.deposit_remaining);
+    const { error, value } = parseDepositSettlementInput(req.body ?? {}, contract.deposit_remaining, contract.damage_charge?.paid ?? 0);
     if (error) return res.status(400).json({ message: error });
-    const requiredAction = contract.deposit_refund === "forfeit" ? "forfeit" : "refund";
-    if (value.action !== requiredAction) {
-      return res.status(409).json({
-        message: requiredAction === "forfeit"
-          ? "ผู้เช่าย้ายออกก่อนครบสัญญา ต้องริบเงินมัดจำตามเงื่อนไข"
-          : "ผู้เช่าพักครบสัญญา ต้องคืนเงินมัดจำตามเงื่อนไข",
-      });
-    }
 
     const staffName = await getActingStaffName(pool, req.user);
     const [result] = await pool.query(
-      `UPDATE Booking SET deposit_settlement = ?, deposit_deduction = ?, deposit_refunded_amount = ?,
+      `UPDATE Booking SET deposit_settlement = ?, deposit_deduction = ?, deposit_refunded_amount = ?, deposit_extra_charge = ?,
                           deposit_settlement_note = ?, deposit_settled_at = NOW(), deposit_settled_by_name = ?
        WHERE id = ? AND deposit_settlement IS NULL`,
       [
-        value.action === "refund" ? "refunded" : "forfeited",
+        "refunded",
         value.deductionCents / 100,
         value.refundCents / 100,
+        value.extraCents > 0 ? value.extraCents / 100 : null,
         value.note,
         staffName || req.user.role,
         bookingId,
       ],
     );
-    if (!result.affectedRows) return res.status(409).json({ message: "บันทึกการคืน/ริบเงินมัดจำของสัญญานี้ไปแล้ว" });
+    if (!result.affectedRows) return res.status(409).json({ message: "บันทึกการคืนเงินมัดจำของสัญญานี้ไปแล้ว" });
     await pool.query(
       `INSERT INTO DepositSettlementLog (booking_id, customer_id, room_number, tenant_name, action, deposit_amount,
-                                        deduction, refunded_amount, forfeited_amount, note, contract_status,
+                                        deduction, refunded_amount, forfeited_amount, extra_charge, note, contract_status,
                                         left_at, contract_end_date, left_reason, settled_by_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         bookingId,
         contract.customer_id,
         contract.room_number ?? null,
         `${contract.first_name || ""} ${contract.last_name || ""}`.trim() || null,
-        value.action === "refund" ? "refunded" : "forfeited",
+        "refunded",
         contract.deposit_remaining,
         value.deductionCents / 100,
         value.refundCents / 100,
-        value.action === "refund" ? 0 : contract.deposit_remaining,
+        0,
+        value.extraCents / 100,
         value.note,
         contract.status,
         contract.moved_out_at || contract.next_contract_at || null,
         contract.effective_end_date || contract.rental_end_date || null,
-        contract.moved_out_at ? "moveout" : contract.is_suspended ? "suspended" : contract.next_contract_at ? "new_contract" : null,
+        contract.status === "voided" ? "voided" : contract.moved_out_at ? "moveout" : contract.is_suspended ? "suspended" : contract.next_contract_at ? "new_contract" : null,
         staffName || req.user.role,
       ],
     );
@@ -285,9 +281,11 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
     }, actorOf(req.user, staffName));
     const [updated] =await withThisMonthRent(pool, [await loadContractByBooking(pool, bookingId)]);
     return res.json({
-      message: value.action === "refund"
-        ? `บันทึกคืนเงินมัดจำ ฿${(value.refundCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} แล้ว`
-        : "บันทึกริบเงินมัดจำแล้ว",
+      message: `บันทึกคืนเงินมัดจำ ฿${(value.refundCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} แล้ว${
+        value.extraCents > 0
+          ? ` · ผู้เช่าต้องจ่ายเพิ่ม ฿${(value.extraCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`
+          : ""
+      }`,
       contract: updated,
     });
   } catch (error) {
@@ -690,9 +688,9 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบผลตรวจห้อง" });
     }
     const existingPhotos = JSON.parse(rows[0].photos);
-    const openMoveRoomId = rows[0].tenant_request_type === "move_room" && ["pending", "in_progress"].includes(rows[0].tenant_request_status)
-      ? rows[0].tenant_request_id
-      : null;
+    const openRequest = ["pending", "in_progress"].includes(rows[0].tenant_request_status);
+    const openMoveRoomId = rows[0].tenant_request_type === "move_room" && openRequest ? rows[0].tenant_request_id : null;
+    const openMoveOutId = rows[0].tenant_request_type === "moveout" && openRequest ? rows[0].tenant_request_id : null;
 
     const { error, value } = parseMoveOutInspectionUpdate(req.body ?? {}, existingPhotos);
     if (error) {
@@ -702,10 +700,15 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
       const damageError = await validateInspectionDamage(pool, openMoveRoomId, value.damageCostCents);
       if (damageError) return res.status(409).json({ message: damageError });
     }
+    if (openMoveOutId) {
+      const damageError = await validateMoveOutDamage(pool, openMoveOutId, value.damageCostCents);
+      if (damageError) return res.status(409).json({ message: damageError });
+    }
 
     const staffName = await getActingStaffName(pool, req.user);
     const savedPhotos = await savePublicImages(customerUploadFolder("move-out-inspections", rows[0].customer_id), value.newPhotos);
     let sentChargeCents = 0;
+    let damageSentCents = 0;
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -725,6 +728,7 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
         ],
       );
       if (openMoveRoomId) sentChargeCents = await syncRoomTransferCharge(connection, openMoveRoomId, staffName);
+      if (openMoveOutId) damageSentCents = (await syncMoveOutDamageCharge(connection, openMoveOutId)).sentCents;
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -737,9 +741,9 @@ router.patch("/move-out-inspections/:id", async (req, res) => {
     const keptUrls = new Set(value.keptPhotos.map((photo) => photo.url));
     await deletePublicImages(existingPhotos.filter((photo) => !keptUrls.has(photo.url)).map((photo) => photo.url));
     return res.json({
-      message: sentChargeCents > 0
+      message: (sentChargeCents > 0
         ? `แก้ไขผลตรวจห้องสำเร็จ ส่งยอดชำระย้ายห้อง ฿${(sentChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าแล้ว`
-        : "แก้ไขผลตรวจห้องสำเร็จ",
+        : "แก้ไขผลตรวจห้องสำเร็จ") + damageChargeMessage(damageSentCents),
     });
   } catch (error) {
     console.error("Update move-out inspection error:", error);
@@ -864,13 +868,18 @@ router.post("/move-out-inspections", async (req, res) => {
       const sentChargeCents = linkedRequestType === "move_room"
         ? await syncRoomTransferCharge(connection, tenantRequestId, staffName)
         : 0;
+      const damageSentCents = linkedRequestType === "moveout"
+        ? (await syncMoveOutDamageCharge(connection, tenantRequestId)).sentCents
+        : 0;
       await connection.commit();
       await moveOutInspectionSaved(result.insertId, actorOf(req.user, staffName));
       return res.status(201).json({
         message: tenantRequestId === null
           ? "ส่งผลตรวจห้องให้ Admin แล้ว"
           : linkedRequestType === "moveout"
-            ? "บันทึกผลตรวจแล้ว สามารถอนุมัติการย้ายออกได้"
+            ? damageSentCents > 0
+              ? `บันทึกผลตรวจแล้ว${damageChargeMessage(damageSentCents)}`
+              : "บันทึกผลตรวจแล้ว สามารถอนุมัติการย้ายออกได้"
             : sentChargeCents > 0
               ? `บันทึกผลตรวจแล้ว ส่งยอดมัดจำเพิ่ม ฿${(sentChargeCents / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })} ให้ผู้เช่าชำระภายใน ${ROOM_TRANSFER_CHARGE_DAYS} วัน`
               : "บันทึกผลตรวจแล้ว สามารถอนุมัติย้ายห้องได้ทันที",

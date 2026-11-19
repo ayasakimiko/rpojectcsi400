@@ -58,6 +58,19 @@ export async function suspendExpiredCustomer(connection, customerId) {
   if (!contract.overdue) return null;
 
   const roomNumber = customer.room_number;
+  const roomVacated = await vacateCustomerRoom(connection, customerId, roomNumber);
+  await suspendCustomerTenancy(connection, customerId, CONTRACT_AUTO_SUSPEND_ACTOR);
+
+  return {
+    customerId,
+    name: `${customer.first_name} ${customer.last_name}`,
+    roomNumber,
+    rentalEndDate: customer.rental_end_date,
+    roomVacated,
+  };
+}
+
+export async function vacateCustomerRoom(connection, customerId, roomNumber) {
   const [rooms] = await connection.query(
     `SELECT id, rental_start_date, rental_end_date FROM Room WHERE room_number = ? FOR UPDATE`,
     [roomNumber],
@@ -88,7 +101,10 @@ export async function suspendExpiredCustomer(connection, customerId) {
     );
     roomVacated = roomUpdate.affectedRows > 0;
   }
+  return roomVacated;
+}
 
+export async function suspendCustomerTenancy(connection, customerId, actor) {
   await resetCustomerHistory(connection, customerId);
   await connection.query(
     `UPDATE Customer SET is_suspended = TRUE, suspended_at = COALESCE(suspended_at, NOW()), room_number = NULL WHERE id = ?`,
@@ -97,28 +113,20 @@ export async function suspendExpiredCustomer(connection, customerId) {
   await connection.query(
     `UPDATE TenantRequest SET status = 'cancelled', completed_at = NOW(), completed_by_name = ?
      WHERE customer_id = ? AND status IN ('pending', 'in_progress')`,
-    [CONTRACT_AUTO_SUSPEND_ACTOR, customerId],
+    [actor, customerId],
   );
-  await cancelCustomerVisitRequests(connection, customerId, CONTRACT_AUTO_SUSPEND_ACTOR);
+  await cancelCustomerVisitRequests(connection, customerId, actor);
   await connection.query(
     `UPDATE SafetyIncident
      SET status = 'cancelled', cancelled_by_name = ?, cancelled_at = NOW(), cancel_reason = 'ผู้แจ้งเหตุถูกระงับการใช้งาน'
      WHERE reporter_role = 'Customer' AND reporter_id = ? AND status = 'pending'`,
-    [CONTRACT_AUTO_SUSPEND_ACTOR, customerId],
+    [actor, customerId],
   );
   await connection.query(
     `UPDATE MaintenanceRequest SET status = 'cancelled', completed_at = NOW(), completed_by_name = ?
      WHERE customer_id = ? AND status IN ('pending', 'in_progress')`,
-    [CONTRACT_AUTO_SUSPEND_ACTOR, customerId],
+    [actor, customerId],
   );
-
-  return {
-    customerId,
-    name: `${customer.first_name} ${customer.last_name}`,
-    roomNumber,
-    rentalEndDate: customer.rental_end_date,
-    roomVacated,
-  };
 }
 
 export async function suspendExpiredCustomerNow(customerId, db = getPool()) {
