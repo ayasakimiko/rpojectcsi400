@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import LandingPage from './page/LandingPage.jsx'
 import LoginPage from './page/LoginPage.jsx'
 import ForgotPasswordPage from './page/ForgotPasswordPage.jsx'
 import RegisterMain from './page/RegisterMain.jsx'
@@ -110,7 +111,7 @@ function App() {
             </RequireOwnerAuth>
           }
         />
-        <Route path="" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<LandingPage />} />
       </Routes>
     </BrowserRouter>
   )

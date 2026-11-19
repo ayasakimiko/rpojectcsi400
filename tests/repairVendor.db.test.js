@@ -87,7 +87,7 @@ async function createJob(vendorId, extra = {}) {
 }
 
 before(async () => {
-  root = await mysql.createConnection(DB_CONFIG);
+  root = await mysql.createConnection({ ...DB_CONFIG, database: undefined });
   const [[staffRow]] = await root.query("SELECT id FROM ??.Staff WHERE is_suspended = FALSE LIMIT 1", [AUTH_DB]);
   assert.ok(staffRow, "need an active Staff account");
   fx.staff = jwt.sign({ id: staffRow.id, role: "Staff" }, SECRET, { expiresIn: "15m" });
