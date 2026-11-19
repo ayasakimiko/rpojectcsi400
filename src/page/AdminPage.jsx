@@ -2147,7 +2147,6 @@ const ROOM_AMENITY_SUGGESTIONS = [
   { name: 'ตู้เสื้อผ้า', icon: 'wardrobe' },
   { name: 'เครื่องทำน้ำอุ่น', icon: 'shower' },
   { name: 'โทรทัศน์', icon: 'tv' },
-  { name: 'ระเบียง', icon: 'balcony' },
   { name: 'โซฟา', icon: 'sofa' },
 ]
 
