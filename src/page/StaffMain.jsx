@@ -97,6 +97,9 @@ import useMinimumLoading from '../utils/useMinimumLoading.js'
 import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import { matchesSearch } from '../utils/search.js'
+import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
+import FloorFilterChips from '../components/FloorFilterChips.jsx'
+import { roomFloorLabel, roomFloorOf } from '../utils/roomFloors.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -7590,6 +7593,7 @@ function StaffMain() {
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [floorFilter, setFloorFilter] = useState('all')
   const [roomsPage, setRoomsPage] = useState(1)
   const [expandedRoomNumbers, setExpandedRoomNumbers] = useState(() => new Set())
 
@@ -9301,16 +9305,17 @@ function StaffMain() {
         if (statusFilter === 'vacant' && room.is_booked) return false
         if (statusFilter === 'due' && (!room.currentDue || room.currentDue.status === 'paid')) return false
         if (statusFilter === 'expiring' && !getRoomExpiryStatus(room)) return false
+        if (floorFilter !== 'all' && roomFloorOf(room.room_number) !== Number(floorFilter)) return false
 
         if (search.trim()) {
           const keyword = search.trim().toLowerCase()
           const tenantName = room.tenant ? `${room.tenant.first_name} ${room.tenant.last_name}`.toLowerCase() : ''
-          if (!matchesSearch([room.room_number, tenantName, room.tenant?.phone], keyword, room)) return false
+          if (!matchesSearch([room.room_number, tenantName, room.tenant?.phone, roomFloorLabel(room.room_number)], keyword, room)) return false
         }
         return true
       })
       .sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
-  }, [rooms, search, statusFilter])
+  }, [rooms, search, statusFilter, floorFilter])
 
   const roomStatusCounts = useMemo(
     () => ({
@@ -11181,10 +11186,20 @@ function StaffMain() {
                 }}
                 searchPlaceholder="ค้นหาเลขห้อง ชื่อผู้เช่า หรือเบอร์โทร"
                 resultText={`พบ ${filteredRooms.length} จาก ${rooms.length} ห้อง`}
-                canClear={statusFilter !== 'all' || Boolean(search.trim())}
+                canClear={statusFilter !== 'all' || floorFilter !== 'all' || Boolean(search.trim())}
                 onClear={() => {
                   setStatusFilter('all')
+                  setFloorFilter('all')
                   setSearch('')
+                  setRoomsPage(1)
+                }}
+              />
+
+              <FloorFilterChips
+                rooms={rooms}
+                value={floorFilter}
+                onChange={(value) => {
+                  setFloorFilter(value)
                   setRoomsPage(1)
                 }}
               />
@@ -11228,6 +11243,7 @@ function StaffMain() {
                               <td className="staff-room-number-cell">
                                 <span className="staff-room-mobile-label">ห้อง</span>
                                 {room.room_number}
+                                <RoomFloorBadge roomNumber={room.room_number} />
                               </td>
                               <td className="staff-col-optional">
                                 <span className={`staff-room-size${room.room_size != null ? '' : ' is-empty'}`}>

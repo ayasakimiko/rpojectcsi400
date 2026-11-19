@@ -6,7 +6,7 @@ export const SCHEMA_SERVICES = ["room", "auth", "customer", "maintenance", "paym
 export const ISOLATED_SERVICES = new Set(["market"]);
 
 export const TABLES_BY_SERVICE = {
-  room: ["Room", "RoomType", "RoomWifi", "RoomWifiDevice"],
+  room: ["Room", "RoomType", "RoomFloor", "RoomWifi", "RoomWifiDevice"],
   auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage", "RoomTransfer", "ContractAmendment"],
   customer: ["TenantRequest", "ParkingSpace", "ResidentVisitRequest", "SafetyIncident"],
   maintenance: ["MaintenanceRequest", "MaintenancePhoto", "RepairVendor", "RepairVendorApiKey", "RepairJob", "RepairVendorImage"],

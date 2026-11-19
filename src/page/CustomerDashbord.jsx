@@ -45,6 +45,8 @@ import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeade
 import useMinimumLoading from '../utils/useMinimumLoading.js'
 import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
+import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
+import { roomFloorLabel } from '../utils/roomFloors.js'
 import {
   ActionDialog,
   ActionDialogAmount,
@@ -8108,7 +8110,7 @@ function CustomerDashbord() {
                   <h2>ห้องของฉัน</h2>
                   {room ? (
                     <>
-                      <p className="dashboard-room-number">ห้อง {room.room_number}</p>
+                      <p className="dashboard-room-number">ห้อง {room.room_number}<RoomFloorBadge roomNumber={room.room_number} /></p>
                       {room.room_size != null && (
                         <p className="dashboard-room-size">
                           <FieldIcon name="area" size={14} />
@@ -8656,7 +8658,7 @@ function CustomerDashbord() {
                                   <option value="" disabled>เลือกห้องว่าง</option>
                                   {availableRooms.map((availableRoom) => (
                                     <option key={availableRoom.room_number} value={availableRoom.room_number}>
-                                      ห้อง {availableRoom.room_number} · {Number(availableRoom.price).toLocaleString('th-TH')} บาท/เดือน
+                                      ห้อง {availableRoom.room_number} ({roomFloorLabel(availableRoom.room_number)}) · {Number(availableRoom.price).toLocaleString('th-TH')} บาท/เดือน
                                       {availableRoom.room_size != null ? ` · ${formatRoomSize(availableRoom.room_size)}` : ''}
                                     </option>
                                   ))}

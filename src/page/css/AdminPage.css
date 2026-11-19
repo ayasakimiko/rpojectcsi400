@@ -19504,3 +19504,11 @@ tr.admin-focus-flash.is-fading > td {
   gap: 12px 20px;
 }
 
+
+.admin-room-floor-hint {
+  display: block;
+  margin-top: 4px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+}
