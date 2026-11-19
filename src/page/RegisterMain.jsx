@@ -9,6 +9,7 @@ import ThaiDatePicker from '../components/ThaiDatePicker.jsx'
 import compressImageFile, { validateImageFile } from '../utils/compressImageFile.js'
 import { digitsOnly, firstError, validatePersonForm } from '../utils/validators.js'
 import { ContractImagePicker, DepositSettlementForm } from '../components/RentalContract.jsx'
+import { roomFloorLabel } from '../utils/roomFloors.js'
 import {
   addContractMonths,
   CONTRACT_DURATION_OPTIONS,
@@ -566,7 +567,7 @@ function RegisterMain() {
                       </option>
                       {availableRooms.map((room) => (
                         <option key={room.id} value={room.room_number}>
-                          ห้อง {room.room_number} · {formatContractMoney(room.price)}/เดือน
+                          ห้อง {room.room_number} ({roomFloorLabel(room.room_number)}) · {formatContractMoney(room.price)}/เดือน
                           {room.room_size != null ? ` · ${Number(room.room_size).toLocaleString('th-TH', { maximumFractionDigits: 2 })} ตร.ม.` : ''}
                         </option>
                       ))}
@@ -733,7 +734,7 @@ function RegisterMain() {
                     <div className="register-actions-meta">
                       {selectedRoom ? (
                         <>
-                          <span>ห้อง {selectedRoom.room_number}{registerForm.contract_duration_months ? ` · ${registerForm.contract_duration_months} เดือน` : ''}</span>
+                          <span>ห้อง {selectedRoom.room_number} · {roomFloorLabel(selectedRoom.room_number)}{registerForm.contract_duration_months ? ` · ${registerForm.contract_duration_months} เดือน` : ''}</span>
                           <strong>เดือนแรก {firstMonth ? formatContractMoney(firstMonth.total) : '-'} · ถัดไป {firstMonth ? formatContractMoney(firstMonth.price) : '-'}/เดือน</strong>
                         </>
                       ) : (

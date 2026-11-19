@@ -29,6 +29,7 @@ import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeade
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
 import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { logout } from '../utils/session.js'
+import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
 
 const EMPTY = { promptpay_id: '', bank_name: '', bank_account_no: '', test_mode: false, verify_mode: 'auto' }
 const SLIP_VERIFY_OPTIONS = [
@@ -6099,7 +6100,7 @@ function OwnerMain() {
                                 <StatIcon name={room.status === 'maintenance' ? 'maintenance' : 'rooms'} />
                               </span>
                               <span className="owner-roomlist-card-title">
-                                <strong>ห้อง {room.room_number}</strong>
+                                <strong>ห้อง {room.room_number}<RoomFloorBadge roomNumber={room.room_number} /></strong>
                                 <em>
                                   {room.price != null ? `฿${formatCurrency(room.price)}/เดือน` : 'ไม่ระบุราคา'}
                                   {room.room_size != null && ` · ${formatCurrency(room.room_size)} ตร.ม.`}

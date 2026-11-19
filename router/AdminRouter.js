@@ -53,6 +53,7 @@ import {
   validateInspectionDamage,
 } from "./rentalContracts.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
+import { floorRateOrderError, roomFloorOf } from "../src/utils/roomFloors.js";
 import { effectiveRoomAssets } from "./roomAssets.js";
 import { loadMoveOutBaseline } from "./moveInBaseline.js";
 import { damageChargeMessage, syncMoveOutDamageCharge, validateMoveOutDamage } from "./moveOutDamage.js";
@@ -654,6 +655,95 @@ router.delete("/room-types/:id", async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error("Delete room type error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  } finally {
+    connection.release();
+  }
+});
+
+async function loadFloors(pool) {
+  const [floors] = await pool.query("SELECT floor_number, price_rate, note, updated_at FROM RoomFloor ORDER BY floor_number ASC");
+  const [rooms] = await pool.query("SELECT room_number, is_booked, price FROM Room ORDER BY room_number ASC");
+  const floorNumbers = new Set(floors.map((floor) => floor.floor_number));
+  const roomsOn = (floorNumber) => rooms.filter((room) => roomFloorOf(room.room_number) === floorNumber);
+  const describe = (floor) => {
+    const floorRooms = roomsOn(floor.floor_number);
+    const booked = floorRooms.filter((room) => room.is_booked).length;
+    return {
+      ...floor,
+      room_count: floorRooms.length,
+      booked_count: booked,
+      vacant_count: floorRooms.length - booked,
+      off_rate_vacant_count: floor.price_rate == null
+        ? 0
+        : floorRooms.filter((room) => !room.is_booked && Number(room.price) !== Number(floor.price_rate)).length,
+      rooms: floorRooms.map((room) => ({ room_number: room.room_number, is_booked: Boolean(room.is_booked), price: room.price })),
+    };
+  };
+  // Rooms whose hundreds digit has no RoomFloor row still show up, without a rate.
+  const unratedFloors = [...new Set(rooms.map((room) => roomFloorOf(room.room_number)))]
+    .filter((floorNumber) => floorNumber != null && !floorNumbers.has(floorNumber))
+    .map((floorNumber) => ({ floor_number: floorNumber, price_rate: null, note: null, updated_at: null }));
+  return [...floors, ...unratedFloors].sort((a, b) => a.floor_number - b.floor_number).map(describe);
+}
+
+router.get("/floors", async (_req, res) => {
+  try {
+    return res.json({ floors: await loadFloors(getPool()) });
+  } catch (error) {
+    console.error("Fetch floors error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
+router.put("/floors/:floor_number", async (req, res) => {
+  const floorNumber = Number(req.params.floor_number);
+  if (!Number.isInteger(floorNumber) || floorNumber < 1 || floorNumber > 9) {
+    return res.status(400).json({ message: "เลขชั้นไม่ถูกต้อง" });
+  }
+  const body = req.body ?? {};
+  const rate = Number(String(body.price_rate ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 99999999.99) {
+    return res.status(400).json({ message: "เรทราคาต้องเป็นตัวเลขมากกว่า 0" });
+  }
+  const note = String(body.note ?? "").trim();
+  if (note.length > 200) return res.status(400).json({ message: "หมายเหตุต้องไม่เกิน 200 ตัวอักษร" });
+  const applyToVacant = body.apply_to_vacant === true;
+
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [floors] = await connection.query("SELECT floor_number, price_rate FROM RoomFloor FOR UPDATE");
+    const orderError = floorRateOrderError([
+      ...floors.filter((floor) => floor.floor_number !== floorNumber),
+      { floor_number: floorNumber, price_rate: rate },
+    ]);
+    if (orderError) {
+      await connection.rollback();
+      return res.status(400).json({ message: orderError });
+    }
+    await connection.query(
+      `INSERT INTO RoomFloor (floor_number, price_rate, note, updated_at) VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE price_rate = VALUES(price_rate), note = VALUES(note), updated_at = NOW()`,
+      [floorNumber, rate, note || null],
+    );
+    let updatedRooms = 0;
+    if (applyToVacant) {
+      // Tenants keep their contracted price, so only vacant rooms take the new rate.
+      const [result] = await connection.query(
+        "UPDATE Room SET price = ? WHERE room_number BETWEEN ? AND ? AND is_booked = FALSE",
+        [rate, floorNumber * 100, floorNumber * 100 + 99],
+      );
+      updatedRooms = result.affectedRows;
+    }
+    await connection.commit();
+    const message = applyToVacant
+      ? `บันทึกเรทชั้น ${floorNumber} และปรับราคาห้องว่าง ${updatedRooms} ห้องแล้ว`
+      : `บันทึกเรทชั้น ${floorNumber} แล้ว`;
+    return res.json({ message, updatedRooms });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Update floor error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
   } finally {
     connection.release();

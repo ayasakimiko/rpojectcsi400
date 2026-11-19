@@ -51,6 +51,10 @@ import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
 import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import { matchesSearch } from '../utils/search.js'
+import FloorManager from '../components/FloorManager.jsx'
+import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
+import FloorFilterChips from '../components/FloorFilterChips.jsx'
+import { floorsOfRooms, roomFloorLabel, roomFloorOf } from '../utils/roomFloors.js'
 
 const WAITING_UI_STATUSES = {
   waiting: { label: 'รอห้องว่าง', tone: 'warning' },
@@ -1253,6 +1257,7 @@ const ROWS_PER_PAGE = 15
 const TABS = [
   { key: 'dorm-info', label: 'กฎระเบียบและเบอร์ติดต่อ' },
   { key: 'rooms', label: 'ห้องพัก' },
+  { key: 'floors', label: 'ชั้นห้องพัก' },
   { key: 'wifi', label: 'Wi-Fi' },
   { key: 'market', label: 'ร้านค้าเช่าข้างหอ' },
   { key: 'repair-vendors', label: 'ติดต่อช่าง' },
@@ -1275,7 +1280,7 @@ const TABS = [
 ]
 
 const TAB_GROUPS = [
-  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
+  { key: 'residents', label: 'ห้องพักและผู้เช่า', tabs: ['rooms', 'floors', 'wifi', 'customers', 'moveouts', 'waiting-list'] },
   { key: 'contracts', label: 'สัญญาและตรวจห้อง', tabs: ['completed-contracts', 'deposit-settlement', 'move-in-inspections', 'move-out-inspections'] },
   { key: 'services', label: 'คำขอและงานบริการ', tabs: ['requests', 'maintenance', 'vehicle-requests', 'safety'] },
   { key: 'repair', label: 'ติดต่อช่าง', tabs: ['repair-vendors'] },
@@ -1285,7 +1290,7 @@ const TAB_GROUPS = [
   { key: 'management', label: 'จัดการหอพัก', tabs: ['staff', 'expenses', 'cameras'] },
 ]
 const SUMMARY_GROUP_OF = {
-  rooms: 'residents', wifi: 'residents', customers: 'residents', moveouts: 'residents', 'waiting-list': 'residents',
+  rooms: 'residents', floors: 'residents', wifi: 'residents', customers: 'residents', moveouts: 'residents', 'waiting-list': 'residents',
   'completed-contracts': 'contracts', 'deposit-settlement': 'deposits', 'move-in-inspections': 'inspections', 'move-out-inspections': 'inspections',
   requests: 'services', maintenance: 'services', 'vehicle-requests': 'services', safety: 'services',
   parcels: 'parcels', announcements: 'announcements', market: 'market', cameras: 'cameras', staff: 'staff', expenses: 'finance',
@@ -5389,6 +5394,10 @@ function AdminBackupPage() {
   const [roomsLoading, setRoomsLoading] = useState(true)
   const [roomsError, setRoomsError] = useState('')
   const [roomSearch, setRoomSearch] = useState('')
+  const [roomFloorFilter, setRoomFloorFilter] = useState('all')
+  const [floors, setFloors] = useState([])
+  const [floorsLoading, setFloorsLoading] = useState(true)
+  const [floorsError, setFloorsError] = useState('')
   const [roomsPage, setRoomsPage] = useState(1)
   const [roomModal, setRoomModal] = useState(null)
   const [roomForm, setRoomForm] = useState(emptyRoomForm)
@@ -5923,8 +5932,28 @@ function AdminBackupPage() {
     }
   }
 
+  const loadFloors = () =>
+    axios
+      .get('/api/admin/floors')
+      .then(({ data }) => {
+        setFloors(data.floors)
+        setFloorsError('')
+      })
+      .catch((err) => {
+        if (handleUnauthorized(err)) return
+        setFloorsError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลชั้นได้')
+      })
+      .finally(() => setFloorsLoading(false))
+
+  const floorRateOf = (roomNumber) => {
+    const floor = floors.find((item) => item.floor_number === roomFloorOf(roomNumber))
+    return floor?.price_rate != null ? Number(floor.price_rate) : null
+  }
+
   const loadRooms = () => {
     setRoomsLoading(true)
+    // Floor room counts come from the room list, so refresh them together.
+    loadFloors()
     return axios
       .get('/api/admin/rooms')
       .then(({ data }) => {
@@ -6076,7 +6105,15 @@ function AdminBackupPage() {
   const handleRoomFormChange = (event) => {
     const { name, type, value, checked } = event.target
     if (name === 'room_number') {
-      setRoomForm((prev) => ({ ...prev, room_number: value.replace(/\D/g, '').slice(0, 3) }))
+      const roomNumber = value.replace(/\D/g, '').slice(0, 3)
+      setRoomForm((prev) => {
+        // New rooms start at their floor's rate until the admin types a price of their own.
+        const previousRate = floorRateOf(prev.room_number)
+        const nextRate = roomNumber.length === 3 ? floorRateOf(roomNumber) : null
+        const priceIsAuto = prev.price === '' || (previousRate != null && Number(prev.price) === previousRate)
+        const price = roomModal?.mode === 'create' && priceIsAuto && nextRate != null ? String(nextRate) : prev.price
+        return { ...prev, room_number: roomNumber, price }
+      })
       return
     }
     if (name === 'electricity_unit_price' || name === 'water_unit_price' || name === 'water_price') {
@@ -6267,14 +6304,19 @@ function AdminBackupPage() {
 
   const filteredRooms = useMemo(() => {
     const keyword = roomSearch.trim().toLowerCase()
+    const onFloor = roomFloorFilter === 'all' ? rooms : rooms.filter((room) => roomFloorOf(room.room_number) === Number(roomFloorFilter))
     const matched = !keyword
-      ? rooms
-      : rooms.filter((room) => {
+      ? onFloor
+      : onFloor.filter((room) => {
           const tenantName = room.customer_id ? `${room.first_name} ${room.last_name}`.toLowerCase() : ''
-          return matchesSearch([room.room_number, tenantName, room.phone], keyword, room)
+          return matchesSearch([room.room_number, tenantName, room.phone, roomFloorLabel(room.room_number)], keyword, room)
         })
     return [...matched].sort((a, b) => Number(a.is_booked) - Number(b.is_booked) || a.room_number - b.room_number)
-  }, [rooms, roomSearch])
+  }, [rooms, roomSearch, roomFloorFilter])
+  const roomFloorOptions = useMemo(
+    () => [...new Set([...floors.map((floor) => floor.floor_number), ...floorsOfRooms(rooms)])].sort((a, b) => a - b),
+    [floors, rooms],
+  )
 
   const roomsTotalPages = Math.max(1, Math.ceil(filteredRooms.length / ROWS_PER_PAGE))
   const currentRoomsPage = Math.min(roomsPage, roomsTotalPages)
@@ -7595,6 +7637,16 @@ function AdminBackupPage() {
               </div>
             </div>
 
+            <FloorFilterChips
+              rooms={rooms}
+              floors={roomFloorOptions}
+              value={roomFloorFilter}
+              onChange={(value) => {
+                setRoomFloorFilter(value)
+                setRoomsPage(1)
+              }}
+            />
+
             {invoicePrintError && <div className="alert alert-danger">{invoicePrintError}</div>}
             {roomsError && <div className="alert alert-danger">{roomsError}</div>}
 
@@ -7633,6 +7685,7 @@ function AdminBackupPage() {
                               <RoomDetailIcon type="home" size={13} />
                               {room.room_number}
                             </button>
+                            <RoomFloorBadge roomNumber={room.room_number} />
                           </td>
                           <td>
                             <span className={`admin-badge has-dot status-${room.is_booked ? 'booked' : 'vacant'}`}>
@@ -7690,6 +7743,7 @@ function AdminBackupPage() {
                           colSpan={7}
                           fields={[
                             { label: 'สถานะ', value: room.is_booked ? 'ไม่ว่าง' : 'ว่าง' },
+                            { label: 'ชั้น', value: roomFloorLabel(room.room_number) },
                             { label: 'ขนาดห้อง', value: room.room_size != null ? formatRoomSize(room.room_size) : 'ไม่ระบุ' },
                             { label: 'ราคา/เดือน', value: `฿${formatCurrency(room.price)}` },
                             {
@@ -7728,6 +7782,22 @@ function AdminBackupPage() {
             </div>
             <Pagination page={currentRoomsPage} totalPages={roomsTotalPages} onChange={setRoomsPage} />
           </div>
+        )}
+
+        {activeTab === 'floors' && (
+          <FloorManager
+            Modal={StaffModal}
+            floors={floors}
+            loading={floorsLoading}
+            error={floorsError}
+            onChanged={loadRooms}
+            onOpenRooms={(floor) => {
+              setRoomFloorFilter(String(floor))
+              setRoomSearch('')
+              setRoomsPage(1)
+              goToTab('rooms')
+            }}
+          />
         )}
 
         {activeTab === 'staff' && (
@@ -9932,6 +10002,14 @@ function AdminBackupPage() {
                     placeholder="เช่น 101"
                     required
                   />
+                  {roomFloorOf(roomForm.room_number) != null && roomForm.room_number.length === 3 && (
+                    <small className="admin-room-floor-hint">
+                      {roomFloorLabel(roomForm.room_number)}
+                      {floorRateOf(roomForm.room_number) != null
+                        ? ` · เรทชั้น ฿${formatCurrency(floorRateOf(roomForm.room_number))}/เดือน`
+                        : ' · ชั้นนี้ยังไม่ตั้งเรท'}
+                    </small>
+                  )}
                 </label>
                 <label className="admin-room-field">
                   <span>ขนาดห้อง <small className="admin-room-optional">ไม่บังคับ</small></span>

@@ -125,3 +125,19 @@ CREATE TABLE IF NOT EXISTS RoomWifiDevice (
     INDEX idx_room_wifi_device_room (room_number),
     FOREIGN KEY (room_number) REFERENCES RoomWifi (room_number) ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- One row per floor. A room's floor is its hundreds digit (101 → 1); the rate is
+-- the default monthly price for rooms on that floor, and lower floors cost more.
+CREATE TABLE IF NOT EXISTS RoomFloor (
+    floor_number TINYINT UNSIGNED NOT NULL PRIMARY KEY CHECK (floor_number BETWEEN 1 AND 9),
+    price_rate DECIMAL(10,2) NOT NULL CHECK (price_rate > 0),
+    note VARCHAR(200) NULL,
+    updated_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT IGNORE INTO RoomFloor (floor_number, price_rate, note) VALUES
+    (1, 4500.00, 'ชั้นล่าง เดินทางสะดวก'),
+    (2, 4000.00, NULL),
+    (3, 3500.00, NULL),
+    (4, 3000.00, 'ชั้นบนสุด');
