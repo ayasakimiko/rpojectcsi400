@@ -29,7 +29,8 @@ import CameraMonitor from '../components/CameraMonitor.jsx'
 import { cameraSummaryTiles } from '../utils/cameras.js'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import { countNewExpenses, maxExpenseId, readExpenseSeen, writeExpenseSeen } from '../utils/expenseSeen.js'
-import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications, withoutDismissed } from '../utils/serverNotifications.js'
+import { NotificationDeleteAllButton, NotificationItemShell, NotificationReadAllButton } from '../components/NotificationActions.jsx'
 import { logout } from '../utils/session.js'
 import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
 
@@ -3553,11 +3554,11 @@ function OwnerMain() {
   const paymentPage = Number(paymentLogs.page || 1)
   const serverFeed = useServerNotifications('/api/owner', { pendingKinds: OWNER_PENDING_KINDS, onNewEvents: loadAnnouncements })
   const totalPaymentPages = Math.max(1, Math.ceil((Number(paymentLogs.total) || 0) / (Number(paymentLogs.pageSize) || 20)))
-  const notifications = sortNewestFirst([...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending])
+  const notifications = withoutDismissed(sortNewestFirst([...announcements.map(buildOwnerAnnouncementNotification), ...serverFeed.events, ...serverFeed.pending]), serverFeed.dismissed)
   const notificationReads = useNotificationReads(getOwnerNotificationStorageKey(), serverFeed)
   const newNotifications = notifications.filter((item) => isUnread(item, notificationReads.seenKeys))
   const freshNotificationKeys = new Set(newNotifications.map((item) => item.key))
-  const notificationPageSize = 100
+  const notificationPageSize = 20
   const notificationPages = Math.max(1, Math.ceil(notifications.length / notificationPageSize))
   const notificationPage = Math.min(notifPage, notificationPages)
   const visibleNotifications = notifications.slice((notificationPage - 1) * notificationPageSize, notificationPage * notificationPageSize)
@@ -3864,6 +3865,10 @@ function OwnerMain() {
                       การแจ้งเตือน
                       {notifications.length > 0 && <span className="staff-notif-count">{notifications.length}</span>}
                     </span>
+                    <NotificationReadAllButton
+                      onClick={() => notificationReads.markAllRead(notifications)}
+                      disabled={newNotifications.length === 0}
+                    />
                     <button type="button" className="staff-notif-panel-close" onClick={closeNotifPanel} aria-label="ปิด">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18" />
@@ -3885,9 +3890,9 @@ function OwnerMain() {
                     <>
                       <div className="staff-notif-list" ref={notifListRef}>
                         {visibleNotifications.map((notification) => (
+                          <NotificationItemShell key={notification.key} title={notification.title} onDelete={() => serverFeed.dismiss([notification.key]).catch(() => {})}>
                           <button
                             type="button"
-                            key={notification.key}
                             className={`staff-notif-item is-${notification.tone}${freshNotificationKeys.has(notification.key) ? ' is-new' : ''}`}
                             onClick={() => openNotification(notification)}
                           >
@@ -3924,10 +3929,16 @@ function OwnerMain() {
                               )}
                             </span>
                           </button>
+                          </NotificationItemShell>
                         ))}
                       </div>
-                      {notificationPages > 1 && (
-                        <div className="staff-notif-pagination">
+                      <div className="staff-notif-pagination notif-footer">
+                        <NotificationDeleteAllButton
+                          count={notifications.length}
+                          onConfirm={() => serverFeed.dismiss(notifications.map((notification) => notification.key)).then(() => setNotifPage(1))}
+                        />
+                        {notificationPages > 1 && (
+                        <div className="notif-footer-pages">
                           <span className="staff-notif-page-info">
                             {(notificationPage - 1) * notificationPageSize + 1}–
                             {Math.min(notificationPage * notificationPageSize, notifications.length)} จาก {notifications.length}
@@ -3966,7 +3977,8 @@ function OwnerMain() {
                             </button>
                           </div>
                         </div>
-                      )}
+                        )}
+                      </div>
                     </>
                   )}
                 </div>

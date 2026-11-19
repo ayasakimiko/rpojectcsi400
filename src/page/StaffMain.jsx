@@ -94,7 +94,8 @@ import { validateImageFile } from '../utils/compressImageFile.js'
 import { PARCEL_STATUS_OPTIONS, PREVIOUS_TENANT_LABEL, parcelStatusInfo } from '../utils/parcelStatus.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications, withoutDismissed } from '../utils/serverNotifications.js'
+import { NotificationDeleteAllButton, NotificationItemShell, NotificationReadAllButton } from '../components/NotificationActions.jsx'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import { matchesSearch } from '../utils/search.js'
 import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
@@ -1465,7 +1466,7 @@ const EXPENSE_PAYMENT_METHOD_LABEL = {
 
 const EXPENSE_MAX_PHOTOS = 6
 const MODAL_ITEMS_PER_PAGE = 10
-const NOTIF_PAGE_SIZE = 100
+const NOTIF_PAGE_SIZE = 20
 const STAFF_SERVER_PENDING_KINDS = [
   'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'transfer_charge', 'move_in',
   'contract_expiry', 'rent_overdue', 'waiting_list', 'parcel_stale',
@@ -9073,7 +9074,7 @@ function StaffMain() {
   })
 
   const notifications = useMemo(() => {
-    return sortNewestFirst([
+    return withoutDismissed(sortNewestFirst([
       ...pendingSafetyIncidents.map(buildStaffSafetyNotif),
       ...pendingVisitRequests.map(buildStaffVisitNotif),
       ...pendingSlips.map(buildStaffSlipNotif),
@@ -9082,8 +9083,8 @@ function StaffMain() {
       ...announcements.map(buildAnnouncementNotif),
       ...serverFeed.events,
       ...serverFeed.pending,
-    ])
-  }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements, serverFeed.events, serverFeed.pending])
+    ]), serverFeed.dismissed)
+  }, [pendingSafetyIncidents, pendingVisitRequests, pendingSlips, tenantRequests, maintenanceRequests, announcements, serverFeed.events, serverFeed.pending, serverFeed.dismissed])
 
   const notificationReads = useNotificationReads(getNotificationStorageKey('staff'), serverFeed)
   const newNotifications = notifications.filter((notification) => isUnread(notification, notificationReads.seenKeys))
@@ -9917,6 +9918,10 @@ function StaffMain() {
                       การแจ้งเตือน
                       {notifications.length > 0 && <span className="staff-notif-count">{notifications.length}</span>}
                     </span>
+                    <NotificationReadAllButton
+                      onClick={() => notificationReads.markAllRead(notifications)}
+                      disabled={newNotifications.length === 0}
+                    />
                     <button
                       type="button"
                       className="staff-notif-panel-close"
@@ -9953,9 +9958,9 @@ function StaffMain() {
                     <>
                       <div className="staff-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
+                          <NotificationItemShell key={notif.key} title={notif.title} onDelete={() => serverFeed.dismiss([notif.key]).catch(() => {})}>
                           <button
                             type="button"
-                            key={notif.key}
                             className={`staff-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
@@ -10005,10 +10010,16 @@ function StaffMain() {
                               )}
                             </span>
                           </button>
+                          </NotificationItemShell>
                         ))}
                       </div>
-                      {notifTotalPages > 1 && (
-                        <div className="staff-notif-pagination">
+                      <div className="staff-notif-pagination notif-footer">
+                        <NotificationDeleteAllButton
+                          count={notifications.length}
+                          onConfirm={() => serverFeed.dismiss(notifications.map((notif) => notif.key)).then(() => setNotifPage(1))}
+                        />
+                        {notifTotalPages > 1 && (
+                        <div className="notif-footer-pages">
                           <span className="staff-notif-page-info">
                             {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
                             {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
@@ -10047,7 +10058,8 @@ function StaffMain() {
                             </button>
                           </div>
                         </div>
-                      )}
+                        )}
+                      </div>
                     </>
                   )}
                 </div>

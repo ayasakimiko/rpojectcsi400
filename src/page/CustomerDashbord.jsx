@@ -43,7 +43,8 @@ import { addContractMonths, DEPOSIT_MONTHS } from '../utils/rentalContract.js'
 import LoadingScreen from '../components/LoadingScreen.jsx'
 import { AppHeaderDate, AppHeaderMeta, LogoutIcon } from '../components/AppHeader.jsx'
 import useMinimumLoading from '../utils/useMinimumLoading.js'
-import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, useNotificationReads, sortNewestFirst, useServerNotifications, withoutDismissed } from '../utils/serverNotifications.js'
+import { NotificationDeleteAllButton, NotificationItemShell, NotificationReadAllButton } from '../components/NotificationActions.jsx'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import RoomFloorBadge from '../components/RoomFloorBadge.jsx'
 import { roomFloorLabel } from '../utils/roomFloors.js'
@@ -2523,7 +2524,7 @@ function ParcelProgress({ parcel, compact = false }) {
   )
 }
 
-const NOTIF_PAGE_SIZE = 100
+const NOTIF_PAGE_SIZE = 20
 const RENT_DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000
 const CUSTOMER_TARGET_TABS = { contract: 'contract', inspection: 'contract', history: 'rental-history', visits: 'vehicles', wifi: 'wifi', announcements: 'announcements' }
 const CUSTOMER_TARGET_SCROLL = { due: 'due', renew: 'tenant-renew' }
@@ -5991,7 +5992,7 @@ function CustomerDashbord() {
     target: 'visits',
   }))
 
-  const notifications = sortNewestFirst([
+  const notifications = withoutDismissed(sortNewestFirst([
     ...tenantRequests.flatMap(buildTenantRequestNotifs),
     ...maintenanceRequests.flatMap(buildMaintenanceNotifs),
     ...utilityPayments.flatMap(buildUtilityBillNotifs),
@@ -6037,7 +6038,7 @@ function CustomerDashbord() {
       previewLabel: 'รายละเอียดประกาศ',
       kind: 'announcement',
     })),
-  ])
+  ]), serverFeed.dismissed)
 
   const newNotifications = notifications.filter((notif) => isUnread(notif, notificationReads.seenKeys))
   const freshNotifKeys = new Set(newNotifications.map((notif) => notif.key))
@@ -6559,6 +6560,10 @@ function CustomerDashbord() {
                       การแจ้งเตือน
                       {notifications.length > 0 && <span className="dashboard-notif-count">{notifications.length}</span>}
                     </span>
+                    <NotificationReadAllButton
+                      onClick={() => notificationReads.markAllRead(notifications)}
+                      disabled={newNotifications.length === 0}
+                    />
                     <button
                       type="button"
                       className="dashboard-notif-panel-close"
@@ -6605,9 +6610,9 @@ function CustomerDashbord() {
                     <>
                       <div className="dashboard-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
+                          <NotificationItemShell key={notif.key} title={notif.title} onDelete={() => serverFeed.dismiss([notif.key]).catch(() => {})}>
                           <button
                             type="button"
-                            key={notif.key}
                             className={`dashboard-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => {
                               closeNotifPanel()
@@ -6683,10 +6688,16 @@ function CustomerDashbord() {
                               )}
                             </span>
                           </button>
+                          </NotificationItemShell>
                         ))}
                       </div>
-                      {notifTotalPages > 1 && (
-                        <div className="dashboard-notif-pagination">
+                      <div className="dashboard-notif-pagination notif-footer">
+                        <NotificationDeleteAllButton
+                          count={notifications.length}
+                          onConfirm={() => serverFeed.dismiss(notifications.map((notif) => notif.key)).then(() => setNotifPage(1))}
+                        />
+                        {notifTotalPages > 1 && (
+                        <div className="notif-footer-pages">
                           <span className="dashboard-notif-page-info">
                             {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
                             {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
@@ -6725,7 +6736,8 @@ function CustomerDashbord() {
                             </button>
                           </div>
                         </div>
-                      )}
+                        )}
+                      </div>
                     </>
                   )}
                 </div>

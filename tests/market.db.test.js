@@ -10,7 +10,6 @@ import { addContractMonths } from "../src/utils/rentalContract.js";
 
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const addDaysKey = (key, days) => dateKey(new Date(new Date(`${key}T00:00:00`).getTime() + days * 86400000));
-// Leases may run at most 12 months, so the fixture starts today and uses the full allowed term.
 const LEASE_START = dateKey(new Date());
 const LEASE_END = leaseMaxEndKey(LEASE_START);
 const RENEWED_END = dateKey(addContractMonths(new Date(`${LEASE_END}T00:00:00`), 6));
@@ -20,6 +19,7 @@ const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const TAG = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
 const MARKET_DB = serviceDatabaseName(DB_CONFIG.database, "market");
 const AUTH_DB = serviceDatabaseName(DB_CONFIG.database, "auth");
+const OWNER_DB = serviceDatabaseName(DB_CONFIG.database, "owner");
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 const fx = {};
 let root;
@@ -80,6 +80,11 @@ after(async () => {
   if (fx.shopIds?.length) {
     const [images] = await root.query("SELECT i.file_name FROM ??.ShopLeaseImage i JOIN ??.ShopLease l ON l.id = i.lease_id WHERE l.shop_id IN (?)", [MARKET_DB, MARKET_DB, fx.shopIds]);
     await removeLeaseFiles(images.map((image) => image.file_name));
+    const [leases] = await root.query("SELECT id FROM ??.ShopLease WHERE shop_id IN (?)", [MARKET_DB, fx.shopIds]);
+    if (leases.length) {
+      await root.query("DELETE FROM ??.Notification WHERE ref_table = 'ShopLease' AND ref_id IN (?)", [OWNER_DB, leases.map((lease) => lease.id)]);
+    }
+    await root.query("DELETE FROM ??.Notification WHERE ref_table = 'Shop' AND ref_id IN (?)", [OWNER_DB, fx.shopIds]);
     await root.query("DELETE k FROM ??.ShopApiKey k JOIN ??.ShopLease l ON l.id = k.lease_id WHERE l.shop_id IN (?)", [MARKET_DB, MARKET_DB, fx.shopIds]);
     await root.query("DELETE FROM ??.ShopLease WHERE shop_id IN (?)", [MARKET_DB, fx.shopIds]);
     await root.query("DELETE FROM ??.Shop WHERE id IN (?)", [MARKET_DB, fx.shopIds]);

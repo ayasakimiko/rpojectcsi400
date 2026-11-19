@@ -252,8 +252,6 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
--- One row per event. Staff-side rows leave recipient_id NULL and reach every role in audience;
--- Customer rows always name the tenant in recipient_id.
 CREATE TABLE IF NOT EXISTS Notification (
     id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
     audience SET('Customer', 'Staff', 'Admin', 'Owner') NOT NULL,
@@ -283,4 +281,13 @@ CREATE TABLE IF NOT EXISTS NotificationRead (
     read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_role, user_id, notification_id),
     INDEX idx_notification_read_notification (notification_id)
+);
+
+CREATE TABLE IF NOT EXISTS NotificationDismiss (
+    user_role VARCHAR(20) NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    item_key VARCHAR(255) NOT NULL,
+    dismissed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_role, user_id, item_key),
+    INDEX idx_notification_dismiss_user (user_role, user_id, dismissed_at)
 );

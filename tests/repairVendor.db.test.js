@@ -117,6 +117,7 @@ after(async () => {
     await root.query("DELETE FROM ??.MaintenanceRequest WHERE id IN (?)", [MAINTENANCE_DB, fx.requestIds]);
   }
   if (fx.vendorIds.length) {
+    await root.query("DELETE FROM ??.Notification WHERE ref_table = 'RepairVendor' AND ref_id IN (?)", [OWNER_DB, fx.vendorIds]);
     const [files] = await root.query("SELECT file_name FROM ??.RepairVendorImage WHERE vendor_id IN (?)", [MAINTENANCE_DB, fx.vendorIds]);
     await root.query("DELETE FROM ??.RepairVendor WHERE id IN (?)", [MAINTENANCE_DB, fx.vendorIds]);
     await removeVendorFiles(files.map((row) => row.file_name));

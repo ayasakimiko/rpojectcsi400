@@ -6,6 +6,9 @@ const FEED_DAYS = 30;
 const FEED_LIMIT = 300;
 const MAX_READ_IDS = 500;
 const WAIT_MS = 25000;
+const MAX_DISMISS_KEYS = 200;
+const MAX_KEY_LENGTH = 255;
+const DISMISS_LIMIT = 3000;
 
 function visibility(user) {
   if (user.role === "Customer") {
@@ -23,13 +26,13 @@ function parseKinds(value, allowed) {
   return value.split(",").map((kind) => kind.trim()).filter((kind) => known.has(kind));
 }
 
-/**
- * GET  /            → { notifications, pending }
- *                     ?pending=slip,visit,... picks which state-derived items to include.
- * GET  /wait        → { cursor, changed } long poll: answers as soon as something this user's
- *                     bell shows has changed since ?cursor=, or after WAIT_MS with changed=false.
- * POST /read        → { ids: [...] } or { all: true }
- */
+function parseDismissKeys(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((key) => typeof key === "string").map((key) => key.trim()))]
+    .filter((key) => key.length > 0 && key.length <= MAX_KEY_LENGTH)
+    .slice(0, MAX_DISMISS_KEYS);
+}
+
 export function createNotificationRoutes({ loadPending = null, pendingKinds = [] } = {}) {
   const router = Router();
 
@@ -83,9 +86,15 @@ export function createNotificationRoutes({ loadPending = null, pendingKinds = []
       );
       const kinds = loadPending ? parseKinds(req.query.pending, pendingKinds) : [];
       const pending = kinds.length ? await loadPending(pool, kinds) : [];
+      const [dismissedRows] = await pool.query(
+        `SELECT item_key FROM NotificationDismiss WHERE user_role = ? AND user_id = ?
+         ORDER BY dismissed_at DESC LIMIT ?`,
+        [req.user.role, req.user.id, DISMISS_LIMIT],
+      );
       return res.json({
         notifications: rows.map((row) => ({ ...row, is_read: Boolean(row.is_read) })),
         pending,
+        dismissed: dismissedRows.map((row) => row.item_key),
       });
     } catch (error) {
       console.error("Fetch notifications error:", error);
@@ -119,6 +128,22 @@ export function createNotificationRoutes({ loadPending = null, pendingKinds = []
     } catch (error) {
       console.error("Mark notifications read error:", error);
       return res.status(500).json({ message: "ไม่สามารถบันทึกสถานะการอ่านได้" });
+    }
+  });
+
+  router.post("/dismiss", async (req, res) => {
+    const keys = parseDismissKeys(req.body?.keys);
+    if (keys.length === 0) return res.status(400).json({ message: "ไม่พบรายการแจ้งเตือน" });
+    try {
+      await getPool().query(
+        `INSERT INTO NotificationDismiss (user_role, user_id, item_key) VALUES ?
+         ON DUPLICATE KEY UPDATE dismissed_at = CURRENT_TIMESTAMP`,
+        [keys.map((key) => [req.user.role, req.user.id, key])],
+      );
+      return res.json({ message: "ลบการแจ้งเตือนแล้ว", keys });
+    } catch (error) {
+      console.error("Dismiss notifications error:", error);
+      return res.status(500).json({ message: "ไม่สามารถลบการแจ้งเตือนได้" });
     }
   });
 

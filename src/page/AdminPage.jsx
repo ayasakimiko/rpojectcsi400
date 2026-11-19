@@ -38,6 +38,7 @@ import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
 import RepairVendorManager from '../components/RepairVendorManager.jsx'
 import NotificationDetailModal from '../components/NotificationDetailModal.jsx'
+import { NotificationDeleteAllButton, NotificationItemShell, NotificationReadAllButton } from '../components/NotificationActions.jsx'
 import { ConfirmDialog, ResultDialog } from '../components/ActionDialog.jsx'
 import { repairSummaryTiles } from '../utils/repairSummary.js'
 import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL } from '../utils/maintenanceCategories.js'
@@ -49,7 +50,7 @@ import CustomAmenityIcon from '../components/CustomAmenityIcon.jsx'
 import { parseRoomAmenities } from '../utils/roomAmenities.js'
 import { Modal as StaffModal, StaffCompletedContractsTab, StaffDepositSettlementTab, StaffFilterPanel, StaffResidentVisitsTab, TransferContractPendingPanel } from './StaffMain.jsx'
 import MoveInInspectionPanel from '../components/MoveInInspection.jsx'
-import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications } from '../utils/serverNotifications.js'
+import { isUnread, takeNotificationDeepLink, useNotificationReads, sortNewestFirst, useServerNotifications, withoutDismissed } from '../utils/serverNotifications.js'
 import { clearSession, hasSession, logout } from '../utils/session.js'
 import { matchesSearch } from '../utils/search.js'
 import FloorManager from '../components/FloorManager.jsx'
@@ -1440,7 +1441,7 @@ function calcStayDays(start, end) {
   return Math.floor(ms / (1000 * 60 * 60 * 24))
 }
 
-const NOTIF_PAGE_SIZE = 100
+const NOTIF_PAGE_SIZE = 20
 const ADMIN_SERVER_PENDING_KINDS = [
   'fine_review', 'fine_unpaid', 'deposit', 'transfer_contract', 'move_in', 'contract_expiry', 'rent_overdue',
   'waiting_list', 'parcel_stale',
@@ -7041,7 +7042,7 @@ function AdminBackupPage() {
   })
 
   const notifications = useMemo(() => {
-    return sortNewestFirst([
+    return withoutDismissed(sortNewestFirst([
       ...notifTenantItems.flatMap(buildAdminTenantNotifs),
       ...notifMaintenanceItems.flatMap(buildAdminMaintenanceNotifs),
       ...notifSafetyItems.flatMap(buildAdminSafetyNotifs),
@@ -7051,8 +7052,8 @@ function AdminBackupPage() {
       ...announcements.map(buildAnnouncementNotif),
       ...serverFeed.events,
       ...serverFeed.pending,
-    ])
-  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, serverFeed.events, serverFeed.pending])
+    ]), serverFeed.dismissed)
+  }, [notifTenantItems, notifMaintenanceItems, notifSafetyItems, notifVisitItems, moveOutInspections, staffList, announcements, serverFeed.events, serverFeed.pending, serverFeed.dismissed])
 
   const notificationReads = useNotificationReads(getNotificationStorageKey('admin'), serverFeed)
   const newNotifications = notifications.filter((notification) => isUnread(notification, notificationReads.seenKeys))
@@ -7251,6 +7252,10 @@ function AdminBackupPage() {
                       การแจ้งเตือน
                       {notifications.length > 0 && <span className="admin-notif-count">{notifications.length}</span>}
                     </span>
+                    <NotificationReadAllButton
+                      onClick={() => notificationReads.markAllRead(notifications)}
+                      disabled={newNotifications.length === 0}
+                    />
                     <button type="button" className="admin-notif-panel-close" onClick={closeNotifPanel} aria-label="ปิด">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18" />
@@ -7272,9 +7277,9 @@ function AdminBackupPage() {
                     <>
                       <div className="admin-notif-list" ref={notifListRef}>
                         {paginatedNotifications.map((notif) => (
+                          <NotificationItemShell key={notif.key} title={notif.title} onDelete={() => serverFeed.dismiss([notif.key]).catch(() => {})}>
                           <button
                             type="button"
-                            key={notif.key}
                             className={`admin-notif-item is-${notif.tone}${freshNotifKeys.has(notif.key) ? ' is-new' : ''}`}
                             onClick={() => openNotification(notif)}
                           >
@@ -7298,10 +7303,16 @@ function AdminBackupPage() {
                               )}
                             </span>
                           </button>
+                          </NotificationItemShell>
                         ))}
                       </div>
-                      {notifTotalPages > 1 && (
-                        <div className="admin-notif-pagination">
+                      <div className="admin-notif-pagination notif-footer">
+                        <NotificationDeleteAllButton
+                          count={notifications.length}
+                          onConfirm={() => serverFeed.dismiss(notifications.map((notif) => notif.key)).then(() => setNotifPage(1))}
+                        />
+                        {notifTotalPages > 1 && (
+                        <div className="notif-footer-pages">
                           <span className="admin-notif-page-info">
                             {(notifCurrentPage - 1) * NOTIF_PAGE_SIZE + 1}–
                             {Math.min(notifCurrentPage * NOTIF_PAGE_SIZE, notifications.length)} จาก {notifications.length}
@@ -7340,7 +7351,8 @@ function AdminBackupPage() {
                             </button>
                           </div>
                         </div>
-                      )}
+                        )}
+                      </div>
                     </>
                   )}
                 </div>

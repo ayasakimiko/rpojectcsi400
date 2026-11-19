@@ -4,6 +4,7 @@ import axios from 'axios'
 import { matchesSearch } from '../utils/search.js'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
+import MissingItemNotice from './MissingItemNotice.jsx'
 import { ContractImagePicker } from './RentalContract.jsx'
 import { copyText } from '../utils/copyText.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
@@ -2295,7 +2296,7 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
           const job = jobsRef.current.find((item) => item.id === Number(focusId))
           if (job) setModal({ type: 'job', job })
         },
-        onMissing: () => setMissingNotice(isVendor ? 'ไม่พบช่างรายนี้แล้ว อาจถูกลบออกจากระบบ' : 'ไม่พบงานซ่อมนี้แล้ว อาจถูกลบออกจากระบบ'),
+        onMissing: () => setMissingNotice(isVendor ? 'ไม่พบช่างที่แจ้งเตือนนี้อ้างถึงในระบบแล้ว' : 'ไม่พบงานซ่อมที่แจ้งเตือนนี้อ้างถึงในระบบแล้ว'),
       })
     }, 0)
     return () => {
@@ -2332,8 +2333,8 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
 
       {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
       {missingNotice && (
-        <RepairModal title="ไม่พบรายการนี้" icon="search" tone="danger" size="sm" onClose={() => setMissingNotice('')} onSubmit={() => setMissingNotice('')} submitLabel="ตกลง" hideCancel>
-          <p className="market-notice-message">{missingNotice}</p>
+        <RepairModal bare title="ไม่พบรายการนี้" size="sm" onClose={() => setMissingNotice('')}>
+          {(requestClose) => <MissingItemNotice message={missingNotice} onClose={requestClose} />}
         </RepairModal>
       )}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}

@@ -5,6 +5,7 @@ import { matchesSearch } from '../utils/search.js'
 import ThaiDatePicker from './ThaiDatePicker.jsx'
 import PhotoLightbox from './PhotoLightbox.jsx'
 import PromptPayQr from './PromptPayQr.jsx'
+import MissingItemNotice from './MissingItemNotice.jsx'
 import readSlipQrPayload from '../utils/slipQr.js'
 import { copyText } from '../utils/copyText.js'
 import { formatPromptPayId } from '../utils/promptpay.js'
@@ -2899,7 +2900,7 @@ export default function MarketManager({ onSummary, focus = null }) {
       setSectionKey(focusNonce)
       cancelFocus = focusAndHighlight(isLease ? `[data-market-lease="${focusId}"]` : `[data-market-shop="${focusId}"]`, {
         onFound: () => setModal({ type: isLease ? 'lease' : 'shop', id: Number(focusId) }),
-        onMissing: () => setMissingNotice(isLease ? 'ไม่พบสัญญาเช่านี้แล้ว อาจถูกลบออกจากระบบ' : 'ไม่พบร้านค้านี้แล้ว ร้านอาจถูกปิดหรือลบออกจากระบบ'),
+        onMissing: () => setMissingNotice(isLease ? 'ไม่พบสัญญาเช่าที่แจ้งเตือนนี้อ้างถึงในระบบแล้ว' : 'ไม่พบร้านค้าที่แจ้งเตือนนี้อ้างถึงในระบบแล้ว'),
       })
     }, 0)
     return () => {
@@ -2929,8 +2930,8 @@ export default function MarketManager({ onSummary, focus = null }) {
 
       {notice && <NoticeModal message={notice} onClose={() => setNotice('')} />}
       {missingNotice && (
-        <MarketModal title="ไม่พบรายการนี้" icon="search" tone="danger" size="sm" onClose={() => setMissingNotice('')} onSubmit={() => setMissingNotice('')} submitLabel="ตกลง" hideCancel>
-          <p className="market-notice-message">{missingNotice}</p>
+        <MarketModal bare title="ไม่พบรายการนี้" size="sm" onClose={() => setMissingNotice('')}>
+          {(requestClose) => <MissingItemNotice message={missingNotice} onClose={requestClose} />}
         </MarketModal>
       )}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
