@@ -7456,3 +7456,476 @@
     display: none;
   }
 }
+
+.csc-status.is-amended {
+  border-color: #a5f3fc;
+  background: #ecfeff;
+  color: #0e7490;
+}
+
+.contract-amend-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #dce9fb;
+  border-left: 4px solid #60a5fa;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #f3f8ff 0%, #ffffff 60%);
+}
+
+.contract-amend-card-icon {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.contract-amend-card > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contract-amend-card strong {
+  color: #0f2b52;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.contract-amend-card small {
+  color: #6b859e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.contract-amend-card > button {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.25);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.contract-amend-card > button:hover {
+  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.3);
+}
+
+.rent-bill.deposit-settle-modal.contract-amend-modal {
+  width: 680px;
+  height: 760px;
+}
+
+.rent-bill.deposit-settle-modal.contract-amend-notice {
+  width: 640px;
+  height: auto;
+  max-height: calc(100dvh - 32px);
+}
+
+.deposit-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.deposit-summary > b {
+  color: #0f2b52;
+  font-weight: 800;
+}
+
+.deposit-summary-months {
+  padding: 1px 8px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #46607c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.deposit-summary-status {
+  padding: 1px 8px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.deposit-summary-status.is-paid {
+  border-color: #a7f3d0;
+  background: #dcfce7;
+  color: #027a48;
+}
+
+.deposit-summary-status.is-pending {
+  border-color: #fcd34d;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.deposit-summary-status.is-due {
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: #b42318;
+}
+
+.deposit-summary.is-none {
+  color: #8aa0b6;
+  font-weight: 600;
+}
+
+.rent-bill-deposit .deposit-summary {
+  justify-content: flex-start;
+}
+
+.contract-contact-card {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1.5px solid #dce9fb;
+  border-left: 4px solid #60a5fa;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.contract-contact-icon {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.contract-contact-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contract-contact-text strong {
+  color: #0f2b52;
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.contract-contact-text small {
+  color: #6b859e;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.contract-contact-call {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 12px;
+  background: #fff;
+  color: #2563eb;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.contract-contact-call:hover {
+  border-color: #60a5fa;
+  background: #f3f8ff;
+  color: #1d4ed8;
+}
+
+.contract-contact-call.is-muted {
+  border: 1.5px solid #dce9fb;
+  background: #fff;
+  box-shadow: none;
+  color: #46607c;
+}
+
+@media (max-width: 640px) {
+  .contract-contact-card {
+    flex-wrap: wrap;
+  }
+
+  .contract-contact-call {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.contract-amend-notice .contract-amendments {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.dsm-amend-law {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #fcd34d;
+  border-left-width: 4px;
+  border-radius: 14px;
+  background: #fffbeb;
+}
+
+.dsm-amend-law-icon {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1.5px solid #fcd34d;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.dsm-amend-law strong {
+  color: #92400e;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.dsm-amend-law ul {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: #7c5a1d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dsm-amend-law b {
+  color: #92400e;
+}
+
+.dsm-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-radius: 12px;
+  outline: none;
+}
+
+.dsm-reasons > button {
+  width: auto;
+  margin: 0;
+  padding: 5px 12px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 999px;
+  background: #fff;
+  color: #33506f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.dsm-reasons > button:hover {
+  border-color: #93c5fd;
+  background: #f3f8ff;
+  color: #2563eb;
+}
+
+.dsm-reasons > button.is-active {
+  border-color: #2563eb;
+  background: #2563eb;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.25);
+  color: #fff;
+}
+
+.dsm-reason-hint {
+  margin-top: -6px;
+  padding-left: 2px;
+  color: #6b859e;
+  font-size: 12.5px;
+}
+
+.dsm-reasons.is-invalid > button {
+  border-color: #fca5a5;
+}
+
+.dsm-name-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dsm-text {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1.5px solid #dce9fb;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #0f2b52;
+  color-scheme: light;
+  font-size: 15px;
+  font-weight: 600;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.dsm-text:focus {
+  border-color: #60a5fa;
+  outline: none;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
+}
+
+.dsm-field.is-invalid .dsm-text {
+  border-color: #f97066;
+  background: #fff;
+}
+
+.dsm-form.is-invalid {
+  border-color: #f97066;
+}
+
+.dsm-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1.5px dashed #bcd6f8;
+  border-radius: 16px;
+  background: #fbfdff;
+}
+
+.dsm-changes dl,
+.contract-amendment-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.dsm-changes dl > div,
+.contract-amendment-changes > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13.5px;
+}
+
+.dsm-changes dt,
+.contract-amendment-changes dt {
+  color: #6b859e;
+  font-weight: 600;
+}
+
+.dsm-changes dd,
+.contract-amendment-changes dd {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.dsm-changes .is-before,
+.contract-amendment-changes .is-before {
+  color: #8aa0b6;
+  text-decoration: line-through;
+}
+
+.dsm-changes .is-after,
+.contract-amendment-changes .is-after {
+  color: #0f2b52;
+  font-weight: 700;
+}
+
+.dsm-changes .is-arrow,
+.contract-amendment-changes .is-arrow {
+  color: #60a5fa;
+  font-weight: 800;
+}
+
+.dsm-changes .is-same {
+  color: #6b859e;
+}
+
+.contract-amendment-old {
+  color: #8aa0b6;
+  font-weight: 600;
+}
+
+.contract-amendment-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1.5px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.contract-amendment-comment-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #b45309;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.contract-amendment-comment-label svg {
+  color: #d97706;
+}
+
+.contract-amendment-comment-text {
+  color: #3f2d0c;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .dsm-name-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contract-amend-card {
+    flex-wrap: wrap;
+  }
+
+  .contract-amend-card > button {
+    width: 100%;
+  }
+}

@@ -15,10 +15,10 @@ import {
   formatContractLength,
   formatContractMoney,
   formatDepositMonths,
-  formatDepositSummary,
   DEPOSIT_STATUS_LABEL,
   completedContractsViewedKey,
   readViewedContractIds,
+  ROOM_TRANSFER_MIN_CONTRACT_IMAGES,
 } from '../utils/rentalContract.js'
 
 const CONTRACT_STATUS = {
@@ -194,6 +194,19 @@ export function ContractGallery({ images = [], title = 'รูปสัญญา
   )
 }
 
+function DepositSummary({ contract }) {
+  if (!(Number(contract?.deposit_amount) > 0)) return <span className="deposit-summary is-none">ไม่มีมัดจำ</span>
+  const months = Number(contract.deposit_months)
+  const status = DEPOSIT_STATUS_LABEL[contract.deposit_status]
+  return (
+    <span className="deposit-summary">
+      <b>{formatContractMoney(contract.deposit_amount)}</b>
+      {Number.isInteger(months) && months > 0 && <span className="deposit-summary-months">{months} เดือน</span>}
+      {status && <span className={`deposit-summary-status is-${contract.deposit_status}`}>{status}</span>}
+    </span>
+  )
+}
+
 export function ContractFacts({ contract }) {
   const facts = [
     { label: 'ระยะเวลาสัญญา', value: formatContractLength(contract) },
@@ -203,7 +216,7 @@ export function ContractFacts({ contract }) {
       ? [{ label: 'สัญญาปัจจุบันถึง', value: formatContractDate(contract.current_end_date, true), hint: 'รวมการต่อสัญญา/ย้ายห้อง' }]
       : []),
     { label: 'ค่าเช่าห้องต่อเดือน', value: formatContractMoney(contract.monthly_price) },
-    { label: 'เงินมัดจำ', value: formatDepositSummary(contract) },
+    { label: 'เงินมัดจำ', value: <DepositSummary contract={contract} /> },
     {
       label: 'ทำสัญญาสำเร็จเมื่อ',
       value: contract.contract_completed_at ? formatContractDate(contract.contract_completed_at, true) : formatContractDate(contract.created_at, true),
@@ -700,6 +713,7 @@ function StaffContractCard({ contract, onOpen, unviewed }) {
             {unviewed && <span className="csc-status is-info">ยังไม่เปิดดู</span>}
             <span className={`csc-status ${status.tone}`}>{status.label}</span>
             {underlying && <span className={`csc-status ${underlying.tone}`}>{underlying.label}</span>}
+            <ContractAmendedBadge contract={contract} />
             {contract.can_settle_deposit && (
               <span className="csc-status is-deposit-alert">
                 รอคืนมัดจำ
@@ -887,7 +901,9 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
             ? true
             : scope === 'deposit'
               ? contract.can_settle_deposit
-              : (scope === 'archived') === Boolean(contract.is_archived),
+              : scope === 'amended'
+                ? Number(contract.amendment_count) > 0
+                : (scope === 'archived') === Boolean(contract.is_archived),
         )
         .filter((contract) => {
           if (!dates.from && !dates.to) return true
@@ -915,6 +931,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
     [contracts, status, scope, dates, keyword, sort, depositMode],
   )
   const archivedCount = contracts.filter((contract) => contract.is_archived).length
+  const amendedCount = contracts.filter((contract) => Number(contract.amendment_count) > 0).length
   const pendingDeposits = useMemo(() => contracts.filter((contract) => contract.can_settle_deposit), [contracts])
   const pendingDepositCount = pendingDeposits.length
   const depositViewCounts = useMemo(
@@ -1027,6 +1044,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
             <option value="current">สัญญาปัจจุบัน ({contracts.length - archivedCount})</option>
             <option value="archived">สัญญาเก่า ({archivedCount})</option>
             <option value="deposit">รอคืนมัดจำ ({pendingDepositCount})</option>
+            <option value="amended">สัญญาที่แก้ไขแล้ว ({amendedCount})</option>
           </select>
         )}
         <select className="staff-filter-select" value={sort} onChange={(event) => resetPage(setSort)(event.target.value)} aria-label="เรียงลำดับ">
@@ -1085,6 +1103,7 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
                 {contractCardStatus(detail) === 'transferred' && (
                   <span className="csc-status is-transferred">ย้ายห้องแล้ว</span>
                 )}
+                <ContractAmendedBadge contract={detail} />
                 <ContractStatusBadge status={detail.status} />
               </span>
             </div>
@@ -1111,6 +1130,15 @@ export function StaffCompletedContracts({ Modal, Pagination, FilterPanel, pageSi
             )}
             {detail.can_settle_deposit && (
               <DepositSettlementForm
+                contract={detail}
+                onSaved={(contract) => {
+                  setContracts((current) => current.map((item) => (item.booking_id === contract.booking_id ? contract : item)))
+                  setDetail(contract)
+                }}
+              />
+            )}
+            {!detail.is_archived && (
+              <ContractAmendCard
                 contract={detail}
                 onSaved={(contract) => {
                   setContracts((current) => current.map((item) => (item.booking_id === contract.booking_id ? contract : item)))
@@ -2128,6 +2156,7 @@ const CONTRACT_SECTIONS = [
   { key: 'payments', label: 'ยอดชำระ', icon: 'wallet' },
   { key: 'images', label: 'รูปสัญญา', icon: 'image' },
   { key: 'history', label: 'ประวัติการย้ายห้อง', icon: 'calendar' },
+  { key: 'amendments', label: 'ประวัติการแก้ไขสัญญา', icon: 'edit' },
 ]
 
 function ContractSectionFilter({ value, onChange, contract }) {
@@ -2147,6 +2176,7 @@ function ContractSectionFilter({ value, onChange, contract }) {
             {label}
             {key === 'images' && <em>{contract.images?.length || 0}</em>}
             {key === 'history' && <em>{contractTransfers(contract).length}</em>}
+            {key === 'amendments' && <em>{Number(contract.amendment_count) || 0}</em>}
           </button>
         ))}
       </div>
@@ -2154,7 +2184,52 @@ function ContractSectionFilter({ value, onChange, contract }) {
   )
 }
 
+function useDormContact() {
+  const [contact, setContact] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/customer/dorm-info')
+      .then(({ data }) => {
+        if (!cancelled) setContact({ phone: data.config?.caretaker_phone || '', dormName: data.config?.dorm_name || '' })
+      })
+      .catch(() => {
+        if (!cancelled) setContact({ phone: '', dormName: '' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return contact
+}
+
+function ContractContactCard({ contact }) {
+  if (!contact) return null
+  const phone = contact.phone.trim()
+  return (
+    <div className="contract-contact-card" role="note">
+      <span className="contract-contact-icon" aria-hidden="true"><ContractIcon type="phone" size={18} /></span>
+      <span className="contract-contact-text">
+        <strong>ต้องการแก้ไขสัญญา? ติดต่อเจ้าหน้าที่</strong>
+        <small>
+          แก้ไขได้ เช่น ชื่อ-นามสกุล หรือเอกสารสัญญาที่ชำรุด · ต้องลงนามเอกสารทั้งสองฝ่ายที่สำนักงาน
+          {contact.dormName ? `${contact.dormName}` : 'หอพัก'}
+        </small>
+      </span>
+      {phone ? (
+        <a className="contract-contact-call" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
+          <ContractIcon type="phone" size={15} />
+          โทร {phone}
+        </a>
+      ) : (
+        <span className="contract-contact-call is-muted">ติดต่อที่สำนักงานหอพัก</span>
+      )}
+    </div>
+  )
+}
+
 export function CustomerContractPanel() {
+  const contact = useDormContact()
   const [contract, setContract] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2197,13 +2272,17 @@ export function CustomerContractPanel() {
             <>
               <ContractIcon type="file" size={26} />
               <strong>ยังไม่มีข้อมูลสัญญาเช่า</strong>
-              <span>กรุณาติดต่อเจ้าหน้าที่หากคุณลงทะเบียนเข้าพักแล้ว</span>
+              <span>
+                กรุณาติดต่อเจ้าหน้าที่หากคุณลงทะเบียนเข้าพักแล้ว
+                {contact?.phone ? ` · โทร ${contact.phone}` : ''}
+              </span>
             </>
           )}
         </div>
       ) : (
         <>
           <ContractSectionFilter value={section} onChange={setSection} contract={contract} />
+          <ContractContactCard contact={contact} />
           <div key={section} className="ccc-customer-content" role="region" aria-label="เนื้อหาสัญญาเช่า" tabIndex={0}>
             <CustomerContractBody contract={contract} viewer="customer" section={section} />
           </div>
@@ -2392,9 +2471,9 @@ function RentBillModal({ contract, thisMonth, onClose, viewer = 'customer' }) {
             <div className="rent-bill-deposit">
               <div>
                 <small>เงินมัดจำ</small>
-                <b>{formatDepositSummary(contract)}</b>
+                <DepositSummary contract={contract} />
               </div>
-              <p>แยกจากค่าเช่า ไม่นำมาหักค่าเช่า · คืนเมื่ออยู่ครบสัญญา ออกก่อนสัญญาไม่คืน</p>
+              <p>แยกจากค่าเช่า ไม่นำมาหักค่าเช่า · คืนเมื่อย้ายออก หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน</p>
             </div>
             {firstBill && (
               <div className="rent-bill-first">
@@ -2966,6 +3045,545 @@ export function ContractTransferHistory({ contract, viewer = 'staff' }) {
   )
 }
 
+const AMENDMENT_REASON_OPTIONS = [
+  { key: 'typo', label: 'แก้ไขข้อมูลที่บันทึกผิดพลาด', hint: 'เช่น พิมพ์ชื่อ-นามสกุลผิดตอนลงทะเบียน', name: true },
+  { key: 'legal_name_change', label: 'เปลี่ยนชื่อ-นามสกุลตามกฎหมาย', hint: 'ต้องมีหลักฐานการเปลี่ยนชื่อจากทางราชการ', name: true },
+  { key: 'document_update', label: 'ทำเอกสารสัญญาใหม่', hint: 'ฉบับเดิมชำรุด ไม่ชัด หรือสูญหาย', name: false },
+]
+const AMENDMENT_REASON_LABEL = Object.fromEntries(AMENDMENT_REASON_OPTIONS.map((option) => [option.key, option.label]))
+const AMENDMENT_MIN_IMAGES = ROOM_TRANSFER_MIN_CONTRACT_IMAGES
+const AMENDMENT_NOTE_MIN = 10
+
+export function ContractAmendedBadge({ contract }) {
+  const count = Number(contract?.amendment_count) || 0
+  if (count <= 0) return null
+  return <span className="csc-status is-amended">แก้ไขแล้ว {count} ครั้ง</span>
+}
+
+function ContractAmendmentEntry({ amendment, viewer, detailed = false }) {
+  const changes = amendment.changes || []
+  const nameChange = changes.find((change) => change.field === 'name')
+  return (
+    <li className="contract-amendment-item">
+      <div className="contract-transfer-route">
+        <strong>
+          <span className="contract-transfer-order">ครั้งที่ {amendment.version_no}</span>
+          {AMENDMENT_REASON_LABEL[amendment.reason] || amendment.reason}
+        </strong>
+        <span className="contract-transfer-date">
+          <ContractIcon type="calendar" size={13} />
+          <span>แก้ไขเมื่อ</span>
+          <b>{formatContractDate(amendment.created_at, true)}</b>
+        </span>
+      </div>
+      <dl>
+        <div>
+          <dt>ชื่อ-นามสกุลผู้เช่า</dt>
+          <dd>
+            {nameChange ? (
+              <>
+                <span className="contract-amendment-old">{nameChange.before}</span> → <b className="is-accent">{nameChange.after}</b>
+              </>
+            ) : (
+              'ไม่เปลี่ยน'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>รูปสัญญา</dt>
+          <dd>
+            {amendment.previous_images?.length || 0} รูป → <b className="is-accent">ฉบับใหม่ {amendment.new_images?.length || 0} รูป</b>
+          </dd>
+        </div>
+        <div>
+          <dt>เอกสาร</dt>
+          <dd className="is-success">ลงนามทั้งสองฝ่ายแล้ว</dd>
+        </div>
+        <div>
+          <dt>ผู้เช่ารับทราบ</dt>
+          <dd className={amendment.acknowledged_at ? 'is-success' : 'is-warning'}>
+            {amendment.acknowledged_at ? `รับทราบแล้ว ${formatContractDate(amendment.acknowledged_at, true)}` : 'ยังไม่รับทราบ'}
+          </dd>
+        </div>
+        {viewer !== 'customer' && amendment.amended_by_name && (
+          <div>
+            <dt>แก้ไขโดย</dt>
+            <dd>{amendment.amended_by_name}</dd>
+          </div>
+        )}
+      </dl>
+      <p className="contract-amendment-comment">
+        <span className="contract-amendment-comment-label">
+          <ContractIcon type="edit" size={13} />
+          เหตุผลที่แก้ไข
+        </span>
+        <span className="contract-amendment-comment-text">{amendment.note}</span>
+      </p>
+      {amendment.new_images?.length > 0 && (
+        <details className="contract-transfer-images" open>
+          <summary>
+            <span>รูปสัญญาฉบับแก้ไข</span>
+            <em>{amendment.new_images.length} รูป</em>
+          </summary>
+          <ContractGallery images={amendment.new_images} title={`รูปสัญญาฉบับแก้ไขครั้งที่ ${amendment.version_no}`} />
+        </details>
+      )}
+      {amendment.previous_images?.length > 0 && (
+        <details className="contract-transfer-images is-old" open={detailed}>
+          <summary>
+            <span>รูปสัญญาก่อนแก้ไข · เก็บไว้เป็นประวัติ</span>
+            <em>{amendment.previous_images.length} รูป</em>
+          </summary>
+          <ContractGallery images={amendment.previous_images} title={`รูปสัญญาก่อนแก้ไขครั้งที่ ${amendment.version_no}`} />
+        </details>
+      )}
+    </li>
+  )
+}
+
+function ContractAmendmentList({ contract, viewer }) {
+  const amendments = [...(contract?.amendments || [])].reverse()
+  return (
+    <section className="contract-transfers contract-amendments" aria-label="ประวัติการแก้ไขสัญญา">
+      <header>
+        <ContractIcon type="edit" size={15} />
+        <strong>ประวัติการแก้ไขสัญญา</strong>
+        <span className="contract-transfers-count">แก้ไขแล้ว {amendments.length} ครั้ง</span>
+      </header>
+      <p className="contract-transfers-note">
+        {viewer === 'customer'
+          ? 'ทุกการแก้ไขทำโดยความยินยอมของทั้งสองฝ่ายและมีเอกสารลงนาม ฉบับก่อนแก้ไขยังเก็บไว้ให้ตรวจสอบได้'
+          : 'แก้ได้เฉพาะชื่อผู้เช่าและรูปสัญญา ทุกครั้งมีเอกสารลงนามทั้งสองฝ่าย ฉบับก่อนแก้ไขเก็บไว้เป็นประวัติ'}
+      </p>
+      {amendments.length === 0 ? (
+        <div className="contract-gallery-empty">
+          <span className="contract-gallery-empty-icon" aria-hidden="true"><ContractIcon type="edit" size={22} /></span>
+          <strong>ยังไม่มีการแก้ไขสัญญา</strong>
+          <span>สัญญานี้ยังเป็นฉบับเดิมตั้งแต่ลงทะเบียน</span>
+        </div>
+      ) : (
+        <ol>
+          {amendments.map((amendment) => (
+            <ContractAmendmentEntry key={amendment.id} amendment={amendment} viewer={viewer} />
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
+
+function ContractAmendmentsModal({ contract, viewer, onClose }) {
+  const amendments = [...(contract.amendments || [])].reverse()
+  return (
+    <ContractDialog
+      className="contract-transfers-modal"
+      label="ประวัติการแก้ไขสัญญาทั้งหมด"
+      onClose={onClose}
+      header={(close) => (
+        <header className="rent-bill-head">
+          <span className="rent-bill-icon"><ContractIcon type="edit" size={18} /></span>
+          <div>
+            <strong>ประวัติการแก้ไขสัญญาทั้งหมด</strong>
+            <small>ห้อง {contract.room_number || '-'} · แก้ไขแล้ว {amendments.length} ครั้ง</small>
+          </div>
+          <DialogCloseButton onClick={close} />
+        </header>
+      )}
+    >
+      <div className="contract-transfers-modal-body contract-transfers">
+        <ol>
+          {amendments.map((amendment) => (
+            <ContractAmendmentEntry key={amendment.id} amendment={amendment} viewer={viewer} detailed />
+          ))}
+        </ol>
+      </div>
+    </ContractDialog>
+  )
+}
+
+export function ContractAmendmentHistory({ contract, viewer = 'staff' }) {
+  const [showAll, setShowAll] = useState(false)
+  const amendments = contract?.amendments || []
+  if (amendments.length === 0) return null
+  const latest = amendments[amendments.length - 1]
+  const hidden = amendments.length - 1
+  return (
+    <section className="contract-transfers contract-amendments" aria-label="ประวัติการแก้ไขสัญญา">
+      <header>
+        <ContractIcon type="edit" size={15} />
+        <strong>การแก้ไขสัญญา (บันทึกแนบท้ายสัญญา)</strong>
+        <span className="contract-transfers-count">แก้ไขแล้ว {amendments.length} ครั้ง</span>
+        <button type="button" className="contract-transfers-all" onClick={() => setShowAll(true)}>
+          ดูทั้งหมด
+        </button>
+      </header>
+      <p className="contract-transfers-note">
+        {viewer === 'customer'
+          ? 'ทุกการแก้ไขทำโดยความยินยอมของทั้งสองฝ่ายและมีเอกสารลงนาม ฉบับก่อนแก้ไขยังเก็บไว้ให้ตรวจสอบได้'
+          : 'แก้ได้เฉพาะชื่อผู้เช่าและรูปสัญญา ทุกครั้งมีเอกสารลงนามทั้งสองฝ่าย ฉบับก่อนแก้ไขเก็บไว้เป็นประวัติ'}
+        {hidden > 0 ? ' · แสดงเฉพาะครั้งล่าสุด' : ''}
+      </p>
+      <ol>
+        <ContractAmendmentEntry amendment={latest} viewer={viewer} />
+      </ol>
+      {hidden > 0 && (
+        <button type="button" className="contract-transfers-more" onClick={() => setShowAll(true)}>
+          ดูการแก้ไขก่อนหน้าอีก {hidden} ครั้ง
+        </button>
+      )}
+      {showAll && <ContractAmendmentsModal contract={contract} viewer={viewer} onClose={() => setShowAll(false)} />}
+    </section>
+  )
+}
+
+function ContractAmendmentModal({ contract, onClose, onSaved }) {
+  const [reason, setReason] = useState('')
+  const [firstName, setFirstName] = useState(contract.first_name || '')
+  const [lastName, setLastName] = useState(contract.last_name || '')
+  const [note, setNote] = useState('')
+  const [files, setFiles] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [invalidField, setInvalidField] = useState(null)
+  const reasonRef = useRef(null)
+  const nameRef = useRef(null)
+  const noteRef = useRef(null)
+  const imagesRef = useRef(null)
+  const reasonOption = AMENDMENT_REASON_OPTIONS.find((option) => option.key === reason)
+  const oldName = `${contract.first_name || ''} ${contract.last_name || ''}`.trim()
+  const newName = `${firstName.trim()} ${lastName.trim()}`.trim()
+  const nameChanged = firstName.trim() !== (contract.first_name || '') || lastName.trim() !== (contract.last_name || '')
+  const nextVersion = (Number(contract.amendment_count) || 0) + 1
+  const currentImages = contract.images?.length || 0
+
+  const fail = (field, ref, message) => {
+    setError(message)
+    setInvalidField(field)
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    ref.current?.focus?.({ preventScroll: true })
+  }
+  const clearError = () => {
+    setError('')
+    setInvalidField(null)
+  }
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (!reasonOption) return fail('reason', reasonRef, 'กรุณาเลือกเหตุผลการแก้ไขสัญญา')
+    if (!firstName.trim() || !lastName.trim()) return fail('name', nameRef, 'กรุณากรอกชื่อและนามสกุลให้ครบ')
+    if (reasonOption.name && !nameChanged) return fail('name', nameRef, 'เหตุผลที่เลือกเป็นการแก้ชื่อ แต่ชื่อ-นามสกุลยังเหมือนเดิม')
+    if (note.trim().length < AMENDMENT_NOTE_MIN) {
+      return fail('note', noteRef, `กรุณาอธิบายเหตุผลที่แก้ไขสัญญาอย่างน้อย ${AMENDMENT_NOTE_MIN} ตัวอักษร`)
+    }
+    if (files.length < AMENDMENT_MIN_IMAGES) {
+      return fail('images', imagesRef, `กรุณาแนบรูปสัญญาฉบับแก้ไขที่ลงนามทั้งสองฝ่ายอย่างน้อย ${AMENDMENT_MIN_IMAGES} รูป`)
+    }
+    clearError()
+    setSaving(true)
+    try {
+      const form = new FormData()
+      form.append('reason', reason)
+      form.append('note', note.trim())
+      form.append('first_name', firstName.trim())
+      form.append('last_name', lastName.trim())
+      files.forEach((file) => form.append('contract_images', file))
+      const { data } = await axios.post(`/api/staff/contracts/${contract.booking_id}/amendments`, form)
+      onSaved(data.contract)
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'แก้ไขสัญญาไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setSaving(false)
+    }
+    return undefined
+  }
+
+  return (
+    <ContractDialog
+      className="deposit-settle-modal contract-amend-modal"
+      label="แก้ไขสัญญา"
+      onClose={onClose}
+      locked={saving}
+      header={(close) => (
+        <header className="rent-bill-head">
+          <span className="rent-bill-icon deposit-settle-icon"><ContractIcon type="edit" size={20} /></span>
+          <div>
+            <strong>แก้ไขสัญญา · ฉบับแก้ไขครั้งที่ {nextVersion}</strong>
+            <small className="dsm-meta">
+              <span><ContractIcon type="home" size={13} />ห้อง {contract.room_number || '-'}</span>
+              {oldName && <span><ContractIcon type="user" size={13} />{oldName}</span>}
+            </small>
+          </div>
+          <DialogCloseButton onClick={close} />
+        </header>
+      )}
+    >
+      <form className="deposit-settle" onSubmit={submit}>
+        <div className="deposit-settle-body">
+          <div className="dsm-amend-law" role="note">
+            <span className="dsm-amend-law-icon" aria-hidden="true"><ContractIcon type="alert" size={16} /></span>
+            <span>
+              <strong>แก้ไขสัญญาตามกฎหมาย</strong>
+              <ul>
+                <li>ต้องได้รับความยินยอมจาก<b>ทั้งสองฝ่าย</b>และมีเอกสารลงนามเป็นลายลักษณ์อักษร</li>
+                <li>แก้ได้เฉพาะ<b>ชื่อผู้เช่า</b>และ<b>รูปสัญญา</b> · ค่าเช่า มัดจำ ระยะเวลา และห้อง แก้ที่นี่ไม่ได้ (ใช้ต่อสัญญาหรือย้ายห้อง)</li>
+                <li>ระบบเก็บสัญญาฉบับก่อนแก้ไขไว้เป็นประวัติ และแจ้งผู้เช่าทุกครั้ง</li>
+              </ul>
+            </span>
+          </div>
+
+          <section className="dsm-form">
+            <h4 className="dsm-section-title">
+              เหตุผลการแก้ไข
+              <span>เลือก 1 ข้อ</span>
+            </h4>
+            <div ref={reasonRef} tabIndex={-1} className={`dsm-reasons${invalidField === 'reason' ? ' is-invalid' : ''}`} role="radiogroup" aria-label="เหตุผลการแก้ไข">
+              {AMENDMENT_REASON_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={reason === option.key}
+                  className={reason === option.key ? 'is-active' : ''}
+                  onClick={() => {
+                    setReason(option.key)
+                    clearError()
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {reasonOption && <small className="dsm-reason-hint">{reasonOption.hint}</small>}
+            <div className={`dsm-field${invalidField === 'name' ? ' is-invalid' : ''}`}>
+              <label htmlFor="amend-first-name">
+                ชื่อ-นามสกุลผู้เช่า
+                {reasonOption?.name ? <em>แก้ไขชื่อ</em> : <span>ไม่บังคับ</span>}
+              </label>
+              <div className="dsm-name-row">
+                <input
+                  id="amend-first-name"
+                  ref={nameRef}
+                  className="dsm-text"
+                  value={firstName}
+                  maxLength={100}
+                  placeholder="ชื่อ"
+                  onChange={(event) => {
+                    setFirstName(event.target.value)
+                    clearError()
+                  }}
+                />
+                <input
+                  className="dsm-text"
+                  value={lastName}
+                  maxLength={100}
+                  placeholder="นามสกุล"
+                  aria-label="นามสกุล"
+                  onChange={(event) => {
+                    setLastName(event.target.value)
+                    clearError()
+                  }}
+                />
+              </div>
+            </div>
+            <div className={`dsm-field${invalidField === 'note' ? ' is-invalid' : ''}`}>
+              <label htmlFor="amend-note">
+                คอมเมนต์เหตุผลที่แก้ไข
+                <em>จำเป็น</em>
+              </label>
+              <textarea
+                id="amend-note"
+                ref={noteRef}
+                rows={3}
+                maxLength={500}
+                value={note}
+                placeholder="เช่น ผู้เช่าเปลี่ยนนามสกุลหลังแต่งงาน แนบใบเปลี่ยนชื่อสกุล (ช.3) และลงนามบันทึกแก้ไขสัญญาแล้ว"
+                onChange={(event) => {
+                  setNote(event.target.value)
+                  clearError()
+                }}
+              />
+              <small className="dsm-help">
+                {note.trim().length < AMENDMENT_NOTE_MIN ? `อย่างน้อย ${AMENDMENT_NOTE_MIN} ตัวอักษร · ผู้เช่าจะเห็นเหตุผลนี้` : 'ผู้เช่าจะเห็นเหตุผลนี้ในประวัติสัญญา'}
+                <b>{note.length}/500</b>
+              </small>
+            </div>
+          </section>
+
+          <section className={`dsm-form${invalidField === 'images' ? ' is-invalid' : ''}`} ref={imagesRef} tabIndex={-1}>
+            <h4 className="dsm-section-title">
+              รูปสัญญาฉบับแก้ไข
+              <span>ลงนามทั้งสองฝ่าย อย่างน้อย {AMENDMENT_MIN_IMAGES} รูป</span>
+            </h4>
+            <ContractImagePicker
+              files={files}
+              min={AMENDMENT_MIN_IMAGES}
+              onChange={(next) => {
+                setFiles(next)
+                clearError()
+              }}
+              error={invalidField === 'images' ? error : ''}
+            />
+          </section>
+
+          <section className="dsm-changes" aria-live="polite">
+            <h4 className="dsm-section-title">สรุปสิ่งที่จะเปลี่ยน</h4>
+            <dl>
+              <div>
+                <dt>ชื่อผู้เช่า</dt>
+                <dd>
+                  {nameChanged ? (
+                    <>
+                      <span className="is-before">{oldName}</span>
+                      <span className="is-arrow" aria-hidden="true">→</span>
+                      <span className="is-after">{newName || '-'}</span>
+                    </>
+                  ) : (
+                    <span className="is-same">ไม่เปลี่ยน</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>รูปสัญญา</dt>
+                <dd>
+                  <span className="is-before">ฉบับเดิม {currentImages} รูป</span>
+                  <span className="is-arrow" aria-hidden="true">→</span>
+                  <span className="is-after">ฉบับใหม่ {files.length} รูป</span>
+                </dd>
+              </div>
+              <div>
+                <dt>ฉบับก่อนแก้ไข</dt>
+                <dd><span className="is-same">เก็บไว้เป็นประวัติ ดูได้ทั้งเจ้าหน้าที่และผู้เช่า</span></dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+        {error && invalidField !== 'images' && <p className="deposit-settle-error" role="alert">{error}</p>}
+        <footer className="deposit-settle-foot">
+          <small>บันทึกแล้วแก้ย้อนไม่ได้ ต้องแก้เป็นฉบับใหม่อีกครั้ง</small>
+          <button type="button" className="deposit-settle-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
+          <button type="submit" className="deposit-settle-submit is-refund" disabled={saving}>
+            {saving ? 'กำลังบันทึก...' : `บันทึกฉบับแก้ไขครั้งที่ ${nextVersion}`}
+          </button>
+        </footer>
+      </form>
+    </ContractDialog>
+  )
+}
+
+export function ContractAmendmentNotice({ disabled = false }) {
+  const [amendments, setAmendments] = useState([])
+  const [roomNumber, setRoomNumber] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/customer/contract')
+      .then(({ data }) => {
+        if (cancelled) return
+        const pending = (data.contract?.amendments || []).filter((amendment) => !amendment.acknowledged_at)
+        setAmendments(pending.reverse())
+        setRoomNumber(data.contract?.room_number ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (disabled || dismissed || amendments.length === 0) return null
+  const latest = amendments[0]
+
+  const acknowledge = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await axios.post('/api/customer/contract/amendments/acknowledge', null)
+      setDismissed(true)
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'บันทึกการรับทราบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ContractDialog
+      className="deposit-settle-modal contract-amend-notice"
+      label="แจ้งการแก้ไขสัญญาเช่า"
+      onClose={() => setDismissed(true)}
+      locked={busy}
+      header={(close) => (
+        <header className="rent-bill-head">
+          <span className="rent-bill-icon deposit-settle-icon"><ContractIcon type="edit" size={20} /></span>
+          <div>
+            <strong>สัญญาเช่าของคุณถูกแก้ไข</strong>
+            <small className="dsm-meta">
+              {roomNumber && <span><ContractIcon type="home" size={13} />ห้อง {roomNumber}</span>}
+              <span><ContractIcon type="file" size={13} />{amendments.length > 1 ? `มีการแก้ไข ${amendments.length} ครั้งที่ยังไม่รับทราบ` : `ฉบับแก้ไขครั้งที่ ${latest.version_no}`}</span>
+            </small>
+          </div>
+          <DialogCloseButton onClick={close} />
+        </header>
+      )}
+    >
+      <div className="deposit-settle">
+        <div className="deposit-settle-body">
+          <div className="deposit-settle-rule" role="note">
+            <span className="deposit-settle-rule-icon" aria-hidden="true"><ContractIcon type="check" size={16} /></span>
+            <span>
+              <strong>แก้ไขโดยความยินยอมของทั้งสองฝ่าย</strong>
+              <small>มีเอกสารลงนามแนบไว้ทุกครั้ง ฉบับก่อนแก้ไขยังเก็บไว้ ดูย้อนหลังได้ที่เมนูสัญญาเช่า → ประวัติการแก้ไขสัญญา</small>
+            </span>
+          </div>
+          <section className="contract-transfers contract-amendments">
+            <ol>
+              {amendments.map((amendment) => (
+                <ContractAmendmentEntry key={amendment.id} amendment={amendment} viewer="customer" />
+              ))}
+            </ol>
+          </section>
+        </div>
+        {error && <p className="deposit-settle-error" role="alert">{error}</p>}
+        <footer className="deposit-settle-foot">
+          <small>กดรับทราบเพื่อยืนยันว่าคุณได้อ่านการแก้ไขสัญญานี้แล้ว</small>
+          <button type="button" className="deposit-settle-cancel" onClick={() => setDismissed(true)} disabled={busy}>ไว้ทีหลัง</button>
+          <button type="button" className="deposit-settle-submit is-refund" onClick={acknowledge} disabled={busy}>
+            {busy ? 'กำลังบันทึก...' : 'รับทราบการแก้ไข'}
+          </button>
+        </footer>
+      </div>
+    </ContractDialog>
+  )
+}
+
+export function ContractAmendCard({ contract, onSaved }) {
+  const [open, setOpen] = useState(false)
+  if (!contract || contract.is_archived) return null
+  return (
+    <div className="contract-amend-card">
+      <span className="contract-amend-card-icon"><ContractIcon type="edit" size={18} /></span>
+      <div>
+        <strong>แก้ไขสัญญา</strong>
+        <small>แก้ชื่อผู้เช่าหรือรูปสัญญา · ต้องมีเอกสารลงนามทั้งสองฝ่าย · ฉบับเดิมเก็บไว้เป็นประวัติ</small>
+      </div>
+      <button type="button" onClick={() => setOpen(true)}>แก้ไขสัญญา</button>
+      {open && (
+        <ContractAmendmentModal
+          contract={contract}
+          onClose={() => setOpen(false)}
+          onSaved={(updated) => {
+            setOpen(false)
+            onSaved(updated)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 const SUMMARY_CARD_ICONS = {
   wallet: <><rect x="3" y="6" width="18" height="13" rx="2.5" /><path d="M3 10h18M16 14.5h2" /></>,
   home: <><path d="M4 11l8-6 8 6" /><path d="M6 10v9h12v-9" /><path d="M10 19v-5h4v5" /></>,
@@ -3088,7 +3706,7 @@ function CustomerContractBody({ contract, viewer = 'customer', section = 'all' }
     { label: 'ค่าเช่า/เดือน', value: formatContractMoney(contract.monthly_price), tone: transferred ? 'is-accent' : undefined },
     {
       label: 'เงินมัดจำ',
-      value: formatDepositSummary(contract),
+      value: <DepositSummary contract={contract} />,
     },
     ...(contract.deposit_transfer_adjusted || Number(contract.deposit_transfer_deducted) > 0
       ? [
@@ -3113,6 +3731,7 @@ function CustomerContractBody({ contract, viewer = 'customer', section = 'all' }
   const showImages = section === 'all' || section === 'images'
 
   if (section === 'history') return <ContractTransferTimeline contract={contract} viewer={viewer} />
+  if (section === 'amendments') return <ContractAmendmentList contract={contract} viewer={viewer} />
 
   return (
     <>
@@ -3155,6 +3774,7 @@ function CustomerContractBody({ contract, viewer = 'customer', section = 'all' }
             ))}
           </dl>
           </>}
+          {section === 'all' && <ContractAmendmentHistory contract={contract} viewer={viewer} />}
           {section === 'all' && <ContractTransferHistory contract={contract} viewer={viewer} />}
           {showPayments && <div className={`ccc-bill${section === 'payments' ? ' ccc-bill-focused' : ''}`}>
             <h3>

@@ -7,7 +7,7 @@ export const ISOLATED_SERVICES = new Set(["market"]);
 
 export const TABLES_BY_SERVICE = {
   room: ["Room", "RoomType", "RoomWifi", "RoomWifiDevice"],
-  auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage", "RoomTransfer"],
+  auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage", "RoomTransfer", "ContractAmendment"],
   customer: ["TenantRequest", "ParkingSpace", "ResidentVisitRequest", "SafetyIncident"],
   maintenance: ["MaintenanceRequest", "MaintenancePhoto", "RepairVendor", "RepairVendorApiKey", "RepairJob", "RepairVendorImage"],
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],

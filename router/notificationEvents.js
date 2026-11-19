@@ -289,6 +289,23 @@ export const depositSettled = ({ bookingId, customerId, roomNumber, action, refu
   ], db);
 });
 
+export const contractAmended = ({ bookingId, customerId, roomNumber, versionNo, reasonLabel, summary }, actor) => safely("contractAmended", async (db) => {
+  await notify([
+    notifyCustomer(customerId, {
+      type: "contract_amended", tone: "info", target: "contract", refTable: "Booking", refId: bookingId,
+      title: `สัญญาเช่าถูกแก้ไข (ครั้งที่ ${versionNo})`,
+      message: `${reasonLabel} · ${summary}`, detail: "ฉบับก่อนแก้ไขยังเก็บไว้เป็นประวัติ ดูได้ที่เมนูสัญญาเช่าของฉัน", actor,
+      dedupeKey: `contract-amended-${bookingId}-${versionNo}`,
+    }),
+    notifyStaffSide({
+      type: "contract_amended", tone: "info", target: "contracts", refTable: "Booking", refId: bookingId,
+      title: `แก้ไขสัญญา${roomNumber ? ` ห้อง ${roomNumber}` : ""} (ครั้งที่ ${versionNo})`,
+      message: `${reasonLabel}${byActor(actor)}`, detail: summary, actor,
+      dedupeKey: `contract-amended-staff-${bookingId}-${versionNo}`,
+    }),
+  ], db);
+});
+
 export const transferContractAttached = (transferId, actor) => safely("transferContractAttached", async (db) => {
   const [[transfer]] = await db.query("SELECT customer_id, from_room_number, to_room_number FROM RoomTransfer WHERE id = ?", [transferId]);
   if (!transfer) return;

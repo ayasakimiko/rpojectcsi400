@@ -1458,6 +1458,19 @@ router.get("/requests/:id/transfer-impact", async (req, res) => {
   }
 });
 
+router.post("/contract/amendments/acknowledge", async (req, res) => {
+  try {
+    const [result] = await getPool().query(
+      "UPDATE ContractAmendment SET acknowledged_at = NOW() WHERE customer_id = ? AND acknowledged_at IS NULL",
+      [req.user.id],
+    );
+    return res.json({ message: "รับทราบการแก้ไขสัญญาแล้ว", acknowledged: result.affectedRows });
+  } catch (error) {
+    console.error("Acknowledge contract amendments error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดของระบบ กรุณาลองใหม่อีกครั้ง" });
+  }
+});
+
 router.post("/announcements/:id/acknowledge", async (req, res) => {
   try {
     const announcementId = Number(req.params.id);

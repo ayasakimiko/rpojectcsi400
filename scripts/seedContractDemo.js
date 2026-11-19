@@ -258,6 +258,8 @@ async function clean(db) {
   if (bookingIds.length) {
     await db.query("DELETE FROM DepositSettlementLog WHERE booking_id IN (?)", [bookingIds]);
     await db.query("DELETE FROM Payment WHERE booking_id IN (?)", [bookingIds]);
+    await db.query("DELETE FROM ContractAmendment WHERE booking_id IN (?)", [bookingIds]);
+    await db.query("DELETE FROM ContractImage WHERE booking_id IN (?)", [bookingIds]);
   }
   if (requests.length) await db.query("DELETE FROM MoveOutInspection WHERE tenant_request_id IN (?)", [requests.map((row) => row.id)]);
   await db.query("DELETE FROM TenantRequest WHERE customer_id IN (?)", [customerIds]);

@@ -293,6 +293,45 @@ PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
 
+CREATE TABLE IF NOT EXISTS ContractAmendment (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    booking_id INT NOT NULL,
+    customer_id INT UNSIGNED NOT NULL,
+    version_no INT UNSIGNED NOT NULL,
+    reason VARCHAR(30) NOT NULL,
+    changes TEXT NOT NULL,
+    note VARCHAR(500) NOT NULL,
+    amended_by_name VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_contract_amendment_version (booking_id, version_no),
+    INDEX idx_contract_amendment_customer (customer_id, id)
+);
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ContractImage' AND COLUMN_NAME = 'amendment_id'),
+    'SELECT 1',
+    'ALTER TABLE `ContractImage`
+       ADD COLUMN `amendment_id` INT UNSIGNED NULL AFTER replaced_by_transfer_id,
+       ADD COLUMN `replaced_by_amendment_id` INT UNSIGNED NULL AFTER amendment_id,
+       ADD INDEX `idx_contract_image_amendment` (amendment_id),
+       ADD INDEX `idx_contract_image_replaced_by_amendment` (replaced_by_amendment_id)'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ContractAmendment' AND COLUMN_NAME = 'acknowledged_at'),
+    'SELECT 1',
+    'ALTER TABLE `ContractAmendment` ADD COLUMN `acknowledged_at` DATETIME NULL AFTER amended_by_name'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
 SET @schema_upgrade_sql = IF(
     EXISTS (SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Booking' AND INDEX_NAME = 'idx_booking_contract_completed'),

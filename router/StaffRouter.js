@@ -97,6 +97,15 @@ import { loadMoveInBaseline, loadMoveOutBaseline, parseMoveInInspectionRow } fro
 import { loadRoomsWithDue } from "./roomDue.js";
 import { actorOf } from "../middleware/notifications.js";
 import {
+  AMENDMENT_REASONS,
+  amendmentSummary,
+  applyContractAmendment,
+  ContractAmendmentError,
+  parseAmendmentImages,
+  parseAmendmentInput,
+} from "./contractAmendments.js";
+import {
+  contractAmended,
   depositSettled,
   maintenanceUpdated,
   moveInInspectionSaved,
@@ -291,6 +300,53 @@ router.post("/contracts/:bookingId/deposit-settlement", async (req, res) => {
   } catch (error) {
     console.error("Settle deposit error:", error);
     return res.status(500).json({ message: "ไม่สามารถบันทึกการคืนเงินมัดจำได้" });
+  }
+});
+
+router.post("/contracts/:bookingId/amendments", parseAmendmentImages, async (req, res) => {
+  const files = req.files ?? [];
+  let kept = false;
+  let connection;
+  try {
+    const bookingId = Number(req.params.bookingId);
+    if (!isPositiveId(bookingId)) return res.status(400).json({ message: "รหัสสัญญาไม่ถูกต้อง" });
+    const pool = getPool();
+    const contract = await loadContractByBooking(pool, bookingId);
+    if (!contract) return res.status(404).json({ message: "ไม่พบสัญญานี้" });
+    if (contract.is_archived) return res.status(409).json({ message: "สัญญาที่สิ้นสุดแล้วแก้ไขไม่ได้ เก็บไว้เป็นประวัติเท่านั้น" });
+    const { error, value } = parseAmendmentInput(req.body ?? {}, contract);
+    if (error) return res.status(400).json({ message: error });
+
+    const staffName = await getActingStaffName(pool, req.user);
+    await moveContractFiles(files, contract.customer_id);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const result = await applyContractAmendment(connection, {
+      bookingId,
+      input: value,
+      images: files.map((file, index) => ({ name: contractImageName(file, index), url: contractImageUrl(file) })),
+      staffName: staffName || req.user.role,
+    });
+    await connection.commit();
+    kept = true;
+    await contractAmended({
+      bookingId,
+      customerId: contract.customer_id,
+      roomNumber: contract.room_number,
+      versionNo: result.versionNo,
+      reasonLabel: AMENDMENT_REASONS[value.reason],
+      summary: amendmentSummary(result.changes),
+    }, actorOf(req.user, staffName));
+    const [updated] = await withThisMonthRent(pool, [await loadContractByBooking(pool, bookingId)]);
+    return res.json({ message: `แก้ไขสัญญาครั้งที่ ${result.versionNo} เรียบร้อยแล้ว · เก็บฉบับเดิมไว้เป็นประวัติ`, contract: updated });
+  } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
+    if (error instanceof ContractAmendmentError) return res.status(error.status).json({ message: error.message });
+    console.error("Contract amendment error:", error);
+    return res.status(500).json({ message: "ไม่สามารถแก้ไขสัญญาได้" });
+  } finally {
+    connection?.release();
+    if (!kept && files.length) await removeContractFiles(files);
   }
 });
 

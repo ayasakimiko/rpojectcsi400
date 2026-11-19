@@ -23,7 +23,7 @@ export function getActingAdminName(pool, user) {
 export const requireActiveStaff = createRequireActiveAccount(getPool);
 
 const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const UNPAID_ALLOWED_WRITES = /\/(payments\/confirm|profile|dorm-info\/acknowledge|announcements\/\d+\/acknowledge)$/;
+const UNPAID_ALLOWED_WRITES = /\/(payments\/confirm|profile|dorm-info\/acknowledge|announcements\/\d+\/acknowledge|contract\/amendments\/acknowledge)$/;
 
 export async function requireActiveCustomer(req, res, next) {
   try {

@@ -13,7 +13,7 @@ import './css/Login.css'
 import './css/CustomerDashbord.css'
 import AnnouncementBoard from '../components/AnnouncementBoard.jsx'
 import PhotoLightbox from '../components/PhotoLightbox.jsx'
-import { CustomerContractPanel } from '../components/RentalContract.jsx'
+import { ContractAmendmentNotice, CustomerContractPanel } from '../components/RentalContract.jsx'
 import { CustomerWifiCard } from '../components/WifiManager.jsx'
 import UtilityUsageChart from '../components/UtilityUsageChart.jsx'
 import RoomTransferFinance from '../components/RoomTransferFinance.jsx'
@@ -1341,8 +1341,8 @@ function RenewContractPreview({ room, months, depositAmount }) {
         <li>ช่วงที่ต่อชำระค่าเช่ารายเดือนตามปกติ ฿{formatCurrency(price)}/เดือน ไม่มีค่าใช้จ่ายเพิ่มตอนต่อสัญญา</li>
         {deposit > 0 ? (
           <li className="is-deposit">
-            เงินมัดจำ ฿{formatCurrency(deposit)} ยังอยู่กับหอพัก ไม่ต้องจ่ายเพิ่ม และจะคืนให้เมื่อพักครบถึง {formatDate(newEnd)}
-            {' '}— หากย้ายออกก่อนวันดังกล่าว จะไม่ได้รับเงินมัดจำคืน
+            เงินมัดจำ ฿{formatCurrency(deposit)} ยังอยู่กับหอพัก ไม่ต้องจ่ายเพิ่ม
+            {' '}— คืนให้เมื่อย้ายออก หักได้เฉพาะค่าเสียหายหรือยอดค้างที่มีหลักฐาน
           </li>
         ) : (
           <li>สัญญานี้ไม่มีเงินมัดจำ</li>
@@ -9090,6 +9090,8 @@ function CustomerDashbord() {
           onAcknowledge={acknowledgeAnnouncement}
         />
       )}
+
+      <ContractAmendmentNotice disabled={needsDormInfoAck || contractLocked || pendingAlerts.length > 0} />
 
       {receiptRequest && (
         <div style={{ position: 'fixed', top: 0, left: -10000, zIndex: -1 }}>

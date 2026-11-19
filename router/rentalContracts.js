@@ -341,9 +341,9 @@ async function attachContractImages(pool, contracts, now) {
   if (contracts.length === 0) return [];
   const bookingIds = contracts.map((contract) => contract.booking_id);
   const customerIds = [...new Set(contracts.map((contract) => contract.customer_id))];
-  const [[images], [paymentRows], [transferRows]] = await Promise.all([
+  const [[images], [paymentRows], [transferRows], [amendmentRows]] = await Promise.all([
     pool.query(
-      `SELECT booking_id, name, url, replaced_at, replaced_by_transfer_id, room_transfer_id
+      `SELECT booking_id, name, url, replaced_at, replaced_by_transfer_id, room_transfer_id, amendment_id, replaced_by_amendment_id
        FROM ContractImage WHERE booking_id IN (?) ORDER BY id ASC`,
       [bookingIds],
     ),
@@ -361,6 +361,11 @@ async function attachContractImages(pool, contracts, now) {
        WHERE rt.customer_id IN (?) ORDER BY rt.id ASC`,
       [customerIds],
     ),
+    pool.query(
+      `SELECT id, booking_id, version_no, reason, changes, note, amended_by_name, acknowledged_at, created_at
+       FROM ContractAmendment WHERE booking_id IN (?) ORDER BY version_no ASC`,
+      [bookingIds],
+    ),
   ]);
   const paymentsByCustomer = new Map();
   for (const payment of paymentRows) {
@@ -374,14 +379,40 @@ async function attachContractImages(pool, contracts, now) {
   const replacedImagesByTransfer = new Map();
   const newImagesByTransfer = new Map();
   const pushTo = (map, key, value) => map.set(key, [...(map.get(key) ?? []), value]);
-  for (const { booking_id, name, url, replaced_at, replaced_by_transfer_id, room_transfer_id } of images) {
+  const replacedImagesByAmendment = new Map();
+  const newImagesByAmendment = new Map();
+  for (const image of images) {
+    const { booking_id, name, url, replaced_at, replaced_by_transfer_id, room_transfer_id, amendment_id, replaced_by_amendment_id } = image;
     if (!replaced_at) pushTo(imagesByBooking, booking_id, { name, url });
     if (replaced_by_transfer_id) pushTo(replacedImagesByTransfer, replaced_by_transfer_id, { name, url });
     if (room_transfer_id) pushTo(newImagesByTransfer, room_transfer_id, { name, url });
+    if (replaced_by_amendment_id) pushTo(replacedImagesByAmendment, replaced_by_amendment_id, { name, url });
+    if (amendment_id) pushTo(newImagesByAmendment, amendment_id, { name, url });
   }
   for (const transfer of transferRows) {
     transfer.previous_images = replacedImagesByTransfer.get(transfer.id) ?? [];
     transfer.new_images = newImagesByTransfer.get(transfer.id) ?? [];
+  }
+  const amendmentsByBooking = new Map();
+  for (const amendment of amendmentRows) {
+    let changes;
+    try {
+      changes = JSON.parse(amendment.changes);
+    } catch {
+      changes = [];
+    }
+    pushTo(amendmentsByBooking, amendment.booking_id, {
+      id: amendment.id,
+      version_no: Number(amendment.version_no),
+      reason: amendment.reason,
+      changes,
+      note: amendment.note,
+      amended_by_name: amendment.amended_by_name,
+      acknowledged_at: amendment.acknowledged_at,
+      created_at: amendment.created_at,
+      previous_images: replacedImagesByAmendment.get(amendment.id) ?? [],
+      new_images: newImagesByAmendment.get(amendment.id) ?? [],
+    });
   }
   return contracts.map((row) => {
     const deposit = { paidCents: 0, pending: false };
@@ -408,8 +439,11 @@ async function attachContractImages(pool, contracts, now) {
     const contract = withDepositBreakdown(row, now, rentPaidCents, deposit, rentPending, transfers);
     const contractImages = imagesByBooking.get(row.booking_id) ?? [];
     const damageExcessCents = Math.max(0, toCents(row.moveout_damage_cost) - toCents(contract.deposit_remaining));
+    const amendments = amendmentsByBooking.get(row.booking_id) ?? [];
     return {
       ...contract,
+      amendments,
+      amendment_count: amendments.length,
       duration_selected: Boolean(row.duration_selected),
       images: contractImages,
       image_count: contractImages.length,
