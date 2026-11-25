@@ -151,3 +151,26 @@ export const repairKeyChanged = (db, vendor, actor, kind) => safely("repairKeyCh
     title, message: `${vendor.name}${byActor(actor)}`, actor,
   }), db);
 });
+
+// repair contracts are between the dorm and the vendor: staff side and owner only, never the tenant
+const CONTRACT_NOTICE = {
+  submitted: { tone: "pending", title: "ช่างส่งสัญญาซ่อมรออนุมัติ", owner: true },
+  revised: { tone: "pending", title: "ช่างแก้ไขสัญญาซ่อม รออนุมัติอีกครั้ง", owner: true },
+  cancelled: { tone: "info", title: "ช่างยกเลิกสัญญาซ่อม", owner: true },
+  approved: { tone: "success", title: "อนุมัติสัญญาซ่อมแล้ว", owner: true },
+  rejected: { tone: "danger", title: "ไม่อนุมัติสัญญาซ่อม", owner: true },
+};
+
+const bahtText = (value) => `฿${Number(value).toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+export const repairContractChanged = (db, job, contract, actor, kind) => safely("repairContractChanged", async () => {
+  const info = CONTRACT_NOTICE[kind];
+  if (!info || !job) return;
+  const summary = `สัญญา ${contract.contract_no} ห้อง ${job.room_number} · ${bahtText(contract.total_amount)}`;
+  const vendorPart = ["submitted", "revised", "cancelled"].includes(kind) ? ` · ${job.vendor_name}` : byActor(actor);
+  const detail = kind === "cancelled" ? contract.cancel_reason
+    : kind === "rejected" ? contract.decision_note
+      : `${contract.start_date} ถึง ${contract.end_date} · ค่าแรง ${bahtText(contract.labor_amount)} · วัสดุ ${bahtText(contract.material_amount)}`;
+  const item = { type: `repair_contract_${kind}`, tone: info.tone, refId: job.id, title: info.title, message: `${summary}${vendorPart}`, detail, actor };
+  await notify([forOperators(item), info.owner && forOwner(item)], db);
+});

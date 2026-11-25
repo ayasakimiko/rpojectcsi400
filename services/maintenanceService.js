@@ -14,6 +14,7 @@ import repairVendorRouter from "../router/RepairVendorRouter.js";
 import repairVendorApiRouter from "../router/RepairVendorApiRouter.js";
 import { RepairError } from "../router/repairVendorShared.js";
 import { repairPartnerWebhook } from "../router/RepairPartnerWebhook.js";
+import { CONTRACT_JSON_LIMIT } from "../router/repairContracts.js";
 import { domainRouter } from "./domainRoutes.js";
 
 configureDatabaseService("maintenance");
@@ -28,7 +29,12 @@ const isPartnerApi = (url) => url.startsWith(REPAIR_API_PREFIX) || url.startsWit
 app.set("trust proxy", "loopback, uniquelocal");
 // raw body: X-Signature is an HMAC of the exact bytes the partner sent
 app.post(`${REPAIR_WEBHOOK_PREFIX}/renocare/:ref`, express.raw({ type: () => true, limit: "64kb" }), repairPartnerWebhook);
-app.use(REPAIR_API_PREFIX, repairApiCors, express.json({ limit: "64kb" }), authenticateRepairApiKey, repairVendorApiRouter);
+// key check runs before the body is read, so only authenticated vendors can send large contract bodies
+const vendorJson = express.json({ limit: "64kb" });
+const contractJson = express.json({ limit: CONTRACT_JSON_LIMIT });
+const CONTRACT_PUT = /^\/jobs\/[^/]+\/contracts\/[^/]+\/?$/;
+const vendorBody = (req, res, next) => (req.method === "PUT" && CONTRACT_PUT.test(req.path) ? contractJson : vendorJson)(req, res, next);
+app.use(REPAIR_API_PREFIX, repairApiCors, authenticateRepairApiKey, vendorBody, repairVendorApiRouter);
 
 app.use(createCorsMiddleware());
 app.use(express.json({ limit: "12mb" }));
@@ -50,6 +56,9 @@ app.use((error, req, res, next) => {
   const vendorApi = isPartnerApi(req.originalUrl);
   if (error instanceof RepairError) {
     return vendorApi ? sendApiError(res, error.status, error.code, error.message) : res.status(error.status).json({ message: error.message, code: error.code });
+  }
+  if (vendorApi && error.type === "entity.too.large") {
+    return sendApiError(res, 413, "PAYLOAD_TOO_LARGE", `ข้อมูลใหญ่เกินไป (PUT สัญญารับได้ไม่เกิน ${CONTRACT_JSON_LIMIT} ไฟล์ใหญ่ให้ส่งแยกผ่าน POST .../files)`);
   }
   if (error.type === "entity.parse.failed" || error.type === "entity.too.large") {
     return vendorApi

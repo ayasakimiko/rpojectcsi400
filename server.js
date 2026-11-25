@@ -57,7 +57,11 @@ function proxy(req, res, target) {
   });
 
   proxyReq.on("response", (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, stripHopByHop(proxyRes.headers));
+    const headers = stripHopByHop(proxyRes.headers);
+    // the service answered before the client finished uploading (e.g. 413 for an oversized body):
+    // close this socket, otherwise the unread body bytes are parsed as the next request and it hangs
+    if (!req.complete) headers.connection = "close";
+    res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, headers);
     proxyRes.pipe(res);
   });
   proxyReq.on("timeout", () => proxyReq.destroy(Object.assign(new Error("Upstream timeout"), { code: "ETIMEDOUT" })));

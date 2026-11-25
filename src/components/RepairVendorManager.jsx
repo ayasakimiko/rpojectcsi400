@@ -23,6 +23,10 @@ import {
   REPAIR_GUIDE_VERSION,
   downloadRepairGuideDocx,
   PARTNER_EXCHANGE,
+  REPAIR_CONTRACT_DECIDED_SAMPLE,
+  REPAIR_CONTRACT_FIELDS,
+  REPAIR_CONTRACT_SAMPLE,
+  REPAIR_CONTRACT_STATUSES,
   PARTNER_INBOUND_FIELDS,
   PARTNER_INBOUND_RESPONSES,
   PARTNER_INBOUND_SAMPLE,
@@ -1739,6 +1743,177 @@ function JobEditModal({ job, onClose, onSaved }) {
   )
 }
 
+const CONTRACT_STATUS = {
+  pending: { label: 'รออนุมัติ', tone: 'warning' },
+  approved: { label: 'อนุมัติแล้ว', tone: 'success' },
+  rejected: { label: 'ไม่อนุมัติ', tone: 'danger' },
+  cancelled: { label: 'ช่างยกเลิก', tone: 'muted' },
+}
+const BILLING_UNIT = { daily: 'วัน', monthly: 'เดือน' }
+const fileSize = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`)
+
+function ContractFileLink({ file }) {
+  const [state, setState] = useState('')
+  const open = async () => {
+    // open the tab synchronously so the popup blocker allows it, then point it at the blob
+    const tab = window.open('', '_blank')
+    setState('loading')
+    try {
+      const { data } = await axios.get(`${API_BASE}/contract-files/${file.file_id}`, { responseType: 'blob' })
+      const url = URL.createObjectURL(data)
+      if (tab) tab.location.href = url
+      else window.location.assign(url)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setState('')
+    } catch {
+      tab?.close()
+      setState('error')
+    }
+  }
+  return (
+    <button type="button" className="repair-contract-file" onClick={open} disabled={state === 'loading'}>
+      <Icon name={file.mime_type === 'application/pdf' ? 'contract' : 'image'} size={15} />
+      <span>{file.file_name}</span>
+      <small>{state === 'loading' ? 'กำลังเปิด...' : state === 'error' ? 'เปิดไม่สำเร็จ' : fileSize(file.size_bytes)}</small>
+    </button>
+  )
+}
+
+function ContractCard({ contract, onDecide }) {
+  const status = CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.pending
+  return (
+    <article className={`repair-contract is-${contract.status}`}>
+      <header className="repair-contract-head">
+        <div>
+          <strong>สัญญา {contract.contract_no}</strong>
+          <small>
+            {contract.contract_type === 'addendum' ? `สัญญาเพิ่มเติมของ ${contract.parent_contract_no}` : 'สัญญาหลัก'}
+            {contract.revision > 1 && ` · แก้ไขครั้งที่ ${contract.revision - 1}`}
+            {' · '}ส่งเมื่อ {thaiDateTime(contract.submitted_at)}
+          </small>
+        </div>
+        <Pill tone={status.tone}>{status.label}</Pill>
+      </header>
+
+      <div className="repair-contract-money">
+        <span className="is-total"><small>ยอดรวม</small><strong>฿{money(contract.total_amount)}</strong></span>
+        <span><small>ค่าแรง</small><strong>฿{money(contract.labor_amount)}</strong><em>฿{money(contract.rate)} × {contract.period_qty} {BILLING_UNIT[contract.billing_type]}</em></span>
+        <span><small>ค่าวัสดุ</small><strong>฿{money(contract.material_amount)}</strong><em>{contract.items.length} รายการ</em></span>
+        <span><small>ระยะเวลา</small><strong>{thaiDate(contract.start_date)}</strong><em>ถึง {thaiDate(contract.end_date)}</em></span>
+      </div>
+
+      {contract.items.length > 0 && (
+        <div className="repair-contract-table" role="table" aria-label={`รายการวัสดุ สัญญา ${contract.contract_no}`}>
+          <div role="row" className="is-head"><span role="columnheader">รายการวัสดุ</span><span role="columnheader">จำนวน</span><span role="columnheader">ราคา/หน่วย</span><span role="columnheader">รวม</span></div>
+          {contract.items.map((item, index) => (
+            <div role="row" key={index}>
+              <span role="cell">{item.description}</span>
+              <span role="cell">{money(item.qty)} {item.unit}</span>
+              <span role="cell">฿{money(item.unit_price)}</span>
+              <span role="cell">฿{money(item.line_total)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {contract.installments.length > 0 && (
+        <div className="repair-contract-table is-installments" role="table" aria-label={`งวดชำระ สัญญา ${contract.contract_no}`}>
+          <div role="row" className="is-head"><span role="columnheader">งวดชำระ</span><span role="columnheader">กำหนด</span><span role="columnheader">จำนวนเงิน</span></div>
+          {contract.installments.map((row) => (
+            <div role="row" key={row.no}>
+              <span role="cell">{row.no}. {row.description}</span>
+              <span role="cell">{row.due_date ? thaiDate(row.due_date) : '-'}</span>
+              <span role="cell">฿{money(row.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {contract.terms && <p className="repair-contract-terms"><strong>เงื่อนไข:</strong> {contract.terms}</p>}
+
+      {contract.files.length > 0 && (
+        <div className="repair-contract-files">
+          {contract.files.map((file) => <ContractFileLink key={file.file_id} file={file} />)}
+        </div>
+      )}
+
+      {contract.status === 'pending' ? (
+        <div className="repair-contract-actions">
+          <button type="button" className="market-btn is-danger-ghost" onClick={() => onDecide(contract, 'rejected')}><Icon name="alert" size={14} /> ไม่อนุมัติ</button>
+          <button type="button" className="market-btn is-primary" onClick={() => onDecide(contract, 'approved')}><Icon name="check" size={14} /> อนุมัติสัญญา</button>
+        </div>
+      ) : (
+        <p className={`repair-contract-decision is-${contract.status}`}>
+          {contract.status === 'cancelled'
+            ? <>ช่างยกเลิกเมื่อ {thaiDateTime(contract.cancelled_at)}{contract.cancel_reason && <> · {contract.cancel_reason}</>}</>
+            : <>{status.label}โดย {contract.decided_by_name} · {thaiDateTime(contract.decided_at)}{contract.decision_note && <> · {contract.decision_note}</>}</>}
+        </p>
+      )}
+    </article>
+  )
+}
+
+/** quotes the vendor submitted for this job; staff and the owner approve or reject them */
+function JobContracts({ job, onChanged }) {
+  const [state, setState] = useState({ loading: true, error: '', contracts: [] })
+  const [dialog, setDialog] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    axios.get(`${API_BASE}/jobs/${job.id}/contracts`)
+      .then(({ data }) => {
+        if (active) setState({ loading: false, error: '', contracts: data.contracts })
+      })
+      .catch((error) => {
+        if (active) setState({ loading: false, error: errorMessage(error, 'โหลดสัญญาจากช่างไม่สำเร็จ'), contracts: [] })
+      })
+    return () => {
+      active = false
+    }
+  }, [job.id, reloadKey])
+
+  if (state.loading) return null
+  if (!state.error && state.contracts.length === 0) return null
+  const pending = state.contracts.filter((contract) => contract.status === 'pending').length
+
+  return (
+    <section className="market-section repair-contracts">
+      <div className="market-section-head">
+        <h4><span className="market-section-icon"><Icon name="contract" size={15} /></span> สัญญาจากช่าง <span className="market-count">{state.contracts.length}</span></h4>
+        {pending > 0 && <Pill tone="warning">รออนุมัติ {pending} ฉบับ</Pill>}
+      </div>
+      {state.error && <p className="market-error" role="alert">{state.error}</p>}
+      <div className="repair-contract-list">
+        {[...state.contracts].reverse().map((contract) => (
+          <ContractCard key={contract.id} contract={contract} onDecide={(target, decision) => setDialog({ contract: target, decision })} />
+        ))}
+      </div>
+      {dialog && (
+        <ConfirmModal
+          title={dialog.decision === 'approved' ? `อนุมัติสัญญา ${dialog.contract.contract_no}` : `ไม่อนุมัติสัญญา ${dialog.contract.contract_no}`}
+          message={dialog.decision === 'approved'
+            ? `ยอดรวม ฿${money(dialog.contract.total_amount)} หลังอนุมัติแล้ว ช่างจะเริ่มงานได้ และแก้ไขสัญญานี้ไม่ได้อีก`
+            : 'ช่างจะเห็นเหตุผลนี้ และต้องออกสัญญาเลขใหม่หากจะเสนอราคาอีกครั้ง'}
+          tone={dialog.decision === 'approved' ? 'success' : 'danger'}
+          icon={dialog.decision === 'approved' ? 'check' : 'alert'}
+          submitLabel={dialog.decision === 'approved' ? 'อนุมัติสัญญา' : 'ไม่อนุมัติ'}
+          reasonLabel={dialog.decision === 'rejected' ? 'เหตุผลที่ไม่อนุมัติ *' : undefined}
+          onClose={() => setDialog(null)}
+          onConfirm={async (reason) => {
+            const response = await axios.post(`${API_BASE}/contracts/${dialog.contract.id}/decision`, {
+              decision: dialog.decision, ...(reason ? { note: reason } : {}),
+            })
+            setReloadKey((value) => value + 1)
+            onChanged?.(response.data.message)
+            return response
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
 function JobDetailModal({ job, onClose, onChanged }) {
   const [dialog, setDialog] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -1808,6 +1983,8 @@ function JobDetailModal({ job, onClose, onChanged }) {
             <strong>{job.cancel_reason ? 'เหตุผลที่ยกเลิก' : 'ข้อความจากช่าง'}:</strong> {job.cancel_reason || job.vendor_note}
           </p>
         )}
+
+        <JobContracts job={job} onChanged={onChanged} />
 
         <div className="repair-detail-columns">
           <section className="market-section">
@@ -1911,6 +2088,9 @@ function JobCard({ job, onOpen, onCancel }) {
         <JobStatusPill status={job.status} />
       </div>
       <p className="repair-job-desc" title={job.description}>{job.description}</p>
+      {Number(job.pending_contracts) > 0 && (
+        <p className="repair-contract-flag"><Icon name="contract" size={13} /> ช่างส่งสัญญารออนุมัติ {job.pending_contracts} ฉบับ</p>
+      )}
       <JobProgress job={job} />
       <div className="market-lease-figures">
         <span><small>ช่างที่เข้าซ่อม</small><strong>{job.technician_name || '-'}</strong></span>
@@ -2183,6 +2363,18 @@ function GuidePrintDocument({ base, nodeRef }) {
       <h2>7. Webhook (ไม่บังคับ)</h2>
       <p>ถ้าหอพักตั้ง Webhook URL ให้ เมื่อหอพักส่งงาน แก้ไขงาน หรือยกเลิกงาน ระบบจะ POST JSON ไปที่ URL นั้น พร้อม header X-Repair-Event: job.created, job.updated หรือ job.cancelled ต้องตอบ HTTP 2xx ภายใน 5 วินาที แล้วยืนยันข้อมูลอีกครั้งด้วย GET /jobs/:id</p>
       <pre><code>{REPAIR_WEBHOOK_SAMPLE}</code></pre>
+      <h2>7.1 สัญญาซ่อม</h2>
+      <p>ส่งด้วย PUT /jobs/:id/contracts/:contract_no หอพักอนุมัติหรือไม่อนุมัติ ช่างดึงผลด้วย GET /contracts?updated_since= หรือรับ webhook contract.decided</p>
+      <table>
+        <thead><tr><th>status</th><th>ความหมาย</th><th>เปลี่ยนโดย</th><th>ไปต่อได้</th></tr></thead>
+        <tbody>{REPAIR_CONTRACT_STATUSES.map((row) => <tr key={row.status}><td><code>{row.status}</code></td><td>{row.label}</td><td>{row.by}</td><td>{row.next}</td></tr>)}</tbody>
+      </table>
+      <table>
+        <thead><tr><th>ฟิลด์</th><th>ชนิดข้อมูล</th><th>กติกา</th></tr></thead>
+        <tbody>{REPAIR_CONTRACT_FIELDS.map((row) => <tr key={row.name}><td><code>{row.name}</code></td><td>{row.type}</td><td>{row.note}</td></tr>)}</tbody>
+      </table>
+      <pre><code>{JSON.stringify(REPAIR_CONTRACT_SAMPLE, null, 2)}</code></pre>
+      <pre><code>{REPAIR_CONTRACT_DECIDED_SAMPLE}</code></pre>
       <h2>8. รหัสข้อผิดพลาด</h2>
       <p>เมื่อเกิดข้อผิดพลาด API จะตอบกลับเป็น JSON รูปแบบ {'{ "code": "...", "message": "..." }'}</p>
       <table>
@@ -2266,6 +2458,43 @@ function ApiClientSamples({ base }) {
       )}
       <pre className="market-code"><code>{sample.code}</code></pre>
     </div>
+  )
+}
+
+function ContractGuide() {
+  const sample = useMemo(() => JSON.stringify(REPAIR_CONTRACT_SAMPLE, null, 2), [])
+  return (
+    <section className="market-section">
+      <div className="market-endpoints-head">
+        <div>
+          <h4><Icon name="contract" size={18} /> สัญญาซ่อม (ส่งให้หอพักอนุมัติก่อนเริ่มงาน)</h4>
+          <p>หลังประเมินหน้างาน ช่างส่งราคา วัสดุ ระยะเวลา และงวดชำระด้วย <code>PUT /jobs/:id/contracts/:contract_no</code> พนักงานหรือเจ้าของหอกดอนุมัติ แล้วช่างดึงผลด้วย <code>GET /contracts?updated_since=</code></p>
+        </div>
+        <CopyButton value={sample} />
+      </div>
+      <div className="repair-field-cards">
+        <h5>สถานะสัญญา</h5>
+        <ul>
+          {REPAIR_CONTRACT_STATUSES.map((row) => (
+            <li key={row.status}><code>{row.status}</code><span>{row.label}</span><small>{row.by} → {row.next}</small></li>
+          ))}
+        </ul>
+      </div>
+      <div className="repair-field-cards">
+        <h5>ฟิลด์ใน body (ยอดเงินต้องบวกกันลงตัว ไม่งั้นได้ 400)</h5>
+        <ul>
+          {REPAIR_CONTRACT_FIELDS.map((row) => (
+            <li key={row.name}><code>{row.name}</code><span>{row.type}</span><small>{row.note}</small></li>
+          ))}
+        </ul>
+      </div>
+      <pre className="market-code"><code>{sample}</code></pre>
+      <div className="repair-webhook-events">
+        <span><code>X-Repair-Event: contract.decided</code> ส่งไปที่ Webhook URL ของช่าง (ถ้าตั้งไว้) เมื่อหอพักอนุมัติหรือไม่อนุมัติ</span>
+        <span>ไฟล์ใหญ่: PUT โดยไม่ส่ง <code>files</code> แล้วอัปโหลดแยกที่ <code>POST .../files</code> (multipart) body ของ PUT รับได้ไม่เกิน 16 MB</span>
+      </div>
+      <pre className="market-code"><code>{REPAIR_CONTRACT_DECIDED_SAMPLE}</code></pre>
+    </section>
   )
 }
 
@@ -2461,6 +2690,8 @@ function ApiGuideSection() {
         </div>
         <pre className="market-code"><code>{REPAIR_WEBHOOK_SAMPLE}</code></pre>
       </section>
+
+      <ContractGuide />
 
       <PartnerIntegrationGuide base={base} />
 

@@ -9,7 +9,7 @@ export const TABLES_BY_SERVICE = {
   room: ["Room", "RoomType", "RoomFloor", "RoomWifi", "RoomWifiDevice"],
   auth: ["Customer", "Staff", "Admin", "Owner", "Booking", "ContractImage", "RoomTransfer", "ContractAmendment"],
   customer: ["TenantRequest", "ParkingSpace", "ResidentVisitRequest", "SafetyIncident"],
-  maintenance: ["MaintenanceRequest", "MaintenancePhoto", "RepairVendor", "RepairVendorApiKey", "RepairJob", "RepairVendorImage", "RepairVendorIntegration", "RepairWebhookEvent"],
+  maintenance: ["MaintenanceRequest", "MaintenancePhoto", "RepairVendor", "RepairVendorApiKey", "RepairJob", "RepairVendorImage", "RepairVendorIntegration", "RepairWebhookEvent", "RepairContract", "RepairContractItem", "RepairContractInstallment", "RepairContractFile"],
   payment: ["Payment", "PaymentSlip", "PaymentSlipRejection"],
   staff: ["MoveOutInspection", "DepositSettlementLog", "MoveInInspection"],
   admin: ["Announcement", "AnnouncementAcknowledgement", "WaitingList"],

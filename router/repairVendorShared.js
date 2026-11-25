@@ -244,7 +244,8 @@ export async function loadJob(db, jobId, vendorId = null) {
     `SELECT j.*, v.name AS vendor_name, v.phone AS vendor_phone, v.contract_type AS vendor_contract_type, v.webhook_url IS NOT NULL AS vendor_has_webhook,
             mr.status AS request_status, mr.created_at AS request_created_at, mr.category AS request_category,
             (SELECT CONCAT(c.first_name, ' ', c.last_name) FROM Customer c WHERE c.room_number = j.room_number AND c.is_suspended = FALSE ORDER BY c.id DESC LIMIT 1) AS tenant_name,
-            (SELECT c.phone FROM Customer c WHERE c.room_number = j.room_number AND c.is_suspended = FALSE ORDER BY c.id DESC LIMIT 1) AS tenant_phone
+            (SELECT c.phone FROM Customer c WHERE c.room_number = j.room_number AND c.is_suspended = FALSE ORDER BY c.id DESC LIMIT 1) AS tenant_phone,
+            (SELECT COUNT(*) FROM RepairContract rc WHERE rc.job_id = j.id AND rc.status = 'pending') AS pending_contracts
      FROM RepairJob j
      JOIN RepairVendor v ON v.id = j.vendor_id
      LEFT JOIN MaintenanceRequest mr ON mr.id = j.maintenance_request_id
@@ -279,11 +280,11 @@ export async function loadPartnerSecrets(db, vendorId) {
   return { apiKey: decryptOrNull(row?.partner_api_key_cipher), webhookSecret: decryptOrNull(row?.webhook_secret_cipher) };
 }
 
-export async function deliverWebhook(db, vendor, event, job) {
-  if (!vendor.webhook_url) return;
-  let status = "failed";
+/** POSTs a signed event to the vendor's webhook URL; resolves "delivered" | "failed" | null (no URL) */
+export async function postVendorWebhook(db, vendor, event, payload) {
+  if (!vendor.webhook_url) return null;
   try {
-    const body = JSON.stringify({ event, sent_at: new Date().toISOString(), job: publicJob(job) });
+    const body = JSON.stringify({ event, sent_at: new Date().toISOString(), ...payload });
     const partner = await loadPartnerSecrets(db, vendor.id);
     const response = await fetch(vendor.webhook_url, {
       method: "POST",
@@ -298,10 +299,16 @@ export async function deliverWebhook(db, vendor, event, job) {
       signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       redirect: "manual",
     });
-    status = response.ok ? "delivered" : "failed";
+    return response.ok ? "delivered" : "failed";
   } catch (error) {
-    console.error(`Repair webhook ${event} job ${job.id} error:`, error.message);
+    console.error(`Repair webhook ${event} vendor ${vendor.id} error:`, error.message);
+    return "failed";
   }
+}
+
+export async function deliverWebhook(db, vendor, event, job) {
+  const status = await postVendorWebhook(db, vendor, event, { job: publicJob(job) });
+  if (!status) return;
   await db.query("UPDATE RepairJob SET webhook_status = ?, webhook_at = NOW() WHERE id = ?", [status, job.id])
     .catch((error) => console.error("Repair webhook status error:", error.message));
 }

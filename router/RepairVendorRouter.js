@@ -5,6 +5,7 @@ import { actorOf } from "../middleware/notifications.js";
 import { repairJobCancelled, repairJobEdited, repairJobSent, repairKeyChanged, repairVendorChanged } from "./repairNotifications.js";
 import { decryptApiKey, encryptApiKey, hashApiKey } from "../middleware/marketApiKey.js";
 import { BUILDING_REF_PATTERN } from "./RepairPartnerWebhook.js";
+import { decideContract, listContracts, loadContractFile, sendContractFile } from "./repairContracts.js";
 import { generateRepairApiKey } from "../middleware/repairApiKey.js";
 import { VENDOR_MAX_IMAGES, VENDOR_MIN_IMAGES, parseVendorImages, removeVendorFiles, vendorImagePath } from "../middleware/repairUploads.js";
 import { validateText } from "../src/utils/validators.js";
@@ -29,6 +30,8 @@ const VENDOR_JOBS = 50;
 router.use((req, res, next) => {
   if (req.user?.role !== "Owner") return next();
   if (req.method === "GET" && !/\/api-keys\/[^/]+\/reveal\/?$/.test(req.path)) return next();
+  // the owner pays for repairs, so approving or rejecting a vendor's contract is allowed
+  if (req.method === "POST" && /^\/contracts\/\d+\/decision\/?$/.test(req.path)) return next();
   return res.status(403).json({ message: "เจ้าของหอดูข้อมูลได้อย่างเดียว การส่งงานและจัดการช่างทำได้เฉพาะพนักงานและแอดมิน", code: "READ_ONLY" });
 });
 
@@ -105,7 +108,8 @@ router.get("/overview", async (req, res) => {
       `SELECT j.*, v.name AS vendor_name, v.phone AS vendor_phone, v.contract_type AS vendor_contract_type, v.webhook_url IS NOT NULL AS vendor_has_webhook,
               mr.status AS request_status, mr.created_at AS request_created_at, mr.category AS request_category,
               (SELECT CONCAT(c.first_name, ' ', c.last_name) FROM Customer c WHERE c.room_number = j.room_number AND c.is_suspended = FALSE ORDER BY c.id DESC LIMIT 1) AS tenant_name,
-              (SELECT c.phone FROM Customer c WHERE c.room_number = j.room_number AND c.is_suspended = FALSE ORDER BY c.id DESC LIMIT 1) AS tenant_phone
+              (SELECT c.phone FROM Customer c WHERE c.room_number = j.room_number AND c.is_suspended = FALSE ORDER BY c.id DESC LIMIT 1) AS tenant_phone,
+              (SELECT COUNT(*) FROM RepairContract rc WHERE rc.job_id = j.id AND rc.status = 'pending') AS pending_contracts
        FROM RepairJob j
        JOIN RepairVendor v ON v.id = j.vendor_id
        LEFT JOIN MaintenanceRequest mr ON mr.id = j.maintenance_request_id
@@ -467,6 +471,29 @@ router.delete("/vendors/:id/integration", async (req, res) => {
   await loadVendor(db, vendorId);
   await db.query("DELETE FROM RepairVendorIntegration WHERE vendor_id = ?", [vendorId]);
   res.json({ message: "ยกเลิกการเชื่อมต่อระบบช่างแล้ว", integration: null, events: [] });
+});
+
+// ---- repair contracts submitted by vendors ----
+router.get("/jobs/:id/contracts", async (req, res) => {
+  const db = getPool();
+  const job = await loadJob(db, parseId(req.params.id));
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ contracts: await listContracts(db, { jobId: job.id }) });
+});
+
+router.get("/contract-files/:id", async (req, res) => {
+  sendContractFile(res, await loadContractFile(getPool(), parseId(req.params.id)));
+});
+
+router.post("/contracts/:id/decision", async (req, res) => {
+  const db = getPool();
+  const contract = await decideContract(db, {
+    contractId: parseId(req.params.id), decision: req.body?.decision, note: req.body?.note, actor: await staffActor(req),
+  });
+  res.json({
+    message: contract.status === "approved" ? `อนุมัติสัญญา ${contract.contract_no} แล้ว ช่างเริ่มงานได้` : `ไม่อนุมัติสัญญา ${contract.contract_no} แล้ว`,
+    contract,
+  });
 });
 
 router.post("/jobs", async (req, res) => {

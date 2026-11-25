@@ -19,6 +19,12 @@ export const REPAIR_GUIDE_ENDPOINTS = [
   { method: 'GET', path: '/jobs/:id', access: 'อ่าน', detail: 'รายละเอียดงานซ่อม 1 งาน' },
   { method: 'GET', path: '/buildings/:ref/owner', access: 'อ่าน', detail: 'ชื่อ เบอร์ และอีเมลเจ้าของหอ ใช้ได้เฉพาะช่างที่หอพักตั้งรหัสอาคารให้แล้ว' },
   { method: 'PATCH', path: '/jobs/:id/status', access: 'แก้ไข', detail: 'เปลี่ยนสถานะงาน (ใช้ PUT ได้)' },
+  { method: 'GET', path: '/contracts?updated_since=', access: 'อ่าน', detail: 'สัญญาซ่อมทุกงานที่เปลี่ยนหลังเวลาที่ระบุ ใช้ดึงผลอนุมัติครั้งเดียวแทนการวนทีละงาน (กรอง status, job_id ได้)' },
+  { method: 'GET', path: '/jobs/:id/contracts', access: 'อ่าน', detail: 'สัญญาซ่อมทั้งหมดของงาน พร้อมผลอนุมัติ' },
+  { method: 'GET', path: '/jobs/:id/contracts/:contract_no/files/:file_id', access: 'อ่าน', detail: 'ดาวน์โหลดไฟล์แนบของสัญญา (binary พร้อม Content-Type)' },
+  { method: 'PUT', path: '/jobs/:id/contracts/:contract_no', access: 'แก้ไข', detail: 'ส่งสัญญาใหม่ (201) หรือแก้สัญญาที่ยังรออนุมัติ (200) body ไม่เกิน 16 MB' },
+  { method: 'POST', path: '/jobs/:id/contracts/:contract_no/files', access: 'แก้ไข', detail: 'แนบไฟล์เพิ่มแบบ multipart (field files) PDF/PNG/JPEG ไฟล์ละ ≤ 5 MB รวม ≤ 5 ไฟล์' },
+  { method: 'POST', path: '/jobs/:id/contracts/:contract_no/cancel', access: 'แก้ไข', detail: 'ยกเลิกสัญญาที่ยังรออนุมัติ ต้องส่ง reason' },
 ]
 
 export const REPAIR_STATUS_FLOW = [
@@ -45,8 +51,57 @@ export const REPAIR_GUIDE_ERRORS = [
   ['400 FIELD_NOT_ALLOWED', 'ส่งฟิลด์อื่นนอกจาก status, note, technician_name, technician_phone, scheduled_at'],
   ['404 NOT_FOUND', 'ไม่พบงาน หรือเป็นงานของช่างรายอื่น'],
   ['409 INVALID_TRANSITION', 'เปลี่ยนข้ามขั้นไม่ได้ เช่น จาก sent ไป done หรืองานถูกยกเลิกไปแล้ว'],
+  ['409 CONTRACT_LOCKED', 'สัญญาอนุมัติ ไม่อนุมัติ หรือยกเลิกไปแล้ว แก้ไข แนบไฟล์ หรือยกเลิกไม่ได้'],
+  ['409 INVALID_JOB_STATUS', 'งานซ่อมปิดแล้ว (done, rejected, cancelled) ส่งหรือแก้สัญญาไม่ได้'],
+  ['413 PAYLOAD_TOO_LARGE', 'body ของ PUT สัญญาเกิน 16 MB ให้ส่งไฟล์แยกผ่าน POST .../files'],
   ['429 RATE_LIMITED', 'เรียกเกิน 120 ครั้ง/นาที ต่อ key (ดู header Retry-After)'],
 ]
+
+export const REPAIR_CONTRACT_STATUSES = [
+  { status: 'pending', label: 'รอหอพักอนุมัติ', by: 'ช่างส่ง (PUT)', next: 'approved, rejected, cancelled' },
+  { status: 'approved', label: 'อนุมัติแล้ว ช่างเริ่มงานได้', by: 'หอพัก', next: 'สิ้นสุด แก้ไม่ได้' },
+  { status: 'rejected', label: 'ไม่อนุมัติ (มีเหตุผลใน decision_note)', by: 'หอพัก', next: 'สิ้นสุด ออกสัญญาเลขใหม่แทน' },
+  { status: 'cancelled', label: 'ช่างยกเลิก', by: 'ช่าง (/cancel)', next: 'สิ้นสุด' },
+]
+
+export const REPAIR_CONTRACT_FIELDS = [
+  { name: 'contract_no (ใน path)', type: 'ข้อความ ≤ 20 (A-Z 0-9 . _ -)', note: 'เลขสัญญาฝั่งช่าง ไม่ซ้ำภายในงาน' },
+  { name: 'contract_type', type: 'main | addendum', note: 'addendum ต้องส่ง parent_contract_no ที่อนุมัติแล้วของงานเดียวกัน' },
+  { name: 'billing_type', type: 'daily | monthly', note: 'คิดค่าแรงรายวันหรือรายเดือน' },
+  { name: 'rate, period_qty', type: 'ตัวเลข ≥ 0, จำนวนเต็ม > 0', note: 'ค่าแรงต่อหน่วย × จำนวนวัน/เดือน' },
+  { name: 'start_date, end_date', type: 'YYYY-MM-DD', note: 'end_date ต้องไม่ก่อน start_date' },
+  { name: 'labor_amount', type: 'ตัวเลข', note: 'ต้องเท่ากับ rate × period_qty' },
+  { name: 'material_amount', type: 'ตัวเลข ≥ 0', note: 'ต้องเท่ากับผลรวม qty × unit_price ของ items' },
+  { name: 'total_amount', type: 'ตัวเลข', note: 'ต้องเท่ากับ labor_amount + material_amount (เทียบทศนิยม 2 ตำแหน่ง)' },
+  { name: 'terms', type: 'ข้อความ ≤ 2000 / null', note: 'เงื่อนไขสัญญา' },
+  { name: 'items', type: 'array ≤ 100', note: 'description ≤ 200, qty > 0, unit ≤ 20, unit_price ≥ 0' },
+  { name: 'installments', type: 'array ≤ 24 / ไม่ส่ง', note: 'no, description, due_date (ไม่บังคับ), amount ผลรวมต้องเท่ากับ total_amount' },
+  { name: 'files', type: 'array ≤ 5 / ไม่ส่ง', note: 'file_name, mime_type (application/pdf, image/png, image/jpeg), data_base64 ไฟล์ละ ≤ 5 MB ถ้าส่งมาจะแทนที่ไฟล์เดิมทั้งหมด ไม่ส่ง = คงไฟล์เดิม' },
+]
+
+export const REPAIR_CONTRACT_SAMPLE = {
+  contract_type: 'main', parent_contract_no: null, billing_type: 'daily', rate: 500, period_qty: 1,
+  start_date: '2026-11-30', end_date: '2026-11-30', labor_amount: 500, material_amount: 85, total_amount: 585,
+  terms: 'รับประกันงาน 30 วัน',
+  items: [{ description: 'กระเบื้องพื้น 60x60 ซม.', qty: 1, unit: 'แผ่น', unit_price: 85 }],
+  installments: [
+    { no: 1, description: 'มัดจำ 30%', due_date: '2026-11-30', amount: 175.5 },
+    { no: 2, description: 'ส่วนที่เหลือเมื่อเสร็จงาน', due_date: '2026-11-30', amount: 409.5 },
+  ],
+}
+
+const CONTRACT_RESULT = {
+  contract_no: 'CT2611-0002', job_id: 41, ...REPAIR_CONTRACT_SAMPLE, status: 'pending',
+  items: [{ description: 'กระเบื้องพื้น 60x60 ซม.', qty: 1, unit: 'แผ่น', unit_price: 85, line_total: 85 }],
+  files: [{ file_id: 12, file_name: 'CT2611-0002.pdf', mime_type: 'application/pdf', size_bytes: 48211 }],
+  revision: 1, submitted_at: '2026-11-26T03:50:00.000Z', updated_at: '2026-11-26T03:50:00.000Z',
+  decided_at: null, decided_by_name: null, decision_note: null, cancelled_at: null, cancel_reason: null,
+}
+
+export const REPAIR_CONTRACT_DECIDED_SAMPLE = JSON.stringify({
+  event: 'contract.decided', sent_at: '2026-11-26T05:10:01.000Z', job_id: 41,
+  contract: { contract_no: 'CT2611-0002', status: 'approved', decided_at: '2026-11-26T05:10:00.000Z', decided_by_name: 'มานะ ทำงานดี', decision_note: null },
+}, null, 2)
 
 function curl(base, method, path, body) {
   const lines = [`curl${method === 'GET' ? '' : ` -X ${method}`} "${base}${path}"`, '  -H "X-Repair-Api-Key: <API_KEY>"']
@@ -109,6 +164,24 @@ export function repairGuideExamples(base) {
       description: 'ต้องใส่เหตุผลใน note หอพักจะส่งงานให้ช่างรายอื่นแทน',
       code: curl(base, 'PATCH', '/jobs/41/status', { status: 'rejected', note: 'ช่างไม่ว่างจนถึงสิ้นเดือน' }),
       response: json({ message: 'อัปเดตสถานะงานซ่อมเรียบร้อยแล้ว', job: { ...SAMPLE_JOB, status: 'rejected', vendor_note: 'ช่างไม่ว่างจนถึงสิ้นเดือน' } }),
+    },
+    {
+      id: 'contract-put', method: 'PUT', path: '/jobs/41/contracts/CT2611-0002', title: 'ส่งสัญญาซ่อมให้หอพักอนุมัติ', status: 201,
+      description: 'หลังประเมินหน้างาน ส่งราคา วัสดุ ระยะเวลา และงวดชำระ (แนบ PDF เป็น base64 ใน files ได้) ส่งซ้ำเลขเดิมตอนยังรออนุมัติ = แก้ไข (200)',
+      code: curl(base, 'PUT', '/jobs/41/contracts/CT2611-0002', REPAIR_CONTRACT_SAMPLE),
+      response: json(CONTRACT_RESULT),
+    },
+    {
+      id: 'contract-poll', method: 'GET', path: '/contracts?updated_since=2026-11-26T03:00:00Z', title: 'ดึงผลอนุมัติสัญญา', status: 200,
+      description: 'เรียกทุก 1-5 นาที แล้วใช้ server_time ที่ได้เป็น updated_since รอบถัดไป',
+      code: curl(base, 'GET', '/contracts?updated_since=2026-11-26T03:00:00Z'),
+      response: json({ contracts: [{ ...CONTRACT_RESULT, status: 'approved', decided_at: '2026-11-26T05:10:00.000Z', decided_by_name: 'มานะ ทำงานดี' }], server_time: '2026-11-26T05:11:00.000Z' }),
+    },
+    {
+      id: 'contract-files', method: 'POST', path: '/jobs/41/contracts/CT2611-0002/files', title: 'แนบไฟล์ใหญ่แบบ multipart', status: 201,
+      description: 'ใช้เมื่อไฟล์รวมใหญ่จน PUT เกิน 16 MB เพิ่มไฟล์ต่อจากของเดิม (รวมไม่เกิน 5 ไฟล์)',
+      code: [`curl -X POST "${base}/jobs/41/contracts/CT2611-0002/files"`, '  -H "X-Repair-Api-Key: <API_KEY>"', '  -F "files=@CT2611-0002.pdf;type=application/pdf"'].join(' \\\n'),
+      response: json({ ...CONTRACT_RESULT, files: [...CONTRACT_RESULT.files, { file_id: 13, file_name: 'CT2611-0002.pdf', mime_type: 'application/pdf', size_bytes: 4210000 }] }),
     },
     {
       id: 'error', method: 'PATCH', path: '/jobs/41/status', title: 'ตัวอย่างข้อผิดพลาด', status: 409,
@@ -212,6 +285,9 @@ export function repairAiPrompt(base) {
     '- GET /jobs?status=<status> — รายการงาน (sent, accepted, in_progress, done, rejected, cancelled)',
     '- GET /jobs/{id} — รายละเอียดงาน 1 งาน',
     '- PATCH /jobs/{id}/status — เปลี่ยนสถานะ ส่งได้เฉพาะ status, note, technician_name, technician_phone, scheduled_at',
+    '- PUT /jobs/{id}/contracts/{contract_no} — ส่งหรือแก้สัญญาซ่อม (ราคา วัสดุ ระยะเวลา งวดชำระ) ยอดเงินต้องบวกกันลงตัว: labor_amount = rate × period_qty, material_amount = ผลรวม qty × unit_price, total_amount = labor_amount + material_amount',
+    '- GET /contracts?updated_since=<ISO> — ดูผลอนุมัติสัญญา (pending, approved, rejected, cancelled)',
+    '- POST /jobs/{id}/contracts/{contract_no}/cancel — ยกเลิกสัญญาที่ยังรออนุมัติ ต้องมี reason',
     '',
     '## ลำดับสถานะ',
     '- sent → accepted หรือ rejected (rejected ต้องมี note บอกเหตุผล)',
@@ -227,6 +303,7 @@ export function repairAiPrompt(base) {
     '4. ถ้าได้ 429 ให้รอตามค่า header Retry-After แล้วค่อยลองใหม่ (จำกัด 120 ครั้ง/นาที)',
     '5. ถ้าได้ 401 INVALID_API_KEY ให้หยุดและแจ้งผู้ใช้ว่า key ใช้ไม่ได้หรือสัญญาสิ้นสุดแล้ว',
     '6. ข้อมูลงาน (เลขห้อง รายละเอียด เบอร์ติดต่อ) แก้ผ่าน API ไม่ได้ ให้แนะนำผู้ใช้ติดต่อหอพัก',
+    '7. ก่อนส่งสัญญา ให้คำนวณยอดเงินให้ตรงกันทุกจุด และสรุปยอดให้ผู้ใช้ยืนยันก่อนส่ง ห้ามเริ่มงานจนกว่าสัญญาเป็น approved',
     '',
     '## รูปแบบคำตอบ',
     '- ตอบเป็นภาษาไทย สรุปสั้น ๆ เช่น งาน #41 ห้อง 305 เปลี่ยนเป็น รับงานแล้ว นัด 1 ธ.ค. 13:00',
@@ -333,10 +410,21 @@ export function partnerIntegrationPrompt(base, webhookUrl) {
     '  - 409 = งานปิดไปแล้ว (done, rejected, cancelled) ห้ามส่งซ้ำ',
     '  - 5xx หรือ timeout = retry แบบ backoff (เช่น 1, 5, 30 นาที) ด้วย event_id เดิม',
     '',
+    '## 4. ส่งสัญญาซ่อมให้หอพักอนุมัติ',
+    '- PUT {DORM_BASE_URL}/jobs/{job_id}/contracts/{contract_no} พร้อม header X-API-Key (201 = สร้างใหม่, 200 = แก้ไขตอนยังรออนุมัติ)',
+    '- body: contract_type (main|addendum), parent_contract_no, billing_type (daily|monthly), rate, period_qty, start_date, end_date, labor_amount, material_amount, total_amount, terms, items[{description, qty, unit, unit_price}], installments[{no, description, due_date, amount}], files[{file_name, mime_type, data_base64}]',
+    '- ยอดต้องตรงกัน (ปัด 2 ตำแหน่ง): labor_amount = rate × period_qty, material_amount = ผลรวม qty × unit_price, total_amount = labor_amount + material_amount, ผลรวม installments = total_amount ไม่ตรงจะได้ 400 VALIDATION_ERROR',
+    '- body ของ PUT ต้องไม่เกิน 16 MB (ไฟล์ละ ≤ 5 MB, ≤ 5 ไฟล์) ถ้าไฟล์ใหญ่ ให้ PUT โดยไม่ส่ง files แล้วอัปโหลดแยกที่ POST .../contracts/{contract_no}/files แบบ multipart field ชื่อ files',
+    '- ดึงผลอนุมัติ: GET {DORM_BASE_URL}/contracts?updated_since=<server_time รอบก่อน> ทุก 1 นาที (ครั้งเดียวได้ทุกงาน) สถานะ: pending, approved, rejected (ดู decision_note), cancelled',
+    '- ถ้ามี URL รับ webhook จะได้ X-Repair-Event: contract.decided พร้อม X-Signature ด้วย',
+    '- ยกเลิกสัญญาที่ยังรออนุมัติ: POST .../contracts/{contract_no}/cancel body { "reason": "..." }',
+    '- 409 CONTRACT_LOCKED = สัญญาปิดแล้ว ให้ออกเลขใหม่, 409 INVALID_JOB_STATUS = งานซ่อมปิดแล้ว, 413 PAYLOAD_TOO_LARGE = body ใหญ่เกิน',
+    '',
     '## สิ่งที่ต้องส่งมอบ',
     '1. ฟังก์ชันเรียก owner endpoint',
     '2. endpoint รับ webhook จากหอพัก พร้อมตรวจลายเซ็นและ X-API-Key',
     '3. ฟังก์ชันส่งสถานะกลับ พร้อมเซ็นและ retry',
+    '3.1 ฟังก์ชันส่งสัญญา (คำนวณยอดให้ตรง) และ job ดึงผลอนุมัติทุก 1 นาทีด้วย updated_since',
     '4. unit test: ลายเซ็นถูกและผิด, body ถูกแก้ระหว่างทาง, ส่งซ้ำด้วย event_id เดิม, การจัดการ 400/401/404/409/5xx',
     '5. วิธีทดสอบกับระบบจริง: ส่ง payload ตัวอย่างไปที่ DORM_WEBHOOK_URL แล้วให้หอพักดูผลในหน้าข้อมูลช่าง',
   ].join('\n')
@@ -412,6 +500,13 @@ export async function downloadRepairGuideDocx(base) {
         heading('7. Webhook (ไม่บังคับ)'),
         para('ถ้าหอพักตั้ง Webhook URL ให้ เมื่อหอพักส่งงาน แก้ไขงาน หรือยกเลิกงาน ระบบจะ POST JSON ไปที่ URL นั้น พร้อม header X-Repair-Event: job.created, job.updated หรือ job.cancelled ต้องตอบ HTTP 2xx ภายใน 5 วินาที แล้วยืนยันข้อมูลอีกครั้งด้วย GET /jobs/:id'),
         ...codeBlock(REPAIR_WEBHOOK_SAMPLE),
+        heading('7.1 สัญญาซ่อม (ส่งให้หอพักอนุมัติก่อนเริ่มงาน)'),
+        para('ส่งด้วย PUT /jobs/:id/contracts/:contract_no หอพัก (พนักงานหรือเจ้าของหอ) จะอนุมัติหรือไม่อนุมัติ ช่างดึงผลด้วย GET /contracts?updated_since= หรือรับ webhook contract.decided'),
+        table(['status', 'ความหมาย', 'เปลี่ยนโดย', 'ไปต่อได้'], REPAIR_CONTRACT_STATUSES.map((row) => [row.status, row.label, row.by, row.next]), [16, 34, 20, 30], [0]),
+        table(['ฟิลด์', 'ชนิดข้อมูล', 'กติกา'], REPAIR_CONTRACT_FIELDS.map((row) => [row.name, row.type, row.note]), [24, 28, 48], [0]),
+        ...codeBlock(JSON.stringify(REPAIR_CONTRACT_SAMPLE, null, 2)),
+        para('Webhook เมื่อหอพักตัดสินใจ (X-Repair-Event: contract.decided)'),
+        ...codeBlock(REPAIR_CONTRACT_DECIDED_SAMPLE),
         heading('8. รหัสข้อผิดพลาด'),
         para('เมื่อเกิดข้อผิดพลาด API จะตอบกลับเป็น JSON รูปแบบ { "code": "...", "message": "..." }'),
         table(['รหัส', 'ความหมาย'], REPAIR_GUIDE_ERRORS, [35, 65], [0]),

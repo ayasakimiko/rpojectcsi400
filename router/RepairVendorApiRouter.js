@@ -10,6 +10,21 @@ import {
   serializeVendor,
   validateStatusInput,
 } from "./repairVendorShared.js";
+import {
+  CONTRACT_STATUSES,
+  addContractFiles,
+  cancelContract,
+  listContracts,
+  loadContract,
+  loadContractFile,
+  parseContractInput,
+  parseContractNo,
+  parseContractUpload,
+  parseUpdatedSince,
+  publicContract,
+  sendContractFile,
+  upsertContract,
+} from "./repairContracts.js";
 
 const router = Router();
 const MAX_JOBS = 200;
@@ -48,6 +63,12 @@ router.get("/", (req, res) => {
       "GET /api/repair/v1/jobs/:id",
       "PATCH|PUT /api/repair/v1/jobs/:id/status (status, note, technician_name, technician_phone, scheduled_at)",
       "GET /api/repair/v1/buildings/:ref/owner",
+      "GET /api/repair/v1/contracts?status=&updated_since=&job_id=",
+      "GET /api/repair/v1/jobs/:id/contracts",
+      "PUT /api/repair/v1/jobs/:id/contracts/:contract_no",
+      "POST /api/repair/v1/jobs/:id/contracts/:contract_no/files (multipart field files)",
+      "GET /api/repair/v1/jobs/:id/contracts/:contract_no/files/:file_id",
+      "POST /api/repair/v1/jobs/:id/contracts/:contract_no/cancel",
     ],
     statuses: { accepted: "รับงาน", rejected: "ปฏิเสธงาน", in_progress: "กำลังซ่อม", done: "ซ่อมเสร็จ" },
   });
@@ -116,6 +137,62 @@ async function updateStatus(req, res) {
   const updated = await applyVendorStatus(db, job, input, req.vendor);
   res.json({ message: "อัปเดตสถานะงานซ่อมเรียบร้อยแล้ว", job: publicJob(updated) });
 }
+
+// ---------- repair contracts ----------
+const vendorJob = (req) => loadJob(getPool(), parseId(req.params.id), req.vendor.vendorId);
+
+router.get("/contracts", async (req, res) => {
+  const status = typeof req.query.status === "string" && req.query.status ? req.query.status : null;
+  if (status && !CONTRACT_STATUSES.includes(status)) throw fail(`status ต้องเป็นหนึ่งใน ${CONTRACT_STATUSES.join(", ")}`);
+  const jobId = req.query.job_id ? parseId(String(req.query.job_id)) : null;
+  const serverTime = new Date().toISOString();
+  const contracts = await listContracts(getPool(), {
+    vendorId: req.vendor.vendorId, status, jobId, updatedSinceMs: parseUpdatedSince(req.query.updated_since),
+  });
+  res.json({ contracts: contracts.map(publicContract), server_time: serverTime });
+});
+
+router.get("/jobs/:id/contracts", async (req, res) => {
+  const job = await vendorJob(req);
+  const contracts = await listContracts(getPool(), { jobId: job.id, vendorId: req.vendor.vendorId });
+  res.json({ contracts: contracts.map(publicContract) });
+});
+
+router.get("/jobs/:id/contracts/:contractNo", async (req, res) => {
+  const job = await vendorJob(req);
+  const contract = await loadContract(getPool(), { jobId: job.id, vendorId: req.vendor.vendorId, contractNo: parseContractNo(req.params.contractNo) });
+  res.json(publicContract(contract));
+});
+
+router.put("/jobs/:id/contracts/:contractNo", async (req, res) => {
+  const jobId = parseId(req.params.id);
+  const contractNo = parseContractNo(req.params.contractNo);
+  const input = parseContractInput(req.body);
+  const { contract, created } = await upsertContract(getPool(), { jobId, vendor: req.vendor, contractNo, input });
+  res.status(created ? 201 : 200).json(publicContract(contract));
+});
+
+router.post("/jobs/:id/contracts/:contractNo/files", parseContractUpload, async (req, res) => {
+  const contract = await addContractFiles(getPool(), {
+    jobId: parseId(req.params.id), vendor: req.vendor, contractNo: parseContractNo(req.params.contractNo), files: req.contractFiles,
+  });
+  res.status(201).json(publicContract(contract));
+});
+
+router.get("/jobs/:id/contracts/:contractNo/files/:fileId", async (req, res) => {
+  const job = await vendorJob(req);
+  const file = await loadContractFile(getPool(), parseId(req.params.fileId), {
+    vendorId: req.vendor.vendorId, jobId: job.id, contractNo: parseContractNo(req.params.contractNo),
+  });
+  sendContractFile(res, file);
+});
+
+router.post("/jobs/:id/contracts/:contractNo/cancel", async (req, res) => {
+  const contract = await cancelContract(getPool(), {
+    jobId: parseId(req.params.id), vendor: req.vendor, contractNo: parseContractNo(req.params.contractNo), reason: req.body?.reason,
+  });
+  res.json(publicContract(contract));
+});
 
 router.patch("/jobs/:id/status", updateStatus);
 router.put("/jobs/:id/status", updateStatus);

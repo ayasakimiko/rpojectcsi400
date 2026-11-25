@@ -235,3 +235,76 @@ CREATE TABLE IF NOT EXISTS RepairWebhookEvent (
     INDEX idx_repair_webhook_received (vendor_id, received_at),
     FOREIGN KEY (vendor_id) REFERENCES RepairVendor(id) ON DELETE CASCADE
 );
+
+-- repair contracts (quote + materials + schedule) a vendor submits for the dorm to approve before work starts
+CREATE TABLE IF NOT EXISTS RepairContract (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    job_id INT NOT NULL,
+    vendor_id INT NOT NULL,
+    contract_no VARCHAR(20) NOT NULL,
+    contract_type VARCHAR(10) NOT NULL DEFAULT 'main',
+    parent_contract_no VARCHAR(20) NULL,
+    status VARCHAR(12) NOT NULL DEFAULT 'pending',
+    billing_type VARCHAR(10) NOT NULL,
+    rate DECIMAL(12,2) NOT NULL,
+    period_qty INT UNSIGNED NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    labor_amount DECIMAL(12,2) NOT NULL,
+    material_amount DECIMAL(12,2) NOT NULL,
+    total_amount DECIMAL(12,2) NOT NULL,
+    terms TEXT NULL,
+    revision INT UNSIGNED NOT NULL DEFAULT 1,
+    submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    decided_at TIMESTAMP NULL DEFAULT NULL,
+    decided_by_name VARCHAR(255) NULL,
+    decision_note VARCHAR(500) NULL,
+    cancelled_at TIMESTAMP NULL DEFAULT NULL,
+    cancel_reason VARCHAR(500) NULL,
+
+    UNIQUE KEY uq_repair_contract_job_no (job_id, contract_no),
+    INDEX idx_repair_contract_vendor_updated (vendor_id, updated_at),
+    INDEX idx_repair_contract_status (status, updated_at),
+    FOREIGN KEY (job_id) REFERENCES RepairJob(id) ON DELETE CASCADE,
+    FOREIGN KEY (vendor_id) REFERENCES RepairVendor(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS RepairContractItem (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    contract_id INT NOT NULL,
+    line_no SMALLINT UNSIGNED NOT NULL,
+    description VARCHAR(200) NOT NULL,
+    qty DECIMAL(12,2) NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    unit_price DECIMAL(12,2) NOT NULL,
+    line_total DECIMAL(12,2) NOT NULL,
+
+    INDEX idx_repair_contract_item (contract_id, line_no),
+    FOREIGN KEY (contract_id) REFERENCES RepairContract(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS RepairContractInstallment (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    contract_id INT NOT NULL,
+    installment_no SMALLINT UNSIGNED NOT NULL,
+    description VARCHAR(200) NOT NULL,
+    due_date DATE NULL,
+    amount DECIMAL(12,2) NOT NULL,
+
+    INDEX idx_repair_contract_installment (contract_id, installment_no),
+    FOREIGN KEY (contract_id) REFERENCES RepairContract(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS RepairContractFile (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    contract_id INT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    stored_name VARCHAR(64) NOT NULL,
+    mime_type VARCHAR(40) NOT NULL,
+    size_bytes INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_repair_contract_file (contract_id),
+    FOREIGN KEY (contract_id) REFERENCES RepairContract(id) ON DELETE CASCADE
+);

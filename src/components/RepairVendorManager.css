@@ -2218,3 +2218,210 @@
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+
+/* ---------- repair contracts from vendors ---------- */
+.repair-contract-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.repair-contract-list {
+  display: grid;
+  gap: 12px;
+}
+
+.repair-contract {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e3ecf8;
+  border-left: 4px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.repair-contract.is-pending { border-left-color: #f59e0b; background: linear-gradient(180deg, #fffbf3 0%, #ffffff 60%); }
+.repair-contract.is-approved { border-left-color: #16a34a; }
+.repair-contract.is-rejected { border-left-color: #dc2626; }
+.repair-contract.is-cancelled { opacity: 0.75; }
+
+.repair-contract-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.repair-contract-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.repair-contract-head strong {
+  color: #10233f;
+  font-size: 15px;
+}
+
+.repair-contract-head small {
+  color: #5d728b;
+  font-size: 12.5px;
+}
+
+.repair-contract-money {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.repair-contract-money > span {
+  display: grid;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f5f8fc;
+}
+
+.repair-contract-money small {
+  color: #5d728b;
+  font-size: 12px;
+}
+
+.repair-contract-money strong {
+  color: #10233f;
+  font-size: 15px;
+}
+
+.repair-contract-money em {
+  color: #7c8ca3;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.repair-contract-money .is-total {
+  background: #eff6ff;
+}
+
+.repair-contract-money .is-total strong {
+  color: #1d4ed8;
+  font-size: 18px;
+}
+
+.repair-contract-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.repair-contract-table > div {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid #eef3fa;
+  color: #33475f;
+}
+
+.repair-contract-table.is-installments > div {
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.repair-contract-table > div:first-child {
+  border-top: 0;
+}
+
+.repair-contract-table > div > span:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.repair-contract-table .is-head {
+  background: #f5f8fc;
+  color: #5d728b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.repair-contract-terms {
+  margin: 0;
+  color: #33475f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.repair-contract-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.repair-contract-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #dbe7fb;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #1d4ed8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.repair-contract-file:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.repair-contract-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repair-contract-file small {
+  color: #7c8ca3;
+  font-size: 11.5px;
+}
+
+.repair-contract-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.repair-contract-decision {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #f5f8fc;
+  color: #5d728b;
+  font-size: 12.5px;
+}
+
+.repair-contract-decision.is-approved { background: #ecfdf3; color: #027a48; }
+.repair-contract-decision.is-rejected { background: #fef2f2; color: #b91c1c; }
+
+@media (max-width: 640px) {
+  .repair-contract-table > div {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .repair-contract-table:not(.is-installments) > div > span:nth-child(3) {
+    display: none;
+  }
+}
