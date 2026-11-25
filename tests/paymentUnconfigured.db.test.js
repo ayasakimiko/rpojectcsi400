@@ -23,6 +23,9 @@ async function sendSlip() {
 
 before(async () => {
   const db = getPool();
+  // a fresh database has no DormConfig row yet; create it so the UPDATEs below take effect
+  const [created] = await db.query("INSERT IGNORE INTO DormConfig (id) VALUES (1)");
+  fx.createdConfig = created.affectedRows === 1;
   const [[config]] = await db.query(
     "SELECT promptpay_id, bank_name, bank_account_no, payment_test_mode, slip_verify_mode FROM DormConfig WHERE id = 1",
   );
@@ -59,18 +62,30 @@ before(async () => {
 
 after(async () => {
   const db = getPool();
-  const { promptpay_id, bank_name, bank_account_no, payment_test_mode, slip_verify_mode } = fx.config;
-  await db.query(
-    "UPDATE DormConfig SET promptpay_id = ?, bank_name = ?, bank_account_no = ?, payment_test_mode = ?, slip_verify_mode = ? WHERE id = 1",
-    [promptpay_id, bank_name, bank_account_no, payment_test_mode, slip_verify_mode],
-  );
-  await db.query("DELETE FROM PaymentSlipRejection WHERE customer_id = ?", [fx.customerId]);
-  await db.query("DELETE FROM PaymentSlip WHERE customer_id = ?", [fx.customerId]);
-  await db.query("DELETE FROM Payment WHERE booking_id = ?", [fx.bookingId]);
-  await db.query("DELETE FROM Booking WHERE id = ?", [fx.bookingId]);
-  await db.query("DELETE FROM Customer WHERE id = ?", [fx.customerId]);
-  await db.query("DELETE FROM Room WHERE id = ?", [fx.roomId]);
-  await db.end();
+  try {
+    if (fx.createdConfig) {
+      await db.query("DELETE FROM DormConfig WHERE id = 1");
+    } else if (fx.config) {
+      const { promptpay_id, bank_name, bank_account_no, payment_test_mode, slip_verify_mode } = fx.config;
+      await db.query(
+        "UPDATE DormConfig SET promptpay_id = ?, bank_name = ?, bank_account_no = ?, payment_test_mode = ?, slip_verify_mode = ? WHERE id = 1",
+        [promptpay_id, bank_name, bank_account_no, payment_test_mode, slip_verify_mode],
+      );
+    }
+    if (fx.customerId) {
+      await db.query("DELETE FROM PaymentSlipRejection WHERE customer_id = ?", [fx.customerId]);
+      await db.query("DELETE FROM PaymentSlip WHERE customer_id = ?", [fx.customerId]);
+    }
+    if (fx.bookingId) {
+      await db.query("DELETE FROM Payment WHERE booking_id = ?", [fx.bookingId]);
+      await db.query("DELETE FROM Booking WHERE id = ?", [fx.bookingId]);
+    }
+    if (fx.customerId) await db.query("DELETE FROM Customer WHERE id = ?", [fx.customerId]);
+    if (fx.roomId) await db.query("DELETE FROM Room WHERE id = ?", [fx.roomId]);
+  } finally {
+    // always release the pool, otherwise a failed cleanup keeps the test process alive forever
+    await db.end();
+  }
 });
 
 const setConfig = (fields) => getPool().query("UPDATE DormConfig SET ? WHERE id = 1", [fields]);

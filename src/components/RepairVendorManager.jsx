@@ -10,7 +10,7 @@ import { copyText } from '../utils/copyText.js'
 import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import { ConfirmDialog } from './ActionDialog.jsx'
 import { API_ORIGIN } from '../config/api.js'
-import { REPAIR_VENDOR_API_PREFIX } from '../config/serviceRoutes.js'
+import { REPAIR_VENDOR_API_PREFIX, REPAIR_WEBHOOK_PREFIX } from '../config/serviceRoutes.js'
 import {
   REPAIR_GUIDE_ENDPOINTS,
   REPAIR_GUIDE_ERRORS,
@@ -22,6 +22,13 @@ import {
   REPAIR_GUIDE_TITLE,
   REPAIR_GUIDE_VERSION,
   downloadRepairGuideDocx,
+  PARTNER_EXCHANGE,
+  PARTNER_INBOUND_FIELDS,
+  PARTNER_INBOUND_RESPONSES,
+  PARTNER_INBOUND_SAMPLE,
+  partnerIntegrationPrompt,
+  partnerSignSample,
+  partnerWebhookUrl,
   repairAiPrompt,
   repairClientSamples,
   repairGuideExamples,
@@ -29,6 +36,7 @@ import {
 import { downloadGuidePdf } from '../utils/marketApiGuide.js'
 import { focusAndHighlight } from '../utils/focusHighlight.js'
 import { MAINTENANCE_CATEGORY_HINT, MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL, MAINTENANCE_TIME_OPTIONS } from '../utils/maintenanceCategories.js'
+import { MarketEmpty } from './MarketManager.jsx'
 import './MarketManager.css'
 import './RepairVendorManager.css'
 
@@ -860,6 +868,162 @@ function ApiKeyPanel({ vendor, apiKeys, onChanged }) {
   )
 }
 
+const WEBHOOK_RESULT = {
+  applied: { tone: 'success', label: 'อัปเดตงานแล้ว' },
+  ignored: { tone: 'info', label: 'ไม่มีอะไรเปลี่ยน' },
+  processing: { tone: 'warning', label: 'กำลังประมวลผล' },
+}
+
+function ShareRow({ label, value, hint }) {
+  return (
+    <li className="repair-share-row">
+      <span className="repair-share-text">
+        <small>{label}</small>
+        {value && <code>{value}</code>}
+        {hint && <em>{hint}</em>}
+      </span>
+      {value && <CopyButton value={value} />}
+    </li>
+  )
+}
+
+/** settings for partner systems (RenoCare) that push status webhooks and read the owner contact */
+function IntegrationPanel({ vendor, hasApiKey }) {
+  const canEdit = useCanEdit()
+  const [state, setState] = useState({ loading: true, error: '', integration: null, events: [] })
+  const [form, setForm] = useState(null)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const { busy, error, run } = useSubmit((data) => {
+    setState({ loading: false, error: '', integration: data.integration, events: data.events })
+    setForm(null)
+  })
+
+  useEffect(() => {
+    let active = true
+    axios.get(`${API_BASE}/vendors/${vendor.id}/integration`)
+      .then(({ data }) => {
+        if (active) setState({ loading: false, error: '', integration: data.integration, events: data.events })
+      })
+      .catch((loadError) => {
+        if (active) setState({ loading: false, error: errorMessage(loadError, 'โหลดการเชื่อมต่อไม่สำเร็จ'), integration: null, events: [] })
+      })
+    return () => {
+      active = false
+    }
+  }, [vendor.id])
+
+  const integration = state.integration
+  const startEdit = () => setForm({
+    building_ref: integration?.building_ref || '',
+    owner_email: integration?.owner_email || '',
+    partner_api_key: '',
+    webhook_secret: '',
+  })
+  const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+  const submit = (event) => {
+    event.preventDefault()
+    const body = { building_ref: form.building_ref.trim(), owner_email: form.owner_email.trim() }
+    // blank secret fields keep what is already saved
+    if (form.partner_api_key.trim()) body.partner_api_key = form.partner_api_key.trim()
+    if (form.webhook_secret.trim()) body.webhook_secret = form.webhook_secret.trim()
+    run(() => axios.put(`${API_BASE}/vendors/${vendor.id}/integration`, body), 'บันทึกการเชื่อมต่อไม่สำเร็จ')
+  }
+
+  return (
+    <section className="market-section">
+      <div className="market-section-head">
+        <h4><Icon name="link" size={16} /> เชื่อมต่อระบบของช่าง (RenoCare)</h4>
+        <small>สำหรับช่างที่มีระบบของตัวเอง ส่งชื่อช่าง เบอร์ และสถานะงานกลับมาทาง Webhook</small>
+      </div>
+      {state.loading && <MarketEmpty variant="loading" />}
+      {state.error && <p className="market-error" role="alert">{state.error}</p>}
+
+      {!state.loading && !state.error && !form && !integration && (
+        <div className="repair-integration-empty">
+          <p>ยังไม่ได้เชื่อมต่อ ตั้งรหัสอาคารและใส่ webhookSecret ที่ได้จากช่าง แล้วส่ง Base URL, API Key และ Webhook URL ให้ช่าง</p>
+          {canEdit && <button type="button" className="market-btn is-primary" onClick={startEdit}><Icon name="plus" size={14} /> ตั้งค่าการเชื่อมต่อ</button>}
+        </div>
+      )}
+
+      {!form && integration && (
+        <>
+          <p className="repair-share-title">ค่าที่ต้องส่งให้ช่าง</p>
+          <ul className="repair-share-list">
+            <ShareRow label="1. Base URL" value={`${API_ORIGIN}${REPAIR_VENDOR_API_PREFIX}`} hint={`ข้อมูลเจ้าของหอ: GET /buildings/${integration.building_ref}/owner`} />
+            <ShareRow label="2. API Key" hint={hasApiKey ? 'ใช้ key ในหัวข้อ "API key ของช่าง" ด้านบน ช่างส่งใน header X-API-Key' : 'ยังไม่มี กรุณาออก API key ในหัวข้อด้านบนก่อน'} />
+            <ShareRow label="3. Webhook URL" value={`${API_ORIGIN}${integration.webhook_path}`} hint="ช่างต้องแนบ X-Signature: sha256=HMAC(webhookSecret, body)" />
+          </ul>
+          <InfoGrid items={[
+            { label: 'รหัสอาคาร', value: integration.building_ref, icon: 'building', tone: 'blue' },
+            { label: 'อีเมลเจ้าของหอที่ส่งให้ช่าง', value: integration.owner_email || '-', icon: 'mail' },
+            { label: 'webhookSecret จากช่าง', value: integration.webhook_secret_hint || 'ยังไม่ได้ใส่', icon: 'key' },
+            { label: 'apiKey จากช่าง', value: integration.partner_api_key_hint || '-', icon: 'key' },
+            { label: 'แก้ไขล่าสุดโดย', value: integration.updated_by_name, icon: 'user' },
+            { label: 'Webhook ที่รับล่าสุด', value: state.events[0] ? thaiDateTime(state.events[0].received_at) : 'ยังไม่เคยได้รับ', icon: 'clock' },
+          ]} />
+          {state.events.length > 0 && (
+            <ul className="repair-webhook-log">
+              {state.events.slice(0, 5).map((event) => (
+                <li key={event.id}>
+                  <span>{thaiDateTime(event.received_at)}</span>
+                  <span>{event.job_id ? `งาน #${event.job_id}` : '-'}</span>
+                  {event.status && <JobStatusPill status={event.status} />}
+                  <Pill tone={WEBHOOK_RESULT[event.result]?.tone || 'info'}>{WEBHOOK_RESULT[event.result]?.label || event.result}</Pill>
+                </li>
+              ))}
+            </ul>
+          )}
+          {canEdit && (
+            <div className="repair-integration-actions">
+              <button type="button" className="market-btn" onClick={startEdit}><Icon name="edit" size={14} /> แก้ไขการเชื่อมต่อ</button>
+              <button type="button" className="market-btn is-danger" onClick={() => setConfirmRemove(true)}><Icon name="trash" size={14} /> ยกเลิกการเชื่อมต่อ</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {form && (
+        <form className="repair-integration-form" onSubmit={submit}>
+          <div className="market-form-grid">
+            <Field label="รหัสอาคาร (building ref)" hint="ช่างใช้ใน /buildings/{ref}/owner และ Webhook URL เช่น PJ-BKN-01" name="building_ref">
+              <input className="market-input" name="building_ref" value={form.building_ref} onChange={update} maxLength={40} required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,39}" />
+            </Field>
+            <Field label="อีเมลเจ้าของหอที่จะส่งให้ช่าง" hint="ชื่อและเบอร์ดึงจากบัญชีเจ้าของหอ เว้นว่างได้" name="owner_email">
+              <input className="market-input" type="email" name="owner_email" value={form.owner_email} onChange={update} maxLength={255} />
+            </Field>
+            <Field label="webhookSecret ที่ได้จากช่าง" hint={integration?.webhook_secret_hint ? `บันทึกไว้แล้ว (${integration.webhook_secret_hint}) เว้นว่างเพื่อใช้ค่าเดิม` : 'ใช้ตรวจ X-Signature ของ Webhook ที่ช่างส่งมา'} name="webhook_secret">
+              <input className="market-input" type="password" name="webhook_secret" value={form.webhook_secret} onChange={update} maxLength={512} autoComplete="off" required={!integration?.webhook_secret_hint} />
+            </Field>
+            <Field label="apiKey ที่ได้จากช่าง" hint={integration?.partner_api_key_hint ? `บันทึกไว้แล้ว (${integration.partner_api_key_hint}) เว้นว่างเพื่อใช้ค่าเดิม` : 'แนบไปใน header X-API-Key ตอนเราส่ง Webhook ให้ช่าง'} name="partner_api_key">
+              <input className="market-input" type="password" name="partner_api_key" value={form.partner_api_key} onChange={update} maxLength={512} autoComplete="off" />
+            </Field>
+          </div>
+          {error && <p className="market-error" role="alert">{error}</p>}
+          <div className="repair-integration-actions">
+            <button type="button" className="market-btn" onClick={() => setForm(null)} disabled={busy}>ยกเลิก</button>
+            <button type="submit" className="market-btn is-primary" disabled={busy}><Icon name="check" size={14} /> {busy ? 'กำลังบันทึก...' : 'บันทึกการเชื่อมต่อ'}</button>
+          </div>
+        </form>
+      )}
+
+      {confirmRemove && (
+        <ConfirmModal
+          title="ยกเลิกการเชื่อมต่อ"
+          message="ลบรหัสอาคารและ secret ที่ได้จากช่าง ระบบของช่างจะส่ง Webhook และดูข้อมูลเจ้าของหอไม่ได้อีก (API key ของช่างยังใช้ได้ตามเดิม)"
+          submitLabel="ยกเลิกการเชื่อมต่อ"
+          icon="link"
+          onClose={() => setConfirmRemove(false)}
+          onConfirm={async () => {
+            const response = await axios.delete(`${API_BASE}/vendors/${vendor.id}/integration`)
+            setState({ loading: false, error: '', integration: null, events: [] })
+            return response
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
 const RECENT_JOBS_PREVIEW = 5
 
 function VendorJobRow({ job, onOpen }) {
@@ -953,7 +1117,7 @@ function VendorDetailModal({ vendorId, onClose, onChanged, onSendJob, onOpenJob 
         </>
       )}
     >
-      {state.loading && <p className="market-empty">กำลังโหลด...</p>}
+      {state.loading && <MarketEmpty variant="loading" />}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
       {vendor && (
         <div className="repair-detail">
@@ -987,6 +1151,7 @@ function VendorDetailModal({ vendorId, onClose, onChanged, onSendJob, onOpenJob 
             setState((current) => ({ ...current, data: { ...current.data, api_keys: apiKeys } }))
             onChanged()
           }} />
+          <IntegrationPanel vendor={vendor} hasApiKey={data.api_keys.some((key) => !key.revoked_at)} />
           <section className="market-section">
             <div className="market-section-head">
               <h4><span className="market-section-icon"><Icon name="clock" size={15} /></span> งานล่าสุดของช่างรายนี้ <span className="market-count">{data.jobs.length}</span></h4>
@@ -1679,7 +1844,7 @@ function JobDetailModal({ job, onClose, onChanged }) {
             <div className="repair-detail-rows">
               <DetailRow icon="wrench" tone="blue" label="ร้าน/บริษัทช่าง" value={job.vendor_name} sub={job.vendor_contract_type ? `สัญญา${CONTRACT_LABEL[job.vendor_contract_type]}` : null} />
               <DetailRow icon="phone" tone="green" label="เบอร์ช่าง" value={job.vendor_phone || '-'} href={`tel:${job.vendor_phone}`} />
-              <DetailRow icon="user" tone="violet" label="ช่างที่เข้าซ่อม" value={job.technician_name || '-'} />
+              <DetailRow icon="user" tone="violet" label="ช่างที่เข้าซ่อม" value={job.technician_name || '-'} sub={job.technician_phone ? `โทร ${job.technician_phone}` : null} href={job.technician_phone ? `tel:${job.technician_phone}` : undefined} />
               <DetailRow icon="calendar" tone="rose" label="นัดเข้าซ่อม" value={job.scheduled_at ? thaiDateTime(job.scheduled_at) : '-'} />
               <DetailRow icon="clock" tone="teal" label="อัปเดตล่าสุด" value={thaiDateTime(job.status_updated_at || job.created_at)} sub={job.status_updated_by ? `โดย ${job.status_updated_by}` : null} />
             </div>
@@ -1800,7 +1965,11 @@ function JobsSection({ data, onSend, onOpenJob, onCancelJob, initialFilter = 'op
         {canEdit && <button type="button" className="market-btn is-primary market-toolbar-action" onClick={() => onSend(null)}><Icon name="send" size={15} /> ติดต่อช่าง</button>}
       </div>
       <div className="market-scroll">
-        {jobs.length === 0 ? <p className="market-empty">ไม่พบงานซ่อม</p> : (
+        {jobs.length === 0 ? (
+          data.jobs.length === 0
+            ? <MarketEmpty title="ยังไม่มีงานซ่อม" hint={canEdit ? 'กด “ติดต่อช่าง” ด้านบนเพื่อส่งงานให้ช่าง' : 'เมื่อมีการส่งงานให้ช่าง รายการจะแสดงที่นี่'} />
+            : <MarketEmpty variant="search" title="ไม่พบงานซ่อมที่ตรงกับเงื่อนไข" hint="ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองอื่น" />
+        ) : (
           <div className="repair-job-grid">
             {jobs.map((job) => <JobCard key={job.id} job={job} onOpen={onOpenJob} onCancel={canEdit ? onCancelJob : null} />)}
           </div>
@@ -1857,7 +2026,11 @@ function VendorsSection({ data, onOpen, onCreate, onSend }) {
         {canEdit && <button type="button" className="market-btn is-primary market-toolbar-action" onClick={onCreate}><Icon name="plus" size={15} /> เพิ่มช่างที่ทำสัญญา</button>}
       </div>
       <div className="market-scroll">
-        {vendors.length === 0 ? <p className="market-empty">ยังไม่มีช่างที่ทำสัญญา</p> : (
+        {vendors.length === 0 ? (
+          data.vendors.length === 0
+            ? <MarketEmpty title="ยังไม่มีช่างที่ทำสัญญา" hint={canEdit ? 'กด “เพิ่มช่างที่ทำสัญญา” ด้านบนเพื่อเพิ่มช่างคนแรก' : 'เมื่อมีการเพิ่มช่าง รายการจะแสดงที่นี่'} />
+            : <MarketEmpty variant="search" title="ไม่พบช่างที่ตรงกับคำค้นหา" hint="ลองค้นด้วยชื่อ เบอร์โทร หรือประเภทงาน" />
+        ) : (
           <div className="repair-vendor-grid">
             {vendors.map((vendor) => <VendorCard key={vendor.id} vendor={vendor} onOpen={onOpen} onSend={onSend} />)}
           </div>
@@ -2096,6 +2269,90 @@ function ApiClientSamples({ base }) {
   )
 }
 
+/** RenoCare-style partners: they push signed webhooks to us instead of polling */
+function PartnerIntegrationGuide({ base }) {
+  const webhookUrl = partnerWebhookUrl(API_ORIGIN, REPAIR_WEBHOOK_PREFIX)
+  const prompt = useMemo(() => partnerIntegrationPrompt(base, webhookUrl), [base, webhookUrl])
+  const signSample = useMemo(() => partnerSignSample(), [])
+  return (
+    <>
+      <section className="market-section">
+        <div className="market-endpoints-head">
+          <div>
+            <h4><Icon name="link" size={18} /> เชื่อมต่อระบบภายนอก (RenoCare)</h4>
+            <p>สำหรับช่างที่มีระบบของตัวเอง ระบบช่างดึงข้อมูลเจ้าของหอ และส่งชื่อช่าง เบอร์ และสถานะงานกลับมาทาง Webhook ที่เซ็นด้วย HMAC</p>
+          </div>
+        </div>
+        <div className="market-api-credentials">
+          <p className="market-api-base"><span>Base URL</span><code>{base}</code><CopyButton value={base} /></p>
+          <p className="market-api-base"><span>Header</span><code>X-API-Key: &lt;API_KEY&gt;</code><small>key เดียวกับที่ออกในหน้ารายละเอียดช่าง</small></p>
+          <p className="market-api-base"><span>Webhook URL</span><code>{webhookUrl}</code><small>แทน &lt;BUILDING_REF&gt; ด้วยรหัสอาคารที่ตั้งในหน้ารายละเอียดช่าง</small></p>
+        </div>
+        <div className="repair-partner-exchange">
+          {PARTNER_EXCHANGE.map((group) => (
+            <div key={group.from}>
+              <h5>{group.from}</h5>
+              <ul>{group.items.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="market-section">
+        <div className="market-endpoints-head">
+          <div>
+            <h4><Icon name="send" size={18} /> Webhook ที่ RenoCare ส่งมาหาหอพัก</h4>
+            <p>POST ไปที่ Webhook URL พร้อม header <code>X-Signature: sha256=HMAC(webhookSecret, body)</code> ระบบตรวจลายเซ็นก่อนรับข้อมูล</p>
+          </div>
+          <CopyButton value={PARTNER_INBOUND_SAMPLE} />
+        </div>
+        <pre className="market-code"><code>{PARTNER_INBOUND_SAMPLE}</code></pre>
+        <div className="repair-field-cards">
+          <h5>ฟิลด์ที่รับ</h5>
+          <ul>
+            {PARTNER_INBOUND_FIELDS.map((item) => (
+              <li key={item.name}>
+                <code>{item.name}</code>
+                <span>{item.type}</span>
+                <small>{item.note}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="repair-partner-sign">
+          <div className="market-client-tabs">
+            <span className="repair-partner-sign-label">ตัวอย่างการเซ็น (Node.js)</span>
+            <CopyButton value={signSample} />
+          </div>
+          <pre className="market-code"><code>{signSample}</code></pre>
+        </div>
+        <dl className="market-api-errors">
+          {PARTNER_INBOUND_RESPONSES.map(([code, text]) => {
+            const [status, ...name] = code.split(' ')
+            return <div key={code}><dt><span>{status}</span>{name.length > 0 && <code>{name.join(' ')}</code>}</dt><dd>{text}</dd></div>
+          })}
+        </dl>
+      </section>
+
+      <section className="market-section market-api-prompt">
+        <div className="market-endpoints-head">
+          <div>
+            <h4><Icon name="user" size={18} /> Prompt สำหรับทีม RenoCare</h4>
+            <p>ส่งข้อความนี้ให้ทีมที่ดูแลระบบ RenoCare เอาไปวางใน AI เพื่อเขียนโค้ดฝั่ง RenoCare ได้ครบตามสเปก</p>
+          </div>
+          <CopyButton value={prompt} label="คัดลอก Prompt" />
+        </div>
+        <ol className="market-prompt-steps">
+          <li>ตั้งรหัสอาคารในหน้ารายละเอียดช่าง แล้วแทน &lt;BUILDING_REF&gt; ใน Prompt ด้วยรหัสนั้น</li>
+          <li>ส่ง API key ให้ RenoCare แยกจาก Prompt อย่าวาง key จริงลงใน Prompt</li>
+          <li>ขอ webhookSecret, apiKey และ URL รับ webhook จาก RenoCare มากรอกในหน้ารายละเอียดช่าง</li>
+        </ol>
+        <pre className="market-code market-prompt-box"><code>{prompt}</code></pre>
+      </section>
+    </>
+  )
+}
+
 function ApiGuideSection() {
   const base = `${API_ORIGIN}${REPAIR_VENDOR_API_PREFIX}`
   const prompt = useMemo(() => repairAiPrompt(base), [base])
@@ -2200,9 +2457,12 @@ function ApiGuideSection() {
           <span><code>X-Repair-Event: job.created</code> หอพักส่งงานใหม่ หรือกดส่งแจ้งเตือนซ้ำ</span>
           <span><code>X-Repair-Event: job.updated</code> หอพักแก้ไขรายละเอียดงาน</span>
           <span><code>X-Repair-Event: job.cancelled</code> หอพักยกเลิกงาน</span>
+          <span><code>X-Signature</code> / <code>X-API-Key</code> แนบมาด้วยเมื่อหอพักตั้งค่าการเชื่อมต่อระบบภายนอก (ดูหัวข้อ RenoCare ด้านล่าง)</span>
         </div>
         <pre className="market-code"><code>{REPAIR_WEBHOOK_SAMPLE}</code></pre>
       </section>
+
+      <PartnerIntegrationGuide base={base} />
 
       <section className="market-section market-api-prompt">
         <div className="market-endpoints-head">
@@ -2338,7 +2598,7 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
         </RepairModal>
       )}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
-      {state.loading && !data && <p className="market-empty">กำลังโหลด...</p>}
+      {state.loading && !data && <MarketEmpty variant="loading" />}
 
       {data && section === 'jobs' && (
         <JobsSection

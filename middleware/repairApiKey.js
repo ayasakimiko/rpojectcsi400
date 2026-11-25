@@ -3,6 +3,8 @@ import { getPool } from "../Database/connection.js";
 import { encryptApiKey, hashApiKey, sendApiError } from "./marketApiKey.js";
 
 export const REPAIR_API_KEY_HEADER = "x-repair-api-key";
+// partner systems (e.g. RenoCare) send the same key in the generic header
+export const PARTNER_API_KEY_HEADER = "x-api-key";
 
 const KEY_PATTERN = /^rpk_[A-Za-z0-9]{10}_[A-Za-z0-9]{32}$/;
 const KEY_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -47,7 +49,7 @@ function takeRateSlot(keyId) {
 export function repairApiCors(req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Repair-Api-Key");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Repair-Api-Key, X-API-Key");
   res.setHeader("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After");
   res.setHeader("Access-Control-Max-Age", "600");
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -56,11 +58,11 @@ export function repairApiCors(req, res, next) {
 
 export async function authenticateRepairApiKey(req, res, next) {
   if (req.headers.authorization) {
-    return sendApiError(res, 401, "INVALID_API_KEY", "API ช่างซ่อมใช้ได้เฉพาะ X-Repair-Api-Key ห้ามส่ง Authorization");
+    return sendApiError(res, 401, "INVALID_API_KEY", "API ช่างซ่อมใช้ได้เฉพาะ X-Repair-Api-Key หรือ X-API-Key ห้ามส่ง Authorization");
   }
-  const key = req.headers[REPAIR_API_KEY_HEADER];
+  const key = req.headers[REPAIR_API_KEY_HEADER] ?? req.headers[PARTNER_API_KEY_HEADER];
   if (typeof key !== "string" || !KEY_PATTERN.test(key)) {
-    return sendApiError(res, 401, "INVALID_API_KEY", "กรุณาส่ง API key ที่ถูกต้องใน header X-Repair-Api-Key");
+    return sendApiError(res, 401, "INVALID_API_KEY", "กรุณาส่ง API key ที่ถูกต้องใน header X-Repair-Api-Key หรือ X-API-Key");
   }
   try {
     const db = getPool();

@@ -3,7 +3,8 @@ import { getPool } from "../Database/connection.js";
 import { getActingStaffName } from "../middleware/accounts.js";
 import { actorOf } from "../middleware/notifications.js";
 import { repairJobCancelled, repairJobEdited, repairJobSent, repairKeyChanged, repairVendorChanged } from "./repairNotifications.js";
-import { decryptApiKey, hashApiKey } from "../middleware/marketApiKey.js";
+import { decryptApiKey, encryptApiKey, hashApiKey } from "../middleware/marketApiKey.js";
+import { BUILDING_REF_PATTERN } from "./RepairPartnerWebhook.js";
 import { generateRepairApiKey } from "../middleware/repairApiKey.js";
 import { VENDOR_MAX_IMAGES, VENDOR_MIN_IMAGES, parseVendorImages, removeVendorFiles, vendorImagePath } from "../middleware/repairUploads.js";
 import { validateText } from "../src/utils/validators.js";
@@ -364,6 +365,109 @@ async function checkLinkedRequest(db, input) {
   );
   if (open) throw fail("รายการแจ้งซ่อมนี้ส่งให้ช่างไปแล้วและยังไม่ปิดงาน", 409, "CONFLICT");
 }
+
+// ---- partner integration (RenoCare): building ref, secrets they gave us, owner email we share ----
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const INTEGRATION_EVENTS = 20;
+
+function secretHint(cipher) {
+  if (!cipher) return null;
+  try {
+    return `••••${decryptApiKey(cipher).slice(-4)}`;
+  } catch {
+    return "ถอดรหัสไม่ได้";
+  }
+}
+
+async function loadIntegration(db, vendorId) {
+  const [[row]] = await db.query("SELECT * FROM RepairVendorIntegration WHERE vendor_id = ?", [vendorId]);
+  const [events] = await db.query(
+    `SELECT id, job_id, status, result, received_at FROM RepairWebhookEvent
+     WHERE vendor_id = ? ORDER BY id DESC LIMIT ?`,
+    [vendorId, INTEGRATION_EVENTS],
+  );
+  if (!row) return { integration: null, events };
+  return {
+    integration: {
+      building_ref: row.building_ref,
+      owner_email: row.owner_email,
+      partner_api_key_hint: secretHint(row.partner_api_key_cipher),
+      webhook_secret_hint: secretHint(row.webhook_secret_cipher),
+      webhook_path: `/api/repair/webhooks/renocare/${row.building_ref}`,
+      owner_path: `/api/repair/v1/buildings/${row.building_ref}/owner`,
+      updated_by_name: row.updated_by_name,
+      updated_at: row.updated_at,
+    },
+    events,
+  };
+}
+
+/** undefined = keep, "" / null = clear, otherwise the new secret encrypted */
+function secretInput(value, label) {
+  if (value === undefined) return undefined;
+  if (value === null || (typeof value === "string" && !value.trim())) return null;
+  if (typeof value !== "string" || value.trim().length < 8 || value.trim().length > 512) {
+    throw fail(`${label}ต้องยาว 8-512 ตัวอักษร`);
+  }
+  return encryptApiKey(value.trim());
+}
+
+function parseIntegrationInput(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw fail("รูปแบบข้อมูลไม่ถูกต้อง");
+  const ref = typeof body.building_ref === "string" ? body.building_ref.trim() : "";
+  if (!BUILDING_REF_PATTERN.test(ref)) {
+    throw fail("รหัสอาคารต้องเป็น A-Z, 0-9, - หรือ _ ยาว 3-40 ตัว และขึ้นต้นด้วยตัวอักษรหรือตัวเลข");
+  }
+  const email = typeof body.owner_email === "string" ? body.owner_email.trim() : "";
+  if (email && (email.length > 255 || !EMAIL_PATTERN.test(email))) throw fail("อีเมลเจ้าของหอไม่ถูกต้อง");
+  return {
+    building_ref: ref,
+    owner_email: email || null,
+    partner_api_key_cipher: secretInput(body.partner_api_key, "API key ของระบบช่าง"),
+    webhook_secret_cipher: secretInput(body.webhook_secret, "Webhook secret "),
+  };
+}
+
+router.get("/vendors/:id/integration", async (req, res) => {
+  const db = getPool();
+  const vendorId = parseId(req.params.id);
+  await loadVendor(db, vendorId);
+  res.setHeader("Cache-Control", "no-store");
+  res.json(await loadIntegration(db, vendorId));
+});
+
+router.put("/vendors/:id/integration", async (req, res) => {
+  const db = getPool();
+  const vendorId = parseId(req.params.id);
+  await loadVendor(db, vendorId);
+  const input = parseIntegrationInput(req.body);
+  const [[taken]] = await db.query(
+    "SELECT vendor_id FROM RepairVendorIntegration WHERE building_ref = ? AND vendor_id <> ?",
+    [input.building_ref, vendorId],
+  );
+  if (taken) throw fail("รหัสอาคารนี้ถูกใช้กับช่างรายอื่นแล้ว", 409, "CONFLICT");
+  const keep = (field) => (input[field] === undefined ? field : "?");
+  const secretFields = ["partner_api_key_cipher", "webhook_secret_cipher"];
+  const secretValues = secretFields.filter((field) => input[field] !== undefined).map((field) => input[field]);
+  const name = await actorName(req);
+  await db.query(
+    `INSERT INTO RepairVendorIntegration (vendor_id, building_ref, owner_email, partner_api_key_cipher, webhook_secret_cipher, updated_by_name)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE building_ref = VALUES(building_ref), owner_email = VALUES(owner_email),
+       ${secretFields.map((field) => `${field} = ${keep(field) === "?" ? "?" : field}`).join(", ")},
+       updated_by_name = VALUES(updated_by_name)`,
+    [vendorId, input.building_ref, input.owner_email, input.partner_api_key_cipher ?? null, input.webhook_secret_cipher ?? null, name, ...secretValues],
+  );
+  res.json({ message: "บันทึกการเชื่อมต่อระบบช่างเรียบร้อยแล้ว", ...(await loadIntegration(db, vendorId)) });
+});
+
+router.delete("/vendors/:id/integration", async (req, res) => {
+  const db = getPool();
+  const vendorId = parseId(req.params.id);
+  await loadVendor(db, vendorId);
+  await db.query("DELETE FROM RepairVendorIntegration WHERE vendor_id = ?", [vendorId]);
+  res.json({ message: "ยกเลิกการเชื่อมต่อระบบช่างแล้ว", integration: null, events: [] });
+});
 
 router.post("/jobs", async (req, res) => {
   const db = getPool();

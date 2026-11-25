@@ -46,7 +46,8 @@ router.get("/", (req, res) => {
       "GET /api/repair/v1/vendor",
       "GET /api/repair/v1/jobs?status=",
       "GET /api/repair/v1/jobs/:id",
-      "PATCH|PUT /api/repair/v1/jobs/:id/status (status, note, technician_name, scheduled_at)",
+      "PATCH|PUT /api/repair/v1/jobs/:id/status (status, note, technician_name, technician_phone, scheduled_at)",
+      "GET /api/repair/v1/buildings/:ref/owner",
     ],
     statuses: { accepted: "รับงาน", rejected: "ปฏิเสธงาน", in_progress: "กำลังซ่อม", done: "ซ่อมเสร็จ" },
   });
@@ -66,6 +67,27 @@ router.get("/vendor", async (req, res) => {
   });
 });
 router.all("/vendor", readOnly("ข้อมูลช่างและสัญญาซ่อม"));
+
+// owner contact for partner integrations; the ref must be the one this vendor's key is bound to
+router.get("/buildings/:ref/owner", async (req, res) => {
+  const db = getPool();
+  const [[integration]] = await db.query(
+    "SELECT building_ref, owner_email FROM RepairVendorIntegration WHERE vendor_id = ?",
+    [req.vendor.vendorId],
+  );
+  if (!integration || integration.building_ref !== req.params.ref) throw fail("ไม่พบอาคารนี้", 404, "NOT_FOUND");
+  const [[owner]] = await db.query(
+    "SELECT first_name, last_name, phone FROM Owner WHERE is_suspended = FALSE ORDER BY id LIMIT 1",
+  );
+  if (!owner) throw fail("ยังไม่มีข้อมูลเจ้าของหอในระบบ", 404, "NOT_FOUND");
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    name: `${owner.first_name} ${owner.last_name}`.trim(),
+    phone: owner.phone,
+    email: integration.owner_email || null,
+  });
+});
+router.all("/buildings/:ref/owner", readOnly("ข้อมูลเจ้าของหอ"));
 
 router.get("/jobs", async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status.trim() : "";

@@ -60,6 +60,9 @@ before(async () => {
   );
   fixture.customerId = customer.insertId;
   fixture.customerToken = jwt.sign({ id: customer.insertId, role: "Customer" }, SECRET, { expiresIn: "10m" });
+  // a fresh database has no DormConfig row yet; create it so the UPDATE below takes effect
+  const [created] = await db.query("INSERT IGNORE INTO DormConfig (id) VALUES (1)");
+  fixture.createdConfig = created.affectedRows === 1;
   const [[config]] = await db.query("SELECT payment_test_mode, slip_verify_mode, parking_fine_per_hour FROM DormConfig WHERE id = 1");
   originalConfig = config;
   await db.query("UPDATE DormConfig SET payment_test_mode = TRUE, slip_verify_mode = 'auto', parking_fine_per_hour = 25 WHERE id = 1");
@@ -68,7 +71,9 @@ before(async () => {
 after(async () => {
   const db = getPool();
   try {
-    if (originalConfig) {
+    if (fixture.createdConfig) {
+      await db.query("DELETE FROM DormConfig WHERE id = 1");
+    } else if (originalConfig) {
       await db.query("UPDATE DormConfig SET payment_test_mode = ?, slip_verify_mode = ?, parking_fine_per_hour = ? WHERE id = 1", [
         originalConfig.payment_test_mode,
         originalConfig.slip_verify_mode,

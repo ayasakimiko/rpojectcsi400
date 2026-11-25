@@ -2068,3 +2068,153 @@
   background: #f0fdf4;
   color: #047857;
 }
+
+/* ---------- partner integration (RenoCare) ---------- */
+.repair-integration-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px dashed #cbd8ea;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.repair-integration-empty p {
+  flex: 1 1 260px;
+  margin: 0;
+  color: #5d728b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.repair-share-title {
+  margin: 0 0 8px;
+  color: #10233f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.repair-share-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.repair-share-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.repair-share-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.repair-share-text small {
+  color: #5d728b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.repair-share-text code {
+  color: #1d4ed8;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.repair-share-text em {
+  color: #7c8ca3;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.repair-webhook-log {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repair-webhook-log li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #5d728b;
+  font-size: 12.5px;
+}
+
+.repair-integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.repair-partner-exchange {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.repair-partner-exchange > div {
+  padding: 12px 14px;
+  border: 1px solid #e3ecf8;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.repair-partner-exchange h5 {
+  margin: 0 0 6px;
+  color: #10233f;
+  font-size: 13.5px;
+}
+
+.repair-partner-exchange ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #4a5d78;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.repair-partner-sign {
+  margin-top: 14px;
+}
+
+.repair-partner-sign-label {
+  margin-right: auto;
+  color: #10233f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* inline code inside guide section descriptions: light chip instead of the dark global code background */
+.market-api-guide .market-endpoints-head p code {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 1px 8px;
+  border: 1px solid #dbe7fb;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

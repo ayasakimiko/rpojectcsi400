@@ -1,4 +1,6 @@
+import { createHmac } from "node:crypto";
 import { validateText, isValidPhone } from "../src/utils/validators.js";
+import { decryptApiKey } from "../middleware/marketApiKey.js";
 import { MAINTENANCE_CATEGORY_KEYS, MAINTENANCE_TIME_KEYS } from "../src/utils/maintenanceCategories.js";
 import { actorOf } from "../middleware/notifications.js";
 import { repairVendorStatusChanged } from "./repairNotifications.js";
@@ -27,7 +29,7 @@ export const VENDOR_TRANSITIONS = {
   done: { from: ["accepted", "in_progress"], label: "ซ่อมเสร็จแล้ว", tone: "success" },
 };
 
-const STATUS_FIELDS = ["status", "note", "technician_name", "scheduled_at"];
+const STATUS_FIELDS = ["status", "note", "technician_name", "technician_phone", "scheduled_at"];
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_FEE = 99_999_999.99;
 
@@ -47,6 +49,16 @@ function optionalText(value, label, maxLength) {
   const error = validateText(value, label, { maxLength });
   if (error) throw fail(error);
   return value.trim();
+}
+
+/** accepts 081-234-5678, 081 234 5678 and +66812345678; returns 0812345678 */
+export function normalizePhone(value) {
+  if (value === undefined) return undefined;
+  if (value === null || (typeof value === "string" && !value.trim())) return null;
+  if (typeof value !== "string" && typeof value !== "number") throw fail("technician_phone ต้องเป็นข้อความ");
+  const digits = String(value).replace(/[\s()-]/g, "").replace(/^\+66/, "0");
+  if (!isValidPhone(digits)) throw fail("technician_phone ต้องเป็นเบอร์ที่ขึ้นต้นด้วย 0 และมี 9-10 หลัก");
+  return digits;
 }
 
 function requiredText(value, label, maxLength) {
@@ -182,6 +194,7 @@ export function validateStatusInput(body) {
     status: body.status,
     note,
     technician_name: body.technician_name === undefined ? undefined : optionalText(body.technician_name, "technician_name", 150),
+    technician_phone: normalizePhone(body.technician_phone),
     scheduled_at: parseSchedule(body.scheduled_at),
   };
 }
@@ -210,6 +223,8 @@ export function publicJob(row) {
     preferred_time: row.preferred_time,
     status: row.status,
     technician_name: row.technician_name,
+    technician_phone: row.technician_phone ?? null,
+    external_ref: row.external_ref ?? null,
     scheduled_at: row.scheduled_at,
     vendor_note: row.vendor_note,
     cancel_reason: row.cancel_reason,
@@ -242,14 +257,44 @@ export async function loadJob(db, jobId, vendorId = null) {
 
 const WEBHOOK_TIMEOUT_MS = 5000;
 
+export function signWebhookBody(secret, body) {
+  return `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+}
+
+function decryptOrNull(cipher) {
+  if (!cipher) return null;
+  try {
+    return decryptApiKey(cipher);
+  } catch {
+    return null;
+  }
+}
+
+/** secrets a partner integration gave us; both null for vendors that only poll our API */
+export async function loadPartnerSecrets(db, vendorId) {
+  const [[row]] = await db.query(
+    "SELECT partner_api_key_cipher, webhook_secret_cipher FROM RepairVendorIntegration WHERE vendor_id = ?",
+    [vendorId],
+  );
+  return { apiKey: decryptOrNull(row?.partner_api_key_cipher), webhookSecret: decryptOrNull(row?.webhook_secret_cipher) };
+}
+
 export async function deliverWebhook(db, vendor, event, job) {
   if (!vendor.webhook_url) return;
   let status = "failed";
   try {
+    const body = JSON.stringify({ event, sent_at: new Date().toISOString(), job: publicJob(job) });
+    const partner = await loadPartnerSecrets(db, vendor.id);
     const response = await fetch(vendor.webhook_url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Repair-Event": event, "User-Agent": "DormRepairWebhook/1" },
-      body: JSON.stringify({ event, sent_at: new Date().toISOString(), job: publicJob(job) }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Repair-Event": event,
+        "User-Agent": "DormRepairWebhook/1",
+        ...(partner.apiKey ? { "X-API-Key": partner.apiKey } : {}),
+        ...(partner.webhookSecret ? { "X-Signature": signWebhookBody(partner.webhookSecret, body) } : {}),
+      },
+      body,
       signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       redirect: "manual",
     });
@@ -298,6 +343,8 @@ export async function applyVendorStatus(db, job, input, vendor) {
          completed_at = IF(? IN ('done', 'rejected'), COALESCE(completed_at, NOW()), completed_at),
          vendor_note = COALESCE(?, vendor_note),
          technician_name = IF(?, ?, technician_name),
+         technician_phone = IF(?, ?, technician_phone),
+         external_ref = IF(?, ?, external_ref),
          scheduled_at = IF(?, ?, scheduled_at)
      WHERE id = ? AND vendor_id = ? AND status = ?`,
     [
@@ -305,6 +352,8 @@ export async function applyVendorStatus(db, job, input, vendor) {
       input.status, input.status, input.status,
       input.note,
       input.technician_name !== undefined, input.technician_name ?? null,
+      input.technician_phone !== undefined, input.technician_phone ?? null,
+      input.external_ref !== undefined, input.external_ref ?? null,
       input.scheduled_at !== undefined, input.scheduled_at ?? null,
       job.id, vendor.vendorId, job.status,
     ],
@@ -314,7 +363,8 @@ export async function applyVendorStatus(db, job, input, vendor) {
   const actor = actorOf(null, actorName);
   if (input.status !== job.status) await syncMaintenanceRequest(db, updated, input.status, actor);
   const scheduleChanged = String(updated.scheduled_at ?? "") !== String(job.scheduled_at ?? "")
-    || (updated.technician_name ?? "") !== (job.technician_name ?? "");
+    || (updated.technician_name ?? "") !== (job.technician_name ?? "")
+    || (updated.technician_phone ?? "") !== (job.technician_phone ?? "");
   await repairVendorStatusChanged(db, updated, actor, { previousStatus: job.status, note: input.note, scheduleChanged });
   return updated;
 }

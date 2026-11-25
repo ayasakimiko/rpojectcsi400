@@ -10,12 +10,14 @@ export const REPAIR_GUIDE_RULES = [
   'สิ่งที่ทำได้คือเปลี่ยนสถานะงาน พร้อมแนบหมายเหตุ ชื่อช่างที่ไปซ่อม และวันเวลานัดหมาย',
   'เมื่อสัญญาหมดอายุ ถูกปิดการใช้งาน หรือ key ถูกยกเลิก จะเรียก API ไม่ได้ทันที',
   'เรียกได้สูงสุด 120 ครั้งต่อนาทีต่อ key',
+  'ส่ง key ใน header X-Repair-Api-Key หรือ X-API-Key ก็ได้ (ระบบภายนอกเช่น RenoCare ใช้ X-API-Key)',
 ]
 
 export const REPAIR_GUIDE_ENDPOINTS = [
   { method: 'GET', path: '/vendor', access: 'อ่าน', detail: 'ข้อมูลช่าง สัญญาซ่อม ค่าสัญญาที่เรียกเก็บจากหอพัก และจำนวนงานแยกตามสถานะ' },
   { method: 'GET', path: '/jobs?status=', access: 'อ่าน', detail: 'รายการงานซ่อมที่ได้รับ กรองตามสถานะได้ (ล่าสุด 200 งาน)' },
   { method: 'GET', path: '/jobs/:id', access: 'อ่าน', detail: 'รายละเอียดงานซ่อม 1 งาน' },
+  { method: 'GET', path: '/buildings/:ref/owner', access: 'อ่าน', detail: 'ชื่อ เบอร์ และอีเมลเจ้าของหอ ใช้ได้เฉพาะช่างที่หอพักตั้งรหัสอาคารให้แล้ว' },
   { method: 'PATCH', path: '/jobs/:id/status', access: 'แก้ไข', detail: 'เปลี่ยนสถานะงาน (ใช้ PUT ได้)' },
 ]
 
@@ -32,6 +34,7 @@ export const REPAIR_STATUS_FIELDS = [
   { name: 'status', type: 'accepted | rejected | in_progress | done', note: 'จำเป็น ต้องเป็นขั้นถัดไปที่ทำได้' },
   { name: 'note', type: 'ข้อความ ≤ 500', note: 'หมายเหตุถึงหอพัก จำเป็นเมื่อ status = rejected' },
   { name: 'technician_name', type: 'ข้อความ ≤ 150', note: 'ชื่อช่างที่จะเข้าไปซ่อม ส่ง null เพื่อล้าง' },
+  { name: 'technician_phone', type: 'เบอร์โทร', note: 'เบอร์ช่างที่จะเข้าไปซ่อม รับ 081-234-5678 หรือ +6681... ได้ ส่ง null เพื่อล้าง' },
   { name: 'scheduled_at', type: 'YYYY-MM-DDTHH:mm', note: 'วันเวลานัดเข้าซ่อม ส่ง null เพื่อล้าง' },
 ]
 
@@ -39,7 +42,7 @@ export const REPAIR_GUIDE_ERRORS = [
   ['401 INVALID_API_KEY', 'ไม่มี key, key ผิด, ถูกยกเลิก หรือสัญญาซ่อมไม่อยู่ในช่วงใช้งาน'],
   ['403 READ_ONLY', 'พยายามแก้ไขข้อมูลงานหรือข้อมูลช่างโดยตรง'],
   ['400 VALIDATION_ERROR', 'ข้อมูลไม่ถูกต้อง เช่น status ไม่รู้จัก หรือปฏิเสธงานโดยไม่ใส่ note'],
-  ['400 FIELD_NOT_ALLOWED', 'ส่งฟิลด์อื่นนอกจาก status, note, technician_name, scheduled_at'],
+  ['400 FIELD_NOT_ALLOWED', 'ส่งฟิลด์อื่นนอกจาก status, note, technician_name, technician_phone, scheduled_at'],
   ['404 NOT_FOUND', 'ไม่พบงาน หรือเป็นงานของช่างรายอื่น'],
   ['409 INVALID_TRANSITION', 'เปลี่ยนข้ามขั้นไม่ได้ เช่น จาก sent ไป done หรืองานถูกยกเลิกไปแล้ว'],
   ['429 RATE_LIMITED', 'เรียกเกิน 120 ครั้ง/นาที ต่อ key (ดู header Retry-After)'],
@@ -55,7 +58,7 @@ const json = (value) => JSON.stringify(value, null, 2)
 
 const SAMPLE_JOB = {
   id: 41, room_number: 305, category: 'aircon', urgency: 'urgent', description: 'แอร์ไม่เย็น มีน้ำหยดจากตัวเครื่อง',
-  contact_phone: '0812345678', preferred_time: 'afternoon', status: 'sent', technician_name: null, scheduled_at: null,
+  contact_phone: '0812345678', preferred_time: 'afternoon', status: 'sent', technician_name: null, technician_phone: null, external_ref: null, scheduled_at: null,
   vendor_note: null, cancel_reason: null, sent_by_name: 'สมชาย ใจดี', created_at: '2026-10-26T03:15:00.000Z',
   accepted_at: null, started_at: null, completed_at: null, cancelled_at: null, status_updated_at: '2026-10-26T03:15:00.000Z',
 }
@@ -208,7 +211,7 @@ export function repairAiPrompt(base) {
     '- GET /vendor — ข้อมูลช่าง สัญญาซ่อม ค่าสัญญา (contract_fee ต่อ contract_fee_period: month หรือ year) และจำนวนงานแยกตามสถานะ',
     '- GET /jobs?status=<status> — รายการงาน (sent, accepted, in_progress, done, rejected, cancelled)',
     '- GET /jobs/{id} — รายละเอียดงาน 1 งาน',
-    '- PATCH /jobs/{id}/status — เปลี่ยนสถานะ ส่งได้เฉพาะ status, note, technician_name, scheduled_at',
+    '- PATCH /jobs/{id}/status — เปลี่ยนสถานะ ส่งได้เฉพาะ status, note, technician_name, technician_phone, scheduled_at',
     '',
     '## ลำดับสถานะ',
     '- sent → accepted หรือ rejected (rejected ต้องมี note บอกเหตุผล)',
@@ -228,6 +231,114 @@ export function repairAiPrompt(base) {
     '## รูปแบบคำตอบ',
     '- ตอบเป็นภาษาไทย สรุปสั้น ๆ เช่น งาน #41 ห้อง 305 เปลี่ยนเป็น รับงานแล้ว นัด 1 ธ.ค. 13:00',
     '- แสดงรายการงานเป็นตาราง: id | ห้อง | ประเภท | ด่วน | สถานะ | นัดหมาย',
+  ].join('\n')
+}
+
+// ---------- partner systems that push webhooks back to us (RenoCare) ----------
+export const PARTNER_REF_PLACEHOLDER = '<BUILDING_REF>'
+
+export function partnerWebhookUrl(origin, webhookPrefix, ref = PARTNER_REF_PLACEHOLDER) {
+  return `${origin}${webhookPrefix}/renocare/${ref}`
+}
+
+export const PARTNER_EXCHANGE = [
+  { from: 'หอพักส่งให้ RenoCare', items: ['Base URL', 'API Key (rpk_...) ออกจากหน้ารายละเอียดช่าง', 'Webhook URL ที่มีรหัสอาคารต่อท้าย'] },
+  { from: 'RenoCare ส่งให้หอพัก', items: ['webhookSecret ใช้เซ็น X-Signature ทั้งสองทาง', 'apiKey ที่หอพักแนบไปใน X-API-Key ตอนส่ง webhook ให้ RenoCare', 'URL รับ webhook ของ RenoCare (ใส่ในช่อง Webhook URL ของข้อมูลช่าง)'] },
+]
+
+export const PARTNER_INBOUND_SAMPLE = json({
+  event_id: 'rc-evt-000123',
+  job_id: 41,
+  external_ref: 'RC-2026-0042',
+  status: 'in_progress',
+  technician: { name: 'ช่างสมชาย', phone: '081-234-5678' },
+  scheduled_at: '2026-10-27T13:00',
+  note: 'ช่างกำลังเดินทาง',
+})
+
+export const PARTNER_INBOUND_FIELDS = [
+  { name: 'job_id', type: 'ตัวเลข', note: 'id งานที่หอพักส่งไปใน job.created (หรือส่ง external_ref อย่างเดียวถ้าเคยส่งไปแล้ว)' },
+  { name: 'event_id', type: 'ข้อความ ≤ 200', note: 'ไม่ซ้ำกันต่อเหตุการณ์ ส่งซ้ำด้วย id เดิมได้ปลอดภัย ระบบจะตอบ duplicate' },
+  { name: 'status', type: 'accepted | in_progress | done | rejected', note: 'รับ assigned, started, completed, declined ได้ ถ้าไม่ส่งแต่มีข้อมูลช่าง งานที่ยัง sent จะเป็น accepted' },
+  { name: 'technician.name / technician.phone', type: 'ข้อความ / เบอร์โทร', note: 'หรือส่ง technician_name, technician_phone ไว้ระดับบนก็ได้' },
+  { name: 'external_ref', type: 'ข้อความ ≤ 100', note: 'เลขงานฝั่ง RenoCare หอพักเก็บไว้อ้างอิง' },
+  { name: 'scheduled_at', type: 'YYYY-MM-DDTHH:mm', note: 'วันเวลานัดเข้าซ่อม' },
+  { name: 'note', type: 'ข้อความ ≤ 500', note: 'หมายเหตุถึงหอพัก (ถ้า rejected แล้วไม่ใส่ ระบบเติมให้)' },
+]
+
+export const PARTNER_INBOUND_RESPONSES = [
+  ['200', 'สำเร็จ { received, job_id, status, changed } หรือเคยรับ event_id นี้แล้ว { received, duplicate: true }'],
+  ['400 VALIDATION_ERROR', 'JSON เสีย ไม่มี job_id/external_ref หรือ status/เบอร์ไม่ถูกต้อง แก้แล้วค่อยส่งใหม่'],
+  ['401 INVALID_SIGNATURE', 'X-Signature ไม่ตรง ตรวจว่า HMAC คำนวณจาก body ชุดเดียวกับที่ส่งจริง'],
+  ['404 NOT_FOUND', 'รหัสอาคารใน URL ผิด หรือ job_id ไม่ใช่งานของ RenoCare'],
+  ['409 INVALID_TRANSITION', 'งานปิดไปแล้ว (done, rejected, cancelled) เปลี่ยนต่อไม่ได้'],
+  ['5xx / timeout', 'ส่งใหม่ด้วย event_id เดิม'],
+]
+
+export function partnerSignSample() {
+  return [
+    "import { createHmac } from 'node:crypto'",
+    '',
+    'const body = JSON.stringify(payload) // เซ็นจาก string นี้ แล้วส่ง string เดียวกันนี้',
+    "const signature = 'sha256=' + createHmac('sha256', process.env.WEBHOOK_SECRET).update(body).digest('hex')",
+    '',
+    'await fetch(process.env.DORM_WEBHOOK_URL, {',
+    "  method: 'POST',",
+    "  headers: { 'Content-Type': 'application/json', 'X-Signature': signature },",
+    '  body,',
+    '})',
+  ].join('\n')
+}
+
+export function partnerIntegrationPrompt(base, webhookUrl) {
+  return [
+    'คุณคือนักพัฒนาที่ต้องเชื่อมระบบ RenoCare (ระบบจัดการช่างซ่อม) เข้ากับระบบหอพัก ช่วยเขียนโค้ดฝั่ง RenoCare ให้ครบตามสเปกด้านล่าง ถ้าไม่รู้ว่าโปรเจกต์ใช้ภาษาหรือเฟรมเวิร์กอะไร ให้ถามฉันก่อน',
+    '',
+    '## ค่าที่ได้จากหอพัก (เก็บใน environment variable ห้าม hardcode)',
+    `- DORM_BASE_URL = ${base}`,
+    '- DORM_API_KEY = <API key ที่หอพักออกให้ ขึ้นต้นด้วย rpk_>',
+    `- DORM_WEBHOOK_URL = ${webhookUrl}`,
+    `- DORM_BUILDING_REF = ${PARTNER_REF_PLACEHOLDER} (รหัสอาคาร ตัวเดียวกับที่อยู่ท้าย DORM_WEBHOOK_URL)`,
+    '- WEBHOOK_SECRET = <secret ที่ RenoCare สร้างเองแล้วส่งให้หอพัก ใช้เซ็นทั้งสองทาง>',
+    '- RENOCARE_API_KEY = <key ที่ RenoCare ส่งให้หอพัก หอพักจะแนบมาใน X-API-Key ตอนส่ง webhook>',
+    '',
+    '## 1. ดึงข้อมูลเจ้าของหอ',
+    '- GET {DORM_BASE_URL}/buildings/{DORM_BUILDING_REF}/owner',
+    '- header: X-API-Key: {DORM_API_KEY}',
+    '- ตอบกลับ 200: { "name": "...", "phone": "...", "email": "..." หรือ null }',
+    '- 401 = key ผิดหรือสัญญาหมด, 404 = รหัสอาคารผิด, 429 = เรียกเกิน 120 ครั้ง/นาที (รอตาม header Retry-After)',
+    '',
+    '## 2. รับงานซ่อมจากหอพัก (webhook ขาเข้าของ RenoCare)',
+    '- สร้าง endpoint POST เช่น /webhooks/dorm แล้วส่ง URL นี้ให้หอพัก',
+    '- หอพักส่งมาเมื่อ X-Repair-Event เป็น job.created (งานใหม่หรือกดส่งซ้ำ), job.updated (แก้รายละเอียด), job.cancelled (ยกเลิกงาน)',
+    '- header ที่มากับคำขอ: X-Signature: sha256=<hex> และ X-API-Key: {RENOCARE_API_KEY}',
+    '- ต้องอ่าน raw body ก่อน parse JSON แล้วคำนวณ "sha256=" + HMAC-SHA256(WEBHOOK_SECRET, raw body) เป็น hex เทียบกับ X-Signature แบบ constant-time ถ้าไม่ตรง หรือ X-API-Key ไม่ตรง ให้ตอบ 401',
+    '- ต้องตอบ 2xx ภายใน 5 วินาที (บันทึกงานก่อน แล้วค่อยประมวลผลต่อแบบ async)',
+    '- body: { "event": "job.created", "sent_at": "ISO datetime", "job": { "id", "room_number", "category", "urgency", "description", "contact_phone", "preferred_time", "status", "technician_name", "technician_phone", "external_ref", "scheduled_at", "vendor_note", "cancel_reason", "created_at", ... } }',
+    '- เก็บ job.id ไว้ เพราะต้องใช้เป็น job_id ตอนส่งสถานะกลับ งานเดียวกันอาจถูกส่งมาซ้ำได้ ให้ upsert ตาม job.id',
+    '',
+    '## 3. ส่งข้อมูลช่างและสถานะกลับไปหอพัก (webhook ขาออกของ RenoCare)',
+    '- POST {DORM_WEBHOOK_URL}',
+    '- header: Content-Type: application/json และ X-Signature: sha256=<hex HMAC-SHA256(WEBHOOK_SECRET, body)>',
+    '- เซ็นจาก string ของ body ที่จะส่งจริง ห้าม stringify ใหม่หลังเซ็น ไม่งั้นลายเซ็นจะไม่ตรง',
+    '- body:',
+    '  { "event_id": "<id ไม่ซ้ำต่อเหตุการณ์>", "job_id": <job.id ที่ได้จากหอพัก>, "external_ref": "<เลขงานของ RenoCare>",',
+    '    "status": "accepted | in_progress | done | rejected", "technician": { "name": "...", "phone": "0812345678" },',
+    '    "scheduled_at": "YYYY-MM-DDTHH:mm", "note": "..." }',
+    '- ส่งเมื่อ: มอบหมายช่าง (accepted พร้อม technician), ช่างเริ่มงาน (in_progress), ซ่อมเสร็จ (done), ไม่รับงาน (rejected พร้อม note)',
+    '- ลำดับสถานะของหอพัก: sent → accepted → in_progress → done ถ้าส่ง in_progress หรือ done มาเลย ระบบหอพักจะผ่าน accepted ให้เอง',
+    '- ผลตอบกลับ:',
+    '  - 200 { received, job_id, status, changed } = สำเร็จ, 200 { received, duplicate: true } = เคยรับ event_id นี้แล้ว',
+    '  - 400 = ข้อมูลผิด ห้ามส่งซ้ำ ให้ log ไว้แล้วแก้, 401 = ลายเซ็นผิด, 404 = job_id หรือรหัสอาคารผิด',
+    '  - 409 = งานปิดไปแล้ว (done, rejected, cancelled) ห้ามส่งซ้ำ',
+    '  - 5xx หรือ timeout = retry แบบ backoff (เช่น 1, 5, 30 นาที) ด้วย event_id เดิม',
+    '',
+    '## สิ่งที่ต้องส่งมอบ',
+    '1. ฟังก์ชันเรียก owner endpoint',
+    '2. endpoint รับ webhook จากหอพัก พร้อมตรวจลายเซ็นและ X-API-Key',
+    '3. ฟังก์ชันส่งสถานะกลับ พร้อมเซ็นและ retry',
+    '4. unit test: ลายเซ็นถูกและผิด, body ถูกแก้ระหว่างทาง, ส่งซ้ำด้วย event_id เดิม, การจัดการ 400/401/404/409/5xx',
+    '5. วิธีทดสอบกับระบบจริง: ส่ง payload ตัวอย่างไปที่ DORM_WEBHOOK_URL แล้วให้หอพักดูผลในหน้าข้อมูลช่าง',
   ].join('\n')
 }
 

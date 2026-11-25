@@ -30,6 +30,7 @@ const ROUTES = [
 
 export const MARKET_TENANT_API_PREFIX = '/api/market/v1'
 export const REPAIR_VENDOR_API_PREFIX = '/api/repair/v1'
+export const REPAIR_WEBHOOK_PREFIX = '/api/repair/webhooks'
 
 function pathnameOf(url = '') {
   return url.split(/[?#]/, 1)[0].toLowerCase()
@@ -45,7 +46,7 @@ export function isMarketTenantApiPath(url = '') {
 }
 
 export function isRepairVendorApiPath(url = '') {
-  return underPrefix(url, REPAIR_VENDOR_API_PREFIX)
+  return underPrefix(url, REPAIR_VENDOR_API_PREFIX) || underPrefix(url, REPAIR_WEBHOOK_PREFIX)
 }
 
 export function serviceForPath(url = '') {

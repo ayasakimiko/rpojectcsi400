@@ -13,6 +13,7 @@ import adminRouter from "../router/AdminRouter.js";
 import repairVendorRouter from "../router/RepairVendorRouter.js";
 import repairVendorApiRouter from "../router/RepairVendorApiRouter.js";
 import { RepairError } from "../router/repairVendorShared.js";
+import { repairPartnerWebhook } from "../router/RepairPartnerWebhook.js";
 import { domainRouter } from "./domainRoutes.js";
 
 configureDatabaseService("maintenance");
@@ -21,8 +22,12 @@ const app = express();
 const PORT = process.env.MAINTENANCE_PORT || 4008;
 const REPAIR_API_PREFIX = "/api/repair/v1";
 const REPAIR_STAFF_PREFIX = "/api/staff/repair-vendors";
+const REPAIR_WEBHOOK_PREFIX = "/api/repair/webhooks";
+const isPartnerApi = (url) => url.startsWith(REPAIR_API_PREFIX) || url.startsWith(REPAIR_WEBHOOK_PREFIX);
 
 app.set("trust proxy", "loopback, uniquelocal");
+// raw body: X-Signature is an HMAC of the exact bytes the partner sent
+app.post(`${REPAIR_WEBHOOK_PREFIX}/renocare/:ref`, express.raw({ type: () => true, limit: "64kb" }), repairPartnerWebhook);
 app.use(REPAIR_API_PREFIX, repairApiCors, express.json({ limit: "64kb" }), authenticateRepairApiKey, repairVendorApiRouter);
 
 app.use(createCorsMiddleware());
@@ -36,13 +41,13 @@ app.use("/api/staff", domainRouter(staffRouter, "staff", "maintenance"));
 app.use("/api/admin", domainRouter(adminRouter, "admin", "maintenance"));
 
 app.use((req, res) => {
-  if (req.originalUrl.startsWith(REPAIR_API_PREFIX)) return sendApiError(res, 404, "NOT_FOUND", "ไม่พบ endpoint นี้");
+  if (isPartnerApi(req.originalUrl)) return sendApiError(res, 404, "NOT_FOUND", "ไม่พบ endpoint นี้");
   return res.status(404).json({ message: "ไม่พบเส้นทาง API นี้" });
 });
 
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
-  const vendorApi = req.originalUrl.startsWith(REPAIR_API_PREFIX);
+  const vendorApi = isPartnerApi(req.originalUrl);
   if (error instanceof RepairError) {
     return vendorApi ? sendApiError(res, error.status, error.code, error.message) : res.status(error.status).json({ message: error.message, code: error.code });
   }

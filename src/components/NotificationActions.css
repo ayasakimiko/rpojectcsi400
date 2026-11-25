@@ -76,10 +76,6 @@
   background: #fff;
 }
 
-.notif-footer:has(.notif-delete-confirm) .notif-footer-pages {
-  display: none;
-}
-
 .notif-footer-pages {
   display: flex;
   align-items: center;
@@ -116,77 +112,184 @@
   cursor: default;
 }
 
-.notif-delete-confirm {
+/* Delete-all confirm modal, portalled to <body>. */
+.notif-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
   display: flex;
-  flex: 1;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 4px 4px 4px 12px;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(3px);
+  animation: notif-overlay-in 0.18s ease-out;
+}
+
+.notif-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 24px 22px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24), 0 2px 8px rgba(15, 23, 42, 0.08);
+  text-align: center;
+  animation: notif-confirm-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.notif-confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: #fee2e2;
+  box-shadow: 0 0 0 8px #fef2f2;
+  color: #dc2626;
+}
+
+.notif-confirm-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.notif-confirm-desc {
+  margin: 8px 0 0;
+  color: #475569;
+  font-size: 14.5px;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+.notif-confirm-desc strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.notif-confirm-error {
+  width: 100%;
+  margin: 14px 0 0;
+  padding: 9px 12px;
   border: 1px solid #fecaca;
   border-radius: 10px;
   background: #fef2f2;
-  animation: notif-confirm-in 0.16s ease-out;
+  color: #b91c1c;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
-.notif-delete-confirm-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: #991b1b;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.notif-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-top: 22px;
 }
 
-.notif-delete-confirm-cancel,
-.notif-delete-confirm-ok {
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 7px;
-  font-size: 12.5px;
+.notif-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 15px;
   font-weight: 600;
-  white-space: nowrap;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.notif-delete-confirm-cancel {
+.notif-confirm-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.notif-confirm-btn.is-cancel {
   border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #475569;
+  background: #f8fafc;
+  color: #334155;
 }
 
-.notif-delete-confirm-ok {
+.notif-confirm-btn.is-cancel:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.notif-confirm-btn.is-danger {
   border: 1px solid #dc2626;
   background: #dc2626;
   color: #fff;
 }
 
-.notif-delete-confirm-ok:hover:not(:disabled) {
+.notif-confirm-btn.is-danger:hover:not(:disabled) {
+  border-color: #b91c1c;
   background: #b91c1c;
 }
 
-.notif-delete-confirm-cancel:disabled,
-.notif-delete-confirm-ok:disabled {
-  opacity: 0.6;
+.notif-confirm-btn:disabled {
+  opacity: 0.65;
   cursor: default;
+}
+
+.notif-confirm-btn:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.notif-confirm-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: notif-spin 0.7s linear infinite;
+}
+
+@keyframes notif-overlay-in {
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes notif-confirm-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(10px) scale(0.96);
   }
+}
+
+@keyframes notif-spin {
   to {
-    opacity: 1;
-    transform: none;
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 420px) {
+  .notif-confirm-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .notif-confirm-btn.is-danger {
+    order: -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-confirm-overlay,
+  .notif-confirm {
+    animation: none;
   }
 }
 
 .notif-delete-all:focus-visible,
-.notif-delete-confirm-cancel:focus-visible,
-.notif-delete-confirm-ok:focus-visible,
 .notif-item-delete:focus-visible,
 .notif-read-all:focus-visible {
   outline: 3px solid #93c5fd;

@@ -197,3 +197,41 @@ SET @schema_upgrade_sql = IF(
 PREPARE schema_upgrade FROM @schema_upgrade_sql;
 EXECUTE schema_upgrade;
 DEALLOCATE PREPARE schema_upgrade;
+
+SET @schema_upgrade_sql = IF(
+    EXISTS (SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'RepairJob' AND COLUMN_NAME = 'technician_phone'),
+    'SELECT 1',
+    'ALTER TABLE `RepairJob` ADD COLUMN `technician_phone` VARCHAR(20) NULL AFTER `technician_name`, ADD COLUMN `external_ref` VARCHAR(100) NULL AFTER `vendor_id`'
+);
+PREPARE schema_upgrade FROM @schema_upgrade_sql;
+EXECUTE schema_upgrade;
+DEALLOCATE PREPARE schema_upgrade;
+
+-- partner systems (e.g. RenoCare) that push status webhooks to us instead of polling /api/repair/v1
+CREATE TABLE IF NOT EXISTS RepairVendorIntegration (
+    vendor_id INT NOT NULL PRIMARY KEY,
+    building_ref VARCHAR(40) NOT NULL UNIQUE,
+    partner_api_key_cipher VARCHAR(1024) NULL,
+    webhook_secret_cipher VARCHAR(1024) NULL,
+    owner_email VARCHAR(255) NULL,
+    updated_by_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (vendor_id) REFERENCES RepairVendor(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS RepairWebhookEvent (
+    id BIGINT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    vendor_id INT NOT NULL,
+    event_key CHAR(64) NOT NULL,
+    job_id INT NULL,
+    status VARCHAR(20) NULL,
+    result VARCHAR(20) NOT NULL DEFAULT 'processing',
+    received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_repair_webhook_event (vendor_id, event_key),
+    INDEX idx_repair_webhook_received (vendor_id, received_at),
+    FOREIGN KEY (vendor_id) REFERENCES RepairVendor(id) ON DELETE CASCADE
+);

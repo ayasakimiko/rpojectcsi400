@@ -23,6 +23,16 @@
   --paper: #f5f8fc;
   --sans: 'IBM Plex Sans Thai Looped', system-ui, 'Segoe UI', 'Leelawadee UI', sans-serif;
   --grad: linear-gradient(135deg, #3b82f6, #2563eb);
+  --btn-grad: linear-gradient(180deg, #4b8df8 0%, #2563eb 58%, #1f56dc 100%);
+  --btn-grad-hover: linear-gradient(180deg, #5a98fa 0%, #2f6df0 58%, #2159e0 100%);
+  --btn-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 1px 2px rgba(15, 40, 110, 0.2),
+    0 8px 20px -8px rgba(37, 99, 235, 0.6);
+  --btn-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 2px 4px rgba(15, 40, 110, 0.2),
+    0 14px 28px -10px rgba(37, 99, 235, 0.7);
   --radius: 16px;
   --radius-sm: 12px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -150,28 +160,56 @@
 }
 
 .lp-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 24px;
+  height: 48px;
+  padding: 0 26px;
   border-radius: var(--radius-sm);
-  border: 1.5px solid transparent;
+  border: 1px solid transparent;
   font-weight: 600;
   font-size: 15.5px;
-  line-height: 1.75;
+  line-height: 1;
+  text-align: center;
   white-space: nowrap;
-  transition: background 0.25s, color 0.25s, transform 0.25s var(--ease);
+  cursor: pointer;
+  transition: background 0.25s, color 0.25s, box-shadow 0.3s var(--ease), transform 0.3s var(--spring);
 }
 
 .lp-btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+}
+
+.lp-btn:active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 0.1s;
 }
 
 .lp-btn-primary {
-  background: var(--grad);
+  border-color: #1d4ed8;
+  background: var(--btn-grad);
   color: #fff;
-  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.25);
+  box-shadow: var(--btn-shadow);
+}
+
+/* soft light sweep across the button on hover */
+.lp-btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+  transform: translateX(-110%);
+  transition: transform 0.7s var(--ease);
+  pointer-events: none;
+}
+
+.lp-btn-primary:hover::after {
+  transform: translateX(110%);
 }
 
 .lp .lp-btn-primary,
@@ -180,29 +218,55 @@
 }
 
 .lp-btn-primary:hover {
-  box-shadow: 0 5px 12px rgba(37, 99, 235, 0.32);
+  background: var(--btn-grad-hover);
+  box-shadow: var(--btn-shadow-hover);
 }
 
 .lp-btn-line {
   border-color: var(--line);
+  background: #fff;
   color: var(--ink);
 }
 
 .lp .lp-btn-line:hover {
+  border-color: #c9d6ea;
   background: var(--paper);
   color: var(--ink);
 }
 
+/* white pill used on top of photos */
 .lp-cta {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  padding: 6px 6px 6px 22px;
-  border-radius: var(--radius-sm);
-  background: #fff;
+  justify-content: center;
+  gap: 16px;
+  height: 54px;
+  padding: 0 8px 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f6ff 100%);
   font-weight: 600;
   font-size: 16px;
-  box-shadow: 0 10px 30px rgba(8, 20, 40, 0.18);
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 -1px 0 rgba(37, 99, 235, 0.1),
+    0 1px 2px rgba(8, 20, 40, 0.12),
+    0 14px 34px -10px rgba(8, 20, 40, 0.45);
+  transition: transform 0.3s var(--spring), box-shadow 0.3s var(--ease);
+}
+
+.lp-cta:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 -1px 0 rgba(37, 99, 235, 0.12),
+    0 2px 4px rgba(8, 20, 40, 0.12),
+    0 20px 40px -10px rgba(8, 20, 40, 0.5);
+}
+
+.lp-cta:active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 0.1s;
 }
 
 .lp .lp-cta,
@@ -210,57 +274,70 @@
   color: var(--navy);
 }
 
-/* a small dot that grows into the arrow button on hover */
+/* soft blue badge that fills with the brand gradient on hover */
 .lp-cta-dot {
   position: relative;
-  width: 40px;
-  height: 40px;
+  flex: none;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  color: #fff;
+  border-radius: 10px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  transition: color 0.3s;
 }
 
 .lp-cta-dot::before {
   content: '';
   position: absolute;
   inset: 0;
-  margin: auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 9px;
-  background: var(--grad);
-  transition: width 0.4s var(--spring), height 0.4s var(--spring);
+  border-radius: inherit;
+  background: var(--btn-grad);
+  box-shadow: 0 6px 14px -4px rgba(37, 99, 235, 0.6);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.3s, transform 0.45s var(--spring);
 }
 
 .lp-cta-dot svg {
   position: relative;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 0.3s, transform 0.4s var(--ease);
+  transition: transform 0.4s var(--ease);
+}
+
+.lp-cta:hover .lp-cta-dot,
+.lp-cta:focus-visible .lp-cta-dot {
+  color: #fff;
 }
 
 .lp-cta:hover .lp-cta-dot::before,
 .lp-cta:focus-visible .lp-cta-dot::before {
-  width: 40px;
-  height: 40px;
-}
-
-.lp-cta:hover .lp-cta-dot svg,
-.lp-cta:focus-visible .lp-cta-dot svg {
   opacity: 1;
   transform: none;
 }
 
+.lp-cta:hover .lp-cta-dot svg,
+.lp-cta:focus-visible .lp-cta-dot svg {
+  transform: translateX(2px);
+}
+
+/* frosted glass secondary button on photos */
 .lp-btn-glass {
   display: inline-flex;
   align-items: center;
-  padding: 14px 26px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px);
+  justify-content: center;
+  height: 54px;
+  padding: 0 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.07) 100%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
   font-weight: 600;
-  transition: background 0.25s;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 10px 30px -12px rgba(8, 20, 40, 0.5);
+  transition: background 0.25s, border-color 0.25s, transform 0.3s var(--spring);
 }
 
 .lp .lp-btn-glass,
@@ -269,7 +346,14 @@
 }
 
 .lp-btn-glass:hover {
-  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.65);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.14) 100%);
+  transform: translateY(-2px);
+}
+
+.lp-btn-glass:active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 0.1s;
 }
 
 .lp-round-btn {
@@ -470,13 +554,29 @@
 }
 
 .lp-nav-login {
-  padding: 4px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 20px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f6ff 100%);
   font-size: 15px;
   font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
-  transition: background 0.3s, color 0.3s;
+  box-shadow: 0 6px 18px -8px rgba(8, 20, 40, 0.45);
+  transition: background 0.3s, color 0.3s, box-shadow 0.3s, transform 0.3s var(--spring);
+}
+
+.lp-nav-login:hover {
+  transform: translateY(-1px);
+}
+
+.lp-nav-login:active {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
 }
 
 .lp .lp-nav-login {
@@ -485,9 +585,16 @@
 
 .lp .lp-nav.is-pill .lp-nav-login,
 .lp .lp-nav.is-open .lp-nav-login {
-  background: var(--grad);
+  border-color: #1d4ed8;
+  background: var(--btn-grad);
   color: #fff;
-  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.25);
+  box-shadow: var(--btn-shadow);
+}
+
+.lp .lp-nav.is-pill .lp-nav-login:hover,
+.lp .lp-nav.is-open .lp-nav-login:hover {
+  background: var(--btn-grad-hover);
+  box-shadow: var(--btn-shadow-hover);
 }
 
 .lp-menu-btn {
@@ -1207,22 +1314,32 @@
 .lp-swap-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  height: 46px;
   margin-top: 26px;
-  padding: 7px 20px;
-  border: 0;
+  padding: 0 18px 0 22px;
+  border: 1px solid #1d4ed8;
   border-radius: var(--radius-sm);
-  background: var(--grad);
+  background: var(--btn-grad);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
-  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.25);
-  transition: transform 0.3s var(--spring), box-shadow 0.3s;
+  box-shadow: var(--btn-shadow);
+  transition: transform 0.3s var(--spring), box-shadow 0.3s, background 0.3s;
 }
 
 .lp-swap-btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  background: var(--btn-grad-hover);
+  box-shadow: var(--btn-shadow-hover);
+}
+
+.lp-swap-btn:active {
+  transform: scale(0.98);
+  transition-duration: 0.1s;
 }
 
 /* pill that morphs into a panel */
@@ -1535,8 +1652,9 @@
 }
 
 .lp-footer-login {
+  height: 44px;
   margin-top: 6px;
-  padding: 10px 20px;
+  padding: 0 22px;
   font-size: 15px;
 }
 
@@ -1666,7 +1784,8 @@
   }
 
   .lp-nav-login {
-    padding: 7px 14px;
+    height: 40px;
+    padding: 0 16px;
     font-size: 14px;
   }
 

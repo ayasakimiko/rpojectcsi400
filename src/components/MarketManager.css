@@ -971,11 +971,79 @@ textarea.market-input {
 
 .market-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  min-height: 240px;
+  height: 100%;
   margin: 0;
-  color: #8199b2;
+  padding: 36px 24px;
+  border: 1.5px dashed #c9d9ee;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f8fe 100%);
+  text-align: center;
+}
+
+.market-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.1), 0 0 0 1px #e1ebf8;
+  color: #2563eb;
+}
+
+.market-empty.is-search .market-empty-icon {
+  color: #64748b;
+}
+
+.market-empty-title {
+  margin: 0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.market-empty-hint {
+  max-width: 340px;
+  margin: 0;
+  color: #64748b;
   font-size: 14px;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+.market-empty.is-loading .market-empty-title {
+  color: #475569;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.market-empty-spinner {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 6px;
+  border: 3px solid #dbe7f7;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: market-empty-spin 0.8s linear infinite;
+}
+
+@keyframes market-empty-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-empty-spinner {
+    animation-duration: 2s;
+  }
 }
 
 .market-empty-line {

@@ -116,6 +116,40 @@ const ICON_PATHS = {
   coin: <><circle cx="12" cy="12" r="9" /><path d="M14.8 9.2A2.6 2.6 0 0 0 12.4 8H11a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-1.6a2.6 2.6 0 0 1-2.4-1.2M12 6v2M12 16v2" /></>,
 }
 
+const EMPTY_ICONS = {
+  empty: <path d="M3 13h5l1.5 3h5L16 13h5M5.5 5h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6l2.5-8Z" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5M8.5 11h5" />
+    </>
+  ),
+}
+
+// Framed, centred empty / loading state for market and repair-vendor lists.
+// variant: empty (nothing exists yet) | search (filters hide everything) | loading
+export function MarketEmpty({ variant = 'empty', title, hint }) {
+  if (variant === 'loading') {
+    return (
+      <div className="market-empty is-loading" role="status">
+        <span className="market-empty-spinner" aria-hidden="true" />
+        <p className="market-empty-title">{title || 'กำลังโหลดข้อมูล...'}</p>
+      </div>
+    )
+  }
+  return (
+    <div className={`market-empty is-${variant}`}>
+      <span className="market-empty-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {EMPTY_ICONS[variant] || EMPTY_ICONS.empty}
+        </svg>
+      </span>
+      <p className="market-empty-title">{title}</p>
+      {hint && <p className="market-empty-hint">{hint}</p>}
+    </div>
+  )
+}
+
 function Icon({ name, size = 18 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2372,7 +2406,11 @@ function ShopsSection({ data, onOpenShop, onCreateShop }) {
         )}
       </div>
       <div className="market-scroll">
-        {shops.length === 0 ? <p className="market-empty">ไม่พบร้านค้า</p> : (
+        {shops.length === 0 ? (
+          data.shops.length === 0
+            ? <MarketEmpty title="ยังไม่มีร้านค้าในระบบ" hint={data.permissions.manageShops ? 'กด “สร้างร้านค้า” ด้านบนเพื่อเพิ่มร้านแรก' : 'เมื่อมีการเพิ่มร้านค้า รายการจะแสดงที่นี่'} />
+            : <MarketEmpty variant="search" title="ไม่พบร้านค้าที่ตรงกับเงื่อนไข" hint="ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองอื่น" />
+        ) : (
           <div className="market-shop-grid">
             {shops.map((shop) => <ShopCard key={shop.id} shop={shop} onOpen={onOpenShop} />)}
           </div>
@@ -2537,7 +2575,11 @@ function LeasesSection({ refreshKey, canOperate, onOpenLease, onCreateLease, onR
       </div>
       {state.error && <p className="market-error">{state.error}</p>}
       <div className="market-scroll">
-        {state.loading ? <p className="market-empty">กำลังโหลด...</p> : leases.length === 0 ? <p className="market-empty">ไม่พบสัญญาเช่า</p> : (
+        {state.loading ? <MarketEmpty variant="loading" title="กำลังโหลดสัญญาเช่า..." /> : leases.length === 0 ? (
+          state.leases.length === 0
+            ? <MarketEmpty title="ยังไม่มีสัญญาเช่า" hint={canOperate ? 'กด “ทำสัญญาเช่า” ด้านบนเพื่อสร้างสัญญาแรก' : 'เมื่อมีการทำสัญญาเช่า รายการจะแสดงที่นี่'} />
+            : <MarketEmpty variant="search" title="ไม่พบสัญญาเช่าที่ตรงกับเงื่อนไข" hint="ลองเปลี่ยนคำค้นหา หรือเลือกสถานะอื่น" />
+        ) : (
           <div className="market-lease-list">
             {leases.map((lease) => <LeaseCard key={lease.id} lease={lease} onOpen={onOpenLease} onRenew={canOperate ? onRenewLease : undefined} />)}
           </div>
@@ -2935,7 +2977,7 @@ export default function MarketManager({ onSummary, focus = null }) {
         </MarketModal>
       )}
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
-      {state.loading && !data && <p className="market-empty">กำลังโหลด...</p>}
+      {state.loading && !data && <MarketEmpty variant="loading" />}
 
       {data && section === 'shops' && (
         <ShopsSection key={sectionKey} data={data} onOpenShop={(id) => setModal({ type: 'shop', id })} onCreateShop={() => setModal({ type: 'create-shop' })} />
