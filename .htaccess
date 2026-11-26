@@ -1,0 +1,16 @@
+# ส่งทุก path ที่ไม่ใช่ไฟล์จริงไปที่ index.html ให้ React Router จัดการ
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# ไม่ cache index.html เพื่อให้ได้เวอร์ชันใหม่ทันทีหลัง deploy
+<IfModule mod_headers.c>
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
