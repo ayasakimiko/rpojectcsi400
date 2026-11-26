@@ -5431,16 +5431,12 @@ function AdminBackupPage() {
     setRoomForm((prev) => update(prev))
   }
   const equipmentItems = roomEquipmentItems(roomForm)
-  // while a tenant rents the room, move-out damage is priced against these items: they can be re-priced, not removed
-  const lockedRoom = roomModal?.mode !== 'create' && roomModal?.room?.is_booked ? roomModal.room : null
-  const lockedAssetNames = useMemo(() => (lockedRoom
-    ? new Set(roomEquipmentItems({
-      air_conditioner: Boolean(lockedRoom.air_conditioner),
-      refrigerator: Boolean(lockedRoom.refrigerator),
-      custom_amenities: parseRoomAmenities(lockedRoom.custom_amenities),
-      assetRows: toAssetRows(lockedRoom.assets),
-    }).map((item) => item.name))
-    : null), [lockedRoom])
+  // under contract (is_booked, incl. a future move-in) or a tenant waiting to move in: the list is what the
+  // contract and move-out damage are priced against, so items can be re-priced but not added or removed
+  const assetsLockReason = roomModal?.mode === 'create' ? ''
+    : roomModal?.room?.is_booked ? 'ห้องนี้มีผู้เช่าหรือทำสัญญาแล้ว'
+      : roomModal?.room?.transfer_pending ? 'ห้องนี้มีผู้เช่ารอย้ายเข้า' : ''
+  const assetsLocked = Boolean(assetsLockReason)
   const [amenityDraft, setAmenityDraft] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('sparkle')
   const [amenityPrice, setAmenityPrice] = useState('')
@@ -6168,6 +6164,7 @@ function AdminBackupPage() {
   }
 
   const addRoomAmenity = (requestClose) => {
+    if (assetsLocked) return
     const name = amenityDraft.trim()
     const priceValid = isValidAssetPrice(amenityPrice)
     setAmenityPriceError(priceValid ? '' : 'กรุณาระบุราคาเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง')
@@ -6197,7 +6194,7 @@ function AdminBackupPage() {
   }
 
   const removeRoomAsset = (name) => {
-    if (lockedAssetNames?.has(name)) return
+    if (assetsLocked) return
     const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
     updateRoomAssets((prev) => ({
       ...prev,
@@ -6245,6 +6242,7 @@ function AdminBackupPage() {
   }
 
   const applyRoomType = (roomTypeId) => {
+    if (assetsLocked) return
     const type = roomTypes.find((item) => item.id === roomTypeId)
     updateRoomAssets((prev) => {
       const known = new Set(prev.assetRows.map((row) => row.name.trim()))
@@ -7805,7 +7803,7 @@ function AdminBackupPage() {
                               <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                 แก้ไข
                               </button>
-                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room, 'amenities')} title="อุปกรณ์และทรัพย์สินในห้อง (แก้ได้แม้มีผู้เช่า)">
+                              <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room, 'amenities')} disabled={Boolean(room.is_booked || room.transfer_pending)} title={room.is_booked ? 'ห้องที่มีผู้เช่าหรือทำสัญญาแล้วแก้ไขทรัพย์สินไม่ได้' : room.transfer_pending ? 'ห้องที่มีผู้เช่ารอย้ายเข้าแก้ไขทรัพย์สินไม่ได้' : 'อุปกรณ์และทรัพย์สินในห้อง'}>
                                 ทรัพย์สิน
                               </button>
                               <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถลบได้' : undefined}>
@@ -7844,7 +7842,7 @@ function AdminBackupPage() {
                                   <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถแก้ไขได้' : undefined}>
                                     แก้ไข
                                   </button>
-                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room, 'amenities')} title="อุปกรณ์และทรัพย์สินในห้อง (แก้ได้แม้มีผู้เช่า)">
+                                  <button type="button" className="admin-action-btn is-ghost" onClick={() => openEditRoom(room, 'amenities')} disabled={Boolean(room.is_booked || room.transfer_pending)} title={room.is_booked ? 'ห้องที่มีผู้เช่าหรือทำสัญญาแล้วแก้ไขทรัพย์สินไม่ได้' : room.transfer_pending ? 'ห้องที่มีผู้เช่ารอย้ายเข้าแก้ไขทรัพย์สินไม่ได้' : 'อุปกรณ์และทรัพย์สินในห้อง'}>
                                     ทรัพย์สิน
                                   </button>
                                   <button type="button" className="admin-action-btn is-danger" onClick={() => setRoomDeleteConfirm(room)} disabled={Boolean(room.is_booked)} title={room.is_booked ? 'ห้องที่มีผู้เช่าอยู่ไม่สามารถลบได้' : undefined}>
@@ -10212,7 +10210,7 @@ function AdminBackupPage() {
                   <span>
                     ดึงทรัพย์สินจากประเภทห้อง <small className="admin-room-optional">ไม่บังคับ</small>
                   </span>
-                  <select className="form-select" value={roomForm.room_type_id ?? ''} onChange={(event) => applyRoomType(event.target.value ? Number(event.target.value) : null)}>
+                  <select className="form-select" value={roomForm.room_type_id ?? ''} disabled={assetsLocked} onChange={(event) => applyRoomType(event.target.value ? Number(event.target.value) : null)}>
                     <option value="">ไม่ระบุประเภท</option>
                     {roomTypes.map((type) => (
                       <option key={type.id} value={type.id}>
@@ -10222,15 +10220,15 @@ function AdminBackupPage() {
                   </select>
                 </label>
               )}
-              {lockedAssetNames && (
+              {assetsLocked && (
                 <p className="admin-equipment-locked-note" role="note">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-                  <span><strong>ห้องนี้มีผู้เช่าอยู่</strong> เพิ่มรายการหรือแก้ราคาได้ แต่ลบรายการเดิมไม่ได้ เพราะใช้คิดค่าเสียหายตอนผู้เช่าย้ายออก</span>
+                  <span><strong>{assetsLockReason}</strong> แก้ไขทรัพย์สินไม่ได้ เพราะรายการนี้ใช้คิดค่าเสียหายตอนผู้เช่าย้ายออก แก้ได้หลังผู้เช่าย้ายออกและสิ้นสุดสัญญา</span>
                 </p>
               )}
               <div className="admin-equipment-list-heading">
                 <strong>รายการในห้อง <span>{equipmentItems.length} รายการ</span></strong>
-                <button type="button" className="admin-action-btn is-primary" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
+                {!assetsLocked && <button type="button" className="admin-action-btn is-primary" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>}
               </div>
               {equipmentItems.length > 0 ? (
                 <ul className="admin-equipment-list">
@@ -10282,8 +10280,8 @@ function AdminBackupPage() {
                           <small className="admin-equipment-price-error">ตัวเลขเท่านั้น ทศนิยมไม่เกิน 2 ตำแหน่ง</small>
                         )}
                       </div>
-                      {lockedAssetNames?.has(item.name) ? (
-                        <span className="admin-equipment-lock" role="img" aria-label={`${item.name} ลบไม่ได้ ห้องนี้มีผู้เช่าอยู่`} title="ห้องนี้มีผู้เช่าอยู่ ลบรายการนี้ไม่ได้">
+                      {assetsLocked ? (
+                        <span className="admin-equipment-lock" role="img" aria-label={`${item.name} ลบไม่ได้ ${assetsLockReason}`} title={`${assetsLockReason} ลบรายการนี้ไม่ได้`}>
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
                         </span>
                       ) : (
@@ -10298,7 +10296,7 @@ function AdminBackupPage() {
                 <div className="admin-equipment-empty">
                   <RoomDetailIcon type="box" size={28} />
                   <strong>ยังไม่มีอุปกรณ์หรือทรัพย์สิน</strong>
-                  <span>กด “เพิ่มทรัพย์สิน” เพื่อเริ่มเพิ่มรายการในห้องนี้</span>
+                  <span>{assetsLocked ? 'เพิ่มรายการได้หลังผู้เช่าย้ายออกและสิ้นสุดสัญญา' : 'กด “เพิ่มทรัพย์สิน” เพื่อเริ่มเพิ่มรายการในห้องนี้'}</span>
                 </div>
               )}
               <div className="admin-equipment-summary">

@@ -763,7 +763,10 @@ router.get("/rooms", async (req, res) => {
          r.electricity_unit_price, r.water_unit_price, r.water_price,
          r.rental_duration_months, r.rental_start_date, r.rental_end_date,
          r.room_type_id, rt.name AS room_type_name, r.assets AS room_assets, rt.assets AS type_assets,
-         c.id AS customer_id, c.first_name, c.last_name, c.phone
+         c.id AS customer_id, c.first_name, c.last_name, c.phone,
+         EXISTS (SELECT 1 FROM TenantRequest tr
+                 WHERE tr.type = 'move_room' AND tr.status IN ('pending', 'in_progress')
+                   AND tr.target_room_number = r.room_number) AS transfer_pending
        FROM Room r
        LEFT JOIN RoomType rt ON rt.id = r.room_type_id
        LEFT JOIN Customer c ON c.id = (
@@ -775,7 +778,11 @@ router.get("/rooms", async (req, res) => {
        ORDER BY r.room_number ASC`,
     );
     return res.json({
-      rooms: rooms.map(({ room_assets, type_assets, ...room }) => ({ ...room, assets: effectiveRoomAssets(room_assets, type_assets) })),
+      rooms: rooms.map(({ room_assets, type_assets, ...room }) => ({
+        ...room,
+        transfer_pending: Boolean(room.transfer_pending),
+        assets: effectiveRoomAssets(room_assets, type_assets),
+      })),
     });
   } catch (error) {
     console.error("Admin fetch rooms error:", error);
@@ -802,8 +809,9 @@ router.put("/rooms/:room_number/assets", async (req, res) => {
       const [types] = await pool.query("SELECT id FROM RoomType WHERE id = ?", [value.roomTypeId]);
       if (!types[0]) return res.status(400).json({ message: "ไม่พบประเภทห้องที่เลือก" });
     }
-    // a tenant's move-out damage is priced against this list, so while the room is rented
-    // assets can be added or re-priced but never removed
+    // the list is what the tenant's contract and move-out damage are priced against: once the room is
+    // under contract (is_booked, including a future move-in) or a tenant is waiting to move in,
+    // nothing may be added, removed or re-priced (an unchanged save still passes)
     const [[current]] = await pool.query(
       `SELECT r.is_booked, r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities
        FROM Room r LEFT JOIN RoomType rt ON rt.id = r.room_type_id
@@ -811,19 +819,32 @@ router.put("/rooms/:room_number/assets", async (req, res) => {
       [roomNumberValue],
     );
     if (!current) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
-    if (current.is_booked) {
-      const kept = new Set(roomEquipmentAssets({
+    const transferPending = !current.is_booked && await roomHeldForTransfer(pool, roomNumberValue, { anyRequest: true });
+    if (current.is_booked || transferPending) {
+      const beforeAssets = roomEquipmentAssets(current);
+      const before = beforeAssets.map((asset) => asset.name);
+      const afterAssets = roomEquipmentAssets({
         room_assets: JSON.stringify(value.assets),
         type_assets: null,
         air_conditioner: hasField(amenityBody, "air_conditioner") ? Boolean(amenityBody.air_conditioner) : current.air_conditioner,
         refrigerator: hasField(amenityBody, "refrigerator") ? Boolean(amenityBody.refrigerator) : current.refrigerator,
         custom_amenities: hasField(amenityBody, "custom_amenities") ? JSON.stringify(amenityBody.custom_amenities) : current.custom_amenities,
-      }).map((asset) => asset.name));
-      const removed = roomEquipmentAssets(current).map((asset) => asset.name).filter((name) => !kept.has(name));
-      if (removed.length) {
+      });
+      const after = afterAssets.map((asset) => asset.name);
+      const priceOf = (list, name) => Math.round(Number(list.find((asset) => asset.name === name)?.price || 0) * 100);
+      const removed = before.filter((name) => !after.includes(name));
+      const added = after.filter((name) => !before.includes(name));
+      const repriced = before.filter((name) => after.includes(name) && priceOf(beforeAssets, name) !== priceOf(afterAssets, name));
+      if (removed.length || added.length || repriced.length) {
+        const who = transferPending ? "ห้องนี้มีผู้เช่ารอย้ายเข้า" : "ห้องนี้มีผู้เช่าหรือทำสัญญาแล้ว";
+        const detail = [
+          added.length && `เพิ่ม ${added.join(", ")}`,
+          removed.length && `ลบ ${removed.join(", ")}`,
+          repriced.length && `แก้ราคา ${repriced.join(", ")}`,
+        ].filter(Boolean).join(" / ");
         return res.status(409).json({
-          message: `ห้องนี้มีผู้เช่าอยู่ ลบทรัพย์สินไม่ได้ (${removed.join(", ")}) เพิ่มรายการหรือแก้ราคาได้ตามปกติ`,
-          code: "ROOM_OCCUPIED",
+          message: `${who} แก้ไขทรัพย์สินไม่ได้ (${detail}) แก้ได้หลังผู้เช่าย้ายออกและสิ้นสุดสัญญา`,
+          code: "ROOM_ASSETS_LOCKED",
         });
       }
     }
