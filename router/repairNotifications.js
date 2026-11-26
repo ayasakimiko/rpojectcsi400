@@ -1,5 +1,6 @@
 import { byActor, notify, notifyCustomer, notifyStaffSide } from "../middleware/notifications.js";
 import { MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL } from "../src/utils/maintenanceCategories.js";
+import { VENDOR_CHANGE_LABEL } from "../src/utils/repairVendorChanges.js";
 
 const OPERATORS = ["Staff", "Admin"];
 const OWNER = ["Owner"];
@@ -150,6 +151,28 @@ export const repairKeyChanged = (db, vendor, actor, kind) => safely("repairKeyCh
     type: `repair_key_${kind}`, tone: kind === "revoked" ? "danger" : "info", refTable: "RepairVendor", refId: vendor.id,
     title, message: `${vendor.name}${byActor(actor)}`, actor,
   }), db);
+});
+
+// a vendor asking to change its own details / contract terms; staff and the owner both may decide
+const VENDOR_CHANGE_NOTICE = {
+  requested: { tone: "pending", title: "ช่างขอแก้ไขข้อมูลและสัญญา รออนุมัติ" },
+  cancelled: { tone: "info", title: "ช่างยกเลิกคำขอแก้ไขข้อมูล" },
+  approved: { tone: "success", title: "อนุมัติคำขอแก้ไขข้อมูลช่างแล้ว" },
+  rejected: { tone: "danger", title: "ไม่อนุมัติคำขอแก้ไขข้อมูลช่าง" },
+};
+
+export const repairVendorChangeNotice = (db, vendor, request, actor, kind) => safely("repairVendorChangeNotice", async () => {
+  const info = VENDOR_CHANGE_NOTICE[kind];
+  if (!info || !vendor) return;
+  const fields = Object.keys(request.changes || {}).map((field) => VENDOR_CHANGE_LABEL[field] || field).join(", ");
+  const detail = kind === "rejected" ? request.decision_note
+    : kind === "cancelled" ? request.cancel_reason
+      : [fields && `แก้: ${fields}`, kind === "requested" && request.reason].filter(Boolean).join(" · ") || null;
+  const item = {
+    type: `repair_vendor_change_${kind}`, tone: info.tone, refTable: "RepairVendor", refId: vendor.id,
+    title: info.title, message: `${vendor.name}${["requested", "cancelled"].includes(kind) ? "" : byActor(actor)}`, detail, actor,
+  };
+  await notify([forOperators(item), forOwner(item)], db);
 });
 
 // repair contracts are between the dorm and the vendor: staff side and owner only, never the tenant

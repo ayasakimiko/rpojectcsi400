@@ -209,6 +209,7 @@ export function serializeVendor(row) {
     open_jobs: Number(row.open_jobs || 0),
     total_jobs: Number(row.total_jobs || 0),
     image_count: Number(row.image_count || 0),
+    pending_changes: Number(row.pending_changes || 0),
   };
 }
 

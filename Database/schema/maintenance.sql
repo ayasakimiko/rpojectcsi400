@@ -308,3 +308,26 @@ CREATE TABLE IF NOT EXISTS RepairContractFile (
     INDEX idx_repair_contract_file (contract_id),
     FOREIGN KEY (contract_id) REFERENCES RepairContract(id) ON DELETE CASCADE
 );
+
+-- changes a vendor asks for through the Repair API (contact info, contract terms);
+-- nothing touches RepairVendor until staff or the owner approve the request
+CREATE TABLE IF NOT EXISTS RepairVendorChangeRequest (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    vendor_id INT NOT NULL,
+    status VARCHAR(12) NOT NULL DEFAULT 'pending',
+    changes TEXT NOT NULL,
+    previous TEXT NOT NULL,
+    reason VARCHAR(500) NULL,
+    requested_by VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    decided_at TIMESTAMP NULL DEFAULT NULL,
+    decided_by_name VARCHAR(255) NULL,
+    decision_note VARCHAR(500) NULL,
+    cancelled_at TIMESTAMP NULL DEFAULT NULL,
+    cancel_reason VARCHAR(500) NULL,
+
+    INDEX idx_repair_vendor_change_status (vendor_id, status),
+    INDEX idx_repair_vendor_change_updated (vendor_id, updated_at),
+    FOREIGN KEY (vendor_id) REFERENCES RepairVendor(id) ON DELETE CASCADE
+);

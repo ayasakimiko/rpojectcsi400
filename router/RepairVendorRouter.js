@@ -6,6 +6,7 @@ import { repairJobCancelled, repairJobEdited, repairJobSent, repairKeyChanged, r
 import { decryptApiKey, encryptApiKey, hashApiKey } from "../middleware/marketApiKey.js";
 import { BUILDING_REF_PATTERN } from "./RepairPartnerWebhook.js";
 import { decideContract, listContracts, loadContractFile, sendContractFile } from "./repairContracts.js";
+import { decideVendorChange, listVendorChanges } from "./repairVendorChanges.js";
 import { generateRepairApiKey } from "../middleware/repairApiKey.js";
 import { VENDOR_MAX_IMAGES, VENDOR_MIN_IMAGES, parseVendorImages, removeVendorFiles, vendorImagePath } from "../middleware/repairUploads.js";
 import { validateText } from "../src/utils/validators.js";
@@ -26,12 +27,15 @@ const router = Router();
 const MAX_KEYS_PER_VENDOR = 5;
 const OVERVIEW_JOBS = 300;
 const VENDOR_JOBS = 50;
+const VENDOR_CHANGE_HISTORY = 20;
 
 router.use((req, res, next) => {
   if (req.user?.role !== "Owner") return next();
   if (req.method === "GET" && !/\/api-keys\/[^/]+\/reveal\/?$/.test(req.path)) return next();
   // the owner pays for repairs, so approving or rejecting a vendor's contract is allowed
   if (req.method === "POST" && /^\/contracts\/\d+\/decision\/?$/.test(req.path)) return next();
+  // same for a vendor asking to change its contract terms (fee, dates)
+  if (req.method === "POST" && /^\/vendor-changes\/\d+\/decision\/?$/.test(req.path)) return next();
   return res.status(403).json({ message: "เจ้าของหอดูข้อมูลได้อย่างเดียว การส่งงานและจัดการช่างทำได้เฉพาะพนักงานและแอดมิน", code: "READ_ONLY" });
 });
 
@@ -54,7 +58,8 @@ async function loadVendor(db, vendorId) {
             (SELECT COUNT(*) FROM RepairVendorApiKey k WHERE k.vendor_id = v.id AND k.revoked_at IS NULL) AS active_keys,
             (SELECT COUNT(*) FROM RepairJob j WHERE j.vendor_id = v.id AND j.status IN ('sent', 'accepted', 'in_progress')) AS open_jobs,
             (SELECT COUNT(*) FROM RepairJob j WHERE j.vendor_id = v.id) AS total_jobs,
-            (SELECT COUNT(*) FROM RepairVendorImage i WHERE i.vendor_id = v.id) AS image_count
+            (SELECT COUNT(*) FROM RepairVendorImage i WHERE i.vendor_id = v.id) AS image_count,
+            (SELECT COUNT(*) FROM RepairVendorChangeRequest r WHERE r.vendor_id = v.id AND r.status = 'pending') AS pending_changes
      FROM RepairVendor v
      WHERE v.id = ?`,
     [vendorId],
@@ -72,7 +77,8 @@ async function loadVendors(db) {
             (SELECT COUNT(*) FROM RepairVendorApiKey k WHERE k.vendor_id = v.id AND k.revoked_at IS NULL) AS active_keys,
             (SELECT COUNT(*) FROM RepairJob j WHERE j.vendor_id = v.id AND j.status IN ('sent', 'accepted', 'in_progress')) AS open_jobs,
             (SELECT COUNT(*) FROM RepairJob j WHERE j.vendor_id = v.id) AS total_jobs,
-            (SELECT COUNT(*) FROM RepairVendorImage i WHERE i.vendor_id = v.id) AS image_count
+            (SELECT COUNT(*) FROM RepairVendorImage i WHERE i.vendor_id = v.id) AS image_count,
+            (SELECT COUNT(*) FROM RepairVendorChangeRequest r WHERE r.vendor_id = v.id AND r.status = 'pending') AS pending_changes
      FROM RepairVendor v
      ORDER BY v.is_active DESC, v.contract_end DESC, v.name`,
   );
@@ -137,6 +143,7 @@ router.get("/overview", async (req, res) => {
     summary: {
       vendors: vendors.length,
       usable_vendors: vendors.filter((vendor) => vendor.is_usable).length,
+      pending_vendor_changes: vendors.reduce((sum, vendor) => sum + vendor.pending_changes, 0),
       open_jobs: OPEN_JOB_STATUSES.reduce((sum, status) => sum + byStatus[status], 0),
       by_status: byStatus,
     },
@@ -213,7 +220,23 @@ router.get("/vendors/:id", async (req, res) => {
      LIMIT ?`,
     [vendorId, VENDOR_JOBS],
   );
-  res.json({ vendor, api_keys: await loadApiKeys(db, vendorId), images: await loadImages(db, vendorId), jobs });
+  res.json({
+    vendor,
+    api_keys: await loadApiKeys(db, vendorId),
+    images: await loadImages(db, vendorId),
+    change_requests: await listVendorChanges(db, { vendorId, limit: VENDOR_CHANGE_HISTORY }),
+    jobs,
+  });
+});
+
+router.post("/vendor-changes/:id/decision", async (req, res) => {
+  const request = await decideVendorChange(getPool(), {
+    requestId: parseId(req.params.id), decision: req.body?.decision, note: req.body?.note, actor: await staffActor(req),
+  });
+  res.json({
+    message: request.status === "approved" ? "อนุมัติคำขอแก้ไขแล้ว ข้อมูลช่างอัปเดตเรียบร้อย" : "ไม่อนุมัติคำขอแก้ไขแล้ว ช่างจะเห็นเหตุผลที่ระบุ",
+    change_request: request,
+  });
 });
 
 router.post("/vendors/:id/images", parseVendorImages({ min: 1 }), async (req, res) => {

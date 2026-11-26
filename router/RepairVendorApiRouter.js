@@ -25,6 +25,7 @@ import {
   sendContractFile,
   upsertContract,
 } from "./repairContracts.js";
+import { CHANGE_STATUSES, cancelVendorChange, createVendorChange, listVendorChanges, loadVendorChange } from "./repairVendorChanges.js";
 
 const router = Router();
 const MAX_JOBS = 200;
@@ -59,6 +60,10 @@ router.get("/", (req, res) => {
     version: "1",
     endpoints: [
       "GET /api/repair/v1/vendor",
+      "GET /api/repair/v1/vendor/change-requests?status=&updated_since=",
+      "POST /api/repair/v1/vendor/change-requests (changes, reason)",
+      "GET /api/repair/v1/vendor/change-requests/:id",
+      "POST /api/repair/v1/vendor/change-requests/:id/cancel",
       "GET /api/repair/v1/jobs?status=",
       "GET /api/repair/v1/jobs/:id",
       "PATCH|PUT /api/repair/v1/jobs/:id/status (status, note, technician_name, technician_phone, scheduled_at)",
@@ -82,12 +87,42 @@ router.get("/vendor", async (req, res) => {
     [req.vendor.vendorId],
   );
   const [counts] = await db.query("SELECT status, COUNT(*) AS count FROM RepairJob WHERE vendor_id = ? GROUP BY status", [req.vendor.vendorId]);
+  const [pending] = await listVendorChanges(db, { vendorId: req.vendor.vendorId, status: "pending", limit: 1 });
   res.json({
     vendor: publicVendor(vendor),
     job_summary: Object.fromEntries(JOB_STATUSES.map((status) => [status, Number(counts.find((row) => row.status === status)?.count || 0)])),
+    pending_change_request: pending || null,
   });
 });
-router.all("/vendor", readOnly("ข้อมูลช่างและสัญญาซ่อม"));
+router.all("/vendor", (req, res) => res.status(403).json({
+  code: "READ_ONLY",
+  message: "แก้ข้อมูลช่างและสัญญาโดยตรงไม่ได้ ให้ส่งคำขอที่ POST /vendor/change-requests แล้วรอหอพักอนุมัติ",
+}));
+
+// ---------- change requests: the vendor proposes, the dorm approves or rejects ----------
+router.get("/vendor/change-requests", async (req, res) => {
+  const status = typeof req.query.status === "string" && req.query.status ? req.query.status : null;
+  if (status && !CHANGE_STATUSES.includes(status)) throw fail(`status ต้องเป็นหนึ่งใน ${CHANGE_STATUSES.join(", ")}`);
+  const serverTime = new Date().toISOString();
+  const requests = await listVendorChanges(getPool(), {
+    vendorId: req.vendor.vendorId, status, updatedSinceMs: parseUpdatedSince(req.query.updated_since),
+  });
+  res.json({ change_requests: requests, server_time: serverTime });
+});
+
+router.post("/vendor/change-requests", async (req, res) => {
+  res.status(201).json(await createVendorChange(getPool(), { vendor: req.vendor, body: req.body }));
+});
+
+router.get("/vendor/change-requests/:changeId", async (req, res) => {
+  res.json(await loadVendorChange(getPool(), parseId(req.params.changeId), req.vendor.vendorId));
+});
+
+router.post("/vendor/change-requests/:changeId/cancel", async (req, res) => {
+  res.json(await cancelVendorChange(getPool(), {
+    vendor: req.vendor, requestId: parseId(req.params.changeId), reason: req.body?.reason,
+  }));
+});
 
 // owner contact for partner integrations; the ref must be the one this vendor's key is bound to
 router.get("/buildings/:ref/owner", async (req, res) => {

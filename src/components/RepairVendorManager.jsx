@@ -40,6 +40,7 @@ import {
 import { downloadGuidePdf } from '../utils/marketApiGuide.js'
 import { focusAndHighlight } from '../utils/focusHighlight.js'
 import { MAINTENANCE_CATEGORY_HINT, MAINTENANCE_CATEGORY_LABEL, MAINTENANCE_TIME_LABEL, MAINTENANCE_TIME_OPTIONS } from '../utils/maintenanceCategories.js'
+import { VENDOR_CHANGE_FIELDS, VENDOR_CHANGE_LABEL, VENDOR_CHANGE_STATUS } from '../utils/repairVendorChanges.js'
 import { MarketEmpty } from './MarketManager.jsx'
 import './MarketManager.css'
 import './RepairVendorManager.css'
@@ -1081,6 +1082,116 @@ function VendorJobsModal({ vendor, jobs, onClose, onOpenJob }) {
   )
 }
 
+const changeValue = (field, value) => {
+  if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) return '-'
+  if (field === 'specialties') return value.map((key) => CATEGORY_LABEL[key] || key).join(', ')
+  if (field === 'contract_type') return CONTRACT_LABEL[value] || value
+  if (field === 'contract_start' || field === 'contract_end') return thaiDate(value)
+  if (field === 'contract_fee') return `฿${Number(value).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return String(value)
+}
+
+function VendorChangeCard({ request, vendor, onDecide }) {
+  const headingId = useId()
+  const status = VENDOR_CHANGE_STATUS[request.status] || VENDOR_CHANGE_STATUS.pending
+  const pending = request.status === 'pending'
+  const fields = VENDOR_CHANGE_FIELDS.filter((field) => Object.hasOwn(request.changes, field))
+  return (
+    <article className={`repair-contract is-${request.status}`} aria-labelledby={headingId}>
+      <header className="repair-contract-head">
+        <span className="repair-contract-icon" aria-hidden="true"><Icon name="edit" size={18} /></span>
+        <div>
+          <h5 id={headingId}>คำขอแก้ไข #{request.id}</h5>
+          <small>ส่งจากระบบของช่างเมื่อ {thaiDateTime(request.created_at)} · {fields.length} รายการ</small>
+        </div>
+        <Pill tone={status.tone}>{status.label}</Pill>
+      </header>
+      {request.reason && (
+        <section className="repair-contract-block is-terms">
+          <h6>เหตุผลจากช่าง</h6>
+          <p>{request.reason}</p>
+        </section>
+      )}
+      <div className="repair-contract-table is-changes" role="table" aria-label={`ข้อมูลที่ขอแก้ คำขอ #${request.id}`}>
+        <div role="row" className="is-head">
+          <span role="columnheader">ข้อมูล</span>
+          <span role="columnheader">{pending ? 'ปัจจุบัน' : 'เดิม'}</span>
+          <span role="columnheader">ขอเปลี่ยนเป็น</span>
+        </div>
+        {fields.map((field) => (
+          <div role="row" key={field}>
+            <span role="cell">{VENDOR_CHANGE_LABEL[field] || field}</span>
+            <span role="cell" className="is-old">{changeValue(field, pending ? vendor[field] : request.previous[field])}</span>
+            <span role="cell" className="is-new">{changeValue(field, request.changes[field])}</span>
+          </div>
+        ))}
+      </div>
+      {pending ? (
+        <footer className="repair-contract-foot">
+          <p><Icon name="alert" size={14} /> อนุมัติแล้วข้อมูลช่างจะเปลี่ยนตามนี้ทันที</p>
+          <div className="repair-contract-actions">
+            <button type="button" className="market-btn is-danger-ghost" onClick={() => onDecide(request, 'rejected')}><Icon name="alert" size={15} /> ไม่อนุมัติ</button>
+            <button type="button" className="market-btn is-primary" onClick={() => onDecide(request, 'approved')}><Icon name="check" size={15} /> อนุมัติการแก้ไข</button>
+          </div>
+        </footer>
+      ) : (
+        <DecisionNote item={request} label={status.label} />
+      )}
+    </article>
+  )
+}
+
+/** changes the vendor asked for through the API; staff and the owner approve or reject them */
+function VendorChangeRequests({ vendor, requests, onDecided }) {
+  const [dialog, setDialog] = useState(null)
+  const [showHistory, setShowHistory] = useState(false)
+  if (requests.length === 0) return null
+  const pending = requests.filter((request) => request.status === 'pending')
+  const history = requests.filter((request) => request.status !== 'pending')
+  const approving = dialog?.decision === 'approved'
+  const decide = (request, decision) => setDialog({ request, decision })
+  return (
+    <section className="market-section repair-contracts">
+      <div className="market-section-head">
+        <h4>
+          <span className="market-section-icon"><Icon name="edit" size={15} /></span> คำขอแก้ไขจากช่าง
+          {pending.length > 0 && <span className="market-count">{pending.length}</span>}
+        </h4>
+        {history.length > 0 && (
+          <button type="button" className="market-link-btn" aria-expanded={showHistory} onClick={() => setShowHistory((value) => !value)}>
+            <Icon name="clock" size={14} /> {showHistory ? 'ซ่อนประวัติ' : `ประวัติ ${history.length} รายการ`}
+          </button>
+        )}
+      </div>
+      {pending.length === 0 && !showHistory && <p className="market-empty-line">ไม่มีคำขอที่รออนุมัติ</p>}
+      <div className="repair-contract-list">
+        {pending.map((request) => <VendorChangeCard key={request.id} request={request} vendor={vendor} onDecide={decide} />)}
+        {showHistory && history.map((request) => <VendorChangeCard key={request.id} request={request} vendor={vendor} onDecide={decide} />)}
+      </div>
+      {dialog && (
+        <ConfirmModal
+          title={approving ? `อนุมัติคำขอแก้ไข #${dialog.request.id}` : `ไม่อนุมัติคำขอแก้ไข #${dialog.request.id}`}
+          message={approving
+            ? 'ข้อมูลช่างและสัญญาจะเปลี่ยนตามคำขอทันที และช่างจะเห็นผลผ่าน API'
+            : 'ช่างจะเห็นเหตุผลนี้ และส่งคำขอใหม่ได้'}
+          tone={approving ? 'success' : 'danger'}
+          icon={approving ? 'check' : 'alert'}
+          submitLabel={approving ? 'อนุมัติการแก้ไข' : 'ไม่อนุมัติ'}
+          reasonLabel={approving ? undefined : 'เหตุผลที่ไม่อนุมัติ *'}
+          onClose={() => setDialog(null)}
+          onConfirm={async (reason) => {
+            const response = await axios.post(`${API_BASE}/vendor-changes/${dialog.request.id}/decision`, {
+              decision: dialog.decision, ...(reason ? { note: reason } : {}),
+            })
+            onDecided(response.data.message)
+            return response
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
 function VendorDetailModal({ vendorId, onClose, onChanged, onSendJob, onOpenJob }) {
   const canEdit = useCanEdit()
   const [state, setState] = useState({ loading: true, error: '', data: null })
@@ -1106,6 +1217,14 @@ function VendorDetailModal({ vendorId, onClose, onChanged, onSendJob, onOpenJob 
   const data = state.data
   const vendor = data?.vendor
   const contract = vendor && contractState(vendor)
+  const changeRequests = data?.change_requests || []
+  const hasPendingChange = changeRequests.some((request) => request.status === 'pending')
+  const changeSection = vendor && (
+    <VendorChangeRequests vendor={vendor} requests={changeRequests} onDecided={(message) => {
+      load()
+      onChanged(message)
+    }} />
+  )
 
   return (
     <RepairModal
@@ -1125,6 +1244,8 @@ function VendorDetailModal({ vendorId, onClose, onChanged, onSendJob, onOpenJob 
       {state.error && <p className="market-error" role="alert">{state.error}</p>}
       {vendor && (
         <div className="repair-detail">
+          {/* a pending request is an action item: show it before the details it would change */}
+          {hasPendingChange && changeSection}
           <section className="market-section">
             <div className="market-section-head">
               <h4><Icon name="contract" size={16} /> ข้อมูลช่างและสัญญา</h4>
@@ -1147,6 +1268,7 @@ function VendorDetailModal({ vendorId, onClose, onChanged, onSendJob, onOpenJob 
             </p>
             {vendor.note && <p className="repair-note">{vendor.note}</p>}
           </section>
+          {!hasPendingChange && changeSection}
           <VendorGallery vendor={vendor} images={data.images} onChanged={(images) => {
             setState((current) => ({ ...current, data: { ...current.data, images } }))
             onChanged()
@@ -1607,15 +1729,19 @@ function JobProgress({ job, detailed = false }) {
   )
 }
 
-function DetailRow({ icon, tone = 'blue', label, value, sub, href }) {
+/** label above value: long Thai names wrap naturally instead of squeezing into a right-aligned column */
+function DetailRow({ icon, tone = 'blue', label, value, sub, href, emptyText = 'ไม่ระบุ' }) {
+  const empty = value == null || value === '' || value === '-'
   return (
-    <div className={`repair-detail-row is-${tone}`}>
-      <span className="repair-detail-row-icon"><Icon name={icon} size={15} /></span>
-      <small>{label}</small>
-      <span className="repair-detail-row-value">
-        {href && value !== '-' ? <a href={href}>{value}</a> : <strong>{value}</strong>}
-        {sub && <em>{sub}</em>}
-      </span>
+    <div className={`repair-detail-row is-${tone}${empty ? ' is-empty' : ''}`}>
+      <span className="repair-detail-row-icon" aria-hidden="true"><Icon name={icon} size={16} /></span>
+      <div className="repair-detail-row-body">
+        <small>{label}</small>
+        <span className="repair-detail-row-value">
+          {empty ? <span className="repair-detail-empty">{emptyText}</span> : href ? <a href={href}>{value}</a> : <strong>{value}</strong>}
+          {sub && <em>{sub}</em>}
+        </span>
+      </div>
     </div>
   )
 }
@@ -1779,13 +1905,115 @@ function ContractFileLink({ file }) {
   )
 }
 
-function ContractCard({ contract, onDecide }) {
-  const status = CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.pending
+const baht2 = (value) => `฿${Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const spanDays = (start, end) => Math.round((new Date(`${end}T00:00:00`) - new Date(`${start}T00:00:00`)) / 86400000) + 1
+const sameCents = (a, b) => Math.round(Number(a) * 100) === Math.round(Number(b) * 100)
+// vendors often write "งวดที่ 1: มัดจำ" while the number is already shown in its own badge
+const installmentText = (row) => row.description.replace(new RegExp(`^งวดที่\\s*${row.no}\\s*[:：.\\-–]?\\s*`), '') || row.description
+
+const isImageFile = (file) => /^image\//.test(file.mime_type)
+
+/** contract files are behind staff auth, so images load as blobs; same pattern as the vendor gallery */
+function useContractImageUrls(files) {
+  const [urls, setUrls] = useState({})
+  useEffect(() => {
+    let active = true
+    const created = []
+    Promise.all(files.filter(isImageFile).map((file) => axios.get(`${API_BASE}/contract-files/${file.file_id}`, { responseType: 'blob' })
+      .then(({ data }) => {
+        const url = URL.createObjectURL(data)
+        created.push(url)
+        return [file.file_id, url]
+      })
+      .catch(() => [file.file_id, null])))
+      .then((entries) => {
+        if (active) setUrls(Object.fromEntries(entries))
+      })
+    return () => {
+      active = false
+      created.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [files])
+  return urls
+}
+
+function ContractFiles({ contract }) {
+  const images = contract.files.filter(isImageFile)
+  const documents = contract.files.filter((file) => !isImageFile(file))
+  const urls = useContractImageUrls(contract.files)
+  const [openIndex, setOpenIndex] = useState(null)
+  const photos = images.map((file) => ({ url: urls[file.file_id], name: file.file_name })).filter((photo) => photo.url)
   return (
-    <article className={`repair-contract is-${contract.status}`}>
+    <section className="repair-contract-block">
+      <h6>ไฟล์แนบ <span className="market-count">{contract.files.length}</span></h6>
+      {images.length > 0 && (
+        <ul className="repair-contract-gallery">
+          {images.map((file, index) => {
+            const url = urls[file.file_id]
+            const failed = url === null
+            return (
+              <li key={file.file_id}>
+                <button
+                  type="button"
+                  aria-label={`ดูรูป ${file.file_name}`}
+                  disabled={!url}
+                  onClick={() => setOpenIndex(photos.findIndex((photo) => photo.url === url))}
+                >
+                  <span className="repair-contract-thumb">
+                    {url ? <img src={url} alt="" /> : failed ? <Icon name="alert" size={18} /> : <span className="market-gallery-loading" />}
+                    <span className="repair-contract-zoom" aria-hidden="true"><Icon name="search" size={14} /></span>
+                  </span>
+                  <span className="repair-contract-thumb-name" title={file.file_name}>{file.file_name}</span>
+                  <small>{failed ? 'โหลดรูปไม่สำเร็จ' : `รูปที่ ${index + 1} · ${fileSize(file.size_bytes)}`}</small>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {documents.length > 0 && (
+        <div className="repair-contract-files">
+          {documents.map((file) => <ContractFileLink key={file.file_id} file={file} />)}
+        </div>
+      )}
+      {openIndex !== null && openIndex >= 0 && createPortal(
+        <div className="market-lightbox-layer" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <PhotoLightbox photos={photos} initialIndex={openIndex} title={`สัญญา ${contract.contract_no}`} subtitle="ไฟล์แนบจากช่าง" label="รูปแนบสัญญา" onClose={() => setOpenIndex(null)} />
+        </div>,
+        document.body,
+      )}
+    </section>
+  )
+}
+
+function DecisionNote({ item, label }) {
+  const icon = item.status === 'approved' ? 'check' : item.status === 'rejected' ? 'alert' : 'dots'
+  return (
+    <p className={`repair-contract-decision is-${item.status}`}>
+      <Icon name={icon} size={15} />
+      <span>
+        {item.status === 'cancelled'
+          ? <>ช่างยกเลิกเมื่อ {thaiDateTime(item.cancelled_at)}{item.cancel_reason && <> · {item.cancel_reason}</>}</>
+          : <>{label}โดย {item.decided_by_name} · {thaiDateTime(item.decided_at)}{item.decision_note && <> · {item.decision_note}</>}</>}
+      </span>
+    </p>
+  )
+}
+
+function ContractCard({ contract, onDecide }) {
+  const headingId = useId()
+  const status = CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.pending
+  const labor = Number(contract.labor_amount)
+  const material = Number(contract.material_amount)
+  const days = spanDays(contract.start_date, contract.end_date)
+  const installmentSum = contract.installments.reduce((sum, row) => sum + Number(row.amount), 0)
+  const sameDay = contract.start_date === contract.end_date
+  return (
+    <article className={`repair-contract is-${contract.status}`} aria-labelledby={headingId}>
       <header className="repair-contract-head">
+        <span className="repair-contract-icon" aria-hidden="true"><Icon name="contract" size={19} /></span>
         <div>
-          <strong>สัญญา {contract.contract_no}</strong>
+          <h5 id={headingId}>สัญญา {contract.contract_no}</h5>
           <small>
             {contract.contract_type === 'addendum' ? `สัญญาเพิ่มเติมของ ${contract.parent_contract_no}` : 'สัญญาหลัก'}
             {contract.revision > 1 && ` · แก้ไขครั้งที่ ${contract.revision - 1}`}
@@ -1795,59 +2023,98 @@ function ContractCard({ contract, onDecide }) {
         <Pill tone={status.tone}>{status.label}</Pill>
       </header>
 
-      <div className="repair-contract-money">
-        <span className="is-total"><small>ยอดรวม</small><strong>฿{money(contract.total_amount)}</strong></span>
-        <span><small>ค่าแรง</small><strong>฿{money(contract.labor_amount)}</strong><em>฿{money(contract.rate)} × {contract.period_qty} {BILLING_UNIT[contract.billing_type]}</em></span>
-        <span><small>ค่าวัสดุ</small><strong>฿{money(contract.material_amount)}</strong><em>{contract.items.length} รายการ</em></span>
-        <span><small>ระยะเวลา</small><strong>{thaiDate(contract.start_date)}</strong><em>ถึง {thaiDate(contract.end_date)}</em></span>
+      <div className="repair-contract-summary">
+        <div className="repair-contract-total">
+          <small>ยอดรวมสัญญา</small>
+          <strong>{baht2(contract.total_amount)}</strong>
+          {labor + material > 0 && (
+            <span className="repair-contract-split" aria-hidden="true">
+              {labor > 0 && <i className="is-labor" style={{ flexGrow: labor }} />}
+              {material > 0 && <i className="is-material" style={{ flexGrow: material }} />}
+            </span>
+          )}
+        </div>
+        <dl className="repair-contract-facts">
+          <div>
+            <dt><span className="repair-dot is-labor" aria-hidden="true" />ค่าแรง</dt>
+            <dd>{baht2(labor)}<small>{baht2(contract.rate)} × {contract.period_qty} {BILLING_UNIT[contract.billing_type]}</small></dd>
+          </div>
+          <div>
+            <dt><span className="repair-dot is-material" aria-hidden="true" />ค่าวัสดุ</dt>
+            <dd>{baht2(material)}<small>{contract.items.length ? `${contract.items.length} รายการ` : 'ไม่มีวัสดุ'}</small></dd>
+          </div>
+          <div>
+            <dt><Icon name="calendar" size={14} />ระยะเวลา</dt>
+            <dd>{days} วัน<small>{sameDay ? thaiDate(contract.start_date) : `${thaiDate(contract.start_date)} – ${thaiDate(contract.end_date)}`}</small></dd>
+          </div>
+        </dl>
       </div>
 
       {contract.items.length > 0 && (
-        <div className="repair-contract-table" role="table" aria-label={`รายการวัสดุ สัญญา ${contract.contract_no}`}>
-          <div role="row" className="is-head"><span role="columnheader">รายการวัสดุ</span><span role="columnheader">จำนวน</span><span role="columnheader">ราคา/หน่วย</span><span role="columnheader">รวม</span></div>
-          {contract.items.map((item, index) => (
-            <div role="row" key={index}>
-              <span role="cell">{item.description}</span>
-              <span role="cell">{money(item.qty)} {item.unit}</span>
-              <span role="cell">฿{money(item.unit_price)}</span>
-              <span role="cell">฿{money(item.line_total)}</span>
+        <section className="repair-contract-block">
+          <h6>รายการวัสดุ <span className="market-count">{contract.items.length}</span></h6>
+          <div className="repair-contract-table" role="table" aria-label={`รายการวัสดุ สัญญา ${contract.contract_no}`}>
+            <div role="row" className="is-head"><span role="columnheader">รายการ</span><span role="columnheader">จำนวน</span><span role="columnheader">ราคา/หน่วย</span><span role="columnheader">รวม</span></div>
+            {contract.items.map((item, index) => (
+              <div role="row" key={index}>
+                <span role="cell">{item.description}</span>
+                <span role="cell">{money(item.qty)} {item.unit}</span>
+                <span role="cell">{baht2(item.unit_price)}</span>
+                <span role="cell">{baht2(item.line_total)}</span>
+              </div>
+            ))}
+            <div role="row" className="is-foot">
+              <span role="cell">รวมค่าวัสดุ</span>
+              <span role="cell">{baht2(material)}</span>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
       )}
 
       {contract.installments.length > 0 && (
-        <div className="repair-contract-table is-installments" role="table" aria-label={`งวดชำระ สัญญา ${contract.contract_no}`}>
-          <div role="row" className="is-head"><span role="columnheader">งวดชำระ</span><span role="columnheader">กำหนด</span><span role="columnheader">จำนวนเงิน</span></div>
-          {contract.installments.map((row) => (
-            <div role="row" key={row.no}>
-              <span role="cell">{row.no}. {row.description}</span>
-              <span role="cell">{row.due_date ? thaiDate(row.due_date) : '-'}</span>
-              <span role="cell">฿{money(row.amount)}</span>
+        <section className="repair-contract-block">
+          <h6>งวดชำระ <span className="market-count">{contract.installments.length}</span></h6>
+          <div className="repair-contract-table is-installments" role="table" aria-label={`งวดชำระ สัญญา ${contract.contract_no}`}>
+            <div role="row" className="is-head"><span role="columnheader">งวด</span><span role="columnheader">กำหนดชำระ</span><span role="columnheader">จำนวนเงิน</span></div>
+            {contract.installments.map((row) => (
+              <div role="row" key={row.no}>
+                <span role="cell"><b className="repair-contract-no">{row.no}</b>{installmentText(row)}</span>
+                <span role="cell">{row.due_date ? thaiDate(row.due_date) : 'ไม่กำหนด'}</span>
+                <span role="cell">{baht2(row.amount)}</span>
+              </div>
+            ))}
+            <div role="row" className="is-foot">
+              <span role="cell">
+                รวม {contract.installments.length} งวด
+                {sameCents(installmentSum, contract.total_amount)
+                  ? <em className="repair-contract-check is-ok"><Icon name="check" size={13} /> ครบยอดสัญญา</em>
+                  : <em className="repair-contract-check is-warn"><Icon name="alert" size={13} /> ไม่ตรงยอดสัญญา</em>}
+              </span>
+              <span role="cell">{baht2(installmentSum)}</span>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
       )}
 
-      {contract.terms && <p className="repair-contract-terms"><strong>เงื่อนไข:</strong> {contract.terms}</p>}
-
-      {contract.files.length > 0 && (
-        <div className="repair-contract-files">
-          {contract.files.map((file) => <ContractFileLink key={file.file_id} file={file} />)}
-        </div>
+      {contract.terms && (
+        <section className="repair-contract-block is-terms">
+          <h6>เงื่อนไขสัญญา</h6>
+          <p>{contract.terms}</p>
+        </section>
       )}
+
+      {contract.files.length > 0 && <ContractFiles contract={contract} />}
 
       {contract.status === 'pending' ? (
-        <div className="repair-contract-actions">
-          <button type="button" className="market-btn is-danger-ghost" onClick={() => onDecide(contract, 'rejected')}><Icon name="alert" size={14} /> ไม่อนุมัติ</button>
-          <button type="button" className="market-btn is-primary" onClick={() => onDecide(contract, 'approved')}><Icon name="check" size={14} /> อนุมัติสัญญา</button>
-        </div>
+        <footer className="repair-contract-foot">
+          <p><Icon name="alert" size={14} /> อนุมัติแล้วช่างเริ่มงานได้ และแก้ไขสัญญานี้ไม่ได้อีก</p>
+          <div className="repair-contract-actions">
+            <button type="button" className="market-btn is-danger-ghost" onClick={() => onDecide(contract, 'rejected')}><Icon name="alert" size={15} /> ไม่อนุมัติ</button>
+            <button type="button" className="market-btn is-primary" onClick={() => onDecide(contract, 'approved')}><Icon name="check" size={15} /> อนุมัติ {baht2(contract.total_amount)}</button>
+          </div>
+        </footer>
       ) : (
-        <p className={`repair-contract-decision is-${contract.status}`}>
-          {contract.status === 'cancelled'
-            ? <>ช่างยกเลิกเมื่อ {thaiDateTime(contract.cancelled_at)}{contract.cancel_reason && <> · {contract.cancel_reason}</>}</>
-            : <>{status.label}โดย {contract.decided_by_name} · {thaiDateTime(contract.decided_at)}{contract.decision_note && <> · {contract.decision_note}</>}</>}
-        </p>
+        <DecisionNote item={contract} label={status.label} />
       )}
     </article>
   )
@@ -1995,9 +2262,9 @@ function JobDetailModal({ job, onClose, onChanged }) {
             <p className="repair-description">{job.description}</p>
             <div className="repair-detail-rows">
               <DetailRow icon="door" tone="blue" label="ห้อง" value={`ห้อง ${job.room_number}`} />
-              <DetailRow icon="user" tone="violet" label="ผู้เช่า" value={job.tenant_name || 'ไม่มีผู้เช่า'} />
-              <DetailRow icon="phone" tone="green" label="เบอร์ผู้เช่า" value={job.tenant_phone || '-'} href={`tel:${job.tenant_phone}`} />
-              <DetailRow icon="phone" tone="green" label="เบอร์ติดต่อหน้างาน" value={job.contact_phone || '-'} href={`tel:${job.contact_phone}`} />
+              <DetailRow icon="user" tone="violet" label="ผู้เช่า" value={job.tenant_name} emptyText="ไม่มีผู้เช่า" />
+              <DetailRow icon="phone" tone="green" label="เบอร์ผู้เช่า" value={job.tenant_phone} href={`tel:${job.tenant_phone}`} />
+              <DetailRow icon="phone" tone="green" label="เบอร์ติดต่อหน้างาน" value={job.contact_phone} href={`tel:${job.contact_phone}`} />
               <DetailRow icon="clock" tone="amber" label="ช่วงเวลาที่สะดวก" value={TIME_LABEL[job.preferred_time] || '-'} />
               {job.details_updated_at && (
                 <DetailRow icon="edit" tone="rose" label="แก้ไขรายละเอียดล่าสุด" value={thaiDateTime(job.details_updated_at)} sub={job.details_updated_by ? `โดย ${job.details_updated_by}` : null} />
@@ -2020,9 +2287,9 @@ function JobDetailModal({ job, onClose, onChanged }) {
             </div>
             <div className="repair-detail-rows">
               <DetailRow icon="wrench" tone="blue" label="ร้าน/บริษัทช่าง" value={job.vendor_name} sub={job.vendor_contract_type ? `สัญญา${CONTRACT_LABEL[job.vendor_contract_type]}` : null} />
-              <DetailRow icon="phone" tone="green" label="เบอร์ช่าง" value={job.vendor_phone || '-'} href={`tel:${job.vendor_phone}`} />
-              <DetailRow icon="user" tone="violet" label="ช่างที่เข้าซ่อม" value={job.technician_name || '-'} sub={job.technician_phone ? `โทร ${job.technician_phone}` : null} href={job.technician_phone ? `tel:${job.technician_phone}` : undefined} />
-              <DetailRow icon="calendar" tone="rose" label="นัดเข้าซ่อม" value={job.scheduled_at ? thaiDateTime(job.scheduled_at) : '-'} />
+              <DetailRow icon="phone" tone="green" label="เบอร์ช่าง" value={job.vendor_phone} href={`tel:${job.vendor_phone}`} />
+              <DetailRow icon="user" tone="violet" label="ช่างที่เข้าซ่อม" value={job.technician_name} emptyText="ช่างยังไม่ระบุ" sub={job.technician_phone ? `โทร ${job.technician_phone}` : null} href={job.technician_phone ? `tel:${job.technician_phone}` : undefined} />
+              <DetailRow icon="calendar" tone="rose" label="นัดเข้าซ่อม" value={job.scheduled_at ? thaiDateTime(job.scheduled_at) : null} emptyText="ยังไม่นัด" />
               <DetailRow icon="clock" tone="teal" label="อัปเดตล่าสุด" value={thaiDateTime(job.status_updated_at || job.created_at)} sub={job.status_updated_by ? `โดย ${job.status_updated_by}` : null} />
             </div>
           </section>
@@ -2092,13 +2359,22 @@ function JobCard({ job, onOpen, onCancel }) {
         <p className="repair-contract-flag"><Icon name="contract" size={13} /> ช่างส่งสัญญารออนุมัติ {job.pending_contracts} ฉบับ</p>
       )}
       <JobProgress job={job} />
-      <div className="market-lease-figures">
-        <span><small>ช่างที่เข้าซ่อม</small><strong>{job.technician_name || '-'}</strong></span>
-        <span><small>นัดเข้าซ่อม</small><strong>{job.scheduled_at ? thaiDateTime(job.scheduled_at) : '-'}</strong></span>
-        <span className={`is-highlight ${job.maintenance_request_id ? 'is-tone-green' : 'is-tone-slate'}`}><small>แจ้งซ่อม</small><strong>{job.maintenance_request_id ? `#${job.maintenance_request_id}` : 'ไม่ผูก'}</strong></span>
-      </div>
+      <dl className="repair-job-meta">
+        <div>
+          <dt><Icon name="user" size={14} /> ช่างที่เข้าซ่อม</dt>
+          <dd className={job.technician_name ? '' : 'is-empty'}>{job.technician_name || 'ยังไม่ระบุ'}</dd>
+        </div>
+        <div>
+          <dt><Icon name="calendar" size={14} /> นัดเข้าซ่อม</dt>
+          <dd className={job.scheduled_at ? '' : 'is-empty'}>{job.scheduled_at ? thaiDateTime(job.scheduled_at) : 'ยังไม่นัด'}</dd>
+        </div>
+        <div>
+          <dt><Icon name="link" size={14} /> แจ้งซ่อมของผู้เช่า</dt>
+          <dd className={job.maintenance_request_id ? 'is-linked' : 'is-empty'}>{job.maintenance_request_id ? `#${job.maintenance_request_id}` : 'ไม่ได้ผูก'}</dd>
+        </div>
+      </dl>
       <footer className="market-lease-foot">
-        <small>ส่ง {thaiDateTime(job.created_at)}<br />โดย <b className="repair-staff-name">{job.sent_by_name}</b></small>
+        <small>ส่ง {thaiDateTime(job.created_at)}<span>โดย <b className="repair-staff-name">{job.sent_by_name}</b></span></small>
         <span className="market-lease-foot-actions">
           {onCancel && ['sent', 'accepted', 'in_progress'].includes(job.status) && (
             <button
@@ -2175,6 +2451,9 @@ function VendorCard({ vendor, onOpen, onSend }) {
       <div className="repair-tag-row">
         {vendor.specialties.map((key) => <span key={key} className={`repair-tag is-${key}`} title={specialtyLabel(vendor, key)}>{specialtyLabel(vendor, key)}</span>)}
       </div>
+      {vendor.pending_changes > 0 && (
+        <p className="repair-contract-flag repair-vendor-change-flag"><Icon name="edit" size={13} /> ช่างขอแก้ไขข้อมูล รออนุมัติ</p>
+      )}
       <div className="market-lease-figures">
         <span><small>สัญญา</small><strong>{CONTRACT_LABEL[vendor.contract_type]}</strong></span>
         <span><small>สิ้นสุด</small><strong>{thaiDate(vendor.contract_end)}</strong></span>
@@ -2817,6 +3096,9 @@ export default function RepairVendorManager({ rooms = [], onSummary, readOnly = 
             <button key={item.key} type="button" aria-current={section === item.key ? 'page' : undefined} className={`market-section-tab${section === item.key ? ' is-active' : ''}`} onClick={() => setSection(item.key)}>
               <Icon name={item.icon} size={15} />
               {item.label}
+              {item.key === 'vendors' && data?.summary.pending_vendor_changes > 0 && (
+                <span className="market-count" aria-label={`คำขอแก้ไขรออนุมัติ ${data.summary.pending_vendor_changes} รายการ`}>{data.summary.pending_vendor_changes}</span>
+              )}
             </button>
           ))}
         </nav>

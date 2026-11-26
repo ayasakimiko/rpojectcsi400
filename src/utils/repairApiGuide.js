@@ -8,6 +8,7 @@ export const REPAIR_GUIDE_RULES = [
   '1 API key ผูกกับช่าง/บริษัทที่ทำสัญญาซ่อม 1 ราย และเห็นได้เฉพาะงานที่หอพักส่งให้รายนั้น',
   'ข้อมูลงานซ่อม (เลขห้อง รายละเอียดความเสียหาย เบอร์ติดต่อ) เป็นแบบอ่านอย่างเดียว หอพักแก้ไขได้ระหว่างที่งานยังไม่ปิด ดูเวลาแก้ล่าสุดได้จาก details_updated_at',
   'สิ่งที่ทำได้คือเปลี่ยนสถานะงาน พร้อมแนบหมายเหตุ ชื่อช่างที่ไปซ่อม และวันเวลานัดหมาย',
+  'ข้อมูลช่างและสัญญา (ชื่อ เบอร์ อีเมล ประเภทงาน รูปแบบสัญญา วันเริ่ม-สิ้นสุด ค่าสัญญา) แก้โดยตรงไม่ได้ ให้ส่งคำขอแก้ไขแล้วรอหอพักอนุมัติ ข้อมูลจะเปลี่ยนหลังอนุมัติเท่านั้น',
   'เมื่อสัญญาหมดอายุ ถูกปิดการใช้งาน หรือ key ถูกยกเลิก จะเรียก API ไม่ได้ทันที',
   'เรียกได้สูงสุด 120 ครั้งต่อนาทีต่อ key',
   'ส่ง key ใน header X-Repair-Api-Key หรือ X-API-Key ก็ได้ (ระบบภายนอกเช่น RenoCare ใช้ X-API-Key)',
@@ -15,6 +16,10 @@ export const REPAIR_GUIDE_RULES = [
 
 export const REPAIR_GUIDE_ENDPOINTS = [
   { method: 'GET', path: '/vendor', access: 'อ่าน', detail: 'ข้อมูลช่าง สัญญาซ่อม ค่าสัญญาที่เรียกเก็บจากหอพัก และจำนวนงานแยกตามสถานะ' },
+  { method: 'GET', path: '/vendor/change-requests?status=&updated_since=', access: 'อ่าน', detail: 'คำขอแก้ไขข้อมูลช่าง/สัญญาที่เคยส่ง พร้อมผลอนุมัติ ใช้ server_time เป็น updated_since รอบถัดไป' },
+  { method: 'GET', path: '/vendor/change-requests/:id', access: 'อ่าน', detail: 'คำขอแก้ไข 1 รายการ' },
+  { method: 'POST', path: '/vendor/change-requests', access: 'แก้ไข', detail: 'ขอแก้ข้อมูลช่างหรือสัญญา body { changes: {...}, reason } หอพักต้องอนุมัติก่อนจึงจะเปลี่ยนจริง (มีคำขอรออนุมัติได้ครั้งละ 1 รายการ)' },
+  { method: 'POST', path: '/vendor/change-requests/:id/cancel', access: 'แก้ไข', detail: 'ยกเลิกคำขอที่ยังรออนุมัติ (reason ไม่บังคับ)' },
   { method: 'GET', path: '/jobs?status=', access: 'อ่าน', detail: 'รายการงานซ่อมที่ได้รับ กรองตามสถานะได้ (ล่าสุด 200 งาน)' },
   { method: 'GET', path: '/jobs/:id', access: 'อ่าน', detail: 'รายละเอียดงานซ่อม 1 งาน' },
   { method: 'GET', path: '/buildings/:ref/owner', access: 'อ่าน', detail: 'ชื่อ เบอร์ และอีเมลเจ้าของหอ ใช้ได้เฉพาะช่างที่หอพักตั้งรหัสอาคารให้แล้ว' },
@@ -46,11 +51,14 @@ export const REPAIR_STATUS_FIELDS = [
 
 export const REPAIR_GUIDE_ERRORS = [
   ['401 INVALID_API_KEY', 'ไม่มี key, key ผิด, ถูกยกเลิก หรือสัญญาซ่อมไม่อยู่ในช่วงใช้งาน'],
-  ['403 READ_ONLY', 'พยายามแก้ไขข้อมูลงานหรือข้อมูลช่างโดยตรง'],
+  ['403 READ_ONLY', 'พยายามแก้ไขข้อมูลงานหรือข้อมูลช่างโดยตรง (ข้อมูลช่างให้ส่งคำขอที่ POST /vendor/change-requests)'],
   ['400 VALIDATION_ERROR', 'ข้อมูลไม่ถูกต้อง เช่น status ไม่รู้จัก หรือปฏิเสธงานโดยไม่ใส่ note'],
   ['400 FIELD_NOT_ALLOWED', 'ส่งฟิลด์อื่นนอกจาก status, note, technician_name, technician_phone, scheduled_at'],
   ['404 NOT_FOUND', 'ไม่พบงาน หรือเป็นงานของช่างรายอื่น'],
   ['409 INVALID_TRANSITION', 'เปลี่ยนข้ามขั้นไม่ได้ เช่น จาก sent ไป done หรืองานถูกยกเลิกไปแล้ว'],
+  ['400 NO_CHANGES', 'คำขอแก้ไขมีค่าเท่ากับข้อมูลปัจจุบันทุกช่อง'],
+  ['409 CHANGE_REQUEST_PENDING', 'มีคำขอแก้ไขรออนุมัติอยู่แล้ว ยกเลิกคำขอเดิมหรือรอผลก่อน'],
+  ['409 CHANGE_LOCKED', 'คำขอแก้ไขนี้อนุมัติ ไม่อนุมัติ หรือยกเลิกไปแล้ว'],
   ['409 CONTRACT_LOCKED', 'สัญญาอนุมัติ ไม่อนุมัติ หรือยกเลิกไปแล้ว แก้ไข แนบไฟล์ หรือยกเลิกไม่ได้'],
   ['409 INVALID_JOB_STATUS', 'งานซ่อมปิดแล้ว (done, rejected, cancelled) ส่งหรือแก้สัญญาไม่ได้'],
   ['413 PAYLOAD_TOO_LARGE', 'body ของ PUT สัญญาเกิน 16 MB ให้ส่งไฟล์แยกผ่าน POST .../files'],
@@ -78,6 +86,26 @@ export const REPAIR_CONTRACT_FIELDS = [
   { name: 'installments', type: 'array ≤ 24 / ไม่ส่ง', note: 'no, description, due_date (ไม่บังคับ), amount ผลรวมต้องเท่ากับ total_amount' },
   { name: 'files', type: 'array ≤ 5 / ไม่ส่ง', note: 'file_name, mime_type (application/pdf, image/png, image/jpeg), data_base64 ไฟล์ละ ≤ 5 MB ถ้าส่งมาจะแทนที่ไฟล์เดิมทั้งหมด ไม่ส่ง = คงไฟล์เดิม' },
 ]
+
+export const VENDOR_CHANGE_SAMPLE = {
+  changes: { phone: '0811111111', contract_end: '2026-12-31', contract_fee: 3500 },
+  reason: 'ต่อสัญญาอีก 1 เดือน และเปลี่ยนเบอร์ติดต่อ',
+}
+
+export const VENDOR_CHANGE_FIELD_NOTE = 'ส่งเฉพาะฟิลด์ที่ต้องการแก้: name, contact_name, phone, email, specialties, specialty_other, contract_type (monthly|yearly), contract_start, contract_end (YYYY-MM-DD), contract_fee ระบบตรวจข้อมูลหลังรวมกับค่าปัจจุบัน (เช่น วันสิ้นสุดต้องไม่ก่อนวันเริ่ม) ฟิลด์อื่นได้ 400 FIELD_NOT_ALLOWED'
+
+const VENDOR_CHANGE_RESULT = {
+  id: 3, status: 'pending', changes: VENDOR_CHANGE_SAMPLE.changes,
+  previous: { phone: '0927823727', contract_end: '2026-11-30', contract_fee: 3000 },
+  reason: VENDOR_CHANGE_SAMPLE.reason, requested_by: 'API: RenoCare',
+  created_at: '2026-11-26T04:00:00.000Z', updated_at: '2026-11-26T04:00:00.000Z',
+  decided_at: null, decided_by_name: null, decision_note: null, cancelled_at: null, cancel_reason: null,
+}
+
+export const VENDOR_CHANGE_DECIDED_SAMPLE = JSON.stringify({
+  event: 'vendor.change_decided', sent_at: '2026-11-26T05:00:01.000Z',
+  change_request: { ...VENDOR_CHANGE_RESULT, status: 'approved', decided_at: '2026-11-26T05:00:00.000Z', decided_by_name: 'มานะ ทำงานดี' },
+}, null, 2)
 
 export const REPAIR_CONTRACT_SAMPLE = {
   contract_type: 'main', parent_contract_no: null, billing_type: 'daily', rate: 500, period_qty: 1,
@@ -134,6 +162,12 @@ export function repairGuideExamples(base) {
         },
         job_summary: { sent: 1, accepted: 0, in_progress: 0, done: 4, rejected: 0, cancelled: 0 },
       }),
+    },
+    {
+      id: 'vendor-change', method: 'POST', path: '/vendor/change-requests', title: 'ขอแก้ข้อมูลช่างหรือสัญญา', status: 201,
+      description: 'ส่งเฉพาะฟิลด์ที่ต้องการแก้ ข้อมูลยังไม่เปลี่ยนจนกว่าหอพักจะอนุมัติ ดูผลด้วย GET /vendor/change-requests หรือรับ webhook vendor.change_decided',
+      code: curl(base, 'POST', '/vendor/change-requests', VENDOR_CHANGE_SAMPLE),
+      response: json(VENDOR_CHANGE_RESULT),
     },
     {
       id: 'jobs', method: 'GET', path: '/jobs?status=sent', title: 'ดึงงานใหม่ที่รอตอบรับ', status: 200,
@@ -282,6 +316,8 @@ export function repairAiPrompt(base) {
     '',
     '## Endpoints ที่ใช้ได้',
     '- GET /vendor — ข้อมูลช่าง สัญญาซ่อม ค่าสัญญา (contract_fee ต่อ contract_fee_period: month หรือ year) และจำนวนงานแยกตามสถานะ',
+    '- POST /vendor/change-requests — ขอแก้ข้อมูลช่างหรือสัญญา body { "changes": { ฟิลด์ที่จะแก้ }, "reason": "..." } ต้องรอหอพักอนุมัติก่อนจึงจะเปลี่ยนจริง',
+    '- GET /vendor/change-requests — ดูคำขอแก้ไขและผล (pending, approved, rejected, cancelled)',
     '- GET /jobs?status=<status> — รายการงาน (sent, accepted, in_progress, done, rejected, cancelled)',
     '- GET /jobs/{id} — รายละเอียดงาน 1 งาน',
     '- PATCH /jobs/{id}/status — เปลี่ยนสถานะ ส่งได้เฉพาะ status, note, technician_name, technician_phone, scheduled_at',
@@ -302,7 +338,7 @@ export function repairAiPrompt(base) {
     '3. ถ้าได้ 409 INVALID_TRANSITION ให้อธิบายว่าสถานะปัจจุบันคืออะไรและไปต่อได้ทางไหน',
     '4. ถ้าได้ 429 ให้รอตามค่า header Retry-After แล้วค่อยลองใหม่ (จำกัด 120 ครั้ง/นาที)',
     '5. ถ้าได้ 401 INVALID_API_KEY ให้หยุดและแจ้งผู้ใช้ว่า key ใช้ไม่ได้หรือสัญญาสิ้นสุดแล้ว',
-    '6. ข้อมูลงาน (เลขห้อง รายละเอียด เบอร์ติดต่อ) แก้ผ่าน API ไม่ได้ ให้แนะนำผู้ใช้ติดต่อหอพัก',
+    '6. ข้อมูลงาน (เลขห้อง รายละเอียด เบอร์ติดต่อ) แก้ผ่าน API ไม่ได้ ให้แนะนำผู้ใช้ติดต่อหอพัก ส่วนข้อมูลช่างและสัญญาให้ส่งคำขอแก้ไข แล้วบอกผู้ใช้ว่าต้องรอหอพักอนุมัติ',
     '7. ก่อนส่งสัญญา ให้คำนวณยอดเงินให้ตรงกันทุกจุด และสรุปยอดให้ผู้ใช้ยืนยันก่อนส่ง ห้ามเริ่มงานจนกว่าสัญญาเป็น approved',
     '',
     '## รูปแบบคำตอบ',
@@ -420,6 +456,15 @@ export function partnerIntegrationPrompt(base, webhookUrl) {
     '- ยกเลิกสัญญาที่ยังรออนุมัติ: POST .../contracts/{contract_no}/cancel body { "reason": "..." }',
     '- 409 CONTRACT_LOCKED = สัญญาปิดแล้ว ให้ออกเลขใหม่, 409 INVALID_JOB_STATUS = งานซ่อมปิดแล้ว, 413 PAYLOAD_TOO_LARGE = body ใหญ่เกิน',
     '',
+    '## 5. ขอแก้ข้อมูลช่างและสัญญา (หอพักต้องอนุมัติก่อน)',
+    '- POST {DORM_BASE_URL}/vendor/change-requests พร้อม header X-API-Key',
+    '- body: { "changes": { ส่งเฉพาะฟิลด์ที่จะแก้ }, "reason": "เหตุผล (ไม่บังคับ ≤ 500)" }',
+    '- ฟิลด์ที่ขอแก้ได้: name, contact_name, phone, email, specialties[], specialty_other, contract_type (monthly|yearly), contract_start, contract_end (YYYY-MM-DD), contract_fee',
+    '- 201 = ส่งคำขอแล้ว status pending ข้อมูลยังไม่เปลี่ยน, 409 CHANGE_REQUEST_PENDING = มีคำขอรออยู่แล้ว (มีได้ครั้งละ 1), 400 NO_CHANGES = ค่าเหมือนเดิม, 400 FIELD_NOT_ALLOWED = ฟิลด์ที่ขอแก้ไม่ได้',
+    '- ดึงผล: GET {DORM_BASE_URL}/vendor/change-requests?updated_since=<server_time รอบก่อน> หรือรับ webhook X-Repair-Event: vendor.change_decided',
+    '- อนุมัติแล้วให้ดึง GET /vendor ใหม่เพื่ออัปเดตข้อมูลฝั่ง RenoCare, ไม่อนุมัติดูเหตุผลใน decision_note',
+    '- ยกเลิกคำขอที่ยังรอ: POST .../vendor/change-requests/{id}/cancel body { "reason": "..." }',
+    '',
     '## สิ่งที่ต้องส่งมอบ',
     '1. ฟังก์ชันเรียก owner endpoint',
     '2. endpoint รับ webhook จากหอพัก พร้อมตรวจลายเซ็นและ X-API-Key',
@@ -507,6 +552,12 @@ export async function downloadRepairGuideDocx(base) {
         ...codeBlock(JSON.stringify(REPAIR_CONTRACT_SAMPLE, null, 2)),
         para('Webhook เมื่อหอพักตัดสินใจ (X-Repair-Event: contract.decided)'),
         ...codeBlock(REPAIR_CONTRACT_DECIDED_SAMPLE),
+        heading('7.2 ขอแก้ข้อมูลช่างและสัญญา (หอพักต้องอนุมัติก่อน)'),
+        para('ส่ง POST /vendor/change-requests ข้อมูลจะเปลี่ยนหลังพนักงานหรือเจ้าของหอกดอนุมัติเท่านั้น ดูผลด้วย GET /vendor/change-requests?updated_since= หรือรับ webhook vendor.change_decided'),
+        para(VENDOR_CHANGE_FIELD_NOTE),
+        ...codeBlock(JSON.stringify(VENDOR_CHANGE_SAMPLE, null, 2)),
+        para('Webhook เมื่อหอพักตัดสินใจ (X-Repair-Event: vendor.change_decided)'),
+        ...codeBlock(VENDOR_CHANGE_DECIDED_SAMPLE),
         heading('8. รหัสข้อผิดพลาด'),
         para('เมื่อเกิดข้อผิดพลาด API จะตอบกลับเป็น JSON รูปแบบ { "code": "...", "message": "..." }'),
         table(['รหัส', 'ความหมาย'], REPAIR_GUIDE_ERRORS, [35, 65], [0]),
