@@ -57,7 +57,7 @@ import {
 } from "./rentalContracts.js";
 import { normalizeRoomAmenity } from "../src/utils/roomAmenities.js";
 import { floorRateOrderError, roomFloorOf } from "../src/utils/roomFloors.js";
-import { effectiveRoomAssets } from "./roomAssets.js";
+import { effectiveRoomAssets, roomEquipmentAssets } from "./roomAssets.js";
 import { loadMoveOutBaseline } from "./moveInBaseline.js";
 import { damageChargeMessage, syncMoveOutDamageCharge, validateMoveOutDamage } from "./moveOutDamage.js";
 
@@ -801,6 +801,31 @@ router.put("/rooms/:room_number/assets", async (req, res) => {
     if (value.roomTypeId !== null) {
       const [types] = await pool.query("SELECT id FROM RoomType WHERE id = ?", [value.roomTypeId]);
       if (!types[0]) return res.status(400).json({ message: "ไม่พบประเภทห้องที่เลือก" });
+    }
+    // a tenant's move-out damage is priced against this list, so while the room is rented
+    // assets can be added or re-priced but never removed
+    const [[current]] = await pool.query(
+      `SELECT r.is_booked, r.assets AS room_assets, rt.assets AS type_assets, r.air_conditioner, r.refrigerator, r.custom_amenities
+       FROM Room r LEFT JOIN RoomType rt ON rt.id = r.room_type_id
+       WHERE r.room_number = ?`,
+      [roomNumberValue],
+    );
+    if (!current) return res.status(404).json({ message: "ไม่พบห้องพักตามเลขห้องที่ระบุ" });
+    if (current.is_booked) {
+      const kept = new Set(roomEquipmentAssets({
+        room_assets: JSON.stringify(value.assets),
+        type_assets: null,
+        air_conditioner: hasField(amenityBody, "air_conditioner") ? Boolean(amenityBody.air_conditioner) : current.air_conditioner,
+        refrigerator: hasField(amenityBody, "refrigerator") ? Boolean(amenityBody.refrigerator) : current.refrigerator,
+        custom_amenities: hasField(amenityBody, "custom_amenities") ? JSON.stringify(amenityBody.custom_amenities) : current.custom_amenities,
+      }).map((asset) => asset.name));
+      const removed = roomEquipmentAssets(current).map((asset) => asset.name).filter((name) => !kept.has(name));
+      if (removed.length) {
+        return res.status(409).json({
+          message: `ห้องนี้มีผู้เช่าอยู่ ลบทรัพย์สินไม่ได้ (${removed.join(", ")}) เพิ่มรายการหรือแก้ราคาได้ตามปกติ`,
+          code: "ROOM_OCCUPIED",
+        });
+      }
     }
     const { columns, values } = buildUpdate(["air_conditioner", "refrigerator", "custom_amenities"], {
       ...amenityBody,

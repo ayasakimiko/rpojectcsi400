@@ -5431,6 +5431,16 @@ function AdminBackupPage() {
     setRoomForm((prev) => update(prev))
   }
   const equipmentItems = roomEquipmentItems(roomForm)
+  // while a tenant rents the room, move-out damage is priced against these items: they can be re-priced, not removed
+  const lockedRoom = roomModal?.mode !== 'create' && roomModal?.room?.is_booked ? roomModal.room : null
+  const lockedAssetNames = useMemo(() => (lockedRoom
+    ? new Set(roomEquipmentItems({
+      air_conditioner: Boolean(lockedRoom.air_conditioner),
+      refrigerator: Boolean(lockedRoom.refrigerator),
+      custom_amenities: parseRoomAmenities(lockedRoom.custom_amenities),
+      assetRows: toAssetRows(lockedRoom.assets),
+    }).map((item) => item.name))
+    : null), [lockedRoom])
   const [amenityDraft, setAmenityDraft] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('sparkle')
   const [amenityPrice, setAmenityPrice] = useState('')
@@ -6187,6 +6197,7 @@ function AdminBackupPage() {
   }
 
   const removeRoomAsset = (name) => {
+    if (lockedAssetNames?.has(name)) return
     const builtin = BUILTIN_EQUIPMENT.find((item) => item.name === name)
     updateRoomAssets((prev) => ({
       ...prev,
@@ -10211,6 +10222,12 @@ function AdminBackupPage() {
                   </select>
                 </label>
               )}
+              {lockedAssetNames && (
+                <p className="admin-equipment-locked-note" role="note">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                  <span><strong>ห้องนี้มีผู้เช่าอยู่</strong> เพิ่มรายการหรือแก้ราคาได้ แต่ลบรายการเดิมไม่ได้ เพราะใช้คิดค่าเสียหายตอนผู้เช่าย้ายออก</span>
+                </p>
+              )}
               <div className="admin-equipment-list-heading">
                 <strong>รายการในห้อง <span>{equipmentItems.length} รายการ</span></strong>
                 <button type="button" className="admin-action-btn is-primary" onClick={openAddRoomAsset}>+ เพิ่มทรัพย์สิน</button>
@@ -10265,9 +10282,15 @@ function AdminBackupPage() {
                           <small className="admin-equipment-price-error">ตัวเลขเท่านั้น ทศนิยมไม่เกิน 2 ตำแหน่ง</small>
                         )}
                       </div>
-                      <button type="button" className="admin-equipment-remove" onClick={() => removeRoomAsset(item.name)} aria-label={'ลบ ' + item.name} title={'ลบ ' + item.name}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
-                      </button>
+                      {lockedAssetNames?.has(item.name) ? (
+                        <span className="admin-equipment-lock" role="img" aria-label={`${item.name} ลบไม่ได้ ห้องนี้มีผู้เช่าอยู่`} title="ห้องนี้มีผู้เช่าอยู่ ลบรายการนี้ไม่ได้">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                        </span>
+                      ) : (
+                        <button type="button" className="admin-equipment-remove" onClick={() => removeRoomAsset(item.name)} aria-label={'ลบ ' + item.name} title={'ลบ ' + item.name}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
