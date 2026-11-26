@@ -1083,8 +1083,9 @@ textarea.market-input {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(15, 43, 82, 0.45);
-  backdrop-filter: blur(2px);
+  /* no backdrop-filter: re-blurring the whole page every frame made opening, scrolling and
+     closing these modals stutter on large or high-DPI screens; a slightly darker tint reads the same */
+  background: rgba(15, 43, 82, 0.5);
   color-scheme: light;
   animation: market-overlay-in 0.2s ease both;
 }
@@ -1100,7 +1101,7 @@ textarea.market-input {
   background: #fff;
   color: #0f2b52;
   box-shadow: 0 24px 60px rgba(15, 43, 82, 0.25);
-  animation: market-modal-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  animation: market-modal-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .market-modal-overlay.is-closing {
@@ -1121,14 +1122,16 @@ textarea.market-input {
   to { opacity: 0; }
 }
 
+/* fade + short slide only: scaling a tall modal full of shadowed cards (with an overshoot) had to
+   re-raster it every frame and stuttered on weaker GPUs */
 @keyframes market-modal-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes market-modal-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(10px) scale(0.97); }
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(6px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -18,6 +18,7 @@ import BirthDateInput from '../components/BirthDateInput.jsx'
 import { isValidBirthDate } from '../utils/validators.js'
 import { downloadUploadFile } from '../utils/uploadFiles.js'
 import RoleTabMenu from '../components/RoleTabMenu.jsx'
+import { lockBodyScroll } from '../utils/bodyScrollLock.js'
 import WifiManager from '../components/WifiManager.jsx'
 import MarketManager from '../components/MarketManager.jsx'
 import { marketSummaryTiles } from '../utils/marketSummary.js'
@@ -681,12 +682,11 @@ function OwnerExpenseDetailDialog({ expense, onClose: closeNow, onEdit, onDelete
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = photoIndex === null ? onClose : () => {} }, [onClose, photoIndex])
   useEffect(() => {
-    const previous = document.body.style.overflow
+    const unlockScroll = lockBodyScroll()
     const previousFocus = document.activeElement
-    document.body.style.overflow = 'hidden'
     const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
     document.addEventListener('keydown', escape)
-    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); previousFocus?.focus?.() }
+    return () => { unlockScroll(); document.removeEventListener('keydown', escape); previousFocus?.focus?.() }
   }, [])
   const recordedAt = expense.created_at ? new Date(expense.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ไม่ระบุ'
   const fields = [
@@ -897,12 +897,11 @@ function OwnerPaymentLogDialog({ payment, onClose: closeNow, onReview, reviewing
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = zoom ? () => {} : onClose }, [onClose, zoom])
   useEffect(() => {
-    const previous = document.body.style.overflow
+    const unlockScroll = lockBodyScroll()
     const previousFocus = document.activeElement
-    document.body.style.overflow = 'hidden'
     const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
     document.addEventListener('keydown', escape)
-    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); previousFocus?.focus?.() }
+    return () => { unlockScroll(); document.removeEventListener('keydown', escape); previousFocus?.focus?.() }
   }, [])
   const status = paymentLogStatus(payment)
   const name = `${payment.first_name || ''} ${payment.last_name || ''}`.trim() || 'ไม่ระบุชื่อ'
@@ -985,12 +984,11 @@ function OwnerOccupancyLogDialog({ eventId, onClose: closeNow }) {
     return () => controller.abort()
   }, [eventId, retry])
   useEffect(() => {
-    const previous = document.body.style.overflow
+    const unlockScroll = lockBodyScroll()
     const previousFocus = document.activeElement
-    document.body.style.overflow = 'hidden'
     const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
     document.addEventListener('keydown', escape)
-    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); previousFocus?.focus() }
+    return () => { unlockScroll(); document.removeEventListener('keydown', escape); previousFocus?.focus() }
   }, [])
   const detail = response?.detail
   const isIn = detail?.event_type === 'move_in'
@@ -1127,12 +1125,11 @@ function OwnerFinancePeriodDialog({ period, range, onClose: closeNow }) {
     return () => controller.abort()
   }, [requestKey])
   useEffect(() => {
-    const previous = document.body.style.overflow
+    const unlockScroll = lockBodyScroll()
     const focus = document.activeElement
-    document.body.style.overflow = 'hidden'
     const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
     document.addEventListener('keydown', escape)
-    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); focus?.focus() }
+    return () => { unlockScroll(); document.removeEventListener('keydown', escape); focus?.focus() }
   }, [])
   const current = response?.key === requestKey ? response : null
   const data = current?.data
@@ -1265,12 +1262,11 @@ function OwnerIncomeItemsDialog({ initialType, types, range, onClose: closeNow }
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = paymentId === null ? onClose : () => {} }, [onClose, paymentId])
   useEffect(() => {
-    const previous = document.body.style.overflow
+    const unlockScroll = lockBodyScroll()
     const previousFocus = document.activeElement
-    document.body.style.overflow = 'hidden'
     const onKey = (event) => { if (event.key === 'Escape') closeRef.current() }
     document.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', onKey); previousFocus?.focus() }
+    return () => { unlockScroll(); document.removeEventListener('keydown', onKey); previousFocus?.focus() }
   }, [])
   useEffect(() => {
     const controller = new AbortController()
@@ -1431,11 +1427,10 @@ function OwnerUtilityPeriodDialog({ period, onClose: closeNow }) {
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = onClose }, [onClose])
   useEffect(() => {
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlockScroll = lockBodyScroll()
     const escape = (event) => { if (event.key === 'Escape') closeRef.current() }
     document.addEventListener('keydown', escape)
-    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape) }
+    return () => { unlockScroll(); document.removeEventListener('keydown', escape) }
   }, [])
   const water = Number(period.water || 0)
   const electricity = Number(period.electricity || 0)
@@ -3369,19 +3364,7 @@ function OwnerMain() {
     const isModalOpen = Boolean(displayRoomDetail) || Boolean(displayRoomListFilter) || displayStaffModalOpen || Boolean(displayViewingStaff)
     if (!isModalOpen) return undefined
 
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
-    const previousOverflow = document.body.style.overflow
-    const previousPaddingRight = document.body.style.paddingRight
-
-    document.body.style.overflow = 'hidden'
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`
-    }
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-      document.body.style.paddingRight = previousPaddingRight
-    }
+    return lockBodyScroll()
   }, [displayRoomDetail, displayRoomListFilter, displayStaffModalOpen, displayViewingStaff])
 
   const handlePaymentLogFilterChange = async (field, value) => {

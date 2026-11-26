@@ -1,4 +1,5 @@
 import { UploadImage } from '../components/UploadMedia.jsx'
+import { lockBodyScroll as lockSharedBodyScroll } from '../utils/bodyScrollLock.js'
 import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { DormInfoMenu, DormInfoSettings } from '../components/DormInfo'
@@ -1038,19 +1039,19 @@ function buildAnnouncementNotif(item) {
 }
 
 let openModalCount = 0
+let releaseBodyScroll = null
 const modalStack = []
 
 function lockBodyScroll() {
   openModalCount += 1
-  if (openModalCount === 1) {
-    document.body.style.overflow = 'hidden'
-  }
+  if (openModalCount === 1) releaseBodyScroll = lockSharedBodyScroll()
 }
 
 function unlockBodyScroll() {
   openModalCount = Math.max(0, openModalCount - 1)
   if (openModalCount === 0) {
-    document.body.style.overflow = ''
+    releaseBodyScroll?.()
+    releaseBodyScroll = null
   }
 }
 
