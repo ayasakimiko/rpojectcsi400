@@ -13,6 +13,7 @@ COPY src/utils/roomFloors.js ./src/utils/roomFloors.js
 COPY src/utils/validators.js ./src/utils/validators.js
 COPY src/utils/maintenanceCategories.js ./src/utils/maintenanceCategories.js
 COPY src/utils/rentalContract.js ./src/utils/rentalContract.js
+COPY src/utils/repairVendorChanges.js ./src/utils/repairVendorChanges.js
 COPY services ./services
 COPY router ./router
 COPY Database ./Database
